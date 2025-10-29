@@ -3633,10 +3633,27 @@ class PackageRelease(Entity):
         """Return a :class:`ReleasePackage` built from the package."""
         return self.package.to_package()
 
-    def to_credentials(self) -> Credentials | None:
-        """Return :class:`Credentials` from the associated release manager."""
-        manager = self.release_manager or self.package.release_manager
-        if manager:
+    def to_credentials(
+        self, user: models.Model | None = None
+    ) -> Credentials | None:
+        """Return :class:`Credentials` from available release managers."""
+
+        manager_candidates: list[ReleaseManager] = []
+
+        for candidate in (self.release_manager, self.package.release_manager):
+            if candidate and candidate not in manager_candidates:
+                manager_candidates.append(candidate)
+
+        if user is not None and getattr(user, "is_authenticated", False):
+            try:
+                user_manager = ReleaseManager.objects.get(user=user)
+            except ReleaseManager.DoesNotExist:
+                user_manager = None
+            else:
+                if user_manager not in manager_candidates:
+                    manager_candidates.append(user_manager)
+
+        for manager in manager_candidates:
             creds = manager.to_credentials()
             if creds and creds.has_auth():
                 return creds
@@ -3658,7 +3675,9 @@ class PackageRelease(Entity):
             return manager.github_token
         return os.environ.get("GITHUB_TOKEN")
 
-    def build_publish_targets(self) -> list[RepositoryTarget]:
+    def build_publish_targets(
+        self, user: models.Model | None = None
+    ) -> list[RepositoryTarget]:
         """Return repository targets for publishing this release."""
 
         manager = self.release_manager or self.package.release_manager
@@ -3667,7 +3686,7 @@ class PackageRelease(Entity):
         env_primary = os.environ.get("PYPI_REPOSITORY_URL", "")
         primary_url = env_primary.strip()
 
-        primary_creds = self.to_credentials()
+        primary_creds = self.to_credentials(user=user)
         targets.append(
             RepositoryTarget(
                 name="PyPI",

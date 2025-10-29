@@ -935,7 +935,7 @@ def _refresh_changelog_once(ctx, log_path: Path) -> None:
     ctx["changelog_refreshed"] = True
 
 
-def _step_check_todos(release, ctx, log_path: Path) -> None:
+def _step_check_todos(release, ctx, log_path: Path, *, user=None) -> None:
     _refresh_changelog_once(ctx, log_path)
 
     pending_qs = Todo.objects.filter(is_deleted=False, done_on__isnull=True)
@@ -975,7 +975,7 @@ def _step_check_todos(release, ctx, log_path: Path) -> None:
     ctx["todos_ack"] = True
 
 
-def _step_check_version(release, ctx, log_path: Path) -> None:
+def _step_check_version(release, ctx, log_path: Path, *, user=None) -> None:
     from . import release as release_utils
     from packaging.version import InvalidVersion, Version
 
@@ -1163,17 +1163,17 @@ def _step_check_version(release, ctx, log_path: Path) -> None:
         _append_log(log_path, "Network unavailable, skipping PyPI check")
 
 
-def _step_handle_migrations(release, ctx, log_path: Path) -> None:
+def _step_handle_migrations(release, ctx, log_path: Path, *, user=None) -> None:
     _append_log(log_path, "Freeze, squash and approve migrations")
     _append_log(log_path, "Migration review acknowledged (manual step)")
 
 
-def _step_changelog_docs(release, ctx, log_path: Path) -> None:
+def _step_changelog_docs(release, ctx, log_path: Path, *, user=None) -> None:
     _append_log(log_path, "Compose CHANGELOG and documentation")
     _append_log(log_path, "CHANGELOG and documentation review recorded")
 
 
-def _step_pre_release_actions(release, ctx, log_path: Path) -> None:
+def _step_pre_release_actions(release, ctx, log_path: Path, *, user=None) -> None:
     _append_log(log_path, "Execute pre-release actions")
     if ctx.get("dry_run"):
         _append_log(log_path, "Dry run: skipping pre-release actions")
@@ -1249,12 +1249,12 @@ def _step_pre_release_actions(release, ctx, log_path: Path) -> None:
     _append_log(log_path, "Pre-release actions complete")
 
 
-def _step_run_tests(release, ctx, log_path: Path) -> None:
+def _step_run_tests(release, ctx, log_path: Path, *, user=None) -> None:
     _append_log(log_path, "Complete test suite with --all flag")
     _append_log(log_path, "Test suite completion acknowledged")
 
 
-def _step_promote_build(release, ctx, log_path: Path) -> None:
+def _step_promote_build(release, ctx, log_path: Path, *, user=None) -> None:
     from . import release as release_utils
 
     _append_log(log_path, "Generating build files")
@@ -1266,7 +1266,7 @@ def _step_promote_build(release, ctx, log_path: Path) -> None:
         release_utils.promote(
             package=release.to_package(),
             version=release.version,
-            creds=release.to_credentials(),
+            creds=release.to_credentials(user=user),
         )
         _append_log(
             log_path,
@@ -1314,8 +1314,10 @@ def _step_promote_build(release, ctx, log_path: Path) -> None:
     _append_log(new_log, "Build complete")
 
 
-def _step_release_manager_approval(release, ctx, log_path: Path) -> None:
-    if release.to_credentials() is None:
+def _step_release_manager_approval(
+    release, ctx, log_path: Path, *, user=None
+) -> None:
+    if release.to_credentials(user=user) is None:
         ctx.pop("release_approval", None)
         if not ctx.get("approval_credentials_missing"):
             _append_log(log_path, "Release manager publishing credentials missing")
@@ -1349,14 +1351,14 @@ def _step_release_manager_approval(release, ctx, log_path: Path) -> None:
     raise ApprovalRequired()
 
 
-def _step_publish(release, ctx, log_path: Path) -> None:
+def _step_publish(release, ctx, log_path: Path, *, user=None) -> None:
     from . import release as release_utils
 
     if ctx.get("dry_run"):
         test_repository_url = os.environ.get(
             "PYPI_TEST_REPOSITORY_URL", "https://test.pypi.org/legacy/"
         )
-        test_creds = release.to_credentials()
+        test_creds = release.to_credentials(user=user)
         if not (test_creds and test_creds.has_auth()):
             test_creds = release_utils.Credentials(
                 token=os.environ.get("PYPI_TEST_API_TOKEN"),
@@ -1396,7 +1398,7 @@ def _step_publish(release, ctx, log_path: Path) -> None:
                 release_utils.build(
                     package=package,
                     version=release.version,
-                    creds=release.to_credentials(),
+                    creds=release.to_credentials(user=user),
                     dist=True,
                     tests=False,
                     twine=False,
@@ -1425,13 +1427,13 @@ def _step_publish(release, ctx, log_path: Path) -> None:
         release_utils.publish(
             package=release.to_package(),
             version=release.version,
-            creds=target.credentials or release.to_credentials(),
+            creds=target.credentials or release.to_credentials(user=user),
             repositories=[target],
         )
         _append_log(log_path, "Dry run: skipped release metadata updates")
         return
 
-    targets = release.build_publish_targets()
+    targets = release.build_publish_targets(user=user)
     repo_labels = []
     for target in targets:
         label = target.name
@@ -1450,7 +1452,7 @@ def _step_publish(release, ctx, log_path: Path) -> None:
         release_utils.publish(
             package=release.to_package(),
             version=release.version,
-            creds=release.to_credentials(),
+            creds=release.to_credentials(user=user),
             repositories=targets,
         )
     except release_utils.PostPublishWarning as warning:
@@ -1819,7 +1821,7 @@ def release_progress(request, pk: int, action: str):
         return redirect(request.path)
 
     manager = release.release_manager or release.package.release_manager
-    credentials_ready = bool(release.to_credentials())
+    credentials_ready = bool(release.to_credentials(user=request.user))
     if credentials_ready and ctx.get("approval_credentials_missing"):
         ctx.pop("approval_credentials_missing", None)
 
@@ -1990,7 +1992,7 @@ def release_progress(request, pk: int, action: str):
         if to_run == step_count:
             name, func = steps[to_run]
             try:
-                func(release, ctx, log_path)
+                func(release, ctx, log_path, user=request.user)
             except PendingTodos:
                 pass
             except ApprovalRequired:
