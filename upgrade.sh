@@ -104,8 +104,8 @@ auto_realign_branch_for_role() {
   fi
 
   if (( has_untracked == 1 )); then
-    echo "Removing untracked files for $role node before pulling updates..."
-    git clean -fd
+    echo "Removing untracked files for $role node before pulling updates (preserving data/)..."
+    git clean -fd -e data/
   fi
 
   if (( ahead > 0 )) && [ -n "$LAST_FAILOVER_BRANCH" ]; then

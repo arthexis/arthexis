@@ -41,3 +41,8 @@ def test_db_setup_clean_flag(tmp_path: Path) -> None:
         text=True,
     )
     assert result.returncode != 0
+
+
+def test_upgrade_script_preserves_user_data_dir() -> None:
+    script_text = (REPO_ROOT / "upgrade.sh").read_text()
+    assert "git clean -fd -e data/" in script_text
