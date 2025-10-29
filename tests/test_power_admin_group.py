@@ -26,6 +26,6 @@ class PowerAdminGroupTests(TestCase):
 
     def test_admin_index_shows_powerlead(self):
         response = self.client.get(reverse("admin:index"))
-        self.assertContains(response, "1. Power MODELS")
+        self.assertContains(response, "1. Power</a>")
         self.assertContains(response, "Power Leads")
         self.assertContains(response, "Energy Tariffs")
