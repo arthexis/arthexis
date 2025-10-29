@@ -2812,7 +2812,7 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
         "user_data_flag",
         "color",
         "kind",
-        "endianness",
+        "endianness_short",
         "released",
         "allowed",
         "last_seen_on",
@@ -2876,6 +2876,14 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
     @admin.display(boolean=True, description=_("UD"))
     def user_data_flag(self, obj):
         return getattr(obj, "is_user_data", False)
+
+    @admin.display(description=_("End"), ordering="endianness")
+    def endianness_short(self, obj):
+        labels = {
+            RFID.BIG_ENDIAN: _("Big"),
+            RFID.LITTLE_ENDIAN: _("Little"),
+        }
+        return labels.get(obj.endianness, obj.get_endianness_display())
 
     def scan_rfids(self, request, queryset):
         return redirect("admin:core_rfid_scan")
