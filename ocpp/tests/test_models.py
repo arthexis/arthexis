@@ -17,7 +17,7 @@ from django.utils import timezone
 
 from core.models import Reference
 
-from ocpp.models import Charger
+from ocpp.models import Charger, Location
 from core.models import SecurityGroup
 
 
@@ -160,3 +160,65 @@ class ChargerSerialValidationTests(TestCase):
             "Serial Number placeholder values such as <charger_id> are not allowed.",
             message_dict["charger_id"],
         )
+
+
+class ChargerIdentityTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.location = Location.objects.create(
+            name="Central Hub",
+            latitude=19.432608,
+            longitude=-99.133209,
+        )
+        cls.aggregate = Charger.objects.create(
+            charger_id="SERIAL-001",
+            location=cls.location,
+        )
+        cls.connector_one = Charger.objects.create(
+            charger_id="SERIAL-001",
+            connector_id=1,
+            location=cls.location,
+        )
+        cls.connector_two = Charger.objects.create(
+            charger_id="SERIAL-001",
+            connector_id=2,
+            location=cls.location,
+        )
+        cls.connector_five = Charger.objects.create(
+            charger_id="SERIAL-001",
+            connector_id=5,
+            location=cls.location,
+        )
+
+    def test_identity_fields_use_expected_slugs(self):
+        self.assertEqual(self.aggregate.identity_tuple(), ("SERIAL-001", None))
+        self.assertEqual(self.aggregate.identity_slug(), "SERIAL-001#all")
+
+        self.assertEqual(self.connector_one.identity_tuple(), ("SERIAL-001", 1))
+        self.assertEqual(self.connector_one.identity_slug(), "SERIAL-001#1")
+
+    def test_connector_labels_and_location_properties(self):
+        self.assertEqual(str(self.aggregate.connector_label), "All Connectors")
+        self.assertEqual(str(self.connector_one.connector_label), "Connector 1 (Left)")
+        self.assertEqual(str(self.connector_two.connector_label), "Connector 2 (Right)")
+        self.assertEqual(str(self.connector_five.connector_label), "Connector 5")
+
+        self.assertEqual(self.aggregate.location_id, self.location.id)
+        self.assertEqual(self.connector_one.location_id, self.location.id)
+        self.assertEqual(self.connector_two.location_id, self.location.id)
+        self.assertEqual(self.connector_five.location_id, self.location.id)
+
+        self.assertEqual(self.aggregate.name, "Central Hub")
+        self.assertEqual(self.connector_one.name, "Central Hub #1")
+        self.assertEqual(self.connector_two.name, "Central Hub #2")
+        self.assertEqual(self.connector_five.name, "Central Hub #5")
+
+        for charger in (
+            self.aggregate,
+            self.connector_one,
+            self.connector_two,
+            self.connector_five,
+        ):
+            with self.subTest(charger=charger.connector_id):
+                self.assertEqual(charger.latitude, self.location.latitude)
+                self.assertEqual(charger.longitude, self.location.longitude)
