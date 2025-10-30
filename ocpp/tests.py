@@ -177,6 +177,36 @@ class DispatchActionTests(TestCase):
         self.assertEqual(metadata.get("trigger_target"), "BootNotification")
         self.assertEqual(metadata.get("log_key"), log_key)
 
+    def test_reset_rejected_when_transaction_active(self):
+        charger = Charger.objects.create(charger_id="RESETBLOCK")
+        dummy = DummyWebSocket()
+        connection_key = store.set_connection(charger.charger_id, charger.connector_id, dummy)
+        self.addCleanup(lambda: store.connections.pop(connection_key, None))
+        tx_obj = Transaction.objects.create(
+            charger=charger,
+            connector_id=charger.connector_id,
+            start_time=timezone.now(),
+        )
+        tx_key = store.set_transaction(charger.charger_id, charger.connector_id, tx_obj)
+        self.addCleanup(lambda: store.transactions.pop(tx_key, None))
+
+        request = self.factory.post(
+            "/chargers/RESETBLOCK/action/",
+            data=json.dumps({"action": "reset"}),
+            content_type="application/json",
+        )
+        request.user = SimpleNamespace(
+            is_authenticated=True,
+            is_superuser=True,
+            is_staff=True,
+        )
+
+        response = dispatch_action(request, charger.charger_id)
+        self.assertEqual(response.status_code, 409)
+        payload = json.loads(response.content.decode("utf-8"))
+        self.assertIn("stop the session first", payload.get("detail", "").lower())
+        self.assertFalse(dummy.sent)
+
 class ChargerFixtureTests(TestCase):
     fixtures = [
         p.name
@@ -2375,6 +2405,43 @@ class ChargerAdminTests(TestCase):
         finally:
             store.pop_connection(charger.charger_id, charger.connector_id)
             store.clear_pending_calls(charger.charger_id)
+
+    def test_reset_charger_action_skips_when_transaction_active(self):
+        charger = Charger.objects.create(charger_id="RESETADMIN")
+
+        class DummyConnection:
+            def __init__(self):
+                self.sent: list[str] = []
+
+            async def send(self, message):
+                self.sent.append(message)
+
+        ws = DummyConnection()
+        store.set_connection(charger.charger_id, charger.connector_id, ws)
+        tx_obj = Transaction.objects.create(
+            charger=charger,
+            connector_id=charger.connector_id,
+            start_time=timezone.now(),
+        )
+        store.set_transaction(charger.charger_id, charger.connector_id, tx_obj)
+        try:
+            url = reverse("admin:ocpp_charger_changelist")
+            response = self.client.post(
+                url,
+                {
+                    "action": "reset_chargers",
+                    "index": 0,
+                    "select_across": 0,
+                    "_selected_action": [charger.pk],
+                },
+                follow=True,
+            )
+            self.assertEqual(response.status_code, 200)
+            self.assertFalse(ws.sent)
+            self.assertContains(response, "stop the session first")
+        finally:
+            store.pop_connection(charger.charger_id, charger.connector_id)
+            store.pop_transaction(charger.charger_id, charger.connector_id)
 
     def test_admin_log_view_displays_entries(self):
         charger = Charger.objects.create(charger_id="LOG2")

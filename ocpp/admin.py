@@ -771,6 +771,17 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
                     level=messages.ERROR,
                 )
                 continue
+            tx_obj = store.get_transaction(charger.charger_id, connector_value)
+            if tx_obj is not None:
+                self.message_user(
+                    request,
+                    (
+                        f"{charger}: reset skipped because a session is active; "
+                        "stop the session first."
+                    ),
+                    level=messages.WARNING,
+                )
+                continue
             message_id = uuid.uuid4().hex
             msg = json.dumps([
                 2,

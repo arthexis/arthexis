@@ -1743,7 +1743,7 @@ def charger_log_page(request, cid, connector=None):
 @csrf_exempt
 @api_login_required
 def dispatch_action(request, cid, connector=None):
-    connector_value, _ = _normalize_connector_slug(connector)
+    connector_value, _normalized_slug = _normalize_connector_slug(connector)
     log_key = store.identity_key(cid, connector_value)
     if connector_value is None:
         charger_obj = (
@@ -1759,11 +1759,11 @@ def dispatch_action(request, cid, connector=None):
         )
     if charger_obj is None:
         if connector_value is None:
-            charger_obj, _ = Charger.objects.get_or_create(
+            charger_obj, _created = Charger.objects.get_or_create(
                 charger_id=cid, connector_id=None
             )
         else:
-            charger_obj, _ = Charger.objects.get_or_create(
+            charger_obj, _created = Charger.objects.get_or_create(
                 charger_id=cid, connector_id=connector_value
             )
 
@@ -1934,6 +1934,13 @@ def dispatch_action(request, cid, connector=None):
             },
         )
     elif action == "reset":
+        tx_obj = store.get_transaction(cid, connector_value)
+        if tx_obj is not None:
+            detail = _(
+                "Reset is blocked while a charging session is active. "
+                "Stop the session first."
+            )
+            return JsonResponse({"detail": detail}, status=409)
         message_id = uuid.uuid4().hex
         ocpp_action = "Reset"
         expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
