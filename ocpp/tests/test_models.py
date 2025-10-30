@@ -4,6 +4,8 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -15,10 +17,17 @@ from django.db.models.deletion import ProtectedError
 from django.test import TestCase
 from django.utils import timezone
 
-from core.models import Reference
+from core.models import Reference, SecurityGroup
 
-from ocpp.models import Charger
-from core.models import SecurityGroup
+from ocpp.models import Charger, Simulator
+from ocpp.simulator import SimulatorConfig
+
+
+@pytest.fixture
+def simulator() -> Simulator:
+    simulator = Simulator.objects.create(name="Test Simulator", cp_path="SIM")
+    yield simulator
+    Simulator.objects.filter(pk=simulator.pk).delete()
 
 
 class ChargerAutoLocationNameTests(TestCase):
@@ -160,3 +169,27 @@ class ChargerSerialValidationTests(TestCase):
             "Serial Number placeholder values such as <charger_id> are not allowed.",
             message_dict["charger_id"],
         )
+
+
+def test_simulator_as_config_defaults(simulator: Simulator):
+    config = simulator.as_config()
+
+    assert isinstance(config, SimulatorConfig)
+    assert config.username is None
+    assert config.password is None
+    assert config.configuration_keys == []
+    assert config.configuration_unknown_keys == []
+
+
+def test_simulator_ws_url_port_and_slash_handling(simulator: Simulator):
+    simulator.host = "localhost"
+    simulator.ws_port = 9000
+    simulator.cp_path = "SIM"
+    simulator.save(update_fields=["host", "ws_port", "cp_path"])
+
+    assert simulator.ws_url == "ws://localhost:9000/SIM/"
+
+    simulator.ws_port = None
+    simulator.save(update_fields=["ws_port"])
+
+    assert simulator.ws_url == "ws://localhost/SIM/"
