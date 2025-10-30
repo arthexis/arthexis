@@ -2138,6 +2138,25 @@ class PackageReleaseCurrentTests(TestCase):
         self.package.save()
         self.assertFalse(self.release.is_current)
 
+    def test_is_current_false_when_version_has_plus(self):
+        self.version_path.write_text("1.0.0+")
+        self.assertFalse(self.release.is_current)
+
+
+class PackageReleaseRevisionTests(TestCase):
+    def setUp(self):
+        self.package = Package.objects.get(name="arthexis")
+        self.release = PackageRelease.objects.create(
+            package=self.package,
+            version="1.0.0",
+            revision="abcdef123456",
+        )
+
+    def test_matches_revision_ignores_plus_suffix(self):
+        self.assertTrue(
+            PackageRelease.matches_revision("1.0.0+", "abcdef123456")
+        )
+
     def test_is_current_false_when_version_differs(self):
         self.release.version = "2.0.0"
         self.release.save()

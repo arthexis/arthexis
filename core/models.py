@@ -3828,6 +3828,8 @@ class PackageRelease(Entity):
         """
 
         version = (version or "").strip()
+        if version.endswith("+"):
+            version = version.rstrip("+")
         revision = (revision or "").strip()
         if not version or not revision:
             return True

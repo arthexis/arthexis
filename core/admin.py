@@ -613,11 +613,12 @@ class PackageAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         from packaging.version import Version
 
         ver_file = Path("VERSION")
-        repo_version = (
-            Version(ver_file.read_text().strip())
-            if ver_file.exists()
-            else Version("0.0.0")
-        )
+        if ver_file.exists():
+            raw_version = ver_file.read_text().strip()
+            cleaned_version = raw_version.rstrip("+") or "0.0.0"
+            repo_version = Version(cleaned_version)
+        else:
+            repo_version = Version("0.0.0")
 
         pypi_latest = Version("0.0.0")
         try:

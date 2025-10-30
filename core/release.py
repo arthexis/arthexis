@@ -520,11 +520,6 @@ def build(
         if not version_path.exists():
             raise ReleaseError("VERSION file not found")
         version = version_path.read_text().strip()
-        if bump:
-            major, minor, patch = map(int, version.split("."))
-            patch += 1
-            version = f"{major}.{minor}.{patch}"
-            version_path.write_text(version + "\n")
     else:
         # Ensure the VERSION file reflects the provided release version
         if version_path.parent != Path("."):
