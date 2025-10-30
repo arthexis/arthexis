@@ -70,3 +70,26 @@ class ChargerAutoLocationNameTests(TestCase):
         self.assertEqual(
             Charger.sanitize_auto_location_name(charger.charger_id), "Charger"
         )
+
+
+class ChargerAvailabilityStateTests(TestCase):
+    def test_operative_statuses_resolve_to_operative(self):
+        for status in Charger.OPERATIVE_STATUSES:
+            with self.subTest(status=status):
+                self.assertEqual(
+                    Charger.availability_state_from_status(status), "Operative"
+                )
+
+    def test_inoperative_statuses_resolve_to_inoperative(self):
+        for status in Charger.INOPERATIVE_STATUSES:
+            with self.subTest(status=status):
+                self.assertEqual(
+                    Charger.availability_state_from_status(status), "Inoperative"
+                )
+
+    def test_availability_state_edge_cases(self):
+        self.assertEqual(
+            Charger.availability_state_from_status("  Available  "), "Operative"
+        )
+        self.assertIsNone(Charger.availability_state_from_status("available"))
+        self.assertIsNone(Charger.availability_state_from_status("BootNotification"))
