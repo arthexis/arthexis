@@ -10,9 +10,10 @@ if str(ROOT) not in sys.path:
 
 import tests.conftest  # noqa: F401
 
-from django.contrib.auth import get_user_model
-from django.contrib.auth.models import AnonymousUser
+from django.core.exceptions import ValidationError
+from django.db.models.deletion import ProtectedError
 from django.test import TestCase
+from django.utils import timezone
 
 from core.models import Reference
 
