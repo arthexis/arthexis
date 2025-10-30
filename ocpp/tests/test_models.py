@@ -17,10 +17,35 @@ from django.db.models.deletion import ProtectedError
 from django.test import TestCase
 from django.utils import timezone
 
-from core.models import Reference, SecurityGroup
+from core.models import EnergyTariff, Reference, SecurityGroup
 
-from ocpp.models import Charger
+from ocpp.models import Charger, Location
 from nodes.models import Node
+
+
+class LocationEnergyTariffFieldsTests(TestCase):
+    def test_zone_and_contract_type_use_energy_tariff_choices(self):
+        zone_field = Location._meta.get_field("zone")
+        contract_field = Location._meta.get_field("contract_type")
+
+        self.assertEqual(zone_field.choices, EnergyTariff.Zone.choices)
+        self.assertEqual(
+            contract_field.choices, EnergyTariff.ContractType.choices
+        )
+
+    def test_location_stores_tariff_scope_information(self):
+        location = Location.objects.create(
+            name="HQ",
+            zone=EnergyTariff.Zone.ONE_A,
+            contract_type=EnergyTariff.ContractType.DAC,
+        )
+
+        location.refresh_from_db()
+
+        self.assertEqual(location.zone, EnergyTariff.Zone.ONE_A)
+        self.assertEqual(
+            location.contract_type, EnergyTariff.ContractType.DAC
+        )
 
 
 class ChargerAutoLocationNameTests(TestCase):

@@ -15,6 +15,7 @@ from nodes.models import Node
 
 from core.models import (
     EnergyAccount,
+    EnergyTariff,
     Reference,
     RFID as CoreRFID,
     ElectricVehicle as CoreElectricVehicle,
@@ -34,6 +35,22 @@ class Location(Entity):
     )
     longitude = models.DecimalField(
         max_digits=9, decimal_places=6, null=True, blank=True
+    )
+    zone = models.CharField(
+        max_length=3,
+        choices=EnergyTariff.Zone.choices,
+        blank=True,
+        null=True,
+        help_text=_("CFE climate zone used to select matching energy tariffs."),
+    )
+    contract_type = models.CharField(
+        max_length=16,
+        choices=EnergyTariff.ContractType.choices,
+        blank=True,
+        null=True,
+        help_text=_(
+            "CFE service contract type required to match energy tariff pricing."
+        ),
     )
 
     def __str__(self) -> str:  # pragma: no cover - simple representation

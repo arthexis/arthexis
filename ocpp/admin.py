@@ -208,7 +208,7 @@ class ChargerConfigurationAdmin(admin.ModelAdmin):
 @admin.register(Location)
 class LocationAdmin(EntityModelAdmin):
     form = LocationAdminForm
-    list_display = ("name", "latitude", "longitude")
+    list_display = ("name", "zone", "contract_type", "latitude", "longitude")
     change_form_template = "admin/ocpp/location/change_form.html"
 
 
