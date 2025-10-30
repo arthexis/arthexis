@@ -14,16 +14,28 @@ def _load_fixture(path):
 
 
 class FixturePresenceTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        cls.reference_fixtures = sorted(
+            glob("core/fixtures/references__*.json")
+        )
+        cls.calculator_fixtures = sorted(
+            glob("awg/fixtures/calculator_templates__*.json")
+        )
+        if cls.reference_fixtures:
+            call_command("loaddata", *cls.reference_fixtures)
+        if cls.calculator_fixtures:
+            call_command("loaddata", *cls.calculator_fixtures)
+
     def test_footer_reference_fixtures_exist(self):
-        files = glob("core/fixtures/references__*.json")
-        self.assertTrue(files, "Reference fixtures are missing")
-        call_command("loaddata", *files)
+        self.assertTrue(self.reference_fixtures, "Reference fixtures are missing")
         self.assertTrue(Reference.objects.filter(include_in_footer=True).exists())
 
     def test_calculator_template_fixtures_exist(self):
-        files = glob("awg/fixtures/calculator_templates__*.json")
-        self.assertTrue(files, "CalculatorTemplate fixtures are missing")
-        call_command("loaddata", *files)
+        self.assertTrue(
+            self.calculator_fixtures,
+            "CalculatorTemplate fixtures are missing",
+        )
         self.assertTrue(CalculatorTemplate.objects.exists())
 
     def test_package_release_fixtures_use_natural_keys(self):
