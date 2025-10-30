@@ -15,11 +15,70 @@ from django.test.utils import override_settings
 
 
 class CSRFOriginSubnetTests(TestCase):
-    def test_origin_in_allowed_subnet(self):
-        rf = RequestFactory()
-        request = rf.post("/", HTTP_HOST="192.168.129.10:8888")
-        request.META["HTTP_ORIGIN"] = "http://192.168.129.10:8000"
+    def setUp(self):
+        self.factory = RequestFactory()
+
+    def _build_middleware_request(self, **request_kwargs):
+        request = self.factory.post("/", **request_kwargs)
+        request.META.setdefault("HTTP_HOST", "disallowed.test")
+        return request
+
+    def test_forwarded_https_origin_within_allowed_subnet(self):
+        request = self._build_middleware_request(
+            secure=True,
+            HTTP_HOST="invalid-proxy.local",
+        )
+        request.META.update(
+            {
+                "HTTP_ORIGIN": "https://192.168.129.10:4443",
+                "HTTP_X_FORWARDED_HOST": "192.168.129.20:4443",
+                "HTTP_FORWARDED": 'for="192.168.129.30";proto=https;host="192.168.129.20:4443"',
+            }
+        )
+
         middleware = CsrfViewMiddleware(lambda r: None)
+
+        allowed_hosts = _get_allowed_hosts()
+        candidates = _candidate_origin_tuples(request, allowed_hosts)
+        self.assertIn(("https", "192.168.129.20", "4443"), candidates)
+        self.assertTrue(middleware._origin_verified(request))
+
+    def test_forwarded_host_outside_allowed_hosts_is_rejected(self):
+        request = self._build_middleware_request(
+            secure=True,
+            HTTP_HOST="invalid-proxy.local",
+        )
+        request.META.update(
+            {
+                "HTTP_ORIGIN": "https://203.0.113.10:4443",
+                "HTTP_X_FORWARDED_HOST": "203.0.113.10:4443",
+                "HTTP_FORWARDED": 'proto=https;host="203.0.113.10:4443"',
+            }
+        )
+
+        middleware = CsrfViewMiddleware(lambda r: None)
+
+        allowed_hosts = _get_allowed_hosts()
+        candidates = _candidate_origin_tuples(request, allowed_hosts)
+        self.assertEqual(candidates, [])
+        self.assertFalse(middleware._origin_verified(request))
+
+    @override_settings(ALLOWED_HOSTS=_get_allowed_hosts() + ["2001:db8::/32"])
+    def test_ipv6_forwarded_host_matches_allowed_subnet(self):
+        request = self._build_middleware_request(secure=True)
+        request.META.update(
+            {
+                "HTTP_ORIGIN": "https://[2001:db8::1]:4443",
+                "HTTP_X_FORWARDED_HOST": "[2001:db8::2]:4443",
+                "HTTP_FORWARDED": 'for="[2001:db8::3]";proto=https;host="[2001:db8::2]:4443"',
+            }
+        )
+
+        middleware = CsrfViewMiddleware(lambda r: None)
+
+        allowed_hosts = _get_allowed_hosts()
+        candidates = _candidate_origin_tuples(request, allowed_hosts)
+        self.assertIn(("https", "2001:db8::2", "4443"), candidates)
         self.assertTrue(middleware._origin_verified(request))
 
     @override_settings(ALLOWED_HOSTS=["testserver", "192.168.0.0/16", "10.42.0.0/16"])
