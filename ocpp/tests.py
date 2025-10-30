@@ -218,6 +218,62 @@ class ChargerFixtureTests(TestCase):
         self.assertEqual(cp2.name, "Simulator #2")
 
 
+class ChargerRefreshManagerNodeTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        local = Node.objects.create(
+            hostname="local-node",
+            address="127.0.0.1",
+            port=8000,
+            mac_address="aa:bb:cc:dd:ee:ff",
+            current_relation=Node.Relation.SELF,
+        )
+        Node.objects.filter(pk=local.pk).update(mac_address="AA:BB:CC:DD:EE:FF")
+        cls.local_node = Node.objects.get(pk=local.pk)
+
+    def test_refresh_manager_node_assigns_local_to_unsaved_charger(self):
+        charger = Charger(charger_id="UNSAVED")
+
+        with patch("nodes.models.Node.get_current_mac", return_value="aa:bb:cc:dd:ee:ff"):
+            result = charger.refresh_manager_node()
+
+        self.assertEqual(result, self.local_node)
+        self.assertEqual(charger.manager_node, self.local_node)
+
+    def test_refresh_manager_node_updates_persisted_charger(self):
+        remote = Node.objects.create(
+            hostname="remote-node",
+            address="10.0.0.1",
+            port=9000,
+            mac_address="11:22:33:44:55:66",
+        )
+        charger = Charger.objects.create(
+            charger_id="PERSISTED",
+            manager_node=remote,
+        )
+
+        charger.refresh_manager_node(node=self.local_node)
+
+        self.assertEqual(charger.manager_node, self.local_node)
+        charger.refresh_from_db()
+        self.assertEqual(charger.manager_node, self.local_node)
+
+    def test_refresh_manager_node_handles_missing_local_node(self):
+        remote = Node.objects.create(
+            hostname="existing-manager",
+            address="10.0.0.2",
+            port=9001,
+            mac_address="22:33:44:55:66:77",
+        )
+        charger = Charger(charger_id="NOLOCAL", manager_node=remote)
+
+        with patch.object(Node, "get_local", return_value=None):
+            result = charger.refresh_manager_node()
+
+        self.assertIsNone(result)
+        self.assertEqual(charger.manager_node, remote)
+
+
 class ChargerUrlFallbackTests(TestCase):
     @override_settings(ALLOWED_HOSTS=["fallback.example", "10.0.0.0/8"])
     def test_reference_created_when_site_missing(self):
