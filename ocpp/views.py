@@ -1609,6 +1609,15 @@ def charger_session_search(request, cid, connector=None):
             transactions = qs.order_by("-start_time")
         except ValueError:
             transactions = []
+    if transactions is not None:
+        transactions = list(transactions)
+        rfid_cache: dict[str, dict[str, str | None]] = {}
+        for tx in transactions:
+            details = _transaction_rfid_details(tx, cache=rfid_cache)
+            label_value = None
+            if details:
+                label_value = str(details.get("label") or "").strip() or None
+            tx.rfid_label = label_value
     overview = _connector_overview(charger, request.user)
     connector_links = [
         {
