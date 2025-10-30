@@ -789,7 +789,11 @@ class Transaction(Entity):
     def vehicle_identifier(self) -> str:
         """Return the preferred vehicle identifier for this transaction."""
 
-        return (self.vid or self.vin or "").strip()
+        vid = (self.vid or "").strip()
+        if vid:
+            return vid
+
+        return (self.vin or "").strip()
 
     @property
     def vehicle_identifier_source(self) -> str:
