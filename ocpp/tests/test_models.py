@@ -10,12 +10,13 @@ if str(ROOT) not in sys.path:
 
 import tests.conftest  # noqa: F401
 
-from django.contrib.auth import get_user_model
-from django.contrib.auth.models import AnonymousUser
+from django.core.exceptions import ValidationError
+from django.db.models.deletion import ProtectedError
 from django.test import TestCase
+from django.utils import timezone
 
-from ocpp.models import Charger
-from core.models import SecurityGroup
+from ocpp import store
+from ocpp.models import Charger, MeterReading, Transaction
 
 
 class ChargerAutoLocationNameTests(TestCase):
@@ -75,22 +76,182 @@ class ChargerAutoLocationNameTests(TestCase):
         )
 
 
-class ChargerConnectorSlugTests(TestCase):
-    def test_none_round_trip_uses_aggregate_slug(self):
-        slug = Charger.connector_slug_from_value(None)
-        self.assertEqual(slug, Charger.AGGREGATE_CONNECTOR_SLUG)
-        self.assertIsNone(Charger.connector_value_from_slug(slug))
+class ChargerVisibilityScopeTests(TestCase):
+    def setUp(self):
+        super().setUp()
+        patcher = patch.object(Charger, "_full_url", return_value="http://example.com")
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
-    def test_string_number_converts_to_integer(self):
-        value = Charger.connector_value_from_slug("2")
-        self.assertEqual(value, 2)
-        self.assertEqual(Charger.connector_slug_from_value(value), "2")
+        user_model = get_user_model()
+        self.superuser = user_model.objects.create_superuser(
+            username="supervisor",
+            email="supervisor@example.com",
+            password="password",
+        )
+        self.owner_user = user_model.objects.create_user(
+            username="owner",
+            email="owner@example.com",
+            password="password",
+        )
+        self.group_user = user_model.objects.create_user(
+            username="groupie",
+            email="group@example.com",
+            password="password",
+        )
 
-    def test_integer_slug_returns_same_integer(self):
-        self.assertEqual(Charger.connector_value_from_slug(5), 5)
+        self.security_group = SecurityGroup.objects.create(name="Fleet Access")
+        self.group_user.groups.add(self.security_group)
 
-    def test_invalid_slugs_raise_value_error(self):
-        for invalid in ["abc", object()]:
-            with self.subTest(invalid=invalid):
-                with self.assertRaises(ValueError):
-                    Charger.connector_value_from_slug(invalid)
+        self.public_charger = Charger.objects.create(charger_id="public-serial")
+        self.user_restricted_charger = Charger.objects.create(
+            charger_id="user-serial"
+        )
+        self.user_restricted_charger.owner_users.add(self.owner_user)
+        self.group_restricted_charger = Charger.objects.create(
+            charger_id="group-serial"
+        )
+        self.group_restricted_charger.owner_groups.add(self.security_group)
+
+        self.all_chargers = [
+            self.public_charger,
+            self.user_restricted_charger,
+            self.group_restricted_charger,
+        ]
+
+    def test_visible_for_user_honors_user_and_group_scope(self):
+        anonymous_visible = Charger.visible_for_user(AnonymousUser())
+        self.assertEqual(
+            {self.public_charger.pk},
+            {charger.pk for charger in anonymous_visible},
+        )
+
+        owner_visible = Charger.visible_for_user(self.owner_user)
+        self.assertEqual(
+            {self.public_charger.pk, self.user_restricted_charger.pk},
+            {charger.pk for charger in owner_visible},
+        )
+
+        group_visible = Charger.visible_for_user(self.group_user)
+        self.assertEqual(
+            {self.public_charger.pk, self.group_restricted_charger.pk},
+            {charger.pk for charger in group_visible},
+        )
+
+        superuser_visible = Charger.visible_for_user(self.superuser)
+        self.assertEqual(
+            {charger.pk for charger in self.all_chargers},
+            {charger.pk for charger in superuser_visible},
+        )
+
+    def test_instance_visibility_matches_queryset_logic(self):
+        self.assertFalse(self.public_charger.has_owner_scope())
+        self.assertTrue(self.user_restricted_charger.has_owner_scope())
+        self.assertTrue(self.group_restricted_charger.has_owner_scope())
+
+        scenarios = [
+            (AnonymousUser(), {self.public_charger.pk}),
+            (
+                self.owner_user,
+                {self.public_charger.pk, self.user_restricted_charger.pk},
+            ),
+        ):
+            with self.subTest(value=value):
+                with self.assertRaises(ValidationError) as context:
+                    Charger.validate_serial(value)
+
+                message_dict = context.exception.message_dict
+                self.assertIn("charger_id", message_dict)
+                self.assertIn(expected_message, message_dict["charger_id"])
+
+    def test_full_clean_propagates_placeholder_serial_error(self):
+        charger = Charger(charger_id="<invalid>")
+
+        with self.assertRaises(ValidationError) as context:
+            charger.full_clean()
+
+        message_dict = context.exception.message_dict
+        self.assertIn("charger_id", message_dict)
+        self.assertIn(
+            "Serial Number placeholder values such as <charger_id> are not allowed.",
+            message_dict["charger_id"],
+        )
+
+
+class ChargerPurgeTests(TestCase):
+    def setUp(self):
+        super().setUp()
+        store.logs["charger"].clear()
+        store.transactions.clear()
+        store.history.clear()
+        self.addCleanup(store.logs["charger"].clear)
+        self.addCleanup(store.transactions.clear)
+        self.addCleanup(store.history.clear)
+
+    def test_delete_requires_purge_for_aggregate_and_connectors(self):
+        serial = "PURGEAGG"
+        now = timezone.now()
+
+        charger = Charger.objects.create(charger_id=serial)
+        connector = Charger.objects.create(charger_id=serial, connector_id=1)
+
+        Transaction.objects.create(charger=charger, start_time=now)
+        Transaction.objects.create(
+            charger=connector,
+            start_time=now,
+            connector_id=1,
+        )
+        MeterReading.objects.create(
+            charger=charger,
+            timestamp=now,
+            value=1,
+        )
+        MeterReading.objects.create(
+            charger=connector,
+            connector_id=1,
+            timestamp=now,
+            value=2,
+        )
+
+        aggregate_key = store.identity_key(serial, None)
+        connector_key = store.identity_key(serial, 1)
+        pending_key = store.pending_key(serial)
+
+        store.logs["charger"][aggregate_key] = ["aggregate log"]
+        store.logs["charger"][connector_key] = ["connector log"]
+        store.logs["charger"][pending_key] = ["pending log"]
+        store.logs["charger"][serial] = ["base log"]
+
+        store.transactions[aggregate_key] = object()
+        store.transactions[connector_key] = object()
+        store.transactions[pending_key] = object()
+        store.transactions[serial] = object()
+
+        store.history[aggregate_key] = {"history": "aggregate"}
+        store.history[connector_key] = {"history": "connector"}
+        store.history[pending_key] = {"history": "pending"}
+        store.history[serial] = {"history": "base"}
+
+        with self.assertRaises(ProtectedError):
+            charger.delete()
+
+        charger.refresh_from_db()
+        connector.refresh_from_db()
+
+        charger.purge()
+
+        self.assertFalse(Transaction.objects.filter(charger__charger_id=serial).exists())
+        self.assertFalse(MeterReading.objects.filter(charger__charger_id=serial).exists())
+
+        expected_keys = {aggregate_key, connector_key, pending_key, serial}
+        for key in expected_keys:
+            self.assertNotIn(key, store.logs["charger"])
+            self.assertNotIn(key, store.transactions)
+            self.assertNotIn(key, store.history)
+
+        charger.delete()
+        self.assertFalse(Charger.objects.filter(pk=charger.pk).exists())
+
+        connector.delete()
+        self.assertFalse(Charger.objects.filter(pk=connector.pk).exists())
+        self.assertFalse(Charger.objects.filter(charger_id=serial).exists())
