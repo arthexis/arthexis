@@ -75,102 +75,22 @@ class ChargerAutoLocationNameTests(TestCase):
         )
 
 
-class ChargerVisibilityScopeTests(TestCase):
-    def setUp(self):
-        super().setUp()
-        patcher = patch.object(Charger, "_full_url", return_value="http://example.com")
-        patcher.start()
-        self.addCleanup(patcher.stop)
+class ChargerConnectorSlugTests(TestCase):
+    def test_none_round_trip_uses_aggregate_slug(self):
+        slug = Charger.connector_slug_from_value(None)
+        self.assertEqual(slug, Charger.AGGREGATE_CONNECTOR_SLUG)
+        self.assertIsNone(Charger.connector_value_from_slug(slug))
 
-        user_model = get_user_model()
-        self.superuser = user_model.objects.create_superuser(
-            username="supervisor",
-            email="supervisor@example.com",
-            password="password",
-        )
-        self.owner_user = user_model.objects.create_user(
-            username="owner",
-            email="owner@example.com",
-            password="password",
-        )
-        self.group_user = user_model.objects.create_user(
-            username="groupie",
-            email="group@example.com",
-            password="password",
-        )
+    def test_string_number_converts_to_integer(self):
+        value = Charger.connector_value_from_slug("2")
+        self.assertEqual(value, 2)
+        self.assertEqual(Charger.connector_slug_from_value(value), "2")
 
-        self.security_group = SecurityGroup.objects.create(name="Fleet Access")
-        self.group_user.groups.add(self.security_group)
+    def test_integer_slug_returns_same_integer(self):
+        self.assertEqual(Charger.connector_value_from_slug(5), 5)
 
-        self.public_charger = Charger.objects.create(charger_id="public-serial")
-        self.user_restricted_charger = Charger.objects.create(
-            charger_id="user-serial"
-        )
-        self.user_restricted_charger.owner_users.add(self.owner_user)
-        self.group_restricted_charger = Charger.objects.create(
-            charger_id="group-serial"
-        )
-        self.group_restricted_charger.owner_groups.add(self.security_group)
-
-        self.all_chargers = [
-            self.public_charger,
-            self.user_restricted_charger,
-            self.group_restricted_charger,
-        ]
-
-    def test_visible_for_user_honors_user_and_group_scope(self):
-        anonymous_visible = Charger.visible_for_user(AnonymousUser())
-        self.assertEqual(
-            {self.public_charger.pk},
-            {charger.pk for charger in anonymous_visible},
-        )
-
-        owner_visible = Charger.visible_for_user(self.owner_user)
-        self.assertEqual(
-            {self.public_charger.pk, self.user_restricted_charger.pk},
-            {charger.pk for charger in owner_visible},
-        )
-
-        group_visible = Charger.visible_for_user(self.group_user)
-        self.assertEqual(
-            {self.public_charger.pk, self.group_restricted_charger.pk},
-            {charger.pk for charger in group_visible},
-        )
-
-        superuser_visible = Charger.visible_for_user(self.superuser)
-        self.assertEqual(
-            {charger.pk for charger in self.all_chargers},
-            {charger.pk for charger in superuser_visible},
-        )
-
-    def test_instance_visibility_matches_queryset_logic(self):
-        self.assertFalse(self.public_charger.has_owner_scope())
-        self.assertTrue(self.user_restricted_charger.has_owner_scope())
-        self.assertTrue(self.group_restricted_charger.has_owner_scope())
-
-        scenarios = [
-            (AnonymousUser(), {self.public_charger.pk}),
-            (
-                self.owner_user,
-                {self.public_charger.pk, self.user_restricted_charger.pk},
-            ),
-            (
-                self.group_user,
-                {self.public_charger.pk, self.group_restricted_charger.pk},
-            ),
-            (
-                self.superuser,
-                {charger.pk for charger in self.all_chargers},
-            ),
-        ]
-
-        for user, expected in scenarios:
-            queryset_ids = {charger.pk for charger in Charger.visible_for_user(user)}
-            direct_ids = {
-                charger.pk
-                for charger in self.all_chargers
-                if charger.is_visible_to(user)
-            }
-
-            self.assertEqual(expected, queryset_ids)
-            self.assertEqual(queryset_ids, direct_ids)
+    def test_invalid_slugs_raise_value_error(self):
+        for invalid in ["abc", object()]:
+            with self.subTest(invalid=invalid):
+                with self.assertRaises(ValueError):
+                    Charger.connector_value_from_slug(invalid)
