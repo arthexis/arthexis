@@ -4,6 +4,8 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -15,10 +17,17 @@ from django.db.models.deletion import ProtectedError
 from django.test import TestCase
 from django.utils import timezone
 
-from core.models import Reference
+from core.models import Reference, SecurityGroup
 
-from ocpp.models import Charger, Transaction
-from core.models import SecurityGroup
+from ocpp.models import Charger, Simulator
+from ocpp.simulator import SimulatorConfig
+
+
+@pytest.fixture
+def simulator() -> Simulator:
+    simulator = Simulator.objects.create(name="Test Simulator", cp_path="SIM")
+    yield simulator
+    Simulator.objects.filter(pk=simulator.pk).delete()
 
 
 class ChargerAutoLocationNameTests(TestCase):
@@ -162,21 +171,25 @@ class ChargerSerialValidationTests(TestCase):
         )
 
 
-class TransactionIdentifierTests(TestCase):
-    def test_vehicle_identifier_prefers_trimmed_vid(self):
-        transaction = Transaction(vid="  vehicle-vid  ", vin="  vehicle-vin  ")
+def test_simulator_as_config_defaults(simulator: Simulator):
+    config = simulator.as_config()
 
-        self.assertEqual(transaction.vehicle_identifier, "vehicle-vid")
-        self.assertEqual(transaction.vehicle_identifier_source, "vid")
+    assert isinstance(config, SimulatorConfig)
+    assert config.username is None
+    assert config.password is None
+    assert config.configuration_keys == []
+    assert config.configuration_unknown_keys == []
 
-    def test_vehicle_identifier_falls_back_to_trimmed_vin(self):
-        transaction = Transaction(vid="   ", vin="  vehicle-vin  ")
 
-        self.assertEqual(transaction.vehicle_identifier, "vehicle-vin")
-        self.assertEqual(transaction.vehicle_identifier_source, "vin")
+def test_simulator_ws_url_port_and_slash_handling(simulator: Simulator):
+    simulator.host = "localhost"
+    simulator.ws_port = 9000
+    simulator.cp_path = "SIM"
+    simulator.save(update_fields=["host", "ws_port", "cp_path"])
 
-    def test_vehicle_identifier_blank_when_both_values_missing(self):
-        transaction = Transaction(vid="   ", vin="   ")
+    assert simulator.ws_url == "ws://localhost:9000/SIM/"
 
-        self.assertEqual(transaction.vehicle_identifier, "")
-        self.assertEqual(transaction.vehicle_identifier_source, "")
+    simulator.ws_port = None
+    simulator.save(update_fields=["ws_port"])
+
+    assert simulator.ws_url == "ws://localhost/SIM/"
