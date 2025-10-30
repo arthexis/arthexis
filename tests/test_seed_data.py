@@ -573,14 +573,17 @@ class EnvRefreshUserDataTests(TransactionTestCase):
 
 
 class SeedDataViewTests(TestCase):
-    def setUp(self):
-        from glob import glob
-
-        call_command("loaddata", *glob("nodes/fixtures/node_roles__*.json"))
-        NodeRole.objects.filter(pk=1).update(is_seed_data=True)
+    @classmethod
+    def setUpTestData(cls):
+        fixtures = sorted(glob("nodes/fixtures/node_roles__*.json"))
+        call_command("loaddata", *fixtures)
+        NodeRole.objects.filter(name="Terminal").update(is_seed_data=True)
         User = get_user_model()
-        self.user = User.objects.create_superuser("sdadmin", password="pw")
-        self.client.login(username="sdadmin", password="pw")
+        cls.user = User.objects.create_superuser("sdadmin", password="pw")
+
+    def setUp(self):
+        self.user = self.__class__.user
+        self.client.force_login(self.user)
 
     def test_seed_data_view_shows_fixture(self):
         response = self.client.get(reverse("admin:seed_data"))
