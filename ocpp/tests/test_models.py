@@ -17,7 +17,7 @@ from django.utils import timezone
 
 from core.models import Reference
 
-from ocpp.models import Charger
+from ocpp.models import Charger, Transaction
 from core.models import SecurityGroup
 
 
@@ -160,3 +160,23 @@ class ChargerSerialValidationTests(TestCase):
             "Serial Number placeholder values such as <charger_id> are not allowed.",
             message_dict["charger_id"],
         )
+
+
+class TransactionIdentifierTests(TestCase):
+    def test_vehicle_identifier_prefers_trimmed_vid(self):
+        transaction = Transaction(vid="  vehicle-vid  ", vin="  vehicle-vin  ")
+
+        self.assertEqual(transaction.vehicle_identifier, "vehicle-vid")
+        self.assertEqual(transaction.vehicle_identifier_source, "vid")
+
+    def test_vehicle_identifier_falls_back_to_trimmed_vin(self):
+        transaction = Transaction(vid="   ", vin="  vehicle-vin  ")
+
+        self.assertEqual(transaction.vehicle_identifier, "vehicle-vin")
+        self.assertEqual(transaction.vehicle_identifier_source, "vin")
+
+    def test_vehicle_identifier_blank_when_both_values_missing(self):
+        transaction = Transaction(vid="   ", vin="   ")
+
+        self.assertEqual(transaction.vehicle_identifier, "")
+        self.assertEqual(transaction.vehicle_identifier_source, "")
