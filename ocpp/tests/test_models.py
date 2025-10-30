@@ -13,6 +13,8 @@ import tests.conftest  # noqa: F401
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 
+from core.models import Reference
+
 from ocpp.models import Charger
 
 
@@ -72,6 +74,56 @@ class ChargerAutoLocationNameTests(TestCase):
             Charger.sanitize_auto_location_name(charger.charger_id), "Charger"
         )
 
+
+class ChargerReferenceTests(TestCase):
+    def test_reference_created_and_updated_for_remote_urls(self):
+        serial = "Remote-123"
+        first_url = "http://remote.example/chargers/remote-123"
+        updated_url = "http://remote.example/chargers/remote-123/v2"
+
+        with patch("ocpp.models.url_targets_local_loopback") as loopback_mock, patch.object(
+            Charger, "_full_url"
+        ) as full_url_mock:
+            loopback_mock.return_value = False
+            full_url_mock.return_value = first_url
+
+            charger = Charger.objects.create(charger_id=serial)
+
+            charger.refresh_from_db()
+            self.assertIsNotNone(charger.reference)
+            self.assertEqual(charger.reference.value, first_url)
+            self.assertEqual(Reference.objects.count(), 1)
+
+            existing_reference_id = charger.reference_id
+
+            full_url_mock.return_value = first_url
+            charger.save()
+            charger.refresh_from_db()
+
+            self.assertEqual(Reference.objects.count(), 1)
+            self.assertEqual(charger.reference_id, existing_reference_id)
+            self.assertEqual(charger.reference.value, first_url)
+
+            full_url_mock.return_value = updated_url
+            charger.save()
+            charger.refresh_from_db()
+
+            self.assertEqual(Reference.objects.count(), 1)
+            self.assertEqual(charger.reference_id, existing_reference_id)
+            self.assertEqual(charger.reference.value, updated_url)
+
+    def test_loopback_url_skips_reference_creation(self):
+        serial = "Loopback-123"
+
+        with patch("ocpp.models.url_targets_local_loopback") as loopback_mock, patch.object(
+            Charger, "_full_url", return_value="http://loopback"
+        ):
+            loopback_mock.return_value = True
+
+            charger = Charger.objects.create(charger_id=serial)
+
+            charger.refresh_from_db()
+            self.assertIsNone(charger.reference)
 
 class ChargerSerialValidationTests(TestCase):
     def test_validate_serial_strips_and_rejects_invalid_values(self):
