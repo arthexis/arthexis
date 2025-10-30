@@ -10,9 +10,12 @@ if str(ROOT) not in sys.path:
 
 import tests.conftest  # noqa: F401
 
+from django.contrib.auth import get_user_model
+from django.contrib.auth.models import AnonymousUser
 from django.test import TestCase
 
 from ocpp.models import Charger
+from core.models import SecurityGroup
 
 
 class ChargerAutoLocationNameTests(TestCase):
@@ -70,3 +73,104 @@ class ChargerAutoLocationNameTests(TestCase):
         self.assertEqual(
             Charger.sanitize_auto_location_name(charger.charger_id), "Charger"
         )
+
+
+class ChargerVisibilityScopeTests(TestCase):
+    def setUp(self):
+        super().setUp()
+        patcher = patch.object(Charger, "_full_url", return_value="http://example.com")
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+        user_model = get_user_model()
+        self.superuser = user_model.objects.create_superuser(
+            username="supervisor",
+            email="supervisor@example.com",
+            password="password",
+        )
+        self.owner_user = user_model.objects.create_user(
+            username="owner",
+            email="owner@example.com",
+            password="password",
+        )
+        self.group_user = user_model.objects.create_user(
+            username="groupie",
+            email="group@example.com",
+            password="password",
+        )
+
+        self.security_group = SecurityGroup.objects.create(name="Fleet Access")
+        self.group_user.groups.add(self.security_group)
+
+        self.public_charger = Charger.objects.create(charger_id="public-serial")
+        self.user_restricted_charger = Charger.objects.create(
+            charger_id="user-serial"
+        )
+        self.user_restricted_charger.owner_users.add(self.owner_user)
+        self.group_restricted_charger = Charger.objects.create(
+            charger_id="group-serial"
+        )
+        self.group_restricted_charger.owner_groups.add(self.security_group)
+
+        self.all_chargers = [
+            self.public_charger,
+            self.user_restricted_charger,
+            self.group_restricted_charger,
+        ]
+
+    def test_visible_for_user_honors_user_and_group_scope(self):
+        anonymous_visible = Charger.visible_for_user(AnonymousUser())
+        self.assertEqual(
+            {self.public_charger.pk},
+            {charger.pk for charger in anonymous_visible},
+        )
+
+        owner_visible = Charger.visible_for_user(self.owner_user)
+        self.assertEqual(
+            {self.public_charger.pk, self.user_restricted_charger.pk},
+            {charger.pk for charger in owner_visible},
+        )
+
+        group_visible = Charger.visible_for_user(self.group_user)
+        self.assertEqual(
+            {self.public_charger.pk, self.group_restricted_charger.pk},
+            {charger.pk for charger in group_visible},
+        )
+
+        superuser_visible = Charger.visible_for_user(self.superuser)
+        self.assertEqual(
+            {charger.pk for charger in self.all_chargers},
+            {charger.pk for charger in superuser_visible},
+        )
+
+    def test_instance_visibility_matches_queryset_logic(self):
+        self.assertFalse(self.public_charger.has_owner_scope())
+        self.assertTrue(self.user_restricted_charger.has_owner_scope())
+        self.assertTrue(self.group_restricted_charger.has_owner_scope())
+
+        scenarios = [
+            (AnonymousUser(), {self.public_charger.pk}),
+            (
+                self.owner_user,
+                {self.public_charger.pk, self.user_restricted_charger.pk},
+            ),
+            (
+                self.group_user,
+                {self.public_charger.pk, self.group_restricted_charger.pk},
+            ),
+            (
+                self.superuser,
+                {charger.pk for charger in self.all_chargers},
+            ),
+        ]
+
+        for user, expected in scenarios:
+            queryset_ids = {charger.pk for charger in Charger.visible_for_user(user)}
+            direct_ids = {
+                charger.pk
+                for charger in self.all_chargers
+                if charger.is_visible_to(user)
+            }
+
+            self.assertEqual(expected, queryset_ids)
+            self.assertEqual(queryset_ids, direct_ids)
