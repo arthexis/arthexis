@@ -70,3 +70,24 @@ class ChargerAutoLocationNameTests(TestCase):
         self.assertEqual(
             Charger.sanitize_auto_location_name(charger.charger_id), "Charger"
         )
+
+
+class ChargerConnectorSlugTests(TestCase):
+    def test_none_round_trip_uses_aggregate_slug(self):
+        slug = Charger.connector_slug_from_value(None)
+        self.assertEqual(slug, Charger.AGGREGATE_CONNECTOR_SLUG)
+        self.assertIsNone(Charger.connector_value_from_slug(slug))
+
+    def test_string_number_converts_to_integer(self):
+        value = Charger.connector_value_from_slug("2")
+        self.assertEqual(value, 2)
+        self.assertEqual(Charger.connector_slug_from_value(value), "2")
+
+    def test_integer_slug_returns_same_integer(self):
+        self.assertEqual(Charger.connector_value_from_slug(5), 5)
+
+    def test_invalid_slugs_raise_value_error(self):
+        for invalid in ["abc", object()]:
+            with self.subTest(invalid=invalid):
+                with self.assertRaises(ValueError):
+                    Charger.connector_value_from_slug(invalid)
