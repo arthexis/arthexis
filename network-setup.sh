@@ -22,13 +22,12 @@ DEFAULT_ETH0_SUBNET_BASE="${DEFAULT_ETH0_SUBNET_PREFIX}.${DEFAULT_ETH0_SUBNET_SU
 
 usage() {
     cat <<USAGE
-Usage: $0 [--password] [--ap NAME] [--no-firewall] [--unsafe] [--interactive|-i] [--no-watchdog] [--vnc] [--no-vnc] [--subnet N[/P]] [--eth0-mode MODE] [--ap-set-password] [--status] [--dhcp-server] [--dhcp-client]
+Usage: $0 [--password] [--ap NAME] [--no-firewall] [--unsafe] [--interactive|-i] [--vnc] [--no-vnc] [--subnet N[/P]] [--eth0-mode MODE] [--ap-set-password] [--status] [--dhcp-server] [--dhcp-client]
   --password      Prompt for a new WiFi password even if one is already configured.
   --ap NAME       Set the wlan0 access point name (SSID) to NAME.
   --no-firewall   Skip firewall port validation.
   --unsafe        Allow modification of the active internet connection.
   --interactive, -i  Collect user decisions for each step before executing.
-  --no-watchdog   Skip installing the WiFi watchdog service.
   --vnc           Require validating that a VNC service is enabled.
   --no-vnc        Skip validating that a VNC service is enabled (default).
   --subnet N[/P]  Configure eth0 on the 192.168.N.0/P subnet (default: 129/16).
@@ -46,7 +45,6 @@ FORCE_PASSWORD=false
 SKIP_FIREWALL=false
 INTERACTIVE=false
 UNSAFE=false
-INSTALL_WATCHDOG=true
 REQUIRE_VNC=false
 VNC_OPTION_SET=false
 DEFAULT_AP_NAME="gelectriic-ap"
@@ -254,7 +252,6 @@ print_network_status() {
     echo "Network service status:"
     describe_service_status NetworkManager "NetworkManager"
     describe_service_status ssh "SSH daemon"
-    describe_service_status wifi-watchdog "WiFi watchdog"
     describe_service_status wlan1-refresh "wlan1 refresh"
     describe_service_status nginx "nginx"
 }
@@ -579,14 +576,6 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             INTERACTIVE=true
-            OTHER_OPTIONS_USED=true
-            ;;
-        --no-watchdog)
-            if [[ $AP_SET_PASSWORD == true ]]; then
-                echo "Error: --ap-set-password cannot be combined with other options." >&2
-                exit 1
-            fi
-            INSTALL_WATCHDOG=false
             OTHER_OPTIONS_USED=true
             ;;
         --vnc)
@@ -1106,42 +1095,7 @@ else
     ask_step RUN_AP "Configure wlan0 access point"
 fi
 ask_step RUN_WLAN1_REFRESH "Install wlan1 device refresh service"
-if [[ $INSTALL_WATCHDOG == true ]]; then
-    ask_step RUN_WIFI_WATCHDOG "Install WiFi watchdog service"
-else
-    RUN_WIFI_WATCHDOG=false
-fi
 
-require_arthexis_service_autostart() {
-    local service_file="$LOCK_DIR/service.lck"
-    if [[ ! -f "$service_file" ]]; then
-        echo "Warning: WiFi watchdog requires the Arthexis suite to be configured as a systemd service; skipping watchdog installation." >&2
-        echo "Run ./install.sh with --service or rerun this script with --no-watchdog." >&2
-        return 1
-    fi
-
-    local service_name
-    service_name="$(<"$service_file")"
-    if [[ -z "$service_name" ]]; then
-        echo "Warning: WiFi watchdog requires the Arthexis suite to be configured as a systemd service; skipping watchdog installation." >&2
-        echo "Run ./install.sh with --service or rerun this script with --no-watchdog." >&2
-        return 1
-    fi
-
-    if ! systemctl list-unit-files | grep -Fq "${service_name}.service"; then
-        echo "Warning: WiFi watchdog requires the Arthexis systemd service '${service_name}' to exist; skipping watchdog installation." >&2
-        echo "Install or enable the service, or rerun this script with --no-watchdog." >&2
-        return 1
-    fi
-
-    if ! systemctl is-enabled --quiet "$service_name"; then
-        echo "Warning: WiFi watchdog requires the Arthexis systemd service '${service_name}' to be enabled; skipping watchdog installation." >&2
-        echo "Enable the service with 'systemctl enable ${service_name}' or rerun this script with --no-watchdog." >&2
-        return 1
-    fi
-
-    return 0
-}
 ask_step RUN_PACKAGES "Ensure required packages and SSH service"
 ask_step RUN_NGINX_SITES "Apply managed NGINX site configuration"
 if [[ $SKIP_FIREWALL == false ]]; then
@@ -1244,46 +1198,6 @@ EOF
             "$WLAN1_REFRESH_SCRIPT" || true
             echo "wlan1 refresh service '${WLAN1_REFRESH_SERVICE}' installed and enabled."
         fi
-    fi
-fi
-
-WATCHDOG_SERVICE="wifi-watchdog"
-if [[ $RUN_WIFI_WATCHDOG == true ]]; then
-    if require_arthexis_service_autostart; then
-        WATCHDOG_SCRIPT="$BASE_DIR/scripts/wifi-watchdog.sh"
-        WATCHDOG_SERVICE_FILE="/etc/systemd/system/${WATCHDOG_SERVICE}.service"
-        if [ -f "$WATCHDOG_SCRIPT" ]; then
-            cat > "$WATCHDOG_SERVICE_FILE" <<EOF
-[Unit]
-Description=WiFi connectivity watchdog
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-ExecStart=$WATCHDOG_SCRIPT
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
-EOF
-            systemctl daemon-reload
-            systemctl enable "$WATCHDOG_SERVICE" >/dev/null 2>&1 || true
-            systemctl restart "$WATCHDOG_SERVICE" || true
-            echo "WiFi watchdog service '${WATCHDOG_SERVICE}' enabled and running."
-        fi
-    else
-        RUN_WIFI_WATCHDOG=false
-    fi
-fi
-
-if [[ $RUN_WIFI_WATCHDOG != true ]]; then
-    if systemctl list-unit-files | grep -Fq "${WATCHDOG_SERVICE}.service"; then
-        systemctl stop "$WATCHDOG_SERVICE" || true
-        systemctl disable "$WATCHDOG_SERVICE" || true
-        rm -f "/etc/systemd/system/${WATCHDOG_SERVICE}.service"
-        systemctl daemon-reload
-        echo "WiFi watchdog service '${WATCHDOG_SERVICE}' disabled."
     fi
 fi
 

@@ -126,7 +126,7 @@ else
 fi
 
 # Remove wlan1 refresh service if present (legacy and current names)
-for svc in wlan1-refresh wlan1-device-refresh wifi-watchdog; do
+for svc in wlan1-refresh wlan1-device-refresh; do
     if systemctl list-unit-files | grep -Fq "${svc}.service"; then
         sudo systemctl stop "$svc" || true
         sudo systemctl disable "$svc" || true
