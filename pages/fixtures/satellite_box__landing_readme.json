@@ -4,8 +4,11 @@
     "fields": {
       "is_seed_data": true,
       "is_deleted": false,
-      "module": ["Satellite", "/read/"],
-      "path": "/read/",
+      "module": [
+        "Satellite",
+        "/read/"
+      ],
+      "path": "/read/docs/cookbooks/install-start-stop-upgrade-uninstall",
       "label": "Cookbooks",
       "enabled": true,
       "description": ""
