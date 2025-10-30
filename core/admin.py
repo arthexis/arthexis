@@ -607,8 +607,8 @@ class PackageAdmin(SaveBeforeChangeAction, EntityModelAdmin):
     change_actions = ["create_repository_action", "prepare_next_release_action"]
 
     def _prepare(self, request, package):
-        if request.method != "POST":
-            return HttpResponseNotAllowed(["POST"])
+        if request.method not in {"POST", "GET"}:
+            return HttpResponseNotAllowed(["GET", "POST"])
         from pathlib import Path
         from packaging.version import Version
 

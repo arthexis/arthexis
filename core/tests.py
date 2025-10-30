@@ -2214,12 +2214,12 @@ class PackageAdminPrepareNextReleaseTests(TestCase):
             PackageRelease.all_objects.filter(package=self.package).count(), 1
         )
 
-    def test_prepare_next_release_active_get_not_allowed(self):
+    def test_prepare_next_release_active_get_creates_release(self):
         PackageRelease.all_objects.filter(package=self.package).delete()
         request = self.factory.get("/admin/core/package/prepare-next-release/")
         response = self.admin.prepare_next_release_active(request)
-        self.assertEqual(response.status_code, 405)
-        self.assertFalse(
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(
             PackageRelease.all_objects.filter(package=self.package).exists()
         )
 
