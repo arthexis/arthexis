@@ -1883,6 +1883,50 @@ class NodeAdminTests(TestCase):
         payload = json.loads(mock_post.call_args_list[-1].kwargs["data"])
         self.assertEqual(payload.get("requester"), str(local_node.uuid))
 
+    @patch("nodes.admin.requests.post")
+    def test_proxy_view_retries_post_after_redirect(self, mock_post):
+        self.client.get(reverse("admin:nodes_node_register_current"))
+        remote = Node.objects.create(
+            hostname="redirect-node",
+            public_endpoint="http://remote.example",
+            address="198.51.100.30",
+            mac_address="aa:bb:cc:dd:ee:20",
+        )
+
+        redirect_response = SimpleNamespace(
+            status_code=301,
+            ok=True,
+            text="redirect",
+            headers={"Location": "https://remote.example/nodes/proxy/session/"},
+        )
+        success_response = SimpleNamespace(
+            status_code=200,
+            ok=True,
+            text="ok",
+            headers={},
+            json=lambda: {
+                "login_url": "https://remote.example/nodes/proxy/login/token",
+                "expires": "2025-01-01T00:00:00",
+            },
+        )
+
+        mock_post.side_effect = [redirect_response, success_response]
+
+        response = self.client.get(
+            reverse("admin:nodes_node_proxy", args=[remote.pk])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(mock_post.call_count, 2)
+
+        first_call_kwargs = mock_post.call_args_list[0].kwargs
+        self.assertFalse(first_call_kwargs.get("allow_redirects", True))
+
+        second_url = mock_post.call_args_list[1].args[0]
+        self.assertEqual(second_url, "https://remote.example/nodes/proxy/session/")
+        second_call_kwargs = mock_post.call_args_list[1].kwargs
+        self.assertFalse(second_call_kwargs.get("allow_redirects", True))
+
     def test_proxy_link_displayed_for_remote_nodes(self):
         Node.objects.create(
             hostname="remote",

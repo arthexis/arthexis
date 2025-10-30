@@ -19,7 +19,7 @@ from django.utils.html import format_html, format_html_join
 from django.utils.translation import gettext_lazy as _
 from pathlib import Path
 from types import SimpleNamespace
-from urllib.parse import urlparse, urlsplit, urlunsplit
+from urllib.parse import urljoin, urlparse, urlsplit, urlunsplit
 import base64
 import ipaddress
 import json
@@ -474,29 +474,64 @@ class NodeAdmin(EntityModelAdmin):
         }
 
         last_error = ""
+        redirect_codes = {301, 302, 303, 307, 308}
+
         for url in self._iter_remote_urls(node, "/nodes/proxy/session/"):
-            try:
-                response = requests.post(url, data=body, headers=headers, timeout=5)
-            except RequestException as exc:
-                last_error = str(exc)
-                continue
-            if not response.ok:
-                last_error = f"{response.status_code} {response.text}"
-                continue
-            try:
-                data = response.json()
-            except ValueError:
-                last_error = "Invalid JSON response"
-                continue
-            login_url = data.get("login_url")
-            if not login_url:
-                last_error = "login_url missing"
-                continue
-            return {
-                "ok": True,
-                "login_url": login_url,
-                "expires": data.get("expires"),
-            }
+            candidate_url = url
+            redirects_followed = 0
+            success = False
+
+            while True:
+                try:
+                    response = requests.post(
+                        candidate_url,
+                        data=body,
+                        headers=headers,
+                        timeout=5,
+                        allow_redirects=False,
+                    )
+                except RequestException as exc:
+                    last_error = str(exc)
+                    break
+
+                if response.status_code in redirect_codes:
+                    location = response.headers.get("Location")
+                    if not location:
+                        last_error = f"{response.status_code} redirect missing Location header"
+                        break
+
+                    redirects_followed += 1
+                    if redirects_followed > 3:
+                        last_error = "Too many redirects"
+                        break
+
+                    candidate_url = urljoin(candidate_url, location)
+                    continue
+
+                if not response.ok:
+                    last_error = f"{response.status_code} {response.text}"
+                    break
+
+                try:
+                    data = response.json()
+                except ValueError:
+                    last_error = "Invalid JSON response"
+                    break
+
+                login_url = data.get("login_url")
+                if not login_url:
+                    last_error = "login_url missing"
+                    break
+
+                success = True
+                break
+
+            if success:
+                return {
+                    "ok": True,
+                    "login_url": login_url,
+                    "expires": data.get("expires"),
+                }
 
         return {
             "ok": False,
