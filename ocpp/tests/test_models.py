@@ -10,6 +10,7 @@ if str(ROOT) not in sys.path:
 
 import tests.conftest  # noqa: F401
 
+from django.core.exceptions import ValidationError
 from django.test import TestCase
 
 from ocpp.models import Charger

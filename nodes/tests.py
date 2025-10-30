@@ -1844,6 +1844,8 @@ class NodeAdminTests(TestCase):
         mock_post.assert_called()
         payload = json.loads(mock_post.call_args[1]["data"])
         self.assertEqual(payload.get("requester"), str(local_node.uuid))
+        self.assertEqual(payload.get("requester_mac"), local_node.mac_address)
+        self.assertEqual(payload.get("requester_public_key"), local_node.public_key)
 
     @patch("nodes.admin.requests.post")
     def test_proxy_view_falls_back_to_http_after_ssl_error(self, mock_post):
@@ -1882,6 +1884,8 @@ class NodeAdminTests(TestCase):
         self.assertIn("/nodes/proxy/session/", second_url)
         payload = json.loads(mock_post.call_args_list[-1].kwargs["data"])
         self.assertEqual(payload.get("requester"), str(local_node.uuid))
+        self.assertEqual(payload.get("requester_mac"), local_node.mac_address)
+        self.assertEqual(payload.get("requester_public_key"), local_node.public_key)
 
     @patch("nodes.admin.requests.post")
     def test_proxy_view_retries_post_after_redirect(self, mock_post):
@@ -2672,6 +2676,32 @@ class NodeProxyGatewayTests(TestCase):
         self.assertEqual(self.client.session.get("_auth_user_id"), str(user.pk))
         second = self.client.get(parsed.path)
         self.assertEqual(second.status_code, 410)
+
+    def test_proxy_session_accepts_mac_hint_when_uuid_unknown(self):
+        payload = {
+            "requester": str(uuid.uuid4()),
+            "requester_mac": self.node.mac_address,
+            "requester_public_key": self.node.public_key,
+            "user": {
+                "username": "proxy-user",
+                "email": "proxy@example.com",
+                "first_name": "Proxy",
+                "last_name": "User",
+                "is_staff": True,
+                "is_superuser": True,
+                "groups": [],
+                "permissions": [],
+            },
+            "target": "/admin/",
+        }
+        body, signature = self._sign(payload)
+        response = self.client.post(
+            reverse("node-proxy-session"),
+            data=body,
+            content_type="application/json",
+            HTTP_X_SIGNATURE=signature,
+        )
+        self.assertEqual(response.status_code, 200)
 
     def test_proxy_execute_lists_nodes(self):
         Node.objects.create(

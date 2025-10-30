@@ -440,6 +440,12 @@ class NodeAdmin(EntityModelAdmin):
             },
             "target": reverse("admin:index"),
         }
+        mac_address = str(local_node.mac_address or "").strip()
+        if mac_address:
+            payload["requester_mac"] = mac_address
+        public_key = local_node.public_key
+        if public_key:
+            payload["requester_public_key"] = public_key
         return payload
 
     def _start_proxy_session(self, request, node):
