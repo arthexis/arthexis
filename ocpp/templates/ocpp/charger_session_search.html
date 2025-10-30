@@ -46,6 +46,7 @@
           <th scope="col">{% trans "Start" %}<span class="d-block small text-muted">{% if date_view == "received" %}{% trans "Received time" %}{% else %}{% trans "Charger time" %}{% endif %}</span></th>
           <th scope="col">{% trans "Stop" %}<span class="d-block small text-muted">{% if date_view == "received" %}{% trans "Received time" %}{% else %}{% trans "Charger time" %}{% endif %}</span></th>
           <th scope="col">{% trans "Energy (kW)" %}</th>
+          <th scope="col">{% trans "RFID Label" %}</th>
         </tr>
       </thead>
       <tbody>
@@ -63,6 +64,13 @@
           <td>{{ tx.stop_time|default:"-" }}</td>
           {% endif %}
           <td>{{ tx.kw|floatformat:2 }}</td>
+          <td>
+            {% if tx.rfid_label %}
+            {{ tx.rfid_label }}
+            {% else %}
+            <span class="text-muted">-</span>
+            {% endif %}
+          </td>
         </tr>
         {% endfor %}
       </tbody>
