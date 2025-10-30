@@ -8,6 +8,8 @@ BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$BASE_DIR/scripts/helpers/nginx_maintenance.sh"
 # shellcheck source=scripts/helpers/desktop_shortcuts.sh
 . "$BASE_DIR/scripts/helpers/desktop_shortcuts.sh"
+# shellcheck source=scripts/helpers/version_marker.sh
+. "$BASE_DIR/scripts/helpers/version_marker.sh"
 arthexis_resolve_log_dir "$BASE_DIR" LOG_DIR || exit 1
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 exec > >(tee "$LOG_FILE") 2>&1
@@ -449,6 +451,9 @@ fi
 # Pull latest changes
 echo "Pulling latest changes..."
 git pull --rebase
+
+# Update the development marker to reflect the new revision.
+arthexis_update_version_marker "$BASE_DIR"
 
 # Exit after pulling if the node isn't installed
 if [ $VENV_PRESENT -eq 0 ]; then

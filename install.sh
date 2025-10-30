@@ -9,6 +9,8 @@ PIP_INSTALL_HELPER="$SCRIPT_DIR/scripts/helpers/pip_install.py"
 . "$SCRIPT_DIR/scripts/helpers/nginx_maintenance.sh"
 # shellcheck source=scripts/helpers/desktop_shortcuts.sh
 . "$SCRIPT_DIR/scripts/helpers/desktop_shortcuts.sh"
+# shellcheck source=scripts/helpers/version_marker.sh
+. "$SCRIPT_DIR/scripts/helpers/version_marker.sh"
 arthexis_resolve_log_dir "$SCRIPT_DIR" LOG_DIR || exit 1
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 exec > >(tee "$LOG_FILE") 2>&1
@@ -267,6 +269,9 @@ fi
 BASE_DIR="$SCRIPT_DIR"
 cd "$BASE_DIR"
 DB_FILE="$BASE_DIR/db.sqlite3"
+
+# Ensure the VERSION marker reflects the current revision before proceeding.
+arthexis_update_version_marker "$BASE_DIR"
 if [ -f "$DB_FILE" ]; then
     if [ "$CLEAN" = true ]; then
         BACKUP_DIR="$BASE_DIR/backups"
