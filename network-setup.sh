@@ -1088,6 +1088,8 @@ if [[ $SKIP_AP == false ]]; then
 fi
 
 # Collect user decisions for each step in advance
+AP_ACTIVATED=false
+
 ask_step RUN_SERVICES "Ensure required services"
 if [[ $SKIP_AP == true ]]; then
     RUN_AP=false
@@ -1146,7 +1148,6 @@ if [[ $RUN_AP == true ]]; then
                 ipv4.never-default yes ipv6.method ignore ipv6.never-default yes \
                 wifi.band bg "${security_args[@]}"
         fi
-        nmcli connection up "$ETH0_CONNECTION_NAME" || true
         if ! nmcli connection up "$AP_NAME" ifname wlan0; then
             echo "Failed to activate access point connection '$AP_NAME' on wlan0." >&2
             exit 1
@@ -1156,6 +1157,7 @@ if [[ $RUN_AP == true ]]; then
             echo "Access point '$AP_NAME' is not bound to wlan0 (device: '${active_ap_device:-none}')." >&2
             exit 1
         fi
+        AP_ACTIVATED=true
         if command -v iptables >/dev/null 2>&1; then
             iptables -C INPUT -i wlan0 -d 10.42.0.1 -j ACCEPT 2>/dev/null || \
                 iptables -A INPUT -i wlan0 -d 10.42.0.1 -j ACCEPT
@@ -1386,13 +1388,25 @@ if [[ $RUN_CONFIGURE_NET == true ]]; then
                 autoconnect yes connection.autoconnect-priority 20 \
                 ipv4.method auto ipv6.method ignore ipv4.route-metric 50
 
-            if ! nmcli connection up "$HYPERLINE_NAME"; then
-                echo "Failed to activate Hyperline connection; trying existing wlan0 connections." >&2
-                while read -r con; do
-                    if nmcli connection up "$con"; then
-                        break
-                    fi
-                done < <(nmcli -t -f NAME connection show | grep '^gate-')
+            if [[ $AP_ACTIVATED == true ]]; then
+                echo "Hyperline client connection configured but left inactive while '$AP_NAME' access point is running."
+            else
+                if ! nmcli connection up "$HYPERLINE_NAME"; then
+                    echo "Failed to activate Hyperline connection; trying existing wlan0 connections." >&2
+                    while read -r con; do
+                        if nmcli connection up "$con"; then
+                            break
+                        fi
+                    done < <(nmcli -t -f NAME connection show | grep '^gate-')
+                fi
+            fi
+        fi
+
+        if [[ $AP_ACTIVATED == true ]]; then
+            if ! nmcli -t -f NAME connection show --active | grep -Fxq "$AP_NAME"; then
+                if ! nmcli connection up "$AP_NAME" ifname wlan0; then
+                    echo "Warning: Unable to reactivate access point '$AP_NAME' after wlan0 client configuration." >&2
+                fi
             fi
         fi
     fi
