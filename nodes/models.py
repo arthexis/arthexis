@@ -4,6 +4,7 @@ from collections.abc import Iterable
 from copy import deepcopy
 from dataclasses import dataclass
 from django.db import models
+from django.db.models import Q
 from django.db.utils import DatabaseError
 from django.db.models.signals import post_delete
 from django.dispatch import Signal, receiver
@@ -294,7 +295,14 @@ class Node(Entity):
         """Return the node representing the current host if it exists."""
         mac = cls.get_current_mac()
         try:
-            return cls.objects.filter(mac_address=mac).first()
+            node = cls.objects.filter(mac_address__iexact=mac).first()
+            if node:
+                return node
+            return (
+                cls.objects.filter(current_relation=cls.Relation.SELF)
+                .filter(Q(mac_address__isnull=True) | Q(mac_address=""))
+                .first()
+            )
         except DatabaseError:
             logger.debug("nodes.Node.get_local skipped: database unavailable", exc_info=True)
             return None
