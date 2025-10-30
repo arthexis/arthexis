@@ -10,6 +10,7 @@ if str(ROOT) not in sys.path:
 
 import tests.conftest  # noqa: F401
 
+from django.core.exceptions import ValidationError
 from django.test import TestCase
 
 from ocpp.models import Charger
@@ -69,4 +70,38 @@ class ChargerAutoLocationNameTests(TestCase):
         self.assertEqual(charger.location.name, "Charger")
         self.assertEqual(
             Charger.sanitize_auto_location_name(charger.charger_id), "Charger"
+        )
+
+
+class ChargerSerialValidationTests(TestCase):
+    def test_validate_serial_strips_and_rejects_invalid_values(self):
+        self.assertEqual(Charger.validate_serial("  ABC  "), "ABC")
+
+        for value, expected_message in (
+            (None, "Serial Number cannot be blank."),
+            ("", "Serial Number cannot be blank."),
+            (
+                "<charger_id>",
+                "Serial Number placeholder values such as <charger_id> are not allowed.",
+            ),
+        ):
+            with self.subTest(value=value):
+                with self.assertRaises(ValidationError) as context:
+                    Charger.validate_serial(value)
+
+                message_dict = context.exception.message_dict
+                self.assertIn("charger_id", message_dict)
+                self.assertIn(expected_message, message_dict["charger_id"])
+
+    def test_full_clean_propagates_placeholder_serial_error(self):
+        charger = Charger(charger_id="<invalid>")
+
+        with self.assertRaises(ValidationError) as context:
+            charger.full_clean()
+
+        message_dict = context.exception.message_dict
+        self.assertIn("charger_id", message_dict)
+        self.assertIn(
+            "Serial Number placeholder values such as <charger_id> are not allowed.",
+            message_dict["charger_id"],
         )
