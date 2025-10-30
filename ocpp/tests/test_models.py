@@ -11,9 +11,12 @@ if str(ROOT) not in sys.path:
 import tests.conftest  # noqa: F401
 
 from django.core.exceptions import ValidationError
+from django.db.models.deletion import ProtectedError
 from django.test import TestCase
+from django.utils import timezone
 
-from ocpp.models import Charger
+from ocpp import store
+from ocpp.models import Charger, MeterReading, Transaction
 
 
 class ChargerAutoLocationNameTests(TestCase):
@@ -105,3 +108,82 @@ class ChargerSerialValidationTests(TestCase):
             "Serial Number placeholder values such as <charger_id> are not allowed.",
             message_dict["charger_id"],
         )
+
+
+class ChargerPurgeTests(TestCase):
+    def setUp(self):
+        super().setUp()
+        store.logs["charger"].clear()
+        store.transactions.clear()
+        store.history.clear()
+        self.addCleanup(store.logs["charger"].clear)
+        self.addCleanup(store.transactions.clear)
+        self.addCleanup(store.history.clear)
+
+    def test_delete_requires_purge_for_aggregate_and_connectors(self):
+        serial = "PURGEAGG"
+        now = timezone.now()
+
+        charger = Charger.objects.create(charger_id=serial)
+        connector = Charger.objects.create(charger_id=serial, connector_id=1)
+
+        Transaction.objects.create(charger=charger, start_time=now)
+        Transaction.objects.create(
+            charger=connector,
+            start_time=now,
+            connector_id=1,
+        )
+        MeterReading.objects.create(
+            charger=charger,
+            timestamp=now,
+            value=1,
+        )
+        MeterReading.objects.create(
+            charger=connector,
+            connector_id=1,
+            timestamp=now,
+            value=2,
+        )
+
+        aggregate_key = store.identity_key(serial, None)
+        connector_key = store.identity_key(serial, 1)
+        pending_key = store.pending_key(serial)
+
+        store.logs["charger"][aggregate_key] = ["aggregate log"]
+        store.logs["charger"][connector_key] = ["connector log"]
+        store.logs["charger"][pending_key] = ["pending log"]
+        store.logs["charger"][serial] = ["base log"]
+
+        store.transactions[aggregate_key] = object()
+        store.transactions[connector_key] = object()
+        store.transactions[pending_key] = object()
+        store.transactions[serial] = object()
+
+        store.history[aggregate_key] = {"history": "aggregate"}
+        store.history[connector_key] = {"history": "connector"}
+        store.history[pending_key] = {"history": "pending"}
+        store.history[serial] = {"history": "base"}
+
+        with self.assertRaises(ProtectedError):
+            charger.delete()
+
+        charger.refresh_from_db()
+        connector.refresh_from_db()
+
+        charger.purge()
+
+        self.assertFalse(Transaction.objects.filter(charger__charger_id=serial).exists())
+        self.assertFalse(MeterReading.objects.filter(charger__charger_id=serial).exists())
+
+        expected_keys = {aggregate_key, connector_key, pending_key, serial}
+        for key in expected_keys:
+            self.assertNotIn(key, store.logs["charger"])
+            self.assertNotIn(key, store.transactions)
+            self.assertNotIn(key, store.history)
+
+        charger.delete()
+        self.assertFalse(Charger.objects.filter(pk=charger.pk).exists())
+
+        connector.delete()
+        self.assertFalse(Charger.objects.filter(pk=connector.pk).exists())
+        self.assertFalse(Charger.objects.filter(charger_id=serial).exists())
