@@ -43,24 +43,68 @@ PROXY_TOKEN_TIMEOUT = 300
 PROXY_CACHE_PREFIX = "nodes:proxy-session:"
 
 
-def _load_signed_node(request, requester_id: str):
+def _load_signed_node(
+    request,
+    requester_id: str,
+    *,
+    mac_address: str | None = None,
+    public_key: str | None = None,
+):
     signature = request.headers.get("X-Signature")
     if not signature:
         return None, JsonResponse({"detail": "signature required"}, status=403)
-    node = Node.objects.filter(uuid=requester_id).first()
-    if not node or not node.public_key:
-        return None, JsonResponse({"detail": "unknown requester"}, status=403)
     try:
-        public_key = serialization.load_pem_public_key(node.public_key.encode())
-        public_key.verify(
-            base64.b64decode(signature),
-            request.body,
-            padding.PKCS1v15(),
-            hashes.SHA256(),
-        )
+        signature_bytes = base64.b64decode(signature)
     except Exception:
         return None, JsonResponse({"detail": "invalid signature"}, status=403)
-    return node, None
+
+    candidates: list[Node] = []
+    seen: set[int] = set()
+
+    lookup_values: list[tuple[str, str]] = []
+    if requester_id:
+        lookup_values.append(("uuid", requester_id))
+    if mac_address:
+        lookup_values.append(("mac_address__iexact", mac_address))
+    if public_key:
+        lookup_values.append(("public_key", public_key))
+
+    for field, value in lookup_values:
+        node = Node.objects.filter(**{field: value}).first()
+        if not node or not node.public_key:
+            continue
+        if node.pk is not None and node.pk in seen:
+            continue
+        if node.pk is not None:
+            seen.add(node.pk)
+        candidates.append(node)
+
+    if not candidates:
+        return None, JsonResponse({"detail": "unknown requester"}, status=403)
+
+    for node in candidates:
+        try:
+            loaded_key = serialization.load_pem_public_key(node.public_key.encode())
+            loaded_key.verify(
+                signature_bytes,
+                request.body,
+                padding.PKCS1v15(),
+                hashes.SHA256(),
+            )
+        except Exception:
+            continue
+        return node, None
+
+    return None, JsonResponse({"detail": "invalid signature"}, status=403)
+
+
+def _clean_requester_hint(value, *, strip: bool = True) -> str | None:
+    if not isinstance(value, str):
+        return None
+    cleaned = value.strip() if strip else value
+    if not cleaned:
+        return None
+    return cleaned
 
 
 def _sanitize_proxy_target(target: str | None, request) -> str:
@@ -589,26 +633,21 @@ def export_rfids(request):
         return JsonResponse({"detail": "invalid json"}, status=400)
 
     requester = payload.get("requester")
-    signature = request.headers.get("X-Signature")
     if not requester:
         return JsonResponse({"detail": "requester required"}, status=400)
-    if not signature:
-        return JsonResponse({"detail": "signature required"}, status=403)
 
-    node = Node.objects.filter(uuid=requester).first()
-    if not node or not node.public_key:
-        return JsonResponse({"detail": "unknown requester"}, status=403)
-
-    try:
-        public_key = serialization.load_pem_public_key(node.public_key.encode())
-        public_key.verify(
-            base64.b64decode(signature),
-            request.body,
-            padding.PKCS1v15(),
-            hashes.SHA256(),
-        )
-    except Exception:
-        return JsonResponse({"detail": "invalid signature"}, status=403)
+    requester_mac = _clean_requester_hint(payload.get("requester_mac"))
+    requester_public_key = _clean_requester_hint(
+        payload.get("requester_public_key"), strip=False
+    )
+    node, error_response = _load_signed_node(
+        request,
+        requester,
+        mac_address=requester_mac,
+        public_key=requester_public_key,
+    )
+    if error_response is not None:
+        return error_response
 
     tags = [serialize_rfid(tag) for tag in RFID.objects.all().order_by("label_id")]
 
@@ -628,26 +667,21 @@ def import_rfids(request):
         return JsonResponse({"detail": "invalid json"}, status=400)
 
     requester = payload.get("requester")
-    signature = request.headers.get("X-Signature")
     if not requester:
         return JsonResponse({"detail": "requester required"}, status=400)
-    if not signature:
-        return JsonResponse({"detail": "signature required"}, status=403)
 
-    node = Node.objects.filter(uuid=requester).first()
-    if not node or not node.public_key:
-        return JsonResponse({"detail": "unknown requester"}, status=403)
-
-    try:
-        public_key = serialization.load_pem_public_key(node.public_key.encode())
-        public_key.verify(
-            base64.b64decode(signature),
-            request.body,
-            padding.PKCS1v15(),
-            hashes.SHA256(),
-        )
-    except Exception:
-        return JsonResponse({"detail": "invalid signature"}, status=403)
+    requester_mac = _clean_requester_hint(payload.get("requester_mac"))
+    requester_public_key = _clean_requester_hint(
+        payload.get("requester_public_key"), strip=False
+    )
+    node, error_response = _load_signed_node(
+        request,
+        requester,
+        mac_address=requester_mac,
+        public_key=requester_public_key,
+    )
+    if error_response is not None:
+        return error_response
 
     rfids = payload.get("rfids", [])
     if not isinstance(rfids, list):
@@ -704,7 +738,16 @@ def proxy_session(request):
     if not requester:
         return JsonResponse({"detail": "requester required"}, status=400)
 
-    node, error_response = _load_signed_node(request, requester)
+    requester_mac = _clean_requester_hint(payload.get("requester_mac"))
+    requester_public_key = _clean_requester_hint(
+        payload.get("requester_public_key"), strip=False
+    )
+    node, error_response = _load_signed_node(
+        request,
+        requester,
+        mac_address=requester_mac,
+        public_key=requester_public_key,
+    )
     if error_response is not None:
         return error_response
 
@@ -844,7 +887,16 @@ def proxy_execute(request):
     if not requester:
         return JsonResponse({"detail": "requester required"}, status=400)
 
-    node, error_response = _load_signed_node(request, requester)
+    requester_mac = _clean_requester_hint(payload.get("requester_mac"))
+    requester_public_key = _clean_requester_hint(
+        payload.get("requester_public_key"), strip=False
+    )
+    node, error_response = _load_signed_node(
+        request,
+        requester,
+        mac_address=requester_mac,
+        public_key=requester_public_key,
+    )
     if error_response is not None:
         return error_response
 
