@@ -15,10 +15,10 @@ from django.db.models.deletion import ProtectedError
 from django.test import TestCase
 from django.utils import timezone
 
-from core.models import Reference
+from core.models import Reference, SecurityGroup
 
 from ocpp.models import Charger
-from core.models import SecurityGroup
+from nodes.models import Node
 
 
 class ChargerAutoLocationNameTests(TestCase):
@@ -127,6 +127,50 @@ class ChargerReferenceTests(TestCase):
 
             charger.refresh_from_db()
             self.assertIsNone(charger.reference)
+
+
+class ChargerManagerNodeTests(TestCase):
+    def test_manager_node_refreshed_using_local_lookup(self):
+        local_node = Node.objects.create(hostname="local", address="127.0.0.1")
+
+        with patch("nodes.models.Node.get_local", return_value=local_node), patch.object(
+            Charger, "_full_url", return_value="http://example.com"
+        ):
+            managed = Charger.objects.create(charger_id="Managed-1")
+
+        self.assertEqual(managed.manager_node_id, local_node.pk)
+        persisted = Charger.objects.only("manager_node_id").get(pk=managed.pk)
+        self.assertEqual(persisted.manager_node_id, local_node.pk)
+
+        managed.manager_node = None
+        managed.manager_node_id = None
+        managed.firmware_status = "Installing"
+        with patch("nodes.models.Node.get_local", return_value=local_node), patch.object(
+            Charger, "_full_url", return_value="http://example.com"
+        ):
+            managed.save(update_fields={"firmware_status"})
+
+        managed.refresh_from_db()
+        self.assertEqual(managed.manager_node_id, local_node.pk)
+
+        with patch("nodes.models.Node.get_local", return_value=None), patch.object(
+            Charger, "_full_url", return_value="http://example.com"
+        ):
+            unmanaged = Charger.objects.create(charger_id="Unmanaged-1")
+
+        self.assertIsNone(unmanaged.manager_node)
+
+        unmanaged.manager_node = None
+        unmanaged.manager_node_id = None
+        unmanaged.firmware_status = "Installed"
+        with patch("nodes.models.Node.get_local", return_value=None), patch.object(
+            Charger, "_full_url", return_value="http://example.com"
+        ):
+            unmanaged.save(update_fields={"firmware_status"})
+
+        unmanaged.refresh_from_db()
+        self.assertIsNone(unmanaged.manager_node)
+        self.assertIsNone(unmanaged.manager_node_id)
 
 class ChargerSerialValidationTests(TestCase):
     def test_validate_serial_strips_and_rejects_invalid_values(self):
