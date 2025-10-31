@@ -64,6 +64,14 @@ arthexis_refresh_desktop_shortcuts() {
     local public_shortcut="$desktop_dir/Arthexis Public Site.desktop"
     local admin_shortcut="$desktop_dir/Arthexis Admin Console.desktop"
 
+    local script_base_dir
+    script_base_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+    local launcher_path="$script_base_dir/scripts/helpers/desktop_shortcuts.sh"
+    local public_exec
+    local admin_exec
+    printf -v public_exec '%q %q %q' "$launcher_path" launch public
+    printf -v admin_exec '%q %q %q' "$launcher_path" launch admin
+
     arthexis_write_shortcut() {
         local target="$1"
 
@@ -92,26 +100,26 @@ arthexis_refresh_desktop_shortcuts() {
         return 1
     }
 
-    arthexis_write_shortcut "$public_shortcut" <<'SHORTCUT'
+    arthexis_write_shortcut "$public_shortcut" <<SHORTCUT
 [Desktop Entry]
 Version=1.0
 Type=Application
 Name=Arthexis Public Site
 Comment=Open the Arthexis public site
-Exec=firefox http://localhost/
+Exec=$public_exec
 Icon=web-browser
 Terminal=false
 Categories=Network;WebBrowser;
 StartupNotify=true
 SHORTCUT
 
-    arthexis_write_shortcut "$admin_shortcut" <<'SHORTCUT'
+    arthexis_write_shortcut "$admin_shortcut" <<SHORTCUT
 [Desktop Entry]
 Version=1.0
 Type=Application
 Name=Arthexis Admin Console
 Comment=Open the Arthexis admin console
-Exec=firefox http://localhost/admin/
+Exec=$admin_exec
 Icon=applications-system
 Terminal=false
 Categories=Office;System;
@@ -126,3 +134,94 @@ SHORTCUT
         chown "$username":"$user_group" "$public_shortcut" "$admin_shortcut" 2>/dev/null || true
     fi
 }
+
+arthexis_desktop_shortcut_start_unit() {
+    local unit="$1"
+    if [ -z "$unit" ]; then
+        return 1
+    fi
+    local start_cmd=(systemctl start "$unit")
+    if ! command -v systemctl >/dev/null 2>&1; then
+        return 1
+    fi
+    if command -v sudo >/dev/null 2>&1; then
+        start_cmd=(sudo "${start_cmd[@]}")
+    fi
+    "${start_cmd[@]}" >/dev/null 2>&1 || return 1
+    return 0
+}
+
+arthexis_desktop_shortcut_launch() {
+    local shortcut="$1"
+    local base_dir
+    base_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+    local locks_dir="$base_dir/locks"
+    local service_name=""
+    local url=""
+
+    case "$shortcut" in
+        public)
+            url="http://localhost/"
+            ;;
+        admin)
+            url="http://localhost/admin/"
+            ;;
+        *)
+            echo "Unknown shortcut: $shortcut" >&2
+            return 1
+            ;;
+    esac
+
+    if [ -f "$locks_dir/service.lck" ]; then
+        service_name="$(cat "$locks_dir/service.lck" 2>/dev/null)"
+    fi
+
+    local started=false
+    if [ -n "$service_name" ] && command -v systemctl >/dev/null 2>&1; then
+        if ! systemctl is-active --quiet "$service_name"; then
+            if arthexis_desktop_shortcut_start_unit "$service_name"; then
+                started=true
+            fi
+            if [ -f "$locks_dir/celery.lck" ]; then
+                arthexis_desktop_shortcut_start_unit "celery-$service_name" || true
+                arthexis_desktop_shortcut_start_unit "celery-beat-$service_name" || true
+            fi
+            if [ -f "$locks_dir/lcd_screen.lck" ]; then
+                arthexis_desktop_shortcut_start_unit "lcd-$service_name" || true
+            fi
+        fi
+        if [ "$started" = true ]; then
+            local attempt
+            for attempt in 1 2 3 4 5; do
+                if systemctl is-active --quiet "$service_name"; then
+                    break
+                fi
+                sleep 1
+            done
+            sleep 1
+        fi
+    fi
+
+    local browser=""
+    if command -v firefox >/dev/null 2>&1; then
+        browser="firefox"
+    elif command -v xdg-open >/dev/null 2>&1; then
+        browser="xdg-open"
+    elif command -v sensible-browser >/dev/null 2>&1; then
+        browser="sensible-browser"
+    fi
+
+    if [ -z "$browser" ]; then
+        echo "No suitable browser found to open $url" >&2
+        return 1
+    fi
+
+    "${browser}" "$url" &
+}
+
+if [[ "${BASH_SOURCE[0]}" == "$0" ]]; then
+    if [ "$1" = "launch" ]; then
+        shift
+        arthexis_desktop_shortcut_launch "$1"
+    fi
+fi

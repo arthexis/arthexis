@@ -16,6 +16,7 @@ from django.contrib import admin
 from django.contrib import messages
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import get_user_model, login
+from django.contrib.auth.decorators import login_required
 from django.contrib.auth.tokens import default_token_generator
 from django.contrib.auth.views import LoginView
 from django import forms
@@ -23,7 +24,14 @@ from django.apps import apps as django_apps
 from utils.decorators import security_group_required
 from utils.sites import get_site
 from django.contrib.staticfiles import finders
-from django.http import FileResponse, Http404, HttpResponse, JsonResponse
+from django.http import (
+    FileResponse,
+    Http404,
+    HttpResponse,
+    HttpResponseForbidden,
+    HttpResponseRedirect,
+    JsonResponse,
+)
 from django.shortcuts import get_object_or_404, redirect, render
 from nodes.models import Node
 from nodes.utils import capture_screenshot, save_screenshot
@@ -1280,10 +1288,10 @@ class ClientReportForm(forms.Form):
         initial=ClientReportSchedule.PERIODICITY_NONE,
         help_text=_("Defines how often the report should be generated automatically."),
     )
-    disable_emails = forms.BooleanField(
-        label=_("Disable email delivery"),
+    enable_emails = forms.BooleanField(
+        label=_("Enable email delivery"),
         required=False,
-        help_text=_("Generate files without sending emails."),
+        help_text=_("Send the report via email to the recipients listed above."),
     )
 
     def __init__(self, *args, request=None, **kwargs):
@@ -1386,12 +1394,17 @@ def client_report(request):
                 owner = form.cleaned_data.get("owner")
                 if not owner and request.user.is_authenticated:
                     owner = request.user
+                enable_emails = form.cleaned_data.get("enable_emails", False)
+                disable_emails = not enable_emails
+                recipients = (
+                    form.cleaned_data.get("destinations") if enable_emails else []
+                )
                 report = ClientReport.generate(
                     form.cleaned_data["start"],
                     form.cleaned_data["end"],
                     owner=owner,
-                    recipients=form.cleaned_data.get("destinations"),
-                    disable_emails=form.cleaned_data.get("disable_emails", False),
+                    recipients=recipients,
+                    disable_emails=disable_emails,
                 )
                 report.store_local_copy()
                 recurrence = form.cleaned_data.get("recurrence")
@@ -1400,8 +1413,8 @@ def client_report(request):
                         owner=owner,
                         created_by=request.user if request.user.is_authenticated else None,
                         periodicity=recurrence,
-                        email_recipients=form.cleaned_data.get("destinations", []),
-                        disable_emails=form.cleaned_data.get("disable_emails", False),
+                        email_recipients=recipients,
+                        disable_emails=disable_emails,
                     )
                     report.schedule = schedule
                     report.save(update_fields=["schedule"])
@@ -1411,6 +1424,27 @@ def client_report(request):
                             "Client report schedule created; future reports will be generated automatically."
                         ),
                     )
+                if disable_emails:
+                    messages.success(
+                        request,
+                        _(
+                            "Consumer report generated. The download will begin automatically."
+                        ),
+                    )
+                    redirect_url = f"{reverse('pages:client-report')}?download={report.pk}"
+                    return HttpResponseRedirect(redirect_url)
+    download_url = None
+    download_param = request.GET.get("download")
+    if download_param and request.user.is_authenticated:
+        try:
+            download_id = int(download_param)
+        except (TypeError, ValueError):
+            download_id = None
+        if download_id:
+            download_url = reverse(
+                "pages:client-report-download", args=[download_id]
+            )
+
     try:
         login_url = reverse("pages:login")
     except NoReverseMatch:
@@ -1424,8 +1458,50 @@ def client_report(request):
         "report": report,
         "schedule": schedule,
         "login_url": login_url,
+        "download_url": download_url,
+        "previous_reports": _client_report_history(request),
     }
     return render(request, "pages/client_report.html", context)
+
+
+@login_required
+def client_report_download(request, report_id: int):
+    report = get_object_or_404(ClientReport, pk=report_id)
+    if not request.user.is_staff and report.owner_id != request.user.pk:
+        return HttpResponseForbidden(
+            _("You do not have permission to download this report.")
+        )
+    pdf_path = report.ensure_pdf()
+    if not pdf_path.exists():
+        raise Http404(_("Report file unavailable."))
+    filename = f"consumer-report-{report.start_date}-{report.end_date}.pdf"
+    response = FileResponse(pdf_path.open("rb"), content_type="application/pdf")
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
+def _client_report_history(request, limit: int = 20):
+    if not request.user.is_authenticated:
+        return []
+    qs = ClientReport.objects.order_by("-created_on")
+    if not request.user.is_staff:
+        qs = qs.filter(owner=request.user)
+    history = []
+    for report in qs[:limit]:
+        totals = report.rows_for_display.get("totals", {})
+        history.append(
+            {
+                "instance": report,
+                "download_url": reverse("pages:client-report-download", args=[report.pk]),
+                "email_enabled": not report.disable_emails,
+                "recipients": report.recipients or [],
+                "totals": {
+                    "total_kw": totals.get("total_kw", 0.0),
+                    "total_kw_period": totals.get("total_kw_period", 0.0),
+                },
+            }
+        )
+    return history
 
 
 def _get_request_language_code(request) -> str:

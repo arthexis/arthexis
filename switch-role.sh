@@ -286,13 +286,9 @@ SERVICE_ACTIVE=false
 if [ -n "$SERVICE" ] && systemctl list-unit-files | grep -Fq "${SERVICE}.service"; then
     if systemctl is-active --quiet "$SERVICE"; then
         SERVICE_ACTIVE=true
-        sudo systemctl stop "$SERVICE"
-        if [ -f "$LOCK_DIR/celery.lck" ]; then
-            sudo systemctl stop "celery-$SERVICE" || true
-            sudo systemctl stop "celery-beat-$SERVICE" || true
-        fi
-        if [ -f "$LOCK_DIR/lcd_screen.lck" ]; then
-            sudo systemctl stop "lcd-$SERVICE" || true
+        if ! "$BASE_DIR/stop.sh"; then
+            echo "Role change aborted because stop.sh detected active charging sessions. Resolve the sessions or run ./stop.sh --force during a maintenance window." >&2
+            exit 1
         fi
     fi
 fi

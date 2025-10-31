@@ -86,6 +86,7 @@ I nodi Terminal possono avviarsi direttamente con gli script sottostanti senza i
      - `--constellation` – abilita lo stack di orchestrazione multiutente.
    - Usa `./install.sh --help` per elencare tutte le opzioni disponibili se hai bisogno di personalizzare il nodo oltre le impostazioni del ruolo.
    - Aggiorna con [`./upgrade.sh`](upgrade.sh).
+   - Consulta il [Manuale degli script di installazione e ciclo di vita](docs/development/install-lifecycle-scripts-manual.md) per l'elenco completo dei flag e le note operative.
 
 - **Windows:**
    - Esegui [`install.bat`](install.bat) per installare (ruolo Terminal) e [`upgrade.bat`](upgrade.bat) per aggiornare.

@@ -86,6 +86,7 @@ Los nodos Terminal pueden iniciarse directamente con los siguientes scripts sin 
      - `--constellation`: habilita la pila de orquestación multiusuario.
    - Usa `./install.sh --help` para ver la lista completa de flags si necesitas personalizar el nodo más allá del rol.
    - Actualiza con [`./upgrade.sh`](upgrade.sh).
+   - Consulta el [Manual de scripts de instalación y ciclo de vida](docs/development/install-lifecycle-scripts-manual.md) para ver la descripción completa de los flags y las notas operativas.
 
 - **Windows:**
    - Ejecuta [`install.bat`](install.bat) para instalar (rol Terminal) y [`upgrade.bat`](upgrade.bat) para actualizar.

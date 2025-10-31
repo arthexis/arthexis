@@ -9,7 +9,7 @@ from django.apps import apps
 from django.contrib import admin
 from django.contrib.contenttypes.models import ContentType
 from django.core.cache import cache
-from django.db import connection
+from django.db import connection, DatabaseError
 from django.db.models import Count, Exists, OuterRef, Q
 from django.db.models import Model
 from django.db.models.signals import post_delete, post_save
@@ -22,6 +22,7 @@ from django.dispatch import receiver
 
 from core.models import Lead, RFID, Todo, GoogleCalendarProfile
 from ocpp.models import Charger
+from nodes.models import NetMessage
 from core.entity import Entity, user_data_flag_updated
 
 register = template.Library()
@@ -60,6 +61,29 @@ def _get_user_data_model_labels() -> set[str]:
         timeout=timeout,
     )
     return labels
+
+
+@register.simple_tag
+def last_net_message() -> dict[str, object]:
+    """Return the most recent NetMessage for the admin dashboard."""
+
+    try:
+        entry = (
+            NetMessage.objects.order_by("-created")
+            .values("subject", "body")
+            .first()
+        )
+    except DatabaseError:
+        return {"text": "", "has_content": False}
+
+    if not entry:
+        return {"text": "", "has_content": False}
+
+    subject = (entry.get("subject") or "").strip()
+    body = (entry.get("body") or "").strip()
+    parts = [part for part in (subject, body) if part]
+    text = " — ".join(parts) if parts else ""
+    return {"text": text, "has_content": bool(parts)}
 
 
 def _invalidate_user_data_model_cache() -> None:

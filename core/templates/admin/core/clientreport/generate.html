@@ -148,18 +148,18 @@
     </div>
     <div class="form-group checkbox-group">
       <div class="checkbox-wrapper">
-        {{ form.disable_emails }}
-        {{ form.disable_emails.label_tag }}
+        {{ form.enable_emails }}
+        {{ form.enable_emails.label_tag }}
       </div>
-      {% if form.disable_emails.errors %}
+      {% if form.enable_emails.errors %}
         <ul class="errorlist">
-          {% for error in form.disable_emails.errors %}
+          {% for error in form.enable_emails.errors %}
             <li>{{ error }}</li>
           {% endfor %}
         </ul>
       {% endif %}
-      {% if form.disable_emails.help_text %}
-        <p class="help-text" id="id_disable_emails-help">{{ form.disable_emails.help_text }}</p>
+      {% if form.enable_emails.help_text %}
+        <p class="help-text" id="id_enable_emails-help">{{ form.enable_emails.help_text }}</p>
       {% endif %}
     </div>
   </fieldset>
@@ -169,70 +169,205 @@
     </button>
   </div>
 </form>
+{% if download_url %}
+  <p class="success auto-download-message">
+    {% trans "Consumer report generated. If the download does not start automatically," %}
+    <a href="{{ download_url }}">{% trans "click here to download it." %}</a>
+  </p>
+  <iframe
+    src="{{ download_url }}"
+    title="{% trans "Consumer report download" %}"
+    class="report-download-frame"
+    aria-hidden="true"
+  ></iframe>
+{% endif %}
 {% if report %}
-  <h2>{% blocktrans with start=report.start_date end=report.end_date %}Report from {{ start }} to {{ end }}{% endblocktrans %}</h2>
-  {% with rows=report.rows_for_display %}
-    {% if rows %}
-      {% with first=rows|first %}
-        {% if first.start %}
-          <table class="adminlist">
-            <thead>
-              <tr>
-                <th>{% trans "RFID / Account" %}</th>
-                <th>{% trans "Session start" %}</th>
-                <th>{% trans "Session end" %}</th>
-                <th>{% trans "Energy (kWh)" %}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for row in rows %}
-                <tr>
-                  <td>
-                    <strong>{{ row.subject }}</strong>
-                  </td>
-                  <td>
-                    {% if row.start %}
-                      <time datetime="{{ row.start|date:'c' }}">{{ row.start|localtime|date:"Y-m-d H:i" }}</time>
-                    {% else %}
-                      {% trans "Unavailable" %}
-                    {% endif %}
-                  </td>
-                  <td>
-                    {% if row.end %}
-                      <time datetime="{{ row.end|date:'c' }}">{{ row.end|localtime|date:"Y-m-d H:i" }}</time>
-                    {% else %}
-                      {% trans "In progress" %}
-                    {% endif %}
-                  </td>
-                  <td>{{ row.kw|floatformat:2 }}</td>
-                </tr>
-              {% empty %}
-                <tr><td colspan="4">{% trans "No data available." %}</td></tr>
-              {% endfor %}
-            </tbody>
-          </table>
+  <section class="report-results" id="client-report-results">
+    <h2>{% blocktrans with start=report.start_date end=report.end_date %}Report from {{ start }} to {{ end }}{% endblocktrans %}</h2>
+    {% with data=report.rows_for_display %}
+      {% if data.schema == "evcs-session/v1" %}
+        {% if data.evcs %}
+          {% for evcs in data.evcs %}
+            <article class="evcs-report">
+              <header class="evcs-report__header">
+                <h3 class="evcs-report__title">
+                  {{ evcs.display_name }}
+                  {% if evcs.serial_number %}
+                    <small class="evcs-report__serial">({% trans "Serial" %}: {{ evcs.serial_number }})</small>
+                  {% endif %}
+                </h3>
+                <p class="evcs-report__summary">
+                  {% trans "Total kW (all time)" %}: {{ evcs.total_kw|floatformat:2 }} ·
+                  {% trans "Total kW (period)" %}: {{ evcs.total_kw_period|floatformat:2 }}
+                </p>
+              </header>
+              {% if evcs.transactions %}
+                <table class="adminlist evcs-report__table">
+                  <thead>
+                    <tr>
+                      <th scope="col">{% trans "Connector" %}</th>
+                      <th scope="col">{% trans "Start kWh" %}</th>
+                      <th scope="col">{% trans "End kWh" %}</th>
+                      <th scope="col">{% trans "Session kWh" %}</th>
+                      <th scope="col">{% trans "Session start" %}</th>
+                      <th scope="col">{% trans "Session end" %}</th>
+                      <th scope="col">{% trans "RFID label" %}</th>
+                      <th scope="col">{% trans "Account" %}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for row in evcs.transactions %}
+                      <tr>
+                        <td data-label="{% trans "Connector" %}">
+                          {% if row.connector is not None %}{{ row.connector }}{% else %}&mdash;{% endif %}
+                        </td>
+                        <td data-label="{% trans "Start kWh" %}">
+                          {% if row.start_kwh is not None %}{{ row.start_kwh|floatformat:2 }}{% else %}&mdash;{% endif %}
+                        </td>
+                        <td data-label="{% trans "End kWh" %}">
+                          {% if row.end_kwh is not None %}{{ row.end_kwh|floatformat:2 }}{% else %}&mdash;{% endif %}
+                        </td>
+                        <td data-label="{% trans "Session kWh" %}">{{ row.session_kwh|floatformat:2 }}</td>
+                        <td data-label="{% trans "Session start" %}">
+                          {% if row.start %}
+                            <time datetime="{{ row.start|date:'c' }}">{{ row.start|localtime|date:"Y-m-d H:i" }}</time>
+                          {% else %}&mdash;{% endif %}
+                        </td>
+                        <td data-label="{% trans "Session end" %}">
+                          {% if row.end %}
+                            <time datetime="{{ row.end|date:'c' }}">{{ row.end|localtime|date:"Y-m-d H:i" }}</time>
+                          {% else %}&mdash;{% endif %}
+                        </td>
+                        <td data-label="{% trans "RFID label" %}">{{ row.rfid_label|default:"—" }}</td>
+                        <td data-label="{% trans "Account" %}">{{ row.account_name|default:"—" }}</td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              {% else %}
+                <p class="quiet evcs-report__empty">{% trans "No charging sessions recorded for this charge point." %}</p>
+              {% endif %}
+            </article>
+          {% endfor %}
+          <footer class="report-results__totals">
+            <p><strong>{% trans "Report totals" %}</strong></p>
+            <p>{% trans "Total kW (all time)" %}: {{ data.totals.total_kw|floatformat:2 }}</p>
+            <p>{% trans "Total kW (period)" %}: {{ data.totals.total_kw_period|floatformat:2 }}</p>
+          </footer>
         {% else %}
-          <table class="adminlist">
-            <thead>
-              <tr><th>{% trans "RFID/Account" %}</th><th>{% trans "Sessions" %}</th><th>{% trans "Total kWh" %}</th></tr>
-            </thead>
-            <tbody>
-              {% for row in rows %}
-                <tr><td>{{ row.subject }}</td><td>{{ row.count }}</td><td>{{ row.kw|floatformat:2 }}</td></tr>
-              {% empty %}
-                <tr><td colspan="3">{% trans "No data available." %}</td></tr>
-              {% endfor %}
-            </tbody>
-          </table>
+          <p class="quiet">{% trans "No charging sessions were recorded for this period." %}</p>
         {% endif %}
-      {% endwith %}
-    {% else %}
-      <p class="quiet">{% trans "No data available." %}</p>
+      {% else %}
+        {% with rows=data.rows %}
+          {% if rows %}
+            {% with first=rows|first %}
+              {% if first.start %}
+                <table class="adminlist">
+                  <thead>
+                    <tr>
+                      <th>{% trans "RFID / Account" %}</th>
+                      <th>{% trans "Session start" %}</th>
+                      <th>{% trans "Session end" %}</th>
+                      <th>{% trans "Energy (kWh)" %}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for row in rows %}
+                      <tr>
+                        <td><strong>{{ row.subject }}</strong></td>
+                        <td>
+                          {% if row.start %}
+                            <time datetime="{{ row.start|date:'c' }}">{{ row.start|localtime|date:"Y-m-d H:i" }}</time>
+                          {% else %}{% trans "Unavailable" %}{% endif %}
+                        </td>
+                        <td>
+                          {% if row.end %}
+                            <time datetime="{{ row.end|date:'c' }}">{{ row.end|localtime|date:"Y-m-d H:i" }}</time>
+                          {% else %}{% trans "In progress" %}{% endif %}
+                        </td>
+                        <td>{{ row.kw|floatformat:2 }}</td>
+                      </tr>
+                    {% empty %}
+                      <tr><td colspan="4">{% trans "No data available." %}</td></tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              {% else %}
+                <table class="adminlist">
+                  <thead>
+                    <tr>
+                      <th>{% trans "RFID/Account" %}</th>
+                      <th>{% trans "Sessions" %}</th>
+                      <th>{% trans "Total kWh" %}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for row in rows %}
+                      <tr>
+                        <td>{{ row.subject }}</td>
+                        <td>{{ row.count }}</td>
+                        <td>{{ row.kw|floatformat:2 }}</td>
+                      </tr>
+                    {% empty %}
+                      <tr><td colspan="3">{% trans "No data available." %}</td></tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              {% endif %}
+            {% endwith %}
+          {% else %}
+            <p class="quiet">{% trans "No data available." %}</p>
+          {% endif %}
+        {% endwith %}
+      {% endif %}
+    {% endwith %}
+    {% if schedule %}
+      <p class="success">{% blocktrans with freq=schedule.get_periodicity_display %}Next run scheduled ({{ freq }}){% endblocktrans %}</p>
     {% endif %}
-  {% endwith %}
-  {% if schedule %}
-    <p class="success">{% blocktrans with freq=schedule.get_periodicity_display %}Next run scheduled ({{ freq }}){% endblocktrans %}</p>
-  {% endif %}
+  </section>
+{% endif %}
+{% if previous_reports %}
+  <section class="report-history" aria-labelledby="report-history-title">
+    <h2 id="report-history-title">{% trans "Previous reports" %}</h2>
+    <table class="adminlist report-history__table">
+      <thead>
+        <tr>
+          <th scope="col">{% trans "Generated on" %}</th>
+          <th scope="col">{% trans "Period" %}</th>
+          <th scope="col">{% trans "Email delivery" %}</th>
+          <th scope="col">{% trans "Recipients" %}</th>
+          <th scope="col">{% trans "Total kW (period)" %}</th>
+          <th scope="col">{% trans "Download" %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in previous_reports %}
+          <tr>
+            <td data-label="{% trans "Generated on" %}">
+              <time datetime="{{ item.instance.created_on|date:'c' }}">{{ item.instance.created_on|localtime|date:"Y-m-d H:i" }}</time>
+            </td>
+            <td data-label="{% trans "Period" %}">{{ item.instance.start_date }} – {{ item.instance.end_date }}</td>
+            <td data-label="{% trans "Email delivery" %}">
+              {% if item.email_enabled %}
+                {% trans "Enabled" %}
+              {% else %}
+                {% trans "Disabled" %}
+              {% endif %}
+            </td>
+            <td data-label="{% trans "Recipients" %}">
+              {% if item.recipients %}
+                {{ item.recipients|join:", " }}
+              {% else %}
+                —
+              {% endif %}
+            </td>
+            <td data-label="{% trans "Total kW (period)" %}">{{ item.totals.total_kw_period|floatformat:2 }}</td>
+            <td data-label="{% trans "Download" %}"><a href="{{ item.download_url }}">{% trans "Download" %}</a></td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
 {% endif %}
 <script>
   const periodRadios = document.querySelectorAll('input[name="period"]');
@@ -257,7 +392,7 @@
     id_owner: 'id_owner-help',
     id_destinations: 'id_destinations-help',
     id_recurrence: 'id_recurrence-help',
-    id_disable_emails: 'id_disable_emails-help',
+    id_enable_emails: 'id_enable_emails-help',
   };
 
   Object.entries(describedByMap).forEach(([fieldId, helpId]) => {
@@ -395,6 +530,51 @@
     margin: 0;
     padding: 0;
     list-style: none;
+  }
+
+  .auto-download-message {
+    margin-top: 1.5rem;
+  }
+
+  .report-download-frame {
+    display: none;
+  }
+
+  .report-results {
+    margin-top: 2.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.75rem;
+  }
+
+  .evcs-report {
+    border: 1px solid rgba(148, 163, 184, 0.25);
+    border-radius: 8px;
+    padding: 1.25rem;
+    background-color: rgba(15, 23, 42, 0.15);
+  }
+
+  .evcs-report__summary {
+    margin: 0.5rem 0 0;
+    color: var(--body-quiet-color, #94a3b8);
+    font-size: 0.95rem;
+  }
+
+  .evcs-report__table {
+    margin-top: 1rem;
+  }
+
+  .report-results__totals {
+    border-top: 1px solid rgba(148, 163, 184, 0.25);
+    padding-top: 1rem;
+  }
+
+  .report-history {
+    margin-top: 3rem;
+  }
+
+  .report-history__table {
+    margin-top: 1rem;
   }
 
   .client-report-form .help-text {

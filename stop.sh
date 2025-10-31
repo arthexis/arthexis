@@ -21,6 +21,62 @@ if ! $SUDO true 2>/dev/null; then
   SUDO=""
 fi
 
+FORCE=false
+ALL=false
+PORT=8888
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --all)
+      ALL=true
+      shift
+      ;;
+    --force)
+      FORCE=true
+      shift
+      ;;
+    *)
+      PORT="$1"
+      shift
+      ;;
+  esac
+done
+
+if [ "$FORCE" != true ]; then
+  ACTIVE_OUTPUT=$(
+    "$PYTHON" "$BASE_DIR/manage.py" shell <<'PY' 2>&1
+import os
+from django.conf import settings
+from django.db import connections
+
+override = os.environ.get("ARTHEXIS_STOP_DB_PATH")
+if override:
+    settings.DATABASES["default"]["NAME"] = override
+    connections.databases["default"]["NAME"] = override
+
+from ocpp.models import Transaction
+
+print(Transaction.objects.filter(stop_time__isnull=True).count())
+PY
+  )
+  ACTIVE_STATUS=$?
+  if [ "$ACTIVE_STATUS" -ne 0 ]; then
+    printf '%s\n' "$ACTIVE_OUTPUT" >&2
+    echo "Unable to verify active charging sessions. Resolve the issue or re-run with --force during a maintenance window." >&2
+    exit 1
+  fi
+  ACTIVE_SESSIONS=$(printf '%s' "$ACTIVE_OUTPUT" | tail -n 1 | tr -d '\r\n ')
+  if [[ ! "$ACTIVE_SESSIONS" =~ ^[0-9]+$ ]]; then
+    printf '%s\n' "$ACTIVE_OUTPUT" >&2
+    echo "Unexpected response while checking for active charging sessions. Resolve the issue or re-run with --force during a maintenance window." >&2
+    exit 1
+  fi
+  if [ "$ACTIVE_SESSIONS" -gt 0 ]; then
+    echo "Active charging sessions detected; aborting stop. Resolve the sessions or pass --force during a maintenance window." >&2
+    exit 1
+  fi
+fi
+
 # If a systemd service was installed, stop it instead of killing processes
 if [ -f "$LOCK_DIR/service.lck" ]; then
   SERVICE_NAME="$(cat "$LOCK_DIR/service.lck")"
@@ -60,22 +116,6 @@ fi
 if [ -d .venv ]; then
   source .venv/bin/activate
 fi
-
-ALL=false
-PORT=8888
-
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --all)
-      ALL=true
-      shift
-      ;;
-    *)
-      PORT="$1"
-      shift
-      ;;
-  esac
-done
 
 PATTERN="manage.py runserver"
 if [ "$ALL" = true ]; then

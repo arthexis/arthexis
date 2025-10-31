@@ -9,6 +9,8 @@ from django.urls import NoReverseMatch, path, reverse
 from urllib.parse import urlencode, urlparse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.http import (
+    FileResponse,
+    Http404,
     HttpResponse,
     JsonResponse,
     HttpResponseBase,
@@ -3674,10 +3676,10 @@ class ClientReportAdmin(EntityModelAdmin):
             initial=ClientReportSchedule.PERIODICITY_NONE,
             help_text="Defines how often the report should be generated automatically.",
         )
-        disable_emails = forms.BooleanField(
-            label="Disable email delivery",
+        enable_emails = forms.BooleanField(
+            label="Enable email delivery",
             required=False,
-            help_text="Generate files without sending emails.",
+            help_text="Send the report via email to the recipients listed above.",
         )
 
         def __init__(self, *args, request=None, **kwargs):
@@ -3741,6 +3743,11 @@ class ClientReportAdmin(EntityModelAdmin):
                 self.admin_site.admin_view(self.generate_view),
                 name="core_clientreport_generate",
             ),
+            path(
+                "download/<int:report_id>/",
+                self.admin_site.admin_view(self.download_view),
+                name="core_clientreport_download",
+            ),
         ]
         return custom + urls
 
@@ -3748,16 +3755,20 @@ class ClientReportAdmin(EntityModelAdmin):
         form = self.ClientReportForm(request.POST or None, request=request)
         report = None
         schedule = None
+        download_url = None
         if request.method == "POST" and form.is_valid():
             owner = form.cleaned_data.get("owner")
             if not owner and request.user.is_authenticated:
                 owner = request.user
+            enable_emails = form.cleaned_data.get("enable_emails", False)
+            disable_emails = not enable_emails
+            recipients = form.cleaned_data.get("destinations") if enable_emails else []
             report = ClientReport.generate(
                 form.cleaned_data["start"],
                 form.cleaned_data["end"],
                 owner=owner,
-                recipients=form.cleaned_data.get("destinations"),
-                disable_emails=form.cleaned_data.get("disable_emails", False),
+                recipients=recipients,
+                disable_emails=disable_emails,
             )
             report.store_local_copy()
             recurrence = form.cleaned_data.get("recurrence")
@@ -3766,8 +3777,8 @@ class ClientReportAdmin(EntityModelAdmin):
                     owner=owner,
                     created_by=request.user if request.user.is_authenticated else None,
                     periodicity=recurrence,
-                    email_recipients=form.cleaned_data.get("destinations", []),
-                    disable_emails=form.cleaned_data.get("disable_emails", False),
+                    email_recipients=recipients,
+                    disable_emails=disable_emails,
                 )
                 report.schedule = schedule
                 report.save(update_fields=["schedule"])
@@ -3776,11 +3787,68 @@ class ClientReportAdmin(EntityModelAdmin):
                     "Client report schedule created; future reports will be generated automatically.",
                     messages.SUCCESS,
                 )
+            if disable_emails:
+                self.message_user(
+                    request,
+                    "Consumer report generated. The download will begin automatically.",
+                    messages.SUCCESS,
+                )
+                redirect_url = f"{reverse('admin:core_clientreport_generate')}?download={report.pk}"
+                return HttpResponseRedirect(redirect_url)
+        download_param = request.GET.get("download")
+        if download_param:
+            try:
+                download_report = ClientReport.objects.get(pk=download_param)
+            except ClientReport.DoesNotExist:
+                pass
+            else:
+                download_url = reverse(
+                    "admin:core_clientreport_download", args=[download_report.pk]
+                )
         context = self.admin_site.each_context(request)
-        context.update({"form": form, "report": report, "schedule": schedule})
+        context.update(
+            {
+                "form": form,
+                "report": report,
+                "schedule": schedule,
+                "download_url": download_url,
+                "previous_reports": self._build_report_history(request),
+            }
+        )
         return TemplateResponse(
             request, "admin/core/clientreport/generate.html", context
         )
+
+    def download_view(self, request, report_id: int):
+        report = get_object_or_404(ClientReport, pk=report_id)
+        pdf_path = report.ensure_pdf()
+        if not pdf_path.exists():
+            raise Http404("Report file unavailable")
+        filename = f"consumer-report-{report.start_date}-{report.end_date}.pdf"
+        response = FileResponse(pdf_path.open("rb"), content_type="application/pdf")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
+
+    def _build_report_history(self, request):
+        queryset = ClientReport.objects.order_by("-created_on")[:20]
+        history = []
+        for item in queryset:
+            totals = item.rows_for_display.get("totals", {})
+            history.append(
+                {
+                    "instance": item,
+                    "download_url": reverse(
+                        "admin:core_clientreport_download", args=[item.pk]
+                    ),
+                    "email_enabled": not item.disable_emails,
+                    "recipients": item.recipients or [],
+                    "totals": {
+                        "total_kw": totals.get("total_kw", 0.0),
+                        "total_kw_period": totals.get("total_kw_period", 0.0),
+                    },
+                }
+            )
+        return history
 
 
 @admin.register(PackageRelease)
