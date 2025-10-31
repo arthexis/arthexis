@@ -11,6 +11,74 @@
         gap: 1rem;
         box-sizing: border-box;
     }
+    #admin-home-header {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 1rem;
+        margin-bottom: 1.25rem;
+    }
+    #admin-home-header h1 {
+        margin: 0;
+    }
+    .admin-home-net-message {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.35rem 0.75rem;
+        border-radius: 6px;
+        background: var(--darkened-bg);
+        color: var(--body-fg);
+        min-height: 2.25rem;
+        box-sizing: border-box;
+    }
+    .admin-home-net-message__label {
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--body-quiet-color);
+        white-space: nowrap;
+    }
+    .admin-home-net-message__content {
+        font-family: var(
+            --font-family-monospace,
+            SFMono-Regular,
+            Menlo,
+            Monaco,
+            Consolas,
+            'Liberation Mono',
+            'Courier New',
+            monospace
+        );
+        font-size: 0.875rem;
+        white-space: pre-wrap;
+        word-break: break-word;
+        flex: 1 1 auto;
+        color: inherit;
+    }
+    .admin-home-net-message__content--empty {
+        color: var(--body-quiet-color);
+    }
+    .admin-home-actions {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+    @media (max-width: 992px) {
+        #admin-home-header {
+            grid-template-columns: 1fr;
+            gap: 0.75rem;
+        }
+        .admin-home-actions {
+            justify-content: flex-start;
+        }
+        .admin-home-net-message {
+            width: 100%;
+        }
+    }
     .dashboard-main {
         flex: 1 1 calc(70% - 0.5rem);
         min-width: 300px;
@@ -380,9 +448,14 @@
 {% block bodyclass %}{{ block.super }} dashboard{% endblock %}
 
 {% block content_title %}
-<div id="admin-home-header" style="display:flex; justify-content:space-between; align-items:center;">
+{% last_net_message as admin_last_net_message %}
+<div id="admin-home-header">
   <h1>Home</h1>
-  <div style="display:flex; align-items:center; gap:8px;">
+  <div class="admin-home-net-message" role="status" aria-live="polite">
+    <span class="admin-home-net-message__label">{% translate 'Net message' %}</span>
+    <span class="admin-home-net-message__content{% if not admin_last_net_message.has_content %} admin-home-net-message__content--empty{% endif %}" title="{% if admin_last_net_message.has_content %}{{ admin_last_net_message.text }}{% else %}{% translate 'No net messages available' %}{% endif %}">{% if admin_last_net_message.has_content %}{{ admin_last_net_message.text }}{% else %}{% translate 'No net messages available' %}{% endif %}</span>
+  </div>
+  <div class="admin-home-actions">
     <a class="button" href="{% url 'admin:seed_data' %}">{% translate 'Seed Data' %}</a>
     <a class="button" href="{% url 'admin:user_data' %}">{% translate 'User Data' %}</a>
     <a class="button" href="{% url 'admin:system' %}">{% translate 'System Reports' %}</a>

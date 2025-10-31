@@ -109,6 +109,7 @@ from nodes.models import (
     NodeRole,
     NodeFeature,
     NodeFeatureAssignment,
+    NetMessage,
 )
 from django.contrib.auth.models import AnonymousUser
 
@@ -733,6 +734,24 @@ class AdminDashboardAppListTests(TestCase):
         self.celery_lock.write_text("")
         resp = self.client.get(reverse("admin:index"))
         self.assertContains(resp, "5. Horologia</a>")
+
+    def test_dashboard_shows_last_net_message(self):
+        NetMessage.objects.all().delete()
+        NetMessage.objects.create(subject="Older", body="First body")
+        NetMessage.objects.create(subject="Latest", body="Signal ready")
+
+        resp = self.client.get(reverse("admin:index"))
+
+        self.assertContains(resp, gettext("Net message"))
+        self.assertContains(resp, "Latest — Signal ready")
+        self.assertNotContains(resp, gettext("No net messages available"))
+
+    def test_dashboard_shows_placeholder_without_net_message(self):
+        NetMessage.objects.all().delete()
+
+        resp = self.client.get(reverse("admin:index"))
+
+        self.assertContains(resp, gettext("No net messages available"))
 
 class AdminSidebarTests(TestCase):
     def setUp(self):
