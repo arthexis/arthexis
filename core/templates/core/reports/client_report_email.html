@@ -16,75 +16,111 @@
 <body>
   <h1>Client Report</h1>
   <p>Period: {{ report.start_date }} to {{ report.end_date }}</p>
-  {% with rows=report.rows_for_display %}
-    {% if rows %}
-      {% with first=rows|first %}
-        {% if first.start %}
-          <table>
-            <thead>
-              <tr>
-                <th>RFID / Account</th>
-                <th>Session start</th>
-                <th>Session end</th>
-                <th>Energy (kWh)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for row in rows %}
+  {% with data=report.rows_for_display %}
+    {% if data.schema == "evcs-session/v1" %}
+      {% if data.evcs %}
+        {% for evcs in data.evcs %}
+          <h2>{{ evcs.display_name }}</h2>
+          {% if evcs.serial_number %}
+            <p><strong>Serial:</strong> {{ evcs.serial_number }}</p>
+          {% endif %}
+          <p>
+            <strong>Total kW (all time):</strong> {{ evcs.total_kw|floatformat:2 }} ·
+            <strong>Total kW (period):</strong> {{ evcs.total_kw_period|floatformat:2 }}
+          </p>
+          {% if evcs.transactions %}
+            <table>
+              <thead>
                 <tr>
-                  <td>
-                    <strong>{{ row.subject }}</strong>
-                  </td>
-                  <td>
-                    {% if row.start %}
-                      {{ row.start|localtime|date:"Y-m-d H:i" }}
-                    {% else %}
-                      Unavailable
-                    {% endif %}
-                  </td>
-                  <td>
-                    {% if row.end %}
-                      {{ row.end|localtime|date:"Y-m-d H:i" }}
-                    {% else %}
-                      In progress
-                    {% endif %}
-                  </td>
-                  <td>{{ row.kw|floatformat:2 }}</td>
+                  <th>Connector</th>
+                  <th>Start kWh</th>
+                  <th>End kWh</th>
+                  <th>Session kWh</th>
+                  <th>Session start</th>
+                  <th>Session end</th>
+                  <th>RFID label</th>
+                  <th>Account</th>
                 </tr>
-              {% empty %}
-                <tr>
-                  <td colspan="4">No data available.</td>
-                </tr>
-              {% endfor %}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {% for row in evcs.transactions %}
+                  <tr>
+                    <td>{% if row.connector is not None %}{{ row.connector }}{% else %}—{% endif %}</td>
+                    <td>{% if row.start_kwh is not None %}{{ row.start_kwh|floatformat:2 }}{% else %}—{% endif %}</td>
+                    <td>{% if row.end_kwh is not None %}{{ row.end_kwh|floatformat:2 }}{% else %}—{% endif %}</td>
+                    <td>{{ row.session_kwh|floatformat:2 }}</td>
+                    <td>{% if row.start %}{{ row.start|localtime|date:"Y-m-d H:i" }}{% else %}—{% endif %}</td>
+                    <td>{% if row.end %}{{ row.end|localtime|date:"Y-m-d H:i" }}{% else %}—{% endif %}</td>
+                    <td>{{ row.rfid_label|default:"—" }}</td>
+                    <td>{{ row.account_name|default:"—" }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          {% else %}
+            <p>No charging sessions recorded for this charge point.</p>
+          {% endif %}
+        {% endfor %}
+        <h3>Report totals</h3>
+        <p><strong>Total kW (all time):</strong> {{ data.totals.total_kw|floatformat:2 }}</p>
+        <p><strong>Total kW (period):</strong> {{ data.totals.total_kw_period|floatformat:2 }}</p>
+      {% else %}
+        <p>No charging sessions were recorded for this period.</p>
+      {% endif %}
+    {% else %}
+      {% with rows=data.rows %}
+        {% if rows %}
+          {% with first=rows|first %}
+            {% if first.start %}
+              <table>
+                <thead>
+                  <tr>
+                    <th>RFID / Account</th>
+                    <th>Session start</th>
+                    <th>Session end</th>
+                    <th>Energy (kWh)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in rows %}
+                    <tr>
+                      <td><strong>{{ row.subject }}</strong></td>
+                      <td>{% if row.start %}{{ row.start|localtime|date:"Y-m-d H:i" }}{% else %}Unavailable{% endif %}</td>
+                      <td>{% if row.end %}{{ row.end|localtime|date:"Y-m-d H:i" }}{% else %}In progress{% endif %}</td>
+                      <td>{{ row.kw|floatformat:2 }}</td>
+                    </tr>
+                  {% empty %}
+                    <tr><td colspan="4">No data available.</td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            {% else %}
+              <table>
+                <thead>
+                  <tr>
+                    <th>RFID/Account</th>
+                    <th>Sessions</th>
+                    <th>Total kWh</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in rows %}
+                    <tr>
+                      <td>{{ row.subject }}</td>
+                      <td>{{ row.count }}</td>
+                      <td>{{ row.kw|floatformat:2 }}</td>
+                    </tr>
+                  {% empty %}
+                    <tr><td colspan="3">No data available.</td></tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            {% endif %}
+          {% endwith %}
         {% else %}
-          <table>
-            <thead>
-              <tr>
-                <th>RFID/Account</th>
-                <th>Sessions</th>
-                <th>Total kWh</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for row in rows %}
-                <tr>
-                  <td>{{ row.subject }}</td>
-                  <td>{{ row.count }}</td>
-                  <td>{{ row.kw|floatformat:2 }}</td>
-                </tr>
-              {% empty %}
-                <tr>
-                  <td colspan="3">No data available.</td>
-                </tr>
-              {% endfor %}
-            </tbody>
-          </table>
+          <p>No data available.</p>
         {% endif %}
       {% endwith %}
-    {% else %}
-      <p>No data available.</p>
     {% endif %}
   {% endwith %}
 </body>

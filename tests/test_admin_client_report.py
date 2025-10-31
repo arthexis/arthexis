@@ -73,11 +73,12 @@ class AdminClientReportTests(TestCase):
                 "recurrence": ClientReportSchedule.PERIODICITY_NONE,
             },
         )
-        self.assertEqual(resp.status_code, 200)
-        self.assertContains(resp, self.account.name)
-        self.assertContains(resp, str(self.rfid2.label_id))
-        self.assertNotContains(resp, self.rfid1.rfid)
-        self.assertNotContains(resp, self.rfid2.rfid)
+        self.assertEqual(resp.status_code, 302)
+        location = resp["Location"]
+        self.assertIn("?download=", location)
+
+        follow = self.client.get(location)
+        self.assertContains(follow, "download it.")
         report = ClientReport.objects.get()
         self.assertEqual(report.start_date, day)
         self.assertEqual(report.end_date, day)
@@ -86,23 +87,48 @@ class AdminClientReportTests(TestCase):
         export = report.data.get("export")
         html_path = Path(settings.BASE_DIR) / export["html_path"]
         json_path = Path(settings.BASE_DIR) / export["json_path"]
+        pdf_path = Path(settings.BASE_DIR) / export["pdf_path"]
         self.assertTrue(html_path.exists())
         self.assertTrue(json_path.exists())
-        subjects = {row["subject"] for row in report.data["rows"]}
-        self.assertIn(self.account.name, subjects)
-        self.assertIn(str(self.rfid2.label_id), subjects)
-        self.assertNotIn(self.rfid1.rfid, subjects)
-        self.assertNotIn(self.rfid2.rfid, subjects)
+        self.assertTrue(pdf_path.exists())
+        self.assertEqual(report.data.get("schema"), "evcs-session/v1")
+        evcs_entries = report.data.get("evcs", [])
+        self.assertTrue(evcs_entries)
+        transactions = [
+            tx for evcs in evcs_entries for tx in evcs.get("transactions", [])
+        ]
+        self.assertTrue(
+            any(tx.get("account_name") == self.account.name for tx in transactions)
+        )
+        self.assertTrue(
+            any(tx.get("rfid_label") == str(self.rfid2.label_id) for tx in transactions)
+        )
+
+        pdf_response = self.client.get(
+            reverse("admin:core_clientreport_download", args=[report.pk])
+        )
+        self.assertEqual(pdf_response.status_code, 200)
+        self.assertEqual(pdf_response["Content-Type"], "application/pdf")
+        pdf_bytes = b"".join(pdf_response.streaming_content)
+        self.assertTrue(pdf_bytes.startswith(b"%PDF"))
 
         with json_path.open(encoding="utf-8") as json_file:
             payload = json.load(json_file)
 
-        json_rows = payload.get("rows", [])
-        json_subjects = {row.get("subject") for row in json_rows}
-        self.assertIn(str(self.rfid2.label_id), json_subjects)
-        self.assertNotIn(self.rfid1.rfid, json_subjects)
+        self.assertEqual(payload.get("schema"), "evcs-session/v1")
+        json_evcs = payload.get("evcs", [])
+        flattened = [
+            tx for evcs in json_evcs for tx in evcs.get("transactions", [])
+        ]
+        self.assertTrue(
+            any(tx.get("rfid_label") == str(self.rfid2.label_id) for tx in flattened)
+        )
+        self.assertTrue(
+            any(tx.get("account_name") == self.account.name for tx in flattened)
+        )
         html_path.unlink()
         json_path.unlink()
+        pdf_path.unlink()
 
     def test_generate_report_with_schedule(self):
         day = timezone.now().date()
@@ -116,6 +142,7 @@ class AdminClientReportTests(TestCase):
                 "recurrence": ClientReportSchedule.PERIODICITY_WEEKLY,
                 "destinations": "dest@example.com",
                 "owner": self.user.pk,
+                "enable_emails": "on",
             },
         )
         self.assertEqual(resp.status_code, 200)
@@ -127,7 +154,10 @@ class AdminClientReportTests(TestCase):
         export = report.data.get("export")
         html_path = Path(settings.BASE_DIR) / export["html_path"]
         json_path = Path(settings.BASE_DIR) / export["json_path"]
+        pdf_path = Path(settings.BASE_DIR) / export["pdf_path"]
         self.assertTrue(html_path.exists())
         self.assertTrue(json_path.exists())
+        self.assertTrue(pdf_path.exists())
         html_path.unlink()
         json_path.unlink()
+        pdf_path.unlink()

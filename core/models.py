@@ -2946,6 +2946,17 @@ class ClientReportSchedule(Entity):
                                 "application/json",
                             )
                         )
+                    pdf_path = export.get("pdf_path")
+                    if pdf_path:
+                        pdf_file = Path(settings.BASE_DIR) / pdf_path
+                        if pdf_file.exists():
+                            attachments.append(
+                                (
+                                    pdf_file.name,
+                                    pdf_file.read_bytes(),
+                                    "application/pdf",
+                                )
+                            )
                     subject = f"Client report {report.start_date} to {report.end_date}"
                     body = (
                         "Attached is the client report generated for the period "
@@ -3016,11 +3027,11 @@ class ClientReport(Entity):
         recipients: list[str] | None = None,
         disable_emails: bool = False,
     ):
-        rows = cls.build_rows(start_date, end_date)
+        payload = cls.build_rows(start_date, end_date)
         return cls.objects.create(
             start_date=start_date,
             end_date=end_date,
-            data={"rows": rows, "schema": "session-list/v1"},
+            data=payload,
             owner=owner,
             schedule=schedule,
             recipients=list(recipients or []),
@@ -3050,15 +3061,13 @@ class ClientReport(Entity):
             _json.dumps(self.data, indent=2, default=str), encoding="utf-8"
         )
 
-        def _relative(path: Path) -> str:
-            try:
-                return str(path.relative_to(base_dir))
-            except ValueError:
-                return str(path)
+        pdf_path = report_dir / f"{identifier}.pdf"
+        self.render_pdf(pdf_path)
 
         export = {
-            "html_path": _relative(html_path),
-            "json_path": _relative(json_path),
+            "html_path": ClientReport._relative_to_base(html_path, base_dir),
+            "json_path": ClientReport._relative_to_base(json_path, base_dir),
+            "pdf_path": ClientReport._relative_to_base(pdf_path, base_dir),
         }
 
         updated = dict(self.data)
@@ -3069,28 +3078,32 @@ class ClientReport(Entity):
 
     @staticmethod
     def build_rows(start_date=None, end_date=None, *, for_display: bool = False):
-        from ocpp.models import Transaction
+        dataset = ClientReport._build_dataset(start_date, end_date)
+        if for_display:
+            return ClientReport._normalize_dataset_for_display(dataset)
+        return dataset
 
-        qs = Transaction.objects.filter(
-            (Q(rfid__isnull=False) & ~Q(rfid=""))
-            | (Q(vid__isnull=False) & ~Q(vid=""))
-        )
+    @staticmethod
+    def _build_dataset(start_date=None, end_date=None):
+        from datetime import datetime, time, timedelta, timezone as pytimezone
+        from ocpp.models import Charger, Transaction
+
+        qs = Transaction.objects.all()
+
+        start_dt = None
+        end_dt = None
         if start_date:
-            from datetime import datetime, time, timedelta, timezone as pytimezone
-
             start_dt = datetime.combine(start_date, time.min, tzinfo=pytimezone.utc)
             qs = qs.filter(start_time__gte=start_dt)
         if end_date:
-            from datetime import datetime, time, timedelta, timezone as pytimezone
-
             end_dt = datetime.combine(
                 end_date + timedelta(days=1), time.min, tzinfo=pytimezone.utc
             )
             qs = qs.filter(start_time__lt=end_dt)
 
-        transactions = list(
-            qs.select_related("account").order_by("-start_time", "-pk")
-        )
+        qs = qs.select_related("account", "charger").prefetch_related("meter_values")
+        transactions = list(qs.order_by("start_time", "pk"))
+
         rfid_values = {tx.rfid for tx in transactions if tx.rfid}
         tag_map: dict[str, RFID] = {}
         if rfid_values:
@@ -3101,52 +3114,227 @@ class ClientReport(Entity):
                 )
             }
 
-        rows: list[dict[str, Any]] = []
+        charger_ids = {
+            tx.charger.charger_id
+            for tx in transactions
+            if getattr(tx, "charger", None) and tx.charger.charger_id
+        }
+        aggregator_map: dict[str, Charger] = {}
+        if charger_ids:
+            aggregator_map = {
+                charger.charger_id: charger
+                for charger in Charger.objects.filter(
+                    charger_id__in=charger_ids, connector_id__isnull=True
+                )
+            }
+
+        groups: dict[str, dict[str, Any]] = {}
         for tx in transactions:
-            energy = tx.kw
-            if energy <= 0:
+            charger = getattr(tx, "charger", None)
+            if charger is None:
                 continue
+            base_id = charger.charger_id
+            aggregator = aggregator_map.get(base_id) or charger
+            entry = groups.setdefault(
+                base_id,
+                {"charger": aggregator, "transactions": []},
+            )
+            entry["transactions"].append(tx)
 
-            subject = None
-            if tx.account and getattr(tx.account, "name", None):
-                subject = tx.account.name
-            else:
-                tag = tag_map.get(tx.rfid)
+        evcs_entries: list[dict[str, Any]] = []
+        total_all_time = 0.0
+        total_period = 0.0
+
+        def _sort_key(tx):
+            anchor = getattr(tx, "start_time", None)
+            if anchor is None:
+                anchor = datetime.min.replace(tzinfo=pytimezone.utc)
+            return (anchor, tx.pk or 0)
+
+        for base_id, info in sorted(groups.items(), key=lambda item: item[0]):
+            aggregator = info["charger"]
+            txs = sorted(info["transactions"], key=_sort_key)
+            total_kw_all = float(getattr(aggregator, "total_kw", 0.0) or 0.0)
+            total_kw_period = 0.0
+            if hasattr(aggregator, "total_kw_for_range"):
+                total_kw_period = float(
+                    aggregator.total_kw_for_range(start=start_dt, end=end_dt) or 0.0
+                )
+            total_all_time += total_kw_all
+            total_period += total_kw_period
+
+            session_rows: list[dict[str, Any]] = []
+            for tx in txs:
+                session_kw = float(getattr(tx, "kw", 0.0) or 0.0)
+                if session_kw <= 0:
+                    continue
+
+                start_kwh, end_kwh = ClientReport._resolve_meter_bounds(tx)
+
+                connector_number = (
+                    tx.connector_id
+                    if getattr(tx, "connector_id", None) is not None
+                    else getattr(getattr(tx, "charger", None), "connector_id", None)
+                )
+
+                rfid_value = (tx.rfid or "").strip()
+                tag = tag_map.get(rfid_value)
+                label = None
+                account_name = (
+                    tx.account.name
+                    if tx.account and getattr(tx.account, "name", None)
+                    else None
+                )
                 if tag:
-                    account = next(iter(tag.energy_accounts.all()), None)
-                    if account:
-                        subject = account.name
-                    else:
-                        subject = str(tag.label_id)
+                    label = tag.custom_label or str(tag.label_id)
+                    if not account_name:
+                        account = next(iter(tag.energy_accounts.all()), None)
+                        if account and getattr(account, "name", None):
+                            account_name = account.name
+                elif rfid_value:
+                    label = rfid_value
 
-            if subject is None:
-                subject = tx.rfid or tx.vid
+                session_rows.append(
+                    {
+                        "connector": connector_number,
+                        "rfid_label": label,
+                        "account_name": account_name,
+                        "start_kwh": start_kwh,
+                        "end_kwh": end_kwh,
+                        "session_kwh": session_kw,
+                        "start": tx.start_time.isoformat()
+                        if getattr(tx, "start_time", None)
+                        else None,
+                        "end": tx.stop_time.isoformat()
+                        if getattr(tx, "stop_time", None)
+                        else None,
+                    }
+                )
 
-            start_value = tx.start_time
-            end_value = tx.stop_time
-            if not for_display:
-                start_value = start_value.isoformat()
-                end_value = end_value.isoformat() if end_value else None
-
-            rows.append(
+            evcs_entries.append(
                 {
-                    "subject": subject,
-                    "rfid": tx.rfid,
-                    "vid": tx.vid,
-                    "kw": energy,
-                    "start": start_value,
-                    "end": end_value,
+                    "charger_id": aggregator.pk,
+                    "serial_number": aggregator.charger_id,
+                    "display_name": aggregator.display_name
+                    or aggregator.name
+                    or aggregator.charger_id,
+                    "total_kw": total_kw_all,
+                    "total_kw_period": total_kw_period,
+                    "transactions": session_rows,
                 }
             )
 
-        return rows
+        return {
+            "schema": "evcs-session/v1",
+            "evcs": evcs_entries,
+            "totals": {
+                "total_kw": total_all_time,
+                "total_kw_period": total_period,
+            },
+        }
 
-    @property
-    def rows_for_display(self):
-        rows = self.data.get("rows", [])
-        if self.data.get("schema") == "session-list/v1":
+    @staticmethod
+    def _resolve_meter_bounds(tx) -> tuple[float | None, float | None]:
+        def _convert(value):
+            if value in {None, ""}:
+                return None
+            try:
+                return float(value) / 1000.0
+            except (TypeError, ValueError):
+                return None
+
+        start_value = _convert(getattr(tx, "meter_start", None))
+        end_value = _convert(getattr(tx, "meter_stop", None))
+
+        readings_manager = getattr(tx, "meter_values", None)
+        readings = []
+        if readings_manager is not None:
+            readings = [
+                reading
+                for reading in readings_manager.all()
+                if getattr(reading, "energy", None) is not None
+            ]
+        if readings:
+            readings.sort(key=lambda item: item.timestamp)
+            if start_value is None:
+                start_value = float(readings[0].energy or 0)
+            if end_value is None:
+                end_value = float(readings[-1].energy or 0)
+
+        return start_value, end_value
+
+    @staticmethod
+    def _normalize_dataset_for_display(dataset: dict[str, Any]):
+        schema = dataset.get("schema")
+        if schema == "evcs-session/v1":
+            from datetime import datetime
+
+            evcs_entries: list[dict[str, Any]] = []
+            for entry in dataset.get("evcs", []):
+                normalized_rows: list[dict[str, Any]] = []
+                for row in entry.get("transactions", []):
+                    start_val = row.get("start")
+                    end_val = row.get("end")
+
+                    start_dt = None
+                    if start_val:
+                        start_dt = parse_datetime(start_val)
+                        if start_dt and timezone.is_naive(start_dt):
+                            start_dt = timezone.make_aware(start_dt, timezone.utc)
+
+                    end_dt = None
+                    if end_val:
+                        end_dt = parse_datetime(end_val)
+                        if end_dt and timezone.is_naive(end_dt):
+                            end_dt = timezone.make_aware(end_dt, timezone.utc)
+
+                    normalized_rows.append(
+                        {
+                            "connector": row.get("connector"),
+                            "rfid_label": row.get("rfid_label"),
+                            "account_name": row.get("account_name"),
+                            "start_kwh": row.get("start_kwh"),
+                            "end_kwh": row.get("end_kwh"),
+                            "session_kwh": row.get("session_kwh"),
+                            "start": start_dt,
+                            "end": end_dt,
+                        }
+                    )
+
+                normalized_rows.sort(
+                    key=lambda item: (
+                        item["start"]
+                        if item["start"] is not None
+                        else datetime.min.replace(tzinfo=timezone.utc),
+                        item.get("connector") or 0,
+                    )
+                )
+
+                evcs_entries.append(
+                    {
+                        "display_name": entry.get("display_name")
+                        or entry.get("serial_number")
+                        or "Charge Point",
+                        "serial_number": entry.get("serial_number"),
+                        "total_kw": entry.get("total_kw", 0.0),
+                        "total_kw_period": entry.get("total_kw_period", 0.0),
+                        "transactions": normalized_rows,
+                    }
+                )
+
+            totals = dataset.get("totals", {})
+            return {
+                "schema": schema,
+                "evcs": evcs_entries,
+                "totals": {
+                    "total_kw": totals.get("total_kw", 0.0),
+                    "total_kw_period": totals.get("total_kw_period", 0.0),
+                },
+            }
+
+        if schema == "session-list/v1":
             parsed: list[dict[str, Any]] = []
-            for row in rows:
+            for row in dataset.get("rows", []):
                 item = dict(row)
                 start_val = row.get("start")
                 end_val = row.get("end")
@@ -3168,8 +3356,216 @@ class ClientReport(Entity):
                     item["end"] = None
 
                 parsed.append(item)
-            return parsed
-        return rows
+
+            return {"schema": schema, "rows": parsed}
+
+        return {"schema": schema, "rows": dataset.get("rows", [])}
+
+    @property
+    def rows_for_display(self):
+        data = self.data or {}
+        return ClientReport._normalize_dataset_for_display(data)
+
+    @staticmethod
+    def _relative_to_base(path: Path, base_dir: Path) -> str:
+        try:
+            return str(path.relative_to(base_dir))
+        except ValueError:
+            return str(path)
+
+    def render_pdf(self, target: Path):
+        from reportlab.lib import colors
+        from reportlab.lib.pagesizes import landscape, letter
+        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.lib.units import inch
+        from reportlab.platypus import (
+            Paragraph,
+            SimpleDocTemplate,
+            Spacer,
+            Table,
+            TableStyle,
+        )
+
+        target_path = Path(target)
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+
+        dataset = self.rows_for_display
+        schema = dataset.get("schema")
+
+        styles = getSampleStyleSheet()
+        title_style = styles["Title"]
+        subtitle_style = styles["Heading2"]
+        normal_style = styles["BodyText"]
+        emphasis_style = styles["Heading3"]
+
+        document = SimpleDocTemplate(
+            str(target_path),
+            pagesize=landscape(letter),
+            leftMargin=0.5 * inch,
+            rightMargin=0.5 * inch,
+            topMargin=0.6 * inch,
+            bottomMargin=0.5 * inch,
+        )
+
+        story: list = []
+        story.append(Paragraph("Consumer Report", title_style))
+        story.append(
+            Paragraph(
+                f"Period: {self.start_date} to {self.end_date}",
+                emphasis_style,
+            )
+        )
+        story.append(Spacer(1, 0.25 * inch))
+
+        if schema == "evcs-session/v1":
+            evcs_entries = dataset.get("evcs", [])
+            if not evcs_entries:
+                story.append(
+                    Paragraph(
+                        "No charging sessions recorded for the selected period.",
+                        normal_style,
+                    )
+                )
+            for index, evcs in enumerate(evcs_entries):
+                if index:
+                    story.append(Spacer(1, 0.2 * inch))
+
+                display_name = evcs.get("display_name") or "Charge Point"
+                serial_number = evcs.get("serial_number")
+                header_text = display_name
+                if serial_number:
+                    header_text = f"{display_name} (Serial: {serial_number})"
+                story.append(Paragraph(header_text, subtitle_style))
+
+                metrics_text = (
+                    f"Total kW (all time): {evcs.get('total_kw', 0.0):.2f} | "
+                    f"Total kW (period): {evcs.get('total_kw_period', 0.0):.2f}"
+                )
+                story.append(Paragraph(metrics_text, normal_style))
+                story.append(Spacer(1, 0.1 * inch))
+
+                transactions = evcs.get("transactions", [])
+                if transactions:
+                    table_data = [
+                        [
+                            "Connector",
+                            "Start kWh",
+                            "End kWh",
+                            "Session kWh",
+                            "Start Time",
+                            "End Time",
+                            "RFID Label",
+                            "Account",
+                        ]
+                    ]
+
+                    def _format_number(value):
+                        return f"{value:.2f}" if value is not None else "—"
+
+                    for row in transactions:
+                        start_dt = row.get("start")
+                        end_dt = row.get("end")
+                        start_display = (
+                            timezone.localtime(start_dt).strftime("%Y-%m-%d %H:%M")
+                            if start_dt
+                            else "—"
+                        )
+                        end_display = (
+                            timezone.localtime(end_dt).strftime("%Y-%m-%d %H:%M")
+                            if end_dt
+                            else "—"
+                        )
+
+                        table_data.append(
+                            [
+                                row.get("connector")
+                                if row.get("connector") is not None
+                                else "—",
+                                _format_number(row.get("start_kwh")),
+                                _format_number(row.get("end_kwh")),
+                                _format_number(row.get("session_kwh")),
+                                start_display,
+                                end_display,
+                                row.get("rfid_label") or "—",
+                                row.get("account_name") or "—",
+                            ]
+                        )
+
+                    table = Table(table_data, repeatRows=1)
+                    table.setStyle(
+                        TableStyle(
+                            [
+                                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0f172a")),
+                                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                                ("ALIGN", (0, 0), (-1, 0), "CENTER"),
+                                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                                ("FONTSIZE", (0, 0), (-1, 0), 9),
+                                (
+                                    "ROWBACKGROUNDS",
+                                    (0, 1),
+                                    (-1, -1),
+                                    [colors.whitesmoke, colors.HexColor("#eef2ff")],
+                                ),
+                                ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
+                                ("VALIGN", (0, 1), (-1, -1), "MIDDLE"),
+                            ]
+                        )
+                    )
+                    story.append(table)
+                else:
+                    story.append(
+                        Paragraph(
+                            "No charging sessions recorded for this charge point.",
+                            normal_style,
+                        )
+                    )
+        else:
+            story.append(
+                Paragraph(
+                    "No structured data is available for this report.",
+                    normal_style,
+                )
+            )
+
+        totals = dataset.get("totals") or {}
+        story.append(Spacer(1, 0.3 * inch))
+        story.append(
+            Paragraph(
+                f"Report totals — Total kW (all time): {totals.get('total_kw', 0.0):.2f}",
+                emphasis_style,
+            )
+        )
+        story.append(
+            Paragraph(
+                f"Total kW during period: {totals.get('total_kw_period', 0.0):.2f}",
+                emphasis_style,
+            )
+        )
+
+        document.build(story)
+
+    def ensure_pdf(self) -> Path:
+        base_dir = Path(settings.BASE_DIR)
+        export = dict((self.data or {}).get("export") or {})
+        pdf_relative = export.get("pdf_path")
+        if pdf_relative:
+            candidate = base_dir / pdf_relative
+            if candidate.exists():
+                return candidate
+
+        report_dir = base_dir / "work" / "reports"
+        report_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = timezone.now().strftime("%Y%m%d%H%M%S")
+        identifier = f"client_report_{self.pk}_{timestamp}"
+        pdf_path = report_dir / f"{identifier}.pdf"
+        self.render_pdf(pdf_path)
+
+        export["pdf_path"] = ClientReport._relative_to_base(pdf_path, base_dir)
+        updated = dict(self.data)
+        updated["export"] = export
+        type(self).objects.filter(pk=self.pk).update(data=updated)
+        self.data = updated
+        return pdf_path
 
 
 class BrandManager(EntityManager):
