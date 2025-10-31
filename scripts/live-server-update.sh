@@ -9,7 +9,8 @@ cd "$REPO_ROOT"
 if [ -x "$REPO_ROOT/stop.sh" ]; then
   echo "Stopping existing development server (if running)..."
   if ! "$REPO_ROOT/stop.sh"; then
-    echo "The stop script exited with a non-zero status; continuing anyway." >&2
+    echo "Live server update aborted because stop.sh detected active charging sessions. Resolve the sessions or run '$REPO_ROOT/stop.sh --force' during a maintenance window before retrying." >&2
+    exit 1
   fi
 fi
 
