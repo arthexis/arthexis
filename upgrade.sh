@@ -445,7 +445,10 @@ VENV_PRESENT=1
 # Stop running instance only if the node is installed
 if [[ $NO_RESTART -eq 0 && $VENV_PRESENT -eq 1 ]]; then
   echo "Stopping running instance..."
-  ./stop.sh --all >/dev/null 2>&1 || true
+  if ! ./stop.sh --all; then
+    echo "Upgrade aborted because active charging sessions are in progress. Resolve them or run ./stop.sh --force during a maintenance window before retrying." >&2
+    exit 1
+  fi
 fi
 
 # Pull latest changes
