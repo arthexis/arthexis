@@ -235,10 +235,27 @@ fi
 
 if [ "$CHECK" = true ]; then
     if [ -f "$LOCK_DIR/role.lck" ]; then
-        cat "$LOCK_DIR/role.lck"
+        echo "Role: $(cat "$LOCK_DIR/role.lck")"
     else
-        echo "unknown"
+        echo "Role: unknown"
     fi
+
+    if [ -f "$LOCK_DIR/auto_upgrade.lck" ]; then
+        case "$(cat "$LOCK_DIR/auto_upgrade.lck")" in
+            latest)
+                echo "Auto-upgrade: enabled (latest channel)"
+                ;;
+            version)
+                echo "Auto-upgrade: enabled (stable channel)"
+                ;;
+            *)
+                echo "Auto-upgrade: enabled (unknown channel)"
+                ;;
+        esac
+    else
+        echo "Auto-upgrade: disabled"
+    fi
+
     exit 0
 fi
 
@@ -251,9 +268,15 @@ if [ -n "$AUTO_UPGRADE_MODE" ] && [ -z "$NODE_ROLE" ]; then
             echo "version" > "$LOCK_DIR/auto_upgrade.lck"
         fi
         run_auto_upgrade_management enable
+        if [ "$LATEST" = true ]; then
+            echo "Auto-upgrade enabled on the latest channel."
+        else
+            echo "Auto-upgrade enabled on the stable channel."
+        fi
     else
         rm -f "$LOCK_DIR/auto_upgrade.lck"
         run_auto_upgrade_management disable
+        echo "Auto-upgrade disabled."
     fi
     exit 0
 fi
@@ -321,9 +344,15 @@ if [ "$AUTO_UPGRADE_MODE" = "enable" ]; then
         echo "version" > "$LOCK_DIR/auto_upgrade.lck"
     fi
     run_auto_upgrade_management enable
+    if [ "$LATEST" = true ]; then
+        echo "Auto-upgrade enabled on the latest channel."
+    else
+        echo "Auto-upgrade enabled on the stable channel."
+    fi
 elif [ "$AUTO_UPGRADE_MODE" = "disable" ]; then
     rm -f "$LOCK_DIR/auto_upgrade.lck"
     run_auto_upgrade_management disable
+    echo "Auto-upgrade disabled."
 fi
 
 if arthexis_can_manage_nginx; then
