@@ -2,11 +2,14 @@ from django.contrib import admin, messages
 from django import forms
 
 import asyncio
+import base64
 from datetime import datetime, time, timedelta
 import json
+from typing import Any
 
 from django.shortcuts import redirect
 from django.utils import formats, timezone, translation
+from django.utils.dateparse import parse_datetime
 from django.utils.html import format_html
 from django.urls import path
 from django.http import HttpResponse, HttpResponseRedirect
@@ -14,6 +17,10 @@ from django.template.response import TemplateResponse
 
 import uuid
 from asgiref.sync import async_to_sync
+import requests
+from requests import RequestException
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import padding
 
 from .models import (
     Charger,
@@ -34,6 +41,7 @@ from .status_display import STATUS_BADGE_MAP, ERROR_OK_VALUES
 from .views import _charger_state, _live_sessions
 from core.admin import SaveBeforeChangeAction
 from core.user_data import EntityModelAdmin
+from nodes.models import Node
 
 
 class LocationAdminForm(forms.ModelForm):
@@ -252,6 +260,13 @@ class DataTransferMessageAdmin(admin.ModelAdmin):
 
 @admin.register(Charger)
 class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
+    _REMOTE_DATETIME_FIELDS = {
+        "availability_state_updated_at",
+        "availability_requested_at",
+        "availability_request_status_at",
+        "last_online_at",
+    }
+
     fieldsets = (
         (
             "General",
@@ -307,6 +322,18 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
             {"fields": ("public_display", "require_rfid", "configuration")},
         ),
         (
+            "Network",
+            {
+                "fields": (
+                    "node_origin",
+                    "manager_node",
+                    "allow_remote",
+                    "export_transactions",
+                    "last_online_at",
+                )
+            },
+        ),
+        (
             "References",
             {
                 "fields": ("reference",),
@@ -334,15 +361,17 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         "availability_request_status_at",
         "availability_request_details",
         "configuration",
+        "last_online_at",
     )
     list_display = (
         "display_name_with_fallback",
         "connector_number",
         "charger_name_display",
+        "local_indicator",
         "require_rfid_display",
         "public_display",
         "last_heartbeat",
-        "session_kw",
+        "today_kw",
         "total_kw_display",
         "page_link",
         "log_link",
@@ -363,6 +392,141 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         "reset_chargers",
         "delete_selected",
     ]
+
+    def _prepare_remote_credentials(self, request):
+        local = Node.get_local()
+        if not local or not local.uuid:
+            self.message_user(
+                request,
+                "Local node is not registered; remote actions are unavailable.",
+                level=messages.ERROR,
+            )
+            return None, None
+        private_key = local.get_private_key()
+        if private_key is None:
+            self.message_user(
+                request,
+                "Local node private key is unavailable; remote actions are disabled.",
+                level=messages.ERROR,
+            )
+            return None, None
+        return local, private_key
+
+    def _call_remote_action(
+        self,
+        request,
+        local_node: Node,
+        private_key,
+        charger: Charger,
+        action: str,
+        extra: dict[str, Any] | None = None,
+    ) -> tuple[bool, dict[str, Any]]:
+        if not charger.node_origin:
+            self.message_user(
+                request,
+                f"{charger}: remote node information is missing.",
+                level=messages.ERROR,
+            )
+            return False, {}
+        origin = charger.node_origin
+        if not origin.address or not origin.port:
+            self.message_user(
+                request,
+                f"{charger}: remote node connection details are incomplete.",
+                level=messages.ERROR,
+            )
+            return False, {}
+
+        payload: dict[str, Any] = {
+            "requester": str(local_node.uuid),
+            "requester_mac": local_node.mac_address,
+            "requester_public_key": local_node.public_key,
+            "charger_id": charger.charger_id,
+            "connector_id": charger.connector_id,
+            "action": action,
+        }
+        if extra:
+            payload.update(extra)
+
+        payload_json = json.dumps(payload, separators=(",", ":"), sort_keys=True)
+        headers = {"Content-Type": "application/json"}
+        try:
+            signature = private_key.sign(
+                payload_json.encode(),
+                padding.PKCS1v15(),
+                hashes.SHA256(),
+            )
+            headers["X-Signature"] = base64.b64encode(signature).decode()
+        except Exception:
+            self.message_user(
+                request,
+                "Unable to sign remote action payload; remote action aborted.",
+                level=messages.ERROR,
+            )
+            return False, {}
+
+        url = f"http://{origin.address}:{origin.port}/nodes/network/chargers/action/"
+        try:
+            response = requests.post(url, data=payload_json, headers=headers, timeout=5)
+        except RequestException as exc:
+            self.message_user(
+                request,
+                f"{charger}: failed to contact remote node ({exc}).",
+                level=messages.ERROR,
+            )
+            return False, {}
+
+        try:
+            data = response.json()
+        except ValueError:
+            self.message_user(
+                request,
+                f"{charger}: invalid response from remote node.",
+                level=messages.ERROR,
+            )
+            return False, {}
+
+        if response.status_code != 200 or data.get("status") != "ok":
+            detail = data.get("detail") if isinstance(data, dict) else None
+            if not detail:
+                detail = response.text or "Remote node rejected the request."
+            self.message_user(
+                request,
+                f"{charger}: {detail}",
+                level=messages.ERROR,
+            )
+            return False, {}
+
+        updates = data.get("updates", {}) if isinstance(data, dict) else {}
+        if not isinstance(updates, dict):
+            updates = {}
+        return True, updates
+
+    def _apply_remote_updates(self, charger: Charger, updates: dict[str, Any]) -> None:
+        if not updates:
+            return
+
+        applied: dict[str, Any] = {}
+        for field, value in updates.items():
+            if field in self._REMOTE_DATETIME_FIELDS and isinstance(value, str):
+                parsed = parse_datetime(value)
+                if parsed and timezone.is_naive(parsed):
+                    parsed = timezone.make_aware(parsed, timezone.get_current_timezone())
+                applied[field] = parsed
+            else:
+                applied[field] = value
+
+        Charger.objects.filter(pk=charger.pk).update(**applied)
+        for field, value in applied.items():
+            setattr(charger, field, value)
+
+    def get_readonly_fields(self, request, obj=None):
+        readonly = list(super().get_readonly_fields(request, obj))
+        if obj and not obj.is_local:
+            for field in ("allow_remote", "export_transactions"):
+                if field not in readonly:
+                    readonly.append(field)
+        return tuple(readonly)
 
     def get_view_on_site_url(self, obj=None):
         return obj.get_absolute_url() if obj else None
@@ -462,6 +626,10 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
             return obj.location.name
         return obj.charger_id
 
+    @admin.display(boolean=True, description="Local")
+    def local_indicator(self, obj):
+        return obj.is_local
+
     def location_name(self, obj):
         return obj.location.name if obj.location else ""
 
@@ -534,51 +702,82 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
     @admin.action(description="Fetch CP configuration")
     def fetch_cp_configuration(self, request, queryset):
         fetched = 0
+        local_node = None
+        private_key = None
+        remote_unavailable = False
         for charger in queryset:
-            connector_value = charger.connector_id
-            ws = store.get_connection(charger.charger_id, connector_value)
-            if ws is None:
+            if charger.is_local:
+                connector_value = charger.connector_id
+                ws = store.get_connection(charger.charger_id, connector_value)
+                if ws is None:
+                    self.message_user(
+                        request,
+                        f"{charger}: no active connection",
+                        level=messages.ERROR,
+                    )
+                    continue
+                message_id = uuid.uuid4().hex
+                payload = {}
+                msg = json.dumps([2, message_id, "GetConfiguration", payload])
+                try:
+                    async_to_sync(ws.send)(msg)
+                except Exception as exc:  # pragma: no cover - network error
+                    self.message_user(
+                        request,
+                        f"{charger}: failed to send GetConfiguration ({exc})",
+                        level=messages.ERROR,
+                    )
+                    continue
+                log_key = store.identity_key(charger.charger_id, connector_value)
+                store.add_log(log_key, f"< {msg}", log_type="charger")
+                store.register_pending_call(
+                    message_id,
+                    {
+                        "action": "GetConfiguration",
+                        "charger_id": charger.charger_id,
+                        "connector_id": connector_value,
+                        "log_key": log_key,
+                        "requested_at": timezone.now(),
+                    },
+                )
+                store.schedule_call_timeout(
+                    message_id,
+                    timeout=5.0,
+                    action="GetConfiguration",
+                    log_key=log_key,
+                    message=(
+                        "GetConfiguration timed out: charger did not respond"
+                        " (operation may not be supported)"
+                    ),
+                )
+                fetched += 1
+                continue
+
+            if not charger.allow_remote:
                 self.message_user(
                     request,
-                    f"{charger}: no active connection",
+                    f"{charger}: remote administration is disabled.",
                     level=messages.ERROR,
                 )
                 continue
-            message_id = uuid.uuid4().hex
-            payload = {}
-            msg = json.dumps([2, message_id, "GetConfiguration", payload])
-            try:
-                async_to_sync(ws.send)(msg)
-            except Exception as exc:  # pragma: no cover - network error
-                self.message_user(
-                    request,
-                    f"{charger}: failed to send GetConfiguration ({exc})",
-                    level=messages.ERROR,
-                )
+            if remote_unavailable:
                 continue
-            log_key = store.identity_key(charger.charger_id, connector_value)
-            store.add_log(log_key, f"< {msg}", log_type="charger")
-            store.register_pending_call(
-                message_id,
-                {
-                    "action": "GetConfiguration",
-                    "charger_id": charger.charger_id,
-                    "connector_id": connector_value,
-                    "log_key": log_key,
-                    "requested_at": timezone.now(),
-                },
+            if local_node is None:
+                local_node, private_key = self._prepare_remote_credentials(request)
+                if not local_node or not private_key:
+                    remote_unavailable = True
+                    continue
+            success, updates = self._call_remote_action(
+                request,
+                local_node,
+                private_key,
+                charger,
+                "get-configuration",
             )
-            store.schedule_call_timeout(
-                message_id,
-                timeout=5.0,
-                action="GetConfiguration",
-                log_key=log_key,
-                message=(
-                    "GetConfiguration timed out: charger did not respond"
-                    " (operation may not be supported)"
-                ),
-            )
-            fetched += 1
+            if success:
+                self._apply_remote_updates(charger, updates)
+                fetched += 1
+
         if fetched:
             self.message_user(
                 request,
@@ -589,14 +788,49 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
     def toggle_rfid_authentication(self, request, queryset):
         enabled = 0
         disabled = 0
+        local_node = None
+        private_key = None
+        remote_unavailable = False
         for charger in queryset:
             new_value = not charger.require_rfid
-            Charger.objects.filter(pk=charger.pk).update(require_rfid=new_value)
-            charger.require_rfid = new_value
-            if new_value:
-                enabled += 1
-            else:
-                disabled += 1
+            if charger.is_local:
+                Charger.objects.filter(pk=charger.pk).update(require_rfid=new_value)
+                charger.require_rfid = new_value
+                if new_value:
+                    enabled += 1
+                else:
+                    disabled += 1
+                continue
+
+            if not charger.allow_remote:
+                self.message_user(
+                    request,
+                    f"{charger}: remote administration is disabled.",
+                    level=messages.ERROR,
+                )
+                continue
+            if remote_unavailable:
+                continue
+            if local_node is None:
+                local_node, private_key = self._prepare_remote_credentials(request)
+                if not local_node or not private_key:
+                    remote_unavailable = True
+                    continue
+            success, updates = self._call_remote_action(
+                request,
+                local_node,
+                private_key,
+                charger,
+                "toggle-rfid",
+                {"enable": new_value},
+            )
+            if success:
+                self._apply_remote_updates(charger, updates)
+                if charger.require_rfid:
+                    enabled += 1
+                else:
+                    disabled += 1
+
         if enabled or disabled:
             changes = []
             if enabled:
@@ -611,53 +845,85 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
 
     def _dispatch_change_availability(self, request, queryset, availability_type: str):
         sent = 0
+        local_node = None
+        private_key = None
+        remote_unavailable = False
         for charger in queryset:
-            connector_value = charger.connector_id
-            ws = store.get_connection(charger.charger_id, connector_value)
-            if ws is None:
+            if charger.is_local:
+                connector_value = charger.connector_id
+                ws = store.get_connection(charger.charger_id, connector_value)
+                if ws is None:
+                    self.message_user(
+                        request,
+                        f"{charger}: no active connection",
+                        level=messages.ERROR,
+                    )
+                    continue
+                connector_id = connector_value if connector_value is not None else 0
+                message_id = uuid.uuid4().hex
+                payload = {"connectorId": connector_id, "type": availability_type}
+                msg = json.dumps([2, message_id, "ChangeAvailability", payload])
+                try:
+                    async_to_sync(ws.send)(msg)
+                except Exception as exc:  # pragma: no cover - network error
+                    self.message_user(
+                        request,
+                        f"{charger}: failed to send ChangeAvailability ({exc})",
+                        level=messages.ERROR,
+                    )
+                    continue
+                log_key = store.identity_key(charger.charger_id, connector_value)
+                store.add_log(log_key, f"< {msg}", log_type="charger")
+                timestamp = timezone.now()
+                store.register_pending_call(
+                    message_id,
+                    {
+                        "action": "ChangeAvailability",
+                        "charger_id": charger.charger_id,
+                        "connector_id": connector_value,
+                        "availability_type": availability_type,
+                        "requested_at": timestamp,
+                    },
+                )
+                updates = {
+                    "availability_requested_state": availability_type,
+                    "availability_requested_at": timestamp,
+                    "availability_request_status": "",
+                    "availability_request_status_at": None,
+                    "availability_request_details": "",
+                }
+                Charger.objects.filter(pk=charger.pk).update(**updates)
+                for field, value in updates.items():
+                    setattr(charger, field, value)
+                sent += 1
+                continue
+
+            if not charger.allow_remote:
                 self.message_user(
                     request,
-                    f"{charger}: no active connection",
+                    f"{charger}: remote administration is disabled.",
                     level=messages.ERROR,
                 )
                 continue
-            connector_id = connector_value if connector_value is not None else 0
-            message_id = uuid.uuid4().hex
-            payload = {"connectorId": connector_id, "type": availability_type}
-            msg = json.dumps([2, message_id, "ChangeAvailability", payload])
-            try:
-                async_to_sync(ws.send)(msg)
-            except Exception as exc:  # pragma: no cover - network error
-                self.message_user(
-                    request,
-                    f"{charger}: failed to send ChangeAvailability ({exc})",
-                    level=messages.ERROR,
-                )
+            if remote_unavailable:
                 continue
-            log_key = store.identity_key(charger.charger_id, connector_value)
-            store.add_log(log_key, f"< {msg}", log_type="charger")
-            timestamp = timezone.now()
-            store.register_pending_call(
-                message_id,
-                {
-                    "action": "ChangeAvailability",
-                    "charger_id": charger.charger_id,
-                    "connector_id": connector_value,
-                    "availability_type": availability_type,
-                    "requested_at": timestamp,
-                },
+            if local_node is None:
+                local_node, private_key = self._prepare_remote_credentials(request)
+                if not local_node or not private_key:
+                    remote_unavailable = True
+                    continue
+            success, updates = self._call_remote_action(
+                request,
+                local_node,
+                private_key,
+                charger,
+                "change-availability",
+                {"availability_type": availability_type},
             )
-            updates = {
-                "availability_requested_state": availability_type,
-                "availability_requested_at": timestamp,
-                "availability_request_status": "",
-                "availability_request_status_at": None,
-                "availability_request_details": "",
-            }
-            Charger.objects.filter(pk=charger.pk).update(**updates)
-            for field, value in updates.items():
-                setattr(charger, field, value)
-            sent += 1
+            if success:
+                self._apply_remote_updates(charger, updates)
+                sent += 1
+
         if sent:
             self.message_user(
                 request,
@@ -675,17 +941,49 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
     def _set_availability_state(
         self, request, queryset, availability_state: str
     ) -> None:
-        timestamp = timezone.now()
         updated = 0
+        local_node = None
+        private_key = None
+        remote_unavailable = False
         for charger in queryset:
-            updates = {
-                "availability_state": availability_state,
-                "availability_state_updated_at": timestamp,
-            }
-            Charger.objects.filter(pk=charger.pk).update(**updates)
-            for field, value in updates.items():
-                setattr(charger, field, value)
-            updated += 1
+            if charger.is_local:
+                timestamp = timezone.now()
+                updates = {
+                    "availability_state": availability_state,
+                    "availability_state_updated_at": timestamp,
+                }
+                Charger.objects.filter(pk=charger.pk).update(**updates)
+                for field, value in updates.items():
+                    setattr(charger, field, value)
+                updated += 1
+                continue
+
+            if not charger.allow_remote:
+                self.message_user(
+                    request,
+                    f"{charger}: remote administration is disabled.",
+                    level=messages.ERROR,
+                )
+                continue
+            if remote_unavailable:
+                continue
+            if local_node is None:
+                local_node, private_key = self._prepare_remote_credentials(request)
+                if not local_node or not private_key:
+                    remote_unavailable = True
+                    continue
+            success, updates = self._call_remote_action(
+                request,
+                local_node,
+                private_key,
+                charger,
+                "set-availability-state",
+                {"availability_state": availability_state},
+            )
+            if success:
+                self._apply_remote_updates(charger, updates)
+                updated += 1
+
         if updated:
             self.message_user(
                 request,
@@ -703,55 +1001,86 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
     @admin.action(description="Remote stop active transaction")
     def remote_stop_transaction(self, request, queryset):
         stopped = 0
+        local_node = None
+        private_key = None
+        remote_unavailable = False
         for charger in queryset:
-            connector_value = charger.connector_id
-            ws = store.get_connection(charger.charger_id, connector_value)
-            if ws is None:
+            if charger.is_local:
+                connector_value = charger.connector_id
+                ws = store.get_connection(charger.charger_id, connector_value)
+                if ws is None:
+                    self.message_user(
+                        request,
+                        f"{charger}: no active connection",
+                        level=messages.ERROR,
+                    )
+                    continue
+                tx_obj = store.get_transaction(charger.charger_id, connector_value)
+                if tx_obj is None:
+                    self.message_user(
+                        request,
+                        f"{charger}: no active transaction",
+                        level=messages.ERROR,
+                    )
+                    continue
+                message_id = uuid.uuid4().hex
+                payload = {"transactionId": tx_obj.pk}
+                msg = json.dumps([
+                    2,
+                    message_id,
+                    "RemoteStopTransaction",
+                    payload,
+                ])
+                try:
+                    async_to_sync(ws.send)(msg)
+                except Exception as exc:  # pragma: no cover - network error
+                    self.message_user(
+                        request,
+                        f"{charger}: failed to send RemoteStopTransaction ({exc})",
+                        level=messages.ERROR,
+                    )
+                    continue
+                log_key = store.identity_key(charger.charger_id, connector_value)
+                store.add_log(log_key, f"< {msg}", log_type="charger")
+                store.register_pending_call(
+                    message_id,
+                    {
+                        "action": "RemoteStopTransaction",
+                        "charger_id": charger.charger_id,
+                        "connector_id": connector_value,
+                        "transaction_id": tx_obj.pk,
+                        "log_key": log_key,
+                        "requested_at": timezone.now(),
+                    },
+                )
+                stopped += 1
+                continue
+
+            if not charger.allow_remote:
                 self.message_user(
                     request,
-                    f"{charger}: no active connection",
+                    f"{charger}: remote administration is disabled.",
                     level=messages.ERROR,
                 )
                 continue
-            tx_obj = store.get_transaction(charger.charger_id, connector_value)
-            if tx_obj is None:
-                self.message_user(
-                    request,
-                    f"{charger}: no active transaction",
-                    level=messages.ERROR,
-                )
+            if remote_unavailable:
                 continue
-            message_id = uuid.uuid4().hex
-            payload = {"transactionId": tx_obj.pk}
-            msg = json.dumps([
-                2,
-                message_id,
-                "RemoteStopTransaction",
-                payload,
-            ])
-            try:
-                async_to_sync(ws.send)(msg)
-            except Exception as exc:  # pragma: no cover - network error
-                self.message_user(
-                    request,
-                    f"{charger}: failed to send RemoteStopTransaction ({exc})",
-                    level=messages.ERROR,
-                )
-                continue
-            log_key = store.identity_key(charger.charger_id, connector_value)
-            store.add_log(log_key, f"< {msg}", log_type="charger")
-            store.register_pending_call(
-                message_id,
-                {
-                    "action": "RemoteStopTransaction",
-                    "charger_id": charger.charger_id,
-                    "connector_id": connector_value,
-                    "transaction_id": tx_obj.pk,
-                    "log_key": log_key,
-                    "requested_at": timezone.now(),
-                },
+            if local_node is None:
+                local_node, private_key = self._prepare_remote_credentials(request)
+                if not local_node or not private_key:
+                    remote_unavailable = True
+                    continue
+            success, updates = self._call_remote_action(
+                request,
+                local_node,
+                private_key,
+                charger,
+                "remote-stop",
             )
-            stopped += 1
+            if success:
+                self._apply_remote_updates(charger, updates)
+                stopped += 1
+
         if stopped:
             self.message_user(
                 request,
@@ -761,56 +1090,95 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
     @admin.action(description="Reset charger (soft)")
     def reset_chargers(self, request, queryset):
         reset = 0
+        local_node = None
+        private_key = None
+        remote_unavailable = False
         for charger in queryset:
-            connector_value = charger.connector_id
-            ws = store.get_connection(charger.charger_id, connector_value)
-            if ws is None:
+            if charger.is_local:
+                connector_value = charger.connector_id
+                ws = store.get_connection(charger.charger_id, connector_value)
+                if ws is None:
+                    self.message_user(
+                        request,
+                        f"{charger}: no active connection",
+                        level=messages.ERROR,
+                    )
+                    continue
+                tx_obj = store.get_transaction(charger.charger_id, connector_value)
+                if tx_obj is not None:
+                    self.message_user(
+                        request,
+                        (
+                            f"{charger}: reset skipped because a session is active; "
+                            "stop the session first."
+                        ),
+                        level=messages.WARNING,
+                    )
+                    continue
+                message_id = uuid.uuid4().hex
+                msg = json.dumps([
+                    2,
+                    message_id,
+                    "Reset",
+                    {"type": "Soft"},
+                ])
+                try:
+                    async_to_sync(ws.send)(msg)
+                except Exception as exc:  # pragma: no cover - network error
+                    self.message_user(
+                        request,
+                        f"{charger}: failed to send Reset ({exc})",
+                        level=messages.ERROR,
+                    )
+                    continue
+                log_key = store.identity_key(charger.charger_id, connector_value)
+                store.add_log(log_key, f"< {msg}", log_type="charger")
+                store.register_pending_call(
+                    message_id,
+                    {
+                        "action": "Reset",
+                        "charger_id": charger.charger_id,
+                        "connector_id": connector_value,
+                        "log_key": log_key,
+                        "requested_at": timezone.now(),
+                    },
+                )
+                store.schedule_call_timeout(
+                    message_id,
+                    timeout=5.0,
+                    action="Reset",
+                    log_key=log_key,
+                    message="Reset timed out: charger did not respond",
+                )
+                reset += 1
+                continue
+
+            if not charger.allow_remote:
                 self.message_user(
                     request,
-                    f"{charger}: no active connection",
+                    f"{charger}: remote administration is disabled.",
                     level=messages.ERROR,
                 )
                 continue
-            tx_obj = store.get_transaction(charger.charger_id, connector_value)
-            if tx_obj is not None:
-                self.message_user(
-                    request,
-                    (
-                        f"{charger}: reset skipped because a session is active; "
-                        "stop the session first."
-                    ),
-                    level=messages.WARNING,
-                )
+            if remote_unavailable:
                 continue
-            message_id = uuid.uuid4().hex
-            msg = json.dumps([
-                2,
-                message_id,
-                "Reset",
-                {"type": "Soft"},
-            ])
-            try:
-                async_to_sync(ws.send)(msg)
-            except Exception as exc:  # pragma: no cover - network error
-                self.message_user(
-                    request,
-                    f"{charger}: failed to send Reset ({exc})",
-                    level=messages.ERROR,
-                )
-                continue
-            log_key = store.identity_key(charger.charger_id, connector_value)
-            store.add_log(log_key, f"< {msg}", log_type="charger")
-            store.register_pending_call(
-                message_id,
-                {
-                    "action": "Reset",
-                    "charger_id": charger.charger_id,
-                    "connector_id": connector_value,
-                    "log_key": log_key,
-                    "requested_at": timezone.now(),
-                },
+            if local_node is None:
+                local_node, private_key = self._prepare_remote_credentials(request)
+                if not local_node or not private_key:
+                    remote_unavailable = True
+                    continue
+            success, updates = self._call_remote_action(
+                request,
+                local_node,
+                private_key,
+                charger,
+                "reset",
+                {"reset_type": "Soft"},
             )
-            reset += 1
+            if success:
+                self._apply_remote_updates(charger, updates)
+                reset += 1
+
         if reset:
             self.message_user(
                 request,
@@ -826,13 +1194,11 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
 
     total_kw_display.short_description = "Total kW"
 
-    def session_kw(self, obj):
-        tx = store.get_transaction(obj.charger_id, obj.connector_id)
-        if tx:
-            return round(tx.kw, 2)
-        return 0.0
+    def today_kw(self, obj):
+        start, end = self._today_range()
+        return round(obj.total_kw_for_range(start, end), 2)
 
-    session_kw.short_description = "Session kW"
+    today_kw.short_description = "Today kW"
 
     def changelist_view(self, request, extra_context=None):
         response = super().changelist_view(request, extra_context=extra_context)

@@ -60,6 +60,7 @@ from .models import (
 )
 from . import dns as dns_utils
 from core.models import RFID
+from ocpp.models import Charger, Location
 from core.user_data import EntityModelAdmin
 
 
@@ -286,6 +287,7 @@ class NodeAdmin(EntityModelAdmin):
         "register_visitor",
         "run_task",
         "take_screenshots",
+        "discover_charge_points",
         "import_rfids_from_selected",
         "export_rfids_to_selected",
     ]
@@ -1057,6 +1059,156 @@ class NodeAdmin(EntityModelAdmin):
             results.append(self._post_export_to_node(node, payload, headers))
 
         return self._render_rfid_sync(request, "export", results)
+
+    @admin.action(description=_("Discover Charge Points"))
+    def discover_charge_points(self, request, queryset):
+        local_node, private_key, error = self._load_local_node_credentials()
+        if error:
+            self.message_user(request, error, level=messages.ERROR)
+            return
+
+        nodes = [node for node in queryset if not local_node.pk or node.pk != local_node.pk]
+        if not nodes:
+            self.message_user(request, _("No remote nodes selected."), level=messages.WARNING)
+            return
+
+        payload = json.dumps(
+            {"requester": str(local_node.uuid)},
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        signature = self._sign_payload(private_key, payload)
+        headers = {
+            "Content-Type": "application/json",
+            "X-Signature": signature,
+        }
+
+        created = 0
+        updated = 0
+        errors: list[str] = []
+
+        for node in nodes:
+            url = f"http://{node.address}:{node.port}/nodes/network/chargers/"
+            try:
+                response = requests.post(url, data=payload, headers=headers, timeout=5)
+            except RequestException as exc:
+                errors.append(f"{node}: {exc}")
+                continue
+
+            if response.status_code != 200:
+                errors.append(f"{node}: {response.status_code} {response.text}")
+                continue
+
+            try:
+                data = response.json()
+            except ValueError:
+                errors.append(f"{node}: invalid JSON response")
+                continue
+
+            for entry in data.get("chargers", []):
+                applied = self._apply_remote_charger_payload(node, entry)
+                if applied == "created":
+                    created += 1
+                elif applied == "updated":
+                    updated += 1
+
+        if created or updated:
+            summary = _("Imported %(created)s new and %(updated)s existing charge point(s).") % {
+                "created": created,
+                "updated": updated,
+            }
+            self.message_user(request, summary, level=messages.SUCCESS)
+        if errors:
+            for error in errors:
+                self.message_user(request, error, level=messages.ERROR)
+
+    def _apply_remote_charger_payload(self, node, payload: Mapping) -> str | None:
+        serial = Charger.normalize_serial(payload.get("charger_id"))
+        if not serial or Charger.is_placeholder_serial(serial):
+            return None
+
+        connector_value = payload.get("connector_id")
+        if connector_value in ("", None):
+            connector_value = None
+        elif isinstance(connector_value, str):
+            try:
+                connector_value = int(connector_value)
+            except ValueError:
+                connector_value = None
+
+        charger, created = Charger.objects.get_or_create(
+            charger_id=serial,
+            connector_id=connector_value,
+        )
+
+        location_obj = None
+        location_payload = payload.get("location")
+        if isinstance(location_payload, Mapping):
+            name = location_payload.get("name")
+            if name:
+                location_obj, _ = Location.objects.get_or_create(name=name)
+                simple_fields = [
+                    "latitude",
+                    "longitude",
+                    "zone",
+                    "contract_type",
+                ]
+                for field in simple_fields:
+                    value = location_payload.get(field)
+                    setattr(location_obj, field, value)
+                location_obj.save()
+
+        datetime_fields = [
+            "firmware_timestamp",
+            "last_heartbeat",
+            "availability_state_updated_at",
+            "availability_requested_at",
+            "availability_request_status_at",
+            "diagnostics_timestamp",
+            "last_status_timestamp",
+        ]
+
+        updates: dict[str, object] = {
+            "node_origin": node,
+            "allow_remote": bool(payload.get("allow_remote", False)),
+            "export_transactions": bool(payload.get("export_transactions", False)),
+            "last_online_at": timezone.now(),
+        }
+
+        simple_fields = [
+            "display_name",
+            "language",
+            "public_display",
+            "require_rfid",
+            "firmware_status",
+            "firmware_status_info",
+            "last_status",
+            "last_error_code",
+            "last_status_vendor_info",
+            "availability_state",
+            "availability_requested_state",
+            "availability_request_status",
+            "availability_request_details",
+            "temperature",
+            "temperature_unit",
+            "diagnostics_status",
+            "diagnostics_location",
+        ]
+        for field in simple_fields:
+            updates[field] = payload.get(field)
+
+        if location_obj is not None:
+            updates["location"] = location_obj
+
+        for field in datetime_fields:
+            value = payload.get(field)
+            updates[field] = parse_datetime(value) if value else None
+
+        for field in ("last_meter_values",):
+            updates[field] = payload.get(field) or {}
+
+        Charger.objects.filter(pk=charger.pk).update(**updates)
+        return "created" if created else "updated"
 
     def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
         extra_context = extra_context or {}

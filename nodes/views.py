@@ -4,6 +4,7 @@ import json
 import re
 import secrets
 import socket
+import uuid
 from collections.abc import Mapping
 from datetime import timedelta
 
@@ -19,6 +20,7 @@ from django.http.request import split_domain_port
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from django.utils.cache import patch_vary_headers
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.csrf import csrf_exempt
@@ -30,7 +32,13 @@ from utils.api import api_login_required
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 
+from django.db.models import Q
+
 from core.models import RFID
+from ocpp import store
+from ocpp.models import Charger
+from ocpp.transactions_io import export_transactions
+from asgiref.sync import async_to_sync
 
 from .rfid_sync import apply_rfid_payload, serialize_rfid
 
@@ -165,6 +173,96 @@ def _assign_groups_and_permissions(user, payload: Mapping) -> None:
                 perm_objs.append(perm)
     if perm_objs:
         user.user_permissions.set(perm_objs)
+
+
+def _serialize_charger_for_network(charger: Charger) -> dict[str, object]:
+    simple_fields = [
+        "display_name",
+        "language",
+        "public_display",
+        "require_rfid",
+        "firmware_status",
+        "firmware_status_info",
+        "last_status",
+        "last_error_code",
+        "last_status_vendor_info",
+        "availability_state",
+        "availability_requested_state",
+        "availability_request_status",
+        "availability_request_details",
+        "temperature",
+        "temperature_unit",
+        "diagnostics_status",
+        "diagnostics_location",
+    ]
+    datetime_fields = [
+        "firmware_timestamp",
+        "last_heartbeat",
+        "availability_state_updated_at",
+        "availability_requested_at",
+        "availability_request_status_at",
+        "diagnostics_timestamp",
+        "last_status_timestamp",
+        "last_online_at",
+    ]
+
+    data: dict[str, object] = {
+        "charger_id": charger.charger_id,
+        "connector_id": charger.connector_id,
+        "allow_remote": charger.allow_remote,
+        "export_transactions": charger.export_transactions,
+        "last_meter_values": charger.last_meter_values or {},
+    }
+
+    for field in simple_fields:
+        data[field] = getattr(charger, field)
+
+    for field in datetime_fields:
+        value = getattr(charger, field)
+        data[field] = value.isoformat() if value else None
+
+    if charger.location:
+        location = charger.location
+        data["location"] = {
+            "name": location.name,
+            "latitude": location.latitude,
+            "longitude": location.longitude,
+            "zone": location.zone,
+            "contract_type": location.contract_type,
+        }
+
+    return data
+
+
+def _normalize_requested_chargers(values) -> list[tuple[str, int | None, object]]:
+    if not isinstance(values, list):
+        return []
+
+    normalized: list[tuple[str, int | None, object]] = []
+    for entry in values:
+        if not isinstance(entry, Mapping):
+            continue
+        serial = Charger.normalize_serial(entry.get("charger_id"))
+        if not serial or Charger.is_placeholder_serial(serial):
+            continue
+        connector = entry.get("connector_id")
+        if connector in ("", None):
+            connector_value = None
+        elif isinstance(connector, int):
+            connector_value = connector
+        else:
+            try:
+                connector_value = int(str(connector))
+            except (TypeError, ValueError):
+                connector_value = None
+        since_raw = entry.get("since")
+        since_dt = None
+        if isinstance(since_raw, str):
+            since_dt = parse_datetime(since_raw)
+            if since_dt is not None and timezone.is_naive(since_dt):
+                since_dt = timezone.make_aware(since_dt, timezone.get_current_timezone())
+        normalized.append((serial, connector_value, since_dt))
+    return normalized
 
 
 def _get_client_ip(request):
@@ -719,6 +817,420 @@ def import_rfids(request):
             "missing_accounts": missing_accounts,
             "errors": errors,
         }
+    )
+
+
+@csrf_exempt
+def network_chargers(request):
+    """Return serialized charger information for trusted peers."""
+
+    if request.method != "POST":
+        return JsonResponse({"detail": "POST required"}, status=405)
+
+    try:
+        body = json.loads(request.body.decode() or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"detail": "invalid json"}, status=400)
+
+    requester = body.get("requester")
+    if not requester:
+        return JsonResponse({"detail": "requester required"}, status=400)
+
+    requester_mac = _clean_requester_hint(body.get("requester_mac"))
+    requester_public_key = _clean_requester_hint(
+        body.get("requester_public_key"), strip=False
+    )
+
+    node, error_response = _load_signed_node(
+        request,
+        requester,
+        mac_address=requester_mac,
+        public_key=requester_public_key,
+    )
+    if error_response is not None:
+        return error_response
+
+    requested = _normalize_requested_chargers(body.get("chargers") or [])
+
+    qs = Charger.objects.all()
+    local_node = Node.get_local()
+    if local_node:
+        qs = qs.filter(Q(node_origin=local_node) | Q(node_origin__isnull=True))
+
+    if requested:
+        filters = Q()
+        for serial, connector_value, _ in requested:
+            if connector_value is None:
+                filters |= Q(charger_id=serial, connector_id__isnull=True)
+            else:
+                filters |= Q(charger_id=serial, connector_id=connector_value)
+        qs = qs.filter(filters)
+
+    chargers = [_serialize_charger_for_network(charger) for charger in qs]
+
+    include_transactions = bool(body.get("include_transactions"))
+    response_data: dict[str, object] = {"chargers": chargers}
+
+    if include_transactions:
+        serials = [serial for serial, _, _ in requested] or list(
+            {charger["charger_id"] for charger in chargers}
+        )
+        since_values = [since for _, _, since in requested if since]
+        start = min(since_values) if since_values else None
+        tx_payload = export_transactions(start=start, chargers=serials or None)
+        response_data["transactions"] = tx_payload
+
+    return JsonResponse(response_data)
+
+
+def _require_local_origin(charger: Charger) -> bool:
+    local = Node.get_local()
+    if not local:
+        return charger.node_origin_id is None
+    if charger.node_origin_id is None:
+        return True
+    return charger.node_origin_id == local.pk
+
+
+def _send_trigger_status(
+    charger: Charger, payload: Mapping | None = None
+) -> tuple[bool, str, dict[str, object]]:
+    connector_value = charger.connector_id
+    ws = store.get_connection(charger.charger_id, connector_value)
+    if ws is None:
+        return False, "no active connection", {}
+    payload: dict[str, object] = {"requestedMessage": "StatusNotification"}
+    if connector_value is not None:
+        payload["connectorId"] = connector_value
+    message_id = uuid.uuid4().hex
+    msg = json.dumps([2, message_id, "TriggerMessage", payload])
+    try:
+        async_to_sync(ws.send)(msg)
+    except Exception as exc:
+        return False, f"failed to send TriggerMessage ({exc})", {}
+    log_key = store.identity_key(charger.charger_id, connector_value)
+    store.add_log(log_key, f"< {msg}", log_type="charger")
+    store.register_pending_call(
+        message_id,
+        {
+            "action": "TriggerMessage",
+            "charger_id": charger.charger_id,
+            "connector_id": connector_value,
+            "log_key": log_key,
+            "trigger_target": "StatusNotification",
+            "trigger_connector": connector_value,
+            "requested_at": timezone.now(),
+        },
+    )
+    store.schedule_call_timeout(
+        message_id,
+        timeout=5.0,
+        action="TriggerMessage",
+        log_key=log_key,
+        message="TriggerMessage StatusNotification timed out",
+    )
+    return True, "requested status update", {}
+
+
+def _send_get_configuration(
+    charger: Charger, payload: Mapping | None = None
+) -> tuple[bool, str, dict[str, object]]:
+    connector_value = charger.connector_id
+    ws = store.get_connection(charger.charger_id, connector_value)
+    if ws is None:
+        return False, "no active connection", {}
+    message_id = uuid.uuid4().hex
+    msg = json.dumps([2, message_id, "GetConfiguration", {}])
+    try:
+        async_to_sync(ws.send)(msg)
+    except Exception as exc:
+        return False, f"failed to send GetConfiguration ({exc})", {}
+    log_key = store.identity_key(charger.charger_id, connector_value)
+    store.add_log(log_key, f"< {msg}", log_type="charger")
+    store.register_pending_call(
+        message_id,
+        {
+            "action": "GetConfiguration",
+            "charger_id": charger.charger_id,
+            "connector_id": connector_value,
+            "log_key": log_key,
+            "requested_at": timezone.now(),
+        },
+    )
+    store.schedule_call_timeout(
+        message_id,
+        timeout=5.0,
+        action="GetConfiguration",
+        log_key=log_key,
+        message=(
+            "GetConfiguration timed out: charger did not respond"
+            " (operation may not be supported)"
+        ),
+    )
+    return True, "requested configuration update", {}
+
+
+def _send_reset(
+    charger: Charger, payload: Mapping | None = None
+) -> tuple[bool, str, dict[str, object]]:
+    connector_value = charger.connector_id
+    tx = store.get_transaction(charger.charger_id, connector_value)
+    if tx:
+        return False, "active session in progress", {}
+    message_id = uuid.uuid4().hex
+    reset_type = None
+    if payload:
+        reset_type = payload.get("reset_type")
+    msg = json.dumps(
+        [2, message_id, "Reset", {"type": (reset_type or "Soft")}]
+    )
+    ws = store.get_connection(charger.charger_id, connector_value)
+    if ws is None:
+        return False, "no active connection", {}
+    try:
+        async_to_sync(ws.send)(msg)
+    except Exception as exc:
+        return False, f"failed to send Reset ({exc})", {}
+    log_key = store.identity_key(charger.charger_id, connector_value)
+    store.add_log(log_key, f"< {msg}", log_type="charger")
+    store.register_pending_call(
+        message_id,
+        {
+            "action": "Reset",
+            "charger_id": charger.charger_id,
+            "connector_id": connector_value,
+            "log_key": log_key,
+            "requested_at": timezone.now(),
+        },
+    )
+    store.schedule_call_timeout(
+        message_id,
+        timeout=5.0,
+        action="Reset",
+        log_key=log_key,
+        message="Reset timed out: charger did not respond",
+    )
+    return True, "reset requested", {}
+
+
+def _toggle_rfid(
+    charger: Charger, payload: Mapping | None = None
+) -> tuple[bool, str, dict[str, object]]:
+    enable = None
+    if payload is not None:
+        enable = payload.get("enable")
+    if isinstance(enable, str):
+        enable = enable.lower() in {"1", "true", "yes", "on"}
+    elif isinstance(enable, (int, bool)):
+        enable = bool(enable)
+    if enable is None:
+        enable = not charger.require_rfid
+    enable_bool = bool(enable)
+    Charger.objects.filter(pk=charger.pk).update(require_rfid=enable_bool)
+    charger.require_rfid = enable_bool
+    detail = "RFID authentication enabled" if enable_bool else "RFID authentication disabled"
+    return True, detail, {"require_rfid": enable_bool}
+
+
+def _change_availability_remote(
+    charger: Charger, payload: Mapping | None = None
+) -> tuple[bool, str, dict[str, object]]:
+    availability_type = None
+    if payload is not None:
+        availability_type = payload.get("availability_type")
+    availability_label = str(availability_type or "").strip()
+    if availability_label not in {"Operative", "Inoperative"}:
+        return False, "invalid availability type", {}
+    connector_value = charger.connector_id
+    ws = store.get_connection(charger.charger_id, connector_value)
+    if ws is None:
+        return False, "no active connection", {}
+    connector_id = connector_value if connector_value is not None else 0
+    message_id = uuid.uuid4().hex
+    msg = json.dumps(
+        [
+            2,
+            message_id,
+            "ChangeAvailability",
+            {"connectorId": connector_id, "type": availability_label},
+        ]
+    )
+    try:
+        async_to_sync(ws.send)(msg)
+    except Exception as exc:
+        return False, f"failed to send ChangeAvailability ({exc})", {}
+    log_key = store.identity_key(charger.charger_id, connector_value)
+    store.add_log(log_key, f"< {msg}", log_type="charger")
+    timestamp = timezone.now()
+    store.register_pending_call(
+        message_id,
+        {
+            "action": "ChangeAvailability",
+            "charger_id": charger.charger_id,
+            "connector_id": connector_value,
+            "availability_type": availability_label,
+            "requested_at": timestamp,
+        },
+    )
+    updates = {
+        "availability_requested_state": availability_label,
+        "availability_requested_at": timestamp,
+        "availability_request_status": "",
+        "availability_request_status_at": None,
+        "availability_request_details": "",
+    }
+    Charger.objects.filter(pk=charger.pk).update(**updates)
+    for field, value in updates.items():
+        setattr(charger, field, value)
+    return True, f"requested ChangeAvailability {availability_label}", updates
+
+
+def _set_availability_state_remote(
+    charger: Charger, payload: Mapping | None = None
+) -> tuple[bool, str, dict[str, object]]:
+    availability_state = None
+    if payload is not None:
+        availability_state = payload.get("availability_state")
+    availability_label = str(availability_state or "").strip()
+    if availability_label not in {"Operative", "Inoperative"}:
+        return False, "invalid availability state", {}
+    timestamp = timezone.now()
+    updates = {
+        "availability_state": availability_label,
+        "availability_state_updated_at": timestamp,
+    }
+    Charger.objects.filter(pk=charger.pk).update(**updates)
+    for field, value in updates.items():
+        setattr(charger, field, value)
+    return True, f"availability marked {availability_label}", updates
+
+
+def _remote_stop_transaction_remote(
+    charger: Charger, payload: Mapping | None = None
+) -> tuple[bool, str, dict[str, object]]:
+    connector_value = charger.connector_id
+    ws = store.get_connection(charger.charger_id, connector_value)
+    if ws is None:
+        return False, "no active connection", {}
+    tx_obj = store.get_transaction(charger.charger_id, connector_value)
+    if tx_obj is None:
+        return False, "no active transaction", {}
+    message_id = uuid.uuid4().hex
+    msg = json.dumps(
+        [
+            2,
+            message_id,
+            "RemoteStopTransaction",
+            {"transactionId": tx_obj.pk},
+        ]
+    )
+    try:
+        async_to_sync(ws.send)(msg)
+    except Exception as exc:
+        return False, f"failed to send RemoteStopTransaction ({exc})", {}
+    log_key = store.identity_key(charger.charger_id, connector_value)
+    store.add_log(log_key, f"< {msg}", log_type="charger")
+    store.register_pending_call(
+        message_id,
+        {
+            "action": "RemoteStopTransaction",
+            "charger_id": charger.charger_id,
+            "connector_id": connector_value,
+            "transaction_id": tx_obj.pk,
+            "log_key": log_key,
+            "requested_at": timezone.now(),
+        },
+    )
+    return True, "remote stop requested", {}
+
+
+REMOTE_ACTIONS = {
+    "trigger-status": _send_trigger_status,
+    "get-configuration": _send_get_configuration,
+    "reset": _send_reset,
+    "toggle-rfid": _toggle_rfid,
+    "change-availability": _change_availability_remote,
+    "set-availability-state": _set_availability_state_remote,
+    "remote-stop": _remote_stop_transaction_remote,
+}
+
+
+@csrf_exempt
+def network_charger_action(request):
+    """Execute remote admin actions on behalf of trusted nodes."""
+
+    if request.method != "POST":
+        return JsonResponse({"detail": "POST required"}, status=405)
+
+    try:
+        body = json.loads(request.body.decode() or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"detail": "invalid json"}, status=400)
+
+    requester = body.get("requester")
+    if not requester:
+        return JsonResponse({"detail": "requester required"}, status=400)
+
+    requester_mac = _clean_requester_hint(body.get("requester_mac"))
+    requester_public_key = _clean_requester_hint(
+        body.get("requester_public_key"), strip=False
+    )
+
+    node, error_response = _load_signed_node(
+        request,
+        requester,
+        mac_address=requester_mac,
+        public_key=requester_public_key,
+    )
+    if error_response is not None:
+        return error_response
+
+    serial = Charger.normalize_serial(body.get("charger_id"))
+    if not serial or Charger.is_placeholder_serial(serial):
+        return JsonResponse({"detail": "invalid charger"}, status=400)
+
+    connector = body.get("connector_id")
+    if connector in ("", None):
+        connector_value = None
+    elif isinstance(connector, int):
+        connector_value = connector
+    else:
+        try:
+            connector_value = int(str(connector))
+        except (TypeError, ValueError):
+            return JsonResponse({"detail": "invalid connector"}, status=400)
+
+    charger = Charger.objects.filter(
+        charger_id=serial, connector_id=connector_value
+    ).first()
+    if not charger:
+        return JsonResponse({"detail": "charger not found"}, status=404)
+
+    if not charger.allow_remote:
+        return JsonResponse({"detail": "remote actions disabled"}, status=403)
+
+    if not _require_local_origin(charger):
+        return JsonResponse({"detail": "charger is not managed by this node"}, status=403)
+
+    action = body.get("action")
+    handler = REMOTE_ACTIONS.get(action or "")
+    if handler is None:
+        return JsonResponse({"detail": "unsupported action"}, status=400)
+
+    success, message, updates = handler(charger, body)
+
+    status_code = 200 if success else 409
+    status_label = "ok" if success else "error"
+    serialized_updates: dict[str, object] = {}
+    if isinstance(updates, Mapping):
+        for key, value in updates.items():
+            if hasattr(value, "isoformat"):
+                serialized_updates[key] = value.isoformat()
+            else:
+                serialized_updates[key] = value
+    return JsonResponse(
+        {"status": status_label, "detail": message, "updates": serialized_updates},
+        status=status_code,
     )
 
 
