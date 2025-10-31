@@ -1,0 +1,12 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate screen Admin feedback overlay",
+      "url": "/admin/",
+      "request_details": "Open the feedback dialog from any admin page and confirm all labels, placeholders, and helper text meet WCAG contrast on both light and dark themes.",
+      "done_on": null,
+      "is_deleted": false
+    }
+  }
+]
