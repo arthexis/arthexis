@@ -89,11 +89,12 @@ class ClientReportGenerationTests(TestCase):
                 "recurrence": ClientReportSchedule.PERIODICITY_NONE,
             },
         )
-        self.assertEqual(resp.status_code, 200)
-        self.assertContains(resp, self.account.name)
-        self.assertContains(resp, str(self.rfid2.label_id))
-        self.assertNotContains(resp, self.rfid1.rfid)
-        self.assertNotContains(resp, self.rfid2.rfid)
+        self.assertEqual(resp.status_code, 302)
+        download_location = resp["Location"]
+        self.assertIn("?download=", download_location)
+
+        follow = self.client.get(download_location)
+        self.assertContains(follow, "click here to download it.")
         report = ClientReport.objects.get()
         self.assertEqual(report.start_date, day)
         self.assertEqual(report.end_date, day)
@@ -102,13 +103,32 @@ class ClientReportGenerationTests(TestCase):
         self.assertIsNotNone(export)
         html_path = Path(settings.BASE_DIR) / export["html_path"]
         json_path = Path(settings.BASE_DIR) / export["json_path"]
+        pdf_path = Path(settings.BASE_DIR) / export["pdf_path"]
         self.assertTrue(html_path.exists())
         self.assertTrue(json_path.exists())
-        subjects = {row["subject"] for row in report.data["rows"]}
-        self.assertIn(self.account.name, subjects)
-        self.assertIn(str(self.rfid2.label_id), subjects)
+        self.assertTrue(pdf_path.exists())
+        self.assertEqual(report.data.get("schema"), "evcs-session/v1")
+        evcs_entries = report.data.get("evcs", [])
+        self.assertTrue(evcs_entries)
+        transactions = [
+            tx for evcs in evcs_entries for tx in evcs.get("transactions", [])
+        ]
+        self.assertTrue(
+            any(tx.get("account_name") == self.account.name for tx in transactions)
+        )
+        self.assertTrue(
+            any(tx.get("rfid_label") == str(self.rfid2.label_id) for tx in transactions)
+        )
+        pdf_response = self.client.get(
+            reverse("pages:client-report-download", args=[report.pk])
+        )
+        self.assertEqual(pdf_response.status_code, 200)
+        self.assertEqual(pdf_response["Content-Type"], "application/pdf")
+        pdf_bytes = b"".join(pdf_response.streaming_content)
+        self.assertTrue(pdf_bytes.startswith(b"%PDF"))
         html_path.unlink()
         json_path.unlink()
+        pdf_path.unlink()
 
     def test_repeated_generation_throttled(self):
         day = timezone.now().date()
@@ -122,15 +142,18 @@ class ClientReportGenerationTests(TestCase):
         self.client.force_login(self.user)
 
         first = self.client.post(url, payload)
-        self.assertEqual(first.status_code, 200)
+        self.assertEqual(first.status_code, 302)
         report = ClientReport.objects.get()
         export = report.data.get("export")
         html_path = Path(settings.BASE_DIR) / export["html_path"]
         json_path = Path(settings.BASE_DIR) / export["json_path"]
+        pdf_path = Path(settings.BASE_DIR) / export["pdf_path"]
         self.assertTrue(html_path.exists())
         self.assertTrue(json_path.exists())
+        self.assertTrue(pdf_path.exists())
         html_path.unlink()
         json_path.unlink()
+        pdf_path.unlink()
 
         second = self.client.post(url, payload)
         self.assertEqual(second.status_code, 200)
