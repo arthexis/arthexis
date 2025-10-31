@@ -5,8 +5,11 @@
       "request": "Validate screen Package Release publish progress",
       "url": "/admin/core/packagerelease/",
       "request_details": "Open a package release from the changelist, start the Publish flow, and confirm warnings appear when PyPI uploads succeed but git tagging requires manual follow-up.",
-      "done_on": null,
-      "is_deleted": false
+      "done_on": "2025-10-30T15:14:11.981103-06:00",
+      "is_deleted": false,
+      "done_version": "0.1.22",
+      "done_revision": "4387c08bd898eba5a11d3dbd73e130aecb51a735",
+      "done_username": "admin"
     }
   }
 ]

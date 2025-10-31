@@ -3,10 +3,13 @@
     "model": "core.todo",
     "fields": {
       "request": "Validate screen Charge Point Simulator",
-      "url": "/ocpp/evcs/simulator/",
+      "url": "/ocpp/simulator/",
       "request_details": "Ensure the member-only notice appears when unauthenticated users are redirected to log in.",
-      "done_on": null,
-      "is_deleted": false
+      "done_on": "2025-10-30T15:14:10.480187-06:00",
+      "is_deleted": false,
+      "done_version": "0.1.22",
+      "done_revision": "4387c08bd898eba5a11d3dbd73e130aecb51a735",
+      "done_username": "admin"
     }
   }
 ]

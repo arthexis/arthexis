@@ -3,10 +3,13 @@
     "model": "core.todo",
     "fields": {
       "request": "Validate screen RFID Scanner",
-      "url": "/ocpp/rfid/validator/",
+      "url": "/ocpp/rfid/",
       "request_details": "Ensure both the single and table modes render correctly, record scans, show the running total, and display command output messages without stray percent symbols.",
-      "done_on": null,
-      "is_deleted": false
+      "done_on": "2025-10-30T15:14:12.824400-06:00",
+      "is_deleted": false,
+      "done_version": "0.1.22",
+      "done_revision": "4387c08bd898eba5a11d3dbd73e130aecb51a735",
+      "done_username": "admin"
     }
   }
 ]

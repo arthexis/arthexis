@@ -4,9 +4,12 @@
     "fields": {
       "request": "Validate screen System Reports",
       "url": "/admin/system/",
-      "request_details": "Confirm the System Reports table lists the changelog, upgrade, and pending TODOs reports with their purposes and only shows the Celery report row when Celery support is available.",
-      "done_on": null,
-      "is_deleted": false
+      "request_details": "Confirm the System Reports section lists the upgrade report link and shows the Celery report link only when Celery support is available.",
+      "done_on": "2025-10-30T15:14:14.242944-06:00",
+      "is_deleted": false,
+      "done_version": "0.1.22",
+      "done_revision": "4387c08bd898eba5a11d3dbd73e130aecb51a735",
+      "done_username": "admin"
     }
   }
 ]

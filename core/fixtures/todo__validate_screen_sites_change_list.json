@@ -5,8 +5,11 @@
       "request": "Validate screen Sites change list",
       "url": "/admin/pages/siteproxy/",
       "request_details": "Ensure the Reload site fixtures button runs the fixture loader without requiring a selection.",
-      "done_on": null,
-      "is_deleted": false
+      "done_on": "2025-10-30T15:14:13.256089-06:00",
+      "is_deleted": false,
+      "done_version": "0.1.22",
+      "done_revision": "4387c08bd898eba5a11d3dbd73e130aecb51a735",
+      "done_username": "admin"
     }
   }
 ]

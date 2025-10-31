@@ -5,8 +5,11 @@
       "request": "Validate screen Admin dashboard collapsible sections",
       "url": "/admin/",
       "request_details": "Ensure each admin module on the dashboard can be collapsed with the arrow control, expands again when toggled, and remembers its state after a page reload.",
-      "done_on": null,
-      "is_deleted": false
+      "done_on": "2025-10-30T15:14:08.035823-06:00",
+      "is_deleted": false,
+      "done_version": "0.1.22",
+      "done_revision": "4387c08bd898eba5a11d3dbd73e130aecb51a735",
+      "done_username": "admin"
     }
   }
 ]

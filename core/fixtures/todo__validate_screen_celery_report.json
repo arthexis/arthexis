@@ -5,8 +5,11 @@
       "request": "Validate screen Celery Report",
       "url": "/admin/nodes/nodefeature/celery-report/",
       "request_details": "Verify the Celery report displays scheduled tasks and log entries for each reporting window.",
-      "done_on": null,
-      "is_deleted": false
+      "done_on": "2025-10-30T15:14:08.964691-06:00",
+      "is_deleted": false,
+      "done_version": "0.1.22",
+      "done_revision": "4387c08bd898eba5a11d3dbd73e130aecb51a735",
+      "done_username": "admin"
     }
   }
 ]

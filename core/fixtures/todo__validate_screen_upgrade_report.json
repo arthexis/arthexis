@@ -5,8 +5,11 @@
       "request": "Validate screen Upgrade Report",
       "url": "/admin/system/upgrade-report/",
       "request_details": "Ensure the upgrade report view renders the settings, schedule, and recent activity sections using live upgrade data, and verify the manual \"Run upgrade check\" action triggers the expected task.",
-      "done_on": null,
-      "is_deleted": false
+      "done_on": "2025-10-30T15:14:14.657805-06:00",
+      "is_deleted": false,
+      "done_version": "0.1.22",
+      "done_revision": "4387c08bd898eba5a11d3dbd73e130aecb51a735",
+      "done_username": "admin"
     }
   }
 ]
