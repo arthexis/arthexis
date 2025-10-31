@@ -232,6 +232,13 @@ class Charger(Entity):
             "Latest GetConfiguration response received from this charge point."
         ),
     )
+    node_origin = models.ForeignKey(
+        "nodes.Node",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="origin_chargers",
+    )
     manager_node = models.ForeignKey(
         "nodes.Node",
         on_delete=models.SET_NULL,
@@ -239,6 +246,9 @@ class Charger(Entity):
         blank=True,
         related_name="managed_chargers",
     )
+    allow_remote = models.BooleanField(default=False)
+    export_transactions = models.BooleanField(default=False)
+    last_online_at = models.DateTimeField(null=True, blank=True)
     owner_users = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
         blank=True,
@@ -292,6 +302,24 @@ class Charger(Entity):
             return True
         user_group_ids = user.groups.values_list("pk", flat=True)
         return self.owner_groups.filter(pk__in=user_group_ids).exists()
+
+    @property
+    def is_local(self) -> bool:
+        """Return ``True`` when this charger originates from the local node."""
+
+        local = Node.get_local()
+        if not local:
+            return False
+        if self.node_origin_id is None:
+            return True
+        return self.node_origin_id == local.pk
+
+    def save(self, *args, **kwargs):
+        if self.node_origin_id is None:
+            local = Node.get_local()
+            if local:
+                self.node_origin = local
+        super().save(*args, **kwargs)
 
     class Meta:
         verbose_name = _("Charge Point")

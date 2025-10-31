@@ -11,6 +11,12 @@ urlpatterns = [
     path("net-message/pull/", views.net_message_pull, name="net-message-pull"),
     path("rfid/export/", views.export_rfids, name="node-rfid-export"),
     path("rfid/import/", views.import_rfids, name="node-rfid-import"),
+    path("network/chargers/", views.network_chargers, name="node-network-chargers"),
+    path(
+        "network/chargers/action/",
+        views.network_charger_action,
+        name="node-network-charger-action",
+    ),
     path("proxy/session/", views.proxy_session, name="node-proxy-session"),
     path("proxy/login/<str:token>/", views.proxy_login, name="node-proxy-login"),
     path("proxy/execute/", views.proxy_execute, name="node-proxy-execute"),

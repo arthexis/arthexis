@@ -307,6 +307,18 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
             {"fields": ("public_display", "require_rfid", "configuration")},
         ),
         (
+            "Network",
+            {
+                "fields": (
+                    "node_origin",
+                    "manager_node",
+                    "allow_remote",
+                    "export_transactions",
+                    "last_online_at",
+                )
+            },
+        ),
+        (
             "References",
             {
                 "fields": ("reference",),
@@ -334,15 +346,17 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         "availability_request_status_at",
         "availability_request_details",
         "configuration",
+        "last_online_at",
     )
     list_display = (
         "display_name_with_fallback",
         "connector_number",
         "charger_name_display",
+        "local_indicator",
         "require_rfid_display",
         "public_display",
         "last_heartbeat",
-        "session_kw",
+        "today_kw",
         "total_kw_display",
         "page_link",
         "log_link",
@@ -363,6 +377,14 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         "reset_chargers",
         "delete_selected",
     ]
+
+    def get_readonly_fields(self, request, obj=None):
+        readonly = list(super().get_readonly_fields(request, obj))
+        if obj and not obj.is_local:
+            for field in ("allow_remote", "export_transactions"):
+                if field not in readonly:
+                    readonly.append(field)
+        return tuple(readonly)
 
     def get_view_on_site_url(self, obj=None):
         return obj.get_absolute_url() if obj else None
@@ -461,6 +483,10 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         if obj.location:
             return obj.location.name
         return obj.charger_id
+
+    @admin.display(boolean=True, description="Local")
+    def local_indicator(self, obj):
+        return obj.is_local
 
     def location_name(self, obj):
         return obj.location.name if obj.location else ""
@@ -826,13 +852,11 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
 
     total_kw_display.short_description = "Total kW"
 
-    def session_kw(self, obj):
-        tx = store.get_transaction(obj.charger_id, obj.connector_id)
-        if tx:
-            return round(tx.kw, 2)
-        return 0.0
+    def today_kw(self, obj):
+        start, end = self._today_range()
+        return round(obj.total_kw_for_range(start, end), 2)
 
-    session_kw.short_description = "Session kW"
+    today_kw.short_description = "Today kW"
 
     def changelist_view(self, request, extra_context=None):
         response = super().changelist_view(request, extra_context=extra_context)
