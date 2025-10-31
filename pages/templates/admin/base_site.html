@@ -141,6 +141,42 @@ document.addEventListener('DOMContentLoaded', function () {
 {% block extrastyle %}
 {{ block.super }}
 <style>
+:root {
+    --user-story-card-bg: var(--body-bg, #ffffff);
+    --user-story-card-fg: var(--body-fg, #212529);
+    --user-story-card-border: rgba(15, 23, 42, 0.12);
+    --user-story-input-bg: var(--body-bg, #ffffff);
+    --user-story-input-border: rgba(15, 23, 42, 0.15);
+    --user-story-checkbox-border: rgba(15, 23, 42, 0.25);
+    --user-story-muted: rgba(15, 23, 42, 0.6);
+    --user-story-focus-ring: rgba(37, 99, 235, 0.2);
+    --user-story-alert-success-bg: rgba(34, 197, 94, 0.12);
+    --user-story-alert-success-border: rgba(34, 197, 94, 0.35);
+    --user-story-alert-success-fg: #047857;
+    --user-story-alert-danger-bg: rgba(248, 113, 113, 0.12);
+    --user-story-alert-danger-border: rgba(248, 113, 113, 0.35);
+    --user-story-alert-danger-fg: #b91c1c;
+    --user-story-close-hover-bg: rgba(15, 23, 42, 0.08);
+}
+
+[data-theme="dark"] {
+    --user-story-card-bg: #0f172a;
+    --user-story-card-fg: #f8fafc;
+    --user-story-card-border: rgba(148, 163, 184, 0.25);
+    --user-story-input-bg: #1e293b;
+    --user-story-input-border: rgba(148, 163, 184, 0.35);
+    --user-story-checkbox-border: rgba(148, 163, 184, 0.35);
+    --user-story-muted: rgba(148, 163, 184, 0.85);
+    --user-story-focus-ring: rgba(59, 130, 246, 0.45);
+    --user-story-alert-success-bg: rgba(34, 197, 94, 0.16);
+    --user-story-alert-success-border: rgba(34, 197, 94, 0.45);
+    --user-story-alert-success-fg: #22c55e;
+    --user-story-alert-danger-bg: rgba(248, 113, 113, 0.18);
+    --user-story-alert-danger-border: rgba(248, 113, 113, 0.45);
+    --user-story-alert-danger-fg: #fca5a5;
+    --user-story-close-hover-bg: rgba(148, 163, 184, 0.25);
+}
+
 body.login #header {
     padding-top: 1em;
     padding-bottom: 1em;
@@ -480,8 +516,8 @@ body.user-story-open {
     width: min(28rem, 100%);
     border-radius: 1rem;
     box-shadow: 0 1.5rem 3rem rgba(15, 23, 42, 0.45);
-    background: var(--body-bg, #ffffff);
-    color: var(--body-fg, #212529);
+    background: var(--user-story-card-bg);
+    color: var(--user-story-card-fg);
     transform: translateY(1rem);
     transition: transform 0.25s ease;
 }
@@ -492,7 +528,7 @@ body.user-story-open {
     justify-content: space-between;
     gap: 1rem;
     padding: 1.25rem 1.25rem 0.75rem;
-    border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+    border-bottom: 1px solid var(--user-story-card-border);
 }
 
 .user-story-card .card-body {
@@ -559,25 +595,30 @@ body.user-story-open {
 
 .user-story-card .btn-close:hover,
 .user-story-card .btn-close:focus-visible {
-    background-color: rgba(15, 23, 42, 0.08);
+    background-color: var(--user-story-close-hover-bg);
 }
 
 .user-story-card .form-control,
 .user-story-card textarea {
     width: 100%;
     border-radius: 0.5rem;
-    border: 1px solid rgba(15, 23, 42, 0.15);
+    border: 1px solid var(--user-story-input-border);
     padding: 0.5rem 0.75rem;
-    background: var(--body-bg, #ffffff);
-    color: inherit;
+    background: var(--user-story-input-bg);
+    color: var(--user-story-card-fg);
     transition: border-color 0.15s ease, box-shadow 0.15s ease;
     resize: vertical;
+}
+
+.user-story-card .form-control::placeholder,
+.user-story-card textarea::placeholder {
+    color: var(--user-story-muted);
 }
 
 .user-story-card .form-control:focus,
 .user-story-card textarea:focus {
     border-color: #2563eb;
-    box-shadow: 0 0 0 0.2rem rgba(37, 99, 235, 0.2);
+    box-shadow: 0 0 0 0.2rem var(--user-story-focus-ring);
     outline: none;
 }
 
@@ -585,7 +626,9 @@ body.user-story-open {
     width: 1.15rem;
     height: 1.15rem;
     border-radius: 0.35rem;
-    border: 1px solid rgba(15, 23, 42, 0.25);
+    border: 1px solid var(--user-story-checkbox-border);
+    background-color: var(--user-story-input-bg);
+    color: var(--user-story-card-fg);
     cursor: pointer;
 }
 
@@ -612,7 +655,7 @@ body.user-story-open {
 
 .user-story-card .form-check-input:focus {
     border-color: #2563eb;
-    box-shadow: 0 0 0 0.2rem rgba(37, 99, 235, 0.2);
+    box-shadow: 0 0 0 0.2rem var(--user-story-focus-ring);
 }
 
 .user-story-overlay.show .user-story-card {
@@ -639,9 +682,13 @@ body.user-story-open {
 }
 
 .user-story-card .form-text {
-    color: rgba(15, 23, 42, 0.6);
+    color: var(--user-story-muted);
     font-size: 0.85rem;
     margin-top: 0.3rem;
+}
+
+.user-story-card .text-muted {
+    color: var(--user-story-muted) !important;
 }
 
 .user-story-screenshot {
@@ -698,15 +745,15 @@ body.user-story-open {
 }
 
 .user-story-card .alert-success {
-    background-color: rgba(34, 197, 94, 0.12);
-    border-color: rgba(34, 197, 94, 0.35);
-    color: #047857;
+    background-color: var(--user-story-alert-success-bg);
+    border-color: var(--user-story-alert-success-border);
+    color: var(--user-story-alert-success-fg);
 }
 
 .user-story-card .alert-danger {
-    background-color: rgba(248, 113, 113, 0.12);
-    border-color: rgba(248, 113, 113, 0.35);
-    color: #b91c1c;
+    background-color: var(--user-story-alert-danger-bg);
+    border-color: var(--user-story-alert-danger-border);
+    color: var(--user-story-alert-danger-fg);
 }
 
 @media (max-width: 767.98px) {
