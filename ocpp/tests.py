@@ -67,6 +67,7 @@ from .models import (
     MeterReading,
     Location,
     DataTransferMessage,
+    CPReservation,
 )
 from .admin import ChargerConfigurationAdmin
 from .consumers import CSMSConsumer
@@ -302,6 +303,184 @@ class ChargerRefreshManagerNodeTests(TestCase):
 
         self.assertIsNone(result)
         self.assertEqual(charger.manager_node, remote)
+
+
+class CPReservationTests(TransactionTestCase):
+    def setUp(self):
+        self.location = Location.objects.create(name="Reservation Site")
+        self.aggregate = Charger.objects.create(charger_id="RSV100", location=self.location)
+        self.connector_one = Charger.objects.create(
+            charger_id="RSV100", connector_id=1, location=self.location
+        )
+        self.connector_two = Charger.objects.create(
+            charger_id="RSV100", connector_id=2, location=self.location
+        )
+        self.addCleanup(store.clear_pending_calls, "RSV100")
+
+    def test_allocates_preferred_connector(self):
+        start = timezone.now() + timedelta(hours=1)
+        reservation = CPReservation(
+            location=self.location,
+            start_time=start,
+            duration_minutes=90,
+            id_tag="TAG001",
+        )
+        reservation.save()
+        self.assertEqual(reservation.connector, self.connector_two)
+
+    def test_allocation_falls_back_and_blocks_overlaps(self):
+        start = timezone.now() + timedelta(hours=1)
+        first = CPReservation.objects.create(
+            location=self.location,
+            start_time=start,
+            duration_minutes=60,
+            id_tag="TAG002",
+        )
+        self.assertEqual(first.connector, self.connector_two)
+        second = CPReservation(
+            location=self.location,
+            start_time=start + timedelta(minutes=15),
+            duration_minutes=60,
+            id_tag="TAG003",
+        )
+        second.save()
+        self.assertEqual(second.connector, self.connector_one)
+        third = CPReservation(
+            location=self.location,
+            start_time=start + timedelta(minutes=30),
+            duration_minutes=45,
+            id_tag="TAG004",
+        )
+        with self.assertRaises(ValidationError):
+            third.save()
+
+    def test_send_reservation_request_dispatches_frame(self):
+        start = timezone.now() + timedelta(hours=1)
+        reservation = CPReservation.objects.create(
+            location=self.location,
+            start_time=start,
+            duration_minutes=30,
+            id_tag="TAG005",
+        )
+
+        class DummyConnection:
+            def __init__(self):
+                self.sent: list[str] = []
+
+            async def send(self, message):
+                self.sent.append(message)
+
+        ws = DummyConnection()
+        store.set_connection(
+            reservation.connector.charger_id,
+            reservation.connector.connector_id,
+            ws,
+        )
+        self.addCleanup(
+            store.pop_connection,
+            reservation.connector.charger_id,
+            reservation.connector.connector_id,
+        )
+
+        message_id = reservation.send_reservation_request()
+        self.assertTrue(ws.sent)
+        frame = json.loads(ws.sent[0])
+        self.assertEqual(frame[0], 2)
+        self.assertEqual(frame[2], "ReserveNow")
+        self.assertEqual(frame[3]["reservationId"], reservation.pk)
+        self.assertEqual(frame[3]["connectorId"], reservation.connector.connector_id)
+        self.assertEqual(frame[3]["idTag"], "TAG005")
+        metadata = store.pending_calls.get(message_id)
+        self.assertIsNotNone(metadata)
+        self.assertEqual(metadata.get("reservation_pk"), reservation.pk)
+
+    def test_call_result_marks_reservation_confirmed(self):
+        start = timezone.now() + timedelta(hours=1)
+        reservation = CPReservation.objects.create(
+            location=self.location,
+            start_time=start,
+            duration_minutes=45,
+            id_tag="TAG006",
+        )
+        log_key = store.identity_key(
+            reservation.connector.charger_id, reservation.connector.connector_id
+        )
+        message_id = "reserve-success"
+        store.register_pending_call(
+            message_id,
+            {
+                "action": "ReserveNow",
+                "charger_id": reservation.connector.charger_id,
+                "connector_id": reservation.connector.connector_id,
+                "log_key": log_key,
+                "reservation_pk": reservation.pk,
+            },
+        )
+
+        consumer = CSMSConsumer()
+        consumer.scope = {"headers": [], "client": ("127.0.0.1", 1234)}
+        consumer.charger_id = reservation.connector.charger_id
+        consumer.store_key = log_key
+        consumer.connector_value = reservation.connector.connector_id
+        consumer.charger = reservation.connector
+        consumer.aggregate_charger = self.aggregate
+        consumer._consumption_task = None
+        consumer._consumption_message_uuid = None
+        consumer.send = AsyncMock()
+
+        async_to_sync(consumer._handle_call_result)(
+            message_id, {"status": "Accepted"}
+        )
+        reservation.refresh_from_db()
+        self.assertTrue(reservation.evcs_confirmed)
+        self.assertEqual(reservation.evcs_status, "Accepted")
+        self.assertIsNotNone(reservation.evcs_confirmed_at)
+
+    def test_call_error_updates_reservation_status(self):
+        start = timezone.now() + timedelta(hours=1)
+        reservation = CPReservation.objects.create(
+            location=self.location,
+            start_time=start,
+            duration_minutes=45,
+            id_tag="TAG007",
+        )
+        log_key = store.identity_key(
+            reservation.connector.charger_id, reservation.connector.connector_id
+        )
+        message_id = "reserve-error"
+        store.register_pending_call(
+            message_id,
+            {
+                "action": "ReserveNow",
+                "charger_id": reservation.connector.charger_id,
+                "connector_id": reservation.connector.connector_id,
+                "log_key": log_key,
+                "reservation_pk": reservation.pk,
+            },
+        )
+
+        consumer = CSMSConsumer()
+        consumer.scope = {"headers": [], "client": ("127.0.0.1", 1234)}
+        consumer.charger_id = reservation.connector.charger_id
+        consumer.store_key = log_key
+        consumer.connector_value = reservation.connector.connector_id
+        consumer.charger = reservation.connector
+        consumer.aggregate_charger = self.aggregate
+        consumer._consumption_task = None
+        consumer._consumption_message_uuid = None
+        consumer.send = AsyncMock()
+
+        async_to_sync(consumer._handle_call_error)(
+            message_id,
+            "Rejected",
+            "Charger unavailable",
+            {"reason": "maintenance"},
+        )
+        reservation.refresh_from_db()
+        self.assertFalse(reservation.evcs_confirmed)
+        self.assertEqual(reservation.evcs_status, "")
+        self.assertIsNone(reservation.evcs_confirmed_at)
+        self.assertIn("Rejected", reservation.evcs_error or "")
 
 
 class ChargerUrlFallbackTests(TestCase):

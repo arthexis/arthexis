@@ -47,6 +47,7 @@ CALL_ACTION_LABELS = {
     "DataTransfer": _("Data transfer"),
     "Reset": _("Reset"),
     "TriggerMessage": _("Trigger message"),
+    "ReserveNow": _("Reserve connector"),
 }
 
 CALL_EXPECTED_STATUSES: dict[str, set[str]] = {
@@ -56,6 +57,7 @@ CALL_EXPECTED_STATUSES: dict[str, set[str]] = {
     "DataTransfer": {"Accepted"},
     "Reset": {"Accepted"},
     "TriggerMessage": {"Accepted"},
+    "ReserveNow": {"Accepted"},
 }
 
 
