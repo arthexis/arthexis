@@ -89,7 +89,13 @@ def _github_repo_path(remote_url: str | None) -> str:
 def _github_commit_url_base() -> str:
     """Return the GitHub commit URL template for the configured repository."""
 
-    repo_path = _github_repo_path(_git_remote_url())
+    try:
+        remote_url = _git_remote_url()
+    except FileNotFoundError:  # pragma: no cover - depends on environment setup
+        logger.debug("Skipping GitHub commit URL generation; git executable not found")
+        remote_url = None
+
+    repo_path = _github_repo_path(remote_url)
     if not repo_path:
         return ""
     return f"https://github.com/{repo_path}/commit/{{sha}}"
