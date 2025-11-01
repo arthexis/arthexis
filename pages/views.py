@@ -1388,7 +1388,7 @@ def client_report(request):
         if not request.user.is_authenticated:
             form.is_valid()  # Run validation to surface field errors alongside auth error.
             form.add_error(
-                None, _("You must log in to generate client reports."),
+                None, _("You must log in to generate consumer reports."),
             )
         elif form.is_valid():
             throttle_seconds = getattr(settings, "CLIENT_REPORT_THROTTLE_SECONDS", 60)
@@ -1417,7 +1417,7 @@ def client_report(request):
                 form.add_error(
                     None,
                     _(
-                        "Client reports can only be generated periodically. Please wait before trying again."
+                        "Consumer reports can only be generated periodically. Please wait before trying again."
                     ),
                 )
             else:
@@ -1477,7 +1477,7 @@ def client_report(request):
                     messages.success(
                         request,
                         _(
-                            "Client report schedule created; future reports will be generated automatically."
+                            "Consumer report schedule created; future reports will be generated automatically."
                         ),
                     )
                 if disable_emails:

@@ -3824,6 +3824,11 @@ class ClientReportAdmin(EntityModelAdmin):
                 name="core_clientreport_generate",
             ),
             path(
+                "generate/action/",
+                self.admin_site.admin_view(self.generate_report),
+                name="core_clientreport_generate_report",
+            ),
+            path(
                 "download/<int:report_id>/",
                 self.admin_site.admin_view(self.download_view),
                 name="core_clientreport_download",
@@ -3891,7 +3896,7 @@ class ClientReportAdmin(EntityModelAdmin):
                 report.save(update_fields=["schedule"])
                 self.message_user(
                     request,
-                    "Client report schedule created; future reports will be generated automatically.",
+                    "Consumer report schedule created; future reports will be generated automatically.",
                     messages.SUCCESS,
                 )
             if disable_emails:
@@ -3919,18 +3924,40 @@ class ClientReportAdmin(EntityModelAdmin):
                 "report": report,
                 "schedule": schedule,
                 "download_url": download_url,
+                "opts": self.model._meta,
             }
         )
         return TemplateResponse(
             request, "admin/core/clientreport/generate.html", context
         )
 
+    def get_changelist_actions(self, request):
+        parent = getattr(super(), "get_changelist_actions", None)
+        actions: list[str] = []
+        if callable(parent):
+            parent_actions = parent(request)
+            if parent_actions:
+                actions.extend(parent_actions)
+        if "generate_report" not in actions:
+            actions.append("generate_report")
+        return actions
+
+    def generate_report(self, request):
+        return HttpResponseRedirect(reverse("admin:core_clientreport_generate"))
+
+    generate_report.label = _("Generate report")
+
     def download_view(self, request, report_id: int):
         report = get_object_or_404(ClientReport, pk=report_id)
         pdf_path = report.ensure_pdf()
         if not pdf_path.exists():
             raise Http404("Report file unavailable")
-        filename = f"consumer-report-{report.start_date}-{report.end_date}.pdf"
+        end_date = report.end_date
+        if hasattr(end_date, "isoformat"):
+            end_date_str = end_date.isoformat()
+        else:  # pragma: no cover - fallback for unexpected values
+            end_date_str = str(end_date)
+        filename = f"consumer-report-{end_date_str}.pdf"
         response = FileResponse(pdf_path.open("rb"), content_type="application/pdf")
         response["Content-Disposition"] = f'attachment; filename="{filename}"'
         return response

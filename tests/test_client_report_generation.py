@@ -74,8 +74,8 @@ class ClientReportGenerationTests(TestCase):
             },
         )
         self.assertEqual(resp.status_code, 200)
-        self.assertContains(resp, "log in</a> to generate client reports.")
-        self.assertContains(resp, "You must log in to generate client reports.")
+        self.assertContains(resp, "log in</a> to generate consumer reports.")
+        self.assertContains(resp, "You must log in to generate consumer reports.")
         self.assertFalse(ClientReport.objects.exists())
 
     def test_generate_report_authenticated(self):
@@ -169,7 +169,7 @@ class ClientReportGenerationTests(TestCase):
         second = self.client.post(url, payload)
         self.assertEqual(second.status_code, 200)
         self.assertContains(
-            second, "Client reports can only be generated periodically.", status_code=200
+            second, "Consumer reports can only be generated periodically.", status_code=200
         )
         self.assertEqual(ClientReport.objects.count(), 1)
 
