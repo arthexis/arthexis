@@ -35,11 +35,13 @@ Constelación Arthexis es una [suite de software](https://es.wikipedia.org/wiki/
   | `GetConfiguration` | Consultamos al dispositivo por los valores actuales de las claves de configuración seguidas. |
   | `RemoteStartTransaction` | Iniciamos sesiones de carga de forma remota para un cliente o token identificado. |
   | `RemoteStopTransaction` | Terminamos sesiones activas desde el centro de control. |
+  | `ReserveNow` | Reservamos conectores para sesiones futuras con asignación automática y seguimiento de confirmaciones. |
   | `Reset` | Solicitamos un reinicio suave o completo para recuperarnos de fallos. |
   | `TriggerMessage` | Pedimos al dispositivo un mensaje inmediato (por ejemplo estado o diagnósticos). |
 
-  **Hoja de ruta OCPP 1.6.** Las siguientes acciones del catálogo están en nuestra lista de tareas: `CancelReservation`, `ChangeConfiguration`, `ClearCache`, `ClearChargingProfile`, `GetCompositeSchedule`, `GetDiagnostics`, `GetLocalListVersion`, `ReserveNow`, `SendLocalList`, `SetChargingProfile`, `UnlockConnector`, `UpdateFirmware`.
+  **Hoja de ruta OCPP 1.6.** Las siguientes acciones del catálogo están en nuestra lista de tareas: `CancelReservation`, `ChangeConfiguration`, `ClearCache`, `ClearChargingProfile`, `GetCompositeSchedule`, `GetDiagnostics`, `GetLocalListVersion`, `SendLocalList`, `SetChargingProfile`, `UnlockConnector`, `UpdateFirmware`.
 
+- Reservas de puntos de carga con asignación automática de conectores, vinculación a cuentas de energía y RFIDs, y confirmación del EVCS.
 - Integración de [API](https://es.wikipedia.org/wiki/Interfaz_de_programaci%C3%B3n_de_aplicaciones) con [Odoo](https://www.odoo.com/) para:
   - Sincronizar credenciales de empleados mediante `res.users`
   - Consultar el catálogo de productos mediante `product.product`

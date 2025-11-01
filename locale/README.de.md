@@ -35,10 +35,13 @@ Die Arthexis-Konstellation ist eine [narrativ orientierte](https://de.wikipedia.
   | `GetConfiguration` | Fragen die aktuellen Werte der überwachten Konfigurationsschlüssel ab. |
   | `RemoteStartTransaction` | Starten Ladevorgänge remote für identifizierte Kundinnen und Kunden oder Tokens. |
   | `RemoteStopTransaction` | Beenden aktive Ladevorgänge aus der Leitwarte. |
+  | `ReserveNow` | Reservieren Anschlüsse für kommende Sitzungen mit automatischer Zuweisung und Bestätigungsnachverfolgung. |
   | `Reset` | Fordern einen Soft- oder Hard-Reset zur Fehlerbehebung an. |
   | `TriggerMessage` | Fordern sofortige Nachrichten an (z. B. Status oder Diagnose). |
 
-  **OCPP-1.6-Roadmap.** Folgende Katalog-Aktionen stehen auf unserer To-do-Liste: `CancelReservation`, `ChangeConfiguration`, `ClearCache`, `ClearChargingProfile`, `GetCompositeSchedule`, `GetDiagnostics`, `GetLocalListVersion`, `ReserveNow`, `SendLocalList`, `SetChargingProfile`, `UnlockConnector`, `UpdateFirmware`.
+  **OCPP-1.6-Roadmap.** Folgende Katalog-Aktionen stehen auf unserer To-do-Liste: `CancelReservation`, `ChangeConfiguration`, `ClearCache`, `ClearChargingProfile`, `GetCompositeSchedule`, `GetDiagnostics`, `GetLocalListVersion`, `SendLocalList`, `SetChargingProfile`, `UnlockConnector`, `UpdateFirmware`.
+
+- Ladepunktreservierungen mit automatischer Anschlusswahl, Verknüpfung zu Energiekonten und RFID-Tags sowie EVCS-Bestätigung.
 
 - [API](https://de.wikipedia.org/wiki/Programmierschnittstelle)-Integration mit [Odoo](https://www.odoo.com/), um:
   - Mitarbeiterzugänge über `res.users` zu synchronisieren

@@ -35,10 +35,13 @@ Costellazione Arthexis è una [suite software](https://it.wikipedia.org/wiki/Sui
   | `GetConfiguration` | Interroghiamo il dispositivo sui valori correnti delle chiavi di configurazione monitorate. |
   | `RemoteStartTransaction` | Avviamo da remoto una sessione di ricarica per clienti o token identificati. |
   | `RemoteStopTransaction` | Interrompiamo da remoto sessioni attive dal centro di controllo. |
+  | `ReserveNow` | Prenotiamo i connettori per le sessioni future con assegnazione automatica e tracciamento della conferma. |
   | `Reset` | Richiediamo un riavvio soft o hard per ripristinare guasti. |
   | `TriggerMessage` | Chiediamo al dispositivo un aggiornamento immediato (ad esempio stato o diagnostica). |
 
-  **Roadmap OCPP 1.6.** Le seguenti azioni del catalogo sono nel nostro backlog: `CancelReservation`, `ChangeConfiguration`, `ClearCache`, `ClearChargingProfile`, `GetCompositeSchedule`, `GetDiagnostics`, `GetLocalListVersion`, `ReserveNow`, `SendLocalList`, `SetChargingProfile`, `UnlockConnector`, `UpdateFirmware`.
+  **Roadmap OCPP 1.6.** Le seguenti azioni del catalogo sono nel nostro backlog: `CancelReservation`, `ChangeConfiguration`, `ClearCache`, `ClearChargingProfile`, `GetCompositeSchedule`, `GetDiagnostics`, `GetLocalListVersion`, `SendLocalList`, `SetChargingProfile`, `UnlockConnector`, `UpdateFirmware`.
+
+- Prenotazioni dei punti di ricarica con assegnazione automatica del connettore, collegamento agli Energy Account e ai RFID, e conferma EVCS.
 
 - Integrazione [API](https://it.wikipedia.org/wiki/Application_programming_interface) con [Odoo](https://www.odoo.com/) per:
   - Sincronizzare le credenziali dei dipendenti tramite `res.users`

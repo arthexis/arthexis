@@ -35,11 +35,13 @@ Arthexis Constellation is a [narrative-driven](https://en.wikipedia.org/wiki/Nar
   | `GetConfiguration` | Poll the device for the current values of tracked configuration keys. |
   | `RemoteStartTransaction` | Initiate a charging session remotely for an identified customer or token. |
   | `RemoteStopTransaction` | Terminate active charging sessions from the control center. |
+  | `ReserveNow` | Reserve connectors for upcoming sessions with automatic connector selection and confirmation tracking. |
   | `Reset` | Request a soft or hard reboot to recover from faults. |
   | `TriggerMessage` | Ask the device to send an immediate update (for example status or diagnostics). |
 
-  **OCPP 1.6 roadmap.** The following catalogue actions are in our backlog: `CancelReservation`, `ChangeConfiguration`, `ClearCache`, `ClearChargingProfile`, `GetCompositeSchedule`, `GetDiagnostics`, `GetLocalListVersion`, `ReserveNow`, `SendLocalList`, `SetChargingProfile`, `UnlockConnector`, `UpdateFirmware`.
+  **OCPP 1.6 roadmap.** The following catalogue actions are in our backlog: `CancelReservation`, `ChangeConfiguration`, `ClearCache`, `ClearChargingProfile`, `GetCompositeSchedule`, `GetDiagnostics`, `GetLocalListVersion`, `SendLocalList`, `SetChargingProfile`, `UnlockConnector`, `UpdateFirmware`.
 
+- Charge point reservations with automated connector assignment, energy account and RFID linkage, and EVCS confirmation tracking.
 - [API](https://en.wikipedia.org/wiki/API) integration with [Odoo](https://www.odoo.com/), syncing:
   - Employee credentials via `res.users`
   - Product catalog lookups via `product.product`
