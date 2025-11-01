@@ -18,6 +18,8 @@ import ipaddress
 import socket
 from core.log_paths import select_log_dir
 from django.utils.translation import gettext_lazy as _
+from datetime import timedelta
+
 from celery.schedules import crontab
 from django.http import request as http_request
 from django.http.request import split_domain_port
@@ -666,8 +668,8 @@ CELERY_BEAT_SCHEDULE = {
         "task": "ocpp.tasks.schedule_daily_charge_point_configuration_checks",
         "schedule": crontab(minute=0, hour=0),
     },
-    "ocpp_remote_sync": {
-        "task": "ocpp.tasks.sync_remote_chargers",
-        "schedule": crontab(minute="*"),
+    "ocpp_forwarding_push": {
+        "task": "ocpp.tasks.push_forwarded_charge_points",
+        "schedule": timedelta(seconds=5),
     },
 }

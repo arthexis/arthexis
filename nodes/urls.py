@@ -13,6 +13,11 @@ urlpatterns = [
     path("rfid/import/", views.import_rfids, name="node-rfid-import"),
     path("network/chargers/", views.network_chargers, name="node-network-chargers"),
     path(
+        "network/chargers/forward/",
+        views.forward_chargers,
+        name="node-network-forward-chargers",
+    ),
+    path(
         "network/chargers/action/",
         views.network_charger_action,
         name="node-network-charger-action",

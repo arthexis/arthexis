@@ -37,6 +37,11 @@ from django.db.models import Q
 from core.models import RFID
 from ocpp import store
 from ocpp.models import Charger
+from ocpp.network import (
+    apply_remote_charger_payload,
+    serialize_charger_for_network,
+    sync_transactions_payload,
+)
 from ocpp.transactions_io import export_transactions
 from asgiref.sync import async_to_sync
 
@@ -179,65 +184,6 @@ def _assign_groups_and_permissions(user, payload: Mapping) -> None:
                 perm_objs.append(perm)
     if perm_objs:
         user.user_permissions.set(perm_objs)
-
-
-def _serialize_charger_for_network(charger: Charger) -> dict[str, object]:
-    simple_fields = [
-        "display_name",
-        "language",
-        "public_display",
-        "require_rfid",
-        "firmware_status",
-        "firmware_status_info",
-        "last_status",
-        "last_error_code",
-        "last_status_vendor_info",
-        "availability_state",
-        "availability_requested_state",
-        "availability_request_status",
-        "availability_request_details",
-        "temperature",
-        "temperature_unit",
-        "diagnostics_status",
-        "diagnostics_location",
-    ]
-    datetime_fields = [
-        "firmware_timestamp",
-        "last_heartbeat",
-        "availability_state_updated_at",
-        "availability_requested_at",
-        "availability_request_status_at",
-        "diagnostics_timestamp",
-        "last_status_timestamp",
-        "last_online_at",
-    ]
-
-    data: dict[str, object] = {
-        "charger_id": charger.charger_id,
-        "connector_id": charger.connector_id,
-        "allow_remote": charger.allow_remote,
-        "export_transactions": charger.export_transactions,
-        "last_meter_values": charger.last_meter_values or {},
-    }
-
-    for field in simple_fields:
-        data[field] = getattr(charger, field)
-
-    for field in datetime_fields:
-        value = getattr(charger, field)
-        data[field] = value.isoformat() if value else None
-
-    if charger.location:
-        location = charger.location
-        data["location"] = {
-            "name": location.name,
-            "latitude": location.latitude,
-            "longitude": location.longitude,
-            "zone": location.zone,
-            "contract_type": location.contract_type,
-        }
-
-    return data
 
 
 def _normalize_requested_chargers(values) -> list[tuple[str, int | None, object]]:
@@ -916,7 +862,7 @@ def network_chargers(request):
                 filters |= Q(charger_id=serial, connector_id=connector_value)
         qs = qs.filter(filters)
 
-    chargers = [_serialize_charger_for_network(charger) for charger in qs]
+    chargers = [serialize_charger_for_network(charger) for charger in qs]
 
     include_transactions = bool(body.get("include_transactions"))
     response_data: dict[str, object] = {"chargers": chargers}
@@ -931,6 +877,55 @@ def network_chargers(request):
         response_data["transactions"] = tx_payload
 
     return JsonResponse(response_data)
+
+
+@csrf_exempt
+def forward_chargers(request):
+    """Receive forwarded charger metadata and transactions from trusted peers."""
+
+    if request.method != "POST":
+        return JsonResponse({"detail": "POST required"}, status=405)
+
+    try:
+        body = json.loads(request.body.decode() or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"detail": "invalid json"}, status=400)
+
+    requester = body.get("requester")
+    if not requester:
+        return JsonResponse({"detail": "requester required"}, status=400)
+
+    requester_mac = _clean_requester_hint(body.get("requester_mac"))
+    requester_public_key = _clean_requester_hint(
+        body.get("requester_public_key"), strip=False
+    )
+
+    node, error_response = _load_signed_node(
+        request,
+        requester,
+        mac_address=requester_mac,
+        public_key=requester_public_key,
+    )
+    if error_response is not None:
+        return error_response
+
+    processed = 0
+    chargers_payload = body.get("chargers", [])
+    if not isinstance(chargers_payload, list):
+        chargers_payload = []
+    for entry in chargers_payload:
+        if not isinstance(entry, Mapping):
+            continue
+        charger = apply_remote_charger_payload(node, entry)
+        if charger:
+            processed += 1
+
+    imported = 0
+    transactions_payload = body.get("transactions")
+    if isinstance(transactions_payload, Mapping):
+        imported = sync_transactions_payload(transactions_payload)
+
+    return JsonResponse({"status": "ok", "chargers": processed, "transactions": imported})
 
 
 def _require_local_origin(charger: Charger) -> bool:
