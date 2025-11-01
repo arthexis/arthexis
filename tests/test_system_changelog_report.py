@@ -101,3 +101,14 @@ def test_latest_release_changelog_includes_url(tmp_path, monkeypatch):
     release = system._latest_release_changelog()  # noqa: SLF001
 
     assert release["entries"][0]["url"] == "https://github.com/example/project/commit/def67890"
+
+
+def test_github_commit_url_base_handles_missing_git(monkeypatch):
+    def raise_file_not_found(remote="origin"):
+        raise FileNotFoundError
+
+    monkeypatch.setattr(system, "_git_remote_url", raise_file_not_found)
+
+    url = system._github_commit_url("abc12345")  # noqa: SLF001
+
+    assert url == ""
