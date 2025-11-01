@@ -66,6 +66,7 @@ from .models import (
 )
 from .backends import OutboxEmailBackend
 from .tasks import capture_node_screenshot, poll_unreachable_upstream, sample_clipboard
+from ocpp.models import Charger
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import serialization, hashes
 from core.models import Package, PackageRelease, SecurityGroup, RFID, EnergyAccount, Todo
@@ -3479,6 +3480,82 @@ class NetMessageSignatureTests(TestCase):
         self.assertTrue(signature_one)
         self.assertTrue(signature_two)
         self.assertNotEqual(signature_one, signature_two)
+
+
+class NetworkChargerActionSecurityTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.local_node = Node.objects.create(
+            hostname="local-node",
+            address="127.0.0.1",
+            port=8000,
+            mac_address="00:aa:bb:cc:dd:10",
+            public_endpoint="local-endpoint",
+        )
+        self.authorized_node = Node.objects.create(
+            hostname="authorized-node",
+            address="127.0.0.2",
+            port=8001,
+            mac_address="00:aa:bb:cc:dd:11",
+            public_endpoint="authorized-endpoint",
+        )
+        self.unauthorized_node, self.unauthorized_key = self._create_signed_node(
+            "unauthorized-node",
+            mac_suffix=0x12,
+        )
+        self.charger = Charger.objects.create(
+            charger_id="SECURE-TEST-1",
+            allow_remote=True,
+            manager_node=self.authorized_node,
+            node_origin=self.local_node,
+        )
+
+    def _create_signed_node(self, hostname: str, *, mac_suffix: int):
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        public_bytes = key.public_key().public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        node = Node.objects.create(
+            hostname=hostname,
+            address="10.0.0.{:d}".format(mac_suffix),
+            port=8020,
+            mac_address="00:aa:bb:cc:dd:{:02x}".format(mac_suffix),
+            public_key=public_bytes.decode(),
+            public_endpoint=f"{hostname}-endpoint",
+        )
+        return node, key
+
+    def test_rejects_requests_from_unmanaged_nodes(self):
+        url = reverse("node-network-charger-action")
+        payload = {
+            "requester": str(self.unauthorized_node.uuid),
+            "charger_id": self.charger.charger_id,
+            "action": "reset",
+        }
+        body = json.dumps(payload).encode()
+        signature = self.unauthorized_key.sign(
+            body,
+            padding.PKCS1v15(),
+            hashes.SHA256(),
+        )
+        headers = {"HTTP_X_SIGNATURE": base64.b64encode(signature).decode()}
+
+        with patch.object(Node, "get_local", return_value=self.local_node):
+            response = self.client.post(
+                url,
+                data=body,
+                content_type="application/json",
+                **headers,
+            )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(
+            response.json().get("detail"),
+            "requester does not manage this charger",
+        )
+
+
 class StartupNotificationTests(TestCase):
     def test_startup_notification_uses_hostname_and_revision(self):
         from nodes.apps import _startup_notification

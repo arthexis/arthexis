@@ -1212,6 +1212,14 @@ def network_charger_action(request):
     if not _require_local_origin(charger):
         return JsonResponse({"detail": "charger is not managed by this node"}, status=403)
 
+    authorized_node_ids = {
+        pk for pk in (charger.manager_node_id, charger.node_origin_id) if pk
+    }
+    if authorized_node_ids and node and node.pk not in authorized_node_ids:
+        return JsonResponse(
+            {"detail": "requester does not manage this charger"}, status=403
+        )
+
     action = body.get("action")
     handler = REMOTE_ACTIONS.get(action or "")
     if handler is None:
