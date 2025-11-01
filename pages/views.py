@@ -66,6 +66,7 @@ from core.models import (
     SecurityGroup,
     Todo,
 )
+from ocpp.models import Charger
 
 try:  # pragma: no cover - optional dependency guard
     from graphviz import Digraph
@@ -1269,6 +1270,14 @@ class ClientReportForm(forms.Form):
         input_formats=["%Y-%m"],
         help_text=_("Generates the report for the calendar month that you select."),
     )
+    chargers = forms.ModelMultipleChoiceField(
+        label=_("Charge points"),
+        queryset=Charger.objects.filter(connector_id__isnull=True)
+        .order_by("display_name", "charger_id"),
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+        help_text=_("Choose which charge points are included in the report."),
+    )
     owner = forms.ModelChoiceField(
         queryset=get_user_model().objects.all(),
         required=False,
@@ -1299,6 +1308,7 @@ class ClientReportForm(forms.Form):
         super().__init__(*args, **kwargs)
         if request and getattr(request, "user", None) and request.user.is_authenticated:
             self.fields["owner"].initial = request.user.pk
+        self.fields["chargers"].widget.attrs["class"] = "charger-options"
 
     def clean(self):
         cleaned = super().clean()
@@ -1399,14 +1409,32 @@ def client_report(request):
                 recipients = (
                     form.cleaned_data.get("destinations") if enable_emails else []
                 )
+                chargers = list(form.cleaned_data.get("chargers") or [])
                 report = ClientReport.generate(
                     form.cleaned_data["start"],
                     form.cleaned_data["end"],
                     owner=owner,
                     recipients=recipients,
                     disable_emails=disable_emails,
+                    chargers=chargers,
                 )
                 report.store_local_copy()
+                if chargers:
+                    report.chargers.set(chargers)
+                if enable_emails and recipients:
+                    delivered = report.send_delivery(
+                        to=recipients,
+                        cc=[],
+                        outbox=ClientReport.resolve_outbox_for_owner(owner),
+                        reply_to=ClientReport.resolve_reply_to_for_owner(owner),
+                    )
+                    if delivered:
+                        report.recipients = delivered
+                        report.save(update_fields=["recipients"])
+                        messages.success(
+                            request,
+                            _("Consumer report emailed to the selected recipients."),
+                        )
                 recurrence = form.cleaned_data.get("recurrence")
                 if recurrence and recurrence != ClientReportSchedule.PERIODICITY_NONE:
                     schedule = ClientReportSchedule.objects.create(
@@ -1416,6 +1444,8 @@ def client_report(request):
                         email_recipients=recipients,
                         disable_emails=disable_emails,
                     )
+                    if chargers:
+                        schedule.chargers.set(chargers)
                     report.schedule = schedule
                     report.save(update_fields=["schedule"])
                     messages.success(
@@ -1459,7 +1489,6 @@ def client_report(request):
         "schedule": schedule,
         "login_url": login_url,
         "download_url": download_url,
-        "previous_reports": _client_report_history(request),
     }
     return render(request, "pages/client_report.html", context)
 
@@ -1478,32 +1507,6 @@ def client_report_download(request, report_id: int):
     response = FileResponse(pdf_path.open("rb"), content_type="application/pdf")
     response["Content-Disposition"] = f'attachment; filename="{filename}"'
     return response
-
-
-def _client_report_history(request, limit: int = 20):
-    if not request.user.is_authenticated:
-        return []
-    qs = ClientReport.objects.order_by("-created_on")
-    if not request.user.is_staff:
-        qs = qs.filter(owner=request.user)
-    history = []
-    for report in qs[:limit]:
-        totals = report.rows_for_display.get("totals", {})
-        history.append(
-            {
-                "instance": report,
-                "download_url": reverse("pages:client-report-download", args=[report.pk]),
-                "email_enabled": not report.disable_emails,
-                "recipients": report.recipients or [],
-                "totals": {
-                    "total_kw": totals.get("total_kw", 0.0),
-                    "total_kw_period": totals.get("total_kw_period", 0.0),
-                },
-            }
-        )
-    return history
-
-
 def _get_request_language_code(request) -> str:
     language_code = ""
     if hasattr(request, "session"):
