@@ -9,19 +9,30 @@ Die Arthexis-Konstellation ist eine [narrativ orientierte](https://de.wikipedia.
 
 ## Aktuelle Funktionen
 
-- Kompatibel mit dem [Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/) als zentrales System und unterstützt:
-  - Lebenszyklus und Sitzungen
-    - `BootNotification`
-    - `Heartbeat`
-    - `StatusNotification`
-    - `StartTransaction`
-    - `StopTransaction`
-  - Zugriff und Messung
-    - `Authorize`
-    - `MeterValues`
-  - Wartung und Firmware
-    - `DiagnosticsStatusNotification`
-    - `FirmwareStatusNotification`
+- Kompatibel mit dem [Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/) als zentrales System. Unterstützte Aktionen im Überblick.
+
+  | Richtung | Aktion | Was wir erledigen |
+  | --- | --- | --- |
+  | Ladepunkt → CSMS | `Authorize` | Validieren RFID- oder Token-Autorisierungsanfragen vor Sitzungsstart. |
+  | Ladepunkt → CSMS | `BootNotification` | Registrieren den Ladepunkt und aktualisieren Identität, Firmware und Status. |
+  | Ladepunkt → CSMS | `DataTransfer` | Akzeptieren herstellerspezifische Nutzdaten und protokollieren die Ergebnisse. |
+  | Ladepunkt → CSMS | `DiagnosticsStatusNotification` | Verfolgen den Fortschritt von aus dem Backoffice gestarteten Diagnoseuploads. |
+  | Ladepunkt → CSMS | `FirmwareStatusNotification` | Verfolgen Firmware-Update-Lebenszyklusmeldungen der Ladepunkte. |
+  | Ladepunkt → CSMS | `Heartbeat` | Halten die Websocket-Sitzung aktiv und aktualisieren den Zeitstempel der letzten Verbindung. |
+  | Ladepunkt → CSMS | `MeterValues` | Speichern periodische Energie- und Leistungswerte während aktiver Transaktionen. |
+  | Ladepunkt → CSMS | `StartTransaction` | Erstellen Ladevorgänge mit Startzählerstand und Identifikationsdaten. |
+  | Ladepunkt → CSMS | `StatusNotification` | Spiegeln Verfügbarkeits- und Fehlerzustände der Anschlüsse in Echtzeit. |
+  | Ladepunkt → CSMS | `StopTransaction` | Schließen Ladevorgänge und erfassen Endzählerstand sowie Stopgrund. |
+  | CSMS → Ladepunkt | `ChangeAvailability` | Schalten Anschlüsse oder die gesamte Station zwischen betriebsbereit und außer Betrieb. |
+  | CSMS → Ladepunkt | `DataTransfer` | Senden herstellerspezifische Befehle und protokollieren die Antwort des Ladepunkts. |
+  | CSMS → Ladepunkt | `GetConfiguration` | Fragen die aktuellen Werte der überwachten Konfigurationsschlüssel ab. |
+  | CSMS → Ladepunkt | `RemoteStartTransaction` | Starten Ladevorgänge remote für identifizierte Kundinnen und Kunden oder Tokens. |
+  | CSMS → Ladepunkt | `RemoteStopTransaction` | Beenden aktive Ladevorgänge aus der Leitwarte. |
+  | CSMS → Ladepunkt | `Reset` | Fordern einen Soft- oder Hard-Reset zur Fehlerbehebung an. |
+  | CSMS → Ladepunkt | `TriggerMessage` | Fordern sofortige Nachrichten an (z. B. Status oder Diagnose). |
+
+  **OCPP-1.6-Roadmap.** Folgende Katalog-Aktionen stehen auf unserer To-do-Liste: `CancelReservation`, `ChangeConfiguration`, `ClearCache`, `ClearChargingProfile`, `GetCompositeSchedule`, `GetDiagnostics`, `GetLocalListVersion`, `ReserveNow`, `SendLocalList`, `SetChargingProfile`, `UnlockConnector`, `UpdateFirmware`.
+
 - [API](https://de.wikipedia.org/wiki/Programmierschnittstelle)-Integration mit [Odoo](https://www.odoo.com/), um:
   - Mitarbeiterzugänge über `res.users` zu synchronisieren
   - Den Produktkatalog über `product.product` abzufragen

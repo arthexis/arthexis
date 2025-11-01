@@ -9,19 +9,30 @@ Costellazione Arthexis è una [suite software](https://it.wikipedia.org/wiki/Sui
 
 ## Caratteristiche attuali
 
-- Compatibile con il [Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/) come sistema centrale, gestendo:
-  - Ciclo di vita e sessioni
-    - `BootNotification`
-    - `Heartbeat`
-    - `StatusNotification`
-    - `StartTransaction`
-    - `StopTransaction`
-  - Accesso e misurazione
-    - `Authorize`
-    - `MeterValues`
-  - Manutenzione e firmware
-    - `DiagnosticsStatusNotification`
-    - `FirmwareStatusNotification`
+- Compatibile con il [Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/) come sistema centrale. Le azioni supportate sono riassunte di seguito.
+
+  | Direzione | Azione | Cosa facciamo |
+  | --- | --- | --- |
+  | Punto di ricarica → CSMS | `Authorize` | Convalidiamo richieste di autorizzazione RFID o token prima dell'inizio della sessione. |
+  | Punto di ricarica → CSMS | `BootNotification` | Registriamo il punto di ricarica e aggiorniamo identità, firmware e stato. |
+  | Punto di ricarica → CSMS | `DataTransfer` | Accettiamo payload specifici del fornitore e registriamo gli esiti. |
+  | Punto di ricarica → CSMS | `DiagnosticsStatusNotification` | Monitoriamo l'avanzamento dei caricamenti diagnostici avviati dal backoffice. |
+  | Punto di ricarica → CSMS | `FirmwareStatusNotification` | Monitoriamo le fasi degli aggiornamenti firmware segnalate dai punti di ricarica. |
+  | Punto di ricarica → CSMS | `Heartbeat` | Manteniamo viva la sessione websocket e aggiorniamo il timestamp dell'ultima attività. |
+  | Punto di ricarica → CSMS | `MeterValues` | Salviamo letture periodiche di energia e potenza durante la transazione. |
+  | Punto di ricarica → CSMS | `StartTransaction` | Creiamo sessioni di ricarica con valori iniziali del contatore e dati identificativi. |
+  | Punto di ricarica → CSMS | `StatusNotification` | Riflettiamo in tempo reale disponibilità e stati di guasto dei connettori. |
+  | Punto di ricarica → CSMS | `StopTransaction` | Chiudiamo le sessioni di ricarica registrando valori finali e motivazioni di chiusura. |
+  | CSMS → Punto di ricarica | `ChangeAvailability` | Impostiamo connettori o stazione tra operativa e fuori servizio. |
+  | CSMS → Punto di ricarica | `DataTransfer` | Inviamo comandi specifici del fornitore e registriamo la risposta del punto di ricarica. |
+  | CSMS → Punto di ricarica | `GetConfiguration` | Interroghiamo il dispositivo sui valori correnti delle chiavi di configurazione monitorate. |
+  | CSMS → Punto di ricarica | `RemoteStartTransaction` | Avviamo da remoto una sessione di ricarica per clienti o token identificati. |
+  | CSMS → Punto di ricarica | `RemoteStopTransaction` | Interrompiamo da remoto sessioni attive dal centro di controllo. |
+  | CSMS → Punto di ricarica | `Reset` | Richiediamo un riavvio soft o hard per ripristinare guasti. |
+  | CSMS → Punto di ricarica | `TriggerMessage` | Chiediamo al dispositivo un aggiornamento immediato (ad esempio stato o diagnostica). |
+
+  **Roadmap OCPP 1.6.** Le seguenti azioni del catalogo sono nel nostro backlog: `CancelReservation`, `ChangeConfiguration`, `ClearCache`, `ClearChargingProfile`, `GetCompositeSchedule`, `GetDiagnostics`, `GetLocalListVersion`, `ReserveNow`, `SendLocalList`, `SetChargingProfile`, `UnlockConnector`, `UpdateFirmware`.
+
 - Integrazione [API](https://it.wikipedia.org/wiki/Application_programming_interface) con [Odoo](https://www.odoo.com/) per:
   - Sincronizzare le credenziali dei dipendenti tramite `res.users`
   - Consultare il catalogo prodotti tramite `product.product`
