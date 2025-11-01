@@ -5,7 +5,7 @@
 {% block content %}
 <div class="row">
   {% if toc %}
-  <div class="col-12 col-lg-3 mb-4 mb-lg-0">
+  <div class="col-12 col-lg-3 mt-4 mt-lg-0 order-2 order-lg-1">
     <div class="reader-sidebar">
       <nav class="toc">
         <h4>Contents</h4>
@@ -25,7 +25,7 @@
     </div>
   </div>
   {% endif %}
-  <div class="{% if toc %}col-12 col-lg-9{% else %}col-12{% endif %}">
+  <div class="{% if toc %}col-12 col-lg-9 order-1 order-lg-2{% else %}col-12{% endif %}">
     {% if edit_url %}
       <div class="d-flex justify-content-end mb-3">
         <a class="btn btn-outline-primary btn-sm" href="{{ edit_url }}">
