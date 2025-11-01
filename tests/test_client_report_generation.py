@@ -14,6 +14,7 @@ django.setup()
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.cache import cache
+from django.core.exceptions import ValidationError
 from django.test import Client, TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -172,6 +173,19 @@ class ClientReportGenerationTests(TestCase):
             second, "Consumer reports can only be generated periodically.", status_code=200
         )
         self.assertEqual(ClientReport.objects.count(), 1)
+
+    def test_generate_rejects_control_characters_in_title(self):
+        day = timezone.now().date()
+
+        with self.assertRaises(ValidationError):
+            ClientReport.generate(
+                day,
+                day,
+                owner=self.user,
+                chargers=[self.charger],
+                language="en",
+                title="Bad\rTitle",
+            )
 
     def test_destinations_help_text_and_parser_alignment(self):
         form = ClientReportForm()

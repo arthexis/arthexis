@@ -17,6 +17,7 @@ from django.conf import settings
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 
 from core.models import ClientReport, ClientReportSchedule, EnergyAccount, RFID
 from nodes.models import NetMessage, NodeRole
@@ -97,6 +98,15 @@ class ClientReportScheduleRunTests(TestCase):
         self.assertTrue(NetMessage.objects.exists())
         message = NetMessage.objects.latest("created")
         self.assertIn("Client report", message.subject)
+
+    def test_schedule_rejects_control_characters_in_title(self):
+        with self.assertRaises(ValidationError):
+            ClientReportSchedule.objects.create(
+                owner=self.owner,
+                created_by=self.owner,
+                periodicity=ClientReportSchedule.PERIODICITY_DAILY,
+                title="Problematic\nTitle",
+            )
 
     def test_daily_task_generates_missing_reports(self):
         schedule = ClientReportSchedule.objects.create(
