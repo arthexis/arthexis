@@ -3,7 +3,8 @@ amqp==5.3.1
 annotated-types==0.7.0
 anyio==4.9.0
 asgiref==3.10.0
-atproto==0.0.63
+# Allow newer atproto releases that support future Python versions.
+atproto>=0.0.63,<0.1.0
 attrs==25.3.0
 autobahn==24.4.2
 Automat==25.4.16
