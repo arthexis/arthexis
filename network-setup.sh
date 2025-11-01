@@ -66,6 +66,7 @@ OTHER_OPTIONS_USED=false
 STATUS_ONLY=false
 DHCP_OVERRIDE=""
 ETH0_MODE_SPECIFIED=false
+WLAN1_DETECTED=true
 ETH0_DHCP_SERVER=""
 
 join_by() {
@@ -89,6 +90,9 @@ describe_device_status() {
     state=$(nmcli -t -f DEVICE,STATE device status 2>/dev/null | awk -F: -v dev="$dev" '$1==dev {print $2; exit}' || true)
     if [[ -z "$state" ]]; then
         echo "  $dev: device not detected"
+        if [[ "$dev" == "wlan1" ]]; then
+            echo "Warning: device wlan1 not found; wlan0 and eth0 clients cannot reach the internet without it." >&2
+        fi
         return
     fi
 
@@ -695,6 +699,14 @@ if [[ $AP_SET_PASSWORD == true && $OTHER_OPTIONS_USED == true ]]; then
     exit 1
 fi
 
+# Record wlan1 presence for later routing rules and provide early feedback.
+if command -v nmcli >/dev/null 2>&1; then
+    if ! nmcli -t -f DEVICE device status 2>/dev/null | grep -Fxq "wlan1"; then
+        echo "Warning: device wlan1 not found; wlan0 and eth0 clients will not have upstream internet access." >&2
+        WLAN1_DETECTED=false
+    fi
+fi
+
 # Ensure D-Bus and NetworkManager services are available
 ensure_service() {
     local svc="$1"
@@ -703,6 +715,27 @@ ensure_service() {
         echo "Starting $svc service..."
         systemctl start "$svc" >/dev/null 2>&1 || echo "Warning: unable to start $svc" >&2
     fi
+}
+
+ensure_forwarding_rule() {
+    local ingress="$1"
+    local egress="$2"
+    if ! command -v iptables >/dev/null 2>&1; then
+        return
+    fi
+    iptables -C FORWARD -i "$ingress" -o "$egress" -j ACCEPT 2>/dev/null || \
+        iptables -A FORWARD -i "$ingress" -o "$egress" -j ACCEPT
+    iptables -C FORWARD -i "$egress" -o "$ingress" -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || \
+        iptables -A FORWARD -i "$egress" -o "$ingress" -m state --state RELATED,ESTABLISHED -j ACCEPT
+}
+
+ensure_masquerade_rule() {
+    local egress="$1"
+    if ! command -v iptables >/dev/null 2>&1; then
+        return
+    fi
+    iptables -t nat -C POSTROUTING -o "$egress" -j MASQUERADE 2>/dev/null || \
+        iptables -t nat -A POSTROUTING -o "$egress" -j MASQUERADE
 }
 
 # Prompt helper for interactive mode
@@ -1166,8 +1199,10 @@ if [[ $RUN_AP == true ]]; then
             while iptables -C FORWARD -i wlan0 -j DROP 2>/dev/null; do
                 iptables -D FORWARD -i wlan0 -j DROP
             done
-            iptables -C FORWARD -i wlan0 -o wlan1 -j DROP 2>/dev/null || \
-                iptables -A FORWARD -i wlan0 -o wlan1 -j DROP
+        fi
+        if [[ $WLAN1_DETECTED == true ]]; then
+            ensure_forwarding_rule wlan0 wlan1
+            ensure_masquerade_rule wlan1
         fi
         if ! nmcli -t -f NAME connection show --active | grep -Fxq "$AP_NAME"; then
             echo "Access point $AP_NAME failed to start." >&2
@@ -1372,6 +1407,10 @@ if [[ $RUN_CONFIGURE_NET == true ]]; then
             fi
         fi
         nmcli connection up "$target_conn" >/dev/null 2>&1 || true
+        if [[ "$ETH0_MODE_EFFECTIVE" != "client" && $WLAN1_DETECTED == true ]]; then
+            ensure_forwarding_rule eth0 wlan1
+            ensure_masquerade_rule wlan1
+        fi
         if [[ "$ETH0_MODE_EFFECTIVE" == "client" ]]; then
             ensure_dhcp_client_registration eth0
             echo "Configured eth0 for DHCP client mode via NetworkManager profile '$ETH0_CONNECTION_CLIENT'."
