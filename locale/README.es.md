@@ -9,19 +9,30 @@ Constelación Arthexis es una [suite de software](https://es.wikipedia.org/wiki/
 
 ## Características actuales
 
-- Compatible con el [Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/) como sistema central, gestionando:
-  - Ciclo de vida y sesiones
-    - `BootNotification`
-    - `Heartbeat`
-    - `StatusNotification`
-    - `StartTransaction`
-    - `StopTransaction`
-  - Acceso y medición
-    - `Authorize`
-    - `MeterValues`
-  - Mantenimiento y firmware
-    - `DiagnosticsStatusNotification`
-    - `FirmwareStatusNotification`
+- Compatible con el [Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/) como sistema central. Las acciones soportadas se resumen a continuación.
+
+  | Dirección | Acción | Qué hacemos |
+  | --- | --- | --- |
+  | Punto de carga → CSMS | `Authorize` | Validamos solicitudes de autorización por RFID o token antes de iniciar una sesión. |
+  | Punto de carga → CSMS | `BootNotification` | Registramos el punto de carga y actualizamos identidad, firmware y estado. |
+  | Punto de carga → CSMS | `DataTransfer` | Aceptamos cargas útiles específicas del proveedor y registramos los resultados. |
+  | Punto de carga → CSMS | `DiagnosticsStatusNotification` | Seguimos el progreso de las cargas de diagnósticos iniciadas desde la oficina central. |
+  | Punto de carga → CSMS | `FirmwareStatusNotification` | Seguimos los eventos del ciclo de vida de actualizaciones de firmware desde los puntos de carga. |
+  | Punto de carga → CSMS | `Heartbeat` | Mantenemos viva la sesión websocket y actualizamos la última conexión. |
+  | Punto de carga → CSMS | `MeterValues` | Guardamos lecturas periódicas de energía y potencia mientras la transacción está activa. |
+  | Punto de carga → CSMS | `StartTransaction` | Creamos sesiones de carga con valores iniciales y datos de identificación. |
+  | Punto de carga → CSMS | `StatusNotification` | Reflejamos la disponibilidad y los fallos del conector en tiempo real. |
+  | Punto de carga → CSMS | `StopTransaction` | Cerramos sesiones de carga, capturando lecturas finales y motivos de cierre. |
+  | CSMS → Punto de carga | `ChangeAvailability` | Cambiamos conectores o estaciones completas entre estados operativos e inoperativos. |
+  | CSMS → Punto de carga | `DataTransfer` | Enviamos comandos específicos del proveedor y registramos la respuesta. |
+  | CSMS → Punto de carga | `GetConfiguration` | Consultamos al dispositivo por los valores actuales de las claves de configuración seguidas. |
+  | CSMS → Punto de carga | `RemoteStartTransaction` | Iniciamos sesiones de carga de forma remota para un cliente o token identificado. |
+  | CSMS → Punto de carga | `RemoteStopTransaction` | Terminamos sesiones activas desde el centro de control. |
+  | CSMS → Punto de carga | `Reset` | Solicitamos un reinicio suave o completo para recuperarnos de fallos. |
+  | CSMS → Punto de carga | `TriggerMessage` | Pedimos al dispositivo un mensaje inmediato (por ejemplo estado o diagnósticos). |
+
+  **Hoja de ruta OCPP 1.6.** Las siguientes acciones del catálogo están en nuestra lista de tareas: `CancelReservation`, `ChangeConfiguration`, `ClearCache`, `ClearChargingProfile`, `GetCompositeSchedule`, `GetDiagnostics`, `GetLocalListVersion`, `ReserveNow`, `SendLocalList`, `SetChargingProfile`, `UnlockConnector`, `UpdateFirmware`.
+
 - Integración de [API](https://es.wikipedia.org/wiki/Interfaz_de_programaci%C3%B3n_de_aplicaciones) con [Odoo](https://www.odoo.com/) para:
   - Sincronizar credenciales de empleados mediante `res.users`
   - Consultar el catálogo de productos mediante `product.product`
