@@ -8,7 +8,7 @@ from django.db.models import Q
 from django.db.models.functions import Lower, Length
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.utils.translation import gettext_lazy as _
+from django.utils.translation import gettext_lazy as _, gettext, override
 from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 from django.core.exceptions import ValidationError
 from django.apps import apps
@@ -33,7 +33,7 @@ import re
 from io import BytesIO
 from django.core.files.base import ContentFile
 import qrcode
-from django.utils import timezone
+from django.utils import timezone, formats
 from django.utils.dateparse import parse_datetime
 import uuid
 from pathlib import Path
@@ -50,6 +50,42 @@ defused_xmlrpc.monkey_patch()
 xmlrpc_client = defused_xmlrpc.xmlrpc_client
 
 logger = logging.getLogger(__name__)
+
+
+def _available_language_codes() -> set[str]:
+    return {code.lower() for code, _ in getattr(settings, "LANGUAGES", [])}
+
+
+def default_report_language() -> str:
+    configured = getattr(settings, "LANGUAGE_CODE", "en") or "en"
+    configured = configured.replace("_", "-").lower()
+    base = configured.split("-", 1)[0]
+    available = _available_language_codes()
+    if base in available:
+        return base
+    if configured in available:
+        return configured
+    if available:
+        return next(iter(sorted(available)))
+    return "en"
+
+
+def normalize_report_language(language: str | None) -> str:
+    default = default_report_language()
+    if not language:
+        return default
+    candidate = str(language).strip().lower()
+    if not candidate:
+        return default
+    candidate = candidate.replace("_", "-")
+    available = _available_language_codes()
+    if candidate in available:
+        return candidate
+    base = candidate.split("-", 1)[0]
+    if base in available:
+        return base
+    return default
+
 
 from .entity import Entity, EntityUserManager, EntityManager
 from .release import (
@@ -2722,6 +2758,17 @@ class ClientReportSchedule(Entity):
     periodicity = models.CharField(
         max_length=12, choices=PERIODICITY_CHOICES, default=PERIODICITY_NONE
     )
+    language = models.CharField(
+        max_length=12,
+        choices=settings.LANGUAGES,
+        default=default_report_language,
+    )
+    title = models.CharField(
+        max_length=200,
+        blank=True,
+        default="",
+        verbose_name=_("Title"),
+    )
     email_recipients = models.JSONField(default=list, blank=True)
     disable_emails = models.BooleanField(default=False)
     chargers = models.ManyToManyField(
@@ -2752,6 +2799,9 @@ class ClientReportSchedule(Entity):
         return f"Client Report Schedule ({owner})"
 
     def save(self, *args, **kwargs):
+        if self.language:
+            self.language = normalize_report_language(self.language)
+        self.title = (self.title or "").strip()
         sync = kwargs.pop("sync_task", True)
         super().save(*args, **kwargs)
         if sync and self.pk:
@@ -2993,6 +3043,8 @@ class ClientReportSchedule(Entity):
                 recipients=self.email_recipients,
                 disable_emails=self.disable_emails,
                 chargers=list(self.chargers.all()),
+                language=self.language,
+                title=self.title,
             )
             report.chargers.set(self.chargers.all())
             report.store_local_copy()
@@ -3057,6 +3109,17 @@ class ClientReport(Entity):
         blank=True,
         related_name="reports",
     )
+    language = models.CharField(
+        max_length=12,
+        choices=settings.LANGUAGES,
+        default=default_report_language,
+    )
+    title = models.CharField(
+        max_length=200,
+        blank=True,
+        default="",
+        verbose_name=_("Title"),
+    )
     recipients = models.JSONField(default=list, blank=True)
     disable_emails = models.BooleanField(default=False)
     chargers = models.ManyToManyField(
@@ -3066,8 +3129,8 @@ class ClientReport(Entity):
     )
 
     class Meta:
-        verbose_name = "Consumer Report"
-        verbose_name_plural = "Consumer Reports"
+        verbose_name = _("Consumer Report")
+        verbose_name_plural = _("Consumer Reports")
         db_table = "core_client_report"
         ordering = ["-created_on"]
 
@@ -3078,6 +3141,20 @@ class ClientReport(Entity):
             else ClientReportSchedule.PERIODICITY_NONE
         )
         return f"{self.start_date} - {self.end_date} ({period_type})"
+
+    @staticmethod
+    def default_language() -> str:
+        return default_report_language()
+
+    @staticmethod
+    def normalize_language(language: str | None) -> str:
+        return normalize_report_language(language)
+
+    def save(self, *args, **kwargs):
+        if self.language:
+            self.language = normalize_report_language(self.language)
+        self.title = (self.title or "").strip()
+        super().save(*args, **kwargs)
 
     @property
     def periodicity_label(self) -> str:
@@ -3103,6 +3180,8 @@ class ClientReport(Entity):
         recipients: list[str] | None = None,
         disable_emails: bool = False,
         chargers=None,
+        language: str | None = None,
+        title: str | None = None,
     ):
         from collections.abc import Iterable as _Iterable
 
@@ -3114,6 +3193,8 @@ class ClientReport(Entity):
                 charger_list = [chargers]
 
         payload = cls.build_rows(start_date, end_date, chargers=charger_list)
+        normalized_language = cls.normalize_language(language)
+        title_value = (title or "").strip()
         report = cls.objects.create(
             start_date=start_date,
             end_date=end_date,
@@ -3122,6 +3203,8 @@ class ClientReport(Entity):
             schedule=schedule,
             recipients=list(recipients or []),
             disable_emails=disable_emails,
+            language=normalized_language,
+            title=title_value,
         )
         if charger_list:
             report.chargers.set(charger_list)
@@ -3139,9 +3222,16 @@ class ClientReport(Entity):
         timestamp = timezone.now().strftime("%Y%m%d%H%M%S")
         identifier = f"client_report_{self.pk}_{timestamp}"
 
-        html_content = html or render_to_string(
-            "core/reports/client_report_email.html", {"report": self}
-        )
+        language_code = self.normalize_language(self.language)
+        context = {
+            "report": self,
+            "language_code": language_code,
+            "default_language": type(self).default_language(),
+        }
+        with override(language_code):
+            html_content = html or render_to_string(
+                "core/reports/client_report_email.html", context
+            )
         html_path = report_dir / f"{identifier}.html"
         html_path.write_text(html_content, encoding="utf-8")
 
@@ -3184,20 +3274,39 @@ class ClientReport(Entity):
             (pdf_path.name, pdf_path.read_bytes(), "application/pdf"),
         ]
 
-        totals = self.rows_for_display.get("totals", {})
-        body_lines = [
-            f"Consumer report for {self.start_date} through {self.end_date}.",
-            f"Total kW during period: {totals.get('total_kw_period', 0.0):.2f}.",
-            f"Total kW (all time): {totals.get('total_kw', 0.0):.2f}.",
-        ]
-        message = "\n".join(body_lines)
+        language_code = self.normalize_language(self.language)
+        with override(language_code):
+            totals = self.rows_for_display.get("totals", {})
+            start_display = formats.date_format(
+                self.start_date, format="DATE_FORMAT", use_l10n=True
+            )
+            end_display = formats.date_format(
+                self.end_date, format="DATE_FORMAT", use_l10n=True
+            )
+            total_kw_period_label = gettext("Total kW during period")
+            total_kw_all_label = gettext("Total kW (all time)")
+            report_title = (self.title or "").strip() or gettext("Consumer Report")
+            body_lines = [
+                gettext("%(title)s for %(start)s through %(end)s.")
+                % {"title": report_title, "start": start_display, "end": end_display},
+                f"{total_kw_period_label}: "
+                f"{formats.number_format(totals.get('total_kw_period', 0.0), decimal_pos=2, use_l10n=True)}.",
+                f"{total_kw_all_label}: "
+                f"{formats.number_format(totals.get('total_kw', 0.0), decimal_pos=2, use_l10n=True)}.",
+            ]
+            message = "\n".join(body_lines)
+            subject = gettext("%(title)s %(start)s - %(end)s") % {
+                "title": report_title,
+                "start": start_display,
+                "end": end_display,
+            }
 
         kwargs = {}
         if reply_to:
             kwargs["reply_to"] = reply_to
 
         mailer.send(
-            f"Consumer report {self.start_date} - {self.end_date}",
+            subject,
             message,
             recipients,
             outbox=outbox,
@@ -3582,153 +3691,180 @@ class ClientReport(Entity):
         dataset = self.rows_for_display
         schema = dataset.get("schema")
 
-        styles = getSampleStyleSheet()
-        title_style = styles["Title"]
-        subtitle_style = styles["Heading2"]
-        normal_style = styles["BodyText"]
-        emphasis_style = styles["Heading3"]
+        language_code = self.normalize_language(self.language)
+        with override(language_code):
+            styles = getSampleStyleSheet()
+            title_style = styles["Title"]
+            subtitle_style = styles["Heading2"]
+            normal_style = styles["BodyText"]
+            emphasis_style = styles["Heading3"]
 
-        document = SimpleDocTemplate(
-            str(target_path),
-            pagesize=landscape(letter),
-            leftMargin=0.5 * inch,
-            rightMargin=0.5 * inch,
-            topMargin=0.6 * inch,
-            bottomMargin=0.5 * inch,
-        )
-
-        story: list = []
-        story.append(Paragraph("Consumer Report", title_style))
-        story.append(
-            Paragraph(
-                f"Period: {self.start_date} to {self.end_date}",
-                emphasis_style,
+            document = SimpleDocTemplate(
+                str(target_path),
+                pagesize=landscape(letter),
+                leftMargin=0.5 * inch,
+                rightMargin=0.5 * inch,
+                topMargin=0.6 * inch,
+                bottomMargin=0.5 * inch,
             )
-        )
-        story.append(Spacer(1, 0.25 * inch))
 
-        if schema == "evcs-session/v1":
-            evcs_entries = dataset.get("evcs", [])
-            if not evcs_entries:
-                story.append(
-                    Paragraph(
-                        "No charging sessions recorded for the selected period.",
-                        normal_style,
-                    )
-                )
-            for index, evcs in enumerate(evcs_entries):
-                if index:
-                    story.append(Spacer(1, 0.2 * inch))
+            story: list = []
 
-                display_name = evcs.get("display_name") or "Charge Point"
-                serial_number = evcs.get("serial_number")
-                header_text = display_name
-                if serial_number:
-                    header_text = f"{display_name} (Serial: {serial_number})"
-                story.append(Paragraph(header_text, subtitle_style))
+            report_title = (self.title or "").strip() or gettext("Consumer Report")
+            story.append(Paragraph(report_title, title_style))
 
-                metrics_text = (
-                    f"Total kW (all time): {evcs.get('total_kw', 0.0):.2f} | "
-                    f"Total kW (period): {evcs.get('total_kw_period', 0.0):.2f}"
-                )
-                story.append(Paragraph(metrics_text, normal_style))
-                story.append(Spacer(1, 0.1 * inch))
-
-                transactions = evcs.get("transactions", [])
-                if transactions:
-                    table_data = [
-                        [
-                            "kWh",
-                            "Start",
-                            "End",
-                            "Connector",
-                            "RFID",
-                            "Account",
-                        ]
-                    ]
-
-                    def _format_number(value):
-                        return f"{value:.2f}" if value is not None else "—"
-
-                    for row in transactions:
-                        start_dt = row.get("start")
-                        end_dt = row.get("end")
-                        start_display = (
-                            timezone.localtime(start_dt).strftime("%Y-%m-%d %H:%M")
-                            if start_dt
-                            else "—"
-                        )
-                        end_display = (
-                            timezone.localtime(end_dt).strftime("%Y-%m-%d %H:%M")
-                            if end_dt
-                            else "—"
-                        )
-
-                        table_data.append(
-                            [
-                                _format_number(row.get("session_kwh")),
-                                start_display,
-                                end_display,
-                                row.get("connector")
-                                if row.get("connector") is not None
-                                else "—",
-                                row.get("rfid_label") or "—",
-                                row.get("account_name") or "—",
-                            ]
-                        )
-
-                    table = Table(table_data, repeatRows=1)
-                    table.setStyle(
-                        TableStyle(
-                            [
-                                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#0f172a")),
-                                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-                                ("ALIGN", (0, 0), (-1, 0), "CENTER"),
-                                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
-                                ("FONTSIZE", (0, 0), (-1, 0), 9),
-                                (
-                                    "ROWBACKGROUNDS",
-                                    (0, 1),
-                                    (-1, -1),
-                                    [colors.whitesmoke, colors.HexColor("#eef2ff")],
-                                ),
-                                ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
-                                ("VALIGN", (0, 1), (-1, -1), "MIDDLE"),
-                            ]
-                        )
-                    )
-                    story.append(table)
-                else:
-                    story.append(
-                        Paragraph(
-                            "No charging sessions recorded for this charge point.",
-                            normal_style,
-                        )
-                    )
-        else:
+            start_display = formats.date_format(
+                self.start_date, format="DATE_FORMAT", use_l10n=True
+            )
+            end_display = formats.date_format(
+                self.end_date, format="DATE_FORMAT", use_l10n=True
+            )
             story.append(
                 Paragraph(
-                    "No structured data is available for this report.",
-                    normal_style,
+                    gettext("Period: %(start)s to %(end)s")
+                    % {"start": start_display, "end": end_display},
+                    emphasis_style,
+                )
+            )
+            story.append(Spacer(1, 0.25 * inch))
+
+            total_kw_all_time_label = gettext("Total kW (all time)")
+            total_kw_period_label = gettext("Total kW (period)")
+            connector_label = gettext("Connector")
+            account_label = gettext("Account")
+            session_kwh_label = gettext("Session kWh")
+            no_sessions_period = gettext(
+                "No charging sessions recorded for the selected period."
+            )
+            no_sessions_point = gettext(
+                "No charging sessions recorded for this charge point."
+            )
+            no_structured_data = gettext(
+                "No structured data is available for this report."
+            )
+            report_totals_label = gettext("Report totals")
+            total_kw_period_line = gettext("Total kW during period")
+
+            def format_datetime(value):
+                if not value:
+                    return "—"
+                localized = timezone.localtime(value)
+                return formats.date_format(
+                    localized, format="DATETIME_FORMAT", use_l10n=True
+                )
+
+            def format_decimal(value):
+                if value is None:
+                    return "—"
+                return formats.number_format(value, decimal_pos=2, use_l10n=True)
+
+            if schema == "evcs-session/v1":
+                evcs_entries = dataset.get("evcs", [])
+                if not evcs_entries:
+                    story.append(Paragraph(no_sessions_period, normal_style))
+                for index, evcs in enumerate(evcs_entries):
+                    if index:
+                        story.append(Spacer(1, 0.2 * inch))
+
+                    display_name = evcs.get("display_name") or gettext("Charge Point")
+                    serial_number = evcs.get("serial_number")
+                    if serial_number:
+                        header_text = gettext("%(name)s (Serial: %(serial)s)") % {
+                            "name": display_name,
+                            "serial": serial_number,
+                        }
+                    else:
+                        header_text = display_name
+                    story.append(Paragraph(header_text, subtitle_style))
+
+                    metrics_text = (
+                        f"{total_kw_all_time_label}: "
+                        f"{format_decimal(evcs.get('total_kw', 0.0))} | "
+                        f"{total_kw_period_label}: "
+                        f"{format_decimal(evcs.get('total_kw_period', 0.0))}"
+                    )
+                    story.append(Paragraph(metrics_text, normal_style))
+                    story.append(Spacer(1, 0.1 * inch))
+
+                    transactions = evcs.get("transactions", [])
+                    if transactions:
+                        table_data = [
+                            [
+                                session_kwh_label,
+                                gettext("Session start"),
+                                gettext("Session end"),
+                                connector_label,
+                                gettext("RFID label"),
+                                account_label,
+                            ]
+                        ]
+
+                        for row in transactions:
+                            start_dt = row.get("start")
+                            end_dt = row.get("end")
+                            table_data.append(
+                                [
+                                    format_decimal(row.get("session_kwh")),
+                                    format_datetime(start_dt),
+                                    format_datetime(end_dt),
+                                    row.get("connector")
+                                    if row.get("connector") is not None
+                                    else "—",
+                                    row.get("rfid_label") or "—",
+                                    row.get("account_name") or "—",
+                                ]
+                            )
+
+                        table = Table(table_data, repeatRows=1)
+                        table.setStyle(
+                            TableStyle(
+                                [
+                                    (
+                                        "BACKGROUND",
+                                        (0, 0),
+                                        (-1, 0),
+                                        colors.HexColor("#0f172a"),
+                                    ),
+                                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                                    ("ALIGN", (0, 0), (-1, 0), "CENTER"),
+                                    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                                    ("FONTSIZE", (0, 0), (-1, 0), 9),
+                                    (
+                                        "ROWBACKGROUNDS",
+                                        (0, 1),
+                                        (-1, -1),
+                                        [colors.whitesmoke, colors.HexColor("#eef2ff")],
+                                    ),
+                                    ("GRID", (0, 0), (-1, -1), 0.25, colors.grey),
+                                    ("VALIGN", (0, 1), (-1, -1), "MIDDLE"),
+                                ]
+                            )
+                        )
+                        story.append(table)
+                    else:
+                        story.append(Paragraph(no_sessions_point, normal_style))
+            else:
+                story.append(Paragraph(no_structured_data, normal_style))
+
+            totals = dataset.get("totals") or {}
+            story.append(Spacer(1, 0.3 * inch))
+            story.append(Paragraph(report_totals_label, emphasis_style))
+            story.append(
+                Paragraph(
+                    f"{total_kw_all_time_label}: "
+                    f"{format_decimal(totals.get('total_kw', 0.0))}",
+                    emphasis_style,
+                )
+            )
+            story.append(
+                Paragraph(
+                    f"{total_kw_period_line}: "
+                    f"{format_decimal(totals.get('total_kw_period', 0.0))}",
+                    emphasis_style,
                 )
             )
 
-        totals = dataset.get("totals") or {}
-        story.append(Spacer(1, 0.3 * inch))
-        story.append(
-            Paragraph(
-                f"Report totals — Total kW (all time): {totals.get('total_kw', 0.0):.2f}",
-                emphasis_style,
-            )
-        )
-        story.append(
-            Paragraph(
-                f"Total kW during period: {totals.get('total_kw_period', 0.0):.2f}",
-                emphasis_style,
-            )
-        )
-
-        document.build(story)
+            document.build(story)
 
     def ensure_pdf(self) -> Path:
         base_dir = Path(settings.BASE_DIR)

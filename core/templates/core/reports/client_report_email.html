@@ -1,9 +1,9 @@
-{% load tz %}
+{% load i18n tz %}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ language_code|default:default_language }}">
 <head>
   <meta charset="utf-8" />
-  <title>Client Report</title>
+  <title>{% if report.title %}{{ report.title }}{% else %}{% trans "Consumer Report" %}{% endif %}</title>
   <style>
     body { font-family: Arial, sans-serif; margin: 1.5em; color: #111; }
     h1 { font-size: 1.4em; margin-bottom: 0.5em; }
@@ -14,32 +14,34 @@
   </style>
 </head>
 <body>
-  <h1>Client Report</h1>
-  <p>Period: {{ report.start_date }} to {{ report.end_date }}</p>
+  <h1>{% if report.title %}{{ report.title }}{% else %}{% trans "Consumer Report" %}{% endif %}</h1>
+  <p>
+    {% blocktrans with start=report.start_date|date:"DATE_FORMAT" end=report.end_date|date:"DATE_FORMAT" %}Period: {{ start }} to {{ end }}{% endblocktrans %}
+  </p>
   {% with data=report.rows_for_display %}
     {% if data.schema == "evcs-session/v1" %}
       {% if data.evcs %}
         {% for evcs in data.evcs %}
           <h2>{{ evcs.display_name }}</h2>
           {% if evcs.serial_number %}
-            <p><strong>Serial:</strong> {{ evcs.serial_number }}</p>
+            <p><strong>{% trans "Serial" %}:</strong> {{ evcs.serial_number }}</p>
           {% endif %}
           <p>
-            <strong>Total kW (all time):</strong> {{ evcs.total_kw|floatformat:2 }} ·
-            <strong>Total kW (period):</strong> {{ evcs.total_kw_period|floatformat:2 }}
+            <strong>{% trans "Total kW (all time)" %}:</strong> {{ evcs.total_kw|floatformat:2 }} ·
+            <strong>{% trans "Total kW (period)" %}:</strong> {{ evcs.total_kw_period|floatformat:2 }}
           </p>
           {% if evcs.transactions %}
             <table>
               <thead>
                 <tr>
-                  <th>Connector</th>
-                  <th>Start kWh</th>
-                  <th>End kWh</th>
-                  <th>Session kWh</th>
-                  <th>Session start</th>
-                  <th>Session end</th>
-                  <th>RFID label</th>
-                  <th>Account</th>
+                  <th>{% trans "Connector" %}</th>
+                  <th>{% trans "Start kWh" %}</th>
+                  <th>{% trans "End kWh" %}</th>
+                  <th>{% trans "Session kWh" %}</th>
+                  <th>{% trans "Session start" %}</th>
+                  <th>{% trans "Session end" %}</th>
+                  <th>{% trans "RFID label" %}</th>
+                  <th>{% trans "Account" %}</th>
                 </tr>
               </thead>
               <tbody>
@@ -49,8 +51,8 @@
                     <td>{% if row.start_kwh is not None %}{{ row.start_kwh|floatformat:2 }}{% else %}—{% endif %}</td>
                     <td>{% if row.end_kwh is not None %}{{ row.end_kwh|floatformat:2 }}{% else %}—{% endif %}</td>
                     <td>{{ row.session_kwh|floatformat:2 }}</td>
-                    <td>{% if row.start %}{{ row.start|localtime|date:"Y-m-d H:i" }}{% else %}—{% endif %}</td>
-                    <td>{% if row.end %}{{ row.end|localtime|date:"Y-m-d H:i" }}{% else %}—{% endif %}</td>
+                    <td>{% if row.start %}{{ row.start|localtime|date:"DATETIME_FORMAT" }}{% else %}—{% endif %}</td>
+                    <td>{% if row.end %}{{ row.end|localtime|date:"DATETIME_FORMAT" }}{% else %}—{% endif %}</td>
                     <td>{{ row.rfid_label|default:"—" }}</td>
                     <td>{{ row.account_name|default:"—" }}</td>
                   </tr>
@@ -58,14 +60,14 @@
               </tbody>
             </table>
           {% else %}
-            <p>No charging sessions recorded for this charge point.</p>
+            <p>{% trans "No charging sessions recorded for this charge point." %}</p>
           {% endif %}
         {% endfor %}
-        <h3>Report totals</h3>
-        <p><strong>Total kW (all time):</strong> {{ data.totals.total_kw|floatformat:2 }}</p>
-        <p><strong>Total kW (period):</strong> {{ data.totals.total_kw_period|floatformat:2 }}</p>
+        <h3>{% trans "Report totals" %}</h3>
+        <p><strong>{% trans "Total kW (all time)" %}:</strong> {{ data.totals.total_kw|floatformat:2 }}</p>
+        <p><strong>{% trans "Total kW (period)" %}:</strong> {{ data.totals.total_kw_period|floatformat:2 }}</p>
       {% else %}
-        <p>No charging sessions were recorded for this period.</p>
+        <p>{% trans "No charging sessions were recorded for this period." %}</p>
       {% endif %}
     {% else %}
       {% with rows=data.rows %}
@@ -75,22 +77,22 @@
               <table>
                 <thead>
                   <tr>
-                    <th>RFID / Account</th>
-                    <th>Session start</th>
-                    <th>Session end</th>
-                    <th>Energy (kWh)</th>
+                    <th>{% trans "RFID / Account" %}</th>
+                    <th>{% trans "Session start" %}</th>
+                    <th>{% trans "Session end" %}</th>
+                    <th>{% trans "Energy (kWh)" %}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {% for row in rows %}
                     <tr>
                       <td><strong>{{ row.subject }}</strong></td>
-                      <td>{% if row.start %}{{ row.start|localtime|date:"Y-m-d H:i" }}{% else %}Unavailable{% endif %}</td>
-                      <td>{% if row.end %}{{ row.end|localtime|date:"Y-m-d H:i" }}{% else %}In progress{% endif %}</td>
+                      <td>{% if row.start %}{{ row.start|localtime|date:"DATETIME_FORMAT" }}{% else %}{% trans "Unavailable" %}{% endif %}</td>
+                      <td>{% if row.end %}{{ row.end|localtime|date:"DATETIME_FORMAT" }}{% else %}{% trans "In progress" %}{% endif %}</td>
                       <td>{{ row.kw|floatformat:2 }}</td>
                     </tr>
                   {% empty %}
-                    <tr><td colspan="4">No data available.</td></tr>
+                    <tr><td colspan="4">{% trans "No data available." %}</td></tr>
                   {% endfor %}
                 </tbody>
               </table>
@@ -98,9 +100,9 @@
               <table>
                 <thead>
                   <tr>
-                    <th>RFID/Account</th>
-                    <th>Sessions</th>
-                    <th>Total kWh</th>
+                    <th>{% trans "RFID/Account" %}</th>
+                    <th>{% trans "Sessions" %}</th>
+                    <th>{% trans "Total kWh" %}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -111,14 +113,14 @@
                       <td>{{ row.kw|floatformat:2 }}</td>
                     </tr>
                   {% empty %}
-                    <tr><td colspan="3">No data available.</td></tr>
+                    <tr><td colspan="3">{% trans "No data available." %}</td></tr>
                   {% endfor %}
                 </tbody>
               </table>
             {% endif %}
           {% endwith %}
         {% else %}
-          <p>No data available.</p>
+          <p>{% trans "No data available." %}</p>
         {% endif %}
       {% endwith %}
     {% endif %}

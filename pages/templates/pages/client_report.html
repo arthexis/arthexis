@@ -250,6 +250,26 @@
       {% endif %}
     </div>
   </fieldset>
+  <fieldset class="report-section" aria-describedby="presentation-help">
+    <legend class="section-title">{% trans "Presentation" %}</legend>
+    <p class="section-description" id="presentation-help">
+      {% trans "Customize the language and heading used when generating the report." %}
+    </p>
+    <div class="form-group">
+      {{ form.language.label_tag }}
+      {{ form.language }}
+      {% if form.language.help_text %}
+        <p class="help-text" id="id_language-help">{{ form.language.help_text }}</p>
+      {% endif %}
+    </div>
+    <div class="form-group">
+      {{ form.title.label_tag }}
+      {{ form.title }}
+      {% if form.title.help_text %}
+        <p class="help-text" id="id_title-help">{{ form.title.help_text }}</p>
+      {% endif %}
+    </div>
+  </fieldset>
   <fieldset class="report-section" aria-describedby="id_chargers-help">
     <legend class="section-title">{% trans "Charge points" %}</legend>
     <div class="form-group">
@@ -335,6 +355,8 @@
     id_end: 'id_end-help',
     id_week: 'id_week-help',
     id_month: 'id_month-help',
+    id_language: 'id_language-help',
+    id_title: 'id_title-help',
     id_chargers: 'id_chargers-help',
     id_owner: 'id_owner-help',
     id_destinations: 'id_destinations-help',

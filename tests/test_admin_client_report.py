@@ -74,6 +74,7 @@ class AdminClientReportTests(TestCase):
                 "end": day,
                 "recurrence": ClientReportSchedule.PERIODICITY_NONE,
                 "chargers": [self.charger.pk],
+                "language": "en",
             },
         )
         self.assertEqual(resp.status_code, 302)
@@ -89,6 +90,8 @@ class AdminClientReportTests(TestCase):
         self.assertFalse(ClientReportSchedule.objects.exists())
         self.assertEqual(report.chargers.count(), 1)
         self.assertEqual(report.chargers.get(), self.charger)
+        self.assertEqual(report.language, "en")
+        self.assertEqual(report.title, "")
         export = report.data.get("export")
         html_path = Path(settings.BASE_DIR) / export["html_path"]
         json_path = Path(settings.BASE_DIR) / export["json_path"]
@@ -146,6 +149,7 @@ class AdminClientReportTests(TestCase):
                 "month": month_value,
                 "recurrence": ClientReportSchedule.PERIODICITY_NONE,
                 "chargers": [self.charger.pk],
+                "language": "en",
             },
         )
         self.assertEqual(resp.status_code, 302)
@@ -158,6 +162,7 @@ class AdminClientReportTests(TestCase):
         self.assertEqual(report.end_date, target_month.replace(day=last_day))
         self.assertEqual(report.owner, self.user)
         self.assertEqual(list(report.chargers.all()), [self.charger])
+        self.assertEqual(report.language, "en")
 
         export = report.data.get("export")
         html_path = Path(settings.BASE_DIR) / export["html_path"]
@@ -187,6 +192,8 @@ class AdminClientReportTests(TestCase):
                     "owner": self.user.pk,
                     "enable_emails": "on",
                     "chargers": [self.charger.pk],
+                    "language": "es",
+                    "title": "Informe especial",
                 },
             )
         mocked_send.assert_called_once()
@@ -195,9 +202,13 @@ class AdminClientReportTests(TestCase):
         self.assertEqual(schedule.periodicity, ClientReportSchedule.PERIODICITY_WEEKLY)
         self.assertIn("dest@example.com", schedule.email_recipients)
         self.assertEqual(list(schedule.chargers.all()), [self.charger])
+        self.assertEqual(schedule.language, "es")
+        self.assertEqual(schedule.title, "Informe especial")
         report = ClientReport.objects.get()
         self.assertEqual(report.schedule, schedule)
         self.assertEqual(report.recipients, ["dest@example.com"])
+        self.assertEqual(report.language, "es")
+        self.assertEqual(report.title, "Informe especial")
         export = report.data.get("export")
         html_path = Path(settings.BASE_DIR) / export["html_path"]
         json_path = Path(settings.BASE_DIR) / export["json_path"]

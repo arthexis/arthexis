@@ -24,6 +24,7 @@ class ClientReportFormTests(SimpleTestCase):
                 "period": "week",
                 "week": "invalid-week",
                 "recurrence": ClientReportSchedule.PERIODICITY_NONE,
+                "language": "en",
             }
         )
 
@@ -36,6 +37,7 @@ class ClientReportFormTests(SimpleTestCase):
                 "period": "month",
                 "month": "2023-09",
                 "recurrence": ClientReportSchedule.PERIODICITY_NONE,
+                "language": "en",
             }
         )
 

@@ -3710,6 +3710,17 @@ class ClientReportAdmin(EntityModelAdmin):
             input_formats=["%Y-%m"],
             help_text="Generates the report for the calendar month that you select.",
         )
+        language = forms.ChoiceField(
+            label="Report language",
+            choices=settings.LANGUAGES,
+            help_text="Choose the language used for the generated report.",
+        )
+        title = forms.CharField(
+            label="Report title",
+            required=False,
+            max_length=200,
+            help_text="Optional heading that replaces the default report title.",
+        )
         chargers = forms.ModelMultipleChoiceField(
             label="Charge points",
             queryset=Charger.objects.filter(connector_id__isnull=True)
@@ -3751,6 +3762,12 @@ class ClientReportAdmin(EntityModelAdmin):
             ):
                 self.fields["owner"].initial = request.user.pk
             self.fields["chargers"].widget.attrs["class"] = "charger-options"
+            language_initial = ClientReport.default_language()
+            if request:
+                language_initial = ClientReport.normalize_language(
+                    getattr(request, "LANGUAGE_CODE", language_initial)
+                )
+            self.fields["language"].initial = language_initial
 
         def clean(self):
             cleaned = super().clean()
@@ -3795,6 +3812,9 @@ class ClientReportAdmin(EntityModelAdmin):
                 emails.append(candidate)
             return emails
 
+        def clean_title(self):
+            return (self.cleaned_data.get("title") or "").strip()
+
     def get_urls(self):
         urls = super().get_urls()
         custom = [
@@ -3824,6 +3844,8 @@ class ClientReportAdmin(EntityModelAdmin):
             disable_emails = not enable_emails
             recipients = form.cleaned_data.get("destinations") if enable_emails else []
             chargers = list(form.cleaned_data.get("chargers") or [])
+            language = form.cleaned_data.get("language")
+            title = form.cleaned_data.get("title")
             report = ClientReport.generate(
                 form.cleaned_data["start"],
                 form.cleaned_data["end"],
@@ -3831,6 +3853,8 @@ class ClientReportAdmin(EntityModelAdmin):
                 recipients=recipients,
                 disable_emails=disable_emails,
                 chargers=chargers,
+                language=language,
+                title=title,
             )
             report.store_local_copy()
             if chargers:
@@ -3858,6 +3882,8 @@ class ClientReportAdmin(EntityModelAdmin):
                     periodicity=recurrence,
                     email_recipients=recipients,
                     disable_emails=disable_emails,
+                    language=language,
+                    title=title,
                 )
                 if chargers:
                     schedule.chargers.set(chargers)

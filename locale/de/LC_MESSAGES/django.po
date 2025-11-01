@@ -5872,3 +5872,67 @@ msgstr ""
 #: teams/forms.py:87
 msgid "Enter your one-time password for testing"
 msgstr ""
+
+#: pages/views.py:139
+msgid "Report language"
+msgstr "Berichtssprache"
+
+#: pages/views.py:144
+msgid "Report title"
+msgstr "Berichtstitel"
+
+#: pages/views.py:137
+msgid "Choose the language used for the generated report."
+msgstr "Wählen Sie die Sprache, die für den generierten Bericht verwendet wird."
+
+#: pages/views.py:142
+msgid "Optional heading that replaces the default report title."
+msgstr "Optionaler Kopftext, der den Standardtitel des Berichts ersetzt."
+
+#: pages/templates/pages/client_report.html:214 core/templates/admin/core/clientreport/generate.html:143
+msgid "Presentation"
+msgstr "Darstellung"
+
+#: pages/templates/pages/client_report.html:215 core/templates/admin/core/clientreport/generate.html:145
+msgid "Customize the language and heading used when generating the report."
+msgstr "Passen Sie Sprache und Überschrift für den erzeugten Bericht an."
+
+#: core/models.py:3608 core/templates/core/reports/client_report_email.html:7
+msgid "Consumer Report"
+msgstr "Verbrauchsbericht"
+
+#: core/models.py:3615 core/templates/core/reports/client_report_email.html:11
+msgid "Period: %(start)s to %(end)s"
+msgstr "Zeitraum: %(start)s bis %(end)s"
+
+#: core/models.py:3650
+msgid "Charge Point"
+msgstr "Ladepunkt"
+
+#: core/models.py:3652
+msgid "%(name)s (Serial: %(serial)s)"
+msgstr "%(name)s (Seriennummer: %(serial)s)"
+
+#: core/models.py:3669
+msgid "No charging sessions recorded for the selected period."
+msgstr "Für den ausgewählten Zeitraum wurden keine Ladesitzungen erfasst."
+
+#: core/models.py:3694
+msgid "No structured data is available for this report."
+msgstr "Für diesen Bericht sind keine strukturierten Daten verfügbar."
+
+#: core/templates/core/reports/client_report_email.html:21
+msgid "Start kWh"
+msgstr "kWh-Startwert"
+
+#: core/templates/core/reports/client_report_email.html:22
+msgid "End kWh"
+msgstr "kWh-Endwert"
+
+#: core/models.py:3194
+msgid "%(title)s for %(start)s through %(end)s."
+msgstr "%(title)s für %(start)s bis %(end)s."
+
+#: core/models.py:3200
+msgid "%(title)s %(start)s - %(end)s"
+msgstr "%(title)s %(start)s - %(end)s"
