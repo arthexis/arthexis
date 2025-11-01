@@ -515,6 +515,23 @@ class InvitationTests(TestCase):
         self.assertEqual(lead.mac_address, "")
         self.assertEqual(len(mail.outbox), 0)
 
+    def test_request_invite_uses_original_referer(self):
+        InviteLead.objects.all().delete()
+        self.client.get(
+            reverse("pages:index"),
+            HTTP_REFERER="https://campaign.example/landing",
+        )
+
+        resp = self.client.post(
+            reverse("pages:request-invite"),
+            {"email": "origin@example.com"},
+            HTTP_REFERER="http://testserver/pages/request-invite/",
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        lead = InviteLead.objects.get()
+        self.assertEqual(lead.referer, "https://campaign.example/landing")
+
     def test_request_invite_falls_back_to_send_mail(self):
         node = Node.objects.create(
             hostname="local", address="127.0.0.1", mac_address="00:11:22:33:44:55"
@@ -3530,6 +3547,28 @@ class UserStorySubmissionTests(TestCase):
         self.assertEqual(response.status_code, 200)
         story = UserStory.objects.get()
         self.assertEqual(story.language_code, "es")
+
+    def test_submission_prefers_original_referer(self):
+        self.client.get(
+            reverse("pages:index"),
+            HTTP_REFERER="https://ads.example/original",
+        )
+        response = self.client.post(
+            self.url,
+            {
+                "rating": 3,
+                "comments": "Works well",
+                "path": "/wizard/step-2/",
+                "name": "visitor@example.com",
+                "take_screenshot": "0",
+            },
+            HTTP_REFERER="http://testserver/wizard/step-2/",
+            HTTP_USER_AGENT="FeedbackBot/2.0",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        story = UserStory.objects.get()
+        self.assertEqual(story.referer, "https://ads.example/original")
 
     def test_superuser_submission_creates_triage_todo(self):
         Todo.objects.all().delete()

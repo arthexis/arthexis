@@ -12,7 +12,7 @@ from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.translation import gettext as _, gettext_lazy as _lazy
 
-from pages.utils import landing
+from pages.utils import get_original_referer, landing
 
 from .models import (
     CableSize,
@@ -411,7 +411,7 @@ def calculator(request):
             user=request.user if request.user.is_authenticated else None,
             values=lead_values,
             path=request.path,
-            referer=request.META.get("HTTP_REFERER", ""),
+            referer=get_original_referer(request),
             user_agent=request.META.get("HTTP_USER_AGENT", ""),
             ip_address=_extract_client_ip(),
             malformed=malformed,
