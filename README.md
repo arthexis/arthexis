@@ -11,25 +11,32 @@ Arthexis Constellation is a [narrative-driven](https://en.wikipedia.org/wiki/Nar
 
 - Compatible with the [Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/) central system. Supported actions are summarized below.
 
-  | Direction | Action | What we do |
-  | --- | --- | --- |
-  | Charge point → CSMS | `Authorize` | Validate RFID or token authorization requests before a session starts. |
-  | Charge point → CSMS | `BootNotification` | Register the charge point and update identity, firmware, and status details. |
-  | Charge point → CSMS | `DataTransfer` | Accept vendor-specific payloads and record the results. |
-  | Charge point → CSMS | `DiagnosticsStatusNotification` | Track the progress of diagnostic uploads kicked off from the back office. |
-  | Charge point → CSMS | `FirmwareStatusNotification` | Track firmware update lifecycle events from charge points. |
-  | Charge point → CSMS | `Heartbeat` | Keep the websocket session alive and update last-seen timestamps. |
-  | Charge point → CSMS | `MeterValues` | Persist periodic energy and power readings while a transaction is active. |
-  | Charge point → CSMS | `StartTransaction` | Create charging sessions with initial meter values and identification data. |
-  | Charge point → CSMS | `StatusNotification` | Reflect connector availability and fault states in real time. |
-  | Charge point → CSMS | `StopTransaction` | Close charging sessions, capturing closing meter values and stop reasons. |
-  | CSMS → Charge point | `ChangeAvailability` | Switch connectors or the whole station between operative and inoperative states. |
-  | CSMS → Charge point | `DataTransfer` | Send vendor-specific commands and log the charge point response. |
-  | CSMS → Charge point | `GetConfiguration` | Poll the device for the current values of tracked configuration keys. |
-  | CSMS → Charge point | `RemoteStartTransaction` | Initiate a charging session remotely for an identified customer or token. |
-  | CSMS → Charge point | `RemoteStopTransaction` | Terminate active charging sessions from the control center. |
-  | CSMS → Charge point | `Reset` | Request a soft or hard reboot to recover from faults. |
-  | CSMS → Charge point | `TriggerMessage` | Ask the device to send an immediate update (for example status or diagnostics). |
+  **Charge point → CSMS**
+
+  | Action | What we do |
+  | --- | --- |
+  | `Authorize` | Validate RFID or token authorization requests before a session starts. |
+  | `BootNotification` | Register the charge point and update identity, firmware, and status details. |
+  | `DataTransfer` | Accept vendor-specific payloads and record the results. |
+  | `DiagnosticsStatusNotification` | Track the progress of diagnostic uploads kicked off from the back office. |
+  | `FirmwareStatusNotification` | Track firmware update lifecycle events from charge points. |
+  | `Heartbeat` | Keep the websocket session alive and update last-seen timestamps. |
+  | `MeterValues` | Persist periodic energy and power readings while a transaction is active. |
+  | `StartTransaction` | Create charging sessions with initial meter values and identification data. |
+  | `StatusNotification` | Reflect connector availability and fault states in real time. |
+  | `StopTransaction` | Close charging sessions, capturing closing meter values and stop reasons. |
+
+  **CSMS → Charge point**
+
+  | Action | What we do |
+  | --- | --- |
+  | `ChangeAvailability` | Switch connectors or the whole station between operative and inoperative states. |
+  | `DataTransfer` | Send vendor-specific commands and log the charge point response. |
+  | `GetConfiguration` | Poll the device for the current values of tracked configuration keys. |
+  | `RemoteStartTransaction` | Initiate a charging session remotely for an identified customer or token. |
+  | `RemoteStopTransaction` | Terminate active charging sessions from the control center. |
+  | `Reset` | Request a soft or hard reboot to recover from faults. |
+  | `TriggerMessage` | Ask the device to send an immediate update (for example status or diagnostics). |
 
   **OCPP 1.6 roadmap.** The following catalogue actions are in our backlog: `CancelReservation`, `ChangeConfiguration`, `ClearCache`, `ClearChargingProfile`, `GetCompositeSchedule`, `GetDiagnostics`, `GetLocalListVersion`, `ReserveNow`, `SendLocalList`, `SetChargingProfile`, `UnlockConnector`, `UpdateFirmware`.
 
