@@ -151,6 +151,64 @@ arthexis_desktop_shortcut_start_unit() {
     return 0
 }
 
+arthexis_desktop_shortcut_detect_port() {
+    local base_dir="$1"
+    local default_port="8888"
+    local mode_file="$base_dir/locks/nginx_mode.lck"
+    if [ -f "$mode_file" ]; then
+        local mode
+        mode="$(tr '[:upper:]' '[:lower:]' < "$mode_file" 2>/dev/null | tr -d '\r\n\t ')"
+        if [ "$mode" = "public" ]; then
+            default_port="8000"
+        fi
+    fi
+
+    local service_lock="$base_dir/locks/service.lck"
+    local service_name=""
+    if [ -f "$service_lock" ]; then
+        service_name="$(tr -d '\r\n' < "$service_lock" 2>/dev/null)"
+    fi
+
+    if [ -n "$service_name" ]; then
+        local unit_file="/etc/systemd/system/${service_name}.service"
+        if [ -f "$unit_file" ]; then
+            local exec_line
+            exec_line="$(grep -E '^ExecStart=' "$unit_file" 2>/dev/null | head -n1)"
+            if [ -n "$exec_line" ]; then
+                exec_line="${exec_line#ExecStart=}"
+                local port
+                port="$(printf '%s\n' "$exec_line" | sed -n 's/.*0\\.0\\.0\\.0:\([0-9]\{2,5\}\).*/\1/p')"
+                if [ -z "$port" ]; then
+                    port="$(printf '%s\n' "$exec_line" | sed -n 's/.*--port[= ]\([0-9]\{2,5\}\).*/\1/p')"
+                fi
+                if [ -n "$port" ]; then
+                    printf '%s' "$port"
+                    return 0
+                fi
+            fi
+        fi
+    fi
+
+    if command -v pgrep >/dev/null 2>&1; then
+        local runserver_line
+        runserver_line="$(pgrep -af "manage.py runserver" 2>/dev/null | head -n1)"
+        if [ -n "$runserver_line" ]; then
+            local port
+            port="$(printf '%s\n' "$runserver_line" | sed -n 's/.*0\\.0\\.0\\.0:\([0-9]\{2,5\}\).*/\1/p')"
+            if [ -z "$port" ]; then
+                port="$(printf '%s\n' "$runserver_line" | sed -n 's/.*--port[= ]\([0-9]\{2,5\}\).*/\1/p')"
+            fi
+            if [ -n "$port" ]; then
+                printf '%s' "$port"
+                return 0
+            fi
+        fi
+    fi
+
+    printf '%s' "$default_port"
+    return 0
+}
+
 arthexis_desktop_shortcut_launch() {
     local shortcut="$1"
     local base_dir
@@ -158,19 +216,27 @@ arthexis_desktop_shortcut_launch() {
     local locks_dir="$base_dir/locks"
     local service_name=""
     local url=""
+    local port_suffix="/"
 
     case "$shortcut" in
         public)
-            url="http://localhost/"
+            port_suffix="/"
             ;;
         admin)
-            url="http://localhost/admin/"
+            port_suffix="/admin/"
             ;;
         *)
             echo "Unknown shortcut: $shortcut" >&2
             return 1
             ;;
     esac
+
+    local port
+    port="$(arthexis_desktop_shortcut_detect_port "$base_dir")"
+    if [ -z "$port" ]; then
+        port="8000"
+    fi
+    url="http://localhost:${port}${port_suffix}"
 
     if [ -f "$locks_dir/service.lck" ]; then
         service_name="$(cat "$locks_dir/service.lck" 2>/dev/null)"
