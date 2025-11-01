@@ -140,6 +140,32 @@ class AWGCalculatorTests(TestCase):
         self.assertEqual(lead.status, PowerLead.Status.OPEN)
         self.assertFalse(lead.malformed)
 
+    def test_power_lead_uses_original_referer(self):
+        url = reverse("awg:calculator")
+        data = {
+            "meters": "5",
+            "amps": "32",
+            "volts": "208",
+            "material": "cu",
+            "max_lines": "1",
+            "phases": "2",
+            "temperature": "60",
+            "conduit": "emt",
+            "ground": "1",
+        }
+        self.client.get(
+            reverse("pages:index"),
+            HTTP_REFERER="https://campaign.example/power",
+        )
+        self.client.post(
+            url,
+            data,
+            HTTP_REFERER="http://testserver/awg/calculator/",
+            HTTP_USER_AGENT="tester",
+        )
+        lead = PowerLead.objects.get()
+        self.assertEqual(lead.referer, "https://campaign.example/power")
+
     def test_power_lead_stores_forwarded_for_ip(self):
         url = reverse("awg:calculator")
         data = {

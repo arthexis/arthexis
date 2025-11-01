@@ -10,7 +10,7 @@ from django.conf import settings
 from django.urls import Resolver404, resolve
 
 from .models import Landing, LandingLead, ViewHistory
-from .utils import landing_leads_supported
+from .utils import cache_original_referer, get_original_referer, landing_leads_supported
 
 
 logger = logging.getLogger(__name__)
@@ -30,6 +30,7 @@ class ViewHistoryMiddleware:
         )
 
     def __call__(self, request):
+        cache_original_referer(request)
         should_track = self._should_track(request)
         if not should_track:
             return self.get_response(request)
@@ -132,7 +133,7 @@ class ViewHistoryMiddleware:
         if not landing_leads_supported():
             return
 
-        referer = request.META.get("HTTP_REFERER", "") or ""
+        referer = get_original_referer(request)
         user_agent = request.META.get("HTTP_USER_AGENT", "") or ""
         ip_address = self._extract_client_ip(request) or None
         user = getattr(request, "user", None)

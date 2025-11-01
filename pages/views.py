@@ -67,6 +67,7 @@ from core.models import (
     Todo,
 )
 from ocpp.models import Charger
+from .utils import get_original_referer
 
 try:  # pragma: no cover - optional dependency guard
     from graphviz import Digraph
@@ -1114,7 +1115,7 @@ def request_invite(request):
                 comment=comment,
                 user=request.user if request.user.is_authenticated else None,
                 path=request.path,
-                referer=request.META.get("HTTP_REFERER", ""),
+                referer=get_original_referer(request),
                 user_agent=request.META.get("HTTP_USER_AGENT", ""),
                 ip_address=ip_address,
                 mac_address=mac_address or "",
@@ -1592,7 +1593,7 @@ def submit_user_story(request):
         if not story.name:
             story.name = str(_("Anonymous"))[:40]
         story.path = (story.path or request.get_full_path())[:500]
-        story.referer = request.META.get("HTTP_REFERER", "")
+        story.referer = get_original_referer(request)
         story.user_agent = request.META.get("HTTP_USER_AGENT", "")
         story.ip_address = client_ip or None
         story.is_user_data = True
