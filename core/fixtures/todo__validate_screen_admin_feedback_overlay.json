@@ -5,8 +5,11 @@
       "request": "Validate screen Admin feedback overlay",
       "url": "/admin/",
       "request_details": "Open the feedback dialog from any admin page and confirm all labels, placeholders, and helper text meet WCAG contrast on both light and dark themes.",
-      "done_on": null,
-      "is_deleted": false
+      "done_on": "2025-10-31T20:59:39.349725-06:00",
+      "is_deleted": true,
+      "done_version": "0.1.23+",
+      "done_revision": "92dc8b60a33faa353d5369e2db29e228688205fe",
+      "done_username": "admin"
     }
   }
 ]
