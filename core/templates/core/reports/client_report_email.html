@@ -35,11 +35,12 @@
               <thead>
                 <tr>
                   <th>{% trans "Connector" %}</th>
-                  <th>{% trans "Start kWh" %}</th>
-                  <th>{% trans "End kWh" %}</th>
-                  <th>{% trans "Session kWh" %}</th>
+                  <th>{% trans "Start kW" %}</th>
+                  <th>{% trans "End kW" %}</th>
+                  <th>{% trans "Session kW" %}</th>
                   <th>{% trans "Session start" %}</th>
                   <th>{% trans "Session end" %}</th>
+                  <th>{% trans "Time" %}</th>
                   <th>{% trans "RFID label" %}</th>
                   <th>{% trans "Account" %}</th>
                 </tr>
@@ -51,8 +52,17 @@
                     <td>{% if row.start_kwh is not None %}{{ row.start_kwh|floatformat:2 }}{% else %}—{% endif %}</td>
                     <td>{% if row.end_kwh is not None %}{{ row.end_kwh|floatformat:2 }}{% else %}—{% endif %}</td>
                     <td>{{ row.session_kwh|floatformat:2 }}</td>
-                    <td>{% if row.start %}{{ row.start|localtime|date:"DATETIME_FORMAT" }}{% else %}—{% endif %}</td>
-                    <td>{% if row.end %}{{ row.end|localtime|date:"DATETIME_FORMAT" }}{% else %}—{% endif %}</td>
+                    <td>
+                      {% if row.start %}
+                        <time datetime="{{ row.start|date:'c' }}">{{ row.start_display|default:"—" }}</time>
+                      {% else %}—{% endif %}
+                    </td>
+                    <td>
+                      {% if row.end %}
+                        <time datetime="{{ row.end|date:'c' }}">{{ row.end_display|default:"—" }}</time>
+                      {% else %}—{% endif %}
+                    </td>
+                    <td>{{ row.duration_minutes|default_if_none:"—" }}</td>
                     <td>{{ row.rfid_label|default:"—" }}</td>
                     <td>{{ row.account_name|default:"—" }}</td>
                   </tr>
@@ -80,19 +90,29 @@
                     <th>{% trans "RFID / Account" %}</th>
                     <th>{% trans "Session start" %}</th>
                     <th>{% trans "Session end" %}</th>
-                    <th>{% trans "Energy (kWh)" %}</th>
+                    <th>{% trans "Time" %}</th>
+                    <th>{% trans "Energy (kW)" %}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {% for row in rows %}
                     <tr>
                       <td><strong>{{ row.subject }}</strong></td>
-                      <td>{% if row.start %}{{ row.start|localtime|date:"DATETIME_FORMAT" }}{% else %}{% trans "Unavailable" %}{% endif %}</td>
-                      <td>{% if row.end %}{{ row.end|localtime|date:"DATETIME_FORMAT" }}{% else %}{% trans "In progress" %}{% endif %}</td>
+                      <td>
+                        {% if row.start %}
+                          <time datetime="{{ row.start|date:'c' }}">{{ row.start_display|default:"—" }}</time>
+                        {% else %}{% trans "Unavailable" %}{% endif %}
+                      </td>
+                      <td>
+                        {% if row.end %}
+                          <time datetime="{{ row.end|date:'c' }}">{{ row.end_display|default:"—" }}</time>
+                        {% else %}{% trans "In progress" %}{% endif %}
+                      </td>
+                      <td>{{ row.duration_minutes|default_if_none:"—" }}</td>
                       <td>{{ row.kw|floatformat:2 }}</td>
                     </tr>
                   {% empty %}
-                    <tr><td colspan="4">{% trans "No data available." %}</td></tr>
+                    <tr><td colspan="5">{% trans "No data available." %}</td></tr>
                   {% endfor %}
                 </tbody>
               </table>
@@ -102,7 +122,7 @@
                   <tr>
                     <th>{% trans "RFID/Account" %}</th>
                     <th>{% trans "Sessions" %}</th>
-                    <th>{% trans "Total kWh" %}</th>
+                    <th>{% trans "Total kW" %}</th>
                   </tr>
                 </thead>
                 <tbody>
