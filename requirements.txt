@@ -94,7 +94,7 @@ vine==5.1.0
 wcwidth==0.2.14
 webencodings==0.5.1
 websocket-client==1.8.0
-websockets==13.1
+websockets==15.0.1
 whitenoise==6.11.0
 plyer==2.1.0; sys_platform == "win32"
 wsproto==1.2.0
