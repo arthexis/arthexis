@@ -50,6 +50,7 @@ import uuid
 import requests
 import datetime
 from django.db import IntegrityError, transaction
+from django.db.models import Q
 import calendar
 import re
 from django_object_actions import DjangoObjectActions
@@ -63,7 +64,7 @@ from reportlab.graphics.barcode import qr
 from reportlab.graphics.shapes import Drawing
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
-from ocpp.models import Transaction
+from ocpp.models import Charger, Transaction
 from ocpp.rfid.utils import build_mode_toggle
 from nodes.models import EmailOutbox
 from .github_helper import GitHubRepositoryError, create_repository_for_package
@@ -3615,12 +3616,61 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
         return JsonResponse(result, status=status)
 
 
+class ClientReportRecurrencyFilter(admin.SimpleListFilter):
+    title = "Recurrency"
+    parameter_name = "recurrency"
+
+    def lookups(self, request, model_admin):
+        for value, label in ClientReportSchedule.PERIODICITY_CHOICES:
+            yield (value, label)
+
+    def queryset(self, request, queryset):
+        value = self.value()
+        if not value:
+            return queryset
+        if value == ClientReportSchedule.PERIODICITY_NONE:
+            return queryset.filter(
+                Q(schedule__isnull=True) | Q(schedule__periodicity=value)
+            )
+        return queryset.filter(schedule__periodicity=value)
+
+
 @admin.register(ClientReport)
 class ClientReportAdmin(EntityModelAdmin):
-    list_display = ("created_on", "start_date", "end_date")
+    list_display = (
+        "created_on",
+        "period_range",
+        "owner",
+        "recurrency_display",
+        "total_kw_period_display",
+        "download_link",
+    )
+    list_select_related = ("schedule", "owner")
+    list_filter = ("owner", ClientReportRecurrencyFilter)
     readonly_fields = ("created_on", "data")
 
     change_list_template = "admin/core/clientreport/change_list.html"
+
+    def period_range(self, obj):
+        return str(obj)
+
+    period_range.short_description = "Period"
+
+    def recurrency_display(self, obj):
+        return obj.periodicity_label
+
+    recurrency_display.short_description = "Recurrency"
+
+    def total_kw_period_display(self, obj):
+        return f"{obj.total_kw_period:.2f}"
+
+    total_kw_period_display.short_description = "Total kW (period)"
+
+    def download_link(self, obj):
+        url = reverse("admin:core_clientreport_download", args=[obj.pk])
+        return format_html('<a href="{}">Download</a>', url)
+
+    download_link.short_description = "Download"
 
     class ClientReportForm(forms.Form):
         PERIOD_CHOICES = [
@@ -3659,6 +3709,14 @@ class ClientReportAdmin(EntityModelAdmin):
             widget=forms.DateInput(attrs={"type": "month"}),
             help_text="Generates the report for the calendar month that you select.",
         )
+        chargers = forms.ModelMultipleChoiceField(
+            label="Charge points",
+            queryset=Charger.objects.filter(connector_id__isnull=True)
+            .order_by("display_name", "charger_id"),
+            required=False,
+            widget=forms.CheckboxSelectMultiple,
+            help_text="Choose which charge points are included in the report.",
+        )
         owner = forms.ModelChoiceField(
             queryset=get_user_model().objects.all(),
             required=False,
@@ -3691,6 +3749,7 @@ class ClientReportAdmin(EntityModelAdmin):
                 and request.user.is_authenticated
             ):
                 self.fields["owner"].initial = request.user.pk
+            self.fields["chargers"].widget.attrs["class"] = "charger-options"
 
         def clean(self):
             cleaned = super().clean()
@@ -3763,14 +3822,33 @@ class ClientReportAdmin(EntityModelAdmin):
             enable_emails = form.cleaned_data.get("enable_emails", False)
             disable_emails = not enable_emails
             recipients = form.cleaned_data.get("destinations") if enable_emails else []
+            chargers = list(form.cleaned_data.get("chargers") or [])
             report = ClientReport.generate(
                 form.cleaned_data["start"],
                 form.cleaned_data["end"],
                 owner=owner,
                 recipients=recipients,
                 disable_emails=disable_emails,
+                chargers=chargers,
             )
             report.store_local_copy()
+            if chargers:
+                report.chargers.set(chargers)
+            if enable_emails and recipients:
+                delivered = report.send_delivery(
+                    to=recipients,
+                    cc=[],
+                    outbox=ClientReport.resolve_outbox_for_owner(owner),
+                    reply_to=ClientReport.resolve_reply_to_for_owner(owner),
+                )
+                if delivered:
+                    report.recipients = delivered
+                    report.save(update_fields=["recipients"])
+                    self.message_user(
+                        request,
+                        "Consumer report emailed to the selected recipients.",
+                        messages.SUCCESS,
+                    )
             recurrence = form.cleaned_data.get("recurrence")
             if recurrence and recurrence != ClientReportSchedule.PERIODICITY_NONE:
                 schedule = ClientReportSchedule.objects.create(
@@ -3780,6 +3858,8 @@ class ClientReportAdmin(EntityModelAdmin):
                     email_recipients=recipients,
                     disable_emails=disable_emails,
                 )
+                if chargers:
+                    schedule.chargers.set(chargers)
                 report.schedule = schedule
                 report.save(update_fields=["schedule"])
                 self.message_user(
@@ -3812,7 +3892,6 @@ class ClientReportAdmin(EntityModelAdmin):
                 "report": report,
                 "schedule": schedule,
                 "download_url": download_url,
-                "previous_reports": self._build_report_history(request),
             }
         )
         return TemplateResponse(
@@ -3828,28 +3907,6 @@ class ClientReportAdmin(EntityModelAdmin):
         response = FileResponse(pdf_path.open("rb"), content_type="application/pdf")
         response["Content-Disposition"] = f'attachment; filename="{filename}"'
         return response
-
-    def _build_report_history(self, request):
-        queryset = ClientReport.objects.order_by("-created_on")[:20]
-        history = []
-        for item in queryset:
-            totals = item.rows_for_display.get("totals", {})
-            history.append(
-                {
-                    "instance": item,
-                    "download_url": reverse(
-                        "admin:core_clientreport_download", args=[item.pk]
-                    ),
-                    "email_enabled": not item.disable_emails,
-                    "recipients": item.recipients or [],
-                    "totals": {
-                        "total_kw": totals.get("total_kw", 0.0),
-                        "total_kw_period": totals.get("total_kw_period", 0.0),
-                    },
-                }
-            )
-        return history
-
 
 @admin.register(PackageRelease)
 class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):

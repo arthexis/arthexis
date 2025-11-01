@@ -69,6 +69,7 @@ class ClientReportGenerationTests(TestCase):
                 "start": day,
                 "end": day,
                 "recurrence": ClientReportSchedule.PERIODICITY_NONE,
+                "chargers": [self.charger.pk],
             },
         )
         self.assertEqual(resp.status_code, 200)
@@ -87,6 +88,7 @@ class ClientReportGenerationTests(TestCase):
                 "start": day,
                 "end": day,
                 "recurrence": ClientReportSchedule.PERIODICITY_NONE,
+                "chargers": [self.charger.pk],
             },
         )
         self.assertEqual(resp.status_code, 302)
@@ -99,6 +101,7 @@ class ClientReportGenerationTests(TestCase):
         self.assertEqual(report.start_date, day)
         self.assertEqual(report.end_date, day)
         self.assertEqual(report.owner, self.user)
+        self.assertEqual(list(report.chargers.all()), [self.charger])
         export = report.data.get("export")
         self.assertIsNotNone(export)
         html_path = Path(settings.BASE_DIR) / export["html_path"]
@@ -119,6 +122,8 @@ class ClientReportGenerationTests(TestCase):
         self.assertTrue(
             any(tx.get("rfid_label") == str(self.rfid2.label_id) for tx in transactions)
         )
+        filters = report.data.get("filters", {})
+        self.assertEqual(filters.get("chargers"), [self.charger.charger_id])
         pdf_response = self.client.get(
             reverse("pages:client-report-download", args=[report.pk])
         )
@@ -138,6 +143,7 @@ class ClientReportGenerationTests(TestCase):
             "start": day,
             "end": day,
             "recurrence": ClientReportSchedule.PERIODICITY_NONE,
+            "chargers": [self.charger.pk],
         }
         self.client.force_login(self.user)
 

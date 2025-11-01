@@ -3,6 +3,7 @@ import os
 import sys
 from pathlib import Path
 from datetime import timedelta
+from unittest.mock import patch
 
 import pytest
 
@@ -71,6 +72,7 @@ class AdminClientReportTests(TestCase):
                 "start": day,
                 "end": day,
                 "recurrence": ClientReportSchedule.PERIODICITY_NONE,
+                "chargers": [self.charger.pk],
             },
         )
         self.assertEqual(resp.status_code, 302)
@@ -84,6 +86,8 @@ class AdminClientReportTests(TestCase):
         self.assertEqual(report.end_date, day)
         self.assertEqual(report.owner, self.user)
         self.assertFalse(ClientReportSchedule.objects.exists())
+        self.assertEqual(report.chargers.count(), 1)
+        self.assertEqual(report.chargers.get(), self.charger)
         export = report.data.get("export")
         html_path = Path(settings.BASE_DIR) / export["html_path"]
         json_path = Path(settings.BASE_DIR) / export["json_path"]
@@ -133,24 +137,31 @@ class AdminClientReportTests(TestCase):
     def test_generate_report_with_schedule(self):
         day = timezone.now().date()
         url = reverse("admin:core_clientreport_generate")
-        resp = self.client.post(
-            url,
-            {
-                "period": "range",
-                "start": day,
-                "end": day,
-                "recurrence": ClientReportSchedule.PERIODICITY_WEEKLY,
-                "destinations": "dest@example.com",
-                "owner": self.user.pk,
-                "enable_emails": "on",
-            },
-        )
+        with patch(
+            "core.models.ClientReport.send_delivery", return_value=["dest@example.com"]
+        ) as mocked_send:
+            resp = self.client.post(
+                url,
+                {
+                    "period": "range",
+                    "start": day,
+                    "end": day,
+                    "recurrence": ClientReportSchedule.PERIODICITY_WEEKLY,
+                    "destinations": "dest@example.com",
+                    "owner": self.user.pk,
+                    "enable_emails": "on",
+                    "chargers": [self.charger.pk],
+                },
+            )
+        mocked_send.assert_called_once()
         self.assertEqual(resp.status_code, 200)
         schedule = ClientReportSchedule.objects.get()
         self.assertEqual(schedule.periodicity, ClientReportSchedule.PERIODICITY_WEEKLY)
         self.assertIn("dest@example.com", schedule.email_recipients)
+        self.assertEqual(list(schedule.chargers.all()), [self.charger])
         report = ClientReport.objects.get()
         self.assertEqual(report.schedule, schedule)
+        self.assertEqual(report.recipients, ["dest@example.com"])
         export = report.data.get("export")
         html_path = Path(settings.BASE_DIR) / export["html_path"]
         json_path = Path(settings.BASE_DIR) / export["json_path"]
