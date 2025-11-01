@@ -3072,8 +3072,12 @@ class ClientReport(Entity):
         ordering = ["-created_on"]
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
-        period_label = self.periodicity_label
-        return f"{self.start_date} - {self.end_date} ({period_label})"
+        period_type = (
+            self.schedule.periodicity
+            if self.schedule
+            else ClientReportSchedule.PERIODICITY_NONE
+        )
+        return f"{self.start_date} - {self.end_date} ({period_type})"
 
     @property
     def periodicity_label(self) -> str:
@@ -3179,20 +3183,6 @@ class ClientReport(Entity):
         attachments = [
             (pdf_path.name, pdf_path.read_bytes(), "application/pdf"),
         ]
-
-        export = dict((self.data or {}).get("export") or {})
-        base_dir = Path(settings.BASE_DIR)
-        for key, mime in (
-            ("html_path", "text/html"),
-            ("json_path", "application/json"),
-        ):
-            relative_path = export.get(key)
-            if not relative_path:
-                continue
-            candidate = base_dir / relative_path
-            if not candidate.exists():
-                continue
-            attachments.append((candidate.name, candidate.read_bytes(), mime))
 
         totals = self.rows_for_display.get("totals", {})
         body_lines = [
