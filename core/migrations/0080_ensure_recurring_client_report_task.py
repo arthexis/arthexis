@@ -36,6 +36,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("core", "0079_clientreport_chargers_clientreportschedule_chargers"),
+        ("django_celery_beat", "0019_alter_periodictasks_options"),
     ]
 
     operations = [
