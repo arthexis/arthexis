@@ -80,7 +80,15 @@
                 <input type="checkbox" id="{{ checkbox_id }}" name="selected_shas" value="{{ entry.sha }}">
               </td>
               <td>
-                <label for="{{ checkbox_id }}"><code>{{ entry.sha }}</code></label>
+                <label for="{{ checkbox_id }}">
+                  {% if entry.url %}
+                    <a href="{{ entry.url }}" target="_blank" rel="noopener">
+                      <code>{{ entry.sha }}</code>
+                    </a>
+                  {% else %}
+                    <code>{{ entry.sha }}</code>
+                  {% endif %}
+                </label>
               </td>
               <td>{{ entry.message|default:"" }}</td>
             </tr>
@@ -112,7 +120,15 @@
           <tbody>
           {% for entry in latest_release_changelog.entries %}
             <tr>
-              <td><code>{{ entry.sha }}</code></td>
+              <td>
+                {% if entry.url %}
+                  <a href="{{ entry.url }}" target="_blank" rel="noopener">
+                    <code>{{ entry.sha }}</code>
+                  </a>
+                {% else %}
+                  <code>{{ entry.sha }}</code>
+                {% endif %}
+              </td>
               <td>{{ entry.message|default:"" }}</td>
             </tr>
           {% endfor %}
