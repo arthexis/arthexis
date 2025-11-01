@@ -52,6 +52,7 @@ AP_NAME="$DEFAULT_AP_NAME"
 AP_SPECIFIED=false
 AP_NAME_LOWER=""
 SKIP_AP=false
+AP_IPV6_ADDRESS="fd42:0:0:42::1/64"
 ETH0_SUBNET_BASE="$DEFAULT_ETH0_SUBNET_BASE"
 ETH0_PREFIX=16
 ETH0_MODE="auto"
@@ -1137,7 +1138,8 @@ if [[ $RUN_AP == true ]]; then
                 ipv4.method shared \
                 ipv4.addresses 10.42.0.1/16 \
                 ipv4.never-default yes \
-                ipv6.method ignore \
+                ipv6.method shared \
+                ipv6.addresses "$AP_IPV6_ADDRESS" \
                 ipv6.never-default yes \
                 connection.autoconnect yes \
                 connection.autoconnect-priority 0
@@ -1145,7 +1147,7 @@ if [[ $RUN_AP == true ]]; then
             nmcli connection add type wifi ifname wlan0 con-name "$AP_NAME" \
                 connection.interface-name wlan0 autoconnect yes connection.autoconnect-priority 0 \
                 ssid "$AP_NAME" mode ap ipv4.method shared ipv4.addresses 10.42.0.1/16 \
-                ipv4.never-default yes ipv6.method ignore ipv6.never-default yes \
+                ipv4.never-default yes ipv6.method shared ipv6.addresses "$AP_IPV6_ADDRESS" ipv6.never-default yes \
                 wifi.band bg "${security_args[@]}"
         fi
         if ! nmcli connection up "$AP_NAME" ifname wlan0; then
@@ -1296,11 +1298,11 @@ if [[ $RUN_REINSTALL_WLAN1 == true ]]; then
                 if [[ -n "$psk" ]]; then
                     nmcli connection add type wifi ifname wlan1 con-name "$new_name" ssid "$ssid" \
                         wifi.band a wifi-sec.key-mgmt "$key_mgmt" wifi-sec.psk "$psk" autoconnect yes \
-                        ipv4.method auto ipv4.route-metric 100 ipv6.method ignore
+                        ipv4.method auto ipv4.route-metric 100 ipv6.method auto
                 else
                     nmcli connection add type wifi ifname wlan1 con-name "$new_name" ssid "$ssid" \
                         wifi.band a autoconnect yes ipv4.method auto ipv4.route-metric 100 \
-                        ipv6.method ignore
+                        ipv6.method auto
                 fi
             fi
         done < <(nmcli -t -f NAME connection show)
@@ -1330,18 +1332,26 @@ if [[ $RUN_CONFIGURE_NET == true ]]; then
                     ipv4.method auto \
                     ipv4.never-default no \
                     ipv4.route-metric 100 \
-                    ipv6.method ignore \
-                    ipv6.never-default yes \
+                    ipv6.method auto \
+                    ipv6.never-default no \
                     connection.autoconnect yes \
                     connection.autoconnect-priority 0
             else
                 nmcli connection add type ethernet ifname eth0 con-name "$ETH0_CONNECTION_CLIENT" autoconnect yes \
                     ipv4.method auto ipv4.never-default no ipv4.route-metric 100 \
-                    ipv6.method ignore ipv6.never-default yes \
+                    ipv6.method auto ipv6.never-default no \
                     connection.autoconnect-priority 0
             fi
         else
             eth0_ip="${ETH0_SUBNET_BASE}.10/${ETH0_PREFIX}"
+            ETH0_SUBNET_SUFFIX="${ETH0_SUBNET_BASE##*.}"
+            if [[ -z "$ETH0_SUBNET_SUFFIX" || "$ETH0_SUBNET_SUFFIX" == "$ETH0_SUBNET_BASE" ]]; then
+                ETH0_SUBNET_SUFFIX="$DEFAULT_ETH0_SUBNET_SUFFIX"
+            elif [[ ! "$ETH0_SUBNET_SUFFIX" =~ ^[0-9]+$ ]]; then
+                ETH0_SUBNET_SUFFIX="$DEFAULT_ETH0_SUBNET_SUFFIX"
+            fi
+            printf -v ETH0_IPV6_SEGMENT "%02x" "$ETH0_SUBNET_SUFFIX"
+            ETH0_IPV6_ADDRESS="fd42:${ETH0_IPV6_SEGMENT}::1/64"
             if nmcli -t -f NAME connection show | grep -Fxq "$ETH0_CONNECTION_SHARED"; then
                 nmcli connection modify "$ETH0_CONNECTION_SHARED" \
                     connection.interface-name eth0 \
@@ -1349,14 +1359,15 @@ if [[ $RUN_CONFIGURE_NET == true ]]; then
                     ipv4.addresses "$eth0_ip" \
                     ipv4.never-default yes \
                     ipv4.route-metric 10000 \
-                    ipv6.method ignore \
+                    ipv6.method shared \
+                    ipv6.addresses "$ETH0_IPV6_ADDRESS" \
                     ipv6.never-default yes \
                     connection.autoconnect yes \
                     connection.autoconnect-priority 0
             else
                 nmcli connection add type ethernet ifname eth0 con-name "$ETH0_CONNECTION_SHARED" autoconnect yes \
                     ipv4.method shared ipv4.addresses "$eth0_ip" ipv4.never-default yes \
-                    ipv4.route-metric 10000 ipv6.method ignore ipv6.never-default yes \
+                    ipv4.route-metric 10000 ipv6.method shared ipv6.addresses "$ETH0_IPV6_ADDRESS" ipv6.never-default yes \
                     connection.autoconnect-priority 0
             fi
         fi
@@ -1386,7 +1397,7 @@ if [[ $RUN_CONFIGURE_NET == true ]]; then
                 connection.interface-name wlan0 \
                 ssid "Hyperline" wifi-sec.key-mgmt wpa-psk wifi-sec.psk "arthexis" \
                 autoconnect yes connection.autoconnect-priority 20 \
-                ipv4.method auto ipv6.method ignore ipv4.route-metric 50
+                ipv4.method auto ipv6.method auto ipv4.route-metric 50
 
             if [[ $AP_ACTIVATED == true ]]; then
                 echo "Hyperline client connection configured but left inactive while '$AP_NAME' access point is running."

@@ -434,7 +434,10 @@ def sync_remote_chargers() -> int:
         if signature:
             headers["X-Signature"] = signature
 
-        url = f"http://{node.address}:{node.port}/nodes/network/chargers/"
+        url = next(node.iter_remote_urls("/nodes/network/chargers/"), "")
+        if not url:
+            logger.warning("No reachable host found for %s when syncing chargers", node)
+            continue
         try:
             response = requests.post(url, data=payload_json, headers=headers, timeout=5)
         except RequestException as exc:
