@@ -16,7 +16,7 @@ from django.urls import NoReverseMatch, path, reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.utils.html import format_html, format_html_join
-from django.utils.translation import gettext_lazy as _
+from django.utils.translation import gettext_lazy as _, ngettext
 from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import urljoin, urlparse, urlsplit, urlunsplit
@@ -290,8 +290,34 @@ class NodeAdmin(EntityModelAdmin):
         "discover_charge_points",
         "import_rfids_from_selected",
         "export_rfids_to_selected",
+        "send_net_message",
     ]
     inlines = [NodeFeatureAssignmentInline]
+
+    class SendNetMessageForm(forms.Form):
+        subject = forms.CharField(
+            label=_("Subject"),
+            max_length=NetMessage._meta.get_field("subject").max_length,
+            required=False,
+        )
+        body = forms.CharField(
+            label=_("Body"),
+            max_length=NetMessage._meta.get_field("body").max_length,
+            required=False,
+            widget=forms.Textarea(attrs={"rows": 4}),
+        )
+
+        def clean(self):
+            cleaned = super().clean()
+            subject = (cleaned.get("subject") or "").strip()
+            body = (cleaned.get("body") or "").strip()
+            if not subject and not body:
+                raise forms.ValidationError(
+                    _("Enter a subject or body to send.")
+                )
+            cleaned["subject"] = subject
+            cleaned["body"] = body
+            return cleaned
 
     @admin.display(description=_("Relation"), ordering="current_relation")
     def relation(self, obj):
@@ -415,6 +441,75 @@ class NodeAdmin(EntityModelAdmin):
         }
         return TemplateResponse(
             request, "admin/nodes/node/update_selected.html", context
+        )
+
+    @admin.action(description=_("Send Net Message"))
+    def send_net_message(self, request, queryset):
+        is_submit = "apply" in request.POST
+        form = self.SendNetMessageForm(request.POST if is_submit else None)
+        selected_ids = request.POST.getlist(helpers.ACTION_CHECKBOX_NAME)
+        if not selected_ids:
+            selected_ids = [str(pk) for pk in queryset.values_list("pk", flat=True)]
+        nodes: list[Node] = []
+        cleaned_ids: list[int] = []
+        for value in selected_ids:
+            try:
+                cleaned_ids.append(int(value))
+            except (TypeError, ValueError):
+                continue
+        if cleaned_ids:
+            base_queryset = self.get_queryset(request).filter(pk__in=cleaned_ids)
+            nodes_by_pk = {str(node.pk): node for node in base_queryset}
+            nodes = [nodes_by_pk[value] for value in selected_ids if value in nodes_by_pk]
+        if not nodes:
+            nodes = list(queryset)
+            selected_ids = [str(node.pk) for node in nodes]
+        if not nodes:
+            self.message_user(request, _("No nodes selected."), messages.INFO)
+            return None
+        if is_submit and form.is_valid():
+            subject = form.cleaned_data["subject"]
+            body = form.cleaned_data["body"]
+            created = 0
+            for node in nodes:
+                message = NetMessage.objects.create(
+                    subject=subject,
+                    body=body,
+                    filter_node=node,
+                )
+                message.propagate()
+                created += 1
+            if created:
+                success_message = ngettext(
+                    "Sent %(count)d net message.",
+                    "Sent %(count)d net messages.",
+                    created,
+                ) % {"count": created}
+                self.message_user(request, success_message, messages.SUCCESS)
+            else:
+                self.message_user(
+                    request, _("No net messages were sent."), messages.INFO
+                )
+            return None
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "title": _("Send Net Message"),
+            "nodes": nodes,
+            "selected_ids": selected_ids,
+            "action_name": request.POST.get("action", "send_net_message"),
+            "select_across": request.POST.get("select_across", "0"),
+            "action_checkbox_name": helpers.ACTION_CHECKBOX_NAME,
+            "adminform": helpers.AdminForm(
+                form,
+                [(None, {"fields": ("subject", "body")})],
+                {},
+            ),
+            "form": form,
+            "media": self.media + form.media,
+        }
+        return TemplateResponse(
+            request, "admin/nodes/node/send_net_message.html", context
         )
 
     def update_selected_progress(self, request):
