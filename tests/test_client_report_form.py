@@ -44,3 +44,21 @@ class ClientReportFormTests(SimpleTestCase):
         self.assertTrue(form.is_valid(), form.errors)
         self.assertEqual(form.cleaned_data["start"], datetime.date(2023, 9, 1))
         self.assertEqual(form.cleaned_data["end"], datetime.date(2023, 9, 30))
+
+    def test_title_rejects_control_characters(self):
+        form = ClientReportForm(
+            data={
+                "period": "range",
+                "start": "2024-01-01",
+                "end": "2024-01-31",
+                "recurrence": ClientReportSchedule.PERIODICITY_NONE,
+                "language": "en",
+                "title": "Malicious\nSubject",
+            }
+        )
+
+        self.assertFalse(form.is_valid())
+        self.assertIn(
+            "Report title cannot contain control characters.",
+            form.errors.get("title", []),
+        )

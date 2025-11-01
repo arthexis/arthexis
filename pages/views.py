@@ -1376,7 +1376,8 @@ class ClientReportForm(forms.Form):
         return emails
 
     def clean_title(self):
-        return (self.cleaned_data.get("title") or "").strip()
+        title = self.cleaned_data.get("title")
+        return ClientReport.normalize_title(title)
 
 
 @live_update()

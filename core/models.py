@@ -87,6 +87,15 @@ def normalize_report_language(language: str | None) -> str:
     return default
 
 
+def normalize_report_title(title: str | None) -> str:
+    value = (title or "").strip()
+    if "\r" in value or "\n" in value:
+        raise ValidationError(
+            _("Report title cannot contain control characters."),
+        )
+    return value
+
+
 from .entity import Entity, EntityUserManager, EntityManager
 from .release import (
     Package as ReleasePackage,
@@ -2801,7 +2810,7 @@ class ClientReportSchedule(Entity):
     def save(self, *args, **kwargs):
         if self.language:
             self.language = normalize_report_language(self.language)
-        self.title = (self.title or "").strip()
+        self.title = normalize_report_title(self.title)
         sync = kwargs.pop("sync_task", True)
         super().save(*args, **kwargs)
         if sync and self.pk:
@@ -3150,10 +3159,14 @@ class ClientReport(Entity):
     def normalize_language(language: str | None) -> str:
         return normalize_report_language(language)
 
+    @staticmethod
+    def normalize_title(title: str | None) -> str:
+        return normalize_report_title(title)
+
     def save(self, *args, **kwargs):
         if self.language:
             self.language = normalize_report_language(self.language)
-        self.title = (self.title or "").strip()
+        self.title = self.normalize_title(self.title)
         super().save(*args, **kwargs)
 
     @property
@@ -3194,7 +3207,7 @@ class ClientReport(Entity):
 
         payload = cls.build_rows(start_date, end_date, chargers=charger_list)
         normalized_language = cls.normalize_language(language)
-        title_value = (title or "").strip()
+        title_value = cls.normalize_title(title)
         report = cls.objects.create(
             start_date=start_date,
             end_date=end_date,
@@ -3285,7 +3298,9 @@ class ClientReport(Entity):
             )
             total_kw_period_label = gettext("Total kW during period")
             total_kw_all_label = gettext("Total kW (all time)")
-            report_title = (self.title or "").strip() or gettext("Consumer Report")
+            report_title = self.normalize_title(self.title) or gettext(
+                "Consumer Report"
+            )
             body_lines = [
                 gettext("%(title)s for %(start)s through %(end)s.")
                 % {"title": report_title, "start": start_display, "end": end_display},
@@ -3710,7 +3725,9 @@ class ClientReport(Entity):
 
             story: list = []
 
-            report_title = (self.title or "").strip() or gettext("Consumer Report")
+            report_title = self.normalize_title(self.title) or gettext(
+                "Consumer Report"
+            )
             story.append(Paragraph(report_title, title_style))
 
             start_display = formats.date_format(
