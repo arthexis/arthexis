@@ -3180,6 +3180,20 @@ class ClientReport(Entity):
             (pdf_path.name, pdf_path.read_bytes(), "application/pdf"),
         ]
 
+        export = dict((self.data or {}).get("export") or {})
+        base_dir = Path(settings.BASE_DIR)
+        for key, mime in (
+            ("html_path", "text/html"),
+            ("json_path", "application/json"),
+        ):
+            relative_path = export.get(key)
+            if not relative_path:
+                continue
+            candidate = base_dir / relative_path
+            if not candidate.exists():
+                continue
+            attachments.append((candidate.name, candidate.read_bytes(), mime))
+
         totals = self.rows_for_display.get("totals", {})
         body_lines = [
             f"Consumer report for {self.start_date} through {self.end_date}.",
