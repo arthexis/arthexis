@@ -318,8 +318,27 @@ class Command(BaseCommand):
         return total if total >= 0 else 0.0
 
     def _render_table(self, chargers: Iterable[Charger]) -> None:
+        totals: dict[int, float] = {}
+        aggregate_totals: dict[str, float] = {}
+        aggregate_sources: set[str] = set()
+
+        for charger in chargers:
+            total = self._total_energy_kwh(charger)
+            totals[charger.pk] = total
+            if charger.connector_id is not None:
+                aggregate_sources.add(charger.charger_id)
+                aggregate_totals[charger.charger_id] = (
+                    aggregate_totals.get(charger.charger_id, 0.0) + total
+                )
+
         rows: list[dict[str, str]] = []
         for charger in chargers:
+            total = totals.get(charger.pk, 0.0)
+            if (
+                charger.connector_id is None
+                and charger.charger_id in aggregate_sources
+            ):
+                total = aggregate_totals.get(charger.charger_id, total)
             rows.append(
                 {
                     "serial": charger.charger_id,
@@ -332,7 +351,7 @@ class Command(BaseCommand):
                     "rfid": "on" if charger.require_rfid else "off",
                     "public": "yes" if charger.public_display else "no",
                     "status": self._status_label(charger),
-                    "energy": self._format_energy(self._total_energy_kwh(charger)),
+                    "energy": self._format_energy(total),
                 }
             )
 

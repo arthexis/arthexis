@@ -48,6 +48,55 @@ class ChargerStatusCommandTests(TestCase):
         self.assertIn("1.50", text)
         self.assertNotIn("Connected", text)
 
+    def test_aggregate_connector_matches_sum_of_connectors(self):
+        Charger.objects.create(charger_id="CP-AGG")
+        connector_one = Charger.objects.create(
+            charger_id="CP-AGG",
+            connector_id=1,
+        )
+        connector_two = Charger.objects.create(
+            charger_id="CP-AGG",
+            connector_id=2,
+        )
+
+        Transaction.objects.create(
+            charger=connector_one,
+            connector_id=1,
+            start_time=timezone.now(),
+            stop_time=timezone.now(),
+            meter_start=1000,
+            meter_stop=2000,
+        )
+        Transaction.objects.create(
+            charger=connector_two,
+            connector_id=2,
+            start_time=timezone.now(),
+            stop_time=timezone.now(),
+            meter_start=2000,
+            meter_stop=2500,
+        )
+
+        output = StringIO()
+        call_command("charger_status", stdout=output)
+
+        totals: dict[str, float] = {}
+        for line in output.getvalue().splitlines():
+            if not line.startswith("CP-AGG"):
+                continue
+            parts = line.split()
+            if len(parts) < 3:
+                continue
+            connector = parts[2]
+            try:
+                totals[connector] = float(parts[-1])
+            except ValueError:
+                continue
+
+        self.assertIn("all", totals)
+        self.assertIn("1", totals)
+        self.assertIn("2", totals)
+        self.assertAlmostEqual(totals["all"], totals["1"] + totals["2"], places=2)
+
     def test_matches_serial_suffix(self):
         Charger.objects.create(charger_id="EVBOX-12345678")
         Charger.objects.create(charger_id="EVBOX-56789012")
