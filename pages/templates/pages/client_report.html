@@ -38,9 +38,10 @@
                 <table class="client-report-table">
                   <thead>
                     <tr>
-                      <th scope="col">{% trans "Session kWh" %}</th>
+                      <th scope="col">{% trans "Session kW" %}</th>
                       <th scope="col">{% trans "Session start" %}</th>
                       <th scope="col">{% trans "Session end" %}</th>
+                      <th scope="col">{% trans "Time" %}</th>
                       <th scope="col">{% trans "Connector" %}</th>
                       <th scope="col">{% trans "RFID label" %}</th>
                       <th scope="col">{% trans "Account" %}</th>
@@ -49,17 +50,18 @@
                   <tbody>
                     {% for row in evcs.transactions %}
                       <tr>
-                        <td data-label="{% trans "Session kWh" %}">{{ row.session_kwh|floatformat:2 }}</td>
+                        <td data-label="{% trans "Session kW" %}">{{ row.session_kwh|floatformat:2 }}</td>
                         <td data-label="{% trans "Session start" %}">
                           {% if row.start %}
-                            <time datetime="{{ row.start|date:'c' }}">{{ row.start|localtime|date:"M j, Y H:i" }}</time>
+                            <time datetime="{{ row.start|date:'c' }}">{{ row.start_display|default:"—" }}</time>
                           {% else %}&mdash;{% endif %}
                         </td>
                         <td data-label="{% trans "Session end" %}">
                           {% if row.end %}
-                            <time datetime="{{ row.end|date:'c' }}">{{ row.end|localtime|date:"M j, Y H:i" }}</time>
+                            <time datetime="{{ row.end|date:'c' }}">{{ row.end_display|default:"—" }}</time>
                           {% else %}&mdash;{% endif %}
                         </td>
+                        <td data-label="{% trans "Time" %}">{{ row.duration_minutes|default_if_none:"—" }}</td>
                         <td data-label="{% trans "Connector" %}">
                           {% if row.connector is not None %}{{ row.connector }}{% else %}&mdash;{% endif %}
                         </td>
@@ -93,7 +95,8 @@
                       <th scope="col">{% trans "RFID / Account" %}</th>
                       <th scope="col">{% trans "Session start" %}</th>
                       <th scope="col">{% trans "Session end" %}</th>
-                      <th scope="col">{% trans "Energy (kWh)" %}</th>
+                      <th scope="col">{% trans "Time" %}</th>
+                      <th scope="col">{% trans "Energy (kW)" %}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -102,18 +105,19 @@
                         <td data-label="{% trans "RFID / Account" %}"><span class="report-subject">{{ row.subject }}</span></td>
                         <td data-label="{% trans "Session start" %}">
                           {% if row.start %}
-                            <time datetime="{{ row.start|date:'c' }}">{{ row.start|localtime|date:"M j, Y H:i" }}</time>
+                            <time datetime="{{ row.start|date:'c' }}">{{ row.start_display|default:"—" }}</time>
                           {% else %}<span class="report-missing">{% trans "Unavailable" %}</span>{% endif %}
                         </td>
                         <td data-label="{% trans "Session end" %}">
                           {% if row.end %}
-                            <time datetime="{{ row.end|date:'c' }}">{{ row.end|localtime|date:"M j, Y H:i" }}</time>
+                            <time datetime="{{ row.end|date:'c' }}">{{ row.end_display|default:"—" }}</time>
                           {% else %}<span class="report-missing">{% trans "In progress" %}</span>{% endif %}
                         </td>
-                        <td data-label="{% trans "Energy (kWh)" %}">{{ row.kw|floatformat:2 }}</td>
+                        <td data-label="{% trans "Time" %}">{{ row.duration_minutes|default_if_none:"—" }}</td>
+                        <td data-label="{% trans "Energy (kW)" %}">{{ row.kw|floatformat:2 }}</td>
                       </tr>
                     {% empty %}
-                      <tr><td colspan="4">{% trans "No data available." %}</td></tr>
+                      <tr><td colspan="5">{% trans "No data available." %}</td></tr>
                     {% endfor %}
                   </tbody>
                 </table>
@@ -123,7 +127,7 @@
                     <tr>
                       <th scope="col">{% trans "RFID/Account" %}</th>
                       <th scope="col">{% trans "Sessions" %}</th>
-                      <th scope="col">{% trans "Total kWh" %}</th>
+                      <th scope="col">{% trans "Total kW" %}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -131,7 +135,7 @@
                       <tr>
                         <td data-label="{% trans "RFID/Account" %}">{{ row.subject }}</td>
                         <td data-label="{% trans "Sessions" %}">{{ row.count }}</td>
-                        <td data-label="{% trans "Total kWh" %}">{{ row.kw|floatformat:2 }}</td>
+                        <td data-label="{% trans "Total kW" %}">{{ row.kw|floatformat:2 }}</td>
                       </tr>
                     {% empty %}
                       <tr><td colspan="3">{% trans "No data available." %}</td></tr>

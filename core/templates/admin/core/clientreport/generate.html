@@ -305,9 +305,10 @@
                 <table class="adminlist evcs-report__table">
                   <thead>
                     <tr>
-                      <th scope="col">{% trans "Session kWh" %}</th>
+                      <th scope="col">{% trans "Session kW" %}</th>
                       <th scope="col">{% trans "Session start" %}</th>
                       <th scope="col">{% trans "Session end" %}</th>
+                      <th scope="col">{% trans "Time" %}</th>
                       <th scope="col">{% trans "Connector" %}</th>
                       <th scope="col">{% trans "RFID label" %}</th>
                       <th scope="col">{% trans "Account" %}</th>
@@ -316,17 +317,18 @@
                   <tbody>
                     {% for row in evcs.transactions %}
                       <tr>
-                        <td data-label="{% trans "Session kWh" %}">{{ row.session_kwh|floatformat:2 }}</td>
+                        <td data-label="{% trans "Session kW" %}">{{ row.session_kwh|floatformat:2 }}</td>
                         <td data-label="{% trans "Session start" %}">
                           {% if row.start %}
-                            <time datetime="{{ row.start|date:'c' }}">{{ row.start|localtime|date:"Y-m-d H:i" }}</time>
+                            <time datetime="{{ row.start|date:'c' }}">{{ row.start_display|default:"—" }}</time>
                           {% else %}&mdash;{% endif %}
                         </td>
                         <td data-label="{% trans "Session end" %}">
                           {% if row.end %}
-                            <time datetime="{{ row.end|date:'c' }}">{{ row.end|localtime|date:"Y-m-d H:i" }}</time>
+                            <time datetime="{{ row.end|date:'c' }}">{{ row.end_display|default:"—" }}</time>
                           {% else %}&mdash;{% endif %}
                         </td>
+                        <td data-label="{% trans "Time" %}">{{ row.duration_minutes|default_if_none:"—" }}</td>
                         <td data-label="{% trans "Connector" %}">
                           {% if row.connector is not None %}{{ row.connector }}{% else %}&mdash;{% endif %}
                         </td>
@@ -360,7 +362,8 @@
                       <th>{% trans "RFID / Account" %}</th>
                       <th>{% trans "Session start" %}</th>
                       <th>{% trans "Session end" %}</th>
-                      <th>{% trans "Energy (kWh)" %}</th>
+                      <th>{% trans "Time" %}</th>
+                      <th>{% trans "Energy (kW)" %}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -369,18 +372,19 @@
                         <td><strong>{{ row.subject }}</strong></td>
                         <td>
                           {% if row.start %}
-                            <time datetime="{{ row.start|date:'c' }}">{{ row.start|localtime|date:"Y-m-d H:i" }}</time>
+                            <time datetime="{{ row.start|date:'c' }}">{{ row.start_display|default:"—" }}</time>
                           {% else %}{% trans "Unavailable" %}{% endif %}
                         </td>
                         <td>
                           {% if row.end %}
-                            <time datetime="{{ row.end|date:'c' }}">{{ row.end|localtime|date:"Y-m-d H:i" }}</time>
+                            <time datetime="{{ row.end|date:'c' }}">{{ row.end_display|default:"—" }}</time>
                           {% else %}{% trans "In progress" %}{% endif %}
                         </td>
+                        <td>{{ row.duration_minutes|default_if_none:"—" }}</td>
                         <td>{{ row.kw|floatformat:2 }}</td>
                       </tr>
                     {% empty %}
-                      <tr><td colspan="4">{% trans "No data available." %}</td></tr>
+                      <tr><td colspan="5">{% trans "No data available." %}</td></tr>
                     {% endfor %}
                   </tbody>
                 </table>
@@ -390,7 +394,7 @@
                     <tr>
                       <th>{% trans "RFID/Account" %}</th>
                       <th>{% trans "Sessions" %}</th>
-                      <th>{% trans "Total kWh" %}</th>
+                      <th>{% trans "Total kW" %}</th>
                     </tr>
                   </thead>
                   <tbody>

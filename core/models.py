@@ -3542,6 +3542,31 @@ class ClientReport(Entity):
         return start_value, end_value
 
     @staticmethod
+    def _format_session_datetime(value):
+        if not value:
+            return None
+        localized = timezone.localtime(value)
+        date_part = formats.date_format(
+            localized, format="MONTH_DAY_FORMAT", use_l10n=True
+        )
+        time_part = formats.time_format(
+            localized, format="TIME_FORMAT", use_l10n=True
+        )
+        return gettext("%(date)s, %(time)s") % {
+            "date": date_part,
+            "time": time_part,
+        }
+
+    @staticmethod
+    def _calculate_duration_minutes(start, end):
+        if not start or not end:
+            return None
+        total_seconds = (end - start).total_seconds()
+        if total_seconds < 0:
+            return None
+        return int(round(total_seconds / 60.0))
+
+    @staticmethod
     def _normalize_dataset_for_display(dataset: dict[str, Any]):
         schema = dataset.get("schema")
         if schema == "evcs-session/v1":
@@ -3576,6 +3601,15 @@ class ClientReport(Entity):
                             "session_kwh": row.get("session_kwh"),
                             "start": start_dt,
                             "end": end_dt,
+                            "start_display": ClientReport._format_session_datetime(
+                                start_dt
+                            ),
+                            "end_display": ClientReport._format_session_datetime(
+                                end_dt
+                            ),
+                            "duration_minutes": ClientReport._calculate_duration_minutes(
+                                start_dt, end_dt
+                            ),
                         }
                     )
 
@@ -3624,6 +3658,7 @@ class ClientReport(Entity):
                         start_dt = timezone.make_aware(start_dt, timezone.utc)
                     item["start"] = start_dt
                 else:
+                    start_dt = None
                     item["start"] = None
 
                 if end_val:
@@ -3632,7 +3667,14 @@ class ClientReport(Entity):
                         end_dt = timezone.make_aware(end_dt, timezone.utc)
                     item["end"] = end_dt
                 else:
+                    end_dt = None
                     item["end"] = None
+
+                item["start_display"] = ClientReport._format_session_datetime(start_dt)
+                item["end_display"] = ClientReport._format_session_datetime(end_dt)
+                item["duration_minutes"] = ClientReport._calculate_duration_minutes(
+                    start_dt, end_dt
+                )
 
                 parsed.append(item)
 
@@ -3749,7 +3791,8 @@ class ClientReport(Entity):
             total_kw_period_label = gettext("Total kW (period)")
             connector_label = gettext("Connector")
             account_label = gettext("Account")
-            session_kwh_label = gettext("Session kWh")
+            session_kwh_label = gettext("Session kW")
+            time_label = gettext("Time")
             no_sessions_period = gettext(
                 "No charging sessions recorded for the selected period."
             )
@@ -3765,15 +3808,17 @@ class ClientReport(Entity):
             def format_datetime(value):
                 if not value:
                     return "—"
-                localized = timezone.localtime(value)
-                return formats.date_format(
-                    localized, format="DATETIME_FORMAT", use_l10n=True
-                )
+                return ClientReport._format_session_datetime(value) or "—"
 
             def format_decimal(value):
                 if value is None:
                     return "—"
                 return formats.number_format(value, decimal_pos=2, use_l10n=True)
+
+            def format_duration(value):
+                if value is None:
+                    return "—"
+                return formats.number_format(value, decimal_pos=0, use_l10n=True)
 
             if schema == "evcs-session/v1":
                 evcs_entries = dataset.get("evcs", [])
@@ -3810,6 +3855,7 @@ class ClientReport(Entity):
                                 session_kwh_label,
                                 gettext("Session start"),
                                 gettext("Session end"),
+                                time_label,
                                 connector_label,
                                 gettext("RFID label"),
                                 account_label,
@@ -3819,11 +3865,13 @@ class ClientReport(Entity):
                         for row in transactions:
                             start_dt = row.get("start")
                             end_dt = row.get("end")
+                            duration_value = row.get("duration_minutes")
                             table_data.append(
                                 [
                                     format_decimal(row.get("session_kwh")),
                                     format_datetime(start_dt),
                                     format_datetime(end_dt),
+                                    format_duration(duration_value),
                                     row.get("connector")
                                     if row.get("connector") is not None
                                     else "—",
@@ -3832,7 +3880,14 @@ class ClientReport(Entity):
                                 ]
                             )
 
-                        table = Table(table_data, repeatRows=1)
+                        column_count = len(table_data[0])
+                        col_width = document.width / column_count if column_count else None
+                        table = Table(
+                            table_data,
+                            repeatRows=1,
+                            colWidths=[col_width] * column_count if col_width else None,
+                            hAlign="LEFT",
+                        )
                         table.setStyle(
                             TableStyle(
                                 [
