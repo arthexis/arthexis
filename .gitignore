@@ -254,3 +254,6 @@ REVISION
 
 # Auto-upgrade control file
 AUTO_UPGRADE
+
+# Local working directory
+work/
