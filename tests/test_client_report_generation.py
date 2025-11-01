@@ -70,6 +70,7 @@ class ClientReportGenerationTests(TestCase):
                 "end": day,
                 "recurrence": ClientReportSchedule.PERIODICITY_NONE,
                 "chargers": [self.charger.pk],
+                "language": "en",
             },
         )
         self.assertEqual(resp.status_code, 200)
@@ -89,6 +90,7 @@ class ClientReportGenerationTests(TestCase):
                 "end": day,
                 "recurrence": ClientReportSchedule.PERIODICITY_NONE,
                 "chargers": [self.charger.pk],
+                "language": "en",
             },
         )
         self.assertEqual(resp.status_code, 302)
@@ -102,6 +104,8 @@ class ClientReportGenerationTests(TestCase):
         self.assertEqual(report.end_date, day)
         self.assertEqual(report.owner, self.user)
         self.assertEqual(list(report.chargers.all()), [self.charger])
+        self.assertEqual(report.language, "en")
+        self.assertEqual(report.title, "")
         export = report.data.get("export")
         self.assertIsNotNone(export)
         html_path = Path(settings.BASE_DIR) / export["html_path"]
@@ -144,6 +148,7 @@ class ClientReportGenerationTests(TestCase):
             "end": day,
             "recurrence": ClientReportSchedule.PERIODICITY_NONE,
             "chargers": [self.charger.pk],
+            "language": "en",
         }
         self.client.force_login(self.user)
 
@@ -186,6 +191,7 @@ class ClientReportGenerationTests(TestCase):
                     "first@example.com second@example.com\n"
                     "third@example.com,\tfourth@example.com"
                 ),
+                "language": "en",
             }
         )
         self.assertTrue(bound_form.is_valid())

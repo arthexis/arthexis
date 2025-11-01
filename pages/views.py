@@ -1270,6 +1270,17 @@ class ClientReportForm(forms.Form):
         input_formats=["%Y-%m"],
         help_text=_("Generates the report for the calendar month that you select."),
     )
+    language = forms.ChoiceField(
+        label=_("Report language"),
+        choices=settings.LANGUAGES,
+        help_text=_("Choose the language used for the generated report."),
+    )
+    title = forms.CharField(
+        label=_("Report title"),
+        required=False,
+        max_length=200,
+        help_text=_("Optional heading that replaces the default report title."),
+    )
     chargers = forms.ModelMultipleChoiceField(
         label=_("Charge points"),
         queryset=Charger.objects.filter(connector_id__isnull=True)
@@ -1309,6 +1320,12 @@ class ClientReportForm(forms.Form):
         if request and getattr(request, "user", None) and request.user.is_authenticated:
             self.fields["owner"].initial = request.user.pk
         self.fields["chargers"].widget.attrs["class"] = "charger-options"
+        language_initial = ClientReport.default_language()
+        if request:
+            language_initial = ClientReport.normalize_language(
+                getattr(request, "LANGUAGE_CODE", language_initial)
+            )
+        self.fields["language"].initial = language_initial
 
     def clean(self):
         cleaned = super().clean()
@@ -1357,6 +1374,9 @@ class ClientReportForm(forms.Form):
             seen.add(key)
             emails.append(candidate)
         return emails
+
+    def clean_title(self):
+        return (self.cleaned_data.get("title") or "").strip()
 
 
 @live_update()
@@ -1410,6 +1430,8 @@ def client_report(request):
                     form.cleaned_data.get("destinations") if enable_emails else []
                 )
                 chargers = list(form.cleaned_data.get("chargers") or [])
+                language = form.cleaned_data.get("language")
+                title = form.cleaned_data.get("title")
                 report = ClientReport.generate(
                     form.cleaned_data["start"],
                     form.cleaned_data["end"],
@@ -1417,6 +1439,8 @@ def client_report(request):
                     recipients=recipients,
                     disable_emails=disable_emails,
                     chargers=chargers,
+                    language=language,
+                    title=title,
                 )
                 report.store_local_copy()
                 if chargers:
@@ -1443,6 +1467,8 @@ def client_report(request):
                         periodicity=recurrence,
                         email_recipients=recipients,
                         disable_emails=disable_emails,
+                        language=language,
+                        title=title,
                     )
                     if chargers:
                         schedule.chargers.set(chargers)
