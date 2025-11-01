@@ -327,6 +327,8 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
                 "fields": (
                     "node_origin",
                     "manager_node",
+                    "forwarded_to",
+                    "forwarding_watermark",
                     "allow_remote",
                     "export_transactions",
                     "last_online_at",
@@ -361,6 +363,8 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         "availability_request_status_at",
         "availability_request_details",
         "configuration",
+        "forwarded_to",
+        "forwarding_watermark",
         "last_online_at",
     )
     list_display = (

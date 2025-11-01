@@ -246,6 +246,19 @@ class Charger(Entity):
         blank=True,
         related_name="managed_chargers",
     )
+    forwarded_to = models.ForeignKey(
+        "nodes.Node",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="forwarded_chargers",
+        help_text=_("Remote node receiving forwarded transactions."),
+    )
+    forwarding_watermark = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=_("Timestamp of the last forwarded transaction."),
+    )
     allow_remote = models.BooleanField(default=False)
     export_transactions = models.BooleanField(default=False)
     last_online_at = models.DateTimeField(null=True, blank=True)
