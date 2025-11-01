@@ -45,6 +45,20 @@ def test_sets_operate_as_on_admin_creation():
     assert user.operate_as_id == delegate.id
 
 
+def test_allows_localhost_hostname():
+    User = get_user_model()
+    ensure_arthexis_user()
+    User.all_objects.filter(username="admin").delete()
+    backend = LocalhostAdminBackend()
+    req = HttpRequest()
+    req.META["REMOTE_ADDR"] = "127.0.0.1"
+    req.META["HTTP_HOST"] = "localhost"
+
+    user = backend.authenticate(req, username="admin", password="admin")
+
+    assert user is not None
+
+
 def test_resets_missing_password_on_login():
     User = get_user_model()
     ensure_arthexis_user()

@@ -181,6 +181,8 @@ def _preferred_site_domain(domains: Iterable[str]) -> str | None:
         candidate = host.strip()
         if not candidate or candidate.startswith("*") or "/" in candidate:
             continue
+        if candidate == "localhost" and "127.0.0.1" in normalized:
+            continue
         if candidate in normalized:
             return candidate
 

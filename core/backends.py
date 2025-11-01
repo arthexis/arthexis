@@ -217,7 +217,9 @@ class LocalhostAdminBackend(ModelBackend):
             try:
                 ipaddress.ip_address(host)
             except ValueError:
-                if not self._is_test_environment(request):
+                if host.lower() == "localhost":
+                    host = "127.0.0.1"
+                elif not self._is_test_environment(request):
                     return None
             forwarded = request.META.get("HTTP_X_FORWARDED_FOR")
             if forwarded:

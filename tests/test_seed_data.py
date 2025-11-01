@@ -60,6 +60,7 @@ class SiteFixtureTests(TestCase):
         expected_domains = {
             "arthexis.com": "Arthexis",
             "127.0.0.1": "Local",
+            "localhost": "Local",
             "10.42.0.1": "Router",
             "192.168.129.10": "Gateway",
         }
@@ -347,6 +348,7 @@ class EnvRefreshFixtureTests(TestCase):
         expected_sites = {
             "arthexis.com": "Arthexis",
             "127.0.0.1": "Local",
+            "localhost": "Local",
             "10.42.0.1": "Router",
             "192.168.129.10": "Gateway",
         }
