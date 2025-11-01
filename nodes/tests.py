@@ -36,6 +36,7 @@ from django.test import Client, SimpleTestCase, TestCase, TransactionTestCase, o
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.contrib import admin
+from django.contrib.admin import helpers
 from django.contrib.auth.models import Permission
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
 from django.conf import settings
@@ -2406,6 +2407,53 @@ class NodeAdminTests(TestCase):
             f'data-node-id="{remote.pk}"', response.content.decode()
         )
         self.assertContains(response, str(remote))
+
+    def test_send_net_message_action_displays_form(self):
+        target = Node.objects.create(
+            hostname="remote-one", address="10.0.0.10", port=8020
+        )
+        response = self.client.post(
+            reverse("admin:nodes_node_changelist"),
+            {
+                "action": "send_net_message",
+                helpers.ACTION_CHECKBOX_NAME: [str(target.pk)],
+            },
+            follow=False,
+        )
+        self.assertEqual(response.status_code, 200)
+        response.render()
+        self.assertContains(response, "Send Net Message")
+        self.assertContains(response, str(target))
+        self.assertContains(response, 'name="apply"')
+        self.assertContains(response, "Selected node (1)")
+
+    @patch("nodes.admin.NetMessage.propagate")
+    def test_send_net_message_action_creates_messages(self, mock_propagate):
+        first = Node.objects.create(
+            hostname="remote-two", address="10.0.0.11", port=8021
+        )
+        second = Node.objects.create(
+            hostname="remote-three", address="10.0.0.12", port=8022
+        )
+        url = reverse("admin:nodes_node_changelist")
+        payload = {
+            "action": "send_net_message",
+            "apply": "1",
+            helpers.ACTION_CHECKBOX_NAME: [str(first.pk), str(second.pk)],
+            "subject": "Maintenance",
+            "body": "We will reboot tonight.",
+        }
+        existing_ids = set(NetMessage.objects.values_list("pk", flat=True))
+        response = self.client.post(url, payload, follow=True)
+        self.assertEqual(response.status_code, 200)
+        new_messages = NetMessage.objects.exclude(pk__in=existing_ids)
+        self.assertEqual(new_messages.count(), 2)
+        self.assertEqual(mock_propagate.call_count, 2)
+        for node in (first, second):
+            message = new_messages.get(filter_node=node)
+            self.assertEqual(message.subject, "Maintenance")
+            self.assertEqual(message.body, "We will reboot tonight.")
+        self.assertContains(response, "Sent 2 net messages.")
 
     @patch("nodes.admin.requests.post")
     @patch("nodes.admin.requests.get")
