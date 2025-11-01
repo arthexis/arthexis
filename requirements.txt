@@ -3,7 +3,7 @@ amqp==5.3.1
 annotated-types==0.7.0
 anyio==4.9.0
 asgiref==3.10.0
-atproto==0.0.62
+atproto==0.0.63
 attrs==25.3.0
 autobahn==24.4.2
 Automat==25.4.16
@@ -58,8 +58,8 @@ psycopg-binary==3.2.12
 pyasn1==0.6.1
 pyasn1_modules==0.4.2
 pycparser==2.22
-pydantic==2.11.7
-pydantic_core==2.33.2
+pydantic==2.12.3
+pydantic_core==2.41.4
 pyOpenSSL==25.1.0
 pyperclip==1.11.0
 PySocks==1.7.1
@@ -94,7 +94,7 @@ vine==5.1.0
 wcwidth==0.2.14
 webencodings==0.5.1
 websocket-client==1.8.0
-websockets==13.1
+websockets==15.0.1
 whitenoise==6.11.0
 plyer==2.1.0; sys_platform == "win32"
 wsproto==1.2.0

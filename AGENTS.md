@@ -52,3 +52,5 @@ Configuration changes that simply prefer one valid default over another (for exa
 - Feature-driven tests must use `@pytest.mark.feature("<slug>")` where the slug
   matches a `nodes.NodeFeature`. CI uses these markers to include the
   feature-specific suites for each node role.
+- When adjusting dependency pins, run `pytest tests/test_env_refresh_dependency_conflict.py`
+  to surface Python compatibility problems before the `check-migrations` CI stage.
