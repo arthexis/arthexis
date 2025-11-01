@@ -35,3 +35,20 @@ def test_network_setup_no_longer_mentions_wifi_watchdog() -> None:
     script = REPO_ROOT / "network-setup.sh"
     script_contents = script.read_text()
     assert "WiFi watchdog" not in script_contents
+
+
+def test_network_setup_wlan1_drop_rule_removed() -> None:
+    script = REPO_ROOT / "network-setup.sh"
+    script_contents = script.read_text()
+    assert "-o wlan1 -j DROP" not in script_contents
+    assert "ensure_forwarding_rule wlan0 wlan1" in script_contents
+    assert "ensure_forwarding_rule eth0 wlan1" in script_contents
+
+
+def test_network_setup_warns_when_wlan1_missing() -> None:
+    script = REPO_ROOT / "network-setup.sh"
+    script_contents = script.read_text()
+    expected_warning = (
+        "Warning: device wlan1 not found; wlan0 and eth0 clients will not have upstream internet access."
+    )
+    assert expected_warning in script_contents
