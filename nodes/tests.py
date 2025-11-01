@@ -1817,132 +1817,6 @@ class NodeAdminTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "data:image/png;base64")
 
-    @patch("nodes.admin.requests.post")
-    def test_proxy_view_uses_remote_login_url(self, mock_post):
-        self.client.get(reverse("admin:nodes_node_register_current"))
-        local_node = Node.objects.get()
-        remote = Node.objects.create(
-            hostname="remote",
-            address="192.0.2.10",
-            port=8443,
-            mac_address="aa:bb:cc:dd:ee:ff",
-        )
-        mock_post.return_value = SimpleNamespace(
-            ok=True,
-            json=lambda: {
-                "login_url": "https://remote.example/nodes/proxy/login/token",
-                "expires": "2025-01-01T00:00:00",
-            },
-            status_code=200,
-            text="ok",
-        )
-        response = self.client.get(
-            reverse("admin:nodes_node_proxy", args=[remote.pk])
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertTemplateUsed(response, "admin/nodes/node/proxy.html")
-        self.assertContains(response, "<iframe", html=False)
-        mock_post.assert_called()
-        payload = json.loads(mock_post.call_args[1]["data"])
-        self.assertEqual(payload.get("requester"), str(local_node.uuid))
-        self.assertEqual(payload.get("requester_mac"), local_node.mac_address)
-        self.assertEqual(payload.get("requester_public_key"), local_node.public_key)
-
-    @patch("nodes.admin.requests.post")
-    def test_proxy_view_falls_back_to_http_after_ssl_error(self, mock_post):
-        self.client.get(reverse("admin:nodes_node_register_current"))
-        remote = Node.objects.create(
-            hostname="remote-https",
-            address="198.51.100.20",
-            port=443,
-            mac_address="aa:bb:cc:dd:ee:10",
-        )
-        local_node = Node.get_local()
-        success_response = SimpleNamespace(
-            ok=True,
-            json=lambda: {
-                "login_url": "http://remote.example/nodes/proxy/login/token",
-                "expires": "2025-01-01T00:00:00",
-            },
-            status_code=200,
-            text="ok",
-        )
-        mock_post.side_effect = [
-            SSLError("wrong version number"),
-            success_response,
-        ]
-
-        response = self.client.get(
-            reverse("admin:nodes_node_proxy", args=[remote.pk])
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(mock_post.call_count, 2)
-        first_url = mock_post.call_args_list[0].args[0]
-        second_url = mock_post.call_args_list[1].args[0]
-        self.assertTrue(first_url.startswith("https://"))
-        self.assertTrue(second_url.startswith("http://"))
-        self.assertIn("/nodes/proxy/session/", second_url)
-        payload = json.loads(mock_post.call_args_list[-1].kwargs["data"])
-        self.assertEqual(payload.get("requester"), str(local_node.uuid))
-        self.assertEqual(payload.get("requester_mac"), local_node.mac_address)
-        self.assertEqual(payload.get("requester_public_key"), local_node.public_key)
-
-    @patch("nodes.admin.requests.post")
-    def test_proxy_view_retries_post_after_redirect(self, mock_post):
-        self.client.get(reverse("admin:nodes_node_register_current"))
-        remote = Node.objects.create(
-            hostname="redirect-node",
-            public_endpoint="http://remote.example",
-            address="198.51.100.30",
-            mac_address="aa:bb:cc:dd:ee:20",
-        )
-
-        redirect_response = SimpleNamespace(
-            status_code=301,
-            ok=True,
-            text="redirect",
-            headers={"Location": "https://remote.example/nodes/proxy/session/"},
-        )
-        success_response = SimpleNamespace(
-            status_code=200,
-            ok=True,
-            text="ok",
-            headers={},
-            json=lambda: {
-                "login_url": "https://remote.example/nodes/proxy/login/token",
-                "expires": "2025-01-01T00:00:00",
-            },
-        )
-
-        mock_post.side_effect = [redirect_response, success_response]
-
-        response = self.client.get(
-            reverse("admin:nodes_node_proxy", args=[remote.pk])
-        )
-
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(mock_post.call_count, 2)
-
-        first_call_kwargs = mock_post.call_args_list[0].kwargs
-        self.assertFalse(first_call_kwargs.get("allow_redirects", True))
-
-        second_url = mock_post.call_args_list[1].args[0]
-        self.assertEqual(second_url, "https://remote.example/nodes/proxy/session/")
-        second_call_kwargs = mock_post.call_args_list[1].kwargs
-        self.assertFalse(second_call_kwargs.get("allow_redirects", True))
-
-    def test_proxy_link_displayed_for_remote_nodes(self):
-        Node.objects.create(
-            hostname="remote",
-            address="203.0.113.1",
-            port=8000,
-            mac_address="aa:aa:aa:aa:aa:01",
-        )
-        response = self.client.get(reverse("admin:nodes_node_changelist"))
-        proxy_url = reverse("admin:nodes_node_proxy", args=[1])
-        self.assertContains(response, proxy_url)
-
     def test_visit_link_uses_local_admin_dashboard_for_local_node(self):
         node_admin = admin.site._registry[Node]
         local_node = self._create_local_node()
@@ -1975,14 +1849,14 @@ class NodeAdminTests(TestCase):
             port=8443,
         )
 
-        urls = list(node_admin._iter_remote_urls(remote, "/nodes/proxy/session/"))
+        urls = list(node_admin._iter_remote_urls(remote, "/nodes/info/"))
 
         self.assertIn(
-            "https://example.com:8443/interface/nodes/proxy/session/",
+            "https://example.com:8443/interface/nodes/info/",
             urls,
         )
         self.assertIn(
-            "http://example.com:8443/interface/nodes/proxy/session/",
+            "http://example.com:8443/interface/nodes/info/",
             urls,
         )
         combined = "".join(urls)

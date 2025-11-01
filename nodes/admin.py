@@ -238,7 +238,6 @@ class NodeAdmin(EntityModelAdmin):
         "relation",
         "last_seen",
         "visit_link",
-        "proxy_link",
     )
     search_fields = ("hostname", "address", "mac_address")
     change_list_template = "admin/nodes/node/change_list.html"
@@ -297,16 +296,6 @@ class NodeAdmin(EntityModelAdmin):
     @admin.display(description=_("Relation"), ordering="current_relation")
     def relation(self, obj):
         return obj.get_current_relation_display()
-
-    @admin.display(description=_("Proxy"))
-    def proxy_link(self, obj):
-        if not obj or obj.is_local:
-            return ""
-        try:
-            url = reverse("admin:nodes_node_proxy", args=[obj.pk])
-        except NoReverseMatch:
-            return ""
-        return format_html('<a class="button" href="{}">{}</a>', url, _("Proxy"))
 
     @admin.display(description=_("Visit"))
     def visit_link(self, obj):
@@ -374,11 +363,6 @@ class NodeAdmin(EntityModelAdmin):
                 self.admin_site.admin_view(self.update_selected_progress),
                 name="nodes_node_update_selected_progress",
             ),
-            path(
-                "<int:node_id>/proxy/",
-                self.admin_site.admin_view(self.proxy_node),
-                name="nodes_node_proxy",
-            ),
         ]
         return custom + urls
 
@@ -410,162 +394,6 @@ class NodeAdmin(EntityModelAdmin):
             request=request,
         )
         return response
-
-    def _load_local_private_key(self, node):
-        security_dir = Path(node.base_path or settings.BASE_DIR) / "security"
-        priv_path = security_dir / f"{node.public_endpoint}"
-        if not priv_path.exists():
-            return None, _("Local node private key not found.")
-        try:
-            return (
-                serialization.load_pem_private_key(
-                    priv_path.read_bytes(), password=None
-                ),
-                "",
-            )
-        except Exception as exc:  # pragma: no cover - unexpected errors
-            return None, str(exc)
-
-    def _build_proxy_payload(self, request, local_node):
-        user = request.user
-        payload = {
-            "requester": str(local_node.uuid),
-            "user": {
-                "username": user.get_username(),
-                "email": user.email or "",
-                "first_name": user.first_name or "",
-                "last_name": user.last_name or "",
-                "is_staff": user.is_staff,
-                "is_superuser": user.is_superuser,
-                "groups": list(user.groups.values_list("name", flat=True)),
-                "permissions": sorted(user.get_all_permissions()),
-            },
-            "target": reverse("admin:index"),
-        }
-        mac_address = str(local_node.mac_address or "").strip()
-        if mac_address:
-            payload["requester_mac"] = mac_address
-        public_key = local_node.public_key
-        if public_key:
-            payload["requester_public_key"] = public_key
-        return payload
-
-    def _start_proxy_session(self, request, node):
-        if node.is_local:
-            return {"ok": False, "message": _("Local node cannot be proxied.")}
-
-        local_node = Node.get_local()
-        if local_node is None:
-            try:
-                local_node, _ = Node.register_current()
-            except Exception as exc:  # pragma: no cover - unexpected errors
-                return {"ok": False, "message": str(exc)}
-
-        private_key, error = self._load_local_private_key(local_node)
-        if private_key is None:
-            return {"ok": False, "message": error}
-
-        payload = self._build_proxy_payload(request, local_node)
-        body = json.dumps(payload, separators=(",", ":"), sort_keys=True)
-        try:
-            signature = private_key.sign(
-                body.encode(),
-                padding.PKCS1v15(),
-                hashes.SHA256(),
-            )
-        except Exception as exc:  # pragma: no cover - unexpected errors
-            return {"ok": False, "message": str(exc)}
-
-        headers = {
-            "Content-Type": "application/json",
-            "X-Signature": base64.b64encode(signature).decode(),
-        }
-
-        last_error = ""
-        redirect_codes = {301, 302, 303, 307, 308}
-
-        for url in self._iter_remote_urls(node, "/nodes/proxy/session/"):
-            candidate_url = url
-            redirects_followed = 0
-            success = False
-
-            while True:
-                try:
-                    response = requests.post(
-                        candidate_url,
-                        data=body,
-                        headers=headers,
-                        timeout=5,
-                        allow_redirects=False,
-                    )
-                except RequestException as exc:
-                    last_error = str(exc)
-                    break
-
-                if response.status_code in redirect_codes:
-                    location = response.headers.get("Location")
-                    if not location:
-                        last_error = f"{response.status_code} redirect missing Location header"
-                        break
-
-                    redirects_followed += 1
-                    if redirects_followed > 3:
-                        last_error = "Too many redirects"
-                        break
-
-                    candidate_url = urljoin(candidate_url, location)
-                    continue
-
-                if not response.ok:
-                    last_error = f"{response.status_code} {response.text}"
-                    break
-
-                try:
-                    data = response.json()
-                except ValueError:
-                    last_error = "Invalid JSON response"
-                    break
-
-                login_url = data.get("login_url")
-                if not login_url:
-                    last_error = "login_url missing"
-                    break
-
-                success = True
-                break
-
-            if success:
-                return {
-                    "ok": True,
-                    "login_url": login_url,
-                    "expires": data.get("expires"),
-                }
-
-        return {
-            "ok": False,
-            "message": last_error or "Unable to initiate proxy.",
-        }
-
-    def proxy_node(self, request, node_id):
-        node = self.get_queryset(request).filter(pk=node_id).first()
-        if not node:
-            raise Http404
-        if not self.has_view_permission(request):
-            raise PermissionDenied
-        result = self._start_proxy_session(request, node)
-        if not result.get("ok"):
-            message = result.get("message") or _("Unable to proxy node.")
-            self.message_user(request, message, messages.ERROR)
-            return redirect("admin:nodes_node_changelist")
-
-        context = {
-            **self.admin_site.each_context(request),
-            "opts": self.model._meta,
-            "node": node,
-            "frame_url": result.get("login_url"),
-            "expires": result.get("expires"),
-        }
-        return TemplateResponse(request, "admin/nodes/node/proxy.html", context)
 
     @admin.action(description="Register Visitor")
     def register_visitor(self, request, queryset=None):
