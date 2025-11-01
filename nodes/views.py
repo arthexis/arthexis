@@ -42,7 +42,13 @@ from asgiref.sync import async_to_sync
 
 from .rfid_sync import apply_rfid_payload, serialize_rfid
 
-from .models import Node, NetMessage, PendingNetMessage, node_information_updated
+from .models import (
+    Node,
+    NetMessage,
+    PendingNetMessage,
+    NodeRole,
+    node_information_updated,
+)
 from .utils import capture_screenshot, save_screenshot
 
 
@@ -410,7 +416,7 @@ def _get_advertised_address(request, node) -> str:
     host_ip = _get_host_ip(request)
     if host_ip:
         return host_ip
-    return node.address
+    return node.get_primary_contact() or node.address or node.hostname
 
 
 @api_login_required
@@ -420,7 +426,10 @@ def node_list(request):
     nodes = [
         {
             "hostname": node.hostname,
+            "network_hostname": node.network_hostname,
             "address": node.address,
+            "ipv4_address": node.ipv4_address,
+            "ipv6_address": node.ipv6_address,
             "port": node.port,
             "last_seen": node.last_seen,
             "features": list(node.features.values_list("slug", flat=True)),
@@ -448,21 +457,22 @@ def node_info(request):
             advertised_port = host_port
     if host_domain:
         hostname = host_domain
-        if advertised_address and advertised_address != node.address:
-            address = advertised_address
-        else:
-            address = host_domain
+        address = advertised_address or host_domain
     else:
         hostname = node.hostname
-        address = advertised_address
+        address = advertised_address or node.address or node.network_hostname or ""
     data = {
         "hostname": hostname,
+        "network_hostname": node.network_hostname,
         "address": address,
+        "ipv4_address": node.ipv4_address,
+        "ipv6_address": node.ipv6_address,
         "port": advertised_port,
         "mac_address": node.mac_address,
         "public_key": node.public_key,
         "features": list(node.features.values_list("slug", flat=True)),
         "role": node.role.name if node.role_id else "",
+        "contact_hosts": node.get_remote_host_candidates(),
     }
 
     if token:
@@ -506,7 +516,14 @@ def _add_cors_headers(request, response):
 def _node_display_name(node: Node) -> str:
     """Return a human-friendly name for ``node`` suitable for messaging."""
 
-    for attr in ("hostname", "public_endpoint", "address"):
+    for attr in (
+        "hostname",
+        "network_hostname",
+        "public_endpoint",
+        "address",
+        "ipv6_address",
+        "ipv4_address",
+    ):
         value = getattr(node, attr, "") or ""
         value = value.strip()
         if value:
@@ -558,10 +575,13 @@ def register_node(request):
     else:
         features = data.get("features")
 
-    hostname = data.get("hostname")
-    address = data.get("address")
+    hostname = (data.get("hostname") or "").strip()
+    address = (data.get("address") or "").strip()
+    network_hostname = (data.get("network_hostname") or "").strip()
+    ipv4_address = (data.get("ipv4_address") or "").strip()
+    ipv6_address = (data.get("ipv6_address") or "").strip()
     port = data.get("port", 8000)
-    mac_address = data.get("mac_address")
+    mac_address = (data.get("mac_address") or "").strip()
     public_key = data.get("public_key")
     token = data.get("token")
     signature = data.get("signature")
@@ -577,11 +597,26 @@ def register_node(request):
         Node.normalize_relation(raw_relation) if relation_present else None
     )
 
-    if not hostname or not address or not mac_address:
+    if not hostname or not mac_address:
         response = JsonResponse(
-            {"detail": "hostname, address and mac_address required"}, status=400
+            {"detail": "hostname and mac_address required"}, status=400
         )
         return _add_cors_headers(request, response)
+
+    if not any([address, network_hostname, ipv4_address, ipv6_address]):
+        response = JsonResponse(
+            {
+                "detail": "at least one of address, network_hostname, "
+                "ipv4_address or ipv6_address must be provided",
+            },
+            status=400,
+        )
+        return _add_cors_headers(request, response)
+
+    try:
+        port = int(port)
+    except (TypeError, ValueError):
+        port = 8000
 
     verified = False
     if public_key and token and signature:
@@ -603,9 +638,15 @@ def register_node(request):
         return _add_cors_headers(request, response)
 
     mac_address = mac_address.lower()
+    address_value = address or None
+    ipv4_value = ipv4_address or None
+    ipv6_value = ipv6_address or None
     defaults = {
         "hostname": hostname,
-        "address": address,
+        "network_hostname": network_hostname,
+        "address": address_value,
+        "ipv4_address": ipv4_value,
+        "ipv6_address": ipv6_value,
         "port": port,
     }
     role_name = str(data.get("role") or data.get("role_name") or "").strip()
@@ -630,10 +671,18 @@ def register_node(request):
     if not created:
         previous_version = (node.installed_version or "").strip()
         previous_revision = (node.installed_revision or "").strip()
-        node.hostname = hostname
-        node.address = address
-        node.port = port
-        update_fields = ["hostname", "address", "port"]
+        update_fields = []
+        for field, value in (
+            ("hostname", hostname),
+            ("network_hostname", network_hostname),
+            ("address", address_value),
+            ("ipv4_address", ipv4_value),
+            ("ipv6_address", ipv6_value),
+            ("port", port),
+        ):
+            if getattr(node, field) != value:
+                setattr(node, field, value)
+                update_fields.append(field)
         if verified:
             node.public_key = public_key
             update_fields.append("public_key")
@@ -651,7 +700,8 @@ def register_node(request):
         if desired_role and node.role_id != desired_role.id:
             node.role = desired_role
             update_fields.append("role")
-        node.save(update_fields=update_fields)
+        if update_fields:
+            node.save(update_fields=update_fields)
         current_version = (node.installed_version or "").strip()
         current_revision = (node.installed_revision or "").strip()
         node_information_updated.send(
@@ -1561,7 +1611,10 @@ def public_node_endpoint(request, endpoint):
     if request.method == "GET":
         data = {
             "hostname": node.hostname,
-            "address": node.address,
+            "network_hostname": node.network_hostname,
+            "address": node.address or node.get_primary_contact(),
+            "ipv4_address": node.ipv4_address,
+            "ipv6_address": node.ipv6_address,
             "port": node.port,
             "badge_color": node.badge_color,
             "last_seen": node.last_seen,

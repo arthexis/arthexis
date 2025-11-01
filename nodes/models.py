@@ -14,6 +14,7 @@ from core.fields import SigilLongAutoField, SigilShortAutoField
 import re
 import json
 import base64
+import ipaddress
 from django.utils import timezone
 from django.utils.text import slugify
 from django.conf import settings
@@ -25,6 +26,7 @@ import socket
 import stat
 import subprocess
 from pathlib import Path
+from urllib.parse import urlparse, urlunsplit
 from utils import revision
 from core.notifications import notify_async
 from django.core.exceptions import ValidationError
@@ -205,7 +207,14 @@ class Node(Entity):
         SELF = "SELF", "Self"
 
     hostname = models.CharField(max_length=100)
-    address = models.GenericIPAddressField()
+    network_hostname = models.CharField(max_length=253, blank=True)
+    ipv4_address = models.GenericIPAddressField(
+        protocol="IPv4", blank=True, null=True
+    )
+    ipv6_address = models.GenericIPAddressField(
+        protocol="IPv6", blank=True, null=True
+    )
+    address = models.GenericIPAddressField(blank=True, null=True)
     mac_address = models.CharField(max_length=17, unique=True, null=True, blank=True)
     port = models.PositiveIntegerField(default=8000)
     message_queue_length = models.PositiveSmallIntegerField(
@@ -266,6 +275,212 @@ class Node(Entity):
         return f"{self.hostname}:{self.port}"
 
     @staticmethod
+    def _ip_preference(ip_value: str) -> tuple[int, str]:
+        """Return a sort key favouring globally routable addresses."""
+
+        try:
+            parsed = ipaddress.ip_address(ip_value)
+        except ValueError:
+            return (3, ip_value)
+
+        if parsed.is_global:
+            return (0, ip_value)
+
+        if parsed.is_loopback or parsed.is_link_local:
+            return (2, ip_value)
+
+        if parsed.is_private:
+            return (2, ip_value)
+
+        return (1, ip_value)
+
+    @classmethod
+    def _select_preferred_ip(cls, addresses: Iterable[str]) -> str | None:
+        """Return the preferred IP from ``addresses`` when available."""
+
+        best: tuple[int, str] | None = None
+        for candidate in addresses:
+            candidate = (candidate or "").strip()
+            if not candidate:
+                continue
+            score = cls._ip_preference(candidate)
+            if best is None or score < best:
+                best = score
+        return best[1] if best else None
+
+    @classmethod
+    def _resolve_ip_addresses(
+        cls, *hosts: str, include_ipv4: bool = True, include_ipv6: bool = True
+    ) -> tuple[list[str], list[str]]:
+        """Resolve ``hosts`` into IPv4 and IPv6 address lists."""
+
+        ipv4: list[str] = []
+        ipv6: list[str] = []
+
+        for host in hosts:
+            host = (host or "").strip()
+            if not host:
+                continue
+            try:
+                info = socket.getaddrinfo(
+                    host,
+                    None,
+                    socket.AF_UNSPEC,
+                    socket.SOCK_STREAM,
+                )
+            except OSError:
+                continue
+            for family, _, _, _, sockaddr in info:
+                if family == socket.AF_INET and include_ipv4:
+                    value = sockaddr[0]
+                    if value not in ipv4:
+                        ipv4.append(value)
+                elif family == socket.AF_INET6 and include_ipv6:
+                    value = sockaddr[0]
+                    if value not in ipv6:
+                        ipv6.append(value)
+
+        return ipv4, ipv6
+
+    def get_remote_host_candidates(self) -> list[str]:
+        """Return host strings that may reach this node."""
+
+        values: list[str] = []
+        for attr in (
+            "network_hostname",
+            "hostname",
+            "ipv6_address",
+            "ipv4_address",
+            "address",
+            "public_endpoint",
+        ):
+            value = getattr(self, attr, "") or ""
+            value = value.strip()
+            if value and value not in values:
+                values.append(value)
+
+        resolved_ipv6: list[str] = []
+        resolved_ipv4: list[str] = []
+        for host in list(values):
+            if host.startswith("http://") or host.startswith("https://"):
+                continue
+            try:
+                ipaddress.ip_address(host)
+            except ValueError:
+                ipv4, ipv6 = self._resolve_ip_addresses(host)
+                for candidate in ipv6:
+                    if candidate not in values and candidate not in resolved_ipv6:
+                        resolved_ipv6.append(candidate)
+                for candidate in ipv4:
+                    if candidate not in values and candidate not in resolved_ipv4:
+                        resolved_ipv4.append(candidate)
+        values.extend(resolved_ipv6)
+        values.extend(resolved_ipv4)
+        return values
+
+    def get_primary_contact(self) -> str:
+        """Return the first reachable host for this node."""
+
+        for host in self.get_remote_host_candidates():
+            if host:
+                return host
+        return ""
+
+    def iter_remote_urls(self, path: str):
+        """Yield potential remote URLs for ``path`` on this node."""
+
+        host_candidates = self.get_remote_host_candidates()
+        default_port = self.port or 8000
+        normalized_path = path if path.startswith("/") else f"/{path}"
+        seen: set[str] = set()
+
+        for host in host_candidates:
+            host = host.strip()
+            if not host:
+                continue
+            base_path = ""
+            formatted_host = host
+            port_override: int | None = None
+
+            if "://" in host:
+                parsed = urlparse(host)
+                netloc = parsed.netloc or parsed.path
+                base_path = (parsed.path or "").rstrip("/")
+                combined_path = (
+                    f"{base_path}{normalized_path}" if base_path else normalized_path
+                )
+                primary = urlunsplit((parsed.scheme, netloc, combined_path, "", ""))
+                if primary not in seen:
+                    seen.add(primary)
+                    yield primary
+                if parsed.scheme == "https":
+                    fallback = urlunsplit(("http", netloc, combined_path, "", ""))
+                    if fallback not in seen:
+                        seen.add(fallback)
+                        yield fallback
+                elif parsed.scheme == "http":
+                    alternate = urlunsplit(("https", netloc, combined_path, "", ""))
+                    if alternate not in seen:
+                        seen.add(alternate)
+                        yield alternate
+                continue
+
+            if host.startswith("[") and "]" in host:
+                end = host.index("]")
+                core_host = host[1:end]
+                remainder = host[end + 1 :]
+                if remainder.startswith(":"):
+                    remainder = remainder[1:]
+                    port_part, sep, path_tail = remainder.partition("/")
+                    if port_part:
+                        try:
+                            port_override = int(port_part)
+                        except ValueError:
+                            port_override = None
+                    if sep:
+                        base_path = f"/{path_tail}".rstrip("/")
+                elif "/" in remainder:
+                    _, _, path_tail = remainder.partition("/")
+                    base_path = f"/{path_tail}".rstrip("/")
+                formatted_host = f"[{core_host}]"
+            else:
+                if "/" in host:
+                    host_only, _, path_tail = host.partition("/")
+                    formatted_host = host_only or host
+                    base_path = f"/{path_tail}".rstrip("/")
+                try:
+                    ip_obj = ipaddress.ip_address(formatted_host)
+                except ValueError:
+                    parts = formatted_host.rsplit(":", 1)
+                    if len(parts) == 2 and parts[1].isdigit():
+                        formatted_host = parts[0]
+                        port_override = int(parts[1])
+                    try:
+                        ip_obj = ipaddress.ip_address(formatted_host)
+                    except ValueError:
+                        ip_obj = None
+                else:
+                    if ip_obj.version == 6 and not formatted_host.startswith("["):
+                        formatted_host = f"[{formatted_host}]"
+
+            effective_port = port_override if port_override is not None else default_port
+            combined_path = f"{base_path}{normalized_path}" if base_path else normalized_path
+
+            for scheme, scheme_default_port in (("https", 443), ("http", 80)):
+                base = f"{scheme}://{formatted_host}"
+                if effective_port and (
+                    port_override is not None or effective_port != scheme_default_port
+                ):
+                    explicit = f"{base}:{effective_port}{combined_path}"
+                    if explicit not in seen:
+                        seen.add(explicit)
+                        yield explicit
+                candidate = f"{base}{combined_path}"
+                if candidate not in seen:
+                    seen.add(candidate)
+                    yield candidate
+
+    @staticmethod
     def get_current_mac() -> str:
         """Return the MAC address of the current host."""
         return ":".join(re.findall("..", f"{uuid.getnode():012x}"))
@@ -317,10 +532,59 @@ class Node(Entity):
         )
         hostname_override = hostname_override.strip()
         hostname = hostname_override or socket.gethostname()
+
+        network_hostname = os.environ.get("NODE_PUBLIC_HOSTNAME", "").strip()
+        if not network_hostname:
+            fqdn = socket.getfqdn(hostname)
+            if fqdn and "." in fqdn:
+                network_hostname = fqdn
+
+        ipv4_override = os.environ.get("NODE_PUBLIC_IPV4", "").strip()
+        ipv6_override = os.environ.get("NODE_PUBLIC_IPV6", "").strip()
+
+        ipv4_candidates: list[str] = []
+        ipv6_candidates: list[str] = []
+
+        for override, version in ((ipv4_override, 4), (ipv6_override, 6)):
+            override = override.strip()
+            if not override:
+                continue
+            try:
+                parsed = ipaddress.ip_address(override)
+            except ValueError:
+                continue
+            if parsed.version == version:
+                if version == 4 and override not in ipv4_candidates:
+                    ipv4_candidates.append(override)
+                elif version == 6 and override not in ipv6_candidates:
+                    ipv6_candidates.append(override)
+
+        resolve_hosts: list[str] = []
+        for value in (network_hostname, hostname_override, hostname):
+            value = (value or "").strip()
+            if value and value not in resolve_hosts:
+                resolve_hosts.append(value)
+
+        resolved_ipv4, resolved_ipv6 = cls._resolve_ip_addresses(*resolve_hosts)
+        for ip_value in resolved_ipv4:
+            if ip_value not in ipv4_candidates:
+                ipv4_candidates.append(ip_value)
+        for ip_value in resolved_ipv6:
+            if ip_value not in ipv6_candidates:
+                ipv6_candidates.append(ip_value)
+
         try:
-            address = socket.gethostbyname(hostname)
+            direct_address = socket.gethostbyname(hostname)
         except OSError:
-            address = "127.0.0.1"
+            direct_address = ""
+
+        if direct_address and direct_address not in ipv4_candidates:
+            ipv4_candidates.append(direct_address)
+
+        ipv4_address = cls._select_preferred_ip(ipv4_candidates)
+        ipv6_address = cls._select_preferred_ip(ipv6_candidates)
+
+        preferred_contact = ipv4_address or ipv6_address or direct_address or "127.0.0.1"
         port = int(os.environ.get("PORT", 8000))
         base_path = str(settings.BASE_DIR)
         ver_path = Path(settings.BASE_DIR) / "VERSION"
@@ -338,7 +602,10 @@ class Node(Entity):
             node = cls.objects.filter(public_endpoint=slug).first()
         defaults = {
             "hostname": hostname,
-            "address": address,
+            "network_hostname": network_hostname,
+            "ipv4_address": ipv4_address,
+            "ipv6_address": ipv6_address,
+            "address": preferred_contact,
             "port": port,
             "base_path": base_path,
             "installed_version": installed_version,
@@ -416,7 +683,10 @@ class Node(Entity):
 
         payload = {
             "hostname": self.hostname,
+            "network_hostname": self.network_hostname,
             "address": self.address,
+            "ipv4_address": self.ipv4_address,
+            "ipv6_address": self.ipv6_address,
             "port": self.port,
             "mac_address": self.mac_address,
             "public_key": self.public_key,
@@ -433,16 +703,17 @@ class Node(Entity):
 
         peers = Node.objects.exclude(pk=self.pk)
         for peer in peers:
-            host_candidates: list[str] = []
-            if peer.address:
-                host_candidates.append(peer.address)
-            if peer.hostname and peer.hostname not in host_candidates:
-                host_candidates.append(peer.hostname)
+            host_candidates = peer.get_remote_host_candidates()
             port = peer.port or 8000
             urls: list[str] = []
             for host in host_candidates:
                 host = host.strip()
                 if not host:
+                    continue
+                if host.startswith("http://") or host.startswith("https://"):
+                    normalized = host.rstrip("/")
+                    if normalized not in urls:
+                        urls.append(normalized)
                     continue
                 if ":" in host and not host.startswith("["):
                     host = f"[{host}]"
@@ -1928,20 +2199,25 @@ class NetMessage(Entity):
             if signature:
                 headers["X-Signature"] = signature
             success = False
-            try:
-                response = requests.post(
-                    f"http://{node.address}:{node.port}/nodes/net-message/",
-                    data=payload_json,
-                    headers=headers,
-                    timeout=1,
-                )
-                success = bool(response.ok)
-            except Exception:
-                logger.exception(
-                    "Failed to propagate NetMessage %s to node %s",
-                    self.pk,
-                    node.pk,
-                )
+            for url in node.iter_remote_urls("/nodes/net-message/"):
+                try:
+                    response = requests.post(
+                        url,
+                        data=payload_json,
+                        headers=headers,
+                        timeout=1,
+                    )
+                    success = bool(response.ok)
+                except Exception:
+                    logger.exception(
+                        "Failed to propagate NetMessage %s to node %s via %s",
+                        self.pk,
+                        node.pk,
+                        url,
+                    )
+                    continue
+                if success:
+                    break
             if success:
                 self.clear_queue_for_node(node)
             else:

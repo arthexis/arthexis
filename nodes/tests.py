@@ -133,6 +133,12 @@ class NodeGetLocalDatabaseUnavailableTests(SimpleTestCase):
 
 
 class NodeGetLocalTests(TestCase):
+    def setUp(self):
+        super().setUp()
+        User = get_user_model()
+        self.user = User.objects.create_user(username="localtester", password="pwd")
+        self.client.force_login(self.user)
+
     def test_normalize_relation_handles_various_inputs(self):
         self.assertEqual(
             Node.normalize_relation(Node.Relation.UPSTREAM),
@@ -174,6 +180,7 @@ class NodeGetLocalTests(TestCase):
                     patch(
                         "nodes.models.socket.gethostbyname", return_value="127.0.0.1"
                     ),
+                    patch.object(Node, "_resolve_ip_addresses", return_value=([], [])),
                     patch("nodes.models.revision.get_revision", return_value="rev"),
                     patch.object(Node, "ensure_keys"),
                 ):
@@ -202,6 +209,7 @@ class NodeGetLocalTests(TestCase):
                     patch(
                         "nodes.models.socket.gethostbyname", return_value="127.0.0.1"
                     ),
+                    patch.object(Node, "_resolve_ip_addresses", return_value=([], [])),
                     patch("nodes.models.revision.get_revision", return_value="rev"),
                     patch.object(Node, "ensure_keys"),
                     patch.object(Node, "notify_peers_of_update"),
@@ -221,6 +229,7 @@ class NodeGetLocalTests(TestCase):
                     patch(
                         "nodes.models.socket.gethostbyname", return_value="127.0.0.1"
                     ),
+                    patch.object(Node, "_resolve_ip_addresses", return_value=([], [])),
                     patch("nodes.models.revision.get_revision", return_value="rev"),
                     patch.object(Node, "ensure_keys"),
                     patch.object(Node, "notify_peers_of_update"),
@@ -242,6 +251,7 @@ class NodeGetLocalTests(TestCase):
                     patch(
                         "nodes.models.socket.gethostbyname", return_value="127.0.0.1"
                     ),
+                    patch.object(Node, "_resolve_ip_addresses", return_value=([], [])),
                     patch("nodes.models.revision.get_revision", return_value="rev"),
                     patch.object(Node, "ensure_keys"),
                     patch.object(Node, "notify_peers_of_update"),
@@ -260,6 +270,7 @@ class NodeGetLocalTests(TestCase):
                     patch("nodes.models.Node.get_current_mac", return_value="00:11:22:33:44:55"),
                     patch("nodes.models.socket.gethostname", return_value="localhost"),
                     patch("nodes.models.socket.gethostbyname", return_value="127.0.0.1"),
+                    patch.object(Node, "_resolve_ip_addresses", return_value=([], [])),
                     patch("nodes.models.revision.get_revision", return_value="rev"),
                     patch.object(Node, "ensure_keys"),
                     patch.object(Node, "notify_peers_of_update"),
@@ -282,6 +293,7 @@ class NodeGetLocalTests(TestCase):
                     patch("nodes.models.Node.get_current_mac", return_value="00:11:22:33:44:56"),
                     patch("nodes.models.socket.gethostname", return_value="localhost"),
                     patch("nodes.models.socket.gethostbyname", return_value="127.0.0.1"),
+                    patch.object(Node, "_resolve_ip_addresses", return_value=([], [])),
                     patch("nodes.models.revision.get_revision", return_value="rev"),
                     patch.object(Node, "ensure_keys"),
                     patch.object(Node, "notify_peers_of_update"),
@@ -376,6 +388,37 @@ class NodeGetLocalTests(TestCase):
 
         self.assertNotEqual(node_one.public_endpoint, node_two.public_endpoint)
         self.assertTrue(node_two.public_endpoint.startswith("duplicate-host-"))
+
+    def test_register_node_accepts_network_hostname_without_address(self):
+        response = self.client.post(
+            reverse("register-node"),
+            data={
+                "hostname": "domain-node",
+                "network_hostname": "domain-node.example.com",
+                "port": 8050,
+                "mac_address": "aa:bb:cc:dd:ee:ff",
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        node = Node.objects.get(mac_address="aa:bb:cc:dd:ee:ff")
+        self.assertEqual(node.network_hostname, "domain-node.example.com")
+        self.assertIsNone(node.address)
+        self.assertIsNone(node.ipv4_address)
+        self.assertIsNone(node.ipv6_address)
+
+    def test_register_node_requires_contact_information(self):
+        response = self.client.post(
+            reverse("register-node"),
+            data={
+                "hostname": "missing-host",
+                "port": 8051,
+                "mac_address": "aa:bb:cc:dd:ee:00",
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("at least one", response.json()["detail"])
 
     def test_register_node_assigns_interface_role_and_returns_uuid(self):
         NodeRole.objects.get_or_create(name="Interface")
@@ -806,7 +849,10 @@ class NodeInfoViewTests(TestCase):
         self.addCleanup(self.patcher.stop)
         self.node = Node.objects.create(
             hostname="local",
+            network_hostname="local.example.com",
             address="10.0.0.10",
+            ipv4_address="10.0.0.10",
+            ipv6_address="2001:db8::10",
             port=8000,
             mac_address=self.mac,
             public_endpoint="local",
@@ -834,6 +880,8 @@ class NodeInfoViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertEqual(payload["port"], 80)
+        self.assertEqual(payload.get("network_hostname"), "local.example.com")
+        self.assertIn("local.example.com", payload.get("contact_hosts", []))
 
     def test_preserves_explicit_port_in_host_header(self):
         with self.settings(ALLOWED_HOSTS=["arthexis.com"]):
@@ -855,6 +903,8 @@ class NodeInfoViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertEqual(payload.get("role"), "Terminal")
+        self.assertEqual(payload.get("ipv4_address"), "10.0.0.10")
+        self.assertEqual(payload.get("ipv6_address"), "2001:db8::10")
 
 
 class RegisterVisitorNodeMessageTests(TestCase):
@@ -936,6 +986,7 @@ class NodeRegisterCurrentTests(TestCase):
                     patch(
                         "nodes.models.socket.gethostbyname", return_value="127.0.0.1"
                     ),
+                    patch.object(Node, "_resolve_ip_addresses", return_value=([], [])),
                     patch("nodes.models.revision.get_revision", return_value="rev"),
                     patch.object(Node, "ensure_keys"),
                     patch.object(Node, "notify_peers_of_update") as mock_notify,
@@ -963,6 +1014,7 @@ class NodeRegisterCurrentTests(TestCase):
                     patch(
                         "nodes.models.socket.gethostbyname", return_value="127.0.0.1"
                     ),
+                    patch.object(Node, "_resolve_ip_addresses", return_value=([], [])),
                     patch("nodes.models.revision.get_revision", return_value="rev"),
                     patch.object(Node, "ensure_keys"),
                 ):
@@ -981,6 +1033,7 @@ class NodeRegisterCurrentTests(TestCase):
                     patch(
                         "nodes.models.socket.gethostbyname", return_value="127.0.0.1"
                     ),
+                    patch.object(Node, "_resolve_ip_addresses", return_value=([], [])),
                     patch("nodes.models.revision.get_revision", return_value="rev"),
                     patch.object(Node, "ensure_keys"),
                 ):
@@ -1000,6 +1053,7 @@ class NodeRegisterCurrentTests(TestCase):
                     patch(
                         "nodes.models.socket.gethostbyname", return_value="127.0.0.1"
                     ),
+                    patch.object(Node, "_resolve_ip_addresses", return_value=([], [])),
                     patch("nodes.models.revision.get_revision", return_value="rev"),
                     patch.object(Node, "ensure_keys"),
                 ):
@@ -1025,9 +1079,19 @@ class NodeRegisterCurrentTests(TestCase):
                         return_value="00:ff:ee:dd:cc:bb",
                     ),
                     patch("nodes.models.socket.gethostname", return_value="localnode"),
+                    patch("nodes.models.socket.getfqdn", return_value="localnode.example.com"),
                     patch(
                         "nodes.models.socket.gethostbyname",
                         return_value="192.168.1.5",
+                    ),
+                    patch.dict(os.environ, {"HOSTNAME": ""}, clear=False),
+                    patch.object(
+                        Node,
+                        "_resolve_ip_addresses",
+                        return_value=(
+                            ["192.168.1.5", "93.184.216.34"],
+                            ["fe80::1", "2001:4860:4860::8888"],
+                        ),
                     ),
                     patch("nodes.models.revision.get_revision", return_value="newrev"),
                     patch("requests.post") as mock_post,
@@ -1052,6 +1116,9 @@ class NodeRegisterCurrentTests(TestCase):
         self.assertEqual(payload["hostname"], "localnode")
         self.assertEqual(payload["installed_version"], "2.0.0")
         self.assertEqual(payload["installed_revision"], "newrev")
+        self.assertEqual(payload.get("network_hostname"), "localnode.example.com")
+        self.assertEqual(payload.get("ipv4_address"), "93.184.216.34")
+        self.assertEqual(payload.get("ipv6_address"), "2001:4860:4860::8888")
 
     def test_register_current_notifies_peers_without_version_change(self):
         Node.objects.create(
@@ -1070,9 +1137,19 @@ class NodeRegisterCurrentTests(TestCase):
                         return_value="00:ff:ee:dd:cc:cc",
                     ),
                     patch("nodes.models.socket.gethostname", return_value="samever"),
+                    patch("nodes.models.socket.getfqdn", return_value="samever.example.com"),
                     patch(
                         "nodes.models.socket.gethostbyname",
                         return_value="192.168.1.6",
+                    ),
+                    patch.dict(os.environ, {"HOSTNAME": ""}, clear=False),
+                    patch.object(
+                        Node,
+                        "_resolve_ip_addresses",
+                        return_value=(
+                            ["192.168.1.6", "93.184.216.35"],
+                            ["fe80::2", "2001:4860:4860::8844"],
+                        ),
                     ),
                     patch("nodes.models.revision.get_revision", return_value="rev1"),
                     patch("requests.post") as mock_post,
@@ -1095,6 +1172,44 @@ class NodeRegisterCurrentTests(TestCase):
         payload = json.loads(kwargs["data"])
         self.assertEqual(payload["installed_version"], "1.0.0")
         self.assertEqual(payload.get("installed_revision"), "rev1")
+        self.assertEqual(payload.get("network_hostname"), "samever.example.com")
+        self.assertEqual(payload.get("ipv4_address"), "93.184.216.35")
+        self.assertEqual(payload.get("ipv6_address"), "2001:4860:4860::8844")
+
+    def test_register_current_populates_network_fields(self):
+        with TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            with override_settings(BASE_DIR=base):
+                with (
+                    patch(
+                        "nodes.models.Node.get_current_mac",
+                        return_value="00:12:34:56:78:90",
+                    ),
+                    patch("nodes.models.socket.gethostname", return_value="nodehost"),
+                    patch("nodes.models.socket.getfqdn", return_value="nodehost.example.com"),
+                    patch(
+                        "nodes.models.socket.gethostbyname",
+                        return_value="10.0.0.5",
+                    ),
+                    patch.dict(os.environ, {"HOSTNAME": ""}, clear=False),
+                    patch.object(
+                        Node,
+                        "_resolve_ip_addresses",
+                        return_value=(
+                            ["10.0.0.5", "93.184.216.36"],
+                            ["fe80::5", "2001:4860:4860::1"],
+                        ),
+                    ),
+                    patch("nodes.models.revision.get_revision", return_value="revX"),
+                    patch.object(Node, "ensure_keys"),
+                    patch.object(Node, "notify_peers_of_update"),
+                ):
+                    node, created = Node.register_current()
+        self.assertTrue(created)
+        self.assertEqual(node.network_hostname, "nodehost.example.com")
+        self.assertEqual(node.ipv4_address, "93.184.216.36")
+        self.assertEqual(node.ipv6_address, "2001:4860:4860::1")
+        self.assertEqual(node.address, "93.184.216.36")
 
     @patch("nodes.views.capture_screenshot")
     def test_capture_screenshot(self, mock_capture):
@@ -1731,7 +1846,10 @@ class NodeAdminTests(TestCase):
 
         payload = {
             "hostname": node.hostname,
+            "network_hostname": "remote-node.example.com",
             "address": node.address,
+            "ipv4_address": "198.51.100.10",
+            "ipv6_address": "2001:db8::10",
             "port": node.port,
             "role": "Control",
         }
@@ -1740,7 +1858,13 @@ class NodeAdminTests(TestCase):
         node.refresh_from_db()
 
         self.assertIn("role", changed)
+        self.assertIn("network_hostname", changed)
+        self.assertIn("ipv4_address", changed)
+        self.assertIn("ipv6_address", changed)
         self.assertEqual(node.role, control)
+        self.assertEqual(node.network_hostname, "remote-node.example.com")
+        self.assertEqual(node.ipv4_address, "198.51.100.10")
+        self.assertEqual(node.ipv6_address, "2001:db8::10")
         self.assertTrue(control.node_set.filter(pk=node.pk).exists())
         self.assertFalse(terminal.node_set.filter(pk=node.pk).exists())
 
@@ -1758,7 +1882,10 @@ class NodeAdminTests(TestCase):
 
         payload = {
             "hostname": node.hostname,
+            "network_hostname": "role-name-node.example.com",
             "address": node.address,
+            "ipv4_address": "198.51.100.11",
+            "ipv6_address": "2001:db8::11",
             "port": node.port,
             "role_name": "Control",
         }
@@ -1767,6 +1894,9 @@ class NodeAdminTests(TestCase):
         node.refresh_from_db()
 
         self.assertIn("role", changed)
+        self.assertEqual(node.network_hostname, "role-name-node.example.com")
+        self.assertEqual(node.ipv4_address, "198.51.100.11")
+        self.assertEqual(node.ipv6_address, "2001:db8::11")
         self.assertEqual(node.role, control)
         self.assertTrue(control.node_set.filter(pk=node.pk).exists())
         self.assertFalse(terminal.node_set.filter(pk=node.pk).exists())
@@ -3064,7 +3194,7 @@ class NetMessagePropagationTests(TestCase):
         with patch.object(Node, "get_local", return_value=self.local):
             msg = NetMessage.broadcast(subject="subject", body="body")
         self.assertEqual(msg.node_origin, self.local)
-        self.assertIsNone(msg.reach)
+        self.assertEqual(msg.reach, self.role)
 
     @patch("requests.post")
     @patch("core.notifications.notify")

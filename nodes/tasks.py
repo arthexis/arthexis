@@ -83,25 +83,22 @@ def poll_unreachable_upstream() -> None:
     for upstream in upstream_nodes:
         if not upstream.public_key:
             continue
-        host = (upstream.address or upstream.hostname or "").strip()
-        if not host:
-            continue
-        if ":" in host and not host.startswith("["):
-            host = f"[{host}]"
-        port = upstream.port or 8000
-        if port in {80, 443}:
-            url = f"http://{host}/nodes/net-message/pull/"
-        else:
-            url = f"http://{host}:{port}/nodes/net-message/pull/"
-        try:
-            response = requests.post(url, data=payload_json, headers=headers, timeout=5)
-        except Exception as exc:
-            logger.warning("Polling upstream node %s failed: %s", upstream.pk, exc)
-            continue
-        if not response.ok:
+        response = None
+        for url in upstream.iter_remote_urls("/nodes/net-message/pull/"):
+            try:
+                response = requests.post(
+                    url, data=payload_json, headers=headers, timeout=5
+                )
+            except Exception as exc:
+                logger.warning("Polling upstream node %s via %s failed: %s", upstream.pk, url, exc)
+                continue
+            if response.ok:
+                break
             logger.warning(
                 "Upstream node %s returned status %s", upstream.pk, response.status_code
             )
+            response = None
+        if response is None or not response.ok:
             continue
         try:
             body = response.json()

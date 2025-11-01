@@ -19,9 +19,8 @@ from django.utils.html import format_html, format_html_join
 from django.utils.translation import gettext_lazy as _
 from pathlib import Path
 from types import SimpleNamespace
-from urllib.parse import urljoin, urlparse, urlsplit, urlunsplit
+from urllib.parse import urlsplit, urlunsplit
 import base64
-import ipaddress
 import json
 import subprocess
 import uuid
@@ -231,33 +230,37 @@ class DNSRecordAdmin(EntityModelAdmin):
 class NodeAdmin(EntityModelAdmin):
     list_display = (
         "hostname",
-        "mac_address",
-        "address",
+        "network_hostname",
+        "ipv4_address",
+        "ipv6_address",
         "port",
         "role",
         "relation",
         "last_seen",
         "visit_link",
     )
-    search_fields = ("hostname", "address", "mac_address")
+    search_fields = ("hostname", "network_hostname", "address", "mac_address")
     change_list_template = "admin/nodes/node/change_list.html"
     change_form_template = "admin/nodes/node/change_form.html"
     form = NodeAdminForm
     fieldsets = (
         (
-            _("Node"),
+            _("Network"),
             {
                 "fields": (
                     "hostname",
+                    "network_hostname",
+                    "ipv4_address",
+                    "ipv6_address",
                     "address",
                     "mac_address",
                     "port",
                     "message_queue_length",
-                    "role",
                     "current_relation",
                 )
             },
         ),
+        (_("Role"), {"fields": ("role",)}),
         (
             _("Public endpoint"),
             {
@@ -312,12 +315,7 @@ class NodeAdmin(EntityModelAdmin):
                 _("Visit"),
             )
 
-        host_values: list[str] = []
-        for attr in ("hostname", "address", "public_endpoint"):
-            value = getattr(obj, attr, "") or ""
-            cleaned = value.strip()
-            if cleaned and cleaned not in host_values:
-                host_values.append(cleaned)
+        host_values = obj.get_remote_host_candidates()
 
         remote_url = ""
         for host in host_values:
@@ -461,6 +459,7 @@ class NodeAdmin(EntityModelAdmin):
             }
 
         last_error = ""
+        host_candidates = node.get_remote_host_candidates()
         for url in self._iter_remote_urls(node, "/nodes/info/"):
             try:
                 response = requests.get(url, timeout=5)
@@ -487,13 +486,19 @@ class NodeAdmin(EntityModelAdmin):
                 "updated_fields": updated,
                 "message": message,
             }
-        return {"ok": False, "message": last_error or "Unable to reach remote node."}
+        return {
+            "ok": False,
+            "message": self._build_connectivity_hint(last_error, host_candidates),
+        }
 
     def _apply_remote_node_info(self, node, payload):
         changed = []
         field_map = {
             "hostname": payload.get("hostname"),
+            "network_hostname": payload.get("network_hostname"),
             "address": payload.get("address"),
+            "ipv4_address": payload.get("ipv4_address"),
+            "ipv6_address": payload.get("ipv6_address"),
             "public_key": payload.get("public_key"),
         }
         port_value = payload.get("port")
@@ -571,7 +576,10 @@ class NodeAdmin(EntityModelAdmin):
 
         payload = {
             "hostname": local_node.hostname,
+            "network_hostname": local_node.network_hostname,
             "address": local_node.address,
+            "ipv4_address": local_node.ipv4_address,
+            "ipv6_address": local_node.ipv6_address,
             "port": local_node.port,
             "mac_address": local_node.mac_address,
             "public_key": local_node.public_key,
@@ -587,6 +595,7 @@ class NodeAdmin(EntityModelAdmin):
         headers = {"Content-Type": "application/json"}
 
         last_error = ""
+        host_candidates = node.get_remote_host_candidates()
         for url in self._iter_remote_urls(node, "/nodes/register/"):
             try:
                 response = requests.post(
@@ -601,102 +610,41 @@ class NodeAdmin(EntityModelAdmin):
             if response.ok:
                 return {"ok": True, "url": url, "message": "Remote updated."}
             last_error = f"{response.status_code} {response.text}"
-        return {"ok": False, "message": last_error or "Unable to reach remote node."}
+        return {
+            "ok": False,
+            "message": self._build_connectivity_hint(last_error, host_candidates),
+        }
+
+    def _build_connectivity_hint(self, last_error: str, hosts: list[str]) -> str:
+        base_message = last_error or _("Unable to reach remote node.")
+        if hosts:
+            host_text = ", ".join(hosts)
+            return _("%(message)s Tried hosts: %(hosts)s.") % {
+                "message": base_message,
+                "hosts": host_text,
+            }
+        return _("%(message)s No remote hosts were available for contact.") % {
+            "message": base_message
+        }
+
+    def _primary_remote_url(self, node, path: str) -> str:
+        return next(self._iter_remote_urls(node, path), "")
 
     def _iter_remote_urls(self, node, path):
-        host_candidates: list[str] = []
-        for attr in ("public_endpoint", "address", "hostname"):
-            value = getattr(node, attr, "") or ""
-            cleaned = value.strip()
-            if cleaned and cleaned not in host_candidates:
-                host_candidates.append(cleaned)
+        if hasattr(node, "iter_remote_urls"):
+            yield from node.iter_remote_urls(path)
+            return
 
-        default_port = node.port or 8000
-        normalized_path = path if path.startswith("/") else f"/{path}"
-        seen: set[str] = set()
-
-        for host in host_candidates:
-            base_path = ""
-            formatted_host = host
-            port_override: int | None = None
-
-            if "://" in host:
-                parsed = urlparse(host)
-                netloc = parsed.netloc or parsed.path
-                base_path = (parsed.path or "").rstrip("/")
-                combined_path = (
-                    f"{base_path}{normalized_path}" if base_path else normalized_path
-                )
-                primary = urlunsplit((parsed.scheme, netloc, combined_path, "", ""))
-                if primary not in seen:
-                    seen.add(primary)
-                    yield primary
-                if parsed.scheme == "https":
-                    fallback = urlunsplit(("http", netloc, combined_path, "", ""))
-                    if fallback not in seen:
-                        seen.add(fallback)
-                        yield fallback
-                elif parsed.scheme == "http":
-                    alternate = urlunsplit(("https", netloc, combined_path, "", ""))
-                    if alternate not in seen:
-                        seen.add(alternate)
-                        yield alternate
-                continue
-
-            if host.startswith("[") and "]" in host:
-                end = host.index("]")
-                core_host = host[1:end]
-                remainder = host[end + 1 :]
-                if remainder.startswith(":"):
-                    remainder = remainder[1:]
-                    port_part, sep, path_tail = remainder.partition("/")
-                    if port_part:
-                        try:
-                            port_override = int(port_part)
-                        except ValueError:
-                            port_override = None
-                    if sep:
-                        base_path = f"/{path_tail}".rstrip("/")
-                elif "/" in remainder:
-                    _, _, path_tail = remainder.partition("/")
-                    base_path = f"/{path_tail}".rstrip("/")
-                formatted_host = f"[{core_host}]"
-            else:
-                if "/" in host:
-                    host_only, _, path_tail = host.partition("/")
-                    formatted_host = host_only or host
-                    base_path = f"/{path_tail}".rstrip("/")
-                try:
-                    ip_obj = ipaddress.ip_address(formatted_host)
-                except ValueError:
-                    parts = formatted_host.rsplit(":", 1)
-                    if len(parts) == 2 and parts[1].isdigit():
-                        formatted_host = parts[0]
-                        port_override = int(parts[1])
-                    try:
-                        ip_obj = ipaddress.ip_address(formatted_host)
-                    except ValueError:
-                        ip_obj = None
-                else:
-                    if ip_obj.version == 6 and not formatted_host.startswith("["):
-                        formatted_host = f"[{formatted_host}]"
-
-            effective_port = port_override if port_override is not None else default_port
-            combined_path = f"{base_path}{normalized_path}" if base_path else normalized_path
-
-            for scheme, scheme_default_port in (("https", 443), ("http", 80)):
-                base = f"{scheme}://{formatted_host}"
-                if effective_port and (
-                    port_override is not None or effective_port != scheme_default_port
-                ):
-                    explicit = f"{base}:{effective_port}{combined_path}"
-                    if explicit not in seen:
-                        seen.add(explicit)
-                        yield explicit
-                candidate = f"{base}{combined_path}"
-                if candidate not in seen:
-                    seen.add(candidate)
-                    yield candidate
+        temp = Node(
+            public_endpoint=getattr(node, "public_endpoint", ""),
+            address=getattr(node, "address", ""),
+            hostname=getattr(node, "hostname", ""),
+            port=getattr(node, "port", None),
+        )
+        temp.network_hostname = getattr(node, "network_hostname", "")
+        temp.ipv4_address = getattr(node, "ipv4_address", "")
+        temp.ipv6_address = getattr(node, "ipv6_address", "")
+        yield from temp.iter_remote_urls(path)
 
     def register_visitor_view(self, request):
         """Exchange registration data with the visiting node."""
@@ -770,11 +718,28 @@ class NodeAdmin(EntityModelAdmin):
         for node in queryset:
             for source in sources:
                 try:
-                    url = source.format(node=node, address=node.address, port=node.port)
+                    contact_host = node.get_primary_contact()
+                    url = source.format(
+                        node=node, address=contact_host, port=node.port
+                    )
                 except Exception:
                     url = source
                 if not url.startswith("http"):
-                    url = f"http://{node.address}:{node.port}{url}"
+                    candidate = next(
+                        self._iter_remote_urls(node, url),
+                        "",
+                    )
+                    if not candidate:
+                        self.message_user(
+                            request,
+                            _(
+                                "No reachable host was available for %(node)s while generating %(path)s"
+                            )
+                            % {"node": node, "path": url},
+                            messages.WARNING,
+                        )
+                        continue
+                    url = candidate
                 try:
                     path = capture_screenshot(url)
                 except Exception as exc:  # pragma: no cover - selenium issues
@@ -894,7 +859,13 @@ class NodeAdmin(EntityModelAdmin):
 
     def _process_import_from_node(self, node, payload, headers):
         result = self._init_rfid_result(node)
-        url = f"http://{node.address}:{node.port}/nodes/rfid/export/"
+        url = self._primary_remote_url(node, "/nodes/rfid/export/")
+        if not url:
+            result["status"] = "error"
+            result["errors"].append(
+                _("No remote hosts were available for %(node)s.") % {"node": node}
+            )
+            return result
         try:
             response = requests.post(url, data=payload, headers=headers, timeout=5)
         except RequestException as exc:
@@ -939,7 +910,13 @@ class NodeAdmin(EntityModelAdmin):
 
     def _post_export_to_node(self, node, payload, headers):
         result = self._init_rfid_result(node)
-        url = f"http://{node.address}:{node.port}/nodes/rfid/import/"
+        url = self._primary_remote_url(node, "/nodes/rfid/import/")
+        if not url:
+            result["status"] = "error"
+            result["errors"].append(
+                _("No remote hosts were available for %(node)s.") % {"node": node}
+            )
+            return result
         try:
             response = requests.post(url, data=payload, headers=headers, timeout=5)
         except RequestException as exc:
@@ -1088,7 +1065,12 @@ class NodeAdmin(EntityModelAdmin):
         errors: list[str] = []
 
         for node in nodes:
-            url = f"http://{node.address}:{node.port}/nodes/network/chargers/"
+            url = self._primary_remote_url(node, "/nodes/network/chargers/")
+            if not url:
+                errors.append(
+                    _("No remote hosts were available for %(node)s.") % {"node": node}
+                )
+                continue
             try:
                 response = requests.post(url, data=payload, headers=headers, timeout=5)
             except RequestException as exc:

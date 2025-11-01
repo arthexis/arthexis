@@ -429,7 +429,15 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
             )
             return False, {}
         origin = charger.node_origin
-        if not origin.address or not origin.port:
+        if not origin.port:
+            self.message_user(
+                request,
+                f"{charger}: remote node port is not configured.",
+                level=messages.ERROR,
+            )
+            return False, {}
+
+        if not origin.get_remote_host_candidates():
             self.message_user(
                 request,
                 f"{charger}: remote node connection details are incomplete.",
@@ -465,7 +473,17 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
             )
             return False, {}
 
-        url = f"http://{origin.address}:{origin.port}/nodes/network/chargers/action/"
+        url = next(
+            origin.iter_remote_urls("/nodes/network/chargers/action/"),
+            "",
+        )
+        if not url:
+            self.message_user(
+                request,
+                f"{charger}: no reachable hosts were reported for the remote node.",
+                level=messages.ERROR,
+            )
+            return False, {}
         try:
             response = requests.post(url, data=payload_json, headers=headers, timeout=5)
         except RequestException as exc:
