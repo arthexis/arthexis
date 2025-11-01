@@ -2724,6 +2724,11 @@ class ClientReportSchedule(Entity):
     )
     email_recipients = models.JSONField(default=list, blank=True)
     disable_emails = models.BooleanField(default=False)
+    chargers = models.ManyToManyField(
+        "ocpp.Charger",
+        blank=True,
+        related_name="client_report_schedules",
+    )
     periodic_task = models.OneToOneField(
         "django_celery_beat.PeriodicTask",
         on_delete=models.SET_NULL,
@@ -2736,6 +2741,11 @@ class ClientReportSchedule(Entity):
     class Meta:
         verbose_name = "Client Report Schedule"
         verbose_name_plural = "Client Report Schedules"
+
+    @classmethod
+    def label_for_periodicity(cls, value: str) -> str:
+        lookup = dict(cls.PERIODICITY_CHOICES)
+        return lookup.get(value, value)
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         owner = self.owner.get_username() if self.owner else "Unassigned"
@@ -2833,6 +2843,78 @@ class ClientReportSchedule(Entity):
 
         return start, end
 
+    def _advance_period(
+        self, start: datetime_date, end: datetime_date
+    ) -> tuple[datetime_date, datetime_date]:
+        import calendar as _calendar
+        import datetime as _datetime
+
+        if self.periodicity == self.PERIODICITY_DAILY:
+            delta = _datetime.timedelta(days=1)
+            return start + delta, end + delta
+        if self.periodicity == self.PERIODICITY_WEEKLY:
+            delta = _datetime.timedelta(days=7)
+            return start + delta, end + delta
+        if self.periodicity == self.PERIODICITY_MONTHLY:
+            base_start = start.replace(day=1)
+            year = base_start.year
+            month = base_start.month
+            if month == 12:
+                next_year = year + 1
+                next_month = 1
+            else:
+                next_year = year
+                next_month = month + 1
+            next_start = base_start.replace(year=next_year, month=next_month, day=1)
+            last_day = _calendar.monthrange(next_year, next_month)[1]
+            next_end = next_start.replace(day=last_day)
+            return next_start, next_end
+        raise ValueError("advance_period called for non-recurring schedule")
+
+    def iter_pending_periods(self, reference=None):
+        from django.utils import timezone
+
+        if self.periodicity == self.PERIODICITY_NONE:
+            return []
+
+        ref_date = reference or timezone.localdate()
+        try:
+            target_start, target_end = self.calculate_period(reference=ref_date)
+        except ValueError:
+            return []
+
+        reports = self.reports.order_by("start_date", "end_date")
+        last_report = reports.last()
+        if last_report:
+            current_start, current_end = self._advance_period(
+                last_report.start_date, last_report.end_date
+            )
+        else:
+            current_start, current_end = target_start, target_end
+
+        if current_end < current_start:
+            return []
+
+        pending: list[tuple[datetime.date, datetime.date]] = []
+        safety = 0
+        while current_end <= target_end:
+            exists = reports.filter(
+                start_date=current_start, end_date=current_end
+            ).exists()
+            if not exists:
+                pending.append((current_start, current_end))
+            try:
+                current_start, current_end = self._advance_period(
+                    current_start, current_end
+                )
+            except ValueError:
+                break
+            safety += 1
+            if safety > 400:
+                break
+
+        return pending
+
     def resolve_recipients(self):
         """Return (to, cc) email lists respecting owner fallbacks."""
 
@@ -2880,38 +2962,27 @@ class ClientReportSchedule(Entity):
 
         return to, cc
 
+    def resolve_reply_to(self) -> list[str]:
+        return ClientReport.resolve_reply_to_for_owner(self.owner)
+
     def get_outbox(self):
         """Return the preferred :class:`nodes.models.EmailOutbox` instance."""
 
-        from nodes.models import EmailOutbox, Node
-
-        if self.owner:
-            try:
-                outbox = self.owner.get_profile(EmailOutbox)
-            except Exception:  # pragma: no cover - defensive catch
-                outbox = None
-            if outbox:
-                return outbox
-
-        node = Node.get_local()
-        if node:
-            return getattr(node, "email_outbox", None)
-        return None
+        return ClientReport.resolve_outbox_for_owner(self.owner)
 
     def notify_failure(self, message: str):
         from nodes.models import NetMessage
 
         NetMessage.broadcast("Client report delivery issue", message)
 
-    def run(self):
+    def run(self, *, start: datetime_date | None = None, end: datetime_date | None = None):
         """Generate the report, persist it and deliver notifications."""
 
-        from core import mailer
-
-        try:
-            start, end = self.calculate_period()
-        except ValueError:
-            return None
+        if start is None or end is None:
+            try:
+                start, end = self.calculate_period()
+            except ValueError:
+                return None
 
         try:
             report = ClientReport.generate(
@@ -2921,8 +2992,10 @@ class ClientReportSchedule(Entity):
                 schedule=self,
                 recipients=self.email_recipients,
                 disable_emails=self.disable_emails,
+                chargers=list(self.chargers.all()),
             )
-            export, html_content = report.store_local_copy()
+            report.chargers.set(self.chargers.all())
+            report.store_local_copy()
         except Exception as exc:
             self.notify_failure(str(exc))
             raise
@@ -2934,43 +3007,12 @@ class ClientReportSchedule(Entity):
                 raise RuntimeError("No recipients available for client report")
             else:
                 try:
-                    attachments = []
-                    html_name = Path(export["html_path"]).name
-                    attachments.append((html_name, html_content, "text/html"))
-                    json_file = Path(settings.BASE_DIR) / export["json_path"]
-                    if json_file.exists():
-                        attachments.append(
-                            (
-                                json_file.name,
-                                json_file.read_text(encoding="utf-8"),
-                                "application/json",
-                            )
-                        )
-                    pdf_path = export.get("pdf_path")
-                    if pdf_path:
-                        pdf_file = Path(settings.BASE_DIR) / pdf_path
-                        if pdf_file.exists():
-                            attachments.append(
-                                (
-                                    pdf_file.name,
-                                    pdf_file.read_bytes(),
-                                    "application/pdf",
-                                )
-                            )
-                    subject = f"Client report {report.start_date} to {report.end_date}"
-                    body = (
-                        "Attached is the client report generated for the period "
-                        f"{report.start_date} to {report.end_date}."
-                    )
-                    mailer.send(
-                        subject,
-                        body,
-                        to,
-                        outbox=self.get_outbox(),
+                    delivered = report.send_delivery(
+                        to=to,
                         cc=cc,
-                        attachments=attachments,
+                        outbox=self.get_outbox(),
+                        reply_to=self.resolve_reply_to(),
                     )
-                    delivered = list(dict.fromkeys(to + (cc or [])))
                     if delivered:
                         type(report).objects.filter(pk=report.pk).update(
                             recipients=delivered
@@ -2984,6 +3026,14 @@ class ClientReportSchedule(Entity):
         type(self).objects.filter(pk=self.pk).update(last_generated_on=now)
         self.last_generated_on = now
         return report
+
+    def generate_missing_reports(self, reference=None):
+        generated: list["ClientReport"] = []
+        for start, end in self.iter_pending_periods(reference=reference):
+            report = self.run(start=start, end=end)
+            if report:
+                generated.append(report)
+        return generated
 
 
 class ClientReport(Entity):
@@ -3009,12 +3059,34 @@ class ClientReport(Entity):
     )
     recipients = models.JSONField(default=list, blank=True)
     disable_emails = models.BooleanField(default=False)
+    chargers = models.ManyToManyField(
+        "ocpp.Charger",
+        blank=True,
+        related_name="client_reports",
+    )
 
     class Meta:
         verbose_name = "Consumer Report"
         verbose_name_plural = "Consumer Reports"
         db_table = "core_client_report"
         ordering = ["-created_on"]
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        period_label = self.periodicity_label
+        return f"{self.start_date} - {self.end_date} ({period_label})"
+
+    @property
+    def periodicity_label(self) -> str:
+        if self.schedule:
+            return self.schedule.get_periodicity_display()
+        return ClientReportSchedule.label_for_periodicity(
+            ClientReportSchedule.PERIODICITY_NONE
+        )
+
+    @property
+    def total_kw_period(self) -> float:
+        totals = (self.rows_for_display or {}).get("totals", {})
+        return float(totals.get("total_kw_period", 0.0) or 0.0)
 
     @classmethod
     def generate(
@@ -3026,9 +3098,19 @@ class ClientReport(Entity):
         schedule=None,
         recipients: list[str] | None = None,
         disable_emails: bool = False,
+        chargers=None,
     ):
-        payload = cls.build_rows(start_date, end_date)
-        return cls.objects.create(
+        from collections.abc import Iterable as _Iterable
+
+        charger_list = []
+        if chargers:
+            if isinstance(chargers, _Iterable):
+                charger_list = list(chargers)
+            else:
+                charger_list = [chargers]
+
+        payload = cls.build_rows(start_date, end_date, chargers=charger_list)
+        report = cls.objects.create(
             start_date=start_date,
             end_date=end_date,
             data=payload,
@@ -3037,6 +3119,9 @@ class ClientReport(Entity):
             recipients=list(recipients or []),
             disable_emails=disable_emails,
         )
+        if charger_list:
+            report.chargers.set(charger_list)
+        return report
 
     def store_local_copy(self, html: str | None = None):
         """Persist the report data and optional HTML rendering to disk."""
@@ -3076,15 +3161,65 @@ class ClientReport(Entity):
         self.data = updated
         return export, html_content
 
+    def send_delivery(
+        self,
+        *,
+        to: list[str] | tuple[str, ...],
+        cc: list[str] | tuple[str, ...] | None = None,
+        outbox=None,
+        reply_to: list[str] | None = None,
+    ) -> list[str]:
+        from core import mailer
+
+        recipients = list(to or [])
+        if not recipients:
+            return []
+
+        pdf_path = self.ensure_pdf()
+        attachments = [
+            (pdf_path.name, pdf_path.read_bytes(), "application/pdf"),
+        ]
+
+        totals = self.rows_for_display.get("totals", {})
+        body_lines = [
+            f"Consumer report for {self.start_date} through {self.end_date}.",
+            f"Total kW during period: {totals.get('total_kw_period', 0.0):.2f}.",
+            f"Total kW (all time): {totals.get('total_kw', 0.0):.2f}.",
+        ]
+        message = "\n".join(body_lines)
+
+        kwargs = {}
+        if reply_to:
+            kwargs["reply_to"] = reply_to
+
+        mailer.send(
+            f"Consumer report {self.start_date} - {self.end_date}",
+            message,
+            recipients,
+            outbox=outbox,
+            cc=list(cc or []),
+            attachments=attachments,
+            **kwargs,
+        )
+
+        delivered = list(dict.fromkeys(recipients + list(cc or [])))
+        return delivered
+
     @staticmethod
-    def build_rows(start_date=None, end_date=None, *, for_display: bool = False):
-        dataset = ClientReport._build_dataset(start_date, end_date)
+    def build_rows(
+        start_date=None,
+        end_date=None,
+        *,
+        for_display: bool = False,
+        chargers=None,
+    ):
+        dataset = ClientReport._build_dataset(start_date, end_date, chargers=chargers)
         if for_display:
             return ClientReport._normalize_dataset_for_display(dataset)
         return dataset
 
     @staticmethod
-    def _build_dataset(start_date=None, end_date=None):
+    def _build_dataset(start_date=None, end_date=None, *, chargers=None):
         from datetime import datetime, time, timedelta, timezone as pytimezone
         from ocpp.models import Charger, Transaction
 
@@ -3100,6 +3235,14 @@ class ClientReport(Entity):
                 end_date + timedelta(days=1), time.min, tzinfo=pytimezone.utc
             )
             qs = qs.filter(start_time__lt=end_dt)
+
+        selected_base_ids = None
+        if chargers:
+            selected_base_ids = {
+                charger.charger_id for charger in chargers if charger.charger_id
+            }
+            if selected_base_ids:
+                qs = qs.filter(charger__charger_id__in=selected_base_ids)
 
         qs = qs.select_related("account", "charger").prefetch_related("meter_values")
         transactions = list(qs.order_by("start_time", "pk"))
@@ -3134,6 +3277,8 @@ class ClientReport(Entity):
             if charger is None:
                 continue
             base_id = charger.charger_id
+            if selected_base_ids is not None and base_id not in selected_base_ids:
+                continue
             aggregator = aggregator_map.get(base_id) or charger
             entry = groups.setdefault(
                 base_id,
@@ -3224,6 +3369,10 @@ class ClientReport(Entity):
                 }
             )
 
+        filters: dict[str, Any] = {}
+        if selected_base_ids:
+            filters["chargers"] = sorted(selected_base_ids)
+
         return {
             "schema": "evcs-session/v1",
             "evcs": evcs_entries,
@@ -3231,6 +3380,7 @@ class ClientReport(Entity):
                 "total_kw": total_all_time,
                 "total_kw_period": total_period,
             },
+            "filters": filters,
         }
 
     @staticmethod
@@ -3330,6 +3480,7 @@ class ClientReport(Entity):
                     "total_kw": totals.get("total_kw", 0.0),
                     "total_kw_period": totals.get("total_kw_period", 0.0),
                 },
+                "filters": dataset.get("filters", {}),
             }
 
         if schema == "session-list/v1":
@@ -3359,7 +3510,11 @@ class ClientReport(Entity):
 
             return {"schema": schema, "rows": parsed}
 
-        return {"schema": schema, "rows": dataset.get("rows", [])}
+        return {
+            "schema": schema,
+            "rows": dataset.get("rows", []),
+            "filters": dataset.get("filters", {}),
+        }
 
     @property
     def rows_for_display(self):
@@ -3372,6 +3527,37 @@ class ClientReport(Entity):
             return str(path.relative_to(base_dir))
         except ValueError:
             return str(path)
+
+    @staticmethod
+    def resolve_reply_to_for_owner(owner) -> list[str]:
+        if not owner:
+            return []
+        try:
+            inbox = owner.get_profile(EmailInbox)
+        except Exception:  # pragma: no cover - defensive catch
+            inbox = None
+        if inbox and getattr(inbox, "username", ""):
+            address = inbox.username.strip()
+            if address:
+                return [address]
+        return []
+
+    @staticmethod
+    def resolve_outbox_for_owner(owner):
+        from nodes.models import EmailOutbox, Node
+
+        if owner:
+            try:
+                outbox = owner.get_profile(EmailOutbox)
+            except Exception:  # pragma: no cover - defensive catch
+                outbox = None
+            if outbox:
+                return outbox
+
+        node = Node.get_local()
+        if node:
+            return getattr(node, "email_outbox", None)
+        return None
 
     def render_pdf(self, target: Path):
         from reportlab.lib import colors
@@ -3448,13 +3634,11 @@ class ClientReport(Entity):
                 if transactions:
                     table_data = [
                         [
+                            "kWh",
+                            "Start",
+                            "End",
                             "Connector",
-                            "Start kWh",
-                            "End kWh",
-                            "Session kWh",
-                            "Start Time",
-                            "End Time",
-                            "RFID Label",
+                            "RFID",
                             "Account",
                         ]
                     ]
@@ -3478,14 +3662,12 @@ class ClientReport(Entity):
 
                         table_data.append(
                             [
-                                row.get("connector")
-                                if row.get("connector") is not None
-                                else "—",
-                                _format_number(row.get("start_kwh")),
-                                _format_number(row.get("end_kwh")),
                                 _format_number(row.get("session_kwh")),
                                 start_display,
                                 end_display,
+                                row.get("connector")
+                                if row.get("connector") is not None
+                                else "—",
                                 row.get("rfid_label") or "—",
                                 row.get("account_name") or "—",
                             ]

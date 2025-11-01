@@ -86,7 +86,35 @@
     </div>
     <div class="form-group" id="month-field">
       {{ form.month.label_tag }}
-      {{ form.month }}
+      <div class="month-input-wrapper">
+        {{ form.month }}
+        <div class="month-shortcuts" role="group" aria-label="{% trans "Month shortcuts" %}">
+          <button
+            type="button"
+            class="button button-secondary month-shortcut"
+            data-month-target="{{ form.month.id_for_label }}"
+            data-month-offset="-1"
+          >
+            {% trans "Last" %}
+          </button>
+          <button
+            type="button"
+            class="button button-secondary month-shortcut"
+            data-month-target="{{ form.month.id_for_label }}"
+            data-month-offset="0"
+          >
+            {% trans "Current" %}
+          </button>
+          <button
+            type="button"
+            class="button button-secondary month-shortcut"
+            data-month-target="{{ form.month.id_for_label }}"
+            data-month-offset="1"
+          >
+            {% trans "Next" %}
+          </button>
+        </div>
+      </div>
       {% if form.month.errors %}
         <ul class="errorlist">
           {% for error in form.month.errors %}
@@ -96,6 +124,34 @@
       {% endif %}
       {% if form.month.help_text %}
         <p class="help-text" id="id_month-help">{{ form.month.help_text }}</p>
+      {% endif %}
+    </div>
+  </fieldset>
+  <fieldset class="report-section" aria-describedby="id_chargers-help">
+    <legend class="section-title">{% trans "Charge points" %}</legend>
+    <div class="form-group">
+      <div class="form-group__header">
+        {{ form.chargers.label_tag }}
+        <button
+          type="button"
+          class="button button-secondary select-all"
+          data-select-all-target="id_chargers"
+        >
+          {% trans "Select all" %}
+        </button>
+      </div>
+      <div class="checkbox-grid" id="id_chargers-wrapper">
+        {{ form.chargers }}
+      </div>
+      {% if form.chargers.errors %}
+        <ul class="errorlist">
+          {% for error in form.chargers.errors %}
+            <li>{{ error }}</li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+      {% if form.chargers.help_text %}
+        <p class="help-text" id="id_chargers-help">{{ form.chargers.help_text }}</p>
       {% endif %}
     </div>
   </fieldset>
@@ -205,12 +261,10 @@
                 <table class="adminlist evcs-report__table">
                   <thead>
                     <tr>
-                      <th scope="col">{% trans "Connector" %}</th>
-                      <th scope="col">{% trans "Start kWh" %}</th>
-                      <th scope="col">{% trans "End kWh" %}</th>
                       <th scope="col">{% trans "Session kWh" %}</th>
                       <th scope="col">{% trans "Session start" %}</th>
                       <th scope="col">{% trans "Session end" %}</th>
+                      <th scope="col">{% trans "Connector" %}</th>
                       <th scope="col">{% trans "RFID label" %}</th>
                       <th scope="col">{% trans "Account" %}</th>
                     </tr>
@@ -218,15 +272,6 @@
                   <tbody>
                     {% for row in evcs.transactions %}
                       <tr>
-                        <td data-label="{% trans "Connector" %}">
-                          {% if row.connector is not None %}{{ row.connector }}{% else %}&mdash;{% endif %}
-                        </td>
-                        <td data-label="{% trans "Start kWh" %}">
-                          {% if row.start_kwh is not None %}{{ row.start_kwh|floatformat:2 }}{% else %}&mdash;{% endif %}
-                        </td>
-                        <td data-label="{% trans "End kWh" %}">
-                          {% if row.end_kwh is not None %}{{ row.end_kwh|floatformat:2 }}{% else %}&mdash;{% endif %}
-                        </td>
                         <td data-label="{% trans "Session kWh" %}">{{ row.session_kwh|floatformat:2 }}</td>
                         <td data-label="{% trans "Session start" %}">
                           {% if row.start %}
@@ -237,6 +282,9 @@
                           {% if row.end %}
                             <time datetime="{{ row.end|date:'c' }}">{{ row.end|localtime|date:"Y-m-d H:i" }}</time>
                           {% else %}&mdash;{% endif %}
+                        </td>
+                        <td data-label="{% trans "Connector" %}">
+                          {% if row.connector is not None %}{{ row.connector }}{% else %}&mdash;{% endif %}
                         </td>
                         <td data-label="{% trans "RFID label" %}">{{ row.rfid_label|default:"—" }}</td>
                         <td data-label="{% trans "Account" %}">{{ row.account_name|default:"—" }}</td>
@@ -326,49 +374,6 @@
     {% endif %}
   </section>
 {% endif %}
-{% if previous_reports %}
-  <section class="report-history" aria-labelledby="report-history-title">
-    <h2 id="report-history-title">{% trans "Previous reports" %}</h2>
-    <table class="adminlist report-history__table">
-      <thead>
-        <tr>
-          <th scope="col">{% trans "Generated on" %}</th>
-          <th scope="col">{% trans "Period" %}</th>
-          <th scope="col">{% trans "Email delivery" %}</th>
-          <th scope="col">{% trans "Recipients" %}</th>
-          <th scope="col">{% trans "Total kW (period)" %}</th>
-          <th scope="col">{% trans "Download" %}</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for item in previous_reports %}
-          <tr>
-            <td data-label="{% trans "Generated on" %}">
-              <time datetime="{{ item.instance.created_on|date:'c' }}">{{ item.instance.created_on|localtime|date:"Y-m-d H:i" }}</time>
-            </td>
-            <td data-label="{% trans "Period" %}">{{ item.instance.start_date }} – {{ item.instance.end_date }}</td>
-            <td data-label="{% trans "Email delivery" %}">
-              {% if item.email_enabled %}
-                {% trans "Enabled" %}
-              {% else %}
-                {% trans "Disabled" %}
-              {% endif %}
-            </td>
-            <td data-label="{% trans "Recipients" %}">
-              {% if item.recipients %}
-                {{ item.recipients|join:", " }}
-              {% else %}
-                —
-              {% endif %}
-            </td>
-            <td data-label="{% trans "Total kW (period)" %}">{{ item.totals.total_kw_period|floatformat:2 }}</td>
-            <td data-label="{% trans "Download" %}"><a href="{{ item.download_url }}">{% trans "Download" %}</a></td>
-          </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </section>
-{% endif %}
 <script>
   const periodRadios = document.querySelectorAll('input[name="period"]');
   const rangeFields = document.getElementById('range-fields');
@@ -389,6 +394,7 @@
     id_end: 'id_end-help',
     id_week: 'id_week-help',
     id_month: 'id_month-help',
+    id_chargers: 'id_chargers-help',
     id_owner: 'id_owner-help',
     id_destinations: 'id_destinations-help',
     id_recurrence: 'id_recurrence-help',
@@ -446,6 +452,53 @@
         toggleFields();
       }
       weekInput.focus();
+    });
+  });
+
+  function computeMonthValue(offset) {
+    const today = new Date();
+    today.setDate(1);
+    today.setMonth(today.getMonth() + offset);
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    return `${year}-${month}`;
+  }
+
+  document.querySelectorAll('[data-month-target]').forEach((button) => {
+    const targetId = button.getAttribute('data-month-target');
+    const offset = parseInt(button.getAttribute('data-month-offset') || '0', 10);
+    const monthInput = document.getElementById(targetId);
+    if (!monthInput) {
+      return;
+    }
+    button.addEventListener('click', () => {
+      monthInput.value = computeMonthValue(offset);
+      monthInput.dispatchEvent(new Event('input', { bubbles: true }));
+      monthInput.dispatchEvent(new Event('change', { bubbles: true }));
+      const monthRadio = document.querySelector('input[name="period"][value="month"]');
+      if (monthRadio && !monthRadio.checked) {
+        monthRadio.checked = true;
+        monthRadio.dispatchEvent(new Event('change', { bubbles: true }));
+      } else {
+        toggleFields();
+      }
+      monthInput.focus();
+    });
+  });
+
+  document.querySelectorAll('[data-select-all-target]').forEach((button) => {
+    const targetId = button.getAttribute('data-select-all-target');
+    const container = document.getElementById(targetId);
+    if (!container) {
+      return;
+    }
+    button.addEventListener('click', () => {
+      container.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
+        if (!checkbox.disabled) {
+          checkbox.checked = true;
+          checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      });
     });
   });
 </script>
@@ -514,6 +567,47 @@
     margin: 0;
   }
 
+  .client-report-form .month-input-wrapper {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .client-report-form .month-shortcuts {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .client-report-form .month-shortcut {
+    margin: 0;
+  }
+
+  .client-report-form .form-group__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+
+  .client-report-form .checkbox-grid {
+    display: grid;
+    gap: 0.5rem;
+  }
+
+  .client-report-form .checkbox-grid ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: contents;
+  }
+
+  .client-report-form .checkbox-grid li {
+    margin: 0;
+  }
+
   .client-report-form .form-grid {
     display: grid;
     gap: 1rem;
@@ -567,14 +661,6 @@
   .report-results__totals {
     border-top: 1px solid rgba(148, 163, 184, 0.25);
     padding-top: 1rem;
-  }
-
-  .report-history {
-    margin-top: 3rem;
-  }
-
-  .report-history__table {
-    margin-top: 1rem;
   }
 
   .client-report-form .help-text {
