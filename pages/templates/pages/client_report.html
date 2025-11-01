@@ -1,7 +1,7 @@
 {% extends "pages/base.html" %}
 {% load i18n tz %}
 {% block content %}
-<h1>{% trans "Client Report" %}</h1>
+<h1>{% trans "Consumer Report" %}</h1>
 {% if download_url %}
   <div class="notification success auto-download" role="status">
     {% trans "Consumer report generated. If the download does not start automatically," %}
@@ -155,10 +155,10 @@
   <div class="notification warning" role="alert">
     {% if login_url %}
       {% blocktrans trimmed with login_url=login_url %}
-        Please <a href="{{ login_url }}">log in</a> to generate client reports.
+        Please <a href="{{ login_url }}">log in</a> to generate consumer reports.
       {% endblocktrans %}
     {% else %}
-      {% trans "Please log in to generate client reports." %}
+      {% trans "Please log in to generate consumer reports." %}
     {% endif %}
   </div>
 {% endif %}

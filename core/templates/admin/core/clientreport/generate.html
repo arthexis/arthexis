@@ -1,7 +1,17 @@
 {% extends "admin/base_site.html" %}
 {% load i18n tz %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+  &rsaquo; <a href="{% url 'admin:core_clientreport_changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
+  &rsaquo; {% trans "Generate report" %}
+</div>
+{% endblock %}
+
 {% block content %}
-<h1>Client Report</h1>
+<h1>Consumer Report</h1>
 <form method="post" id="report-form" class="client-report-form">
   {% csrf_token %}
   {% if form.non_field_errors %}
