@@ -1,8 +1,9 @@
 import json
+import calendar
 import os
 import sys
 from pathlib import Path
-from datetime import timedelta
+from datetime import date, timedelta
 from unittest.mock import patch
 
 import pytest
@@ -130,6 +131,41 @@ class AdminClientReportTests(TestCase):
         self.assertTrue(
             any(tx.get("account_name") == self.account.name for tx in flattened)
         )
+        html_path.unlink()
+        json_path.unlink()
+        pdf_path.unlink()
+
+    def test_generate_report_with_month_period(self):
+        url = reverse("admin:core_clientreport_generate")
+        target_month = date(2023, 9, 1)
+        month_value = target_month.strftime("%Y-%m")
+        resp = self.client.post(
+            url,
+            {
+                "period": "month",
+                "month": month_value,
+                "recurrence": ClientReportSchedule.PERIODICITY_NONE,
+                "chargers": [self.charger.pk],
+            },
+        )
+        self.assertEqual(resp.status_code, 302)
+        location = resp["Location"]
+        self.assertIn("?download=", location)
+
+        report = ClientReport.objects.get()
+        self.assertEqual(report.start_date, target_month)
+        last_day = calendar.monthrange(target_month.year, target_month.month)[1]
+        self.assertEqual(report.end_date, target_month.replace(day=last_day))
+        self.assertEqual(report.owner, self.user)
+        self.assertEqual(list(report.chargers.all()), [self.charger])
+
+        export = report.data.get("export")
+        html_path = Path(settings.BASE_DIR) / export["html_path"]
+        json_path = Path(settings.BASE_DIR) / export["json_path"]
+        pdf_path = Path(settings.BASE_DIR) / export["pdf_path"]
+        self.assertTrue(html_path.exists())
+        self.assertTrue(json_path.exists())
+        self.assertTrue(pdf_path.exists())
         html_path.unlink()
         json_path.unlink()
         pdf_path.unlink()

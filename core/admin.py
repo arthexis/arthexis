@@ -3707,6 +3707,7 @@ class ClientReportAdmin(EntityModelAdmin):
             label="Month",
             required=False,
             widget=forms.DateInput(attrs={"type": "month"}),
+            input_formats=["%Y-%m"],
             help_text="Generates the report for the calendar month that you select.",
         )
         chargers = forms.ModelMultipleChoiceField(
