@@ -630,6 +630,17 @@ class NodeAdmin(EntityModelAdmin):
     def _primary_remote_url(self, node, path: str) -> str:
         return next(self._iter_remote_urls(node, path), "")
 
+    def _request_remote(self, node, path: str, request_callable):
+        errors: list[str] = []
+        for url in self._iter_remote_urls(node, path):
+            try:
+                response = request_callable(url)
+            except RequestException as exc:
+                errors.append(f"{url}: {exc}")
+                continue
+            return url, response, errors
+        return "", None, errors
+
     def _iter_remote_urls(self, node, path):
         if hasattr(node, "iter_remote_urls"):
             yield from node.iter_remote_urls(path)
@@ -859,18 +870,19 @@ class NodeAdmin(EntityModelAdmin):
 
     def _process_import_from_node(self, node, payload, headers):
         result = self._init_rfid_result(node)
-        url = self._primary_remote_url(node, "/nodes/rfid/export/")
-        if not url:
+        _, response, attempt_errors = self._request_remote(
+            node,
+            "/nodes/rfid/export/",
+            lambda url: requests.post(url, data=payload, headers=headers, timeout=5),
+        )
+        if response is None:
             result["status"] = "error"
-            result["errors"].append(
-                _("No remote hosts were available for %(node)s.") % {"node": node}
-            )
-            return result
-        try:
-            response = requests.post(url, data=payload, headers=headers, timeout=5)
-        except RequestException as exc:
-            result["status"] = "error"
-            result["errors"].append(str(exc))
+            if attempt_errors:
+                result["errors"].extend(attempt_errors)
+            else:
+                result["errors"].append(
+                    _("No remote hosts were available for %(node)s.") % {"node": node}
+                )
             return result
 
         if response.status_code != 200:
@@ -910,18 +922,19 @@ class NodeAdmin(EntityModelAdmin):
 
     def _post_export_to_node(self, node, payload, headers):
         result = self._init_rfid_result(node)
-        url = self._primary_remote_url(node, "/nodes/rfid/import/")
-        if not url:
+        _, response, attempt_errors = self._request_remote(
+            node,
+            "/nodes/rfid/import/",
+            lambda url: requests.post(url, data=payload, headers=headers, timeout=5),
+        )
+        if response is None:
             result["status"] = "error"
-            result["errors"].append(
-                _("No remote hosts were available for %(node)s.") % {"node": node}
-            )
-            return result
-        try:
-            response = requests.post(url, data=payload, headers=headers, timeout=5)
-        except RequestException as exc:
-            result["status"] = "error"
-            result["errors"].append(str(exc))
+            if attempt_errors:
+                result["errors"].extend(attempt_errors)
+            else:
+                result["errors"].append(
+                    _("No remote hosts were available for %(node)s.") % {"node": node}
+                )
             return result
 
         if response.status_code != 200:
@@ -1065,16 +1078,19 @@ class NodeAdmin(EntityModelAdmin):
         errors: list[str] = []
 
         for node in nodes:
-            url = self._primary_remote_url(node, "/nodes/network/chargers/")
-            if not url:
-                errors.append(
-                    _("No remote hosts were available for %(node)s.") % {"node": node}
-                )
-                continue
-            try:
-                response = requests.post(url, data=payload, headers=headers, timeout=5)
-            except RequestException as exc:
-                errors.append(f"{node}: {exc}")
+            _, response, attempt_errors = self._request_remote(
+                node,
+                "/nodes/network/chargers/",
+                lambda url: requests.post(url, data=payload, headers=headers, timeout=5),
+            )
+            if response is None:
+                if attempt_errors:
+                    errors.extend(f"{node}: {err}" for err in attempt_errors)
+                else:
+                    errors.append(
+                        _("No remote hosts were available for %(node)s.")
+                        % {"node": node}
+                    )
                 continue
 
             if response.status_code != 200:

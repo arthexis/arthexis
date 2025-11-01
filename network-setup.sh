@@ -1344,6 +1344,12 @@ if [[ $RUN_CONFIGURE_NET == true ]]; then
             fi
         else
             eth0_ip="${ETH0_SUBNET_BASE}.10/${ETH0_PREFIX}"
+            ETH0_SUBNET_SUFFIX="${ETH0_SUBNET_BASE##*.}"
+            if [[ -z "$ETH0_SUBNET_SUFFIX" || "$ETH0_SUBNET_SUFFIX" == "$ETH0_SUBNET_BASE" ]]; then
+                ETH0_SUBNET_SUFFIX="$DEFAULT_ETH0_SUBNET_SUFFIX"
+            elif [[ ! "$ETH0_SUBNET_SUFFIX" =~ ^[0-9]+$ ]]; then
+                ETH0_SUBNET_SUFFIX="$DEFAULT_ETH0_SUBNET_SUFFIX"
+            fi
             printf -v ETH0_IPV6_SEGMENT "%02x" "$ETH0_SUBNET_SUFFIX"
             ETH0_IPV6_ADDRESS="fd42:${ETH0_IPV6_SEGMENT}::1/64"
             if nmcli -t -f NAME connection show | grep -Fxq "$ETH0_CONNECTION_SHARED"; then
