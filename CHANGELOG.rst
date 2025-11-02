@@ -4,24 +4,29 @@ Changelog
 Unreleased
 ----------
 
-- 2deebc48 chore: update version and fixtures
-- 8e6ffa8b Ignore local work directory (#2571)
-- 92fe5a5d Validate client report titles before delivery (#2570)
-- 6511af1b Rename client report interfaces to consumer report (#2569)
-- 1e94a205 Add localization options to consumer reports (#2568)
-- 087ac86c Fix month period validation for admin client report (#2567)
-- 92dc8b60 Show period type in client report string (#2564)
-- e6d20137 Relax atproto pin for Python 3.14 (#2566)
-- 420de132 Enhance consumer report scheduling and delivery options (#2563)
-- 83206d6e Add env refresh dependency compatibility test (#2565)
-- e9427dc9 Restrict remote charger actions to owning nodes (#2560)
-- 1deef618 Fix desktop shortcuts to include configured port (#2562)
-- 6fb55f99 Adjust README reader sidebar order for mobile (#2561)
-- f64dc6a5 Add charge point network synchronization across nodes (#2557)
-- 2b26d220 Improve admin feedback dialog contrast (#2559)
-- 760d4965 Remove deprecated node proxy admin functionality (#2558)
-- f2cbbdee Improve auto-upgrade status feedback (#2556)
-- ae602cca chore: record publish metadata for v0.1.23
+- 700a784c chore: update version and fixtures
+- 597834ca Link user story screenshots to existing samples (#2594)
+- 7fa0bf56 Implement GraphQL energy export foundation (#2590)
+- cf4c4288 Remove deprecated product fetch admin action (#2592)
+- 3a9445e1 Preserve Odoo profile user data during upgrades (#2588)
+- a8a60e48 docs: propose GraphQL energy export endpoint (#2589)
+- 556ba5de Add column filters to Odoo product registration table (#2587)
+- 2451d8c8 Delay forwarding watermark until forwarding acknowledged (#2586)
+- feb6442a Fix Odoo product fetch without empty domain argument (#2585)
+- bb9556d1 Implement charge point forwarding push workflow (#2584)
+- 34e6f3b4 Add CP reservation model and ReserveNow support (#2583)
+- 7be7132b Ensure wlan clients can route through wlan1 (#2582)
+- 94538dc2 Allow localhost admin login and seed site (#2581)
+- d53ca711 Handle missing git when deriving changelog commit URLs (#2580)
+- d1fa1ba8 Add GitHub commit links to changelog report (#2579)
+- 60808280 Fix aggregate connector energy total (#2576)
+- 495a4c96 Update consumer report session tables (#2578)
+- 7b36709a Split OCPP call table by direction (#2577)
+- 0db3ea82 Document full OCPP 1.6 coverage overview (#2575)
+- a210be3b Preserve original referer for lead submissions (#2574)
+- 7eb3fde0 Enhance node connectivity handling (#2572)
+- b571c07d Add node admin action for sending net messages (#2573)
+- 1cf13cbc chore: record publish metadata for v0.1.24
 
 v0.1.22 (2025-10-28)
 --------------------
