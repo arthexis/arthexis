@@ -157,6 +157,17 @@ type EnergyTotal {
    * Add metrics (e.g., Prometheus counter) around GraphQL usage if observability
      is already in place.
 
+## Implementation status
+
+* ✅ Stage 1 – Foundation: GraphQL dependency, schema scaffolding, `/graphql/`
+  endpoint, and baseline authentication tests are in place.
+* ⏳ Stage 2 – Energy session query: Implement data resolvers, pagination, and
+  validation tests for transaction-backed energy sessions.
+* ⏳ Stage 3 – Aggregation query: Add grouped totals, filters, and associated
+  coverage for the aggregation entry point.
+* ⏳ Stage 4 – Operational hardening: Document operational usage and add
+  monitoring hooks.
+
 ## Testing strategy
 
 * Unit tests for resolvers to verify filters and permission checks.

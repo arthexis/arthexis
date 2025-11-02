@@ -335,6 +335,7 @@ CsrfViewMiddleware._check_referer = _check_referer_with_forwarded
 # Application definition
 
 LOCAL_APPS = [
+    "api",
     "nodes",
     "core",
     "ocpp",
