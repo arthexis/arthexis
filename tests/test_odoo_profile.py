@@ -128,13 +128,13 @@ def test_execute_passes_kwargs(monkeypatch):
     result = profile.execute(
         "product.product",
         "search_read",
-        [[]],
+        [("name", "ilike", "Test")],
         fields=["name"],
         limit=5,
     )
 
     assert result == []
-    assert captured["args"] == [[[]]]
+    assert captured["args"] == [[("name", "ilike", "Test")]]
     assert captured["kwargs"] == {"fields": ["name"], "limit": 5}
 
 
