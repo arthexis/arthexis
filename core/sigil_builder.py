@@ -45,7 +45,7 @@ def _sigil_builder_view(request):
         {
             "prefix": "CONF",
             "url": reverse("admin:config"),
-            "label": _("Django Settings"),
+            "label": _("Django Config"),
         },
         {
             "prefix": "SYS",
