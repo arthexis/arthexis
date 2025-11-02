@@ -45,10 +45,14 @@ class EnergyGraphQLView(View if _GraphQLView is None else _GraphQLView):
             setattr(request, "_dont_enforce_csrf_checks", True)
             setattr(request, "csrf_processing_done", True)
         elif request.method.upper() == "POST":
-            setattr(request, "csrf_processing_done", True)
-            return JsonResponse(
-                {"errors": [{"message": "CSRF Failed: Token missing."}]}, status=403
-            )
+            middleware = CsrfViewMiddleware(lambda r: HttpResponse())
+
+            def _csrf_view(*_args, **_kwargs):
+                return None
+
+            response = middleware.process_view(request, _csrf_view, (), {})
+            if response is not None:
+                return response
 
         if _GraphQLView is not None:
             return super().dispatch(request, *args, **kwargs)
