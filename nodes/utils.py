@@ -90,10 +90,13 @@ def save_screenshot(
     *,
     content: str | None = None,
     user=None,
+    link_duplicates: bool = False,
 ):
     """Save screenshot file info if not already recorded.
 
-    Returns the created :class:`ContentSample` or ``None`` if duplicate.
+    Returns the created :class:`ContentSample`. If ``link_duplicates`` is ``True``
+    and a sample with identical content already exists, the existing record is
+    returned instead of ``None``.
     """
 
     original = path
@@ -101,7 +104,11 @@ def save_screenshot(
         path = settings.LOG_DIR / path
     with path.open("rb") as fh:
         digest = hashlib.sha256(fh.read()).hexdigest()
-    if ContentSample.objects.filter(hash=digest).exists():
+    existing = ContentSample.objects.filter(hash=digest).first()
+    if existing:
+        if link_duplicates:
+            logger.info("Duplicate screenshot content; reusing existing sample")
+            return existing
         logger.info("Duplicate screenshot content; record not created")
         return None
     stored_path = (original if not original.is_absolute() else path).as_posix()

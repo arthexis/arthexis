@@ -3630,6 +3630,7 @@ class UserStorySubmissionTests(TestCase):
             screenshot_file,
             method="USER_STORY",
             user=self.user,
+            link_duplicates=True,
         )
 
     def test_anonymous_submission_uses_provided_email(self):
