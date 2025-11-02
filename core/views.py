@@ -58,7 +58,6 @@ def odoo_products(request):
         products = profile.execute(
             "product.product",
             "search_read",
-            [[]],
             fields=["name"],
             limit=50,
         )
@@ -137,7 +136,6 @@ def odoo_quote_report(request):
         templates = profile.execute(
             "sale.order.template",
             "search_read",
-            [[]],
             fields=["name"],
             order="name asc",
         )
@@ -287,7 +285,6 @@ def odoo_quote_report(request):
         products = profile.execute(
             "product.product",
             "search_read",
-            [[]],
             fields=["name", "default_code", "write_date", "create_date"],
             limit=10,
             order="write_date desc, create_date desc",

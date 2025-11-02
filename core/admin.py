@@ -2311,10 +2311,11 @@ class ProductAdmin(EntityModelAdmin):
 
     def _search_odoo_products(self, profile, form):
         domain = form.build_domain()
+        args = [domain] if domain else []
         return profile.execute(
             "product.product",
             "search_read",
-            [domain],
+            *args,
             fields=[
                 "name",
                 "default_code",
@@ -2507,7 +2508,6 @@ class ProductAdmin(EntityModelAdmin):
             products = profile.execute(
                 "product.product",
                 "search_read",
-                [[]],
                 fields=[
                     "name",
                     "description_sale",
