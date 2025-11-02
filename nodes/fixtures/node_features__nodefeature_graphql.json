@@ -1,0 +1,25 @@
+[
+  {
+    "model": "nodes.nodefeature",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "slug": "graphql",
+      "display": "GraphQL API",
+      "roles": [
+        [
+          "Control"
+        ],
+        [
+          "Interface"
+        ],
+        [
+          "Satellite"
+        ],
+        [
+          "Watchtower"
+        ]
+      ]
+    }
+  }
+]
