@@ -587,6 +587,19 @@ def register_node(request):
     address_value = address or None
     ipv4_value = ipv4_address or None
     ipv6_value = ipv6_address or None
+
+    for candidate in (address, network_hostname, hostname):
+        candidate = (candidate or "").strip()
+        if not candidate:
+            continue
+        try:
+            parsed_ip = ipaddress.ip_address(candidate)
+        except ValueError:
+            continue
+        if parsed_ip.version == 4 and not ipv4_value:
+            ipv4_value = str(parsed_ip)
+        elif parsed_ip.version == 6 and not ipv6_value:
+            ipv6_value = str(parsed_ip)
     defaults = {
         "hostname": hostname,
         "network_hostname": network_hostname,

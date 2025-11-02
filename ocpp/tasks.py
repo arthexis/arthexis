@@ -256,38 +256,54 @@ def push_forwarded_charge_points() -> int:
         if signature:
             headers["X-Signature"] = signature
 
-        url = next(node.iter_remote_urls("/nodes/network/chargers/forward/"), "")
-        if not url:
-            logger.warning(
-                "No reachable host found for %s when forwarding chargers", node
-            )
-            continue
+        success = False
+        attempted = False
+        for url in node.iter_remote_urls("/nodes/network/chargers/forward/"):
+            if not url:
+                continue
 
-        try:
-            response = requests.post(url, data=payload_json, headers=headers, timeout=5)
-        except RequestException as exc:
-            logger.warning("Failed to forward chargers to %s: %s", node, exc)
-            continue
+            attempted = True
+            try:
+                response = requests.post(
+                    url, data=payload_json, headers=headers, timeout=5
+                )
+            except RequestException as exc:
+                logger.warning("Failed to forward chargers to %s: %s", node, exc)
+                continue
 
-        if not response.ok:
-            logger.warning(
-                "Forwarding request to %s returned %s", node, response.status_code
-            )
-            continue
+            if not response.ok:
+                logger.warning(
+                    "Forwarding request to %s via %s returned %s",
+                    node,
+                    url,
+                    response.status_code,
+                )
+                continue
 
-        try:
-            data = response.json()
-        except ValueError:
-            logger.warning("Invalid JSON payload received from %s", node)
-            continue
+            try:
+                data = response.json()
+            except ValueError:
+                logger.warning("Invalid JSON payload received from %s", node)
+                continue
 
-        if data.get("status") != "ok":
-            detail = data.get("detail") if isinstance(data, dict) else None
-            logger.warning(
-                "Forwarding rejected by %s: %s",
-                node,
-                detail or response.text or "Remote node rejected the request.",
-            )
+            if data.get("status") != "ok":
+                detail = data.get("detail") if isinstance(data, dict) else None
+                logger.warning(
+                    "Forwarding rejected by %s via %s: %s",
+                    node,
+                    url,
+                    detail or response.text or "Remote node rejected the request.",
+                )
+                continue
+
+            success = True
+            break
+
+        if not success:
+            if not attempted:
+                logger.warning(
+                    "No reachable host found for %s when forwarding chargers", node
+                )
             continue
 
         updates: dict[int, datetime] = {}

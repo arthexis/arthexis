@@ -386,6 +386,28 @@ class Node(Entity):
                 return host
         return ""
 
+    def get_best_ip(self) -> str:
+        """Return the preferred IP address for this node if known."""
+
+        candidates: list[str] = []
+        for value in (
+            getattr(self, "address", "") or "",
+            getattr(self, "ipv4_address", "") or "",
+            getattr(self, "ipv6_address", "") or "",
+        ):
+            value = value.strip()
+            if not value:
+                continue
+            try:
+                ipaddress.ip_address(value)
+            except ValueError:
+                continue
+            candidates.append(value)
+        if not candidates:
+            return ""
+        selected = self._select_preferred_ip(candidates)
+        return selected or ""
+
     def iter_remote_urls(self, path: str):
         """Yield potential remote URLs for ``path`` on this node."""
 
