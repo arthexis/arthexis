@@ -15,7 +15,7 @@ else:  # pragma: no cover - fallback when pytest fixtures are unavailable
     django.setup()
 
 from pathlib import Path
-from types import SimpleNamespace
+from types import MethodType, SimpleNamespace
 import unittest.mock as mock
 from unittest.mock import patch, call, MagicMock
 from django.core import mail
@@ -32,7 +32,14 @@ import stat
 import time
 from datetime import datetime, timedelta
 
-from django.test import Client, SimpleTestCase, TestCase, TransactionTestCase, override_settings
+from django.test import (
+    Client,
+    RequestFactory,
+    SimpleTestCase,
+    TestCase,
+    TransactionTestCase,
+    override_settings,
+)
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.contrib import admin
@@ -407,6 +414,33 @@ class NodeGetLocalTests(TestCase):
         self.assertIsNone(node.address)
         self.assertIsNone(node.ipv4_address)
         self.assertIsNone(node.ipv6_address)
+
+    def test_register_node_populates_missing_ip_fields_from_address(self):
+        response = self.client.post(
+            reverse("register-node"),
+            data={
+                "hostname": "address-node",
+                "address": "203.0.113.10",
+                "port": 8040,
+                "mac_address": "aa:bb:cc:dd:ee:01",
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        node = Node.objects.get(mac_address="aa:bb:cc:dd:ee:01")
+        self.assertEqual(node.address, "203.0.113.10")
+        self.assertEqual(node.ipv4_address, "203.0.113.10")
+        self.assertIsNone(node.ipv6_address)
+
+    def test_get_best_ip_ignores_non_ip_values(self):
+        node = Node.objects.create(
+            hostname="best-ip",
+            address="gateway.local",
+            ipv4_address="198.51.100.5",
+            port=8000,
+            mac_address="00:11:22:33:44:77",
+        )
+        self.assertEqual(node.get_best_ip(), "198.51.100.5")
 
     def test_register_node_requires_contact_information(self):
         response = self.client.post(
@@ -1901,6 +1935,59 @@ class NodeAdminTests(TestCase):
         self.assertEqual(node.role, control)
         self.assertTrue(control.node_set.filter(pk=node.pk).exists())
         self.assertFalse(terminal.node_set.filter(pk=node.pk).exists())
+
+    @patch("nodes.admin.requests.post")
+    def test_send_forwarding_metadata_retries_until_success(self, mock_post):
+        request = RequestFactory().get("/")
+        local_node = Node.objects.create(
+            hostname="local",
+            address="127.0.0.1",
+            port=8000,
+            mac_address="00:11:22:33:44:aa",
+            public_key="LOCAL-PUB",
+        )
+        class DummyNode:
+            def __init__(self):
+                self.port = 8443
+                self.urls: list[str] = []
+
+            def iter_remote_urls(self, path: str):
+                self.urls.append(path)
+                yield "https://unreachable.example"
+                yield "https://reachable.example"
+
+            def __str__(self):  # pragma: no cover - trivial representation
+                return "dummy-node"
+
+        target = DummyNode()
+        private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        charger = Charger.objects.create(charger_id="FORWARD-1")
+
+        failure = MagicMock()
+        failure.ok = False
+        failure.status_code = 404
+        failure.json.return_value = {"detail": "not found"}
+        success = MagicMock()
+        success.ok = True
+        success.status_code = 200
+        success.json.return_value = {"status": "ok"}
+
+        mock_post.side_effect = [failure, success]
+
+        admin_instance = NodeAdmin(Node, admin.site)
+
+        result = admin_instance._send_forwarding_metadata(
+            request, target, [charger], local_node, private_key
+        )
+
+        self.assertTrue(result)
+        self.assertEqual(
+            target.urls, ["/nodes/network/chargers/forward/"]
+        )
+        self.assertEqual(mock_post.call_count, 2)
+        self.assertEqual(
+            mock_post.call_args_list[1].args[0], "https://reachable.example"
+        )
 
     @pytest.mark.feature("screenshot-poll")
     @patch("nodes.admin.capture_screenshot")

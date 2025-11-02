@@ -234,9 +234,7 @@ class DNSRecordAdmin(EntityModelAdmin):
 class NodeAdmin(EntityModelAdmin):
     list_display = (
         "hostname",
-        "network_hostname",
-        "ipv4_address",
-        "ipv6_address",
+        "primary_ip",
         "port",
         "role",
         "relation",
@@ -330,6 +328,12 @@ class NodeAdmin(EntityModelAdmin):
     @admin.display(description=_("Relation"), ordering="current_relation")
     def relation(self, obj):
         return obj.get_current_relation_display()
+
+    @admin.display(description=_("IP Address"), ordering="address")
+    def primary_ip(self, obj):
+        if not obj:
+            return ""
+        return obj.get_best_ip() or ""
 
     @admin.display(description=_("Visit"))
     def visit_link(self, obj):
@@ -1209,43 +1213,53 @@ class NodeAdmin(EntityModelAdmin):
         if signature:
             headers["X-Signature"] = signature
 
-        url = next(node.iter_remote_urls("/nodes/network/chargers/forward/"), "")
-        if not url:
+        errors: list[str] = []
+        for url in node.iter_remote_urls("/nodes/network/chargers/forward/"):
+            if not url:
+                continue
+            try:
+                response = requests.post(
+                    url, data=payload_json, headers=headers, timeout=5
+                )
+            except RequestException as exc:
+                errors.append(
+                    _(
+                        "Failed to send forwarding metadata to %(node)s via %(url)s (%(error)s)."
+                    )
+                    % {"node": node, "url": url, "error": exc}
+                )
+                continue
+
+            try:
+                data = response.json()
+            except ValueError:
+                data = {}
+
+            if response.ok and isinstance(data, Mapping) and data.get("status") == "ok":
+                return True
+
+            detail = ""
+            if isinstance(data, Mapping):
+                detail = data.get("detail") or ""
+            errors.append(
+                _("Forwarding metadata to %(node)s via %(url)s failed: %(status)s %(detail)s")
+                % {
+                    "node": node,
+                    "url": url,
+                    "status": response.status_code,
+                    "detail": detail,
+                }
+            )
+
+        if not errors:
             self.message_user(
                 request,
                 _("No reachable host found for %(node)s.") % {"node": node},
                 level=messages.WARNING,
             )
-            return False
-        try:
-            response = requests.post(url, data=payload_json, headers=headers, timeout=5)
-        except RequestException as exc:
-            self.message_user(
-                request,
-                _("Failed to send forwarding metadata to %(node)s (%(error)s).")
-                % {"node": node, "error": exc},
-                level=messages.WARNING,
-            )
-            return False
-
-        try:
-            data = response.json()
-        except ValueError:
-            data = {}
-
-        if not response.ok or not isinstance(data, dict) or data.get("status") != "ok":
-            detail = ""
-            if isinstance(data, dict):
-                detail = data.get("detail") or ""
-            message = _("Forwarding metadata to %(node)s failed: %(status)s %(detail)s") % {
-                "node": node,
-                "status": response.status_code,
-                "detail": detail,
-            }
-            self.message_user(request, message.strip(), level=messages.WARNING)
-            return False
-
-        return True
+        else:
+            self.message_user(request, errors[-1].strip(), level=messages.WARNING)
+        return False
 
     @admin.action(description=_("Start Charge Point Forwarding"))
     def start_charge_point_forwarding(self, request, queryset):
