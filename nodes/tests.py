@@ -4885,6 +4885,38 @@ class ContentClassifierTests(TestCase):
         tags = ContentClassification.objects.filter(sample=sample)
         self.assertTrue(tags.filter(tag__slug="screenshot-tag").exists())
 
+    def test_save_screenshot_returns_none_for_duplicate_without_linking(self):
+        with TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            first_path = base / "capture.png"
+            first_path.write_bytes(b"binary image data")
+            duplicate_path = base / "duplicate.png"
+            duplicate_path.write_bytes(b"binary image data")
+            with override_settings(LOG_DIR=base):
+                original = save_screenshot(first_path, method="TEST")
+                duplicate = save_screenshot(duplicate_path, method="TEST")
+
+        self.assertIsNotNone(original)
+        self.assertIsNone(duplicate)
+        self.assertEqual(ContentSample.objects.count(), 1)
+
+    def test_save_screenshot_reuses_existing_sample_when_linking(self):
+        with TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            first_path = base / "capture.png"
+            first_path.write_bytes(b"binary image data")
+            duplicate_path = base / "duplicate.png"
+            duplicate_path.write_bytes(b"binary image data")
+            with override_settings(LOG_DIR=base):
+                original = save_screenshot(first_path, method="TEST")
+                reused = save_screenshot(
+                    duplicate_path, method="TEST", link_duplicates=True
+                )
+
+        self.assertIsNotNone(original)
+        self.assertEqual(reused, original)
+        self.assertEqual(ContentSample.objects.count(), 1)
+
     def test_text_sample_runs_default_classifiers_without_duplicates(self):
         sample = ContentSample.objects.create(
             content="Example content", kind=ContentSample.TEXT
