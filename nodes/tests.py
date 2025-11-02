@@ -4240,6 +4240,17 @@ class ClipboardTaskTests(TestCase):
 
 
 class CaptureScreenshotTests(TestCase):
+    def setUp(self):
+        super().setUp()
+        self.firefox_patcher = patch(
+            "nodes.utils._find_firefox_binary", return_value="/usr/bin/firefox"
+        )
+        self.ensure_geckodriver_patcher = patch("nodes.utils._ensure_geckodriver")
+        self.firefox_patcher.start()
+        self.ensure_geckodriver_patcher.start()
+        self.addCleanup(self.firefox_patcher.stop)
+        self.addCleanup(self.ensure_geckodriver_patcher.stop)
+
     @patch("nodes.utils.webdriver.Firefox")
     def test_connection_failure_does_not_raise(self, mock_firefox):
         browser = MagicMock()
@@ -4251,6 +4262,19 @@ class CaptureScreenshotTests(TestCase):
         result = capture_screenshot("http://example.com")
         self.assertEqual(result.parent, screenshot_dir)
         browser.save_screenshot.assert_called_once()
+
+    def test_missing_firefox_reports_clear_error(self):
+        with patch("nodes.utils._find_firefox_binary", return_value=None):
+            with self.assertRaises(RuntimeError) as excinfo:
+                capture_screenshot("http://example.com")
+        self.assertIn("Firefox is not installed", str(excinfo.exception))
+
+    @patch("nodes.utils.webdriver.Firefox")
+    def test_driver_install_hint_on_failure(self, mock_firefox):
+        mock_firefox.side_effect = WebDriverException("Unable to obtain driver for firefox")
+        with self.assertRaises(RuntimeError) as excinfo:
+            capture_screenshot("http://example.com")
+        self.assertIn("Firefox WebDriver is unavailable", str(excinfo.exception))
 
 
 class NodeRoleAdminTests(TestCase):
