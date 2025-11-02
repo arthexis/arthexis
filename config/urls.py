@@ -14,13 +14,14 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.contrib.staticfiles.urls import staticfiles_urlpatterns
 from django.contrib import admin
+from django.core.exceptions import AppRegistryNotReady, ImproperlyConfigured
+from django.db.utils import DatabaseError, OperationalError, ProgrammingError
 from django.urls import include, path
 import teams.admin  # noqa: F401
 from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import RedirectView
 from django.views.i18n import set_language
 from django.utils.translation import gettext_lazy as _
-from api.views import EnergyGraphQLView
 from core import views as core_views
 from core.admindocs import (
     CommandsView,
@@ -28,6 +29,44 @@ from core.admindocs import (
     OrderedModelIndexView,
 )
 from pages import views as pages_views
+
+try:  # Gate optional GraphQL dependency for roles that do not install it
+    from api.views import EnergyGraphQLView
+except ModuleNotFoundError as exc:  # pragma: no cover - dependency intentionally optional
+    if exc.name in {"graphene_django", "graphene"}:
+        EnergyGraphQLView = None  # type: ignore[assignment]
+    else:  # pragma: no cover - unrelated import error
+        raise
+
+
+def _graphql_feature_enabled() -> bool:
+    """Return ``True`` when the GraphQL endpoint should be exposed."""
+
+    if EnergyGraphQLView is None:
+        return False
+
+    try:
+        from nodes.models import Node, NodeFeature
+    except (ModuleNotFoundError, AppRegistryNotReady, ImproperlyConfigured):
+        return True
+
+    try:
+        feature = NodeFeature.objects.filter(slug="graphql").first()
+    except (DatabaseError, OperationalError, ProgrammingError):
+        return True
+
+    if feature is None:
+        return True
+
+    try:
+        node = Node.get_local()
+    except (DatabaseError, OperationalError, ProgrammingError):
+        return True
+
+    if node and not node.has_feature("graphql"):
+        return False
+
+    return True
 
 admin.site.site_header = _("Constellation")
 admin.site.site_title = _("Constellation")
@@ -120,7 +159,6 @@ urlpatterns = [
         name="admin-model-graph",
     ),
     path("version/", core_views.version_info, name="version-info"),
-    path("graphql/", EnergyGraphQLView.as_view(), name="graphql"),
     path(
         "admin/core/releases/<int:pk>/<str:action>/",
         core_views.release_progress,
@@ -165,6 +203,9 @@ urlpatterns = [
     path("i18n/setlang/", csrf_exempt(set_language), name="set_language"),
     path("", include("pages.urls")),
 ]
+
+if _graphql_feature_enabled():
+    urlpatterns.append(path("graphql/", EnergyGraphQLView.as_view(), name="graphql"))
 
 urlpatterns += autodiscovered_urlpatterns()
 

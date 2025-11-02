@@ -9,6 +9,8 @@ from django.urls import reverse
 pytest.importorskip("graphene_django")
 pytest.importorskip("graphene")
 
+pytestmark = pytest.mark.feature("graphql")
+
 QUERY = {"query": "{ energyExportStatus { ready message } }"}
 
 
