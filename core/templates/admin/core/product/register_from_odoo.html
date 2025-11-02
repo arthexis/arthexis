@@ -55,6 +55,45 @@
         <th>{% trans 'Price' %}</th>
         <th>{% trans 'Original cost' %}</th>
       </tr>
+      <tr class="filter-row">
+        <th></th>
+        <th>
+          <input
+            type="text"
+            class="column-filter"
+            data-column="1"
+            placeholder="{% trans 'Filter name' %}"
+            aria-label="{% trans 'Filter name' %}"
+          >
+        </th>
+        <th>
+          <input
+            type="text"
+            class="column-filter"
+            data-column="2"
+            placeholder="{% trans 'Filter sales description' %}"
+            aria-label="{% trans 'Filter sales description' %}"
+          >
+        </th>
+        <th>
+          <input
+            type="text"
+            class="column-filter"
+            data-column="3"
+            placeholder="{% trans 'Filter price' %}"
+            aria-label="{% trans 'Filter price' %}"
+          >
+        </th>
+        <th>
+          <input
+            type="text"
+            class="column-filter"
+            data-column="4"
+            placeholder="{% trans 'Filter original cost' %}"
+            aria-label="{% trans 'Filter original cost' %}"
+          >
+        </th>
+      </tr>
     </thead>
     <tbody>
       {% for product in products %}
@@ -84,4 +123,48 @@
   </div>
 </form>
 {% endif %}
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const table = document.querySelector('.adminlist');
+    if (!table) {
+      return;
+    }
+
+    const filters = table.querySelectorAll('input.column-filter[data-column]');
+    if (!filters.length) {
+      return;
+    }
+
+    const tbody = table.querySelector('tbody');
+    const rows = Array.from(tbody.querySelectorAll('tr'));
+
+    function applyFilters() {
+      rows.forEach((row) => {
+        const cells = row.querySelectorAll('td');
+        let isVisible = true;
+
+        filters.forEach((filterInput) => {
+          const columnIndex = parseInt(filterInput.dataset.column, 10);
+          const filterValue = filterInput.value.trim().toLowerCase();
+
+          if (!filterValue) {
+            return;
+          }
+
+          const cellText = (cells[columnIndex] ? cells[columnIndex].textContent : '').trim().toLowerCase();
+
+          if (!cellText.includes(filterValue)) {
+            isVisible = false;
+          }
+        });
+
+        row.style.display = isVisible ? '' : 'none';
+      });
+    }
+
+    filters.forEach((filterInput) => {
+      filterInput.addEventListener('input', applyFilters);
+    });
+  });
+</script>
 {% endblock %}
