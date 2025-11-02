@@ -1665,6 +1665,7 @@ def submit_user_story(request):
                         screenshot_path,
                         method="USER_STORY",
                         user=story.user if story.user_id else None,
+                        link_duplicates=True,
                     )
                 except Exception:  # pragma: no cover - best effort persistence
                     logger.exception(
