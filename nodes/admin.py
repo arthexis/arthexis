@@ -1193,9 +1193,9 @@ class NodeAdmin(EntityModelAdmin):
         chargers: list[Charger],
         local_node: Node,
         private_key,
-    ) -> None:
+    ) -> bool:
         if not chargers:
-            return
+            return True
         payload = {
             "requester": str(local_node.uuid),
             "requester_mac": local_node.mac_address,
@@ -1216,7 +1216,7 @@ class NodeAdmin(EntityModelAdmin):
                 _("No reachable host found for %(node)s.") % {"node": node},
                 level=messages.WARNING,
             )
-            return
+            return False
         try:
             response = requests.post(url, data=payload_json, headers=headers, timeout=5)
         except RequestException as exc:
@@ -1226,7 +1226,7 @@ class NodeAdmin(EntityModelAdmin):
                 % {"node": node, "error": exc},
                 level=messages.WARNING,
             )
-            return
+            return False
 
         try:
             data = response.json()
@@ -1243,6 +1243,9 @@ class NodeAdmin(EntityModelAdmin):
                 "detail": detail,
             }
             self.message_user(request, message.strip(), level=messages.WARNING)
+            return False
+
+        return True
 
     @admin.action(description=_("Start Charge Point Forwarding"))
     def start_charge_point_forwarding(self, request, queryset):
@@ -1314,21 +1317,11 @@ class NodeAdmin(EntityModelAdmin):
             )
             return
 
-        now = timezone.now()
-        Charger.objects.filter(pk__in=[c.pk for c in chargers_to_update]).update(
-            forwarded_to=target, forwarding_watermark=now
-        )
+        charger_pks = [c.pk for c in chargers_to_update]
+        Charger.objects.filter(pk__in=charger_pks).update(forwarded_to=target)
 
-        self.message_user(
-            request,
-            ngettext(
-                "Forwarding enabled for %(count)s charge point.",
-                "Forwarding enabled for %(count)s charge points.",
-                len(chargers_to_update),
-            )
-            % {"count": len(chargers_to_update)},
-            level=messages.SUCCESS,
-        )
+        for charger in chargers_to_update:
+            charger.forwarded_to = target
 
         sample = next((charger for charger in chargers_to_update if charger.charger_id), None)
         if sample and not self._attempt_forwarding_probe(target, sample.charger_id):
@@ -1341,9 +1334,36 @@ class NodeAdmin(EntityModelAdmin):
                 level=messages.WARNING,
             )
 
-        self._send_forwarding_metadata(
+        success = self._send_forwarding_metadata(
             request, target, chargers_to_update, local_node, private_key
         )
+
+        if success:
+            now = timezone.now()
+            Charger.objects.filter(pk__in=charger_pks).update(
+                forwarding_watermark=now
+            )
+            self.message_user(
+                request,
+                ngettext(
+                    "Forwarding enabled for %(count)s charge point.",
+                    "Forwarding enabled for %(count)s charge points.",
+                    len(chargers_to_update),
+                )
+                % {"count": len(chargers_to_update)},
+                level=messages.SUCCESS,
+            )
+        else:
+            self.message_user(
+                request,
+                ngettext(
+                    "Marked %(count)s charge point for forwarding; awaiting remote acknowledgment.",
+                    "Marked %(count)s charge points for forwarding; awaiting remote acknowledgment.",
+                    len(chargers_to_update),
+                )
+                % {"count": len(chargers_to_update)},
+                level=messages.INFO,
+            )
 
         try:
             push_forwarded_charge_points.delay()
