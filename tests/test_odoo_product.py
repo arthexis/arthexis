@@ -37,7 +37,6 @@ class OdooProductTests(TestCase):
         mock_exec.assert_called_once_with(
             "product.product",
             "search_read",
-            [[]],
             fields=["name"],
             limit=50,
         )
@@ -120,7 +119,7 @@ class ProductAdminFetchWizardTests(TestCase):
         mock_execute.assert_called_once_with(
             "product.product",
             "search_read",
-            [[("name", "ilike", "Wid")]],
+            [("name", "ilike", "Wid")],
             fields=[
                 "name",
                 "default_code",
@@ -166,7 +165,6 @@ class ProductAdminFetchWizardTests(TestCase):
         mock_execute.assert_called_once_with(
             "product.product",
             "search_read",
-            [[]],
             fields=[
                 "name",
                 "default_code",
@@ -228,7 +226,6 @@ class ProductAdminRegisterFromOdooTests(TestCase):
         mock_execute.assert_called_once_with(
             "product.product",
             "search_read",
-            [[]],
             fields=[
                 "name",
                 "description_sale",
