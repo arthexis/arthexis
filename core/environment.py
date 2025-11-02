@@ -30,7 +30,7 @@ def _config_view(request):
     context = admin.site.each_context(request)
     context.update(
         {
-            "title": _("Django Settings"),
+            "title": _("Django Config"),
             "django_settings": _get_django_settings(),
         }
     )
