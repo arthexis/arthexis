@@ -254,6 +254,23 @@
         return message || messages.partial;
     }
 
+    function cleanRole(info) {
+        if (!info || typeof info !== "object") {
+            return "";
+        }
+        const roleSources = [info.role, info.role_name];
+        for (const value of roleSources) {
+            if (typeof value !== "string") {
+                continue;
+            }
+            const cleaned = value.trim();
+            if (cleaned) {
+                return cleaned;
+            }
+        }
+        return "";
+    }
+
     function buildPayload(info, relation) {
         const payload = {
             hostname: info.hostname,
@@ -266,6 +283,10 @@
         const relationValue = relation || info.current_relation;
         if (relationValue) {
             payload.current_relation = relationValue;
+        }
+        const roleValue = cleanRole(info);
+        if (roleValue) {
+            payload.role = roleValue;
         }
         return payload;
     }
