@@ -634,11 +634,9 @@ class OdooProfile(Profile):
         """Return the display label for this profile."""
 
         username = self._resolved_field_value("username")
-        database = self._resolved_field_value("database")
-        if username and database:
-            return f"{username}@{database}"
         if username:
             return username
+        database = self._resolved_field_value("database")
         return database or ""
 
     def _profile_name(self) -> str:
