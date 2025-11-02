@@ -2305,6 +2305,8 @@ class ProductAdmin(EntityModelAdmin):
     form = ProductAdminForm
     actions = ["fetch_odoo_product", "register_from_odoo"]
     change_list_template = "admin/core/product/change_list.html"
+    list_display = ("name", "renewal_period", "kilowatt_value")
+    readonly_fields = ("odoo_created_by",)
 
     def _odoo_profile_admin(self):
         return self.admin_site._registry.get(OdooProfile)
@@ -2423,14 +2425,22 @@ class ProductAdmin(EntityModelAdmin):
                                                 args=[existing.pk],
                                             )
                                         )
+                                    match_id = match.get("id")
                                     product = self.model.objects.create(
-                                        name=match.get("name") or f"Odoo Product {odoo_id}",
-                                        description=match.get("description_sale", "") or "",
-                                        renewal_period=form.cleaned_data["renewal_period"],
+                                        name=match.get("name")
+                                        or f"Odoo Product {odoo_id}",
+                                        description=match.get(
+                                            "description_sale", ""
+                                        )
+                                        or "",
+                                        renewal_period=form.cleaned_data[
+                                            "renewal_period"
+                                        ],
                                         odoo_product={
-                                            "id": odoo_id,
+                                            "id": match_id or odoo_id,
                                             "name": match.get("name", ""),
                                         },
+                                        odoo_created_by=profile,
                                     )
                                     self.log_addition(
                                         request, product, "Imported product from Odoo"
@@ -2610,14 +2620,18 @@ class ProductAdmin(EntityModelAdmin):
                                         args=[existing.pk],
                                     )
                                 )
+                            match_id = match.get("id")
                             product = self.model.objects.create(
-                                name=match.get("name") or f"Odoo Product {odoo_id}",
-                                description=match.get("description_sale", "") or "",
+                                name=match.get("name")
+                                or f"Odoo Product {odoo_id}",
+                                description=match.get("description_sale", "")
+                                or "",
                                 renewal_period=30,
                                 odoo_product={
-                                    "id": odoo_id,
+                                    "id": match_id or odoo_id,
                                     "name": match.get("name", ""),
                                 },
+                                odoo_created_by=profile,
                             )
                             self.log_addition(
                                 request, product, "Registered product from Odoo"

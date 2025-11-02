@@ -45,6 +45,11 @@ class OdooProductTests(TestCase):
         form = ProductAdminForm()
         self.assertIsInstance(form.fields["odoo_product"].widget, OdooProductWidget)
 
+    def test_product_admin_lists_kilowatt_value(self):
+        admin = default_site._registry[Product]
+        self.assertIn("kilowatt_value", admin.list_display)
+        self.assertIn("renewal_period", admin.list_display)
+
 
 class ProductAdminFetchWizardTests(TestCase):
     def setUp(self):
@@ -133,7 +138,7 @@ class ProductAdminFetchWizardTests(TestCase):
 
     @patch.object(OdooProfile, "execute")
     def test_import_creates_product(self, mock_execute):
-        OdooProfile.objects.create(
+        profile = OdooProfile.objects.create(
             user=self.user,
             host="http://odoo",
             database="db",
@@ -177,6 +182,7 @@ class ProductAdminFetchWizardTests(TestCase):
         self.assertEqual(product.name, "Imported")
         self.assertEqual(product.renewal_period, 45)
         self.assertEqual(product.odoo_product, {"id": 11, "name": "Imported"})
+        self.assertEqual(product.odoo_created_by, profile)
         self.assertEqual(
             response.url, reverse("admin:core_product_change", args=[product.pk])
         )
@@ -237,7 +243,7 @@ class ProductAdminRegisterFromOdooTests(TestCase):
 
     @patch.object(OdooProfile, "execute")
     def test_view_creates_product(self, mock_execute):
-        self._create_profile()
+        profile = self._create_profile()
         mock_execute.return_value = [
             {
                 "id": 21,
@@ -254,6 +260,7 @@ class ProductAdminRegisterFromOdooTests(TestCase):
         self.assertEqual(product.description, "Managed offering")
         self.assertEqual(product.renewal_period, 30)
         self.assertEqual(product.odoo_product, {"id": 21, "name": "Managed Service"})
+        self.assertEqual(product.odoo_created_by, profile)
         self.assertRedirects(
             response, reverse("admin:core_product_change", args=[product.pk])
         )

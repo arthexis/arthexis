@@ -4120,10 +4120,27 @@ class Product(Entity):
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
     renewal_period = models.PositiveIntegerField(help_text="Renewal period in days")
+    kilowatt_value = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        verbose_name="Kilowatt Value (kW)",
+        help_text="Optional kilowatt capacity associated with the product.",
+    )
     odoo_product = models.JSONField(
         null=True,
         blank=True,
         help_text="Selected product from Odoo (id and name)",
+    )
+    odoo_created_by = models.ForeignKey(
+        "core.OdooProfile",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="products_created",
+        verbose_name="Odoo employee",
+        help_text="Employee profile that registered this product from Odoo.",
     )
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
