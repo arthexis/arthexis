@@ -102,6 +102,24 @@ class UserDataAdminTests(TransactionTestCase):
         messages = [m.message for m in get_messages(response.wsgi_request)]
         self.assertTrue(any(str(self.fixture_path) in msg for msg in messages))
 
+    def test_user_datum_fixture_preserves_password(self):
+        self.profile.is_user_data = True
+        self.profile.save(update_fields=["is_user_data"])
+        dump_user_fixture(self.profile, self.user)
+        self.assertTrue(self.fixture_path.exists())
+
+        data = json.loads(self.fixture_path.read_text())
+        self.assertTrue(data)
+        self.assertEqual(data[0]["fields"]["password"], "secret")
+
+        CoreOdooProfile.all_objects.filter(pk=self.profile.pk).delete()
+        self.assertFalse(CoreOdooProfile.all_objects.filter(pk=self.profile.pk).exists())
+
+        load_user_fixtures(self.user)
+        reloaded = CoreOdooProfile.objects.get(pk=self.profile.pk)
+        self.assertEqual(reloaded.password, "secret")
+        self.assertTrue(reloaded.is_user_data)
+
     def test_unchecking_removes_fixture(self):
         self.profile.is_user_data = True
         self.profile.save()

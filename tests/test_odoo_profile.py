@@ -43,7 +43,7 @@ def test_verify_success(monkeypatch):
     assert profile.verify() is True
     profile.refresh_from_db()
     assert profile.odoo_uid == 42
-    assert profile.name == "u0@db"
+    assert profile.name == "u0"
     assert profile.email == "user@example.com"
     assert profile.verified_on is not None
 
@@ -153,5 +153,5 @@ def test_profile_string_resolves_sigil_values(monkeypatch):
         password="secret",
     )
     profile.refresh_from_db()
-    assert profile.name == "resolved-user@resolved-db"
+    assert profile.name == "resolved-user"
     assert str(profile) == "resolved-user@resolved-db"
