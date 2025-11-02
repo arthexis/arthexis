@@ -4369,6 +4369,11 @@ class PackageRelease(Entity):
     def natural_key(self):
         return (self.package.name, self.version)
 
+    class Severity(models.TextChoices):
+        NORMAL = "normal", _("Normal")
+        LOW = "low", _("Low")
+        CRITICAL = "critical", _("Critical")
+
     package = models.ForeignKey(
         Package, on_delete=models.CASCADE, related_name="releases"
     )
@@ -4378,6 +4383,12 @@ class PackageRelease(Entity):
     version = models.CharField(max_length=20, default="0.0.0")
     revision = models.CharField(
         max_length=40, blank=True, default=revision_utils.get_revision, editable=False
+    )
+    severity = models.CharField(
+        max_length=16,
+        choices=Severity.choices,
+        default=Severity.NORMAL,
+        help_text=_("Controls the expected urgency for auto-upgrades."),
     )
     changelog = models.TextField(blank=True, default="")
     pypi_url = models.URLField("PyPI URL", blank=True, editable=False)

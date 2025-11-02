@@ -10,11 +10,42 @@ import urllib.request
 
 from celery import shared_task
 from core import github_issues
+from django.db import DatabaseError
 from django.utils import timezone
 
 
 AUTO_UPGRADE_HEALTH_DELAY_SECONDS = 30
 AUTO_UPGRADE_SKIP_LOCK_NAME = "auto_upgrade_skip_revisions.lck"
+
+SEVERITY_NORMAL = "normal"
+SEVERITY_LOW = "low"
+SEVERITY_CRITICAL = "critical"
+
+_PackageReleaseModel = None
+
+
+def _get_package_release_model():
+    """Return the :class:`core.models.PackageRelease` model when available."""
+
+    global _PackageReleaseModel
+
+    if _PackageReleaseModel is not None:
+        return _PackageReleaseModel
+
+    try:
+        from core.models import PackageRelease  # noqa: WPS433 - runtime import
+    except Exception:  # pragma: no cover - app registry not ready
+        return None
+
+    _PackageReleaseModel = PackageRelease
+    return PackageRelease
+
+
+model = _get_package_release_model()
+if model is not None:  # pragma: no branch - runtime constant setup
+    SEVERITY_NORMAL = model.Severity.NORMAL
+    SEVERITY_LOW = model.Severity.LOW
+    SEVERITY_CRITICAL = model.Severity.CRITICAL
 
 
 logger = logging.getLogger(__name__)
@@ -44,6 +75,65 @@ def _append_auto_upgrade_log(base_dir: Path, message: str) -> None:
             fh.write(f"{timestamp} {message}\n")
     except Exception:  # pragma: no cover - best effort logging only
         logger.warning("Failed to append auto-upgrade log entry: %s", message)
+
+
+def _resolve_release_severity(version: str | None) -> str:
+    """Return the stored severity for *version*, defaulting to normal."""
+
+    if not version:
+        return SEVERITY_NORMAL
+
+    model = _get_package_release_model()
+    if model is None:
+        return SEVERITY_NORMAL
+
+    try:
+        queryset = model.objects.filter(version=version)
+        release = (
+            queryset.filter(package__is_active=True).first() or queryset.first()
+        )
+    except DatabaseError:  # pragma: no cover - depends on DB availability
+        return SEVERITY_NORMAL
+
+    if not release:
+        return SEVERITY_NORMAL
+
+    severity = getattr(release, "severity", None)
+    if not severity:
+        return SEVERITY_NORMAL
+    return severity
+
+
+def _read_local_version(base_dir: Path) -> str | None:
+    """Return the local VERSION file contents when readable."""
+
+    version_path = base_dir / "VERSION"
+    if not version_path.exists():
+        return None
+    try:
+        return version_path.read_text().strip()
+    except OSError:  # pragma: no cover - filesystem error
+        return None
+
+
+def _read_remote_version(base_dir: Path, branch: str) -> str | None:
+    """Return the VERSION file from ``origin/<branch>`` when available."""
+
+    try:
+        return (
+            subprocess.check_output(
+                [
+                    "git",
+                    "show",
+                    f"origin/{branch}:VERSION",
+                ],
+                cwd=base_dir,
+            )
+            .decode()
+            .strip()
+        )
+    except subprocess.CalledProcessError:  # pragma: no cover - git failure
+        return None
 
 
 def _skip_lock_path(base_dir: Path) -> Path:
@@ -173,49 +263,65 @@ def check_github_updates() -> None:
             startup()
         return
 
+    remote_version = _read_remote_version(base_dir, branch)
+    local_version = _read_local_version(base_dir)
+    remote_severity = _resolve_release_severity(remote_version)
+
     upgrade_stamp = timezone.now().strftime("@ %Y%m%d %H:%M")
 
     upgrade_was_applied = False
 
     if mode == "latest":
-        local = (
+        local_revision = (
             subprocess.check_output(["git", "rev-parse", branch], cwd=base_dir)
             .decode()
             .strip()
         )
-        if local == remote_revision:
+        if local_revision == remote_revision:
             if startup:
                 startup()
             return
+
+        if (
+            remote_version
+            and local_version
+            and remote_version != local_version
+            and remote_severity == SEVERITY_LOW
+            and _shares_stable_series(local_version, remote_version)
+        ):
+            _append_auto_upgrade_log(
+                base_dir,
+                f"Skipping auto-upgrade for low severity patch {remote_version}",
+            )
+            if startup:
+                startup()
+            return
+
         if notify:
             notify("Upgrading...", upgrade_stamp)
         args = ["./upgrade.sh", "--latest", "--no-restart"]
         upgrade_was_applied = True
     else:
-        local = "0"
-        version_file = base_dir / "VERSION"
-        if version_file.exists():
-            local = version_file.read_text().strip()
-        remote = (
-            subprocess.check_output(
-                [
-                    "git",
-                    "show",
-                    f"origin/{branch}:VERSION",
-                ],
-                cwd=base_dir,
-            )
-            .decode()
-            .strip()
-        )
-        if local == remote:
+        local_value = local_version or "0"
+        remote_value = remote_version or local_value
+
+        if local_value == remote_value:
             if startup:
                 startup()
             return
-        if mode == "stable" and _shares_stable_series(local, remote):
+
+        if (
+            mode == "stable"
+            and local_version
+            and remote_version
+            and remote_version != local_version
+            and _shares_stable_series(local_version, remote_version)
+            and remote_severity != SEVERITY_CRITICAL
+        ):
             if startup:
                 startup()
             return
+
         if notify:
             notify("Upgrading...", upgrade_stamp)
         if mode == "stable":

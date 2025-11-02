@@ -3784,6 +3784,7 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
     list_display = (
         "version",
         "package_link",
+        "severity",
         "is_current",
         "pypi_url",
         "github_url",
@@ -3800,6 +3801,7 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         "package",
         "release_manager",
         "version",
+        "severity",
         "revision",
         "is_current",
         "pypi_url",

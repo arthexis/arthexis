@@ -64,6 +64,14 @@ class PackageReleaseLatestTests(TestCase):
         self.assertEqual(PackageRelease.latest(), active_release)
 
 
+class PackageReleaseSeverityTests(TestCase):
+    def test_default_severity_is_normal(self) -> None:
+        package = Package.objects.create(name="severity-pkg")
+        release = PackageRelease.objects.create(package=package, version="1.0.1")
+
+        self.assertEqual(release.severity, PackageRelease.Severity.NORMAL)
+
+
 class PackageReleaseUserDataTests(TestCase):
     def test_delete_removes_user_data_fixture(self) -> None:
         User = get_user_model()
