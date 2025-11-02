@@ -1,0 +1,323 @@
+{% load i18n %}
+{% with prefix=viewer_prefix|default:'log-viewer' %}
+  {% with wrapper_class=viewer_wrapper_class|default:'log-viewer-module' %}
+  {% translate "Copy to clipboard" as default_copy_label %}
+  {% translate "Log copied to your clipboard." as default_copy_success %}
+  {% translate "Copy failed. Use your browser copy command instead." as default_copy_error %}
+  {% translate "Lines to display" as default_limit_label %}
+  {% translate "Download log" as default_download_label %}
+  {% translate "No log entries recorded yet." as default_empty_message %}
+  <div
+    id="{{ prefix }}-viewer"
+    {% if wrapper_class %}class="{{ wrapper_class }}"{% endif %}
+    data-log-mode="{{ limit_mode|default:'navigate' }}"
+    data-log-param="{{ limit_param|default:'limit' }}"
+    {% if limit_url %}data-log-url="{{ limit_url }}"{% endif %}
+    {% if limit_static_params_json %}data-log-static-params="{{ limit_static_params_json|escapejs }}"
+    {% elif limit_static_params %}data-log-static-params="{{ limit_static_params|escapejs }}"
+    {% endif %}
+  >
+    {% if viewer_heading or log_filename or log_download_url %}
+      <div class="{{ viewer_heading_class|default:'log-viewer-heading' }}">
+        {% if viewer_heading %}
+          <h2 class="{{ viewer_title_class|default:'log-viewer-title' }}">{{ viewer_heading }}</h2>
+        {% endif %}
+        {% if log_filename %}
+          <span data-log-role="filename" class="{{ filename_class|default:'log-viewer-filename' }}">{{ log_filename }}</span>
+        {% endif %}
+        {% if log_download_url %}
+          <a
+            href="{{ log_download_url }}"
+            class="{{ download_button_class|default:'button button-secondary' }}"
+            data-log-role="download"
+          >{{ download_label|default:default_download_label }}</a>
+        {% endif %}
+      </div>
+    {% endif %}
+    <div class="{{ viewer_actions_class|default:'log-viewer-actions' }}">
+      <div class="{{ viewer_slider_class|default:'log-viewer-slider' }}">
+        <label for="{{ prefix }}-limit">
+          {{ limit_label_text|default:default_limit_label }}:
+          <span id="{{ prefix }}-limit-value">{{ log_limit_label }}</span>
+        </label>
+        <input
+          type="range"
+          id="{{ prefix }}-limit"
+          class="{{ limit_slider_class|default:'log-viewer-limit' }}"
+          min="0"
+          max="{{ log_limit_options|length|add:'-1' }}"
+          step="1"
+          value="{{ log_limit_index }}"
+          list="{{ prefix }}-limit-options"
+          {% if limit_slider_data %}{% for key, value in limit_slider_data.items %}data-{{ key }}="{{ value }}" {% endfor %}{% endif %}{% if limit_slider_log %}data-log="{{ limit_slider_log }}"{% endif %}
+        >
+        <datalist id="{{ prefix }}-limit-options">{% for option in log_limit_options %}<option value="{{ forloop.counter0 }}" label="{{ option.label }}"></option>{% endfor %}</datalist>
+      </div>
+      {% if show_copy|default:True %}
+        <button
+          type="button"
+          id="{{ prefix }}-copy"
+          class="{{ copy_button_class|default:'button button-secondary' }}"
+          data-copy-target="#{{ prefix }}-content"
+          data-copy-success="{{ copy_success|default:default_copy_success|escapejs|escape }}"
+          data-copy-error="{{ copy_error|default:default_copy_error|escapejs|escape }}"
+        >{{ copy_label|default:default_copy_label }}</button>
+        <span
+          id="{{ prefix }}-copy-status"
+          class="{{ copy_status_class|default:'log-viewer-status' }}"
+          aria-live="polite"
+          hidden
+        ></span>
+      {% endif %}
+    </div>
+    {{ log_limit_options|json_script:prefix|add:'-limit-data' }}
+    {% with provided_content=log_content|default_if_none:'' %}
+      {% if provided_content %}
+        <pre id="{{ prefix }}-content" class="{{ content_class|default:'log-viewer-content' }}" tabindex="{{ content_tabindex|default:'0' }}">{{ provided_content }}</pre>
+      {% else %}
+        {% with log_lines=log|default:log_lines %}
+          {% if log_lines %}
+            <pre id="{{ prefix }}-content" class="{{ content_class|default:'log-viewer-content' }}" tabindex="{{ content_tabindex|default:'0' }}">{{ log_lines|join:'\n' }}</pre>
+          {% else %}
+            <pre id="{{ prefix }}-content" class="{{ content_class|default:'log-viewer-content' }}" tabindex="{{ content_tabindex|default:'0' }}">{{ default_empty_message }}</pre>
+          {% endif %}
+        {% endwith %}
+      {% endif %}
+    {% endwith %}
+  </div>
+  <script>
+    (function() {
+      const prefix = "{{ prefix|escapejs }}";
+      function initialize() {
+        const container = document.getElementById(`${prefix}-viewer`);
+        if (!container) {
+          return;
+        }
+        const content = document.getElementById(`${prefix}-content`);
+        if (content) {
+          window.requestAnimationFrame(() => {
+            content.scrollTop = content.scrollHeight;
+          });
+        }
+        const copyButton = document.getElementById(`${prefix}-copy`);
+        const status = document.getElementById(`${prefix}-copy-status`);
+        if (copyButton) {
+          copyButton.addEventListener('click', () => {
+            const targetSelector = copyButton.getAttribute('data-copy-target');
+            const target = targetSelector ? document.querySelector(targetSelector) : null;
+            if (!target) {
+              return;
+            }
+            const text = target.innerText;
+            const successMessage = copyButton.getAttribute('data-copy-success') || '';
+            const errorMessage = copyButton.getAttribute('data-copy-error') || '';
+            const handleSuccess = () => {
+              if (status) {
+                status.textContent = successMessage;
+                status.classList.remove('error');
+                status.hidden = false;
+              }
+            };
+            const handleError = () => {
+              if (status) {
+                status.textContent = errorMessage;
+                status.classList.add('error');
+                status.hidden = false;
+              }
+            };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              navigator.clipboard.writeText(text).then(handleSuccess).catch(handleError);
+            } else {
+              try {
+                const range = document.createRange();
+                range.selectNodeContents(target);
+                const selection = window.getSelection();
+                if (!selection) {
+                  handleError();
+                  return;
+                }
+                selection.removeAllRanges();
+                selection.addRange(range);
+                const successful = document.execCommand('copy');
+                selection.removeAllRanges();
+                successful ? handleSuccess() : handleError();
+              } catch (err) {
+                handleError();
+              }
+            }
+          });
+        }
+        const limitSlider = document.getElementById(`${prefix}-limit`);
+        const limitValue = document.getElementById(`${prefix}-limit-value`);
+        const limitDataScript = document.getElementById(`${prefix}-limit-data`);
+        let limitData = [];
+        if (limitDataScript && limitDataScript.textContent) {
+          try {
+            limitData = JSON.parse(limitDataScript.textContent);
+          } catch (err) {
+            limitData = [];
+          }
+        }
+        const downloadLink = container.querySelector('[data-log-role="download"]');
+        const filenameEl = container.querySelector('[data-log-role="filename"]');
+        const mode = container.getAttribute('data-log-mode') || 'navigate';
+        const param = container.getAttribute('data-log-param') || 'limit';
+        const staticParams = container.getAttribute('data-log-static-params');
+        function parseStaticParams() {
+          if (!staticParams) {
+            return {};
+          }
+          try {
+            return JSON.parse(staticParams);
+          } catch (err) {
+            return {};
+          }
+        }
+        const preservedParams = parseStaticParams();
+        function getLimitOption(index) {
+          if (!Array.isArray(limitData) || !limitData.length) {
+            return null;
+          }
+          const clamped = Math.max(0, Math.min(index, limitData.length - 1));
+          return limitData[clamped] || null;
+        }
+        function updateLimitLabel() {
+          if (!limitSlider || !limitValue) {
+            return;
+          }
+          const index = parseInt(limitSlider.value, 10) || 0;
+          const option = getLimitOption(index);
+          if (option && option.label) {
+            limitValue.textContent = option.label;
+          }
+        }
+        updateLimitLabel();
+        function applyParams(url, option) {
+          if (!option) {
+            return url;
+          }
+          url.searchParams.set(param, option.value);
+          url.searchParams.delete('download');
+          if (limitSlider && limitSlider.dataset && limitSlider.dataset.log) {
+            url.searchParams.set('log', limitSlider.dataset.log);
+          }
+          Object.entries(preservedParams).forEach(([key, value]) => {
+            if (value === null || typeof value === 'undefined' || value === '') {
+              url.searchParams.delete(key);
+            } else {
+              url.searchParams.set(key, value);
+            }
+          });
+          return url;
+        }
+        function fetchLog(option, index, silent) {
+          if (!option) {
+            return;
+          }
+          const url = applyParams(new URL(window.location.href), option);
+          fetch(url.toString(), { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then((response) => {
+              if (!response.ok) {
+                throw new Error('Network response was not ok');
+              }
+              return response.text();
+            })
+            .then((html) => {
+              const parser = new DOMParser();
+              const doc = parser.parseFromString(html, 'text/html');
+              const replacement = doc.getElementById(`${prefix}-viewer`);
+              if (!replacement || !container) {
+                window.location.assign(url.toString());
+                return;
+              }
+              const newContent = replacement.querySelector('#' + prefix + '-content');
+              if (content && newContent) {
+                content.textContent = newContent.textContent;
+                window.requestAnimationFrame(() => {
+                  content.scrollTop = content.scrollHeight;
+                });
+              }
+              const newDownload = replacement.querySelector('[data-log-role="download"]');
+              if (downloadLink && newDownload) {
+                downloadLink.href = newDownload.getAttribute('href');
+                downloadLink.innerHTML = newDownload.innerHTML;
+              }
+              const newFilename = replacement.querySelector('[data-log-role="filename"]');
+              if (filenameEl && newFilename) {
+                filenameEl.textContent = newFilename.textContent;
+              }
+              const newLimitDataScript = doc.getElementById(`${prefix}-limit-data`);
+              if (newLimitDataScript) {
+                limitDataScript.textContent = newLimitDataScript.textContent;
+                try {
+                  limitData = JSON.parse(newLimitDataScript.textContent);
+                } catch (err) {
+                  limitData = [];
+                }
+              }
+              const newSlider = replacement.querySelector('#' + prefix + '-limit');
+              if (newSlider && limitSlider) {
+                limitSlider.setAttribute('max', newSlider.getAttribute('max'));
+                limitSlider.value = String(index);
+                limitSlider.dataset.log = newSlider.dataset ? newSlider.dataset.log || '' : '';
+              }
+              updateLimitLabel();
+              if (!silent && status) {
+                status.hidden = true;
+              }
+            })
+            .catch(() => {
+              window.location.assign(url.toString());
+            });
+        }
+        function navigateTo(option) {
+          if (!option) {
+            return;
+          }
+          const base = container.getAttribute('data-log-url') || window.location.href;
+          let url;
+          try {
+            url = new URL(base, window.location.origin);
+          } catch (err) {
+            url = new URL(window.location.href);
+          }
+          applyParams(url, option);
+          window.location.assign(url.toString());
+        }
+        if (limitSlider) {
+          limitSlider.addEventListener('input', () => {
+            updateLimitLabel();
+          });
+          limitSlider.addEventListener('change', () => {
+            const index = parseInt(limitSlider.value, 10) || 0;
+            const option = getLimitOption(index);
+            if (mode === 'fetch') {
+              fetchLog(option, index, false);
+            } else {
+              navigateTo(option);
+            }
+          });
+        }
+        if (mode === 'fetch') {
+          window.__logViewers = window.__logViewers || {};
+          window.__logViewers[prefix] = {
+            refresh() {
+              if (!limitSlider) {
+                return;
+              }
+              const index = parseInt(limitSlider.value, 10) || 0;
+              const option = getLimitOption(index);
+              fetchLog(option, index, true);
+            },
+          };
+        }
+      }
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initialize, { once: true });
+      } else {
+        initialize();
+      }
+    })();
+  </script>
+  {% endwith %}
+{% endwith %}

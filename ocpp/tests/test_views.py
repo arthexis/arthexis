@@ -242,6 +242,7 @@ class ChargerLogViewTests(TestCase):
         )
         slug_source = slugify(expected_target) or slugify(self.charger.charger_id) or "log"
         self.assertEqual(context["log_filename"], f"charger-{slug_source}.log")
+        self.assertEqual(context["log_content"], "\n".join(entries))
 
     def test_log_view_applies_numeric_limit(self):
         entries = [f"entry {i}" for i in range(1, 101)]
@@ -250,12 +251,14 @@ class ChargerLogViewTests(TestCase):
         self.assertEqual(len(rendered_entries), 40)
         self.assertEqual(rendered_entries[0], "entry 61")
         self.assertEqual(rendered_entries[-1], "entry 100")
+        self.assertEqual(context["log_content"], "\n".join(rendered_entries))
 
     def test_log_view_all_limit_returns_every_entry(self):
         entries = ["first", "second", "third"]
         context = self._render_context(entries, params={"limit": "all"})
         rendered_entries = context["log"]
         self.assertEqual(rendered_entries, entries)
+        self.assertEqual(context["log_content"], "\n".join(entries))
 
     def test_log_view_download_streams_full_log(self):
         entries = ["download one", "download two"]
