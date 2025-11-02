@@ -21,11 +21,12 @@ def _uses_token_auth(request: HttpRequest) -> bool:
 class EnergyGraphQLView(GraphQLView):
     """GraphQL view that conditionally skips CSRF checks for token clients."""
 
+    csrf_exempt = False
+
     def __init__(self, **kwargs):
         kwargs.setdefault("schema", schema)
         kwargs.setdefault("graphiql", settings.DEBUG)
         super().__init__(**kwargs)
-        self.csrf_exempt = False
 
     @method_decorator(csrf_protect)
     def dispatch(self, request: HttpRequest, *args, **kwargs):  # pragma: no cover - Django handles dispatch
