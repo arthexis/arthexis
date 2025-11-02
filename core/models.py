@@ -641,6 +641,14 @@ class OdooProfile(Profile):
             return username
         return database or ""
 
+    def _profile_name(self) -> str:
+        """Return the stored name for this profile without database suffix."""
+
+        username = self._resolved_field_value("username")
+        if username:
+            return username
+        return self._resolved_field_value("database")
+
     def save(self, *args, **kwargs):
         if self.pk:
             old = type(self).all_objects.get(pk=self.pk)
@@ -651,7 +659,7 @@ class OdooProfile(Profile):
                 or old.host != self.host
             ):
                 self._clear_verification()
-        computed_name = self._display_identifier()
+        computed_name = self._profile_name()
         update_fields = kwargs.get("update_fields")
         update_fields_set = set(update_fields) if update_fields is not None else None
         if computed_name != self.name:
@@ -686,6 +694,7 @@ class OdooProfile(Profile):
         self.odoo_uid = uid
         self.email = info.get("email", "")
         self.verified_on = timezone.now()
+        self.name = self._profile_name()
         self.save(update_fields=["odoo_uid", "name", "email", "verified_on"])
         return True
 
