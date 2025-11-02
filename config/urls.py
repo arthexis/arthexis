@@ -20,6 +20,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import RedirectView
 from django.views.i18n import set_language
 from django.utils.translation import gettext_lazy as _
+from api.views import EnergyGraphQLView
 from core import views as core_views
 from core.admindocs import (
     CommandsView,
@@ -119,6 +120,7 @@ urlpatterns = [
         name="admin-model-graph",
     ),
     path("version/", core_views.version_info, name="version-info"),
+    path("graphql/", csrf_exempt(EnergyGraphQLView.as_view()), name="graphql"),
     path(
         "admin/core/releases/<int:pk>/<str:action>/",
         core_views.release_progress,
