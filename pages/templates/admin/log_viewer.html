@@ -106,157 +106,33 @@
     {% endif %}
 
     {% if selected_log and not log_error %}
+      {% blocktranslate with name=selected_log asvar viewer_heading %}Viewing {{ name }}{% endblocktranslate %}
       {% translate 'Log copied to your clipboard.' as copy_success %}
       {% translate 'Copy failed. Use your browser copy command instead.' as copy_error %}
       {% translate 'Copy to clipboard' as copy_label %}
-      <div class="log-viewer-actions">
-        <div class="log-viewer-heading">
-          <h2>{% blocktranslate with name=selected_log %}Viewing {{ name }}{% endblocktranslate %}</h2>
-          <a
-            href="?log={{ selected_log|urlencode }}&amp;limit={{ log_limit_choice }}&amp;download=1"
-            class="button button-secondary"
-          >{% translate "Download log" %}</a>
-        </div>
-        <div class="log-viewer-slider">
-          <label for="log-viewer-limit">{% translate "Lines to display" %}: <span id="log-viewer-limit-value">{{ log_limit_label }}</span></label>
-          <input
-            type="range"
-            id="log-viewer-limit"
-            class="log-viewer-limit"
-            min="0"
-            max="{{ log_limit_options|length|add:'-1' }}"
-            step="1"
-            value="{{ log_limit_index }}"
-            list="log-viewer-limit-options"
-            data-log="{{ selected_log }}"
-          >
-          <datalist id="log-viewer-limit-options">
-            {% for option in log_limit_options %}
-              <option value="{{ forloop.counter0 }}" label="{{ option.label }}"></option>
-            {% endfor %}
-          </datalist>
-        </div>
-        <button
-          type="button"
-          class="button button-secondary"
-          id="log-viewer-copy"
-          data-copy-target="#log-viewer-content"
-          data-copy-success="{{ copy_success|escapejs|escape }}"
-          data-copy-error="{{ copy_error|escapejs|escape }}"
-        >{{ copy_label }}</button>
-        <span id="log-viewer-copy-status" class="log-viewer-status" aria-live="polite" hidden></span>
-      </div>
-      {{ log_limit_options|json_script:"log-viewer-limit-data" }}
-      <pre id="log-viewer-content" class="log-viewer-content" tabindex="0">{{ log_content }}</pre>
+      {% with encoded_log=selected_log|urlencode %}
+        {% with download_url="?log="|add:encoded_log|add:"&limit="|add:log_limit_choice|add:"&download=1" %}
+          {% include "includes/log_viewer.html" with
+          viewer_prefix="system-log"
+          viewer_wrapper_class=""
+          viewer_heading=viewer_heading
+          log_filename=selected_log
+          log_download_url=download_url
+          log_limit_options=log_limit_options
+          log_limit_index=log_limit_index
+          log_limit_label=log_limit_label
+          log_content=log_content
+          copy_label=copy_label
+          copy_success=copy_success
+          copy_error=copy_error
+          copy_status_class="log-viewer-status"
+          content_class="log-viewer-content"
+          limit_slider_class="log-viewer-limit"
+          limit_slider_log=selected_log
+          %}
+        {% endwith %}
+      {% endwith %}
     {% endif %}
   </div>
 </div>
-{% endblock %}
-
-{% block extrajs %}
-  {{ block.super }}
-  <script>
-    document.addEventListener('DOMContentLoaded', () => {
-      const content = document.getElementById('log-viewer-content');
-      if (content) {
-        window.requestAnimationFrame(() => {
-          content.scrollTop = content.scrollHeight;
-        });
-      }
-
-      const copyButton = document.getElementById('log-viewer-copy');
-      if (!copyButton) {
-        return;
-      }
-      const status = document.getElementById('log-viewer-copy-status');
-      copyButton.addEventListener('click', () => {
-        const targetSelector = copyButton.getAttribute('data-copy-target');
-        const target = targetSelector ? document.querySelector(targetSelector) : null;
-        if (!target) {
-          return;
-        }
-        const text = target.innerText;
-        const successMessage = copyButton.getAttribute('data-copy-success') || '';
-        const errorMessage = copyButton.getAttribute('data-copy-error') || '';
-        const handleSuccess = () => {
-          if (status) {
-            status.textContent = successMessage;
-            status.classList.remove('error');
-            status.hidden = false;
-          }
-        };
-        const handleError = () => {
-          if (status) {
-            status.textContent = errorMessage;
-            status.classList.add('error');
-            status.hidden = false;
-          }
-        };
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(text).then(handleSuccess).catch(handleError);
-        } else {
-          try {
-            const range = document.createRange();
-            range.selectNodeContents(target);
-            const selection = window.getSelection();
-            selection.removeAllRanges();
-            selection.addRange(range);
-            const successful = document.execCommand('copy');
-            selection.removeAllRanges();
-            successful ? handleSuccess() : handleError();
-          } catch (err) {
-            handleError();
-          }
-        }
-      });
-
-      const limitSlider = document.getElementById('log-viewer-limit');
-      const limitValue = document.getElementById('log-viewer-limit-value');
-      const limitDataScript = document.getElementById('log-viewer-limit-data');
-      const limitData = limitDataScript ? JSON.parse(limitDataScript.textContent) : [];
-
-      function getLimitOption(index) {
-        if (!Array.isArray(limitData) || !limitData.length) {
-          return null;
-        }
-        const clamped = Math.max(0, Math.min(index, limitData.length - 1));
-        return limitData[clamped];
-      }
-
-      function updateLimitLabel() {
-        if (!limitSlider || !limitValue) {
-          return;
-        }
-        const index = parseInt(limitSlider.value, 10) || 0;
-        const option = getLimitOption(index);
-        if (option && option.label) {
-          limitValue.textContent = option.label;
-        }
-      }
-
-      function updateLimitSelection() {
-        if (!limitSlider) {
-          return;
-        }
-        const index = parseInt(limitSlider.value, 10) || 0;
-        const option = getLimitOption(index);
-        if (!option) {
-          return;
-        }
-        const url = new URL(window.location.href);
-        if (limitSlider.dataset.log) {
-          url.searchParams.set('log', limitSlider.dataset.log);
-        }
-        url.searchParams.set('limit', option.value);
-        url.searchParams.delete('download');
-        window.location.assign(url.toString());
-      }
-
-      if (limitSlider) {
-        updateLimitLabel();
-        limitSlider.addEventListener('input', updateLimitLabel);
-        limitSlider.addEventListener('change', updateLimitSelection);
-      }
-    });
-  </script>
 {% endblock %}

@@ -1722,12 +1722,14 @@ def charger_log_page(request, cid, connector=None):
     log_download_url = f"{request.path}?{download_query}" if download_query else request.path
 
     limit_label = limit_options[limit_index]["label"]
+    log_content = "\n".join(log_entries)
     return render(
         request,
         "ocpp/charger_logs.html",
         {
             "charger": charger,
             "log": log_entries,
+            "log_content": log_content,
             "log_type": log_type,
             "connector_slug": connector_slug,
             "connector_links": connector_links,

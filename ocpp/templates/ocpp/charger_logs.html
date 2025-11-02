@@ -5,10 +5,65 @@
 
 {% block extra_head %}
 <style>
-  #log {
-    max-height: calc(1em * 40);
-    overflow-y: auto;
-    overflow-x: auto;
+  .log-viewer-card {
+    background: var(--bs-body-bg);
+    border: 1px solid var(--bs-border-color);
+    border-radius: var(--bs-border-radius-lg, 0.75rem);
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+  .log-viewer-heading {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 1rem;
+    margin-bottom: 1rem;
+  }
+  .log-viewer-heading h2 {
+    margin: 0;
+    font-size: 1.125rem;
+  }
+  .log-viewer-filename {
+    font-weight: 600;
+    color: var(--bs-secondary-color);
+  }
+  .log-viewer-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+  .log-viewer-slider {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    min-width: 220px;
+  }
+  .log-viewer-slider label {
+    font-weight: 600;
+  }
+  .log-viewer-limit {
+    min-width: 220px;
+  }
+  .log-viewer-content {
+    max-height: 60vh;
+    overflow: auto;
+    background: var(--bs-light-bg-subtle, #f8f9fa);
+    border: 1px solid var(--bs-border-color);
+    border-radius: var(--bs-border-radius);
+    padding: 1rem;
+    font-family: var(--bs-font-monospace, var(--font-monospace, monospace));
+    font-size: 0.875rem;
+    line-height: 1.4;
+    white-space: pre-wrap;
+  }
+  .log-viewer-status {
+    font-size: 0.875rem;
+    color: var(--bs-secondary-color);
+  }
+  .log-viewer-status.error {
+    color: var(--bs-danger-text, #dc3545);
   }
 </style>
 {% endblock %}
@@ -18,12 +73,6 @@
   <div class="d-flex flex-column gap-1">
     <div class="d-flex flex-wrap align-items-center gap-2">
       <h1 class="mb-0">{{ charger.display_name|default:charger.name|default:charger.charger_id }}</h1>
-    </div>
-    <div class="d-flex flex-wrap align-items-center gap-2 text-body-secondary small">
-      {% if log_filename %}
-      <span id="log-filename" class="fw-semibold">{{ log_filename }}</span>
-      {% endif %}
-      <a id="log-download-link" class="link-secondary fw-semibold" href="{{ log_download_url }}">{% trans "Download log" %}</a>
     </div>
   </div>
   {% if status_url %}
@@ -37,110 +86,78 @@
   {% endfor %}
 </nav>
 {% endif %}
-<div class="form-check mb-2">
+<div class="form-check mb-3">
   <input class="form-check-input" type="checkbox" id="auto-reload">
-  <label class="form-check-label" for="auto-reload">Auto reload</label>
+  <label class="form-check-label" for="auto-reload">{% trans "Auto reload" %}</label>
 </div>
-<div class="mb-3">
-  <label for="log-limit" class="form-label">{% trans "Lines to display" %}: <span id="log-limit-value">{{ log_limit_label }}</span></label>
-  <input
-    type="range"
-    class="form-range"
-    id="log-limit"
-    min="0"
-    max="{{ log_limit_options|length|add:'-1' }}"
-    step="1"
-    list="log-limit-options"
-    value="{{ log_limit_index }}"
-  >
-  <datalist id="log-limit-options">
-    {% for option in log_limit_options %}
-    <option value="{{ forloop.counter0 }}" label="{{ option.label }}"></option>
-    {% endfor %}
-  </datalist>
-</div>
-{{ log_limit_options|json_script:"log-limit-data" }}
-<pre id="log" class="p-3 border rounded bg-body text-body">
-{% for entry in log %}{{ entry }}
-{% endfor %}
-</pre>
+{% blocktranslate with name=charger.display_name|default:charger.name|default:charger.charger_id asvar viewer_heading %}Viewing log for {{ name }}{% endblocktranslate %}
+{% translate 'Log copied to your clipboard.' as copy_success %}
+{% translate 'Copy failed. Use your browser copy command instead.' as copy_error %}
+{% translate 'Copy to clipboard' as copy_label %}
+{% include "includes/log_viewer.html" with
+  viewer_prefix="charger-log"
+  viewer_wrapper_class="log-viewer-card"
+  viewer_heading=viewer_heading
+  log_filename=log_filename
+  log_download_url=log_download_url
+  log_limit_options=log_limit_options
+  log_limit_index=log_limit_index
+  log_limit_label=log_limit_label
+  log_content=log_content
+  copy_label=copy_label
+  copy_success=copy_success
+  copy_error=copy_error
+  copy_button_class="btn btn-secondary"
+  copy_status_class="log-viewer-status text-body-secondary small"
+  download_button_class="btn btn-secondary"
+  content_class="log-viewer-content"
+  limit_slider_class="log-viewer-limit"
+  viewer_actions_class="log-viewer-actions"
+  viewer_slider_class="log-viewer-slider"
+  limit_mode="fetch"
+%}
 <script>
-  const logEl = document.getElementById('log');
-  const limitDataScript = document.getElementById('log-limit-data');
-  const limitSlider = document.getElementById('log-limit');
-  const limitValueEl = document.getElementById('log-limit-value');
-  const downloadLink = document.getElementById('log-download-link');
-  const filenameEl = document.getElementById('log-filename');
-  const limitData = limitDataScript ? JSON.parse(limitDataScript.textContent) : [];
-
-  function getLimitItem(index) {
-    return limitData[Math.max(0, Math.min(index, limitData.length - 1))];
-  }
-
-  function updateLimitLabel() {
-    if (!limitSlider || !limitValueEl) {
-      return;
+  (function() {
+    const checkbox = document.getElementById('auto-reload');
+    const prefix = 'charger-log';
+    let reloadTimer;
+    function getViewer() {
+      return window.__logViewers && window.__logViewers[prefix];
     }
-    const index = parseInt(limitSlider.value, 10) || 0;
-    const item = getLimitItem(index);
-    if (item) {
-      limitValueEl.textContent = item.label;
+    function refresh() {
+      const viewer = getViewer();
+      if (viewer && typeof viewer.refresh === 'function') {
+        viewer.refresh();
+      }
     }
-  }
-
-  function scrollToBottom() {
-    logEl.scrollTop = logEl.scrollHeight;
-  }
-  function fetchLog(url = window.location.href) {
-    fetch(url, {headers: {'X-Requested-With': 'XMLHttpRequest'}})
-      .then(resp => resp.text())
-      .then(html => {
-        const doc = new DOMParser().parseFromString(html, 'text/html');
-        const newLog = doc.getElementById('log');
-        if (newLog) {
-          logEl.textContent = newLog.textContent;
-          scrollToBottom();
-        }
-        const newDownload = doc.getElementById('log-download-link');
-        if (newDownload && downloadLink) {
-          downloadLink.href = newDownload.href;
-        }
-        const newFilename = doc.getElementById('log-filename');
-        if (newFilename && filenameEl) {
-          filenameEl.textContent = newFilename.textContent;
-        }
-      });
-  }
-  function updateLimitSelection() {
-    if (!limitSlider) {
-      return;
+    function start() {
+      refresh();
+      reloadTimer = window.setInterval(refresh, 3000);
     }
-    const index = parseInt(limitSlider.value, 10) || 0;
-    const item = getLimitItem(index);
-    if (!item) {
-      return;
+    function stop() {
+      if (reloadTimer) {
+        window.clearInterval(reloadTimer);
+        reloadTimer = null;
+      }
     }
-    const url = new URL(window.location);
-    url.searchParams.set('limit', item.value);
-    window.history.replaceState({}, '', url);
-    fetchLog(url.toString());
-  }
-  if (limitSlider) {
-    limitSlider.addEventListener('input', updateLimitLabel);
-    limitSlider.addEventListener('change', () => {
-      updateLimitLabel();
-      updateLimitSelection();
-    });
-  }
-  updateLimitLabel();
-  scrollToBottom();
-  let reloadTimer;
-  document.getElementById('auto-reload').addEventListener('change', function() {
-    if (this.checked) {
-      reloadTimer = setInterval(fetchLog, 3000);
-    } else if (reloadTimer) {
-      clearInterval(reloadTimer);
+    function onToggle(event) {
+      if (event.target.checked) {
+        start();
+      } else {
+        stop();
+      }
     }
-  });
+    function initialize() {
+      if (!checkbox) {
+        return;
+      }
+      checkbox.addEventListener('change', onToggle);
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initialize, { once: true });
+    } else {
+      initialize();
+    }
+  })();
 </script>
 {% endblock %}
