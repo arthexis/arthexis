@@ -52,3 +52,11 @@ def test_network_setup_warns_when_wlan1_missing() -> None:
         "Warning: device wlan1 not found; wlan0 and eth0 clients will not have upstream internet access."
     )
     assert expected_warning in script_contents
+
+
+def test_network_setup_accounts_for_systemd_networkd() -> None:
+    script = REPO_ROOT / "network-setup.sh"
+    script_contents = script.read_text()
+    assert "Normalize systemd-networkd default route" in script_contents
+    assert "normalize_systemd_networkd_default_route" in script_contents
+    assert "NetworkManager (nmcli) not available; showing systemd-networkd status summary." in script_contents
