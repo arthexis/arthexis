@@ -14,6 +14,7 @@
       ],
       "version": "0.1.10",
       "revision": "6d31ae295e882be780ac55c05ba33b62a16341be",
+      "severity": "normal",
       "changelog": "",
       "pypi_url": "https://pypi.org/project/arthexis/0.1.10/",
       "github_url": "",

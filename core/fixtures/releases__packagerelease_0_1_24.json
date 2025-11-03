@@ -14,6 +14,7 @@
       ],
       "version": "0.1.24",
       "revision": "8e6ffa8ba3ea33ea946090716780576a9f4aff3c",
+      "severity": "normal",
       "changelog": "- 2deebc48 chore: update version and fixtures\n- 8e6ffa8b Ignore local work directory (#2571)\n- 92fe5a5d Validate client report titles before delivery (#2570)\n- 6511af1b Rename client report interfaces to consumer report (#2569)\n- 1e94a205 Add localization options to consumer reports (#2568)\n- 087ac86c Fix month period validation for admin client report (#2567)\n- 92dc8b60 Show period type in client report string (#2564)\n- e6d20137 Relax atproto pin for Python 3.14 (#2566)\n- 420de132 Enhance consumer report scheduling and delivery options (#2563)\n- 83206d6e Add env refresh dependency compatibility test (#2565)\n- e9427dc9 Restrict remote charger actions to owning nodes (#2560)\n- 1deef618 Fix desktop shortcuts to include configured port (#2562)\n- 6fb55f99 Adjust README reader sidebar order for mobile (#2561)\n- f64dc6a5 Add charge point network synchronization across nodes (#2557)\n- 2b26d220 Improve admin feedback dialog contrast (#2559)\n- 760d4965 Remove deprecated node proxy admin functionality (#2558)\n- f2cbbdee Improve auto-upgrade status feedback (#2556)\n- ae602cca chore: record publish metadata for v0.1.23",
       "pypi_url": "https://pypi.org/project/arthexis/0.1.24/",
       "github_url": "",
