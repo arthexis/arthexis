@@ -10,6 +10,14 @@ from django.conf import settings
 AUTO_UPGRADE_TASK_NAME = "auto-upgrade-check"
 AUTO_UPGRADE_TASK_PATH = "core.tasks.check_github_updates"
 
+DEFAULT_AUTO_UPGRADE_MODE = "version"
+AUTO_UPGRADE_INTERVAL_MINUTES = {
+    "latest": 5,
+    "stable": 60,
+    DEFAULT_AUTO_UPGRADE_MODE: 720,
+}
+AUTO_UPGRADE_FALLBACK_INTERVAL = AUTO_UPGRADE_INTERVAL_MINUTES["stable"]
+
 
 def ensure_auto_upgrade_periodic_task(
     sender=None, *, base_dir: Path | None = None, **kwargs
@@ -44,8 +52,10 @@ def ensure_auto_upgrade_periodic_task(
             return
         return
 
-    _mode = mode_file.read_text().strip() or "version"
-    interval_minutes = 5
+    _mode = mode_file.read_text().strip().lower() or DEFAULT_AUTO_UPGRADE_MODE
+    interval_minutes = AUTO_UPGRADE_INTERVAL_MINUTES.get(
+        _mode, AUTO_UPGRADE_FALLBACK_INTERVAL
+    )
 
     try:
         schedule, _ = IntervalSchedule.objects.get_or_create(
