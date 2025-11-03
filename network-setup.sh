@@ -947,11 +947,45 @@ normalize_systemd_networkd_default_route() {
         return
     fi
 
-    local gateway
-    gateway=$(ip -4 route show default dev "$iface" | awk 'NR==1 {print $3}')
-    if [[ -z "$gateway" ]]; then
+    local -a gateways=()
+    while IFS= read -r candidate; do
+        [[ -z "$candidate" ]] && continue
+        if [[ ! "$candidate" =~ ^([0-9]+\.){3}[0-9]+$ ]]; then
+            continue
+        fi
+        local already_present=false
+        for existing in "${gateways[@]}"; do
+            if [[ "$existing" == "$candidate" ]]; then
+                already_present=true
+                break
+            fi
+        done
+        if [[ $already_present == false ]]; then
+            gateways+=("$candidate")
+        fi
+    done < <(ip -4 route show default dev "$iface" 2>/dev/null | awk '($1=="default" && $2=="via") {print $3}')
+
+    if (( ${#gateways[@]} == 0 )); then
         echo "Unable to determine default gateway for $iface; skipping systemd-networkd normalization." >&2
         return
+    fi
+
+    local gateway=""
+    for candidate in "${gateways[@]}"; do
+        if [[ "$candidate" =~ ^([0-9]+\.){3}1$ ]]; then
+            gateway="$candidate"
+            break
+        fi
+    done
+
+    if [[ -z "$gateway" ]]; then
+        gateway="${gateways[0]}"
+    fi
+
+    if (( ${#gateways[@]} > 1 )); then
+        local joined_gateways
+        joined_gateways=$(join_by ", " "${gateways[@]}")
+        echo "Multiple default gateways detected for $iface ($joined_gateways); preferring $gateway." >&2
     fi
 
     local config_path="/etc/systemd/network/10-${iface}.network"

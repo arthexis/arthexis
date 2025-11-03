@@ -60,3 +60,10 @@ def test_network_setup_accounts_for_systemd_networkd() -> None:
     assert "Normalize systemd-networkd default route" in script_contents
     assert "normalize_systemd_networkd_default_route" in script_contents
     assert "NetworkManager (nmcli) not available; showing systemd-networkd status summary." in script_contents
+
+
+def test_network_setup_prefers_dot_one_gateway_when_present() -> None:
+    script = REPO_ROOT / "network-setup.sh"
+    script_contents = script.read_text()
+    assert "Multiple default gateways detected for $iface" in script_contents
+    assert '[[ "$candidate" =~ ^([0-9]+\\.){3}1$ ]]' in script_contents
