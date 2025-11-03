@@ -39,8 +39,20 @@ def ensure_auto_upgrade_periodic_task(
     except Exception:
         return
 
-    _mode = mode_file.read_text().strip() or "version"
-    interval_minutes = 5
+    try:
+        _mode = mode_file.read_text().strip().lower()
+    except OSError:
+        return
+
+    if not _mode:
+        _mode = "version"
+
+    interval_by_mode = {
+        "latest": 5,
+        "version": 60,
+        "stable": 60,
+    }
+    interval_minutes = interval_by_mode.get(_mode, interval_by_mode["version"])
 
     try:
         schedule, _ = IntervalSchedule.objects.get_or_create(
