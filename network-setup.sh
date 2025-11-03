@@ -178,8 +178,27 @@ describe_service_status() {
 
 print_network_status() {
     if ! command -v nmcli >/dev/null 2>&1; then
-        echo "nmcli (NetworkManager) is required to inspect network status." >&2
-        return 1
+        echo "NetworkManager (nmcli) not available; showing systemd-networkd status summary." >&2
+        if command -v ip >/dev/null 2>&1; then
+            local default_iface
+            default_iface=$(ip -4 route show default | awk 'NR==1 {for (i=1; i<=NF; i++) if ($i=="dev") {print $(i+1); exit}}')
+            if [[ -n "$default_iface" ]]; then
+                echo "  Default interface: $default_iface"
+                ip -4 route show default dev "$default_iface" | sed 's/^/  /'
+                ip -4 addr show dev "$default_iface" | sed 's/^/  /'
+            else
+                echo "  No IPv4 default route configured."
+            fi
+        else
+            echo "  ip utility not available; unable to summarize routing." >&2
+        fi
+        if systemctl is-active --quiet systemd-networkd 2>/dev/null; then
+            echo "  systemd-networkd: $(systemctl is-active systemd-networkd 2>/dev/null)"
+        fi
+        if systemctl is-active --quiet systemd-resolved 2>/dev/null; then
+            echo "  systemd-resolved: $(systemctl is-active systemd-resolved 2>/dev/null)"
+        fi
+        return 0
     fi
 
     local eth0_connection=""
@@ -458,61 +477,111 @@ validate_eth0_mode() {
 perform_dhcp_reset() {
     echo "Restoring upstream DHCP defaults..."
 
+    local nmcli_available=true
     if ! command -v nmcli >/dev/null 2>&1; then
-        echo "Error: --dhcp-reset requires NetworkManager (nmcli)." >&2
-        exit 1
+        nmcli_available=false
+        echo "NetworkManager (nmcli) is not installed; attempting a generic DHCP reset."
     fi
 
-    local removed=false
-    local conn
-    for conn in "$ETH0_CONNECTION_SHARED" "$ETH0_CONNECTION_CLIENT"; do
-        if nmcli -t -f NAME connection show | grep -Fxq "$conn"; then
-            nmcli connection delete "$conn" >/dev/null 2>&1 || true
-            echo "Removed NetworkManager connection '$conn'."
-            removed=true
-        fi
-    done
-
-    local -a ethernet_connections=()
-    mapfile -t ethernet_connections < <(nmcli -t -f NAME,TYPE connection show 2>/dev/null | awk -F: '$2=="802-3-ethernet" {print $1}')
-    for conn in "${ethernet_connections[@]}"; do
-        local method
-        method=$(nmcli -g ipv4.method connection show "$conn" 2>/dev/null || true)
-        if [[ "$method" == "shared" || "$method" == "manual" ]]; then
-            nmcli connection modify "$conn" \
-                ipv4.method auto \
-                ipv4.never-default no \
-                ipv4.may-fail yes \
-                ipv4.route-metric 100 \
-                ipv6.method auto \
-                ipv6.never-default no \
-                ipv6.may-fail yes \
-                ipv6.route-metric 100 >/dev/null 2>&1 || true
-            echo "Reset ethernet connection '$conn' to request DHCP."
-            removed=true
-        fi
-    done
-
-    nmcli connection reload >/dev/null 2>&1 || true
-
-    local -a ethernet_devices=()
-    mapfile -t ethernet_devices < <(nmcli -t -f DEVICE,TYPE device status 2>/dev/null | awk -F: '$2=="ethernet" {print $1}')
-    local dev
-    for dev in "${ethernet_devices[@]}"; do
-        if ip link show "$dev" >/dev/null 2>&1; then
-            ip addr flush dev "$dev" >/dev/null 2>&1 || true
-            nmcli device set "$dev" managed yes >/dev/null 2>&1 || true
-            if ! nmcli device reconnect "$dev" >/dev/null 2>&1; then
-                nmcli device connect "$dev" >/dev/null 2>&1 || true
+    if [[ $nmcli_available == true ]]; then
+        local removed=false
+        local conn
+        for conn in "$ETH0_CONNECTION_SHARED" "$ETH0_CONNECTION_CLIENT"; do
+            if nmcli -t -f NAME connection show | grep -Fxq "$conn"; then
+                nmcli connection delete "$conn" >/dev/null 2>&1 || true
+                echo "Removed NetworkManager connection '$conn'."
+                removed=true
             fi
-        fi
-    done
+        done
 
-    if [[ $removed == false && ${#ethernet_devices[@]} -eq 0 ]]; then
-        echo "No NetworkManager ethernet configuration detected to reset." >&2
+        local -a ethernet_connections=()
+        mapfile -t ethernet_connections < <(nmcli -t -f NAME,TYPE connection show 2>/dev/null | awk -F: '$2=="802-3-ethernet" {print $1}')
+        for conn in "${ethernet_connections[@]}"; do
+            local method
+            method=$(nmcli -g ipv4.method connection show "$conn" 2>/dev/null || true)
+            if [[ "$method" == "shared" || "$method" == "manual" ]]; then
+                nmcli connection modify "$conn" \
+                    ipv4.method auto \
+                    ipv4.never-default no \
+                    ipv4.may-fail yes \
+                    ipv4.route-metric 100 \
+                    ipv6.method auto \
+                    ipv6.never-default no \
+                    ipv6.may-fail yes \
+                    ipv6.route-metric 100 >/dev/null 2>&1 || true
+                echo "Reset ethernet connection '$conn' to request DHCP."
+                removed=true
+            fi
+        done
+
+        nmcli connection reload >/dev/null 2>&1 || true
+
+        local -a ethernet_devices=()
+        mapfile -t ethernet_devices < <(nmcli -t -f DEVICE,TYPE device status 2>/dev/null | awk -F: '$2=="ethernet" {print $1}')
+        local dev
+        for dev in "${ethernet_devices[@]}"; do
+            if ip link show "$dev" >/dev/null 2>&1; then
+                ip addr flush dev "$dev" >/dev/null 2>&1 || true
+                nmcli device set "$dev" managed yes >/dev/null 2>&1 || true
+                if ! nmcli device reconnect "$dev" >/dev/null 2>&1; then
+                    nmcli device connect "$dev" >/dev/null 2>&1 || true
+                fi
+            fi
+        done
+
+        if [[ $removed == false && ${#ethernet_devices[@]} -eq 0 ]]; then
+            echo "No NetworkManager ethernet configuration detected to reset." >&2
+        fi
+
+        echo "DHCP reset complete."
+        print_network_status || true
+        exit 0
     fi
 
-    echo "DHCP reset complete."
+    local normalized_iface=""
+    local normalized=false
+    if systemctl is-active --quiet systemd-networkd 2>/dev/null; then
+        if command -v ip >/dev/null 2>&1; then
+            local default_route_line
+            default_route_line=$(ip -4 route show default | head -n1)
+            if [[ -n "$default_route_line" ]]; then
+                local default_iface
+                default_iface=$(echo "$default_route_line" | awk '{for (i=1; i<=NF; i++) if ($i=="dev") {print $(i+1); exit}}')
+                if [[ -n "$default_iface" ]]; then
+                    local -a current_gateways=()
+                    mapfile -t current_gateways < <(ip -4 route show default dev "$default_iface" 2>/dev/null | awk '($1=="default" && $2=="via") {print $3}')
+                    if (( ${#current_gateways[@]} > 1 )); then
+                        echo "systemd-networkd reported multiple gateways on $default_iface; normalizing to prefer .1 if available."
+                        normalize_systemd_networkd_default_route "$default_iface"
+                        normalized=true
+                        normalized_iface="$default_iface"
+                    elif (( ${#current_gateways[@]} == 1 )); then
+                        local gateway_candidate="${current_gateways[0]}"
+                        if [[ ! "$gateway_candidate" =~ ^([0-9]+\.){3}1$ ]]; then
+                            echo "systemd-networkd default gateway on $default_iface is $gateway_candidate; normalizing to canonical router."
+                            normalize_systemd_networkd_default_route "$default_iface"
+                            normalized=true
+                            normalized_iface="$default_iface"
+                        fi
+                    else
+                        echo "Unable to locate default gateways for $default_iface during DHCP reset." >&2
+                    fi
+                else
+                    echo "Unable to determine systemd-networkd default interface during DHCP reset." >&2
+                fi
+            else
+                echo "No IPv4 default route found during DHCP reset." >&2
+            fi
+        else
+            echo "ip utility not available; unable to normalize systemd-networkd routes during DHCP reset." >&2
+        fi
+    fi
+
+    if [[ $normalized == true ]]; then
+        echo "DHCP reset complete (NetworkManager unavailable; systemd-networkd normalized for $normalized_iface)."
+    else
+        echo "DHCP reset complete (NetworkManager unavailable)."
+    fi
     print_network_status || true
     exit 0
 }
@@ -824,6 +893,99 @@ ensure_masquerade_rule() {
     fi
     iptables -t nat -C POSTROUTING -o "$egress" -j MASQUERADE 2>/dev/null || \
         iptables -t nat -A POSTROUTING -o "$egress" -j MASQUERADE
+}
+
+normalize_systemd_networkd_default_route() {
+    local iface="$1"
+    if [[ -z "$iface" ]]; then
+        return
+    fi
+
+    if ! command -v ip >/dev/null 2>&1; then
+        echo "ip utility not available; skipping systemd-networkd normalization." >&2
+        return
+    fi
+
+    local ipv4_address
+    ipv4_address=$(ip -4 addr show "$iface" | awk '/ inet / {print $2; exit}')
+    if [[ -z "$ipv4_address" ]]; then
+        echo "Unable to determine IPv4 address for $iface; skipping systemd-networkd normalization." >&2
+        return
+    fi
+
+    local -a gateways=()
+    while IFS= read -r candidate; do
+        [[ -z "$candidate" ]] && continue
+        if [[ ! "$candidate" =~ ^([0-9]+\.){3}[0-9]+$ ]]; then
+            continue
+        fi
+        local already_present=false
+        for existing in "${gateways[@]}"; do
+            if [[ "$existing" == "$candidate" ]]; then
+                already_present=true
+                break
+            fi
+        done
+        if [[ $already_present == false ]]; then
+            gateways+=("$candidate")
+        fi
+    done < <(ip -4 route show default dev "$iface" 2>/dev/null | awk '($1=="default" && $2=="via") {print $3}')
+
+    if (( ${#gateways[@]} == 0 )); then
+        echo "Unable to determine default gateway for $iface; skipping systemd-networkd normalization." >&2
+        return
+    fi
+
+    local gateway=""
+    for candidate in "${gateways[@]}"; do
+        if [[ "$candidate" =~ ^([0-9]+\.){3}1$ ]]; then
+            gateway="$candidate"
+            break
+        fi
+    done
+
+    if [[ -z "$gateway" ]]; then
+        gateway="${gateways[0]}"
+    fi
+
+    if (( ${#gateways[@]} > 1 )); then
+        local joined_gateways
+        joined_gateways=$(join_by ", " "${gateways[@]}")
+        echo "Multiple default gateways detected for $iface ($joined_gateways); preferring $gateway." >&2
+    fi
+
+    local config_path="/etc/systemd/network/10-${iface}.network"
+    local backup_path="${config_path}.bak.$(date +%s)"
+    if [ -f "$config_path" ]; then
+        cp "$config_path" "$backup_path"
+        echo "Existing $config_path backed up to $backup_path." >&2
+    fi
+
+    mapfile -t resolv_dns < <(awk '/^nameserver / {print $2}' /etc/resolv.conf 2>/dev/null | head -n 3)
+    if [[ ${#resolv_dns[@]} -eq 0 ]]; then
+        resolv_dns=(8.8.8.8 1.1.1.1)
+    fi
+
+    {
+        echo "[Match]"
+        echo "Name=$iface"
+        echo
+        echo "[Network]"
+        echo "Address=$ipv4_address"
+        echo "Gateway=$gateway"
+        echo "DHCP=no"
+        for dns in "${resolv_dns[@]}"; do
+            echo "DNS=$dns"
+        done
+    } > "$config_path"
+
+    chmod 644 "$config_path"
+
+    rm -f /run/systemd/netif/leases/*
+    rm -f /var/lib/systemd/network/*
+    systemctl restart systemd-networkd >/dev/null 2>&1 || echo "Warning: failed to restart systemd-networkd" >&2
+    systemctl restart systemd-resolved >/dev/null 2>&1 || echo "Warning: failed to restart systemd-resolved" >&2
+    echo "Normalized systemd-networkd configuration for $iface (static $ipv4_address via $gateway)."
 }
 
 # Prompt helper for interactive mode
@@ -1209,16 +1371,51 @@ if [[ $SKIP_AP == false ]]; then
     fi
 fi
 
+# Detect environments that rely on systemd-networkd instead of NetworkManager.
+SYSTEMD_NETWORKD_ACTIVE=false
+NETWORKD_DEFAULT_IFACE=""
+NETWORKD_DUPLICATE_ROUTES=false
+if systemctl is-active --quiet systemd-networkd 2>/dev/null; then
+    SYSTEMD_NETWORKD_ACTIVE=true
+    if command -v ip >/dev/null 2>&1; then
+        DEFAULT_ROUTE_LINE=$(ip -4 route show default | head -n1)
+        if [[ -n "$DEFAULT_ROUTE_LINE" ]]; then
+            NETWORKD_DEFAULT_IFACE=$(echo "$DEFAULT_ROUTE_LINE" | awk '{for (i=1; i<=NF; i++) if ($i=="dev") {print $(i+1); exit}}')
+            if [[ -n "$NETWORKD_DEFAULT_IFACE" ]]; then
+                DEFAULT_ROUTE_COUNT=$(ip -4 route show default dev "$NETWORKD_DEFAULT_IFACE" | wc -l | tr -d '[:space:]')
+                if [[ ${DEFAULT_ROUTE_COUNT:-0} -gt 1 ]]; then
+                    NETWORKD_DUPLICATE_ROUTES=true
+                fi
+            fi
+        fi
+    fi
+fi
+
 # Collect user decisions for each step in advance
 AP_ACTIVATED=false
+NMCLI_AVAILABLE=false
+if command -v nmcli >/dev/null 2>&1; then
+    NMCLI_AVAILABLE=true
+fi
 
 ask_step RUN_SERVICES "Ensure required services"
 if [[ $SKIP_AP == true ]]; then
     RUN_AP=false
-else
+elif [[ $NMCLI_AVAILABLE == true ]]; then
     ask_step RUN_AP "Configure wlan0 access point"
+else
+    RUN_AP=false
 fi
-ask_step RUN_WLAN1_REFRESH "Install wlan1 device refresh service"
+if [[ $NMCLI_AVAILABLE == true ]]; then
+    ask_step RUN_WLAN1_REFRESH "Install wlan1 device refresh service"
+else
+    RUN_WLAN1_REFRESH=false
+fi
+
+RUN_SYSTEMD_NETWORKD=false
+if [[ $SYSTEMD_NETWORKD_ACTIVE == true && $NETWORKD_DUPLICATE_ROUTES == true && $NMCLI_AVAILABLE == false ]]; then
+    ask_step RUN_SYSTEMD_NETWORKD "Normalize systemd-networkd default route for $NETWORKD_DEFAULT_IFACE"
+fi
 
 ask_step RUN_PACKAGES "Ensure required packages and SSH service"
 ask_step RUN_NGINX_SITES "Apply managed NGINX site configuration"
@@ -1227,14 +1424,26 @@ if [[ $SKIP_FIREWALL == false ]]; then
 else
     RUN_FIREWALL=false
 fi
-ask_step RUN_REINSTALL_WLAN1 "Reinstall wlan1 connections"
-ask_step RUN_CONFIGURE_NET "Configure network connections"
-ask_step RUN_ROUTING "Finalize routing and connectivity checks"
+if [[ $NMCLI_AVAILABLE == true ]]; then
+    ask_step RUN_REINSTALL_WLAN1 "Reinstall wlan1 connections"
+    ask_step RUN_CONFIGURE_NET "Configure network connections"
+    ask_step RUN_ROUTING "Finalize routing and connectivity checks"
+else
+    RUN_REINSTALL_WLAN1=false
+    RUN_CONFIGURE_NET=false
+    RUN_ROUTING=false
+fi
 
 # Execute steps based on user choices
 if [[ $RUN_SERVICES == true ]]; then
     ensure_service dbus
-    ensure_service NetworkManager
+    if [[ $NMCLI_AVAILABLE == true ]]; then
+        ensure_service NetworkManager
+    fi
+fi
+
+if [[ $RUN_SYSTEMD_NETWORKD == true ]]; then
+    normalize_systemd_networkd_default_route "$NETWORKD_DEFAULT_IFACE"
 fi
 
 if [[ $RUN_AP == true ]]; then
@@ -1308,6 +1517,13 @@ if [[ $RUN_WLAN1_REFRESH == true ]]; then
         WLAN1_REFRESH_SERVICE="wlan1-refresh"
         WLAN1_REFRESH_SERVICE_FILE="/etc/systemd/system/${WLAN1_REFRESH_SERVICE}.service"
         if [ -f "$WLAN1_REFRESH_SCRIPT" ]; then
+            if [ -f /etc/systemd/system/wlan1-device-refresh.service ]; then
+                systemctl stop wlan1-device-refresh || true
+                systemctl disable wlan1-device-refresh || true
+                rm -f /etc/systemd/system/wlan1-device-refresh.service
+                systemctl daemon-reload
+                echo "Removed legacy wlan1-device-refresh service definition."
+            fi
             cat > "$WLAN1_REFRESH_SERVICE_FILE" <<EOF
 [Unit]
 Description=Refresh wlan1 MAC addresses in NetworkManager
@@ -1621,17 +1837,19 @@ if [[ $RUN_ROUTING == true ]]; then
 fi
 
 # Restore any previously active connection that was removed
-if [[ -n "$PROTECTED_CONN_BACKUP" ]]; then
-    if ! nmcli -t -f NAME connection show | grep -Fxq "$PROTECTED_CONN"; then
-        nmcli connection clone "$PROTECTED_CONN_BACKUP" "$PROTECTED_CONN" >/dev/null 2>&1 || true
+if [[ $NMCLI_AVAILABLE == true ]]; then
+    if [[ -n "$PROTECTED_CONN_BACKUP" ]]; then
+        if ! nmcli -t -f NAME connection show | grep -Fxq "$PROTECTED_CONN"; then
+            nmcli connection clone "$PROTECTED_CONN_BACKUP" "$PROTECTED_CONN" >/dev/null 2>&1 || true
+        fi
+        nmcli connection delete "$PROTECTED_CONN_BACKUP" >/dev/null 2>&1 || true
     fi
-    nmcli connection delete "$PROTECTED_CONN_BACKUP" >/dev/null 2>&1 || true
-fi
 
-# Ensure NetworkManager leaves Wi-Fi interfaces in a state where new
-# connections can be discovered after the script completes.
-nmcli radio wifi on >/dev/null 2>&1 || true
-nmcli device set wlan1 managed yes >/dev/null 2>&1 || true
-nmcli device connect wlan1 >/dev/null 2>&1 || true
+    # Ensure NetworkManager leaves Wi-Fi interfaces in a state where new
+    # connections can be discovered after the script completes.
+    nmcli radio wifi on >/dev/null 2>&1 || true
+    nmcli device set wlan1 managed yes >/dev/null 2>&1 || true
+    nmcli device connect wlan1 >/dev/null 2>&1 || true
+fi
 
 print_network_status

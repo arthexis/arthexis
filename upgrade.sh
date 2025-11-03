@@ -565,34 +565,6 @@ BEATSERVICEEOF
   fi
 fi
 
-# Ensure wlan1 refresh service uses new script location
-WLAN1_REFRESH_SCRIPT="$BASE_DIR/scripts/wlan1-refresh.sh"
-if [ -f /etc/systemd/system/wlan1-device-refresh.service ]; then
-  echo "Migrating wlan1 refresh service to new name/location..."
-  sudo systemctl stop wlan1-device-refresh || true
-  sudo systemctl disable wlan1-device-refresh || true
-  sudo rm -f /etc/systemd/system/wlan1-device-refresh.service
-  sudo systemctl daemon-reload
-fi
-if [ -f "$WLAN1_REFRESH_SCRIPT" ]; then
-  WLAN1_REFRESH_SERVICE_FILE="/etc/systemd/system/wlan1-refresh.service"
-  cat <<EOF | sudo tee "$WLAN1_REFRESH_SERVICE_FILE" >/dev/null
-[Unit]
-Description=Refresh wlan1 MAC addresses in NetworkManager
-After=NetworkManager.service
-
-[Service]
-Type=oneshot
-ExecStart=$WLAN1_REFRESH_SCRIPT
-
-[Install]
-WantedBy=multi-user.target
-EOF
-  sudo systemctl daemon-reload
-  sudo systemctl enable wlan1-refresh >/dev/null 2>&1 || true
-  "$WLAN1_REFRESH_SCRIPT" || true
-fi
-
 if [[ $NO_RESTART -eq 0 ]]; then
   echo "Restarting services..."
   if [ -f "$LOCK_DIR/service.lck" ]; then
