@@ -542,6 +542,15 @@ perform_dhcp_reset() {
     fi
 
     local removed=false
+    if [ -f /etc/systemd/system/wlan1-device-refresh.service ]; then
+        systemctl stop wlan1-device-refresh >/dev/null 2>&1 || true
+        systemctl disable wlan1-device-refresh >/dev/null 2>&1 || true
+        rm -f /etc/systemd/system/wlan1-device-refresh.service
+        systemctl daemon-reload >/dev/null 2>&1 || true
+        echo "Removed legacy wlan1-device-refresh service definition."
+        removed=true
+    fi
+
     local conn
     for conn in "$ETH0_CONNECTION_SHARED" "$ETH0_CONNECTION_CLIENT"; do
         if nmcli -t -f NAME connection show | grep -Fxq "$conn"; then
@@ -1382,6 +1391,13 @@ if [[ $RUN_WLAN1_REFRESH == true ]]; then
         WLAN1_REFRESH_SERVICE="wlan1-refresh"
         WLAN1_REFRESH_SERVICE_FILE="/etc/systemd/system/${WLAN1_REFRESH_SERVICE}.service"
         if [ -f "$WLAN1_REFRESH_SCRIPT" ]; then
+            if [ -f /etc/systemd/system/wlan1-device-refresh.service ]; then
+                systemctl stop wlan1-device-refresh || true
+                systemctl disable wlan1-device-refresh || true
+                rm -f /etc/systemd/system/wlan1-device-refresh.service
+                systemctl daemon-reload
+                echo "Removed legacy wlan1-device-refresh service definition."
+            fi
             cat > "$WLAN1_REFRESH_SERVICE_FILE" <<EOF
 [Unit]
 Description=Refresh wlan1 MAC addresses in NetworkManager
