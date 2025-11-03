@@ -137,7 +137,7 @@ The platform ships with three configuration prefixes:
 
 Additional prefixes are defined through **Sigil Roots**, which map a short code (for example `ROLE`, `ODOO`, or `USER`) to a Django model. You can review them from **Admin &rarr; Sigil Builder** (`/admin/sigil-builder/`), where a test console is also available.
 
-Unknown prefixes remain in place (e.g. `[UNKNOWN.VALUE]`) and are logged. When the optional `gway` CLI is installed, the resolver will attempt to delegate unresolved tokens to it before falling back to the original text.
+Unknown prefixes remain in place (e.g. `[UNKNOWN.VALUE]`) and are logged.
 
 ## Support
 

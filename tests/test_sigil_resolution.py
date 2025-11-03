@@ -1,7 +1,5 @@
 import os
 from unittest import mock
-
-import pytest
 from django.contrib.auth import get_user_model
 from django.template import Context, Template
 from django.test import TestCase, override_settings
@@ -419,73 +417,6 @@ class SigilResolutionTests(TestCase):
                 "sys-lower",
             )
 
-    @pytest.mark.feature("gway-runner")
-    def test_gway_fallback_invoked_for_unknown_sigil(self):
-        sigil_resolver._find_gway_command.cache_clear()
-        self.addCleanup(sigil_resolver._find_gway_command.cache_clear)
-        with (
-            mock.patch(
-                "core.sigil_resolver._find_gway_command",
-                return_value="/usr/local/bin/gway",
-            ) as mock_find,
-            mock.patch("core.sigil_resolver.subprocess.run") as mock_run,
-        ):
-            mock_run.return_value = mock.Mock(
-                returncode=0,
-                stdout="gway-output\n",
-                stderr="",
-            )
-            result = resolve_sigils_in_text("[unknown.sigil]")
-        self.assertEqual(result, "gway-output")
-        mock_find.assert_called_once()
-        mock_run.assert_called_once()
-        args, kwargs = mock_run.call_args
-        self.assertEqual(args[0], ["/usr/local/bin/gway", "-e", "[unknown.sigil]"])
-        self.assertFalse(kwargs.get("check"))
-        self.assertEqual(kwargs.get("stdout"), sigil_resolver.subprocess.PIPE)
-        self.assertEqual(kwargs.get("stderr"), sigil_resolver.subprocess.PIPE)
-        self.assertTrue(kwargs.get("text"))
-        self.assertEqual(kwargs.get("timeout"), 1)
-
-    @pytest.mark.feature("gway-runner")
-    def test_gway_timeout_respects_wizard_mode(self):
-        sigil_resolver._find_gway_command.cache_clear()
-        self.addCleanup(sigil_resolver._find_gway_command.cache_clear)
-        with (
-            self.settings(WIZARD_MODE=True),
-            mock.patch(
-                "core.sigil_resolver._find_gway_command",
-                return_value="/usr/local/bin/gway",
-            ),
-            mock.patch("core.sigil_resolver.subprocess.run") as mock_run,
-        ):
-            mock_run.return_value = mock.Mock(
-                returncode=0,
-                stdout="gway-output\n",
-                stderr="",
-            )
-            result = resolve_sigils_in_text("[unknown.sigil]")
-        self.assertEqual(result, "gway-output")
-        self.assertEqual(mock_run.call_count, 1)
-        _, kwargs = mock_run.call_args
-        self.assertEqual(kwargs.get("timeout"), 60)
-
-    @pytest.mark.feature("gway-runner")
-    def test_gway_timeout_expired_returns_none(self):
-        sigil_resolver._find_gway_command.cache_clear()
-        self.addCleanup(sigil_resolver._find_gway_command.cache_clear)
-        with (
-            mock.patch(
-                "core.sigil_resolver._find_gway_command",
-                return_value="/usr/local/bin/gway",
-            ),
-            mock.patch(
-                "core.sigil_resolver.subprocess.run",
-                side_effect=sigil_resolver.subprocess.TimeoutExpired(
-                    cmd="gway", timeout=1
-                ),
-            ) as mock_run,
-        ):
-            result = resolve_sigils_in_text("[unknown.sigil]")
+    def test_unknown_sigil_without_gway_returns_literal(self):
+        result = resolve_sigils_in_text("[unknown.sigil]")
         self.assertEqual(result, "[unknown.sigil]")
-        self.assertEqual(mock_run.call_count, 1)

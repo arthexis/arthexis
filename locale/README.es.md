@@ -135,7 +135,7 @@ La plataforma incluye tres prefijos de configuración:
 
 Los prefijos adicionales se definen mediante **Sigil Roots**, que vinculan un código corto (por ejemplo `ROLE`, `ODOO` o `USER`) con un modelo de Django. Puedes revisarlos desde **Admin &rarr; Sigil Builder** (`/admin/sigil-builder/`), que también ofrece una consola de pruebas.
 
-Los prefijos desconocidos permanecen sin cambios (por ejemplo `[UNKNOWN.VALUE]`) y se registran en los logs. Cuando la CLI opcional `gway` está instalada, el resolvedor intenta delegar los tokens sin resolver antes de devolver el texto original.
+Los prefijos desconocidos permanecen sin cambios (por ejemplo `[UNKNOWN.VALUE]`) y se registran en los logs.
 
 ## Soporte
 

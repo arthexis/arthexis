@@ -4503,17 +4503,6 @@ class NodeFeatureTests(TestCase):
         ):
             self.assertTrue(feature.is_enabled)
 
-    @patch("nodes.models.Node._has_gway_runner", return_value=True)
-    def test_gway_runner_enabled_when_command_available(self, mock_has_runner):
-        feature = NodeFeature.objects.create(
-            slug="gway-runner", display="gway Runner"
-        )
-        with patch(
-            "nodes.models.Node.get_current_mac", return_value="00:11:22:33:44:55"
-        ):
-            self.assertTrue(feature.is_enabled)
-        mock_has_runner.assert_called_once_with()
-
     @patch("nodes.models.Node._has_rpi_camera", return_value=True)
     def test_rpi_camera_detection(self, mock_camera):
         feature = NodeFeature.objects.create(
@@ -4551,49 +4540,6 @@ class NodeFeatureTests(TestCase):
                 node=self.node, feature=feature
             ).exists()
         )
-
-    @patch("nodes.models.Node._find_gway_runner_command", return_value="/usr/bin/gway")
-    def test_gway_runner_detection(self, mock_find_command):
-        feature = NodeFeature.objects.create(
-            slug="gway-runner", display="gway Runner"
-        )
-        feature.roles.add(self.role)
-        with patch(
-            "nodes.models.Node.get_current_mac", return_value="00:11:22:33:44:55"
-        ):
-            self.node.refresh_features()
-        self.assertTrue(
-            NodeFeatureAssignment.objects.filter(
-                node=self.node, feature=feature
-            ).exists()
-        )
-        mock_find_command.assert_called_with()
-
-    @patch(
-        "nodes.models.Node._find_gway_runner_command",
-        side_effect=["/usr/bin/gway", None],
-    )
-    def test_gway_runner_removed_when_command_missing(self, mock_find_command):
-        feature = NodeFeature.objects.create(
-            slug="gway-runner", display="gway Runner"
-        )
-        feature.roles.add(self.role)
-        with patch(
-            "nodes.models.Node.get_current_mac", return_value="00:11:22:33:44:55"
-        ):
-            self.node.refresh_features()
-            self.assertTrue(
-                NodeFeatureAssignment.objects.filter(
-                    node=self.node, feature=feature
-                ).exists()
-            )
-            self.node.refresh_features()
-        self.assertFalse(
-            NodeFeatureAssignment.objects.filter(
-                node=self.node, feature=feature
-            ).exists()
-        )
-        self.assertEqual(mock_find_command.call_count, 2)
 
     @pytest.mark.feature("ap-router")
     @patch("nodes.models.Node._hosts_gelectriic_ap", return_value=True)

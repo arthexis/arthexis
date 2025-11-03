@@ -136,7 +136,7 @@ Die Plattform bringt drei Konfigurationspräfixe mit:
 
 Weitere Präfixe werden über **Sigil Roots** definiert, die einen Kurznamen (z. B. `ROLE`, `ODOO` oder `USER`) einem Django-Modell zuordnen. In **Admin &rarr; Sigil Builder** (`/admin/sigil-builder/`) kannst du sie einsehen und die Auflösung testen.
 
-Unbekannte Präfixe bleiben unverändert (z. B. `[UNKNOWN.VALUE]`) und werden protokolliert. Ist das optionale `gway`-CLI installiert, versucht der Resolver, nicht aufgelöste Tokens dorthin weiterzuleiten, bevor der Originaltext zurückgegeben wird.
+Unbekannte Präfixe bleiben unverändert (z. B. `[UNKNOWN.VALUE]`) und werden protokolliert.
 
 ## Support
 

@@ -2,17 +2,10 @@ import json
 from unittest import TestCase
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
 from arthexis import suite as suite_module
-
-
-pytestmark = [pytest.mark.feature("gway-runner")]
-
-
 class DummyResponse:
     def __init__(self, payload, status_code=200):
         self._payload = payload

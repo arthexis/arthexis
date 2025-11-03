@@ -31,7 +31,6 @@ def release_sandbox(tmp_path, monkeypatch):
     return tmp_path
 
 
-@pytest.mark.feature("gway-runner")
 def test_gateway_package_module_exposes_release_api(tmp_path, monkeypatch):
     module_path = (
         Path(__file__).resolve().parents[1]
