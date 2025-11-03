@@ -39,6 +39,7 @@ docutils==0.22.2
 gpiozero==2.0.1; sys_platform == "linux"
 graphene-django==3.2.2
 graphviz==0.21
+geckodriver-autoinstaller==0.1.0
 h11==0.16.0
 httpcore==1.0.9
 httpx==0.28.1
