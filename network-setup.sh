@@ -22,7 +22,7 @@ DEFAULT_ETH0_SUBNET_BASE="${DEFAULT_ETH0_SUBNET_PREFIX}.${DEFAULT_ETH0_SUBNET_SU
 
 usage() {
     cat <<USAGE
-Usage: $0 [--password] [--ap NAME] [--no-firewall] [--unsafe] [--interactive|-i] [--vnc] [--no-vnc] [--subnet N[/P]] [--eth0-mode MODE] [--ap-set-password] [--status] [--dhcp-server] [--dhcp-client]
+Usage: $0 [--password] [--ap NAME] [--no-firewall] [--unsafe] [--interactive|-i] [--vnc] [--no-vnc] [--subnet N[/P]] [--eth0-mode MODE] [--ap-set-password] [--status] [--dhcp-server] [--dhcp-client] [--dhcp-reset]
   --password      Prompt for a new WiFi password even if one is already configured.
   --ap NAME       Set the wlan0 access point name (SSID) to NAME.
   --no-firewall   Skip firewall port validation.
@@ -36,6 +36,7 @@ Usage: $0 [--password] [--ap NAME] [--no-firewall] [--unsafe] [--interactive|-i]
   --eth0-mode MODE  Set eth0 mode to shared, client, or auto (default: auto).
   --dhcp-server   Force eth0 into shared mode (DHCP server).
   --dhcp-client   Force eth0 into client mode (DHCP client).
+  --dhcp-reset    Remove Arthexis-managed ethernet profiles and restore DHCP defaults.
   --status        Print the current network configuration summary and exit.
   --ap-set-password  Update the configured access point password without running other setup steps.
 USAGE
@@ -68,6 +69,7 @@ DHCP_OVERRIDE=""
 ETH0_MODE_SPECIFIED=false
 WLAN1_DETECTED=true
 ETH0_DHCP_SERVER=""
+DHCP_RESET=false
 
 join_by() {
     local sep="$1"
@@ -452,7 +454,74 @@ validate_eth0_mode() {
             ;;
     esac
 }
+
+perform_dhcp_reset() {
+    echo "Restoring upstream DHCP defaults..."
+
+    if ! command -v nmcli >/dev/null 2>&1; then
+        echo "Error: --dhcp-reset requires NetworkManager (nmcli)." >&2
+        exit 1
+    fi
+
+    local removed=false
+    local conn
+    for conn in "$ETH0_CONNECTION_SHARED" "$ETH0_CONNECTION_CLIENT"; do
+        if nmcli -t -f NAME connection show | grep -Fxq "$conn"; then
+            nmcli connection delete "$conn" >/dev/null 2>&1 || true
+            echo "Removed NetworkManager connection '$conn'."
+            removed=true
+        fi
+    done
+
+    local -a ethernet_connections=()
+    mapfile -t ethernet_connections < <(nmcli -t -f NAME,TYPE connection show 2>/dev/null | awk -F: '$2=="802-3-ethernet" {print $1}')
+    for conn in "${ethernet_connections[@]}"; do
+        local method
+        method=$(nmcli -g ipv4.method connection show "$conn" 2>/dev/null || true)
+        if [[ "$method" == "shared" || "$method" == "manual" ]]; then
+            nmcli connection modify "$conn" \
+                ipv4.method auto \
+                ipv4.never-default no \
+                ipv4.may-fail yes \
+                ipv4.route-metric 100 \
+                ipv6.method auto \
+                ipv6.never-default no \
+                ipv6.may-fail yes \
+                ipv6.route-metric 100 >/dev/null 2>&1 || true
+            echo "Reset ethernet connection '$conn' to request DHCP."
+            removed=true
+        fi
+    done
+
+    nmcli connection reload >/dev/null 2>&1 || true
+
+    local -a ethernet_devices=()
+    mapfile -t ethernet_devices < <(nmcli -t -f DEVICE,TYPE device status 2>/dev/null | awk -F: '$2=="ethernet" {print $1}')
+    local dev
+    for dev in "${ethernet_devices[@]}"; do
+        if ip link show "$dev" >/dev/null 2>&1; then
+            ip addr flush dev "$dev" >/dev/null 2>&1 || true
+            nmcli device set "$dev" managed yes >/dev/null 2>&1 || true
+            if ! nmcli device reconnect "$dev" >/dev/null 2>&1; then
+                nmcli device connect "$dev" >/dev/null 2>&1 || true
+            fi
+        fi
+    done
+
+    if [[ $removed == false && ${#ethernet_devices[@]} -eq 0 ]]; then
+        echo "No NetworkManager ethernet configuration detected to reset." >&2
+    fi
+
+    echo "DHCP reset complete."
+    print_network_status || true
+    exit 0
+}
+
 while [[ $# -gt 0 ]]; do
+    if [[ $DHCP_RESET == true ]]; then
+        echo "Error: --dhcp-reset cannot be combined with other options." >&2
+        exit 1
+    fi
     case "$1" in
         --password)
             if [[ $AP_SET_PASSWORD == true ]]; then
@@ -637,6 +706,17 @@ while [[ $# -gt 0 ]]; do
             ETH0_MODE_SPECIFIED=true
             OTHER_OPTIONS_USED=true
             ;;
+        --dhcp-reset)
+            if [[ $AP_SET_PASSWORD == true ]]; then
+                echo "Error: --ap-set-password cannot be combined with other options." >&2
+                exit 1
+            fi
+            if [[ $STATUS_ONLY == true || $OTHER_OPTIONS_USED == true ]]; then
+                echo "Error: --dhcp-reset cannot be combined with other options." >&2
+                exit 1
+            fi
+            DHCP_RESET=true
+            ;;
         --status)
             if [[ $AP_SET_PASSWORD == true ]]; then
                 echo "Error: --ap-set-password cannot be combined with other options." >&2
@@ -687,6 +767,14 @@ if [[ $STATUS_ONLY == true ]]; then
     fi
     print_network_status
     exit 0
+fi
+
+if [[ $DHCP_RESET == true ]]; then
+    if [[ $EUID -ne 0 ]]; then
+        echo "This script must be run as root" >&2
+        exit 1
+    fi
+    perform_dhcp_reset
 fi
 
 if [[ $EUID -ne 0 ]]; then
