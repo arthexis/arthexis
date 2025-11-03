@@ -46,3 +46,15 @@ def test_db_setup_clean_flag(tmp_path: Path) -> None:
 def test_upgrade_script_preserves_user_data_dir() -> None:
     script_text = (REPO_ROOT / "upgrade.sh").read_text()
     assert "git clean -fd -e data/" in script_text
+
+
+@pytest.mark.parametrize(
+    "script_name",
+    ["install.sh", "upgrade.sh", "start.sh"],
+)
+def test_primary_scripts_do_not_manage_network_interfaces(script_name: str) -> None:
+    script_text = (REPO_ROOT / script_name).read_text()
+    forbidden_tokens = ["nmcli", "wlan1-refresh", "wlan1-device-refresh", "NetworkManager"]
+    assert all(token not in script_text for token in forbidden_tokens), (
+        f"{script_name} should not contain network configuration commands"
+    )
