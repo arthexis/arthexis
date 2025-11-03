@@ -200,8 +200,28 @@ describe_service_status() {
 }
 
 print_network_status() {
-    if [[ $NMCLI_AVAILABLE == false ]]; then
-        echo "NetworkManager (nmcli) is not installed; reporting limited status information." >&2
+    if ! command -v nmcli >/dev/null 2>&1; then
+        echo "NetworkManager (nmcli) not available; showing systemd-networkd status summary." >&2
+        if command -v ip >/dev/null 2>&1; then
+            local default_iface
+            default_iface=$(ip -4 route show default | awk 'NR==1 {for (i=1; i<=NF; i++) if ($i=="dev") {print $(i+1); exit}}')
+            if [[ -n "$default_iface" ]]; then
+                echo "  Default interface: $default_iface"
+                ip -4 route show default dev "$default_iface" | sed 's/^/  /'
+                ip -4 addr show dev "$default_iface" | sed 's/^/  /'
+            else
+                echo "  No IPv4 default route configured."
+            fi
+        else
+            echo "  ip utility not available; unable to summarize routing." >&2
+        fi
+        if systemctl is-active --quiet systemd-networkd 2>/dev/null; then
+            echo "  systemd-networkd: $(systemctl is-active systemd-networkd 2>/dev/null)"
+        fi
+        if systemctl is-active --quiet systemd-resolved 2>/dev/null; then
+            echo "  systemd-resolved: $(systemctl is-active systemd-resolved 2>/dev/null)"
+        fi
+        return 0
     fi
 
     local eth0_connection=""
@@ -909,6 +929,65 @@ ensure_masquerade_rule() {
         iptables -t nat -A POSTROUTING -o "$egress" -j MASQUERADE
 }
 
+normalize_systemd_networkd_default_route() {
+    local iface="$1"
+    if [[ -z "$iface" ]]; then
+        return
+    fi
+
+    if ! command -v ip >/dev/null 2>&1; then
+        echo "ip utility not available; skipping systemd-networkd normalization." >&2
+        return
+    fi
+
+    local ipv4_address
+    ipv4_address=$(ip -4 addr show "$iface" | awk '/ inet / {print $2; exit}')
+    if [[ -z "$ipv4_address" ]]; then
+        echo "Unable to determine IPv4 address for $iface; skipping systemd-networkd normalization." >&2
+        return
+    fi
+
+    local gateway
+    gateway=$(ip -4 route show default dev "$iface" | awk 'NR==1 {print $3}')
+    if [[ -z "$gateway" ]]; then
+        echo "Unable to determine default gateway for $iface; skipping systemd-networkd normalization." >&2
+        return
+    fi
+
+    local config_path="/etc/systemd/network/10-${iface}.network"
+    local backup_path="${config_path}.bak.$(date +%s)"
+    if [ -f "$config_path" ]; then
+        cp "$config_path" "$backup_path"
+        echo "Existing $config_path backed up to $backup_path." >&2
+    fi
+
+    mapfile -t resolv_dns < <(awk '/^nameserver / {print $2}' /etc/resolv.conf 2>/dev/null | head -n 3)
+    if [[ ${#resolv_dns[@]} -eq 0 ]]; then
+        resolv_dns=(8.8.8.8 1.1.1.1)
+    fi
+
+    {
+        echo "[Match]"
+        echo "Name=$iface"
+        echo
+        echo "[Network]"
+        echo "Address=$ipv4_address"
+        echo "Gateway=$gateway"
+        echo "DHCP=no"
+        for dns in "${resolv_dns[@]}"; do
+            echo "DNS=$dns"
+        done
+    } > "$config_path"
+
+    chmod 644 "$config_path"
+
+    rm -f /run/systemd/netif/leases/*
+    rm -f /var/lib/systemd/network/*
+    systemctl restart systemd-networkd >/dev/null 2>&1 || echo "Warning: failed to restart systemd-networkd" >&2
+    systemctl restart systemd-resolved >/dev/null 2>&1 || echo "Warning: failed to restart systemd-resolved" >&2
+    echo "Normalized systemd-networkd configuration for $iface (static $ipv4_address via $gateway)."
+}
+
 # Prompt helper for interactive mode
 ask_step() {
     local var="$1"
@@ -1292,16 +1371,51 @@ if [[ $SKIP_AP == false ]]; then
     fi
 fi
 
+# Detect environments that rely on systemd-networkd instead of NetworkManager.
+SYSTEMD_NETWORKD_ACTIVE=false
+NETWORKD_DEFAULT_IFACE=""
+NETWORKD_DUPLICATE_ROUTES=false
+if systemctl is-active --quiet systemd-networkd 2>/dev/null; then
+    SYSTEMD_NETWORKD_ACTIVE=true
+    if command -v ip >/dev/null 2>&1; then
+        DEFAULT_ROUTE_LINE=$(ip -4 route show default | head -n1)
+        if [[ -n "$DEFAULT_ROUTE_LINE" ]]; then
+            NETWORKD_DEFAULT_IFACE=$(echo "$DEFAULT_ROUTE_LINE" | awk '{for (i=1; i<=NF; i++) if ($i=="dev") {print $(i+1); exit}}')
+            if [[ -n "$NETWORKD_DEFAULT_IFACE" ]]; then
+                DEFAULT_ROUTE_COUNT=$(ip -4 route show default dev "$NETWORKD_DEFAULT_IFACE" | wc -l | tr -d '[:space:]')
+                if [[ ${DEFAULT_ROUTE_COUNT:-0} -gt 1 ]]; then
+                    NETWORKD_DUPLICATE_ROUTES=true
+                fi
+            fi
+        fi
+    fi
+fi
+
 # Collect user decisions for each step in advance
 AP_ACTIVATED=false
+NMCLI_AVAILABLE=false
+if command -v nmcli >/dev/null 2>&1; then
+    NMCLI_AVAILABLE=true
+fi
 
 ask_step RUN_SERVICES "Ensure required services"
 if [[ $SKIP_AP == true ]]; then
     RUN_AP=false
-else
+elif [[ $NMCLI_AVAILABLE == true ]]; then
     ask_step RUN_AP "Configure wlan0 access point"
+else
+    RUN_AP=false
 fi
-ask_step RUN_WLAN1_REFRESH "Install wlan1 device refresh service"
+if [[ $NMCLI_AVAILABLE == true ]]; then
+    ask_step RUN_WLAN1_REFRESH "Install wlan1 device refresh service"
+else
+    RUN_WLAN1_REFRESH=false
+fi
+
+RUN_SYSTEMD_NETWORKD=false
+if [[ $SYSTEMD_NETWORKD_ACTIVE == true && $NETWORKD_DUPLICATE_ROUTES == true && $NMCLI_AVAILABLE == false ]]; then
+    ask_step RUN_SYSTEMD_NETWORKD "Normalize systemd-networkd default route for $NETWORKD_DEFAULT_IFACE"
+fi
 
 ask_step RUN_PACKAGES "Ensure required packages and SSH service"
 ask_step RUN_NGINX_SITES "Apply managed NGINX site configuration"
@@ -1310,14 +1424,26 @@ if [[ $SKIP_FIREWALL == false ]]; then
 else
     RUN_FIREWALL=false
 fi
-ask_step RUN_REINSTALL_WLAN1 "Reinstall wlan1 connections"
-ask_step RUN_CONFIGURE_NET "Configure network connections"
-ask_step RUN_ROUTING "Finalize routing and connectivity checks"
+if [[ $NMCLI_AVAILABLE == true ]]; then
+    ask_step RUN_REINSTALL_WLAN1 "Reinstall wlan1 connections"
+    ask_step RUN_CONFIGURE_NET "Configure network connections"
+    ask_step RUN_ROUTING "Finalize routing and connectivity checks"
+else
+    RUN_REINSTALL_WLAN1=false
+    RUN_CONFIGURE_NET=false
+    RUN_ROUTING=false
+fi
 
 # Execute steps based on user choices
 if [[ $RUN_SERVICES == true ]]; then
     ensure_service dbus
-    ensure_service NetworkManager
+    if [[ $NMCLI_AVAILABLE == true ]]; then
+        ensure_service NetworkManager
+    fi
+fi
+
+if [[ $RUN_SYSTEMD_NETWORKD == true ]]; then
+    normalize_systemd_networkd_default_route "$NETWORKD_DEFAULT_IFACE"
 fi
 
 if [[ $RUN_AP == true ]]; then
@@ -1711,17 +1837,19 @@ if [[ $RUN_ROUTING == true ]]; then
 fi
 
 # Restore any previously active connection that was removed
-if [[ -n "$PROTECTED_CONN_BACKUP" ]]; then
-    if ! nmcli -t -f NAME connection show | grep -Fxq "$PROTECTED_CONN"; then
-        nmcli connection clone "$PROTECTED_CONN_BACKUP" "$PROTECTED_CONN" >/dev/null 2>&1 || true
+if [[ $NMCLI_AVAILABLE == true ]]; then
+    if [[ -n "$PROTECTED_CONN_BACKUP" ]]; then
+        if ! nmcli -t -f NAME connection show | grep -Fxq "$PROTECTED_CONN"; then
+            nmcli connection clone "$PROTECTED_CONN_BACKUP" "$PROTECTED_CONN" >/dev/null 2>&1 || true
+        fi
+        nmcli connection delete "$PROTECTED_CONN_BACKUP" >/dev/null 2>&1 || true
     fi
-    nmcli connection delete "$PROTECTED_CONN_BACKUP" >/dev/null 2>&1 || true
-fi
 
-# Ensure NetworkManager leaves Wi-Fi interfaces in a state where new
-# connections can be discovered after the script completes.
-nmcli radio wifi on >/dev/null 2>&1 || true
-nmcli device set wlan1 managed yes >/dev/null 2>&1 || true
-nmcli device connect wlan1 >/dev/null 2>&1 || true
+    # Ensure NetworkManager leaves Wi-Fi interfaces in a state where new
+    # connections can be discovered after the script completes.
+    nmcli radio wifi on >/dev/null 2>&1 || true
+    nmcli device set wlan1 managed yes >/dev/null 2>&1 || true
+    nmcli device connect wlan1 >/dev/null 2>&1 || true
+fi
 
 print_network_status
