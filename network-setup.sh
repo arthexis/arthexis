@@ -464,6 +464,15 @@ perform_dhcp_reset() {
     fi
 
     local removed=false
+    if [ -f /etc/systemd/system/wlan1-device-refresh.service ]; then
+        systemctl stop wlan1-device-refresh >/dev/null 2>&1 || true
+        systemctl disable wlan1-device-refresh >/dev/null 2>&1 || true
+        rm -f /etc/systemd/system/wlan1-device-refresh.service
+        systemctl daemon-reload >/dev/null 2>&1 || true
+        echo "Removed legacy wlan1-device-refresh service definition."
+        removed=true
+    fi
+
     local conn
     for conn in "$ETH0_CONNECTION_SHARED" "$ETH0_CONNECTION_CLIENT"; do
         if nmcli -t -f NAME connection show | grep -Fxq "$conn"; then

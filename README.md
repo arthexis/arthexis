@@ -109,6 +109,7 @@ Terminal nodes can start directly with the scripts below without installing; Con
    - Use `./install.sh --help` to list every available flag if you need to customize the node beyond the role defaults.
    - Upgrade with [`./upgrade.sh`](upgrade.sh).
    - Consult the [Install & Lifecycle Scripts Manual](docs/development/install-lifecycle-scripts-manual.md) for complete flag descriptions and operational notes.
+   - Review the [Upgrade Guide](docs/UPGRADE.md) for manual steps required after releases that stop automating specific migrations.
 
 - **Windows:**
    - Run [`install.bat`](install.bat) to install (Terminal role) and [`upgrade.bat`](upgrade.bat) to upgrade.
