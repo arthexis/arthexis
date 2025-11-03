@@ -3,7 +3,8 @@
     "model": "sites.site",
     "fields": {
       "domain": "127.0.0.1",
-      "name": "Local"
+      "name": "Local",
+      "default_layout": ["constellation"]
     }
   }
 ]

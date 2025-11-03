@@ -41,6 +41,20 @@ _FIELD_DEFINITIONS: tuple[tuple[str, models.Field], ...] = (
             ),
         ),
     ),
+    (
+        "default_layout",
+        models.ForeignKey(
+            "pages.SiteLayout",
+            null=True,
+            blank=True,
+            on_delete=models.SET_NULL,
+            related_name="sites",
+            verbose_name=_("Default layout"),
+            help_text=_(
+                "Site layout applied when modules do not override it."
+            ),
+        ),
+    ),
 )
 
 

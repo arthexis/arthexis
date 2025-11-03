@@ -1,0 +1,13 @@
+[
+  {
+    "model": "pages.sitelayout",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "name": "Navy Horizon",
+      "slug": "navy-horizon",
+      "base_template": "pages/layouts/navy.html",
+      "stylesheet": ".navy-layout .card, .navy-layout .modal-content {background: rgba(7, 21, 44, 0.82); border: 1px solid rgba(157, 198, 255, 0.35); color: #e6f0ff;}\n.navy-layout .btn-primary {background: linear-gradient(135deg, #4f8be6, #7fb4ff); border: none; color: #061127;}\n.navy-layout .form-control {background: rgba(5, 17, 36, 0.8); border: 1px solid rgba(157, 198, 255, 0.3); color: #e6f0ff;}\n.navy-layout .form-control:focus {box-shadow: 0 0 0 0.25rem rgba(127, 180, 255, 0.25); border-color: #7fb4ff;}
+    }
+  }
+]

@@ -3,7 +3,8 @@
     "model": "sites.site",
     "fields": {
       "domain": "arthexis.com",
-      "name": "Arthexis"
+      "name": "Arthexis",
+      "default_layout": ["constellation"]
     }
   }
 ]

@@ -56,6 +56,31 @@ class Application(Entity):
             return self.name
 
 
+class SiteLayoutManager(models.Manager):
+    def get_by_natural_key(self, slug: str):
+        return self.get(slug=slug)
+
+
+class SiteLayout(Entity):
+    name = models.CharField(max_length=100)
+    slug = models.SlugField(max_length=100, unique=True)
+    base_template = models.CharField(max_length=255, default="pages/layouts/default.html")
+    stylesheet = models.TextField(blank=True)
+
+    objects = SiteLayoutManager()
+
+    class Meta:
+        verbose_name = _("Site Layout")
+        verbose_name_plural = _("Site Layouts")
+        ordering = ("name",)
+
+    def natural_key(self):  # pragma: no cover - simple representation
+        return (self.slug,)
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return self.name
+
+
 class ModuleManager(models.Manager):
     def get_by_natural_key(self, role: str, path: str):
         return self.get(node_role__name=role, path=path)
@@ -84,6 +109,14 @@ class Module(Entity):
     )
     is_default = models.BooleanField(default=False)
     favicon = models.ImageField(upload_to="modules/favicons/", blank=True)
+    site_layout = models.ForeignKey(
+        "SiteLayout",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="modules",
+        help_text=_("Override the default site layout for pages served by this module."),
+    )
 
     objects = ModuleManager()
 

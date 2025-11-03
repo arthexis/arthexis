@@ -1,0 +1,13 @@
+[
+  {
+    "model": "pages.sitelayout",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "name": "Constellation",
+      "slug": "constellation",
+      "base_template": "pages/layouts/default.html",
+      "stylesheet": ""
+    }
+  }
+]

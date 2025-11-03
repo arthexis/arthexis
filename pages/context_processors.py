@@ -1,3 +1,5 @@
+from typing import Optional
+
 from utils.sites import get_site
 from django.urls import Resolver404, resolve
 from django.conf import settings
@@ -5,7 +7,7 @@ from pathlib import Path
 from nodes.models import Node
 from core.models import Reference
 from core.reference_utils import filter_visible_references
-from .models import Module
+from .models import Module, SiteLayout
 
 _FAVICON_DIR = Path(settings.BASE_DIR) / "pages" / "fixtures" / "data"
 _FAVICON_FILENAMES = {
@@ -41,7 +43,7 @@ def nav_links(request):
     if role:
         modules = (
             Module.objects.filter(node_role=role, is_deleted=False)
-            .select_related("application")
+            .select_related("application", "site_layout")
             .prefetch_related("landings")
         )
     else:
@@ -144,8 +146,25 @@ def nav_links(request):
         node=node,
     )
 
+    layout = None  # type: Optional[SiteLayout]
+    if current_module and getattr(current_module, "site_layout_id", None):
+        layout = current_module.site_layout
+    elif site and getattr(site, "default_layout_id", None):
+        layout = site.default_layout
+
+    if layout is None:
+        layout = (
+            SiteLayout.objects.filter(is_deleted=False)
+            .order_by("name")
+            .first()
+        )
+
+    template_name = getattr(layout, "base_template", "pages/layouts/default.html")
+
     return {
         "nav_modules": valid_modules,
         "favicon_url": favicon_url,
         "header_references": header_references,
+        "site_layout": layout,
+        "site_layout_template": template_name,
     }

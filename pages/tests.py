@@ -26,6 +26,7 @@ from pages.models import (
     Application,
     Landing,
     Module,
+    SiteLayout,
     RoleLanding,
     SiteBadge,
     Favorite,
@@ -1994,6 +1995,97 @@ class ReleaseModuleNavTests(TestCase):
         self.client.force_login(user)
         response = self.client.get(reverse("pages:index"))
         self.assertNotContains(response, 'badge rounded-pill text-bg-secondary">RELEASE')
+
+
+class SiteLayoutContextTests(TestCase):
+    class ModuleQueryStub(list):
+        def select_related(self, *args):
+            return self
+
+        def prefetch_related(self, *args):
+            return self
+
+    class LandingManagerStub:
+        def __init__(self, landings):
+            self._landings = list(landings)
+
+        def filter(self, **kwargs):
+            enabled = kwargs.get("enabled", True)
+            if enabled:
+                return [landing for landing in self._landings if getattr(landing, "enabled", True)]
+            return list(self._landings)
+
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.default_layout = SiteLayout.objects.create(
+            name="Constellation Default",
+            slug="constellation-test",
+            base_template="pages/layouts/default.html",
+        )
+        self.alt_layout = SiteLayout.objects.create(
+            name="Navy Layout",
+            slug="navy-test",
+            base_template="pages/layouts/navy.html",
+        )
+        self.site_stub = SimpleNamespace(default_layout=self.default_layout)
+        self.get_site_patch = patch(
+            "pages.context_processors.get_site", return_value=self.site_stub
+        )
+        self.get_site_patch.start()
+        self.node_patch = patch(
+            "pages.context_processors.Node.get_local",
+            return_value=SimpleNamespace(role=SimpleNamespace(name="LayoutRole")),
+        )
+        self.node_patch.start()
+        self.module_queryset = self.ModuleQueryStub()
+        self.module_filter_patch = patch(
+            "pages.context_processors.Module.objects.filter",
+            return_value=self.module_queryset,
+        )
+        self.module_filter_patch.start()
+        self.request = self.factory.get("/")
+        self.request.user = AnonymousUser()
+        self.request.path = "/"
+
+    def test_context_uses_site_default_layout(self):
+        self.module_queryset.clear()
+        context = nav_links(self.request)
+        self.assertEqual(
+            context["site_layout_template"], self.default_layout.base_template
+        )
+        self.assertEqual(context["site_layout"], self.default_layout)
+
+    def test_module_override_layout_selected(self):
+        landing = SimpleNamespace(
+            path="/",
+            label="Home",
+            description="",
+            enabled=True,
+            nav_is_locked=False,
+            nav_lock_reason=None,
+        )
+        module = SimpleNamespace(
+            path="/",
+            menu_label="Home",
+            menu="Home",
+            application=SimpleNamespace(name="layoutapp"),
+            favicon=None,
+            site_layout=self.alt_layout,
+            site_layout_id=self.alt_layout.pk,
+        )
+        module.landings = self.LandingManagerStub([landing])
+        self.module_queryset[:] = [module]
+        context = nav_links(self.request)
+        self.assertEqual(
+            context["site_layout_template"], self.alt_layout.base_template
+        )
+        self.assertEqual(context["site_layout"], self.alt_layout)
+
+    def tearDown(self):
+        self.module_filter_patch.stop()
+        self.node_patch.stop()
+        self.get_site_patch.stop()
+        super().tearDown()
 
 
 class ControlNavTests(TestCase):

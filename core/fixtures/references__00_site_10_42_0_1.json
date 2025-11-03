@@ -3,7 +3,8 @@
     "model": "sites.site",
     "fields": {
       "domain": "10.42.0.1",
-      "name": "Router"
+      "name": "Router",
+      "default_layout": ["constellation"]
     }
   }
 ]

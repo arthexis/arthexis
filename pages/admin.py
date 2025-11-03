@@ -36,6 +36,7 @@ from .models import (
     Application,
     SiteProxy,
     Module,
+    SiteLayout,
     Landing,
     LandingLead,
     RoleLanding,
@@ -116,8 +117,8 @@ class SiteAdmin(DjangoSiteAdmin):
     form = SiteForm
     inlines = [SiteBadgeInline]
     change_list_template = "admin/sites/site/change_list.html"
-    fields = ("domain", "name", "managed", "require_https")
-    list_display = ("domain", "name", "managed", "require_https")
+    fields = ("domain", "name", "default_layout", "managed", "require_https")
+    list_display = ("domain", "name", "default_layout", "managed", "require_https")
     list_filter = (ManagedSiteListFilter, RequireHttpsListFilter)
     actions = ["capture_screenshot"]
 
@@ -316,12 +317,35 @@ class LandingAdmin(EntityModelAdmin):
     list_select_related = ("module", "module__application", "module__node_role")
 
 
+@admin.register(SiteLayout)
+class SiteLayoutAdmin(EntityModelAdmin):
+    list_display = ("name", "slug", "base_template")
+    search_fields = ("name", "slug", "base_template")
+    list_filter = ("base_template",)
+    fields = ("name", "slug", "base_template", "stylesheet")
+
+
 @admin.register(Module)
 class ModuleAdmin(EntityModelAdmin):
     change_list_template = "admin/pages/module/change_list.html"
-    list_display = ("application", "node_role", "path", "menu", "is_default")
-    list_filter = ("node_role", "application")
-    fields = ("node_role", "application", "path", "menu", "is_default", "favicon")
+    list_display = (
+        "application",
+        "node_role",
+        "path",
+        "menu",
+        "site_layout",
+        "is_default",
+    )
+    list_filter = ("node_role", "application", "site_layout")
+    fields = (
+        "node_role",
+        "application",
+        "path",
+        "menu",
+        "site_layout",
+        "is_default",
+        "favicon",
+    )
     inlines = [LandingInline]
 
     def get_urls(self):

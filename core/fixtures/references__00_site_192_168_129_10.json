@@ -3,7 +3,8 @@
     "model": "sites.site",
     "fields": {
       "domain": "192.168.129.10",
-      "name": "Gateway"
+      "name": "Gateway",
+      "default_layout": ["constellation"]
     }
   }
 ]
