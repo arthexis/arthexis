@@ -108,6 +108,7 @@ I nodi Terminal possono avviarsi direttamente con gli script sottostanti senza i
    - Usa `./install.sh --help` per elencare tutte le opzioni disponibili se hai bisogno di personalizzare il nodo oltre le impostazioni del ruolo.
    - Aggiorna con [`./upgrade.sh`](upgrade.sh).
    - Consulta il [Manuale degli script di installazione e ciclo di vita](docs/development/install-lifecycle-scripts-manual.md) per l'elenco completo dei flag e le note operative.
+   - Consulta la [Guida all'aggiornamento](docs/UPGRADE.md) per i passaggi manuali richiesti quando alcune migrazioni non vengono più automatizzate.
 
 - **Windows:**
    - Esegui [`install.bat`](install.bat) per installare (ruolo Terminal) e [`upgrade.bat`](upgrade.bat) per aggiornare.
