@@ -15,16 +15,24 @@ def test_ensure_auto_upgrade_task_skips_without_lock(tmp_path):
     assert not PeriodicTask.objects.filter(name=AUTO_UPGRADE_TASK_NAME).exists()
 
 
-@pytest.mark.parametrize(
-    "mode, expected_minutes",
-    [
-        ("latest", 5),
-        ("version", 60),
-        ("stable", 60),
-        ("unexpected", 60),
-    ],
-)
-def test_ensure_auto_upgrade_task_uses_interval_for_mode(tmp_path, mode, expected_minutes):
+def test_ensure_auto_upgrade_task_is_removed_when_lock_deleted(tmp_path):
+    PeriodicTask.objects.filter(name=AUTO_UPGRADE_TASK_NAME).delete()
+
+    locks_dir = tmp_path / "locks"
+    locks_dir.mkdir()
+    lock_file = locks_dir / "auto_upgrade.lck"
+    lock_file.write_text("version")
+
+    ensure_auto_upgrade_periodic_task(base_dir=tmp_path)
+    assert PeriodicTask.objects.filter(name=AUTO_UPGRADE_TASK_NAME).exists()
+
+    lock_file.unlink()
+    ensure_auto_upgrade_periodic_task(base_dir=tmp_path)
+
+    assert not PeriodicTask.objects.filter(name=AUTO_UPGRADE_TASK_NAME).exists()
+
+
+def test_ensure_auto_upgrade_task_uses_five_minute_interval_for_latest(tmp_path):
     PeriodicTask.objects.filter(name=AUTO_UPGRADE_TASK_NAME).delete()
 
     locks_dir = tmp_path / "locks"
