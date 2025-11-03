@@ -30,13 +30,18 @@ def ensure_auto_upgrade_periodic_task(
 
     lock_dir = base_dir / "locks"
     mode_file = lock_dir / "auto_upgrade.lck"
-    if not mode_file.exists():
-        return
 
     try:  # pragma: no cover - optional dependency failures
         from django_celery_beat.models import IntervalSchedule, PeriodicTask
         from django.db.utils import OperationalError, ProgrammingError
     except Exception:
+        return
+
+    if not mode_file.exists():
+        try:
+            PeriodicTask.objects.filter(name=AUTO_UPGRADE_TASK_NAME).delete()
+        except (OperationalError, ProgrammingError):  # pragma: no cover - DB not ready
+            return
         return
 
     _mode = mode_file.read_text().strip() or "version"
