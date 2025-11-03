@@ -7,6 +7,18 @@ from django.db import migrations, models
 def add_default_layout_field(apps, schema_editor):
     Site = apps.get_model("sites", "Site")
     Layout = apps.get_model("pages", "SiteLayout")
+
+    connection = schema_editor.connection
+    table_name = Site._meta.db_table
+    with connection.cursor() as cursor:
+        existing_columns = {
+            info.name
+            for info in connection.introspection.get_table_description(cursor, table_name)
+        }
+
+    if "default_layout_id" in existing_columns:
+        return
+
     field = models.ForeignKey(
         Layout,
         null=True,
