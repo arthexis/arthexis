@@ -70,6 +70,11 @@ ETH0_MODE_SPECIFIED=false
 WLAN1_DETECTED=true
 ETH0_DHCP_SERVER=""
 DHCP_RESET=false
+NMCLI_AVAILABLE=false
+
+if command -v nmcli >/dev/null 2>&1; then
+    NMCLI_AVAILABLE=true
+fi
 
 join_by() {
     local sep="$1"
@@ -88,52 +93,66 @@ join_by() {
 
 describe_device_status() {
     local dev="$1"
-    local state
-    state=$(nmcli -t -f DEVICE,STATE device status 2>/dev/null | awk -F: -v dev="$dev" '$1==dev {print $2; exit}' || true)
-    if [[ -z "$state" ]]; then
-        echo "  $dev: device not detected"
-        if [[ "$dev" == "wlan1" ]]; then
-            echo "Warning: device wlan1 not found; wlan0 and eth0 clients cannot reach the internet without it." >&2
-        fi
-        return
-    fi
-
-    local connection
-    connection=$(nmcli -g GENERAL.CONNECTION device show "$dev" 2>/dev/null | head -n1 | tr -d '\n')
-    if [[ "$connection" == "--" ]]; then
-        connection=""
-    fi
-
+    local state=""
+    local connection=""
     local method=""
-    if [[ -n "$connection" ]]; then
-        method=$(nmcli -g ipv4.method connection show "$connection" 2>/dev/null | head -n1 || true)
-    fi
+    local role_message=""
 
-    local role
-    case "$method" in
-        shared)
-            role="DHCP server (NetworkManager shared mode)"
-            ;;
-        auto)
-            role="DHCP client (automatic)"
-            ;;
-        manual)
-            role="Static IPv4 configuration"
-            ;;
-        disabled)
-            role="IPv4 disabled"
-            ;;
-        "")
-            if [[ "$state" == "unmanaged" ]]; then
-                role="Unmanaged"
-            else
-                role="No IPv4 configuration reported"
+    if [[ $NMCLI_AVAILABLE == true ]]; then
+        state=$(nmcli -t -f DEVICE,STATE device status 2>/dev/null | awk -F: -v dev="$dev" '$1==dev {print $2; exit}' || true)
+        if [[ -z "$state" ]]; then
+            echo "  $dev: device not detected"
+            if [[ "$dev" == "wlan1" ]]; then
+                echo "Warning: device wlan1 not found; wlan0 and eth0 clients cannot reach the internet without it." >&2
             fi
-            ;;
-        *)
-            role="IPv4 method: $method"
-            ;;
-    esac
+            return
+        fi
+
+        connection=$(nmcli -g GENERAL.CONNECTION device show "$dev" 2>/dev/null | head -n1 | tr -d '\n')
+        if [[ "$connection" == "--" ]]; then
+            connection=""
+        fi
+
+        if [[ -n "$connection" ]]; then
+            method=$(nmcli -g ipv4.method connection show "$connection" 2>/dev/null | head -n1 || true)
+        fi
+
+        case "$method" in
+            shared)
+                role_message="DHCP server (NetworkManager shared mode)"
+                ;;
+            auto)
+                role_message="DHCP client (automatic)"
+                ;;
+            manual)
+                role_message="Static IPv4 configuration"
+                ;;
+            disabled)
+                role_message="IPv4 disabled"
+                ;;
+            "")
+                if [[ "$state" == "unmanaged" ]]; then
+                    role_message="Unmanaged"
+                else
+                    role_message="No IPv4 configuration reported"
+                fi
+                ;;
+            *)
+                role_message="IPv4 method: $method"
+                ;;
+        esac
+    else
+        if ! ip link show "$dev" >/dev/null 2>&1; then
+            echo "  $dev: device not detected"
+            if [[ "$dev" == "wlan1" ]]; then
+                echo "Warning: device wlan1 not found; wlan0 and eth0 clients cannot reach the internet without it." >&2
+            fi
+            return
+        fi
+        state=$(ip -o link show "$dev" 2>/dev/null | awk '{print $9}' || true)
+        connection="Unavailable (NetworkManager not installed)"
+        role_message="Unable to determine without NetworkManager"
+    fi
 
     local -a ipv4_list=()
     mapfile -t ipv4_list < <(ip -o -4 addr show dev "$dev" 2>/dev/null | awk '{print $4}' || true)
@@ -151,8 +170,12 @@ describe_device_status() {
 
     echo "  $dev:"
     echo "    State: ${state:-unknown}"
-    echo "    Connection: ${connection:-none}"
-    echo "    IPv4 role: $role"
+    if [[ $NMCLI_AVAILABLE == true ]]; then
+        echo "    Connection: ${connection:-none}"
+    else
+        echo "    Connection: $connection"
+    fi
+    echo "    IPv4 role: $role_message"
     echo "    IPv4 addresses: $ipv4"
     echo "    IPv6 addresses: $ipv6"
 }
@@ -177,22 +200,31 @@ describe_service_status() {
 }
 
 print_network_status() {
-    if ! command -v nmcli >/dev/null 2>&1; then
-        echo "nmcli (NetworkManager) is required to inspect network status." >&2
-        return 1
+    if [[ $NMCLI_AVAILABLE == false ]]; then
+        echo "NetworkManager (nmcli) is not installed; reporting limited status information." >&2
     fi
 
     local eth0_connection=""
-    local eth0_method=""
-    local eth0_state
-    eth0_state=$(nmcli -t -f DEVICE,STATE device status 2>/dev/null | awk -F: '$1=="eth0" {print $2; exit}' || true)
-    if [[ -n "$eth0_state" ]]; then
-        eth0_connection=$(nmcli -g GENERAL.CONNECTION device show eth0 2>/dev/null | head -n1 | tr -d '\n')
-        if [[ "$eth0_connection" == "--" ]]; then
-            eth0_connection=""
+    local eth0_method="unknown"
+    local eth0_state=""
+    if [[ $NMCLI_AVAILABLE == true ]]; then
+        eth0_state=$(nmcli -t -f DEVICE,STATE device status 2>/dev/null | awk -F: '$1=="eth0" {print $2; exit}' || true)
+        if [[ -n "$eth0_state" ]]; then
+            eth0_connection=$(nmcli -g GENERAL.CONNECTION device show eth0 2>/dev/null | head -n1 | tr -d '\n')
+            if [[ "$eth0_connection" == "--" ]]; then
+                eth0_connection=""
+            fi
+            if [[ -n "$eth0_connection" ]]; then
+                eth0_method=$(nmcli -g ipv4.method connection show "$eth0_connection" 2>/dev/null | head -n1 || true)
+            else
+                eth0_method=""
+            fi
+        else
+            eth0_method=""
         fi
-        if [[ -n "$eth0_connection" ]]; then
-            eth0_method=$(nmcli -g ipv4.method connection show "$eth0_connection" 2>/dev/null | head -n1 || true)
+    else
+        if ip link show eth0 >/dev/null 2>&1; then
+            eth0_state=$(ip -o link show eth0 2>/dev/null | awk '{print $9}' || true)
         fi
     fi
 
@@ -204,45 +236,55 @@ print_network_status() {
     fi
 
     local dhcp_summary
-    case "$eth0_method" in
-        shared)
-            if [[ -n "$eth0_primary_ip" ]]; then
-                dhcp_summary="DHCP summary: eth0 is providing DHCP service via NetworkManager shared mode (IP ${eth0_primary_ip})."
-            else
-                dhcp_summary="DHCP summary: eth0 is providing DHCP service via NetworkManager shared mode."
-            fi
-            ;;
-        auto)
-            if [[ -n "$eth0_primary_ip" ]]; then
-                dhcp_summary="DHCP summary: eth0 is configured as a DHCP client (address ${eth0_primary_ip})."
-            else
-                dhcp_summary="DHCP summary: eth0 is configured as a DHCP client (awaiting lease)."
-            fi
-            ;;
-        manual)
-            if [[ -n "$eth0_primary_ip" ]]; then
-                dhcp_summary="DHCP summary: eth0 uses a static IPv4 configuration (${eth0_primary_ip})."
-            else
-                dhcp_summary="DHCP summary: eth0 uses a static IPv4 configuration with no IPv4 address reported."
-            fi
-            ;;
-        disabled)
-            dhcp_summary="DHCP summary: eth0 IPv4 networking is disabled."
-            ;;
-        "")
-            if [[ -z "$eth0_state" ]]; then
-                dhcp_summary="DHCP summary: eth0 device not detected."
-            else
-                dhcp_summary="DHCP summary: eth0 has no active IPv4 configuration."
-            fi
-            ;;
-        *)
-            dhcp_summary="DHCP summary: eth0 IPv4 method is '$eth0_method'."
-            ;;
-    esac
+    if [[ $NMCLI_AVAILABLE == true ]]; then
+        case "$eth0_method" in
+            shared)
+                if [[ -n "$eth0_primary_ip" ]]; then
+                    dhcp_summary="DHCP summary: eth0 is providing DHCP service via NetworkManager shared mode (IP ${eth0_primary_ip})."
+                else
+                    dhcp_summary="DHCP summary: eth0 is providing DHCP service via NetworkManager shared mode."
+                fi
+                ;;
+            auto)
+                if [[ -n "$eth0_primary_ip" ]]; then
+                    dhcp_summary="DHCP summary: eth0 is configured as a DHCP client (address ${eth0_primary_ip})."
+                else
+                    dhcp_summary="DHCP summary: eth0 is configured as a DHCP client (awaiting lease)."
+                fi
+                ;;
+            manual)
+                if [[ -n "$eth0_primary_ip" ]]; then
+                    dhcp_summary="DHCP summary: eth0 uses a static IPv4 configuration (${eth0_primary_ip})."
+                else
+                    dhcp_summary="DHCP summary: eth0 uses a static IPv4 configuration with no IPv4 address reported."
+                fi
+                ;;
+            disabled)
+                dhcp_summary="DHCP summary: eth0 IPv4 networking is disabled."
+                ;;
+            "")
+                if [[ -z "$eth0_state" ]]; then
+                    dhcp_summary="DHCP summary: eth0 device not detected."
+                else
+                    dhcp_summary="DHCP summary: eth0 has no active IPv4 configuration."
+                fi
+                ;;
+            *)
+                dhcp_summary="DHCP summary: eth0 IPv4 method is '$eth0_method'."
+                ;;
+        esac
+    else
+        if [[ -n "$eth0_primary_ip" ]]; then
+            dhcp_summary="DHCP summary: Unable to determine DHCP role without NetworkManager (current address ${eth0_primary_ip})."
+        elif [[ -n "$eth0_state" ]]; then
+            dhcp_summary="DHCP summary: Unable to determine DHCP role without NetworkManager."
+        else
+            dhcp_summary="DHCP summary: eth0 device not detected."
+        fi
+    fi
 
     echo "$dhcp_summary"
-    if [[ "$eth0_method" == "auto" ]]; then
+    if [[ $NMCLI_AVAILABLE == true && "$eth0_method" == "auto" ]]; then
         local detected_server=""
         detected_server=$(discover_dhcp_server eth0 2>/dev/null || true)
         if [[ -n "$detected_server" ]]; then
@@ -455,12 +497,48 @@ validate_eth0_mode() {
     esac
 }
 
+perform_dhcp_reset_without_nmcli() {
+    echo "NetworkManager (nmcli) is not installed; attempting a generic DHCP reset."
+
+    local -a ethernet_devices=()
+    mapfile -t ethernet_devices < <(ip -o link show 2>/dev/null | awk -F': ' '/^[0-9]+: e/{print $2}' || true)
+
+    if (( ${#ethernet_devices[@]} == 0 )); then
+        echo "No ethernet interfaces detected to reset." >&2
+    fi
+
+    local dev
+    for dev in "${ethernet_devices[@]}"; do
+        if [[ "$dev" == "lo" ]]; then
+            continue
+        fi
+        if ip link show "$dev" >/dev/null 2>&1; then
+            ip addr flush dev "$dev" >/dev/null 2>&1 || true
+            if command -v dhclient >/dev/null 2>&1; then
+                dhclient -r "$dev" >/dev/null 2>&1 || true
+                dhclient "$dev" >/dev/null 2>&1 || true
+            fi
+        fi
+    done
+
+    if command -v netplan >/dev/null 2>&1; then
+        if netplan apply >/dev/null 2>&1; then
+            echo "Applied netplan configuration to refresh DHCP settings."
+        else
+            echo "Warning: Failed to apply netplan configuration; verify system networking." >&2
+        fi
+    fi
+
+    echo "DHCP reset complete (NetworkManager unavailable)."
+    print_network_status || true
+    exit 0
+}
+
 perform_dhcp_reset() {
     echo "Restoring upstream DHCP defaults..."
 
-    if ! command -v nmcli >/dev/null 2>&1; then
-        echo "Error: --dhcp-reset requires NetworkManager (nmcli)." >&2
-        exit 1
+    if [[ $NMCLI_AVAILABLE == false ]]; then
+        perform_dhcp_reset_without_nmcli
     fi
 
     local removed=false
@@ -759,10 +837,6 @@ if [[ $STATUS_ONLY == true ]]; then
     fi
     if [[ $OTHER_OPTIONS_USED == true ]]; then
         echo "Error: --status cannot be combined with other options." >&2
-        exit 1
-    fi
-    if ! command -v nmcli >/dev/null 2>&1; then
-        echo "nmcli (NetworkManager) is required." >&2
         exit 1
     fi
     print_network_status
