@@ -15,31 +15,43 @@ def test_ensure_auto_upgrade_task_skips_without_lock(tmp_path):
     assert not PeriodicTask.objects.filter(name=AUTO_UPGRADE_TASK_NAME).exists()
 
 
-def test_ensure_auto_upgrade_task_uses_five_minute_interval_for_latest(tmp_path):
+@pytest.mark.parametrize(
+    "mode, expected_minutes",
+    [
+        ("latest", 5),
+        ("version", 60),
+        ("stable", 60),
+        ("unexpected", 60),
+    ],
+)
+def test_ensure_auto_upgrade_task_uses_interval_for_mode(tmp_path, mode, expected_minutes):
     PeriodicTask.objects.filter(name=AUTO_UPGRADE_TASK_NAME).delete()
 
     locks_dir = tmp_path / "locks"
     locks_dir.mkdir()
-    (locks_dir / "auto_upgrade.lck").write_text("latest")
+    (locks_dir / "auto_upgrade.lck").write_text(mode)
 
     ensure_auto_upgrade_periodic_task(base_dir=tmp_path)
 
     task = PeriodicTask.objects.get(name=AUTO_UPGRADE_TASK_NAME)
     assert task.task == AUTO_UPGRADE_TASK_PATH
-    assert task.interval.every == 5
+    assert task.interval.every == expected_minutes
     assert task.interval.period == IntervalSchedule.MINUTES
 
 
-def test_ensure_auto_upgrade_task_uses_five_minute_interval_for_version(tmp_path):
+def test_ensure_auto_upgrade_task_updates_interval_when_mode_changes(tmp_path):
     PeriodicTask.objects.filter(name=AUTO_UPGRADE_TASK_NAME).delete()
 
     locks_dir = tmp_path / "locks"
     locks_dir.mkdir()
-    (locks_dir / "auto_upgrade.lck").write_text("version")
+    mode_file = locks_dir / "auto_upgrade.lck"
 
+    mode_file.write_text("latest")
     ensure_auto_upgrade_periodic_task(base_dir=tmp_path)
-
     task = PeriodicTask.objects.get(name=AUTO_UPGRADE_TASK_NAME)
-    assert task.task == AUTO_UPGRADE_TASK_PATH
     assert task.interval.every == 5
-    assert task.interval.period == IntervalSchedule.MINUTES
+
+    mode_file.write_text("stable")
+    ensure_auto_upgrade_periodic_task(base_dir=tmp_path)
+    task.refresh_from_db()
+    assert task.interval.every == 60
