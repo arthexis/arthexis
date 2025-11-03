@@ -1,7 +1,5 @@
 import socket
 
-import pytest
-
 from django.conf import settings
 
 from config import settings as settings_module
@@ -12,8 +10,6 @@ def test_current_hostname_is_allowed():
     assert hostname, "socket.gethostname() returned an empty string"
     assert hostname in settings.ALLOWED_HOSTS
 
-
-@pytest.mark.feature("gway-runner")
 def test_mdns_variant_is_generated():
     variants = settings_module._iter_local_hostnames("gway-001", "gway-001.arthexis")
     assert "gway-001" in variants

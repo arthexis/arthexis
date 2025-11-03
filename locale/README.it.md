@@ -136,7 +136,7 @@ La piattaforma include tre prefissi di configurazione:
 
 Prefissi aggiuntivi vengono definiti tramite **Sigil Roots**, che associano un codice breve (ad esempio `ROLE`, `ODOO` o `USER`) a un modello Django. Puoi consultarli in **Admin &rarr; Sigil Builder** (`/admin/sigil-builder/`), che offre anche una console di test.
 
-I prefissi sconosciuti restano invariati (ad esempio `[UNKNOWN.VALUE]`) e vengono registrati nei log. Quando è installata la CLI opzionale `gway`, il risolutore prova a delegare i token non risolti prima di restituire il testo originale.
+I prefissi sconosciuti restano invariati (ad esempio `[UNKNOWN.VALUE]`) e vengono registrati nei log.
 
 ## Supporto
 

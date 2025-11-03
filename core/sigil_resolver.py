@@ -1,8 +1,5 @@
 import logging
 import os
-import shutil
-import subprocess
-from functools import lru_cache
 from typing import Optional
 
 from django.apps import apps
@@ -16,15 +13,6 @@ from .system import get_system_sigil_values, resolve_system_namespace_value
 logger = logging.getLogger("core.entity")
 
 
-def _is_wizard_mode() -> bool:
-    """Return ``True`` when the application is running in wizard mode."""
-
-    flag = getattr(settings, "WIZARD_MODE", False)
-    if isinstance(flag, str):
-        return flag.lower() in {"1", "true", "yes", "on"}
-    return bool(flag)
-
-
 def _first_instance(model: type[models.Model]) -> Optional[models.Model]:
     qs = model.objects
     ordering = list(getattr(model._meta, "ordering", []))
@@ -35,58 +23,8 @@ def _first_instance(model: type[models.Model]) -> Optional[models.Model]:
     return qs.first()
 
 
-@lru_cache(maxsize=1)
-def _find_gway_command() -> Optional[str]:
-    path = shutil.which("gway")
-    if path:
-        return path
-    for candidate in ("~/.local/bin/gway", "/usr/local/bin/gway"):
-        expanded = os.path.expanduser(candidate)
-        if os.path.isfile(expanded) and os.access(expanded, os.X_OK):
-            return expanded
-    return None
-
-
-def _resolve_with_gway(sigil: str) -> Optional[str]:
-    command = _find_gway_command()
-    if not command:
-        return None
-    timeout = 60 if _is_wizard_mode() else 1
-    try:
-        result = subprocess.run(
-            [command, "-e", sigil],
-            check=False,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            timeout=timeout,
-        )
-    except subprocess.TimeoutExpired:
-        logger.warning(
-            "gway timed out after %s seconds while resolving sigil %s",
-            timeout,
-            sigil,
-        )
-        return None
-    except Exception:
-        logger.exception("Failed executing gway for sigil %s", sigil)
-        return None
-    if result.returncode != 0:
-        logger.warning(
-            "gway exited with status %s while resolving sigil %s",
-            result.returncode,
-            sigil,
-        )
-        return None
-    return result.stdout.strip()
-
-
 def _failed_resolution(token: str) -> str:
-    sigil = f"[{token}]"
-    resolved = _resolve_with_gway(sigil)
-    if resolved is not None:
-        return resolved
-    return sigil
+    return f"[{token}]"
 
 
 def _resolve_token(token: str, current: Optional[models.Model] = None) -> str:
@@ -197,9 +135,6 @@ def _resolve_token(token: str, current: Optional[models.Model] = None) -> str:
                     value = getattr(settings, candidate, sentinel)
                     if value is not sentinel:
                         return str(value)
-                fallback = _resolve_with_gway(f"[{original_token}]")
-                if fallback is not None:
-                    return fallback
                 return ""
             if root.prefix.upper() == "SYS":
                 values = get_system_sigil_values()
