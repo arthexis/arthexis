@@ -4,29 +4,18 @@ Changelog
 Unreleased
 ----------
 
-- 700a784c chore: update version and fixtures
-- 597834ca Link user story screenshots to existing samples (#2594)
-- 7fa0bf56 Implement GraphQL energy export foundation (#2590)
-- cf4c4288 Remove deprecated product fetch admin action (#2592)
-- 3a9445e1 Preserve Odoo profile user data during upgrades (#2588)
-- a8a60e48 docs: propose GraphQL energy export endpoint (#2589)
-- 556ba5de Add column filters to Odoo product registration table (#2587)
-- 2451d8c8 Delay forwarding watermark until forwarding acknowledged (#2586)
-- feb6442a Fix Odoo product fetch without empty domain argument (#2585)
-- bb9556d1 Implement charge point forwarding push workflow (#2584)
-- 34e6f3b4 Add CP reservation model and ReserveNow support (#2583)
-- 7be7132b Ensure wlan clients can route through wlan1 (#2582)
-- 94538dc2 Allow localhost admin login and seed site (#2581)
-- d53ca711 Handle missing git when deriving changelog commit URLs (#2580)
-- d1fa1ba8 Add GitHub commit links to changelog report (#2579)
-- 60808280 Fix aggregate connector energy total (#2576)
-- 495a4c96 Update consumer report session tables (#2578)
-- 7b36709a Split OCPP call table by direction (#2577)
-- 0db3ea82 Document full OCPP 1.6 coverage overview (#2575)
-- a210be3b Preserve original referer for lead submissions (#2574)
-- 7eb3fde0 Enhance node connectivity handling (#2572)
-- b571c07d Add node admin action for sending net messages (#2573)
-- 1cf13cbc chore: record publish metadata for v0.1.24
+- 09a0c650 Adjust auto-upgrade schedule intervals (#2618)
+- 35118111 Stop auto-upgrade scheduler when lock is removed (#2606)
+- 117cefe6 Adjust auto-upgrade intervals by mode (#2605)
+- 6bfc477c Remove gway CLI integration (#2604)
+- 037db2e6 Ensure Firefox driver is available for screenshots (#2600)
+- db20f487 Add release severity handling for auto-upgrades (#2603)
+- f880e979 Capture visitor node role during registration (#2602)
+- 2fc9832a Gate GraphQL feature for non-Terminal roles (#2599)
+- d4a25c98 Improve node networking metadata handling (#2598)
+- 01f8ed5d Adjust Odoo profile display name (#2597)
+- 2adad0d5 Refactor log viewers to share functionality (#2596)
+- 8c9c0dab Rename Django settings admin labels to Django Config (#2595)
 
 v0.1.22 (2025-10-28)
 --------------------
