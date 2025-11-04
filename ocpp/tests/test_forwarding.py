@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import base64
 import json
-from datetime import timedelta
 from unittest.mock import Mock, patch
 
 from django.test import TestCase
@@ -13,8 +12,10 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
 from nodes.models import Node, NodeRole
+from ocpp import tasks as ocpp_tasks
 from ocpp.models import Charger, Transaction
 from ocpp.tasks import push_forwarded_charge_points
+from websocket import WebSocketException
 
 
 class ForwardingTaskTests(TestCase):
@@ -36,59 +37,13 @@ class ForwardingTaskTests(TestCase):
             role=self.role,
             public_endpoint="remote",
         )
-        self.private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-        public_bytes = self.private_key.public_key().public_bytes(
-            serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo
-        )
-        self.local.public_key = public_bytes.decode()
-        self.local.save()
+        ocpp_tasks._FORWARDING_SESSIONS.clear()
+        self.addCleanup(ocpp_tasks._FORWARDING_SESSIONS.clear)
 
-    @patch("requests.post")
-    def test_push_forwarded_charge_points_sends_transactions(self, mock_post):
+    @patch("ocpp.tasks.create_connection")
+    def test_push_forwarded_charge_points_establishes_websocket(self, mock_create):
         charger = Charger.objects.create(
             charger_id="CP-1001",
-            node_origin=self.local,
-            manager_node=self.local,
-            export_transactions=True,
-            forwarded_to=self.remote,
-            forwarding_watermark=timezone.now() - timedelta(minutes=1),
-        )
-        tx = Transaction.objects.create(
-            charger=charger,
-            start_time=timezone.now(),
-            connector_id=1,
-            meter_start=10,
-            meter_stop=20,
-        )
-
-        mock_post.return_value = Mock(
-            ok=True,
-            status_code=200,
-            json=Mock(return_value={"status": "ok"}),
-        )
-
-        with patch.object(Node, "get_local", return_value=self.local), patch.object(
-            Node, "get_private_key", return_value=self.private_key
-        ), patch.object(
-            Node,
-            "iter_remote_urls",
-            lambda self, path: iter(["https://remote.example" + path]),
-        ):
-            forwarded = push_forwarded_charge_points()
-
-        self.assertEqual(forwarded, 1)
-        self.assertTrue(mock_post.called)
-        payload = json.loads(mock_post.call_args.kwargs["data"])
-        self.assertEqual(payload.get("chargers"), [])
-        transactions_payload = payload.get("transactions", {})
-        self.assertEqual(len(transactions_payload.get("transactions", [])), 1)
-        updated = Charger.objects.get(pk=charger.pk)
-        self.assertEqual(updated.forwarding_watermark, tx.start_time)
-
-    @patch("requests.post")
-    def test_push_forwarded_charge_points_sends_metadata_when_uninitialized(self, mock_post):
-        charger = Charger.objects.create(
-            charger_id="CP-INIT",
             node_origin=self.local,
             manager_node=self.local,
             export_transactions=True,
@@ -96,27 +51,80 @@ class ForwardingTaskTests(TestCase):
             forwarding_watermark=None,
         )
 
-        mock_post.return_value = Mock(
-            ok=True,
-            status_code=200,
-            json=Mock(return_value={"status": "ok"}),
-        )
+        connection = Mock()
+        connection.connected = True
+        mock_create.return_value = connection
 
         with patch.object(Node, "get_local", return_value=self.local), patch.object(
-            Node, "get_private_key", return_value=self.private_key
-        ), patch.object(
             Node,
             "iter_remote_urls",
             lambda self, path: iter(["https://remote.example" + path]),
         ):
-            forwarded = push_forwarded_charge_points()
+            connected = push_forwarded_charge_points()
 
-        self.assertEqual(forwarded, 0)
-        payload = json.loads(mock_post.call_args.kwargs["data"])
-        chargers_payload = payload.get("chargers", [])
-        self.assertEqual(len(chargers_payload), 1)
+        self.assertEqual(connected, 1)
+        mock_create.assert_called_once()
+        session = ocpp_tasks._FORWARDING_SESSIONS.get(charger.pk)
+        self.assertIsNotNone(session)
         updated = Charger.objects.get(pk=charger.pk)
         self.assertIsNotNone(updated.forwarding_watermark)
+
+    @patch("ocpp.tasks.create_connection")
+    def test_push_forwarded_charge_points_skips_active_session(self, mock_create):
+        charger = Charger.objects.create(
+            charger_id="CP-2002",
+            node_origin=self.local,
+            manager_node=self.local,
+            export_transactions=True,
+            forwarded_to=self.remote,
+            forwarding_watermark=None,
+        )
+
+        connection = Mock()
+        connection.connected = True
+        mock_create.return_value = connection
+
+        with patch.object(Node, "get_local", return_value=self.local), patch.object(
+            Node,
+            "iter_remote_urls",
+            lambda self, path: iter(["https://remote.example" + path]),
+        ):
+            first = push_forwarded_charge_points()
+
+        self.assertEqual(first, 1)
+        mock_create.assert_called_once()
+
+        mock_create.reset_mock()
+        with patch.object(Node, "get_local", return_value=self.local), patch.object(
+            Node,
+            "iter_remote_urls",
+            lambda self, path: iter(["https://remote.example" + path]),
+        ):
+            second = push_forwarded_charge_points()
+
+        self.assertEqual(second, 0)
+        mock_create.assert_not_called()
+
+    @patch("ocpp.tasks.create_connection", side_effect=WebSocketException("boom"))
+    def test_push_forwarded_charge_points_reports_failures(self, mock_create):
+        charger = Charger.objects.create(
+            charger_id="CP-FAIL",
+            node_origin=self.local,
+            manager_node=self.local,
+            export_transactions=True,
+            forwarded_to=self.remote,
+            forwarding_watermark=None,
+        )
+
+        with patch.object(Node, "get_local", return_value=self.local), patch.object(
+            Node,
+            "iter_remote_urls",
+            lambda self, path: iter(["https://remote.example" + path]),
+        ):
+            result = push_forwarded_charge_points()
+
+        self.assertEqual(result, 0)
+        self.assertIsNone(ocpp_tasks._FORWARDING_SESSIONS.get(charger.pk))
 
 
 class ForwardingViewTests(TestCase):

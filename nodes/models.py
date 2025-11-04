@@ -1101,7 +1101,7 @@ class Node(Entity):
         task_name = f"poll_clipboard_node_{self.pk}"
         if enabled:
             schedule, _ = IntervalSchedule.objects.get_or_create(
-                every=5, period=IntervalSchedule.SECONDS
+                every=10, period=IntervalSchedule.SECONDS
             )
             PeriodicTask.objects.update_or_create(
                 name=task_name,
@@ -1208,7 +1208,7 @@ class Node(Entity):
         task_name = "nodes_poll_upstream_messages"
         if celery_enabled:
             schedule, _ = IntervalSchedule.objects.get_or_create(
-                every=1, period=IntervalSchedule.MINUTES
+                every=5, period=IntervalSchedule.MINUTES
             )
             PeriodicTask.objects.update_or_create(
                 name=task_name,
