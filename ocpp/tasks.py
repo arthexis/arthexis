@@ -1,9 +1,10 @@
-import base64
 import json
 import logging
 import uuid
+from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
+from typing import Iterable
 
 from asgiref.sync import async_to_sync
 from celery import shared_task
@@ -11,37 +12,67 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db.models import Q
 from django.utils import timezone
-import requests
-from requests import RequestException
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric import padding
+from urllib.parse import quote, urlsplit, urlunsplit
+from websocket import WebSocketException, create_connection
 
 from core import mailer
 from nodes.models import Node
 
 from . import store
 from .models import Charger, MeterValue, Transaction
-from .network import (
-    newest_transaction_timestamp,
-    serialize_charger_for_network,
-    serialize_transactions_for_forwarding,
-)
-
 logger = logging.getLogger(__name__)
 
 
-def _sign_payload(payload_json: str, private_key) -> str | None:
-    if not private_key:
-        return None
+@dataclass
+class ForwardingSession:
+    """Active websocket forwarding session for a charge point."""
+
+    charger_pk: int
+    node_id: int | None
+    url: str
+    connection: object
+    connected_at: datetime
+
+    @property
+    def is_connected(self) -> bool:
+        return bool(getattr(self.connection, "connected", False))
+
+
+_FORWARDING_SESSIONS: dict[int, ForwardingSession] = {}
+
+def _candidate_forwarding_urls(node: Node, charger: Charger) -> Iterable[str]:
+    """Yield websocket URLs suitable for forwarding ``charger`` via ``node``."""
+
+    charger_id = (charger.charger_id or "").strip()
+    if not charger_id:
+        return []
+
+    encoded_id = quote(charger_id, safe="")
+    for base in node.iter_remote_urls("/"):
+        if not base:
+            continue
+        parsed = urlsplit(base)
+        if parsed.scheme not in {"http", "https"}:
+            continue
+        scheme = "wss" if parsed.scheme == "https" else "ws"
+        base_path = parsed.path.rstrip("/")
+        for prefix in ("", "/ws"):
+            path = f"{base_path}{prefix}/{encoded_id}".replace("//", "/")
+            if not path.startswith("/"):
+                path = f"/{path}"
+            yield urlunsplit((scheme, parsed.netloc, path, "", ""))
+
+
+def _close_forwarding_session(session: ForwardingSession) -> None:
+    """Close the websocket connection associated with ``session`` if open."""
+
+    connection = session.connection
+    if connection is None:
+        return
     try:
-        signature = private_key.sign(
-            payload_json.encode(),
-            padding.PKCS1v15(),
-            hashes.SHA256(),
-        )
-    except Exception:
-        return None
-    return base64.b64encode(signature).decode()
+        connection.close()
+    except Exception:  # pragma: no cover - best effort close
+        pass
 
 
 @shared_task
@@ -161,16 +192,11 @@ purge_meter_readings = purge_meter_values
 
 @shared_task
 def push_forwarded_charge_points() -> int:
-    """Push local charge point sessions to configured upstream nodes."""
+    """Ensure websocket connections exist for forwarded charge points."""
 
     local = Node.get_local()
     if not local:
         logger.debug("Forwarding skipped: local node not registered")
-        return 0
-
-    private_key = local.get_private_key()
-    if private_key is None:
-        logger.warning("Forwarding skipped: missing local node private key")
         return 0
 
     chargers_qs = (
@@ -184,143 +210,75 @@ def push_forwarded_charge_points() -> int:
         node_filter |= Q(node_origin=local)
 
     chargers = list(chargers_qs.filter(node_filter))
+    active_ids = {charger.pk for charger in chargers}
+
+    # Close sessions that no longer map to active forwarded chargers.
+    for pk in list(_FORWARDING_SESSIONS.keys()):
+        if pk not in active_ids:
+            session = _FORWARDING_SESSIONS.pop(pk)
+            _close_forwarding_session(session)
+
     if not chargers:
         return 0
 
-    grouped: dict[Node, list[Charger]] = {}
+    connected = 0
+
     for charger in chargers:
         target = charger.forwarded_to
         if not target:
             continue
         if local.pk and target.pk == local.pk:
             continue
-        grouped.setdefault(target, []).append(charger)
 
-    if not grouped:
-        return 0
-
-    forwarded_total = 0
-
-    for node, node_chargers in grouped.items():
-        if not node_chargers:
-            continue
-
-        initializing = [ch for ch in node_chargers if ch.forwarding_watermark is None]
-        charger_by_pk = {ch.pk: ch for ch in node_chargers}
-        transactions_map: dict[int, list[Transaction]] = {}
-
-        for charger in node_chargers:
-            watermark = charger.forwarding_watermark
-            if watermark is None:
+        existing = _FORWARDING_SESSIONS.get(charger.pk)
+        if existing and existing.node_id == getattr(target, "pk", None):
+            if existing.is_connected:
                 continue
-            tx_queryset = (
-                Transaction.objects.filter(charger=charger, start_time__gt=watermark)
-                .select_related("charger")
-                .prefetch_related("meter_values")
-                .order_by("start_time")
-            )
-            txs = list(tx_queryset)
-            if txs:
-                transactions_map[charger.pk] = txs
+            _close_forwarding_session(existing)
+            _FORWARDING_SESSIONS.pop(charger.pk, None)
 
-        transaction_payload = {"chargers": [], "transactions": []}
-        for charger_pk, txs in transactions_map.items():
-            charger = charger_by_pk[charger_pk]
-            transaction_payload["chargers"].append(
-                {
-                    "charger_id": charger.charger_id,
-                    "connector_id": charger.connector_id,
-                    "require_rfid": charger.require_rfid,
-                }
-            )
-            transaction_payload["transactions"].extend(
-                serialize_transactions_for_forwarding(txs)
-            )
-
-        payload = {
-            "requester": str(local.uuid),
-            "requester_mac": local.mac_address,
-            "requester_public_key": local.public_key,
-            "chargers": [serialize_charger_for_network(ch) for ch in initializing],
-        }
-
-        has_transactions = bool(transaction_payload["transactions"])
-        if has_transactions or payload["chargers"]:
-            payload["transactions"] = transaction_payload
-        else:
-            continue
-
-        payload_json = json.dumps(payload, separators=(",", ":"), sort_keys=True)
-        signature = _sign_payload(payload_json, private_key)
-        headers = {"Content-Type": "application/json"}
-        if signature:
-            headers["X-Signature"] = signature
-
-        success = False
-        attempted = False
-        for url in node.iter_remote_urls("/nodes/network/chargers/forward/"):
-            if not url:
-                continue
-
-            attempted = True
+        for url in _candidate_forwarding_urls(target, charger):
             try:
-                response = requests.post(
-                    url, data=payload_json, headers=headers, timeout=5
-                )
-            except RequestException as exc:
-                logger.warning("Failed to forward chargers to %s: %s", node, exc)
-                continue
-
-            if not response.ok:
-                logger.warning(
-                    "Forwarding request to %s via %s returned %s",
-                    node,
+                connection = create_connection(
                     url,
-                    response.status_code,
+                    timeout=5,
+                    subprotocols=["ocpp1.6"],
                 )
-                continue
-
-            try:
-                data = response.json()
-            except ValueError:
-                logger.warning("Invalid JSON payload received from %s", node)
-                continue
-
-            if data.get("status") != "ok":
-                detail = data.get("detail") if isinstance(data, dict) else None
+            except (WebSocketException, OSError) as exc:
                 logger.warning(
-                    "Forwarding rejected by %s via %s: %s",
-                    node,
+                    "Websocket forwarding connection to %s via %s failed: %s",
+                    target,
                     url,
-                    detail or response.text or "Remote node rejected the request.",
+                    exc,
                 )
                 continue
 
-            success = True
+            session = ForwardingSession(
+                charger_pk=charger.pk,
+                node_id=getattr(target, "pk", None),
+                url=url,
+                connection=connection,
+                connected_at=timezone.now(),
+            )
+            _FORWARDING_SESSIONS[charger.pk] = session
+            Charger.objects.filter(pk=charger.pk).update(
+                forwarding_watermark=session.connected_at
+            )
+            connected += 1
+            logger.info(
+                "Established forwarding websocket for charger %s to %s via %s",
+                charger.charger_id,
+                target,
+                url,
+            )
             break
+        else:
+            logger.warning(
+                "Unable to establish forwarding websocket for charger %s",
+                charger.charger_id or charger.pk,
+            )
 
-        if not success:
-            if not attempted:
-                logger.warning(
-                    "No reachable host found for %s when forwarding chargers", node
-                )
-            continue
-
-        updates: dict[int, datetime] = {}
-        now = timezone.now()
-        for charger in initializing:
-            updates[charger.pk] = now
-        for charger_pk, txs in transactions_map.items():
-            latest = newest_transaction_timestamp(txs)
-            if latest:
-                updates[charger_pk] = latest
-
-        for pk, timestamp in updates.items():
-            Charger.objects.filter(pk=pk).update(forwarding_watermark=timestamp)
-
-        forwarded_total += len(transaction_payload["transactions"])
-
-    return forwarded_total
+    return connected
 
 
 # Backwards compatibility alias for legacy schedules
