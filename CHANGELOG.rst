@@ -4,18 +4,19 @@ Changelog
 Unreleased
 ----------
 
-- 09a0c650 Adjust auto-upgrade schedule intervals (#2618)
-- 35118111 Stop auto-upgrade scheduler when lock is removed (#2606)
-- 117cefe6 Adjust auto-upgrade intervals by mode (#2605)
-- 6bfc477c Remove gway CLI integration (#2604)
-- 037db2e6 Ensure Firefox driver is available for screenshots (#2600)
-- db20f487 Add release severity handling for auto-upgrades (#2603)
-- f880e979 Capture visitor node role during registration (#2602)
-- 2fc9832a Gate GraphQL feature for non-Terminal roles (#2599)
-- d4a25c98 Improve node networking metadata handling (#2598)
-- 01f8ed5d Adjust Odoo profile display name (#2597)
-- 2adad0d5 Refactor log viewers to share functionality (#2596)
-- 8c9c0dab Rename Django settings admin labels to Django Config (#2595)
+- 1f8e2e16 chore: update version and fixtures
+- a2a5edfc chore(deps): bump txaio from 25.6.1 to 25.9.2 (#2608)
+- 38db3621 Refactor forwarded charge point task to use websockets (#2625)
+- c7619e17 chore(deps): bump pillow from 11.3.0 to 12.0.0 (#2611)
+- 614887b9 chore(deps): bump django-otp from 1.5.4 to 1.6.3 (#2613)
+- 19cad95a chore(deps): bump psutil from 7.1.2 to 7.1.3 (#2615)
+- a2d7253c Prefer canonical gateway when normalizing systemd-networkd (#2623)
+- df32fead Support systemd-networkd routing normalization (#2622)
+- 669a3dec chore(deps): bump reportlab from 4.2.2 to 4.4.4 (#2616)
+- bb4b5106 Stop upgrade script from configuring network (#2620)
+- b1b9e294 Handle DHCP reset and status without nmcli (#2621)
+- 6db5113b Add DHCP reset option to network setup (#2619)
+- 423a8579 chore: record publish metadata for v0.1.26
 
 v0.1.22 (2025-10-28)
 --------------------
