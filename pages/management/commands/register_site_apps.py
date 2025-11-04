@@ -28,7 +28,7 @@ class Command(BaseCommand):
             hostname=hostname,
             defaults={
                 "address": "127.0.0.1",
-                "port": 8000,
+                "port": 8888,
                 "enable_public_api": False,
                 "role": role,
             },

@@ -64,7 +64,7 @@ class SystemInfoModeTests(SimpleTestCase):
         try:
             info = _gather_info()
             self.assertEqual(info["mode"], "public")
-            self.assertEqual(info["port"], 8000)
+            self.assertEqual(info["port"], 8888)
         finally:
             lock_file.unlink()
             if not any(lock_dir.iterdir()):
@@ -146,21 +146,21 @@ class SystemInfoRunserverDetectionTests(SimpleTestCase):
         mock_run.return_value = CompletedProcess(
             args=["pgrep"],
             returncode=0,
-            stdout="123 python manage.py runserver 0.0.0.0:8000 --noreload\n",
+            stdout="123 python manage.py runserver 0.0.0.0:8888 --noreload\n",
         )
 
         info = _gather_info()
 
         self.assertTrue(info["running"])
-        self.assertEqual(info["port"], 8000)
+        self.assertEqual(info["port"], 8888)
 
-    @patch("core.system._probe_ports", return_value=(True, 8000))
+    @patch("core.system._probe_ports", return_value=(True, 8888))
     @patch("core.system.subprocess.run", side_effect=FileNotFoundError)
     def test_falls_back_to_port_probe_when_pgrep_missing(self, mock_run, mock_probe):
         info = _gather_info()
 
         self.assertTrue(info["running"])
-        self.assertEqual(info["port"], 8000)
+        self.assertEqual(info["port"], 8888)
 
 
 class SystemSigilValueTests(SimpleTestCase):

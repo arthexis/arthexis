@@ -9,7 +9,7 @@ if not exist %VENV%\Scripts\python.exe (
     goto cleanup
 )
 
-set PORT=8000
+set PORT=8888
 set RELOAD=
 :parse
 if "%1"=="" goto run

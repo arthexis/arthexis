@@ -85,11 +85,7 @@ if [ -f "$LOCK_DIR/nginx_mode.lck" ]; then
 else
   MODE="internal"
 fi
-if [ "$MODE" = "public" ]; then
-  PORT=8000
-else
-  PORT=8888
-fi
+PORT=8888
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -110,7 +106,7 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --public)
-      PORT=8000
+      PORT=8888
       shift
       ;;
     --internal)

@@ -778,8 +778,8 @@ class NodeAdmin(EntityModelAdmin):
             "token": token,
             "info_url": reverse("node-info"),
             "register_url": reverse("register-node"),
-            "visitor_info_url": "http://localhost:8000/nodes/info/",
-            "visitor_register_url": "http://localhost:8000/nodes/register/",
+            "visitor_info_url": "http://localhost:8888/nodes/info/",
+            "visitor_register_url": "http://localhost:8888/nodes/register/",
         }
         return render(request, "admin/nodes/node/register_visitor.html", context)
 

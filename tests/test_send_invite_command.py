@@ -58,7 +58,7 @@ def test_send_invite_tracks_outbox(monkeypatch):
     node = Node.objects.create(
         hostname="node-host",
         address="127.0.0.1",
-        port=8000,
+        port=8888,
         mac_address="00:aa:bb:cc:dd:ee",
     )
     outbox = EmailOutbox.objects.create(

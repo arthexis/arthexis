@@ -726,7 +726,7 @@ class AdminDashboardAppListTests(TestCase):
                 "hostname": socket.gethostname(),
                 "address": socket.gethostbyname(socket.gethostname()),
                 "base_path": settings.BASE_DIR,
-                "port": 8000,
+                "port": 8888,
             },
         )
         self.node.features.clear()
@@ -869,7 +869,7 @@ class ViewHistoryLoggingTests(TestCase):
                 "hostname": socket.gethostname(),
                 "address": "127.0.0.1",
                 "base_path": settings.BASE_DIR,
-                "port": 8000,
+                "port": 8888,
             },
         )
         return node
@@ -1178,7 +1178,7 @@ class LandingLeadAdminTests(TestCase):
                 "hostname": socket.gethostname(),
                 "address": "127.0.0.1",
                 "base_path": settings.BASE_DIR,
-                "port": 8000,
+                "port": 8888,
             },
         )
         self.node.features.clear()
@@ -1694,7 +1694,7 @@ class NavAppsTests(TestCase):
         self.assertContains(resp, "badge rounded-pill")
 
     def test_nav_pill_renders_with_port(self):
-        resp = self.client.get(reverse("pages:index"), HTTP_HOST="127.0.0.1:8000")
+        resp = self.client.get(reverse("pages:index"), HTTP_HOST="127.0.0.1:8888")
         self.assertContains(resp, "COOKBOOKS")
 
     def test_nav_pill_uses_menu_field(self):
@@ -3133,7 +3133,7 @@ class FavoriteTests(TestCase):
             hostname="cached-node",
             address="127.0.0.1",
             mac_address="AA:BB:CC:DD:EE:FF",
-            port=8000,
+            port=8888,
             is_user_data=True,
         )
 
@@ -3580,7 +3580,7 @@ class UserStorySubmissionTests(TestCase):
             defaults={
                 "hostname": "local-node",
                 "address": "127.0.0.1",
-                "port": 8000,
+                "port": 8888,
                 "public_endpoint": "local-node",
             },
         )

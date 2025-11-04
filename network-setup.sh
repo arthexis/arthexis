@@ -1058,9 +1058,6 @@ apply_managed_nginx_sites() {
     fi
 
     local port="8888"
-    if [[ "$mode" == "public" ]]; then
-        port="8000"
-    fi
 
     local helper="$BASE_DIR/scripts/helpers/render_nginx_sites.py"
     local dest_dir="/etc/nginx/conf.d/arthexis-sites.d"
@@ -1620,7 +1617,7 @@ if [[ $RUN_FIREWALL == true ]]; then
         MODE="$(cat "$LOCK_DIR/nginx_mode.lck")"
     fi
     if [ "$MODE" = "public" ]; then
-        PORTS+=(80 443 8000)
+        PORTS+=(80 443 8888)
     else
         PORTS+=(8000 8080 8888)
     fi

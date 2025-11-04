@@ -403,7 +403,20 @@ def node_info(request):
             advertised_port = host_port
     if host_domain:
         hostname = host_domain
-        address = advertised_address or host_domain
+        local_aliases = {
+            value
+            for value in (
+                node.hostname,
+                node.network_hostname,
+                node.address,
+                node.public_endpoint,
+            )
+            if value
+        }
+        if advertised_address and advertised_address not in local_aliases:
+            address = advertised_address
+        else:
+            address = host_domain
     else:
         hostname = node.hostname
         address = advertised_address or node.address or node.network_hostname or ""
@@ -526,7 +539,7 @@ def register_node(request):
     network_hostname = (data.get("network_hostname") or "").strip()
     ipv4_address = (data.get("ipv4_address") or "").strip()
     ipv6_address = (data.get("ipv6_address") or "").strip()
-    port = data.get("port", 8000)
+    port = data.get("port", 8888)
     mac_address = (data.get("mac_address") or "").strip()
     public_key = data.get("public_key")
     token = data.get("token")
@@ -562,7 +575,7 @@ def register_node(request):
     try:
         port = int(port)
     except (TypeError, ValueError):
-        port = 8000
+        port = 8888
 
     verified = False
     if public_key and token and signature:

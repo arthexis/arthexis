@@ -54,11 +54,7 @@ detect_service_port() {
     fi
 
     if [ -z "$port" ]; then
-        if [ "$nginx_mode" = "public" ]; then
-            port=8000
-        else
-            port=8888
-        fi
+        port=8888
     fi
 
     echo "$port"

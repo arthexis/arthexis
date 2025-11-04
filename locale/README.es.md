@@ -86,7 +86,7 @@ Constelación Arthexis se distribuye en cuatro roles de nodo que adaptan la plat
 - **[Windows](https://es.wikipedia.org/wiki/Microsoft_Windows)**: abre [PowerShell](https://learn.microsoft.com/es-es/powershell/) o [Git Bash](https://gitforwindows.org/) y ejecuta el mismo comando.
 
 ### 2. Iniciar y detener
-Los nodos Terminal pueden iniciarse directamente con los siguientes scripts sin instalar; los roles Control, Satélite y Constelación deben instalarse primero. Ambos métodos escuchan en [`http://localhost:8000/`](http://localhost:8000/) de forma predeterminada.
+Los nodos Terminal pueden iniciarse directamente con los siguientes scripts sin instalar; los roles Control, Satélite y Constelación deben instalarse primero. Ambos métodos escuchan en [`http://localhost:8888/`](http://localhost:8888/) de forma predeterminada.
 
 - **[VS Code](https://code.visualstudio.com/)**
    - Abre la carpeta y ve al panel **Run and Debug** (`Ctrl+Shift+D`).
@@ -114,7 +114,7 @@ Los nodos Terminal pueden iniciarse directamente con los siguientes scripts sin 
    - No es necesario instalar para iniciar en modo Terminal (el predeterminado).
 
 ### 4. Administración
-Visita [`http://localhost:8000/admin/`](http://localhost:8000/admin/) para el [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) y [`http://localhost:8000/admindocs/`](http://localhost:8000/admindocs/) para la [documentación de administración](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/). Usa `--port` con los scripts de inicio o el instalador si necesitas exponer otro puerto.
+Visita [`http://localhost:8888/admin/`](http://localhost:8888/admin/) para el [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) y [`http://localhost:8888/admindocs/`](http://localhost:8888/admindocs/) para la [documentación de administración](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/). Usa `--port` con los scripts de inicio o el instalador si necesitas exponer otro puerto.
 
 ## Sigilos
 

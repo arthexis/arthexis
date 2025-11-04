@@ -88,7 +88,7 @@ Arthexis Constellation ships in four node roles tailored to different deployment
 - **[Windows](https://en.wikipedia.org/wiki/Microsoft_Windows)**: open [PowerShell](https://learn.microsoft.com/powershell/) or [Git Bash](https://gitforwindows.org/) and run the same command.
 
 ### 2. Start and stop
-Terminal nodes can start directly with the scripts below without installing; Control, Satellite, and Watchtower roles require installation first. Both approaches listen on [`http://localhost:8000/`](http://localhost:8000/) by default.
+Terminal nodes can start directly with the scripts below without installing; Control, Satellite, and Watchtower roles require installation first. Both approaches listen on [`http://localhost:8888/`](http://localhost:8888/) by default.
 
 - **[VS Code](https://code.visualstudio.com/)**
    - Open the folder and go to the **Run and Debug** panel (`Ctrl+Shift+D`).
@@ -116,7 +116,7 @@ Terminal nodes can start directly with the scripts below without installing; Con
    - Installation is not required to start in Terminal mode (the default).
 
 ### 4. Administration
-Visit [`http://localhost:8000/admin/`](http://localhost:8000/admin/) for the [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) and [`http://localhost:8000/admindocs/`](http://localhost:8000/admindocs/) for the [admindocs](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/). Use `--port` with the start scripts or installer when you need to expose a different port.
+Visit [`http://localhost:8888/admin/`](http://localhost:8888/admin/) for the [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) and [`http://localhost:8888/admindocs/`](http://localhost:8888/admindocs/) for the [admindocs](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/). Use `--port` with the start scripts or installer when you need to expose a different port.
 
 ## Sigils
 
