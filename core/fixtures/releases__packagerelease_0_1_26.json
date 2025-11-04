@@ -18,7 +18,7 @@
       "changelog": "- 09a0c650 Adjust auto-upgrade schedule intervals (#2618)\n- 35118111 Stop auto-upgrade scheduler when lock is removed (#2606)\n- 117cefe6 Adjust auto-upgrade intervals by mode (#2605)\n- 6bfc477c Remove gway CLI integration (#2604)\n- 037db2e6 Ensure Firefox driver is available for screenshots (#2600)\n- db20f487 Add release severity handling for auto-upgrades (#2603)\n- f880e979 Capture visitor node role during registration (#2602)\n- 2fc9832a Gate GraphQL feature for non-Terminal roles (#2599)\n- d4a25c98 Improve node networking metadata handling (#2598)\n- 01f8ed5d Adjust Odoo profile display name (#2597)\n- 2adad0d5 Refactor log viewers to share functionality (#2596)\n- 8c9c0dab Rename Django settings admin labels to Django Config (#2595)",
       "pypi_url": "https://pypi.org/project/arthexis/0.1.26/",
       "github_url": "",
-      "release_on": "2025-11-03T03:21:14.385Z"
+      "release_on": "2025-11-03T03:21:10.618Z"
     }
   }
 ]
