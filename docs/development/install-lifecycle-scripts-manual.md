@@ -26,8 +26,8 @@ Passing a role flag applies a curated bundle of options. Each preset still honou
 | --- | --- |
 | `--service NAME` | Installs or updates systemd services (`NAME`, `celery-NAME`, `celery-beat-NAME`, and optionally `lcd-NAME`) and records the name in `locks/service.lck` for the runtime helpers.【F:install.sh†L133-L137】【F:install.sh†L480-L563】 |
 | `--internal` | Forces the internal Nginx template (ports 8000/8080). This is the default unless a role preset changes it.【F:install.sh†L30-L36】【F:install.sh†L320-L373】 |
-| `--public` | Enables the public HTTPS reverse proxy template and defaults the HTTP backend port to 8000.【F:install.sh†L37-L44】【F:install.sh†L305-L373】 |
-| `--port PORT` | Overrides the backend Django port used in generated systemd units and the stored lock. If omitted, `8000` is used for public mode and `8888` for internal mode.【F:install.sh†L45-L60】 |
+| `--public` | Enables the public HTTPS reverse proxy template while continuing to proxy to the backend on port 8888 unless overridden.【F:install.sh†L37-L44】【F:install.sh†L305-L373】 |
+| `--port PORT` | Overrides the backend Django port used in generated systemd units and the stored lock. If omitted, every mode defaults to `8888`.【F:install.sh†L45-L60】 |
 | `--upgrade` | Immediately runs `upgrade.sh` after installation (respecting the `--latest` / `--stable` track selection).【F:install.sh†L61-L68】【F:install.sh†L526-L551】 |
 | `--auto-upgrade` | Schedules automatic upgrades via Celery, writes `locks/auto_upgrade.lck`, and optionally performs a first upgrade run.【F:install.sh†L20-L28】【F:install.sh†L526-L551】 |
 | `--latest` | Switches the upgrade track to latest commits; conflicts with `--stable`. Used by presets that prioritise new features (Terminal/Satellite).【F:install.sh†L69-L76】【F:install.sh†L526-L551】 |
@@ -46,7 +46,7 @@ The script also:
 
 ### 1.2 Windows: `install.bat`
 
-The Windows installer is intentionally simple: it bootstraps `.venv`, installs requirements, applies migrations, and then runs `env-refresh.bat --latest` so developers always start on the latest schema locally.【F:install.bat†L1-L20】 No flags are accepted—Windows nodes rely on Terminal defaults (development server at port 8000, no system services). Run `install.bat` again whenever dependencies change.
+The Windows installer is intentionally simple: it bootstraps `.venv`, installs requirements, applies migrations, and then runs `env-refresh.bat --latest` so developers always start on the latest schema locally.【F:install.bat†L1-L20】 No flags are accepted—Windows nodes rely on Terminal defaults (development server at port 8888, no system services). Run `install.bat` again whenever dependencies change.
 
 ## 2. Runtime helpers
 
@@ -56,10 +56,10 @@ The Windows installer is intentionally simple: it bootstraps `.venv`, installs r
 
 | Flag | Purpose |
 | --- | --- |
-| `--port PORT` | Overrides the serving port; defaults to `8000` when the Nginx mode lock is `public` and `8888` otherwise.【F:start.sh†L72-L112】 |
+| `--port PORT` | Overrides the serving port; defaults to `8888` regardless of the Nginx mode lock.【F:start.sh†L72-L112】 |
 | `--reload` | Runs Django with auto-reload enabled (useful for development).【F:start.sh†L106-L117】【F:start.sh†L136-L145】 |
 | `--celery` / `--no-celery` | Enables or disables the Celery worker/beat pair that handles background email. Defaults to on.【F:start.sh†L100-L145】 |
-| `--public` / `--internal` | Convenience shorthands to force the default port to 8000 or 8888 without editing the lock file.【F:start.sh†L108-L119】 |
+| `--public` / `--internal` | Convenience shorthands to reset the port to the installer default (8888) without editing the lock file.【F:start.sh†L108-L119】 |
 
 When a systemd service was previously installed, the script prefers restarting those units (plus `celery-*` and `lcd-*` companions) and exits once they are healthy. Otherwise it runs the development server in the foreground.【F:start.sh†L46-L101】 Celery processes launched directly are cleaned up automatically when the script exits because of the `trap` handler.【F:start.sh†L120-L145】
 
@@ -74,7 +74,7 @@ On Control nodes with LCD support, it also sends a farewell notification before 
 
 ### 2.3 Windows: `start.bat`
 
-The Windows starter mirrors the Linux workflow without service management: it validates `.venv`, reruns `collectstatic` only when the static hash changes, and starts Django at the requested port (default 8000). Flags: `--port PORT` and `--reload`. Any other argument prints usage and aborts.【F:start.bat†L1-L57】 Use `Ctrl+C` to stop the server.
+The Windows starter mirrors the Linux workflow without service management: it validates `.venv`, reruns `collectstatic` only when the static hash changes, and starts Django at the requested port (default 8888). Flags: `--port PORT` and `--reload`. Any other argument prints usage and aborts.【F:start.bat†L1-L57】 Use `Ctrl+C` to stop the server.
 
 ## 3. Upgrades
 

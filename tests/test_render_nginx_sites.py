@@ -35,14 +35,14 @@ def test_apply_sites_generates_https_blocks(tmp_path):
     )
 
     dest_dir = tmp_path / "conf"
-    changed = apply_sites(config_path, "public", 8000, dest_dir)
+    changed = apply_sites(config_path, "public", 8888, dest_dir)
     assert changed is True
 
     conf_path = dest_dir / "arthexis-site-secure-test.conf"
     conf = conf_path.read_text()
     assert "return 301 https://$host$request_uri;" in conf
     assert "listen 443 ssl;" in conf
-    assert "proxy_pass http://127.0.0.1:8000/" in conf
+    assert "proxy_pass http://127.0.0.1:8888/" in conf
 
 
 def test_apply_sites_removes_stale_files(tmp_path):

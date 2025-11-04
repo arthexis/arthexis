@@ -258,11 +258,7 @@ if [ "$LATEST" = true ] && [ "$STABLE" = true ]; then
 fi
 
 if [ -z "$PORT" ]; then
-    if [ "$NGINX_MODE" = "public" ]; then
-        PORT=8000
-    else
-        PORT=8888
-    fi
+    PORT=8888
 fi
 
 

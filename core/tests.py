@@ -2534,7 +2534,7 @@ class TodoFocusViewTests(TestCase):
     def test_focus_view_sanitizes_loopback_absolute_url(self):
         todo = Todo.objects.create(
             request="Task",
-            url="http://127.0.0.1:8000/docs/?section=chart",
+            url="http://127.0.0.1:8888/docs/?section=chart",
         )
         resp = self.client.get(reverse("todo-focus", args=[todo.pk]))
         self.assertContains(resp, 'src="/docs/?section=chart"')

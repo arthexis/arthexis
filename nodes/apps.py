@@ -21,7 +21,7 @@ def _startup_notification() -> None:
 
     host = socket.gethostname()
 
-    port = os.environ.get("PORT", "8000")
+    port = os.environ.get("PORT", "8888")
 
     version = ""
     ver_path = Path(settings.BASE_DIR) / "VERSION"

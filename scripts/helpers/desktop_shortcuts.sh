@@ -154,14 +154,6 @@ arthexis_desktop_shortcut_start_unit() {
 arthexis_desktop_shortcut_detect_port() {
     local base_dir="$1"
     local default_port="8888"
-    local mode_file="$base_dir/locks/nginx_mode.lck"
-    if [ -f "$mode_file" ]; then
-        local mode
-        mode="$(tr '[:upper:]' '[:lower:]' < "$mode_file" 2>/dev/null | tr -d '\r\n\t ')"
-        if [ "$mode" = "public" ]; then
-            default_port="8000"
-        fi
-    fi
 
     local service_lock="$base_dir/locks/service.lck"
     local service_name=""

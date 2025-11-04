@@ -932,7 +932,7 @@ def _detect_runserver_process() -> tuple[bool, int | None]:
             break
 
     if port is None:
-        port = 8000
+        port = 8888
 
     return True, port
 
@@ -981,7 +981,7 @@ def _gather_info() -> dict:
         raw_mode = ""
     mode = raw_mode.lower() or "internal"
     info["mode"] = mode
-    default_port = 8000 if mode == "public" else 8888
+    default_port = 8888
     detected_port: int | None = None
 
     screen_file = lock_dir / "screen_mode.lck"

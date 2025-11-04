@@ -214,7 +214,7 @@ class Node(Entity):
     )
     address = models.GenericIPAddressField(blank=True, null=True)
     mac_address = models.CharField(max_length=17, unique=True, null=True, blank=True)
-    port = models.PositiveIntegerField(default=8000)
+    port = models.PositiveIntegerField(default=8888)
     message_queue_length = models.PositiveSmallIntegerField(
         default=10,
         help_text="Maximum queued NetMessages to retain for this peer.",
@@ -407,7 +407,7 @@ class Node(Entity):
         """Yield potential remote URLs for ``path`` on this node."""
 
         host_candidates = self.get_remote_host_candidates()
-        default_port = self.port or 8000
+        default_port = self.port or 8888
         normalized_path = path if path.startswith("/") else f"/{path}"
         seen: set[str] = set()
 
@@ -602,7 +602,7 @@ class Node(Entity):
         ipv6_address = cls._select_preferred_ip(ipv6_candidates)
 
         preferred_contact = ipv4_address or ipv6_address or direct_address or "127.0.0.1"
-        port = int(os.environ.get("PORT", 8000))
+        port = int(os.environ.get("PORT", 8888))
         base_path = str(settings.BASE_DIR)
         ver_path = Path(settings.BASE_DIR) / "VERSION"
         installed_version = ver_path.read_text().strip() if ver_path.exists() else ""
@@ -721,7 +721,7 @@ class Node(Entity):
         peers = Node.objects.exclude(pk=self.pk)
         for peer in peers:
             host_candidates = peer.get_remote_host_candidates()
-            port = peer.port or 8000
+            port = peer.port or 8888
             urls: list[str] = []
             for host in host_candidates:
                 host = host.strip()

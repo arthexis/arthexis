@@ -189,7 +189,7 @@ def _resolve_service_url(base_dir: Path) -> str:
             value = ""
         if value:
             mode = value.lower()
-    port = 8000 if mode == "public" else 8888
+    port = 8888
     return f"http://127.0.0.1:{port}/"
 
 

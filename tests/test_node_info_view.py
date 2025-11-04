@@ -62,7 +62,7 @@ class NodeInfoViewTests(TestCase):
 
         with patch("nodes.views._get_route_address", return_value="192.168.1.2"):
             response = self.client.get(
-                reverse("node-info"), HTTP_HOST="localhost:8000"
+                reverse("node-info"), HTTP_HOST="localhost:8888"
             )
 
         payload = response.json()

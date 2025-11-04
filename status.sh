@@ -64,9 +64,6 @@ if [ -f "$LOCK_DIR/nginx_mode.lck" ]; then
   MODE="$(cat "$LOCK_DIR/nginx_mode.lck")"
 fi
 PORT=8888
-if [ "$MODE" = "public" ]; then
-  PORT=8000
-fi
 
 echo "Nginx mode: $MODE"
 

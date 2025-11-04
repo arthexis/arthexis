@@ -36,7 +36,7 @@ def sample_clipboard() -> None:
 
 @shared_task
 def capture_node_screenshot(
-    url: str | None = None, port: int = 8000, method: str = "TASK"
+    url: str | None = None, port: int = 8888, method: str = "TASK"
 ) -> str:
     """Capture a screenshot of ``url`` and record it as a :class:`ContentSample`."""
     if url is None:

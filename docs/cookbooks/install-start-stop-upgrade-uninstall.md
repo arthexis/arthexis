@@ -31,8 +31,8 @@ Run the installer from the project root. Every installer writes a timestamped lo
 | Flag | Purpose |
 | --- | --- |
 | `--service NAME` | Registers the deployment under a specific systemd service name. When present, the installer records the value in `locks/service.lck`, enabling later scripts to control that service instead of spawning foreground processes.【F:install.sh†L18-L19】【F:install.sh†L150-L169】 |
-| `--internal` / `--public` | Chooses the nginx topology. `--internal` listens on ports 8000/8888 for LAN-only access, while `--public` provisions TLS-forwarding on 80/443 and proxies to the configured backend port.【F:install.sh†L33-L52】【F:install.sh†L200-L296】 |
-| `--port PORT` | Overrides the backend port used by Django when nginx proxies traffic. Defaults to 8888 for internal nodes and 8000 for public-facing nodes.【F:install.sh†L57-L74】 |
+| `--internal` / `--public` | Chooses the nginx topology. `--internal` listens on ports 8000/8080 for LAN-only access, while `--public` provisions TLS-forwarding on 80/443. Both modes proxy to the configured backend port (default 8888).【F:install.sh†L33-L52】【F:install.sh†L200-L296】 |
+| `--port PORT` | Overrides the backend port used by Django when nginx proxies traffic. Defaults to 8888 for every role unless explicitly overridden.【F:install.sh†L57-L74】 |
 | `--upgrade` | Runs the installer in upgrade mode, preserving state while refreshing configuration. Often paired with role flags to recompute dependencies.【F:install.sh†L75-L79】 |
 | `--auto-upgrade` | Enables unattended upgrades for supported roles by toggling automation locks under `locks/`. Role presets may turn this on automatically.【F:install.sh†L80-L83】【F:install.sh†L116-L148】 |
 | `--latest` / `--stable` | Pin package versions. These switches are mutually exclusive and the script exits when both are present.【F:install.sh†L84-L86】【F:install.sh†L163-L169】 |
@@ -77,10 +77,10 @@ Available options:
 
 | Option | Effect |
 | --- | --- |
-| `--port PORT` | Overrides the listening port (default 8888 for internal mode, 8000 for public deployments, matching the nginx installer choice).【F:start.sh†L86-L97】 |
+| `--port PORT` | Overrides the listening port (default 8888 regardless of nginx mode, matching the installer default).【F:start.sh†L86-L97】 |
 | `--reload` | Enables Django’s autoreload loop for development scenarios. Default is `--noreload` for stability on appliance nodes.【F:start.sh†L98-L103】【F:start.sh†L119-L125】 |
 | `--celery` / `--no-celery` | Forces Celery workers on or off regardless of locks. Celery is enabled by default to handle queued tasks like email delivery.【F:start.sh†L99-L104】【F:start.sh†L105-L116】 |
-| `--public` / `--internal` | Quick shortcuts that set the default port to 8000 or 8888 without touching nginx configuration. Handy when experimenting without rerunning the installer.【F:start.sh†L98-L103】 |
+| `--public` / `--internal` | Convenience shorthands that reset the port to the installer default (8888) without touching nginx configuration. Handy when experimenting without rerunning the installer.【F:start.sh†L98-L103】 |
 
 ### 2.2 Stopping services on Linux
 

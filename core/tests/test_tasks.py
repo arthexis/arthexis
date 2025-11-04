@@ -307,4 +307,4 @@ def test_resolve_service_url_handles_case_insensitive_mode(tmp_path):
 
     url = tasks._resolve_service_url(base_dir)
 
-    assert url == "http://127.0.0.1:8000/"
+    assert url == "http://127.0.0.1:8888/"

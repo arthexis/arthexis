@@ -90,7 +90,7 @@ class NodeBadgeColorTests(TestCase):
         node = Node.objects.create(
             hostname="watchtower",
             address="10.1.0.1",
-            port=8000,
+            port=8888,
             mac_address="00:aa:bb:cc:dd:01",
             role=self.watchtower,
         )
@@ -317,7 +317,7 @@ class NodeGetLocalTests(TestCase):
             data={
                 "hostname": "local",
                 "address": "127.0.0.1",
-                "port": 8000,
+                "port": 8888,
                 "mac_address": "00:11:22:33:44:55",
             },
             content_type="application/json",
@@ -437,7 +437,7 @@ class NodeGetLocalTests(TestCase):
             hostname="best-ip",
             address="gateway.local",
             ipv4_address="198.51.100.5",
-            port=8000,
+            port=8888,
             mac_address="00:11:22:33:44:77",
         )
         self.assertEqual(node.get_best_ip(), "198.51.100.5")
@@ -502,7 +502,7 @@ class NodeGetLocalTests(TestCase):
             data={
                 "hostname": "lcd",
                 "address": "127.0.0.1",
-                "port": 8000,
+                "port": 8888,
                 "mac_address": "00:aa:bb:cc:dd:ee",
                 "features": ["clipboard-poll"],
             },
@@ -517,7 +517,7 @@ class NodeGetLocalTests(TestCase):
             data={
                 "hostname": "lcd",
                 "address": "127.0.0.1",
-                "port": 8000,
+                "port": 8888,
                 "mac_address": "00:aa:bb:cc:dd:ee",
                 "features": [],
             },
@@ -684,7 +684,7 @@ class NodeGetLocalTests(TestCase):
         payload = {
             "hostname": "cors",
             "address": "127.0.0.1",
-            "port": 8000,
+            "port": 8888,
             "mac_address": "10:20:30:40:50:60",
         }
         response = self.client.post(
@@ -702,7 +702,7 @@ class NodeGetLocalTests(TestCase):
         payload = {
             "hostname": "visitor",
             "address": "127.0.0.1",
-            "port": 8000,
+            "port": 8888,
             "mac_address": "aa:bb:cc:dd:ee:00",
         }
         response = self.client.post(
@@ -746,7 +746,7 @@ class NodeGetLocalTests(TestCase):
         payload = {
             "hostname": "visitor",
             "address": "127.0.0.1",
-            "port": 8000,
+            "port": 8888,
             "mac_address": "aa:bb:cc:dd:ee:11",
             "public_key": public_bytes,
             "token": token,
@@ -832,7 +832,7 @@ class NodeEnsureKeysTests(TestCase):
         self.node = Node.objects.create(
             hostname="ensure-host",
             address="127.0.0.1",
-            port=8000,
+            port=8888,
             mac_address="00:11:22:33:44:55",
         )
 
@@ -888,7 +888,7 @@ class NodeInfoViewTests(TestCase):
             address="10.0.0.10",
             ipv4_address="10.0.0.10",
             ipv6_address="2001:db8::10",
-            port=8000,
+            port=8888,
             mac_address=self.mac,
             public_endpoint="local",
             current_relation=Node.Relation.SELF,
@@ -952,7 +952,7 @@ class RegisterVisitorNodeMessageTests(TestCase):
         self.visitor = Node.objects.create(
             hostname="visitor-node",
             address="10.0.0.100",
-            port=8000,
+            port=8888,
             mac_address="00:10:20:30:40:50",
             role=self.role,
         )
@@ -1134,7 +1134,7 @@ class NodeRegisterCurrentTests(TestCase):
                     Node.objects.create(
                         hostname="localnode",
                         address="192.168.1.5",
-                        port=8000,
+                        port=8888,
                         mac_address="00:ff:ee:dd:cc:bb",
                         installed_version="1.9.0",
                         installed_revision="oldrev",
@@ -1192,7 +1192,7 @@ class NodeRegisterCurrentTests(TestCase):
                     Node.objects.create(
                         hostname="samever",
                         address="192.168.1.6",
-                        port=8000,
+                        port=8888,
                         mac_address="00:ff:ee:dd:cc:cc",
                         installed_version="1.0.0",
                         installed_revision="rev1",
@@ -1372,7 +1372,7 @@ class NodeRegisterCurrentTests(TestCase):
         sender = Node.objects.create(
             hostname="sender",
             address="10.0.0.1",
-            port=8000,
+            port=8888,
             mac_address="00:11:22:33:44:cc",
             public_key=public_key,
         )
@@ -1736,7 +1736,7 @@ class NodeAdminTests(TestCase):
         return Node.objects.create(
             hostname="localnode",
             address="127.0.0.1",
-            port=8000,
+            port=8888,
             mac_address=Node.get_current_mac(),
         )
 
@@ -1811,7 +1811,7 @@ class NodeAdminTests(TestCase):
         Node.objects.create(
             hostname=hostname,
             address="127.0.0.1",
-            port=8000,
+            port=8888,
             mac_address=None,
         )
 
@@ -1942,7 +1942,7 @@ class NodeAdminTests(TestCase):
         local_node = Node.objects.create(
             hostname="local",
             address="127.0.0.1",
-            port=8000,
+            port=8888,
             mac_address="00:11:22:33:44:aa",
             public_key="LOCAL-PUB",
         )
@@ -2756,7 +2756,7 @@ class NodeProxyGatewayTests(TestCase):
         self.node = Node.objects.create(
             hostname="requester",
             address="127.0.0.1",
-            port=8000,
+            port=8888,
             mac_address="aa:bb:cc:dd:ee:aa",
             public_key=public_key,
         )
@@ -2981,7 +2981,7 @@ class RFIDExportViewTests(TestCase):
         self.local_node = Node.objects.create(
             hostname="local",
             address="127.0.0.1",
-            port=8000,
+            port=8888,
             mac_address=Node.get_current_mac(),
         )
         self.remote_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
@@ -3107,7 +3107,7 @@ class NetMessageReachTests(TestCase):
             self.nodes[name] = Node.objects.create(
                 hostname=name.lower(),
                 address=f"10.0.0.{idx}",
-                port=8000 + idx,
+                port=8888 + idx,
                 mac_address=f"00:11:22:33:44:{idx:02x}",
                 role=self.roles[name],
             )
@@ -3318,7 +3318,7 @@ class NetMessagePropagationTests(TestCase):
                 Node.objects.create(
                     hostname=f"n{idx}",
                     address=f"10.0.0.{idx}",
-                    port=8000 + idx,
+                    port=8888 + idx,
                     mac_address=f"00:11:22:33:44:{idx:02x}",
                     role=self.role,
                     public_endpoint=f"n{idx}",
@@ -3365,7 +3365,7 @@ class NetMessagePropagationTests(TestCase):
                 Node.objects.create(
                     hostname=f"n{idx}",
                     address=f"10.0.0.{idx}",
-                    port=8000 + idx,
+                    port=8888 + idx,
                     mac_address=f"00:11:22:33:44:{idx:02x}",
                     role=self.role,
                     public_endpoint=f"n{idx}",
@@ -3454,7 +3454,7 @@ class NetMessageQueueTests(TestCase):
         local = Node.objects.create(
             hostname="local",
             address="10.0.0.1",
-            port=8000,
+            port=8888,
             mac_address="00:11:22:33:44:10",
             role=self.role,
             public_endpoint="local",
@@ -3753,7 +3753,7 @@ class NetworkChargerActionSecurityTests(TestCase):
         self.local_node = Node.objects.create(
             hostname="local-node",
             address="127.0.0.1",
-            port=8000,
+            port=8888,
             mac_address="00:aa:bb:cc:dd:10",
             public_endpoint="local-endpoint",
         )
@@ -4026,7 +4026,7 @@ class ContentSampleAdminTests(TestCase):
         Node.objects.create(
             hostname="host",
             address="127.0.0.1",
-            port=8000,
+            port=8888,
             mac_address=Node.get_current_mac(),
         )
         url = reverse("admin:nodes_contentsample_from_clipboard")
@@ -4052,7 +4052,7 @@ class EmailOutboxTests(TestCase):
         node = Node.objects.create(
             hostname="outboxhost",
             address="127.0.0.1",
-            port=8000,
+            port=8888,
             mac_address="00:11:22:33:aa:bb",
         )
         outbox = EmailOutbox.objects.create(
@@ -4068,7 +4068,7 @@ class EmailOutboxTests(TestCase):
         node = Node.objects.create(
             hostname="host",
             address="127.0.0.1",
-            port=8000,
+            port=8888,
             mac_address="00:11:22:33:cc:dd",
         )
         node.send_mail("sub", "msg", ["to@example.com"])
@@ -4181,7 +4181,7 @@ class ClipboardTaskTests(TestCase):
         Node.objects.create(
             hostname="host",
             address="127.0.0.1",
-            port=8000,
+            port=8888,
             mac_address=Node.get_current_mac(),
         )
         sample_clipboard()
@@ -4205,7 +4205,7 @@ class ClipboardTaskTests(TestCase):
         node = Node.objects.create(
             hostname="host",
             address="127.0.0.1",
-            port=8000,
+            port=8888,
             mac_address=Node.get_current_mac(),
         )
         screenshot_dir = settings.LOG_DIR / "screenshots"
@@ -4228,7 +4228,7 @@ class ClipboardTaskTests(TestCase):
         Node.objects.create(
             hostname="host",
             address="127.0.0.1",
-            port=8000,
+            port=8888,
             mac_address=Node.get_current_mac(),
         )
         mock_capture.side_effect = RuntimeError("boom")
@@ -4290,14 +4290,14 @@ class NodeRoleAdminTests(TestCase):
         node1 = Node.objects.create(
             hostname="n1",
             address="127.0.0.1",
-            port=8000,
+            port=8888,
             mac_address="00:11:22:33:44:55",
             role=role,
         )
         node2 = Node.objects.create(
             hostname="n2",
             address="127.0.0.2",
-            port=8000,
+            port=8888,
             mac_address="00:11:22:33:44:66",
         )
         url = reverse("admin:nodes_noderole_change", args=[role.pk])
@@ -4316,7 +4316,7 @@ class NodeRoleAdminTests(TestCase):
         Node.objects.create(
             hostname="n1",
             address="127.0.0.1",
-            port=8000,
+            port=8888,
             mac_address="00:11:22:33:44:77",
             role=role,
         )
@@ -4379,7 +4379,7 @@ class NodeFeatureTests(TestCase):
             self.node = Node.objects.create(
                 hostname="local",
                 address="127.0.0.1",
-                port=8000,
+                port=8888,
                 mac_address="00:11:22:33:44:55",
                 role=self.role,
             )
@@ -4552,7 +4552,7 @@ class NodeFeatureTests(TestCase):
             node = Node.objects.create(
                 hostname="control",
                 address="127.0.0.1",
-                port=8000,
+                port=8888,
                 mac_address=mac,
                 role=control_role,
             )
@@ -4576,7 +4576,7 @@ class NodeFeatureTests(TestCase):
                 node = Node.objects.create(
                     hostname="control",
                     address="127.0.0.1",
-                    port=8000,
+                    port=8888,
                     mac_address=mac,
                     role=control_role,
                     base_path=str(Path(tmp)),
@@ -4597,7 +4597,7 @@ class NodeFeatureTests(TestCase):
             node = Node.objects.create(
                 hostname="control",
                 address="127.0.0.1",
-                port=8000,
+                port=8888,
                 mac_address=mac,
                 role=control_role,
             )

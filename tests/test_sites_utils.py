@@ -94,7 +94,7 @@ def test_sites_template_tag_falls_back_to_request_site(monkeypatch):
 
 
 def test_get_site_uses_case_insensitive_domain_lookup(monkeypatch):
-    request = _build_request("Example.COM:8000")
+    request = _build_request("Example.COM:8888")
     recorded_kwargs: dict[str, object] = {}
     sentinel = Site(domain="example.com", name="Example")
 

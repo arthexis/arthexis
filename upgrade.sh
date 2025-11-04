@@ -500,11 +500,7 @@ if [ -f "$LOCK_DIR/service.lck" ]; then
     if [ -f "$LOCK_DIR/nginx_mode.lck" ]; then
       MODE="$(cat "$LOCK_DIR/nginx_mode.lck")"
     fi
-    if [ "$MODE" = "public" ]; then
-      PORT=8000
-    else
-      PORT=8888
-    fi
+    PORT=8888
     EXEC_CMD="$BASE_DIR/.venv/bin/python manage.py runserver 0.0.0.0:$PORT"
     sudo bash -c "cat > '$SERVICE_FILE'" <<SERVICEEOF
 [Unit]

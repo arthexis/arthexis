@@ -76,7 +76,7 @@
     }
 
     try {
-        const infoTargets = buildUrlVariants("http://localhost:8000/nodes/info/?token=" + token);
+        const infoTargets = buildUrlVariants("http://localhost:8888/nodes/info/?token=" + token);
         const info = await fetchJsonWithFallback(infoTargets);
         const resp = await fetch("{{ register_url|escapejs }}", {
             method: "POST",

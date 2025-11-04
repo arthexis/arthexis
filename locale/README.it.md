@@ -87,7 +87,7 @@ Costellazione Arthexis è distribuita in quattro ruoli di nodo pensati per diver
 - **[Windows](https://it.wikipedia.org/wiki/Microsoft_Windows)**: apri [PowerShell](https://learn.microsoft.com/powershell/) o [Git Bash](https://gitforwindows.org/) ed esegui lo stesso comando.
 
 ### 2. Avvio e arresto
-I nodi Terminal possono avviarsi direttamente con gli script sottostanti senza installazione; i ruoli Control, Satellite e Watchtower richiedono prima l'installazione. Entrambi i metodi ascoltano su [`http://localhost:8000/`](http://localhost:8000/) per impostazione predefinita.
+I nodi Terminal possono avviarsi direttamente con gli script sottostanti senza installazione; i ruoli Control, Satellite e Watchtower richiedono prima l'installazione. Entrambi i metodi ascoltano su [`http://localhost:8888/`](http://localhost:8888/) per impostazione predefinita.
 
 - **[VS Code](https://code.visualstudio.com/)**
    - Apri la cartella e vai al pannello **Run and Debug** (`Ctrl+Shift+D`).
@@ -115,7 +115,7 @@ I nodi Terminal possono avviarsi direttamente con gli script sottostanti senza i
    - Non è necessario installare per avviare in modalità Terminal (predefinita).
 
 ### 4. Amministrazione
-Visita [`http://localhost:8000/admin/`](http://localhost:8000/admin/) per il [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) e [`http://localhost:8000/admindocs/`](http://localhost:8000/admindocs/) per gli [admindocs](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/). Usa `--port` con gli script di avvio o l'installer quando devi esporre una porta diversa.
+Visita [`http://localhost:8888/admin/`](http://localhost:8888/admin/) per il [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) e [`http://localhost:8888/admindocs/`](http://localhost:8888/admindocs/) per gli [admindocs](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/). Usa `--port` con gli script di avvio o l'installer quando devi esporre una porta diversa.
 
 ## Sigilli
 
