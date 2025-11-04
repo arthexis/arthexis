@@ -84,7 +84,7 @@ sqlparse==0.5.3
 tablib==3.8.0
 tinycss2==1.4.0
 toml==0.10.2
-trio==0.30.0
+trio==0.32.0
 trio-websocket==0.12.2
 Twisted==25.5.0
 twine==6.1.0
