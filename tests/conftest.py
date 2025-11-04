@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 import os
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -83,6 +85,154 @@ def safe_setup(*args, **kwargs):
 
 django.setup = safe_setup
 safe_setup()
+
+
+@dataclass(slots=True)
+class StubVenv:
+    """Details about the stubbed virtual environment used in shell tests."""
+
+    python: Path
+    log: Path
+
+
+def create_stub_venv(repo: Path) -> StubVenv:
+    """Write a fake ``.venv/bin/python`` that captures module invocations.
+
+    The stub records every invocation in ``log`` as a JSON lines file and
+    emulates the handful of ``python -m`` commands used by ``env-refresh.sh``
+    during the tests. When invoked with ``pip`` or ``ensurepip`` it responds
+    immediately without shelling out to a real interpreter so the tests avoid
+    slow virtual environment setup.
+    """
+
+    venv_dir = repo / ".venv"
+    bin_dir = venv_dir / "bin"
+    bin_dir.mkdir(parents=True, exist_ok=True)
+
+    log_path = venv_dir / "stub-python-log.jsonl"
+    python_path = bin_dir / "python"
+
+    script_lines = [
+        "#!/usr/bin/env python3",
+        "import json",
+        "import os",
+        "import subprocess",
+        "import sys",
+        "from pathlib import Path",
+        "",
+        "LOG_PATH = Path(__LOG_PATH__)",
+        "LOG_PATH.parent.mkdir(parents=True, exist_ok=True)",
+        "STATE_FILE = LOG_PATH.with_name(\"pip-available.flag\")",
+        "",
+        "def _write(entry):",
+        "    with LOG_PATH.open(\"a\", encoding=\"utf-8\") as handle:",
+        "        handle.write(json.dumps(entry, sort_keys=True) + \"\\n\")",
+        "",
+        "def _should_fail(args):",
+        "    pattern = os.environ.get(\"STUB_PYTHON_FAIL_PATTERN\")",
+        "    if not pattern:",
+        "        return False",
+        "    for index, value in enumerate(args):",
+        "        if value == \"-r\" and index + 1 < len(args):",
+        "            req_path = Path(args[index + 1])",
+        "            if req_path.exists():",
+        "                try:",
+        "                    text = req_path.read_text(encoding=\"utf-8\")",
+        "                except OSError:",
+        "                    continue",
+        "                if pattern in text:",
+        "                    return True",
+        "        if pattern in value:",
+        "            return True",
+        "    return False",
+        "",
+        "def main() -> int:",
+        "    argv = sys.argv[1:]",
+        "    entry: dict[str, object] = {\"argv\": argv, \"cwd\": os.getcwd()}",
+        "    exit_code = 0",
+        "    handled = False",
+        "    passthrough = False",
+        "",
+        "    if argv[:1] == [\"-m\"] and len(argv) >= 2:",
+        "        module = argv[1]",
+        "        entry[\"kind\"] = \"module\"",
+        "        entry[\"module\"] = module",
+        "        entry[\"args\"] = argv[2:]",
+        "        if module == \"pip\":",
+        "            handled = True",
+        "            if entry[\"args\"][:1] == [\"install\"]:",
+        "                if _should_fail(entry[\"args\"][1:]):",
+        "                    pattern = os.environ.get(\"STUB_PYTHON_FAIL_PATTERN\", \"package\")",
+        "                    sys.stderr.write(f\"ERROR: {pattern} requires a different Python\\n\")",
+        "                    exit_code = 1",
+        "                else:",
+        "                    exit_code = 0",
+        "            elif entry[\"args\"][:1] == [\"--version\"]:",
+        "                exit_code = 0 if STATE_FILE.exists() else 1",
+        "            else:",
+        "                exit_code = 0",
+        "        elif module == \"ensurepip\":",
+        "            handled = True",
+        "            try:",
+        "                STATE_FILE.write_text(\"\", encoding=\"utf-8\")",
+        "            except OSError:",
+        "                pass",
+        "            exit_code = 0",
+        "        else:",
+        "            passthrough = True",
+        "    elif argv:",
+        "        entry[\"kind\"] = \"script\"",
+        "        entry[\"script\"] = argv[0]",
+        "        entry[\"args\"] = argv[1:]",
+        "        name = Path(argv[0]).name",
+        "        if name == \"pip_install.py\":",
+        "            handled = True",
+        "            if _should_fail(entry[\"args\"]):",
+        "                pattern = os.environ.get(\"STUB_PYTHON_FAIL_PATTERN\", \"package\")",
+        "                sys.stderr.write(f\"ERROR: {pattern} requires a different Python\\n\")",
+        "                exit_code = 1",
+        "            else:",
+        "                exit_code = 0",
+        "        elif name.endswith(\".py\"):",
+        "            handled = True",
+        "            exit_code = 0",
+        "        else:",
+        "            passthrough = True",
+        "    else:",
+        "        entry[\"kind\"] = \"noop\"",
+        "        handled = True",
+        "        exit_code = 0",
+        "",
+        "    if not handled:",
+        "        real = os.environ.get(\"STUB_PYTHON_REAL\")",
+        "        passthrough = bool(real)",
+        "        if real:",
+        "            exit_code = subprocess.call([real, *argv])",
+        "        else:",
+        "            exit_code = 0",
+        "",
+        "    entry[\"handled\"] = handled",
+        "    entry[\"passthrough\"] = passthrough",
+        "    entry[\"exit_code\"] = exit_code",
+        "    _write(entry)",
+        "    return exit_code",
+        "",
+        "if __name__ == \"__main__\":",
+        "    raise SystemExit(main())",
+    ]
+
+    script = "\n".join(script_lines) + "\n"
+    script = script.replace("__LOG_PATH__", repr(str(log_path)))
+
+    python_path.write_text(script)
+    python_path.chmod(0o755)
+    log_path.write_text("")
+
+    state_file = log_path.with_name("pip-available.flag")
+    if state_file.exists():
+        state_file.unlink()
+
+    return StubVenv(python=python_path, log=log_path)
 
 
 @pytest.fixture(autouse=True)
