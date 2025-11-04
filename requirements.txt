@@ -23,7 +23,7 @@ click-repl==0.3.0
 colorama==0.4.6
 constantly==23.10.4
 cron-descriptor==2.0.6
-cryptography==45.0.5
+cryptography==46.0.3
 daphne==4.2.1
 diff-match-patch==20241021
 defusedxml==0.7.1
