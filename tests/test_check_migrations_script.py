@@ -1,5 +1,4 @@
 import importlib
-import shutil
 import subprocess
 from types import SimpleNamespace
 
@@ -8,12 +7,6 @@ from pathlib import Path
 import scripts.check_migrations as check_migrations
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-
-
-def clone_repo(tmp_path: Path) -> Path:
-    clone_dir = tmp_path / "repo"
-    shutil.copytree(REPO_ROOT, clone_dir)
-    return clone_dir
 
 
 def test_check_migrations_passes() -> None:
@@ -26,8 +19,8 @@ def test_check_migrations_passes() -> None:
     assert result.returncode == 0
 
 
-def test_check_migrations_allows_merge(tmp_path: Path) -> None:
-    repo = clone_repo(tmp_path)
+def test_check_migrations_allows_merge(prepared_repo: Path) -> None:
+    repo = prepared_repo
     merge_file = repo / "core" / "migrations" / "0012_merge_fake.py"
     merge_file.parent.mkdir(parents=True, exist_ok=True)
     merge_file.write_text(

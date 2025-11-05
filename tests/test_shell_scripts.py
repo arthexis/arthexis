@@ -1,15 +1,8 @@
 from pathlib import Path
-import shutil
 import subprocess
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-
-
-def clone_repo(tmp_path: Path) -> Path:
-    clone_dir = tmp_path / "repo"
-    shutil.copytree(REPO_ROOT, clone_dir)
-    return clone_dir
 
 
 SCRIPTS_WITH_HELP = [p for p in REPO_ROOT.glob("*.sh") if "--help" in p.read_text()]
@@ -21,8 +14,8 @@ def test_script_help(script_path: Path) -> None:
     assert result.returncode == 0
 
 
-def test_backup_restore_roundtrip(tmp_path: Path) -> None:
-    repo = clone_repo(tmp_path)
+def test_backup_restore_roundtrip(prepared_repo: Path) -> None:
+    repo = prepared_repo
     sample = repo / "example.log"
     sample.write_text("data")
     archive = repo / "backup.tgz"
@@ -32,8 +25,8 @@ def test_backup_restore_roundtrip(tmp_path: Path) -> None:
     assert sample.read_text() == "data"
 
 
-def test_db_setup_clean_flag(tmp_path: Path) -> None:
-    repo = clone_repo(tmp_path)
+def test_db_setup_clean_flag(prepared_repo: Path) -> None:
+    repo = prepared_repo
     result = subprocess.run(
         ["bash", "db-setup.sh", "--clean"],
         cwd=repo,

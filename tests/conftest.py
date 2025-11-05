@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -105,6 +107,69 @@ def pytest_configure(config):
     config.addinivalue_line(
         "markers", "django_db: mark test as requiring database access"
     )
+
+
+_SANITIZED_COPY_IGNORES = (
+    ".git",
+    "__pycache__",
+    "*.py[cod]",
+    "*.pyd",
+    "*.so",
+    "*.dylib",
+    "*.log",
+    "logs",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache",
+    ".coverage",
+    "coverage.*",
+    "htmlcov",
+    "build",
+    "dist",
+    "env",
+    "venv",
+    ".venv",
+)
+
+
+def _create_sanitized_snapshot(source: Path, destination: Path) -> None:
+    shutil.copytree(
+        source,
+        destination,
+        ignore=shutil.ignore_patterns(*_SANITIZED_COPY_IGNORES),
+    )
+
+
+def _initialize_git_repository(path: Path) -> None:
+    subprocess.run(["git", "init"], cwd=path, check=True)
+    subprocess.run(["git", "config", "user.name", "Test User"], cwd=path, check=True)
+    subprocess.run(
+        ["git", "config", "user.email", "tests@example.com"],
+        cwd=path,
+        check=True,
+    )
+    subprocess.run(["git", "add", "-A"], cwd=path, check=True)
+    subprocess.run(["git", "commit", "-m", "Test snapshot"], cwd=path, check=True)
+
+
+@pytest.fixture(scope="session")
+def sanitized_repo(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Return a sanitized copy of the repository for test workspaces."""
+
+    base_dir = tmp_path_factory.mktemp("sanitized-repo")
+    workspace = base_dir / "repo"
+    _create_sanitized_snapshot(ROOT, workspace)
+    _initialize_git_repository(workspace)
+    return workspace
+
+
+@pytest.fixture
+def prepared_repo(tmp_path: Path, sanitized_repo: Path) -> Path:
+    """Provide a mutable copy of the sanitized repository for individual tests."""
+
+    destination = tmp_path / "repo"
+    shutil.copytree(sanitized_repo, destination)
+    return destination
 
 
 def _env_flag(name: str) -> bool:
