@@ -1232,7 +1232,7 @@ class OdooProfileInlineForm(ProfileFormMixin, OdooProfileAdminForm):
         ]
         if provided and missing:
             raise forms.ValidationError(
-                "Provide host, database, username, and password to create an Odoo employee.",
+                "Provide host, database, username, and password to create a CRM employee.",
             )
 
         return cleaned
@@ -1360,6 +1360,7 @@ PROFILE_INLINE_CONFIG = {
                 None,
                 {
                     "fields": (
+                        "crm",
                         "host",
                         "database",
                         "username",
@@ -1368,7 +1369,7 @@ PROFILE_INLINE_CONFIG = {
                 },
             ),
             (
-                "Odoo Employee",
+                "CRM Employee",
                 {
                     "fields": ("verified_on", "odoo_uid", "name", "email"),
                 },
@@ -1776,10 +1777,10 @@ class OdooProfileAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdm
     changelist_actions = ["my_profile", "generate_quote_report"]
     fieldsets = (
         ("Owner", {"fields": ("user", "group")}),
-        ("Configuration", {"fields": ("host", "database")}),
+        ("Configuration", {"fields": ("crm", "host", "database")}),
         ("Credentials", {"fields": ("username", "password")}),
         (
-            "Odoo Employee",
+            "CRM Employee",
             {"fields": ("verified_on", "odoo_uid", "name", "email")},
         ),
     )
@@ -2315,7 +2316,7 @@ class ProductAdmin(EntityModelAdmin):
         profile = getattr(request.user, "odoo_profile", None)
         if not profile or not profile.is_verified:
             context["credential_error"] = _(
-                "Configure your Odoo employee credentials before registering products."
+                "Configure your CRM employee credentials before registering products."
             )
             return context, None
 
