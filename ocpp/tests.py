@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+from collections import deque
 from importlib import util as importlib_util
 from pathlib import Path
 from types import ModuleType
@@ -712,7 +713,9 @@ class CSMSConsumerTests(TransactionTestCase):
             store.logs.setdefault("charger", {})
             store.logs["charger"].clear()
             for key, entries in original_logs.items():
-                store.logs["charger"][key] = list(entries)
+                store.logs["charger"][key] = deque(
+                    entries, maxlen=store.MAX_IN_MEMORY_LOG_ENTRIES
+                )
             store.log_names.setdefault("charger", {})
             store.log_names["charger"].clear()
             store.log_names["charger"].update(original_log_names)
@@ -4081,7 +4084,9 @@ class ChargePointSimulatorTests(TransactionTestCase):
         cfg = SimulatorConfig(cp_path="SIMLOG/")
         sim = ChargePointSimulator(cfg)
         store.clear_log(cfg.cp_path, log_type="simulator")
-        store.logs["simulator"][cfg.cp_path] = []
+        store.logs["simulator"][cfg.cp_path] = deque(
+            maxlen=store.MAX_IN_MEMORY_LOG_ENTRIES
+        )
         sent_frames: list[str] = []
 
         async def send(payload: str) -> None:
@@ -4857,11 +4862,14 @@ class ChargerStatusViewTests(TestCase):
             prefix = (timestamp.strftime("%Y-%m-%d %H:%M:%S.%f"))[:-3]
             return f"{prefix} StatusNotification processed: {json.dumps(payload, sort_keys=True)}"
 
-        store.logs["charger"][log_key] = [
-            build_entry(timedelta(days=2), "Available"),
-            build_entry(timedelta(days=1), "Charging"),
-            build_entry(timedelta(hours=12), "Available"),
-        ]
+        store.logs["charger"][log_key] = deque(
+            [
+                build_entry(timedelta(days=2), "Available"),
+                build_entry(timedelta(days=1), "Charging"),
+                build_entry(timedelta(hours=12), "Available"),
+            ],
+            maxlen=store.MAX_IN_MEMORY_LOG_ENTRIES,
+        )
 
         data, _window = _usage_timeline(charger, [], now=fixed_now)
         self.assertEqual(len(data), 1)
@@ -4898,7 +4906,9 @@ class ChargerStatusViewTests(TestCase):
             }
             prefix = (timestamp.strftime("%Y-%m-%d %H:%M:%S.%f"))[:-3]
             key = store.identity_key(aggregate.charger_id, connector_id)
-            store.logs["charger"].setdefault(key, []).append(
+            store.logs["charger"].setdefault(
+                key, deque(maxlen=store.MAX_IN_MEMORY_LOG_ENTRIES)
+            ).append(
                 f"{prefix} StatusNotification processed: {json.dumps(payload, sort_keys=True)}"
             )
 
@@ -4939,13 +4949,16 @@ class ChargerStatusViewTests(TestCase):
             return f"{prefix} StatusNotification processed: {json.dumps(payload, sort_keys=True)}"
 
         log_key = store.identity_key(charger.charger_id, charger.connector_id)
-        store.logs["charger"][log_key] = [
-            build_entry(timedelta(days=6, hours=12), "Available"),
-            build_entry(timedelta(days=5), "Available"),
-            build_entry(timedelta(days=3, hours=6), "Charging"),
-            build_entry(timedelta(days=2), "Charging"),
-            build_entry(timedelta(days=1), "Available"),
-        ]
+        store.logs["charger"][log_key] = deque(
+            [
+                build_entry(timedelta(days=6, hours=12), "Available"),
+                build_entry(timedelta(days=5), "Available"),
+                build_entry(timedelta(days=3, hours=6), "Charging"),
+                build_entry(timedelta(days=2), "Charging"),
+                build_entry(timedelta(days=1), "Available"),
+            ],
+            maxlen=store.MAX_IN_MEMORY_LOG_ENTRIES,
+        )
 
         data, window = _usage_timeline(charger, [], now=fixed_now)
         self.assertIsNotNone(window)
@@ -5492,3 +5505,33 @@ class LiveUpdateViewTests(TestCase):
             reverse("charger-status", args=[restricted.charger_id])
         )
         self.assertEqual(group_denied.status_code, 404)
+
+
+class StoreLogBufferTests(TestCase):
+    def test_add_log_enforces_in_memory_cap(self):
+        cid = "BUFFER-CAP-TEST"
+        log_type = "charger"
+        store.clear_log(cid, log_type=log_type)
+        self.addCleanup(lambda: store.clear_log(cid, log_type=log_type))
+
+        with patch("ocpp.store.MAX_IN_MEMORY_LOG_ENTRIES", 3):
+            for index in range(6):
+                store.add_log(cid, f"message {index}", log_type=log_type)
+
+            buffer = None
+            lower = cid.lower()
+            for key, entries in store.logs[log_type].items():
+                if key.lower() == lower:
+                    buffer = entries
+                    break
+
+            self.assertIsNotNone(buffer, "Expected in-memory log buffer to be created")
+            self.assertIsInstance(buffer, deque)
+            self.assertEqual(len(buffer), 3)
+            self.assertTrue(buffer[0].endswith("message 3"))
+            self.assertTrue(buffer[-1].endswith("message 5"))
+
+            merged = store.get_logs(cid, log_type=log_type)
+
+        self.assertTrue(any(entry.endswith("message 5") for entry in merged))
+        self.assertTrue(any(entry.endswith("message 4") for entry in merged))

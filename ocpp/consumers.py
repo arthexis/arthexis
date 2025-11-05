@@ -3,6 +3,7 @@ import ipaddress
 import re
 from datetime import datetime
 import asyncio
+from collections import deque
 import inspect
 import json
 import logging
@@ -276,7 +277,9 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             log_type="charger",
         )
         store.connections[self.store_key] = self
-        store.logs["charger"].setdefault(self.store_key, [])
+        store.logs["charger"].setdefault(
+            self.store_key, deque(maxlen=store.MAX_IN_MEMORY_LOG_ENTRIES)
+        )
         self.charger, created = await database_sync_to_async(
             Charger.objects.get_or_create
         )(
@@ -388,7 +391,9 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                     await existing_consumer.close()
                 store.reassign_identity(previous_key, new_key)
                 store.connections[new_key] = self
-                store.logs["charger"].setdefault(new_key, [])
+                store.logs["charger"].setdefault(
+                    new_key, deque(maxlen=store.MAX_IN_MEMORY_LOG_ENTRIES)
+                )
             aggregate_name = await sync_to_async(
                 lambda: self.charger.name or self.charger.charger_id
             )()
@@ -457,7 +462,9 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 await existing_consumer.close()
             store.reassign_identity(previous_key, new_key)
             store.connections[new_key] = self
-            store.logs["charger"].setdefault(new_key, [])
+            store.logs["charger"].setdefault(
+                new_key, deque(maxlen=store.MAX_IN_MEMORY_LOG_ENTRIES)
+            )
         connector_name = await sync_to_async(
             lambda: self.charger.name or self.charger.charger_id
         )()
