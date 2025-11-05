@@ -48,6 +48,39 @@ class ChargerStatusCommandTests(TestCase):
         self.assertIn("1.50", text)
         self.assertNotIn("Connected", text)
 
+    def test_active_connector_displays_rfid_value(self):
+        charger = Charger.objects.create(
+            charger_id="CP-RFID",
+            last_status="Charging",
+        )
+        connector = Charger.objects.create(
+            charger_id="CP-RFID",
+            connector_id=1,
+            last_status="Charging",
+        )
+        tx = Transaction.objects.create(
+            charger=connector,
+            connector_id=1,
+            start_time=timezone.now(),
+            rfid="abc123",
+        )
+        self.addCleanup(store.transactions.clear)
+        store.set_transaction(connector.charger_id, connector.connector_id, tx)
+
+        output = StringIO()
+        call_command("charger_status", stdout=output)
+
+        lines = [
+            line.split()
+            for line in output.getvalue().splitlines()
+            if line.startswith("CP-RFID")
+        ]
+        self.assertGreaterEqual(len(lines), 2)
+        aggregate_fields = next(fields for fields in lines if fields[2] == "all")
+        connector_fields = next(fields for fields in lines if fields[2] == "1")
+        self.assertEqual(aggregate_fields[3], "off")
+        self.assertEqual(connector_fields[3], "ABC123")
+
     def test_aggregate_connector_matches_sum_of_connectors(self):
         Charger.objects.create(charger_id="CP-AGG")
         connector_one = Charger.objects.create(

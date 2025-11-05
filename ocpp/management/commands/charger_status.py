@@ -339,6 +339,19 @@ class Command(BaseCommand):
                 and charger.charger_id in aggregate_sources
             ):
                 total = aggregate_totals.get(charger.charger_id, total)
+            status_label = self._status_label(charger)
+            rfid_value = "on" if charger.require_rfid else "off"
+            if (
+                charger.connector_id is not None
+                and status_label.casefold() == "charging"
+            ):
+                tx_obj = store.get_transaction(
+                    charger.charger_id, charger.connector_id
+                )
+                if tx_obj is not None:
+                    active_rfid = str(getattr(tx_obj, "rfid", "") or "").strip()
+                    if active_rfid:
+                        rfid_value = active_rfid.upper()
             rows.append(
                 {
                     "serial": charger.charger_id,
@@ -348,9 +361,9 @@ class Command(BaseCommand):
                         if charger.connector_id is not None
                         else "all"
                     ),
-                    "rfid": "on" if charger.require_rfid else "off",
+                    "rfid": rfid_value,
                     "public": "yes" if charger.public_display else "no",
-                    "status": self._status_label(charger),
+                    "status": status_label,
                     "energy": self._format_energy(total),
                 }
             )
