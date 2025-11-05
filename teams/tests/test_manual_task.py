@@ -4,9 +4,9 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.utils import timezone
 
-from core.models import ManualTask
 from nodes.models import Node
 from ocpp.models import Location
+from teams.models import ManualTask
 
 
 class ManualTaskModelTests(TestCase):

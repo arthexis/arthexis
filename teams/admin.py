@@ -18,7 +18,6 @@ from core.admin import (
     ReleaseManagerAdmin,
     OdooProfileAdmin,
     GoogleCalendarProfileAdmin,
-    ManualTaskAdmin,
 )
 from core.models import (
     InviteLead as CoreInviteLead,
@@ -30,6 +29,7 @@ from core.models import (
     OdooProfile as CoreOdooProfile,
 )
 from core.user_data import (
+    EntityModelAdmin,
     UserDatumAdminMixin,
     delete_user_fixture,
     dump_user_fixture,
@@ -114,8 +114,23 @@ class GoogleCalendarProfileAdminProxy(GoogleCalendarProfileAdmin):
 
 
 @admin.register(ManualTask)
-class ManualTaskAdminProxy(ManualTaskAdmin):
-    pass
+class ManualTaskAdmin(EntityModelAdmin):
+    list_display = (
+        "title",
+        "node",
+        "location",
+        "scheduled_start",
+        "scheduled_end",
+    )
+    list_filter = ("node", "location")
+    search_fields = (
+        "title",
+        "description",
+        "node__hostname",
+        "location__name",
+    )
+    raw_id_fields = ("node", "location")
+    date_hierarchy = "scheduled_start"
 
 
 try:
