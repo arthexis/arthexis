@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections import deque
 from datetime import datetime, timezone
 import json
 from pathlib import Path
@@ -19,7 +20,10 @@ MAX_CONNECTIONS_PER_IP = 2
 
 connections: dict[str, object] = {}
 transactions: dict[str, object] = {}
-logs: dict[str, dict[str, list[str]]] = {"charger": {}, "simulator": {}}
+# Maximum number of recent log entries to keep in memory per identity.
+MAX_IN_MEMORY_LOG_ENTRIES = 1000
+
+logs: dict[str, dict[str, deque[str]]] = {"charger": {}, "simulator": {}}
 # store per charger session logs before they are flushed to disk
 history: dict[str, dict[str, object]] = {}
 simulators = {}
@@ -433,8 +437,21 @@ def add_log(cid: str, entry: str, log_type: str = "charger") -> None:
     store = logs[log_type]
     # Store log entries under the cid as provided but allow retrieval using
     # any casing by recording entries in a case-insensitive manner.
-    key = next((k for k in store.keys() if k.lower() == cid.lower()), cid)
-    store.setdefault(key, []).append(entry)
+    buffer = None
+    lower = cid.lower()
+    key = cid
+    for existing_key, entries in store.items():
+        if existing_key.lower() == lower:
+            key = existing_key
+            buffer = entries
+            break
+    if buffer is None:
+        buffer = deque(maxlen=MAX_IN_MEMORY_LOG_ENTRIES)
+        store[key] = buffer
+    elif buffer.maxlen != MAX_IN_MEMORY_LOG_ENTRIES:
+        buffer = deque(buffer, maxlen=MAX_IN_MEMORY_LOG_ENTRIES)
+        store[key] = buffer
+    buffer.append(entry)
     path = _file_path(key, log_type)
     with path.open("a", encoding="utf-8") as handle:
         handle.write(entry + "\n")
@@ -559,7 +576,7 @@ def _memory_logs_for_identifier(cid: str, log_type: str) -> list[str]:
     lower = cid.lower()
     for key, entries in store.items():
         if key.lower() == lower:
-            return entries
+            return list(entries)
     return []
 
 
