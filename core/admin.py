@@ -97,6 +97,7 @@ from .models import (
     InviteLead,
     PublicWifiAccess,
     Todo,
+    ManualTask,
 )
 from .user_data import (
     EntityModelAdmin,
@@ -4029,6 +4030,26 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
     @admin.display(description="Is current")
     def is_current(self, obj):
         return self._boolean_icon(obj.is_current)
+
+
+@admin.register(ManualTask)
+class ManualTaskAdmin(EntityModelAdmin):
+    list_display = (
+        "title",
+        "node",
+        "location",
+        "scheduled_start",
+        "scheduled_end",
+    )
+    list_filter = ("node", "location")
+    search_fields = (
+        "title",
+        "description",
+        "node__hostname",
+        "location__name",
+    )
+    raw_id_fields = ("node", "location")
+    date_hierarchy = "scheduled_start"
 
 
 @admin.register(Todo)

@@ -18,6 +18,7 @@ from core.admin import (
     ReleaseManagerAdmin,
     OdooProfileAdmin,
     GoogleCalendarProfileAdmin,
+    ManualTaskAdmin,
 )
 from core.models import (
     InviteLead as CoreInviteLead,
@@ -52,6 +53,7 @@ from .models import (
     OdooProfile,
     TOTPDevice,
     GoogleCalendarProfile,
+    ManualTask,
 )
 
 
@@ -108,6 +110,11 @@ class OdooProfileAdminProxy(OdooProfileAdmin):
 
 @admin.register(GoogleCalendarProfile)
 class GoogleCalendarProfileAdminProxy(GoogleCalendarProfileAdmin):
+    pass
+
+
+@admin.register(ManualTask)
+class ManualTaskAdminProxy(ManualTaskAdmin):
     pass
 
 

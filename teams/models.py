@@ -7,6 +7,7 @@ from core.models import (
     ReleaseManager as CoreReleaseManager,
     OdooProfile as CoreOdooProfile,
     GoogleCalendarProfile as CoreGoogleCalendarProfile,
+    ManualTask as CoreManualTask,
 )
 from awg.models import PowerLead as CorePowerLead
 from django_otp.plugins.otp_totp.models import (
@@ -104,5 +105,13 @@ class GoogleCalendarProfile(CoreGoogleCalendarProfile):
         app_label = "django_celery_beat"
         verbose_name = CoreGoogleCalendarProfile._meta.verbose_name
         verbose_name_plural = CoreGoogleCalendarProfile._meta.verbose_name_plural
+
+
+class ManualTask(CoreManualTask):
+    class Meta:
+        proxy = True
+        app_label = "teams"
+        verbose_name = CoreManualTask._meta.verbose_name
+        verbose_name_plural = CoreManualTask._meta.verbose_name_plural
 
 

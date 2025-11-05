@@ -4,7 +4,7 @@ from django.contrib.auth.models import (
     UserManager as DjangoUserManager,
 )
 from django.db import DatabaseError, IntegrityError, connections, models, transaction
-from django.db.models import Q
+from django.db.models import Q, F
 from django.db.models.functions import Lower, Length
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -4744,6 +4744,72 @@ def validate_relative_url(value: str) -> None:
 class TodoManager(EntityManager):
     def get_by_natural_key(self, request: str):
         return self.get(request=request)
+
+
+class ManualTask(Entity):
+    """Manual work scheduled for nodes or charge locations."""
+
+    title = models.CharField(_("Title"), max_length=200)
+    description = models.TextField(
+        _("Description"), help_text=_("Detailed summary of the work to perform.")
+    )
+    node = models.ForeignKey(
+        "nodes.Node",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="manual_tasks",
+        verbose_name=_("Node"),
+        help_text=_("Node where this manual task should be completed."),
+    )
+    location = models.ForeignKey(
+        "ocpp.Location",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="manual_tasks",
+        verbose_name=_("Charge Location"),
+        help_text=_("Charge point location associated with this manual task."),
+    )
+    scheduled_start = models.DateTimeField(
+        _("Scheduled start"), help_text=_("Planned start time for this work."),
+    )
+    scheduled_end = models.DateTimeField(
+        _("Scheduled end"), help_text=_("Planned completion time for this work."),
+    )
+
+    class Meta:
+        verbose_name = _("Manual Task")
+        verbose_name_plural = _("Manual Tasks")
+        ordering = ("scheduled_start", "title")
+        constraints = [
+            models.CheckConstraint(
+                name="manualtask_requires_target",
+                condition=Q(node__isnull=False) | Q(location__isnull=False),
+            ),
+            models.CheckConstraint(
+                name="manualtask_schedule_order",
+                condition=Q(scheduled_end__gte=F("scheduled_start")),
+            ),
+        ]
+
+    def clean(self):
+        super().clean()
+        errors: dict[str, list[str]] = {}
+        if not self.node and not self.location:
+            message = _("Select at least one node or charge location.")
+            errors["node"] = [message]
+            errors["location"] = [message]
+        if self.scheduled_start and self.scheduled_end:
+            if self.scheduled_end < self.scheduled_start:
+                errors.setdefault("scheduled_end", []).append(
+                    _("Scheduled end must be on or after the scheduled start.")
+                )
+        if errors:
+            raise ValidationError(errors)
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return self.title
 
 
 class Todo(Entity):
