@@ -21,6 +21,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import urlsplit, urlunsplit, quote
 import base64
+import binascii
 import json
 import subprocess
 import uuid
@@ -33,6 +34,7 @@ from cryptography.hazmat.primitives.asymmetric import padding
 from pyperclip import PyperclipException
 from requests import RequestException
 import websockets
+from asgiref.sync import async_to_sync
 
 from .classifiers import run_default_classifiers, suppress_default_classifiers
 from .rfid_sync import apply_rfid_payload, serialize_rfid
@@ -61,7 +63,13 @@ from .models import (
 )
 from . import dns as dns_utils
 from core.models import RFID
-from ocpp.models import Charger
+from ocpp import store
+from ocpp.models import (
+    Charger,
+    CPFirmware,
+    CPFirmwareDeployment,
+    DataTransferMessage,
+)
 from ocpp.network import serialize_charger_for_network
 from ocpp.tasks import push_forwarded_charge_points
 from core.user_data import EntityModelAdmin
@@ -292,6 +300,7 @@ class NodeAdmin(EntityModelAdmin):
         "register_visitor",
         "run_task",
         "take_screenshots",
+        "download_evcs_firmware",
         "start_charge_point_forwarding",
         "stop_charge_point_forwarding",
         "import_rfids_from_selected",
@@ -324,6 +333,26 @@ class NodeAdmin(EntityModelAdmin):
             cleaned["subject"] = subject
             cleaned["body"] = body
             return cleaned
+
+    class DownloadFirmwareForm(forms.Form):
+        def __init__(self, node: Node, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            base_queryset = Charger.objects.filter(
+                node_origin=node, connector_id__isnull=True
+            ).order_by("display_name", "charger_id")
+            self.fields["charger"].queryset = base_queryset
+
+        charger = forms.ModelChoiceField(
+            label=_("Charge point"),
+            queryset=Charger.objects.none(),
+            help_text=_("Select the EVCS to request firmware from."),
+        )
+        vendor_id = forms.CharField(
+            label=_("Vendor ID"),
+            max_length=255,
+            initial="org.openchargealliance.firmware",
+            help_text=_("Vendor identifier included in the DataTransfer request."),
+        )
 
     @admin.display(description=_("Relation"), ordering="current_relation")
     def relation(self, obj):
@@ -517,6 +546,322 @@ class NodeAdmin(EntityModelAdmin):
         }
         return TemplateResponse(
             request, "admin/nodes/node/send_net_message.html", context
+        )
+
+    def _coerce_metadata_value(self, value):
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            return value
+        if isinstance(value, (bytes, bytearray)):
+            return base64.b64encode(bytes(value)).decode("ascii")
+        if isinstance(value, Mapping):
+            return {k: self._coerce_metadata_value(v) for k, v in value.items()}
+        if isinstance(value, (list, tuple, set)):
+            return [self._coerce_metadata_value(v) for v in value]
+        return str(value)
+
+    def _decode_payload_bytes(self, value, encoding_hint: str = ""):
+        if isinstance(value, (bytes, bytearray)):
+            return bytes(value), encoding_hint or "binary"
+        if not isinstance(value, str):
+            return None, encoding_hint
+        text = value.strip()
+        if not text:
+            return b"", encoding_hint or "binary"
+        try:
+            decoded = base64.b64decode(text, validate=True)
+            return decoded, "base64"
+        except (binascii.Error, ValueError):
+            return None, encoding_hint
+
+    def _extract_firmware_payload(self, data):
+        content_type = "application/octet-stream"
+        encoding = ""
+        filename = ""
+        json_payload = None
+        binary_payload = None
+        metadata: dict[str, object] = {}
+
+        if isinstance(data, Mapping):
+            metadata = {
+                key: self._coerce_metadata_value(value)
+                for key, value in data.items()
+                if key not in {"payload", "data", "json"}
+            }
+            filename = str(data.get("filename") or data.get("name") or "").strip()
+            if data.get("contentType"):
+                content_type_candidate = str(data.get("contentType")).strip()
+                if content_type_candidate:
+                    content_type = content_type_candidate
+            encoding = str(data.get("encoding") or "").strip()
+            raw_payload = data.get("payload")
+            if raw_payload is None:
+                raw_payload = data.get("data")
+            if raw_payload is not None:
+                binary_payload, encoding = self._decode_payload_bytes(
+                    raw_payload, encoding
+                )
+            json_candidate = data.get("json")
+            if json_candidate is not None:
+                if isinstance(json_candidate, str):
+                    try:
+                        json_payload = json.loads(json_candidate)
+                    except json.JSONDecodeError:
+                        metadata["json_raw"] = json_candidate
+                else:
+                    json_payload = json_candidate
+            if json_payload is None and binary_payload is None:
+                remaining = {
+                    key: value
+                    for key, value in data.items()
+                    if key
+                    not in {
+                        "payload",
+                        "data",
+                        "encoding",
+                        "contentType",
+                        "filename",
+                        "json",
+                    }
+                }
+                if remaining:
+                    json_payload = remaining
+        elif isinstance(data, (bytes, bytearray)):
+            binary_payload = bytes(data)
+            encoding = encoding or "binary"
+        elif isinstance(data, str):
+            metadata = {"raw": data}
+            binary_payload, encoding = self._decode_payload_bytes(data, encoding)
+            if binary_payload is None:
+                try:
+                    json_payload = json.loads(data)
+                except json.JSONDecodeError:
+                    binary_payload = data.encode("utf-8")
+                    encoding = encoding or "utf-8"
+        elif data is not None:
+            metadata = {"raw": self._coerce_metadata_value(data)}
+            json_payload = metadata.get("raw")
+
+        return {
+            "binary": binary_payload,
+            "json": json_payload,
+            "encoding": encoding,
+            "content_type": content_type,
+            "filename": filename,
+            "metadata": metadata,
+        }
+
+    def _format_pending_failure(self, action: str, result: Mapping) -> str:
+        label_map = {
+            "DataTransfer": _("Data transfer"),
+            "UpdateFirmware": _("Update firmware"),
+        }
+        action_label = label_map.get(action, action)
+        error_code = str(result.get("error_code") or "").strip()
+        error_description = str(result.get("error_description") or "").strip()
+        details = result.get("error_details")
+        parts: list[str] = []
+        if error_code:
+            parts.append(_("code=%(code)s") % {"code": error_code})
+        if error_description:
+            parts.append(
+                _("description=%(description)s")
+                % {"description": error_description}
+            )
+        if details:
+            try:
+                details_text = json.dumps(
+                    details, sort_keys=True, ensure_ascii=False
+                )
+            except TypeError:
+                details_text = str(details)
+            if details_text:
+                parts.append(_("details=%(details)s") % {"details": details_text})
+        if parts:
+            return _("%(action)s failed: %(details)s") % {
+                "action": action_label,
+                "details": ", ".join(parts),
+            }
+        return _("%(action)s failed.") % {"action": action_label}
+
+    def _process_firmware_download(self, request, node: Node, cleaned_data) -> bool:
+        charger: Charger = cleaned_data["charger"]
+        vendor_id = cleaned_data.get("vendor_id", "")
+        connection = store.get_connection(charger.charger_id, charger.connector_id)
+        if connection is None:
+            self.message_user(
+                request,
+                _("%(charger)s is not currently connected to the platform.")
+                % {"charger": charger},
+                level=messages.ERROR,
+            )
+            return False
+
+        message_id = uuid.uuid4().hex
+        payload = {
+            "vendorId": vendor_id,
+            "messageId": "DownloadFirmware",
+        }
+        log_key = store.identity_key(charger.charger_id, charger.connector_id)
+        message_record = DataTransferMessage.objects.create(
+            charger=charger,
+            connector_id=charger.connector_id,
+            direction=DataTransferMessage.DIRECTION_CSMS_TO_CP,
+            ocpp_message_id=message_id,
+            vendor_id=vendor_id,
+            message_id="DownloadFirmware",
+            payload=payload,
+            status="Pending",
+        )
+
+        frame = json.dumps([2, message_id, "DataTransfer", payload])
+        async_to_sync(connection.send)(frame)
+        store.add_log(
+            log_key,
+            _("Requested firmware download via DataTransfer."),
+            log_type="charger",
+        )
+        store.register_pending_call(
+            message_id,
+            {
+                "action": "DataTransfer",
+                "charger_id": charger.charger_id,
+                "connector_id": charger.connector_id,
+                "log_key": log_key,
+                "message_pk": message_record.pk,
+            },
+        )
+        store.schedule_call_timeout(
+            message_id, action="DataTransfer", log_key=log_key
+        )
+
+        result = store.wait_for_pending_call(message_id, timeout=15.0)
+        if result is None:
+            self.message_user(
+                request,
+                _("The charge point did not respond to the firmware request."),
+                level=messages.ERROR,
+            )
+            return False
+        if not result.get("success", True):
+            detail = self._format_pending_failure("DataTransfer", result)
+            self.message_user(request, detail, level=messages.ERROR)
+            return False
+
+        payload_data = result.get("payload") or {}
+        status_value = str(payload_data.get("status") or "").strip()
+        if status_value.lower() != "accepted":
+            self.message_user(
+                request,
+                _(
+                    "Firmware request for %(charger)s was %(status)s."
+                )
+                % {"charger": charger, "status": status_value or "Rejected"},
+                level=messages.ERROR,
+            )
+            return False
+
+        data_section = payload_data.get("data")
+        extracted = self._extract_firmware_payload(data_section)
+        binary_payload = extracted["binary"]
+        json_payload = extracted["json"]
+        if binary_payload is None and json_payload is None:
+            self.message_user(
+                request,
+                _("The charge point did not include a firmware payload."),
+                level=messages.ERROR,
+            )
+            return False
+
+        now = timezone.now()
+        filename = extracted["filename"] or ""
+        if not filename:
+            suffix = ".bin" if binary_payload is not None else ".json"
+            filename = f"{charger.charger_id}_{now:%Y%m%d%H%M%S}{suffix}"
+
+        metadata = {
+            "vendor_id": vendor_id,
+            "response": self._coerce_metadata_value(payload_data),
+        }
+        metadata.update(extracted["metadata"])
+
+        firmware = CPFirmware(
+            name=f"{charger.charger_id} firmware {now:%Y-%m-%d %H:%M:%S}",
+            source=CPFirmware.Source.DOWNLOAD,
+            source_node=node,
+            source_charger=charger,
+            filename=filename,
+            payload_binary=binary_payload,
+            payload_json=json_payload,
+            payload_encoding=extracted["encoding"],
+            content_type=extracted["content_type"],
+            metadata=metadata,
+            download_vendor_id=vendor_id,
+            download_message_id=message_id,
+            downloaded_at=now,
+            is_user_data=True,
+        )
+        firmware.save()
+
+        self.message_user(
+            request,
+            _("Stored firmware from %(charger)s as %(firmware)s.")
+            % {"charger": charger, "firmware": firmware},
+            level=messages.SUCCESS,
+        )
+        return True
+
+    @admin.action(description=_("Download EVCS firmware"))
+    def download_evcs_firmware(self, request, queryset):
+        nodes = list(queryset)
+        if len(nodes) != 1:
+            self.message_user(
+                request,
+                _("Select a single node to request firmware."),
+                level=messages.ERROR,
+            )
+            return None
+        node = nodes[0]
+
+        if "apply" in request.POST:
+            form = self.DownloadFirmwareForm(node, request.POST)
+            if form.is_valid():
+                if self._process_firmware_download(request, node, form.cleaned_data):
+                    return None
+        else:
+            form = self.DownloadFirmwareForm(node)
+
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "title": _("Download EVCS firmware"),
+            "node": node,
+            "nodes": [node],
+            "selected_ids": [str(node.pk)],
+            "action_name": request.POST.get(
+                "action", "download_evcs_firmware"
+            ),
+            "select_across": request.POST.get("select_across", "0"),
+            "action_checkbox_name": helpers.ACTION_CHECKBOX_NAME,
+            "adminform": helpers.AdminForm(
+                form,
+                [
+                    (
+                        None,
+                        {
+                            "fields": (
+                                "charger",
+                                "vendor_id",
+                            )
+                        },
+                    )
+                ],
+                {},
+            ),
+            "form": form,
+            "media": self.media + form.media,
+        }
+        return TemplateResponse(
+            request, "admin/nodes/node/download_firmware.html", context
         )
 
     def update_selected_progress(self, request):
