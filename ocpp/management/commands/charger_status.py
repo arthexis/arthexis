@@ -10,6 +10,7 @@ from django.utils import timezone
 
 from ocpp import store
 from ocpp.models import Charger, MeterValue, Transaction
+from ocpp.views import _aggregate_dashboard_state
 
 
 class Command(BaseCommand):
@@ -271,6 +272,11 @@ class Command(BaseCommand):
         )
 
     def _status_label(self, charger: Charger) -> str:
+        if charger.connector_id is None:
+            aggregate_state = _aggregate_dashboard_state(charger)
+            if aggregate_state is not None:
+                label, _color = aggregate_state
+                return label
         if charger.last_status:
             return charger.last_status
         if charger.availability_state:

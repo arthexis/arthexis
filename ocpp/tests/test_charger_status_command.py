@@ -97,6 +97,46 @@ class ChargerStatusCommandTests(TestCase):
         self.assertIn("2", totals)
         self.assertAlmostEqual(totals["all"], totals["1"] + totals["2"], places=2)
 
+    def test_aggregate_status_reflects_available_connectors(self):
+        Charger.objects.create(
+            charger_id="CP-AGG-STATUS",
+            display_name="Aggregate",
+            last_status="Charging",
+        )
+        charging = Charger.objects.create(
+            charger_id="CP-AGG-STATUS",
+            connector_id=1,
+            display_name="Connector1",
+            last_status="Charging",
+        )
+        Transaction.objects.create(
+            charger=charging,
+            connector_id=1,
+            start_time=timezone.now(),
+            meter_start=1000,
+        )
+        Charger.objects.create(
+            charger_id="CP-AGG-STATUS",
+            connector_id=2,
+            display_name="Connector2",
+            last_status="Available",
+        )
+
+        output = StringIO()
+        call_command("charger_status", stdout=output)
+
+        aggregate_parts = None
+        for line in output.getvalue().splitlines():
+            parts = line.split()
+            if len(parts) < 6:
+                continue
+            if parts[0] == "CP-AGG-STATUS" and parts[2] == "all":
+                aggregate_parts = parts
+                break
+
+        self.assertIsNotNone(aggregate_parts)
+        self.assertEqual("Available", aggregate_parts[5])
+
     def test_matches_serial_suffix(self):
         Charger.objects.create(charger_id="EVBOX-12345678")
         Charger.objects.create(charger_id="EVBOX-56789012")
