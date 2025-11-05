@@ -31,6 +31,7 @@ from urllib.parse import urlsplit
 import django.utils.encoding as encoding
 
 from config.settings_helpers import (
+    discover_local_ip_addresses,
     extract_ip_from_host,
     install_validate_host_with_subnets,
     load_secret_key,
@@ -141,6 +142,11 @@ with contextlib.suppress(Exception):
 for host in _iter_local_hostnames(_local_hostname, _local_fqdn):
     if host not in ALLOWED_HOSTS:
         ALLOWED_HOSTS.append(host)
+
+
+for address in discover_local_ip_addresses():
+    if address not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(address)
 
 
 # Allow CSRF origin verification for hosts within allowed subnets.
