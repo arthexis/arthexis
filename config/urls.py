@@ -22,6 +22,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import RedirectView
 from django.views.i18n import set_language
 from django.utils.translation import gettext_lazy as _
+from django.http import Http404
 from core import views as core_views
 from core.admindocs import (
     CommandsView,
@@ -204,8 +205,23 @@ urlpatterns = [
     path("", include("pages.urls")),
 ]
 
-if _graphql_feature_enabled():
-    urlpatterns.append(path("graphql/", EnergyGraphQLView.as_view(), name="graphql"))
+_GRAPHQL_URLPOSITION = len(urlpatterns)
+
+
+if EnergyGraphQLView is not None:
+
+    class FeatureFlaggedGraphQLView(EnergyGraphQLView):
+        """GraphQL endpoint guarded by the node feature flag."""
+
+        def dispatch(self, request, *args, **kwargs):  # type: ignore[override]
+            if not _graphql_feature_enabled():
+                raise Http404()
+            return super().dispatch(request, *args, **kwargs)
+
+    urlpatterns.insert(
+        _GRAPHQL_URLPOSITION,
+        path("graphql/", FeatureFlaggedGraphQLView.as_view(), name="graphql"),
+    )
 
 urlpatterns += autodiscovered_urlpatterns()
 
