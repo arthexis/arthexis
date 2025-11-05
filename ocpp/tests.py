@@ -68,6 +68,8 @@ from .models import (
     Location,
     DataTransferMessage,
     CPReservation,
+    CPFirmware,
+    CPFirmwareDeployment,
 )
 from .admin import ChargerConfigurationAdmin
 from .consumers import CSMSConsumer
@@ -531,6 +533,33 @@ class CSMSConsumerTests(TransactionTestCase):
                 await database_sync_to_async(close_old_connections)()
                 await asyncio.sleep(delay)
         raise
+
+    def _create_firmware_deployment(self, charger_id: str) -> int:
+        try:
+            charger = Charger.objects.get(charger_id=charger_id, connector_id=None)
+        except Charger.DoesNotExist:
+            charger = Charger.objects.create(charger_id=charger_id, connector_id=None)
+        firmware = CPFirmware.objects.create(
+            name=f"{charger_id} firmware",
+            filename=f"{charger_id}.bin",
+            payload_binary=b"firmware",
+            content_type="application/octet-stream",
+            source=CPFirmware.Source.DOWNLOAD,
+            is_user_data=True,
+        )
+        deployment = CPFirmwareDeployment.objects.create(
+            firmware=firmware,
+            charger=charger,
+            node=charger.node_origin,
+            ocpp_message_id=f"deploy-{charger_id}",
+            status="Pending",
+            status_info="",
+            status_timestamp=timezone.now(),
+            retrieve_date=timezone.now(),
+            request_payload={},
+            is_user_data=True,
+        )
+        return deployment.pk
 
     async def _send_status_notification(self, serial: str, payload: dict):
         communicator = WebsocketCommunicator(application, f"/{serial}/")
@@ -1262,91 +1291,179 @@ class CSMSConsumerTests(TransactionTestCase):
         await communicator.disconnect()
 
     async def test_firmware_status_notification_updates_database_and_views(self):
+        store.ip_connections.clear()
+        limit = store.MAX_CONNECTIONS_PER_IP
+        store.MAX_CONNECTIONS_PER_IP = 10
         communicator = WebsocketCommunicator(application, "/FWSTAT/")
-        connected, _ = await communicator.connect()
-        self.assertTrue(connected)
+        try:
+            connected, detail = await communicator.connect()
+            self.assertTrue(connected, detail)
 
-        ts = timezone.now().replace(microsecond=0)
-        payload = {
-            "status": "Installing",
-            "statusInfo": "Applying patch",
-            "timestamp": ts.isoformat(),
-        }
+            deployment_pk = await database_sync_to_async(
+                self._create_firmware_deployment
+            )("FWSTAT")
+            ts = timezone.now().replace(microsecond=0)
+            payload = {
+                "status": "Installing",
+                "statusInfo": "Applying patch",
+                "timestamp": ts.isoformat(),
+            }
 
-        await communicator.send_json_to(
-            [2, "1", "FirmwareStatusNotification", payload]
-        )
-        response = await communicator.receive_json_from()
-        self.assertEqual(response, [3, "1", {}])
+            await communicator.send_json_to(
+                [2, "1", "FirmwareStatusNotification", payload]
+            )
+            response = await communicator.receive_json_from()
+            self.assertEqual(response, [3, "1", {}])
 
-        def _fetch_status():
-            charger = Charger.objects.get(charger_id="FWSTAT", connector_id=None)
-            return (
-                charger.firmware_status,
-                charger.firmware_status_info,
-                charger.firmware_timestamp,
+            def _fetch_status():
+                charger = Charger.objects.get(
+                    charger_id="FWSTAT", connector_id=None
+                )
+                return (
+                    charger.firmware_status,
+                    charger.firmware_status_info,
+                    charger.firmware_timestamp,
+                )
+
+            status, info, recorded_ts = await database_sync_to_async(
+                _fetch_status
+            )()
+            self.assertEqual(status, "Installing")
+            self.assertEqual(info, "Applying patch")
+            self.assertIsNotNone(recorded_ts)
+            self.assertEqual(recorded_ts.replace(microsecond=0), ts)
+
+            def _fetch_deployment():
+                return CPFirmwareDeployment.objects.get(pk=deployment_pk)
+
+            deployment = await database_sync_to_async(_fetch_deployment)()
+            self.assertEqual(deployment.status, "Installing")
+            self.assertEqual(deployment.status_info, "Applying patch")
+            self.assertIsNotNone(deployment.status_timestamp)
+            self.assertEqual(
+                deployment.status_timestamp.replace(microsecond=0), ts
             )
 
-        status, info, recorded_ts = await database_sync_to_async(_fetch_status)()
-        self.assertEqual(status, "Installing")
-        self.assertEqual(info, "Applying patch")
-        self.assertIsNotNone(recorded_ts)
-        self.assertEqual(recorded_ts.replace(microsecond=0), ts)
-
-        log_entries = store.get_logs(store.identity_key("FWSTAT", None), log_type="charger")
-        self.assertTrue(
-            any("FirmwareStatusNotification" in entry for entry in log_entries)
-        )
-
-        def _fetch_views():
-            User = get_user_model()
-            user = User.objects.create_user(username="fwstatus", password="pw")
-            client = Client()
-            client.force_login(user)
-            detail = client.get(reverse("charger-detail", args=["FWSTAT"]))
-            status_page = client.get(reverse("charger-status", args=["FWSTAT"]))
-            list_response = client.get(reverse("charger-list"))
-            return (
-                detail.status_code,
-                json.loads(detail.content.decode()),
-                status_page.status_code,
-                status_page.content.decode(),
-                list_response.status_code,
-                json.loads(list_response.content.decode()),
+            log_entries = store.get_logs(
+                store.identity_key("FWSTAT", None), log_type="charger"
+            )
+            self.assertTrue(
+                any("FirmwareStatusNotification" in entry for entry in log_entries)
             )
 
-        (
-            detail_code,
-            detail_payload,
-            status_code,
-            html,
-            list_code,
-            list_payload,
-        ) = await database_sync_to_async(_fetch_views)()
-        self.assertEqual(detail_code, 200)
-        self.assertEqual(status_code, 200)
-        self.assertEqual(list_code, 200)
-        self.assertEqual(detail_payload["firmwareStatus"], "Installing")
-        self.assertEqual(detail_payload["firmwareStatusInfo"], "Applying patch")
-        self.assertEqual(detail_payload["firmwareTimestamp"], ts.isoformat())
-        self.assertNotIn('id="firmware-status"', html)
-        self.assertNotIn('id="firmware-status-info"', html)
-        self.assertNotIn('id="firmware-timestamp"', html)
+            def _fetch_views():
+                User = get_user_model()
+                user = User.objects.create_user(username="fwstatus", password="pw")
+                client = Client()
+                client.force_login(user)
+                detail = client.get(reverse("charger-detail", args=["FWSTAT"]))
+                status_page = client.get(reverse("charger-status", args=["FWSTAT"]))
+                list_response = client.get(reverse("charger-list"))
+                return (
+                    detail.status_code,
+                    json.loads(detail.content.decode()),
+                    status_page.status_code,
+                    status_page.content.decode(),
+                    list_response.status_code,
+                    json.loads(list_response.content.decode()),
+                )
 
-        matching = [
-            item
-            for item in list_payload.get("chargers", [])
-            if item["charger_id"] == "FWSTAT" and item["connector_id"] is None
-        ]
-        self.assertTrue(matching)
-        self.assertEqual(matching[0]["firmwareStatus"], "Installing")
-        self.assertEqual(matching[0]["firmwareStatusInfo"], "Applying patch")
-        list_ts = datetime.fromisoformat(matching[0]["firmwareTimestamp"])
-        self.assertAlmostEqual(list_ts.timestamp(), ts.timestamp(), places=3)
+            (
+                detail_code,
+                detail_payload,
+                status_code,
+                html,
+                list_code,
+                list_payload,
+            ) = await database_sync_to_async(_fetch_views)()
+            self.assertEqual(detail_code, 200)
+            self.assertEqual(status_code, 200)
+            self.assertEqual(list_code, 200)
+            self.assertEqual(detail_payload["firmwareStatus"], "Installing")
+            self.assertEqual(detail_payload["firmwareStatusInfo"], "Applying patch")
+            self.assertEqual(detail_payload["firmwareTimestamp"], ts.isoformat())
+            self.assertNotIn('id="firmware-status"', html)
+            self.assertNotIn('id="firmware-status-info"', html)
+            self.assertNotIn('id="firmware-timestamp"', html)
 
-        store.clear_log(store.identity_key("FWSTAT", None), log_type="charger")
+            matching = [
+                item
+                for item in list_payload.get("chargers", [])
+                if item["charger_id"] == "FWSTAT"
+                and item["connector_id"] is None
+            ]
+            self.assertTrue(matching)
+            self.assertEqual(matching[0]["firmwareStatus"], "Installing")
+            self.assertEqual(matching[0]["firmwareStatusInfo"], "Applying patch")
+            list_ts = datetime.fromisoformat(matching[0]["firmwareTimestamp"])
+            self.assertAlmostEqual(list_ts.timestamp(), ts.timestamp(), places=3)
 
-        await communicator.disconnect()
+            store.clear_log(
+                store.identity_key("FWSTAT", None), log_type="charger"
+            )
+        finally:
+            with suppress(Exception):
+                await communicator.disconnect()
+            store.MAX_CONNECTIONS_PER_IP = limit
+
+    async def test_update_firmware_call_result_updates_deployment(self):
+        store.ip_connections.clear()
+        limit = store.MAX_CONNECTIONS_PER_IP
+        store.MAX_CONNECTIONS_PER_IP = 10
+        charger = await database_sync_to_async(Charger.objects.create)(
+            charger_id="UPFW", connector_id=None
+        )
+        firmware = await database_sync_to_async(CPFirmware.objects.create)(
+            name="Update firmware",
+            filename="update.bin",
+            payload_binary=b"bin",
+            content_type="application/octet-stream",
+            source=CPFirmware.Source.UPLOAD,
+            is_user_data=True,
+        )
+        deployment = await database_sync_to_async(CPFirmwareDeployment.objects.create)(
+            firmware=firmware,
+            charger=charger,
+            node=charger.node_origin,
+            ocpp_message_id="upfw-msg",
+            status="Pending",
+            status_info="",
+            status_timestamp=timezone.now(),
+            retrieve_date=timezone.now(),
+            request_payload={},
+            is_user_data=True,
+        )
+
+        message_id = "firmware-update"
+        store.register_pending_call(
+            message_id,
+            {
+                "action": "UpdateFirmware",
+                "charger_id": "UPFW",
+                "connector_id": None,
+                "deployment_pk": deployment.pk,
+            },
+        )
+
+        communicator = WebsocketCommunicator(application, "/UPFW/")
+        try:
+            connected, detail = await communicator.connect()
+            self.assertTrue(connected, detail)
+
+            await communicator.send_json_to([3, message_id, {"status": "Accepted"}])
+
+            await asyncio.sleep(0.05)
+
+            updated = await database_sync_to_async(CPFirmwareDeployment.objects.get)(
+                pk=deployment.pk
+            )
+            self.assertEqual(updated.status, "Accepted")
+            self.assertIsNotNone(updated.status_timestamp)
+            self.assertFalse(updated.completed_at)
+        finally:
+            with suppress(Exception):
+                await communicator.disconnect()
+            store.MAX_CONNECTIONS_PER_IP = limit
 
     async def test_firmware_status_notification_updates_connector_and_aggregate(
         self,
@@ -4972,6 +5089,37 @@ class ChargerStatusViewTests(TestCase):
         self.assertContains(resp, "id=\"diagnostics-timestamp\"")
         self.assertContains(resp, "id=\"diagnostics-location\"")
         self.assertContains(resp, "https://example.com/report.tar")
+
+    def test_firmware_download_serves_payload(self):
+        charger = Charger.objects.create(charger_id="DLVIEW")
+        firmware = CPFirmware.objects.create(
+            name="Download",
+            filename="download.bin",
+            payload_binary=b"payload",
+            content_type="application/octet-stream",
+            source=CPFirmware.Source.DOWNLOAD,
+            is_user_data=True,
+        )
+        deployment = CPFirmwareDeployment.objects.create(
+            firmware=firmware,
+            charger=charger,
+            node=charger.node_origin,
+            ocpp_message_id="dl-msg",
+            status="Pending",
+            status_info="",
+            status_timestamp=timezone.now(),
+            retrieve_date=timezone.now(),
+            request_payload={},
+            is_user_data=True,
+        )
+        token = deployment.issue_download_token(lifetime=timedelta(hours=1))
+        response = self.client.get(
+            reverse("cp-firmware-download", args=[deployment.pk, token])
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, b"payload")
+        deployment.refresh_from_db()
+        self.assertIsNotNone(deployment.downloaded_at)
 
     def test_connector_status_prefers_connector_diagnostics(self):
         aggregate = Charger.objects.create(

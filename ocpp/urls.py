@@ -5,6 +5,11 @@ from . import views
 urlpatterns = [
     path("cpms/dashboard/", views.dashboard, name="ocpp-dashboard"),
     path("evcs/simulator/", views.cp_simulator, name="cp-simulator"),
+    path(
+        "firmware/<int:deployment_id>/<slug:token>/",
+        views.firmware_download,
+        name="cp-firmware-download",
+    ),
     path("chargers/", views.charger_list, name="charger-list"),
     path("chargers/<str:cid>/", views.charger_detail, name="charger-detail"),
     path(

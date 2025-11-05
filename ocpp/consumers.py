@@ -27,6 +27,7 @@ from .models import (
     MeterValue,
     DataTransferMessage,
     CPReservation,
+    CPFirmwareDeployment,
 )
 from .reference_utils import host_is_local_loopback
 from .evcs_discovery import (
@@ -217,8 +218,20 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                         trimmed = value.strip()
                         if trimmed:
                             return trimmed
-                          
-        return self.scope["url_route"]["kwargs"].get("cid", "")
+
+        serial = self.scope["url_route"]["kwargs"].get("cid", "")
+        if serial:
+            return serial
+
+        path = (self.scope.get("path") or "").strip("/")
+        if not path:
+            return ""
+
+        segments = [segment for segment in path.split("/") if segment]
+        if not segments:
+            return ""
+
+        return segments[-1]
 
     @requires_network
     async def connect(self):
@@ -656,6 +669,23 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             target.firmware_status_info = status_info
             target.firmware_timestamp = timestamp
 
+        def _update_deployments(ids: list[int]) -> None:
+            deployments = list(
+                CPFirmwareDeployment.objects.filter(
+                    charger_id__in=ids, completed_at__isnull=True
+                )
+            )
+            payload = {"status": status, "statusInfo": status_info}
+            for deployment in deployments:
+                deployment.mark_status(
+                    status,
+                    status_info,
+                    timestamp,
+                    response=payload,
+                )
+
+        await database_sync_to_async(_update_deployments)([target.pk for target in targets])
+
     async def _cancel_consumption_message(self) -> None:
         """Stop any scheduled consumption message updates."""
 
@@ -840,6 +870,32 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                         "responded_at",
                         "updated_at",
                     ]
+                )
+
+            await database_sync_to_async(_apply)()
+            store.record_pending_call_result(
+                message_id,
+                metadata=metadata,
+                payload=payload_data,
+            )
+            return
+        if action == "UpdateFirmware":
+            deployment_pk = metadata.get("deployment_pk")
+
+            def _apply():
+                if not deployment_pk:
+                    return
+                deployment = CPFirmwareDeployment.objects.filter(
+                    pk=deployment_pk
+                ).first()
+                if not deployment:
+                    return
+                status_value = str(payload_data.get("status") or "").strip() or "Accepted"
+                deployment.mark_status(
+                    status_value,
+                    "",
+                    timezone.now(),
+                    response=payload_data,
                 )
 
             await database_sync_to_async(_apply)()
@@ -1113,6 +1169,53 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             if connector_value:
                 message += f", connector={connector_value}"
             store.add_log(log_key, message, log_type="charger")
+            store.record_pending_call_result(
+                message_id,
+                metadata=metadata,
+                success=False,
+                error_code=error_code,
+                error_description=description,
+                error_details=details,
+            )
+            return
+        if action == "UpdateFirmware":
+            deployment_pk = metadata.get("deployment_pk")
+
+            def _apply():
+                if not deployment_pk:
+                    return
+                deployment = CPFirmwareDeployment.objects.filter(
+                    pk=deployment_pk
+                ).first()
+                if not deployment:
+                    return
+                parts: list[str] = []
+                if error_code:
+                    parts.append(f"code={str(error_code).strip()}")
+                if description:
+                    parts.append(f"description={str(description).strip()}")
+                if details:
+                    try:
+                        details_text = json.dumps(
+                            details, sort_keys=True, ensure_ascii=False
+                        )
+                    except TypeError:
+                        details_text = str(details)
+                    if details_text:
+                        parts.append(f"details={details_text}")
+                message = "UpdateFirmware error"
+                if parts:
+                    message += ": " + ", ".join(parts)
+                deployment.mark_status(
+                    "Error",
+                    message,
+                    timezone.now(),
+                    response=details or {},
+                )
+                deployment.completed_at = timezone.now()
+                deployment.save(update_fields=["completed_at", "updated_at"])
+
+            await database_sync_to_async(_apply)()
             store.record_pending_call_result(
                 message_id,
                 metadata=metadata,
