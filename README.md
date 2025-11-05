@@ -38,8 +38,9 @@ Arthexis Constellation is a [narrative-driven](https://en.wikipedia.org/wiki/Nar
   | `ReserveNow` | Reserve connectors for upcoming sessions with automatic connector selection and confirmation tracking. |
   | `Reset` | Request a soft or hard reboot to recover from faults. |
   | `TriggerMessage` | Ask the device to send an immediate update (for example status or diagnostics). |
+  | `UpdateFirmware` | Deliver firmware packages to chargers with secure download tokens and track installation responses. |
 
-  **OCPP 1.6 roadmap.** The following catalogue actions are in our backlog: `CancelReservation`, `ChangeConfiguration`, `ClearCache`, `ClearChargingProfile`, `GetCompositeSchedule`, `GetDiagnostics`, `GetLocalListVersion`, `SendLocalList`, `SetChargingProfile`, `UnlockConnector`, `UpdateFirmware`.
+  **OCPP 1.6 roadmap.** The following catalogue actions are in our backlog: `CancelReservation`, `ChangeConfiguration`, `ClearCache`, `ClearChargingProfile`, `GetCompositeSchedule`, `GetDiagnostics`, `GetLocalListVersion`, `SendLocalList`, `SetChargingProfile`, `UnlockConnector`.
 
 - Charge point reservations with automated connector assignment, energy account and RFID linkage, and EVCS confirmation tracking.
 - [API](https://en.wikipedia.org/wiki/API) integration with [Odoo](https://www.odoo.com/), syncing:
