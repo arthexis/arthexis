@@ -4,7 +4,7 @@ from django.contrib.auth.models import (
     UserManager as DjangoUserManager,
 )
 from django.db import DatabaseError, IntegrityError, connections, models, transaction
-from django.db.models import Q
+from django.db.models import Q, F
 from django.db.models.functions import Lower, Length
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -4744,7 +4744,6 @@ def validate_relative_url(value: str) -> None:
 class TodoManager(EntityManager):
     def get_by_natural_key(self, request: str):
         return self.get(request=request)
-
 
 class Todo(Entity):
     """Tasks requested for the Release Manager."""
