@@ -94,7 +94,7 @@ class ProductAdminRegisterFromOdooTests(TestCase):
     def test_view_requires_credentials(self):
         url = reverse("admin:core_product_register_from_odoo")
         response = self.client.get(url)
-        self.assertContains(response, "Configure your Odoo employee credentials")
+        self.assertContains(response, "Configure your CRM employee credentials")
 
     @patch.object(OdooProfile, "execute")
     def test_view_lists_products(self, mock_execute):

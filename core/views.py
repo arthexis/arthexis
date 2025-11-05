@@ -99,7 +99,7 @@ def odoo_quote_report(request):
 
     if not profile or not profile.is_verified:
         context["error"] = _(
-            "Configure and verify your Odoo employee credentials before generating the report."
+            "Configure and verify your CRM employee credentials before generating the report."
         )
         return TemplateResponse(
             request, "admin/core/odoo_quote_report.html", context

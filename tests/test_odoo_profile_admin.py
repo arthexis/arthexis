@@ -47,6 +47,7 @@ class OdooProfileAdminFormTests(TestCase):
             "database": "db",
             "username": "odoo",
             "password": "",
+            "crm": OdooProfile.CRM.ODOO,
         }
         form = OdooProfileAdminForm(data, instance=profile)
         self.assertTrue(form.is_valid())
@@ -63,6 +64,7 @@ class OdooProfileAdminFormTests(TestCase):
             "database": "db",
             "username": "odoo",
             "password": "newpass",
+            "crm": OdooProfile.CRM.ODOO,
         }
         form = OdooProfileAdminForm(data, instance=profile)
         self.assertTrue(form.is_valid())
@@ -87,6 +89,7 @@ class OdooProfileAdminFormTests(TestCase):
             "database": "db",
             "username": "odoo",
             "password": "",
+            "crm": OdooProfile.CRM.ODOO,
         }
         form = OdooProfileAdminForm(data, instance=profile)
         self.assertTrue(form.is_valid())
@@ -204,6 +207,7 @@ class OdooProfileInlineFormTests(TestCase):
                 "database": "",
                 "username": "",
                 "password": "",
+                "crm": OdooProfile.CRM.ODOO,
             },
             instance=OdooProfile(user=self.user),
         )
@@ -217,6 +221,7 @@ class OdooProfileInlineFormTests(TestCase):
                 "database": "",
                 "username": "",
                 "password": "",
+                "crm": OdooProfile.CRM.ODOO,
             },
             instance=OdooProfile(user=self.user),
         )
@@ -242,6 +247,7 @@ class OdooProfileInlineFormTests(TestCase):
                 f"{prefix}-database": "",
                 f"{prefix}-username": "",
                 f"{prefix}-password": "",
+                f"{prefix}-crm": OdooProfile.CRM.ODOO,
             }
         )
         form = OdooProfileInlineForm(data=data, instance=profile, prefix=prefix)

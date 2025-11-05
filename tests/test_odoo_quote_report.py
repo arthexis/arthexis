@@ -20,7 +20,7 @@ class OdooQuoteReportViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(
             response,
-            "Configure and verify your Odoo employee credentials",
+            "Configure and verify your CRM employee credentials",
         )
 
     @patch.object(OdooProfile, "execute")

@@ -605,11 +605,19 @@ class UserPhoneNumber(Entity):
 class OdooProfile(Profile):
     """Store Odoo API credentials for a user."""
 
+    class CRM(models.TextChoices):
+        ODOO = "odoo", _("Odoo")
+
     profile_fields = ("host", "database", "username", "password")
     host = SigilShortAutoField(max_length=255)
     database = SigilShortAutoField(max_length=255)
     username = SigilShortAutoField(max_length=255)
     password = SigilShortAutoField(max_length=255)
+    crm = models.CharField(
+        max_length=32,
+        choices=CRM.choices,
+        default=CRM.ODOO,
+    )
     verified_on = models.DateTimeField(null=True, blank=True)
     odoo_uid = models.PositiveIntegerField(null=True, blank=True, editable=False)
     name = models.CharField(max_length=255, blank=True, editable=False)
@@ -733,8 +741,8 @@ class OdooProfile(Profile):
         return f"{owner} @ {self.host}" if owner else self.host
 
     class Meta:
-        verbose_name = _("Odoo Employee")
-        verbose_name_plural = _("Odoo Employees")
+        verbose_name = _("CRM Employee")
+        verbose_name_plural = _("CRM Employees")
         constraints = [
             models.CheckConstraint(
                 check=(
