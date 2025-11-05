@@ -69,12 +69,33 @@ from core.models import (
 from ocpp.models import Charger
 from .utils import get_original_referer
 
+
+class _GraphvizDeprecationFilter(logging.Filter):
+    """Filter out Graphviz debug logs about positional arg deprecations."""
+
+    _MESSAGE_PREFIX = "deprecate positional args:"
+
+    def filter(self, record: logging.LogRecord) -> bool:  # pragma: no cover - logging hook
+        try:
+            message = record.getMessage()
+        except Exception:  # pragma: no cover - defensive fallback
+            return True
+        return not message.startswith(self._MESSAGE_PREFIX)
+
+
 try:  # pragma: no cover - optional dependency guard
     from graphviz import Digraph
     from graphviz.backend import CalledProcessError, ExecutableNotFound
 except ImportError:  # pragma: no cover - handled gracefully in views
     Digraph = None
     CalledProcessError = ExecutableNotFound = None
+else:
+    graphviz_logger = logging.getLogger("graphviz._tools")
+    if not any(
+        isinstance(existing_filter, _GraphvizDeprecationFilter)
+        for existing_filter in graphviz_logger.filters
+    ):
+        graphviz_logger.addFilter(_GraphvizDeprecationFilter())
 
 import markdown
 from django.utils._os import safe_join
