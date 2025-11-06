@@ -46,6 +46,9 @@ LOCK_DIR.mkdir(exist_ok=True)
 SESSION_LOCK = LOCK_DIR / "charging.lck"
 _lock_task: asyncio.Task | None = None
 
+# Maximum number of session messages retained in memory per charger while the
+# complete transcript is streamed to disk. This allows diagnostics that inspect
+# the active session without storing the full history in ``history``.
 SESSION_LOG_BUFFER_LIMIT = 16
 
 
@@ -492,30 +495,32 @@ def start_session_log(cid: str, tx_id: int) -> None:
         "start": start,
         "path": path,
         "handle": handle,
-        "buffer": [],
+        "buffer": deque(maxlen=SESSION_LOG_BUFFER_LIMIT),
         "first": True,
     }
 
 
 def add_session_message(cid: str, message: str) -> None:
-    """Record a raw message for the current session if one is active."""
+    """Record a raw message for the current session if one is active.
+
+    Only the most recent :data:`SESSION_LOG_BUFFER_LIMIT` messages are retained
+    in memory; the full transcript is streamed directly to the session log
+    file.
+    """
 
     sess = history.get(cid)
     if not sess:
         return
-    buffer: list[str] = sess.setdefault("buffer", [])
-    payload = json.dumps(
-        {
-            "timestamp": datetime.now(timezone.utc)
-            .isoformat()
-            .replace("+00:00", "Z"),
-            "message": message,
-        },
-        ensure_ascii=False,
-    )
-    buffer.append(payload)
-    if len(buffer) >= SESSION_LOG_BUFFER_LIMIT:
-        _flush_session_buffer(sess)
+    payload_obj = {
+        "timestamp": datetime.now(timezone.utc)
+        .isoformat()
+        .replace("+00:00", "Z"),
+        "message": message,
+    }
+    _write_session_payload(sess, json.dumps(payload_obj, ensure_ascii=False))
+    buffer = sess.get("buffer")
+    if isinstance(buffer, deque):
+        buffer.append(payload_obj)
 
 
 def end_session_log(cid: str) -> None:
@@ -527,27 +532,22 @@ def end_session_log(cid: str) -> None:
     _finalize_session(sess)
 
 
-def _flush_session_buffer(sess: dict[str, object]) -> None:
+def _write_session_payload(sess: dict[str, object], raw: str) -> None:
     handle = sess.get("handle")
-    buffer = sess.get("buffer")
-    if not handle or not buffer:
+    if not handle:
         return
     first = bool(sess.get("first", True))
-    for raw in list(buffer):
-        if not first:
-            handle.write(",")
-        handle.write("\n  ")
-        handle.write(raw)
-        first = False
+    if not first:
+        handle.write(",")
+    handle.write("\n  ")
+    handle.write(raw)
     handle.flush()
-    buffer.clear()
-    sess["first"] = first
+    sess["first"] = False
 
 
 def _finalize_session(sess: dict[str, object]) -> None:
     handle = sess.get("handle")
     try:
-        _flush_session_buffer(sess)
         if handle:
             if sess.get("first", True):
                 handle.write("]\n")

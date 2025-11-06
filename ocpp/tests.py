@@ -2208,6 +2208,12 @@ class CSMSConsumerTests(TransactionTestCase):
                 store.add_session_message(cid, f"message {idx}")
                 buffer = metadata["buffer"]
                 self.assertLessEqual(len(buffer), store.SESSION_LOG_BUFFER_LIMIT)
+            self.assertEqual(len(metadata["buffer"]), store.SESSION_LOG_BUFFER_LIMIT)
+            first_retained = metadata["buffer"][0]
+            last_retained = metadata["buffer"][-1]
+            expected_first = message_count - store.SESSION_LOG_BUFFER_LIMIT
+            self.assertEqual(first_retained["message"], f"message {expected_first}")
+            self.assertEqual(last_retained["message"], f"message {message_count - 1}")
         finally:
             store.end_session_log(cid)
 
