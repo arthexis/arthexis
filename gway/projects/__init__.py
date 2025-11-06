@@ -1,1 +1,0 @@
-"""Project utilities for gway."""
