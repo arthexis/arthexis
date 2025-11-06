@@ -18,21 +18,26 @@
       "total": 10
     },
     "csms_to_cp": {
-      "count": 6,
-      "percent": 31.58,
+      "count": 11,
+      "percent": 57.89,
       "supported": [
         "ChangeAvailability",
         "DataTransfer",
+        "GetConfiguration",
+        "GetLocalListVersion",
         "RemoteStartTransaction",
         "RemoteStopTransaction",
+        "ReserveNow",
         "Reset",
-        "TriggerMessage"
+        "SendLocalList",
+        "TriggerMessage",
+        "UpdateFirmware"
       ],
       "total": 19
     },
     "overall": {
-      "count": 16,
-      "percent": 57.14,
+      "count": 21,
+      "percent": 75.0,
       "supported": [
         "Authorize",
         "BootNotification",
@@ -41,15 +46,19 @@
         "DiagnosticsStatusNotification",
         "FirmwareStatusNotification",
         "GetConfiguration",
+        "GetLocalListVersion",
         "Heartbeat",
         "MeterValues",
         "RemoteStartTransaction",
         "RemoteStopTransaction",
+        "ReserveNow",
         "Reset",
+        "SendLocalList",
         "StartTransaction",
         "StatusNotification",
         "StopTransaction",
-        "TriggerMessage"
+        "TriggerMessage",
+        "UpdateFirmware"
       ],
       "total": 28
     }
@@ -66,19 +75,28 @@
       "MeterValues",
       "RemoteStartTransaction",
       "RemoteStopTransaction",
+      "ReserveNow",
       "Reset",
+      "SendLocalList",
       "StartTransaction",
       "StatusNotification",
       "StopTransaction",
-      "TriggerMessage"
+      "TriggerMessage",
+      "UpdateFirmware",
+      "GetLocalListVersion"
     ],
     "csms_to_cp": [
       "ChangeAvailability",
       "DataTransfer",
+      "GetConfiguration",
+      "GetLocalListVersion",
       "RemoteStartTransaction",
       "RemoteStopTransaction",
+      "ReserveNow",
       "Reset",
-      "TriggerMessage"
+      "SendLocalList",
+      "TriggerMessage",
+      "UpdateFirmware"
     ]
   },
   "spec": {

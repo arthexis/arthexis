@@ -33,14 +33,16 @@ Arthexis Constellation is a [narrative-driven](https://en.wikipedia.org/wiki/Nar
   | `ChangeAvailability` | Switch connectors or the whole station between operative and inoperative states. |
   | `DataTransfer` | Send vendor-specific commands and log the charge point response. |
   | `GetConfiguration` | Poll the device for the current values of tracked configuration keys. |
+  | `GetLocalListVersion` | Retrieve the current RFID whitelist version and synchronize entries reported by the charge point. |
   | `RemoteStartTransaction` | Initiate a charging session remotely for an identified customer or token. |
   | `RemoteStopTransaction` | Terminate active charging sessions from the control center. |
   | `ReserveNow` | Reserve connectors for upcoming sessions with automatic connector selection and confirmation tracking. |
   | `Reset` | Request a soft or hard reboot to recover from faults. |
+  | `SendLocalList` | Publish released and approved RFIDs as the charge point's local authorization list. |
   | `TriggerMessage` | Ask the device to send an immediate update (for example status or diagnostics). |
   | `UpdateFirmware` | Deliver firmware packages to chargers with secure download tokens and track installation responses. |
 
-  **OCPP 1.6 roadmap.** The following catalogue actions are in our backlog: `CancelReservation`, `ChangeConfiguration`, `ClearCache`, `ClearChargingProfile`, `GetCompositeSchedule`, `GetDiagnostics`, `GetLocalListVersion`, `SendLocalList`, `SetChargingProfile`, `UnlockConnector`.
+  **OCPP 1.6 roadmap.** The following catalogue actions are in our backlog: `CancelReservation`, `ChangeConfiguration`, `ClearCache`, `ClearChargingProfile`, `GetCompositeSchedule`, `GetDiagnostics`, `SetChargingProfile`, `UnlockConnector`.
 
 - Charge point reservations with automated connector assignment, energy account and RFID linkage, and EVCS confirmation tracking.
 - [API](https://en.wikipedia.org/wiki/API) integration with [Odoo](https://www.odoo.com/), syncing:

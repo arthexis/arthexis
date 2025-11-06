@@ -346,11 +346,14 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             if not tag.allowed:
                 tag.allowed = True
                 updates.append("allowed")
+            if not tag.released:
+                tag.released = True
+                updates.append("released")
             if tag.last_seen_on != now:
                 tag.last_seen_on = now
                 updates.append("last_seen_on")
             if updates:
-                tag.save(update_fields=updates)
+                tag.save(update_fields=sorted(set(updates)))
             return tag
 
         return await database_sync_to_async(_ensure)()
@@ -880,6 +883,57 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 )
 
             await database_sync_to_async(_apply)()
+            store.record_pending_call_result(
+                message_id,
+                metadata=metadata,
+                payload=payload_data,
+            )
+            return
+        if action == "SendLocalList":
+            status_value = str(payload_data.get("status") or "").strip()
+            version_candidate = (
+                payload_data.get("currentLocalListVersion")
+                or payload_data.get("listVersion")
+                or metadata.get("list_version")
+            )
+            message = "SendLocalList result"
+            if status_value:
+                message += f": status={status_value}"
+            if version_candidate is not None:
+                message += f", version={version_candidate}"
+            store.add_log(log_key, message, log_type="charger")
+            version_int = None
+            if version_candidate is not None:
+                try:
+                    version_int = int(version_candidate)
+                except (TypeError, ValueError):
+                    version_int = None
+            await self._update_local_authorization_state(version_int)
+            store.record_pending_call_result(
+                message_id,
+                metadata=metadata,
+                payload=payload_data,
+            )
+            return
+        if action == "GetLocalListVersion":
+            version_candidate = payload_data.get("listVersion")
+            processed = 0
+            auth_list = payload_data.get("localAuthorizationList")
+            if isinstance(auth_list, list):
+                processed = await self._apply_local_authorization_entries(auth_list)
+            message = "GetLocalListVersion result"
+            if version_candidate is not None:
+                message += f": version={version_candidate}"
+            if processed:
+                message += f", entries={processed}"
+            store.add_log(log_key, message, log_type="charger")
+            version_int = None
+            if version_candidate is not None:
+                try:
+                    version_int = int(version_candidate)
+                except (TypeError, ValueError):
+                    version_int = None
+            await self._update_local_authorization_state(version_int)
             store.record_pending_call_result(
                 message_id,
                 metadata=metadata,
@@ -1525,6 +1579,77 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                         setattr(self.aggregate_charger, field, value)
 
         await database_sync_to_async(_apply)()
+
+    async def _update_local_authorization_state(self, version: int | None) -> None:
+        """Persist the reported local authorization list version."""
+
+        timestamp = timezone.now()
+
+        def _apply() -> None:
+            updates: dict[str, object] = {"local_auth_list_updated_at": timestamp}
+            if version is not None:
+                updates["local_auth_list_version"] = int(version)
+
+            targets: list[Charger] = []
+            if self.charger and getattr(self.charger, "pk", None):
+                targets.append(self.charger)
+            aggregate = self.aggregate_charger
+            if (
+                aggregate
+                and getattr(aggregate, "pk", None)
+                and not any(target.pk == aggregate.pk for target in targets if target.pk)
+            ):
+                targets.append(aggregate)
+
+            if not targets:
+                return
+
+            for target in targets:
+                Charger.objects.filter(pk=target.pk).update(**updates)
+                for field, value in updates.items():
+                    setattr(target, field, value)
+
+        await database_sync_to_async(_apply)()
+
+    async def _apply_local_authorization_entries(
+        self, entries: list[dict[str, object]]
+    ) -> int:
+        """Create or update RFID records from a local authorization list."""
+
+        def _apply() -> int:
+            processed = 0
+            now = timezone.now()
+            for entry in entries:
+                if not isinstance(entry, dict):
+                    continue
+                id_tag = entry.get("idTag")
+                id_tag_text = str(id_tag or "").strip().upper()
+                if not id_tag_text:
+                    continue
+                info = entry.get("idTagInfo")
+                status_value = ""
+                if isinstance(info, dict):
+                    status_value = str(info.get("status") or "").strip()
+                status_key = status_value.lower()
+                allowed_flag = status_key in {"", "accepted", "concurrenttx"}
+                defaults = {"allowed": allowed_flag, "released": allowed_flag}
+                tag, _ = CoreRFID.update_or_create_from_code(id_tag_text, defaults)
+                updates: set[str] = set()
+                if tag.allowed != allowed_flag:
+                    tag.allowed = allowed_flag
+                    updates.add("allowed")
+                if tag.released != allowed_flag:
+                    tag.released = allowed_flag
+                    updates.add("released")
+                if tag.last_seen_on != now:
+                    tag.last_seen_on = now
+                    updates.add("last_seen_on")
+                if updates:
+                    tag.save(update_fields=sorted(updates))
+                processed += 1
+            return processed
+
+        return await database_sync_to_async(_apply)()
 
     async def _update_availability_state(
         self,

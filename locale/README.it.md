@@ -33,14 +33,16 @@ Costellazione Arthexis è una [suite software](https://it.wikipedia.org/wiki/Sui
   | `ChangeAvailability` | Impostiamo connettori o stazione tra operativa e fuori servizio. |
   | `DataTransfer` | Inviamo comandi specifici del fornitore e registriamo la risposta del punto di ricarica. |
   | `GetConfiguration` | Interroghiamo il dispositivo sui valori correnti delle chiavi di configurazione monitorate. |
+  | `GetLocalListVersion` | Recuperiamo la versione corrente della whitelist RFID e sincronizziamo le voci segnalate dal punto di ricarica. |
   | `RemoteStartTransaction` | Avviamo da remoto una sessione di ricarica per clienti o token identificati. |
   | `RemoteStopTransaction` | Interrompiamo da remoto sessioni attive dal centro di controllo. |
   | `ReserveNow` | Prenotiamo i connettori per le sessioni future con assegnazione automatica e tracciamento della conferma. |
   | `Reset` | Richiediamo un riavvio soft o hard per ripristinare guasti. |
+  | `SendLocalList` | Pubbliciamo gli RFID rilasciati e approvati come lista di autorizzazione locale del punto di ricarica. |
   | `TriggerMessage` | Chiediamo al dispositivo un aggiornamento immediato (ad esempio stato o diagnostica). |
   | `UpdateFirmware` | Distribuiamo pacchetti firmware ai charger con token di download sicuri e tracciamo le risposte di installazione. |
 
-  **Roadmap OCPP 1.6.** Le seguenti azioni del catalogo sono nel nostro backlog: `CancelReservation`, `ChangeConfiguration`, `ClearCache`, `ClearChargingProfile`, `GetCompositeSchedule`, `GetDiagnostics`, `GetLocalListVersion`, `SendLocalList`, `SetChargingProfile`, `UnlockConnector`.
+  **Roadmap OCPP 1.6.** Le seguenti azioni del catalogo sono nel nostro backlog: `CancelReservation`, `ChangeConfiguration`, `ClearCache`, `ClearChargingProfile`, `GetCompositeSchedule`, `GetDiagnostics`, `SetChargingProfile`, `UnlockConnector`.
 
 - Prenotazioni dei punti di ricarica con assegnazione automatica del connettore, collegamento agli Energy Account e ai RFID, e conferma EVCS.
 
