@@ -993,6 +993,7 @@ def rfid_login_page(request):
         redirect_target = ""
     context = {
         "login_api_url": reverse("rfid-login"),
+        "scan_api_url": reverse("rfid-scan-next"),
         "redirect_field_name": redirect_field_name,
         "redirect_target": redirect_target,
         "back_url": reverse("pages:login"),

@@ -1,0 +1,12 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate control RFID login flow",
+      "url": "/login/rfid/",
+      "request_details": "On a node with an RFID scanner, open the Login with RFID page, confirm the status updates to show the scanner connection, and verify that scanning an allowed card submits the login and redirects to the dashboard.",
+      "done_on": null,
+      "is_deleted": false
+    }
+  }
+]
