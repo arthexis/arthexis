@@ -41,7 +41,11 @@ from django.test import RequestFactory, signals as test_signals
 from django.urls import NoReverseMatch, reverse
 from django.utils import timezone
 from django.utils.encoding import force_bytes, force_str
-from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
+from django.utils.http import (
+    url_has_allowed_host_and_scheme,
+    urlsafe_base64_decode,
+    urlsafe_base64_encode,
+)
 from core import mailer, public_wifi
 from core.backends import TOTP_DEVICE_NAME
 from django.utils.translation import get_language, gettext as _
@@ -940,6 +944,11 @@ class CustomLoginView(LoginView):
                 "restricted_notice": restricted_notice,
             }
         )
+        node = Node.get_local()
+        has_rfid_scanner = bool(node and node.has_feature("rfid-scanner"))
+        context["show_rfid_login"] = has_rfid_scanner
+        if has_rfid_scanner:
+            context["rfid_login_url"] = reverse("pages:rfid-login")
         return context
 
     def get_success_url(self):
@@ -959,6 +968,30 @@ class CustomLoginView(LoginView):
 
 
 login_view = CustomLoginView.as_view()
+
+
+@ensure_csrf_cookie
+def rfid_login_page(request):
+    node = Node.get_local()
+    if not node or not node.has_feature("rfid-scanner"):
+        raise Http404
+    if request.user.is_authenticated:
+        return redirect(reverse("admin:index") if request.user.is_staff else "/")
+    redirect_field_name = CustomLoginView.redirect_field_name
+    redirect_target = request.GET.get(redirect_field_name, "")
+    if redirect_target and not url_has_allowed_host_and_scheme(
+        redirect_target,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        redirect_target = ""
+    context = {
+        "login_api_url": reverse("rfid-login"),
+        "redirect_field_name": redirect_field_name,
+        "redirect_target": redirect_target,
+        "back_url": reverse("pages:login"),
+    }
+    return render(request, "pages/rfid_login.html", context)
 
 
 @staff_member_required

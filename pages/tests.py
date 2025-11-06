@@ -123,6 +123,17 @@ class LoginViewTests(TestCase):
         self.user = User.objects.create_user(username="user", password="pwd")
         Site.objects.update_or_create(id=1, defaults={"name": "Terminal"})
 
+    def _enable_rfid_scanner(self):
+        node, _ = Node.objects.get_or_create(
+            mac_address=Node.get_current_mac(),
+            defaults={"name": "Local"},
+        )
+        feature, _ = NodeFeature.objects.get_or_create(
+            slug="rfid-scanner", defaults={"display": "RFID Scanner"}
+        )
+        NodeFeatureAssignment.objects.get_or_create(node=node, feature=feature)
+        return node
+
     def test_login_link_in_navbar(self):
         resp = self.client.get(reverse("pages:index"))
         self.assertContains(resp, 'href="/login/"')
@@ -200,6 +211,21 @@ class LoginViewTests(TestCase):
             {"username": "user", "password": "pwd"},
         )
         self.assertRedirects(resp, "/nodes/list/")
+
+    def test_login_page_shows_rfid_link_when_feature_enabled(self):
+        self._enable_rfid_scanner()
+        resp = self.client.get(reverse("pages:login"))
+        self.assertContains(resp, reverse("pages:rfid-login"))
+
+    def test_rfid_login_page_requires_feature(self):
+        resp = self.client.get(reverse("pages:rfid-login"))
+        self.assertEqual(resp.status_code, 404)
+
+    def test_rfid_login_page_redirects_authenticated_user(self):
+        self._enable_rfid_scanner()
+        self.client.force_login(self.user)
+        resp = self.client.get(reverse("pages:rfid-login"))
+        self.assertRedirects(resp, "/")
 
     def test_homepage_excludes_version_banner_for_anonymous(self):
         response = self.client.get(reverse("pages:index"))

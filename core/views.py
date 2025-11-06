@@ -11,7 +11,7 @@ import requests
 from django.conf import settings
 from django.contrib.admin.sites import site as admin_site
 from django.contrib.admin.views.decorators import staff_member_required
-from django.contrib.auth import authenticate, login
+from django.contrib.auth import REDIRECT_FIELD_NAME, authenticate, login
 from django.contrib import messages
 from django.contrib.sites.models import Site
 from django.http import Http404, JsonResponse, HttpResponse
@@ -1549,12 +1549,28 @@ def rfid_login(request):
     if not rfid:
         return JsonResponse({"detail": "rfid required"}, status=400)
 
+    redirect_to = data.get(REDIRECT_FIELD_NAME) or data.get("next")
+    if redirect_to and not url_has_allowed_host_and_scheme(
+        redirect_to,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        redirect_to = ""
+
     user = authenticate(request, rfid=rfid)
     if user is None:
         return JsonResponse({"detail": "invalid RFID"}, status=401)
 
     login(request, user)
-    return JsonResponse({"id": user.id, "username": user.username})
+    if redirect_to:
+        target = redirect_to
+    elif user.is_staff:
+        target = reverse("admin:index")
+    else:
+        target = "/"
+    return JsonResponse(
+        {"id": user.id, "username": user.username, "redirect": target}
+    )
 
 
 @api_login_required

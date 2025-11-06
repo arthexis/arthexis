@@ -1,0 +1,315 @@
+{% extends "pages/base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Login with RFID" %}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-center">
+  <div class="card p-4" style="max-width: 480px; width: 100%;">
+    <h1 class="text-center mb-3">{% trans "Login with RFID" %}</h1>
+    <p class="text-muted text-center mb-4">
+      {% trans "Hold your RFID card near the reader or enter the code below to sign in." %}
+    </p>
+    <div
+      class="alert alert-info"
+      role="status"
+      aria-live="assertive"
+      data-status-message
+    >
+      {% trans "Ready to scan. Hold your RFID card near the reader." %}
+    </div>
+    <button type="button" class="btn btn-primary w-100 mb-3" data-connect>
+      {% trans "Connect RFID Scanner" %}
+    </button>
+    <div class="mb-3">
+      <label for="rfid-input" class="form-label">{% trans "RFID code" %}</label>
+      <div class="input-group">
+        <input
+          type="text"
+          class="form-control"
+          id="rfid-input"
+          data-rfid-input
+          autocomplete="off"
+          autocapitalize="characters"
+          inputmode="text"
+          spellcheck="false"
+          autofocus
+        >
+        <button class="btn btn-outline-secondary" type="button" data-submit>
+          {% trans "Submit" %}
+        </button>
+      </div>
+      <div class="form-text">
+        {% trans "If your scanner types like a keyboard, focus the field and scan the card." %}
+      </div>
+    </div>
+    <div class="text-center">
+      <a href="{{ back_url }}">{% trans "Use password instead" %}</a>
+    </div>
+  </div>
+</div>
+<form method="post" data-csrf-form style="display:none;">{% csrf_token %}</form>
+<script>
+(function(){
+  const statusBox = document.querySelector('[data-status-message]');
+  const connectBtn = document.querySelector('[data-connect]');
+  const input = document.querySelector('[data-rfid-input]');
+  const submitBtn = document.querySelector('[data-submit]');
+  const loginUrl = '{{ login_api_url|escapejs }}';
+  const redirectTarget = '{{ redirect_target|default:""|escapejs }}';
+
+  const text = {
+    ready: '{% trans "Ready to scan. Hold your RFID card near the reader." %}',
+    connectPrompt: '{% trans "Select an RFID reader to connect." %}',
+    connected: '{% trans "Scanner connected. Awaiting RFID…" %}',
+    disconnected: '{% trans "Scanner disconnected. Reconnect to continue." %}',
+    unsupported: '{% trans "This browser does not support direct scanner connections." %}',
+    authenticating: '{% trans "Authenticating…" %}',
+    success: '{% trans "Authentication successful. Redirecting…" %}',
+    failure: '{% trans "Login failed. Scan again or try another card." %}',
+    invalid: '{% trans "Please scan a valid RFID." %}',
+    duplicate: '{% trans "Card already scanned. Waiting for a new scan…" %}',
+  };
+
+  let loggingIn = false;
+  let lastValue = null;
+  let lastScanAt = 0;
+  let port = null;
+  let reader = null;
+
+  function setStatus(message, variant){
+    const box = statusBox;
+    if(!box){
+      return;
+    }
+    box.classList.remove('alert-info', 'alert-success', 'alert-danger');
+    if(variant === 'success'){
+      box.classList.add('alert-success');
+    } else if(variant === 'error'){
+      box.classList.add('alert-danger');
+    } else {
+      box.classList.add('alert-info');
+    }
+    box.textContent = message;
+  }
+
+  function getCookie(name){
+    const cookies = document.cookie ? document.cookie.split('; ') : [];
+    for(let i = 0; i < cookies.length; i += 1){
+      const parts = cookies[i].split('=');
+      const key = parts.shift();
+      if(key === name){
+        return decodeURIComponent(parts.join('='));
+      }
+    }
+    return null;
+  }
+
+  function getCsrfToken(){
+    const cookie = getCookie('csrftoken');
+    if(cookie){
+      return cookie;
+    }
+    const csrfInput = document.querySelector('input[name="csrfmiddlewaretoken"]');
+    return csrfInput ? csrfInput.value : '';
+  }
+
+  function sanitize(value){
+    if(typeof value !== 'string'){
+      return '';
+    }
+    return value.replace(/[^0-9A-Fa-f]/g, '').toUpperCase();
+  }
+
+  async function authenticate(rfid){
+    if(loggingIn){
+      return;
+    }
+    const cleaned = sanitize(rfid);
+    if(!cleaned){
+      setStatus(text.invalid, 'error');
+      return;
+    }
+    loggingIn = true;
+    setStatus(text.authenticating, 'info');
+    connectBtn && (connectBtn.disabled = true);
+    submitBtn && (submitBtn.disabled = true);
+    input && (input.disabled = true);
+    try{
+      const headers = {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-Requested-With': 'XMLHttpRequest',
+      };
+      const csrf = getCsrfToken();
+      if(csrf){
+        headers['X-CSRFToken'] = csrf;
+      }
+      const body = {rfid: cleaned};
+      if(redirectTarget){
+        body['next'] = redirectTarget;
+      }
+      const response = await fetch(loginUrl, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers,
+        body: JSON.stringify(body),
+      });
+      const data = await response.json();
+      if(!response.ok){
+        const message = data && data.detail ? data.detail : text.failure;
+        throw new Error(message);
+      }
+      setStatus(text.success, 'success');
+      const target = data && data.redirect ? data.redirect : (redirectTarget || '/');
+      window.location.href = target;
+    } catch(err){
+      const message = err && err.message ? err.message : text.failure;
+      setStatus(message, 'error');
+      loggingIn = false;
+      connectBtn && (connectBtn.disabled = false);
+      submitBtn && (submitBtn.disabled = false);
+      input && (input.disabled = false);
+      input && input.focus();
+    }
+  }
+
+  function handleScan(value){
+    const cleaned = sanitize(value);
+    if(!cleaned){
+      return;
+    }
+    const now = Date.now();
+    if(cleaned === lastValue && now - lastScanAt < 500){
+      setStatus(text.duplicate, 'info');
+      return;
+    }
+    lastValue = cleaned;
+    lastScanAt = now;
+    if(input){
+      input.value = cleaned;
+    }
+    authenticate(cleaned);
+  }
+
+  async function readFromPort(){
+    if(!port || !port.readable){
+      return;
+    }
+    reader = port.readable.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    try{
+      while(true){
+        const {value, done} = await reader.read();
+        if(done){
+          break;
+        }
+        if(value){
+          buffer += decoder.decode(value, {stream: true});
+          const parts = buffer.split(/[\r\n]+/);
+          buffer = parts.pop() || '';
+          parts.forEach((part) => handleScan(part.trim()));
+        }
+      }
+      buffer += decoder.decode();
+      if(buffer.trim()){
+        handleScan(buffer.trim());
+      }
+    } finally {
+      if(reader){
+        try { reader.releaseLock(); } catch(_err) { /* ignore */ }
+        reader = null;
+      }
+    }
+  }
+
+  async function connectScanner(){
+    if(!('serial' in navigator)){
+      setStatus(text.unsupported, 'error');
+      connectBtn && (connectBtn.disabled = true);
+      return;
+    }
+    try{
+      setStatus(text.connectPrompt, 'info');
+      port = await navigator.serial.requestPort();
+      await port.open({baudRate: 9600});
+      connectBtn && (connectBtn.disabled = true);
+      setStatus(text.connected, 'info');
+      await readFromPort();
+    } catch(err){
+      if(err && err.name === 'NotFoundError'){
+        setStatus(text.ready, 'info');
+      } else {
+        setStatus(text.failure, 'error');
+      }
+    } finally {
+      if(reader){
+        try { await reader.cancel(); } catch(_err) { /* ignore */ }
+      }
+      if(port){
+        try { await port.close(); } catch(_err) { /* ignore */ }
+        port = null;
+      }
+      if(!loggingIn){
+        setStatus(text.disconnected, 'error');
+        connectBtn && (connectBtn.disabled = false);
+      }
+    }
+  }
+
+  if(connectBtn){
+    if(!('serial' in navigator)){
+      connectBtn.disabled = true;
+      connectBtn.classList.add('disabled');
+      setStatus(text.unsupported, 'error');
+    } else {
+      connectBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        connectScanner();
+      });
+      if(navigator.serial && navigator.serial.addEventListener){
+        navigator.serial.addEventListener('disconnect', () => {
+          port = null;
+          reader = null;
+          if(!loggingIn){
+            connectBtn.disabled = false;
+            setStatus(text.disconnected, 'error');
+          }
+        });
+      }
+    }
+  }
+
+  if(submitBtn){
+    submitBtn.addEventListener('click', (event) => {
+      event.preventDefault();
+      handleScan(input ? input.value : '');
+    });
+  }
+
+  if(input){
+    input.addEventListener('keydown', (event) => {
+      if(event.key === 'Enter'){
+        event.preventDefault();
+        handleScan(input.value);
+      }
+    });
+  }
+
+  window.addEventListener('beforeunload', () => {
+    if(reader){
+      try { reader.cancel(); } catch(_err) { /* ignore */ }
+    }
+    if(port){
+      try { port.close(); } catch(_err) { /* ignore */ }
+    }
+  });
+
+  if(input){
+    input.focus();
+  }
+  setStatus(text.ready, 'info');
+})();
+</script>
+{% endblock %}

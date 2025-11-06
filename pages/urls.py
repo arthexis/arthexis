@@ -23,6 +23,7 @@ urlpatterns = [
         name="client-report-download",
     ),
     path("release-checklist", views.release_checklist, name="release-checklist"),
+    path("login/rfid/", views.rfid_login_page, name="rfid-login"),
     path("login/", views.login_view, name="login"),
     path("authenticator/setup/", views.authenticator_setup, name="authenticator-setup"),
     path("request-invite/", views.request_invite, name="request-invite"),

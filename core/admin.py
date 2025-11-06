@@ -28,6 +28,7 @@ from django.contrib.auth.admin import (
     GroupAdmin as DjangoGroupAdmin,
     UserAdmin as DjangoUserAdmin,
 )
+from django.contrib.auth.forms import AdminPasswordChangeForm
 import logging
 from import_export import resources, fields
 from import_export.admin import ImportExportModelAdmin
@@ -43,6 +44,7 @@ from django.utils import timezone, translation
 from django.utils.formats import date_format
 from django.utils.dateparse import parse_datetime
 from django.utils.html import format_html
+from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _, ngettext
 from django.forms.models import BaseInlineFormSet
 import json
@@ -881,6 +883,77 @@ class EnergyAccountRFIDInline(admin.TabularInline):
     verbose_name_plural = "RFIDs"
 
 
+class UserPasswordRFIDChangeForm(AdminPasswordChangeForm):
+    """Extend the admin password form with RFID assignment support."""
+
+    rfid = forms.ModelChoiceField(
+        label=_("RFID"),
+        queryset=RFID.objects.none(),
+        required=False,
+        help_text=_("Assign an RFID card to this user for RFID logins."),
+    )
+
+    def __init__(self, user, *args, **kwargs):
+        super().__init__(user, *args, **kwargs)
+        field = self.fields["rfid"]
+        account = getattr(user, "energy_account", None)
+        if account is not None:
+            queryset = RFID.objects.filter(
+                Q(energy_accounts__isnull=True) | Q(energy_accounts=account)
+            )
+            current = account.rfids.order_by("label_id").first()
+            if current:
+                field.initial = current.pk
+        else:
+            queryset = RFID.objects.filter(energy_accounts__isnull=True)
+        field.queryset = queryset.order_by("label_id")
+        field.empty_label = _("Keep current assignment")
+
+    def _ensure_energy_account(self, user):
+        account = getattr(user, "energy_account", None)
+        if account is not None:
+            if account.user_id != user.pk:
+                account.user = user
+                account.save(update_fields=["user"])
+            return account
+        account = EnergyAccount.objects.filter(user=user).first()
+        if account is not None:
+            if account.user_id != user.pk:
+                account.user = user
+                account.save(update_fields=["user"])
+            return account
+        base_slug = slugify(
+            user.username
+            or user.get_full_name()
+            or user.email
+            or (str(user.pk) if user.pk is not None else "")
+        )
+        if not base_slug:
+            base_slug = f"user-{uuid.uuid4().hex[:8]}"
+        base_name = base_slug.upper()
+        candidate = base_name
+        suffix = 1
+        while EnergyAccount.objects.filter(name=candidate).exists():
+            suffix += 1
+            candidate = f"{base_name}-{suffix}"
+        return EnergyAccount.objects.create(user=user, name=candidate)
+
+    def save(self, commit=True):
+        user = super().save(commit)
+        rfid = self.cleaned_data.get("rfid")
+        if not rfid:
+            return user
+        account = self._ensure_energy_account(user)
+        if account.pk is None:
+            account.save()
+        other_accounts = list(rfid.energy_accounts.exclude(pk=account.pk))
+        if other_accounts:
+            rfid.energy_accounts.remove(*other_accounts)
+        if not account.rfids.filter(pk=rfid.pk).exists():
+            account.rfids.add(rfid)
+        return user
+
+
 def _raw_instance_value(instance, field_name):
     """Return the stored value for ``field_name`` without resolving sigils."""
 
@@ -1562,6 +1635,7 @@ class UserAdmin(UserDatumAdminMixin, DjangoUserAdmin):
     inlines = USER_PROFILE_INLINES + [UserPhoneNumberInline]
     change_form_template = "admin/user_profile_change_form.html"
     _skip_entity_user_datum = True
+    change_password_form = UserPasswordRFIDChangeForm
 
     def _get_operate_as_profile_template(self):
         opts = self.model._meta

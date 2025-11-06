@@ -82,6 +82,11 @@
         {% if current_method == 'otp' %}{% trans "Use Password" %}{% else %}{% trans "Use Authenticator app" %}{% endif %}
       </a>
     </div>
+    {% if show_rfid_login %}
+    <div class="mt-3 text-center">
+      <a href="{% if rfid_login_url %}{{ rfid_login_url }}{% else %}{% url 'pages:rfid-login' %}{% endif %}">{% trans "Log in with RFID" %}</a>
+    </div>
+    {% endif %}
     {% endwith %}
     {% if can_request_invite %}
     <div class="mt-3 text-center">
