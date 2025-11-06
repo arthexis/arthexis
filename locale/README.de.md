@@ -30,6 +30,7 @@ Die Arthexis-Konstellation ist eine [narrativ orientierte](https://de.wikipedia.
 
   | Aktion | Was wir erledigen |
   | --- | --- |
+  | `CancelReservation` | Stornieren ausstehender Reservierungen und geben Anschlüsse direkt aus der Leitwarte frei. |
   | `ChangeAvailability` | Schalten Anschlüsse oder die gesamte Station zwischen betriebsbereit und außer Betrieb. |
   | `DataTransfer` | Senden herstellerspezifische Befehle und protokollieren die Antwort des Ladepunkts. |
   | `GetConfiguration` | Fragen die aktuellen Werte der überwachten Konfigurationsschlüssel ab. |
@@ -42,9 +43,9 @@ Die Arthexis-Konstellation ist eine [narrativ orientierte](https://de.wikipedia.
   | `TriggerMessage` | Fordern sofortige Nachrichten an (z. B. Status oder Diagnose). |
   | `UpdateFirmware` | Liefern Firmwarepakete an Ladepunkte mit sicheren Download-Tokens und verfolgen Installationsrückmeldungen. |
 
-  **OCPP-1.6-Roadmap.** Folgende Katalog-Aktionen stehen auf unserer To-do-Liste: `CancelReservation`, `ChangeConfiguration`, `ClearCache`, `ClearChargingProfile`, `GetCompositeSchedule`, `GetDiagnostics`, `SetChargingProfile`, `UnlockConnector`.
+  **OCPP-1.6-Roadmap.** Folgende Katalog-Aktionen stehen auf unserer To-do-Liste: `ChangeConfiguration`, `ClearCache`, `ClearChargingProfile`, `GetCompositeSchedule`, `GetDiagnostics`, `SetChargingProfile`, `UnlockConnector`.
 
-- Ladepunktreservierungen mit automatischer Anschlusswahl, Verknüpfung zu Energiekonten und RFID-Tags sowie EVCS-Bestätigung.
+- Ladepunktreservierungen mit automatischer Anschlusswahl, Verknüpfung zu Energiekonten und RFID-Tags, EVCS-Bestätigung sowie Stornierung über die Leitwarte.
 
 - [API](https://de.wikipedia.org/wiki/Programmierschnittstelle)-Integration mit [Odoo](https://www.odoo.com/), um:
   - Mitarbeiterzugänge über `res.users` zu synchronisieren

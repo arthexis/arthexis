@@ -30,6 +30,7 @@ Arthexis Constellation is a [narrative-driven](https://en.wikipedia.org/wiki/Nar
 
   | Action | What we do |
   | --- | --- |
+  | `CancelReservation` | Withdraw pending reservations and release connectors directly from the control center. |
   | `ChangeAvailability` | Switch connectors or the whole station between operative and inoperative states. |
   | `DataTransfer` | Send vendor-specific commands and log the charge point response. |
   | `GetConfiguration` | Poll the device for the current values of tracked configuration keys. |
@@ -42,9 +43,9 @@ Arthexis Constellation is a [narrative-driven](https://en.wikipedia.org/wiki/Nar
   | `TriggerMessage` | Ask the device to send an immediate update (for example status or diagnostics). |
   | `UpdateFirmware` | Deliver firmware packages to chargers with secure download tokens and track installation responses. |
 
-  **OCPP 1.6 roadmap.** The following catalogue actions are in our backlog: `CancelReservation`, `ChangeConfiguration`, `ClearCache`, `ClearChargingProfile`, `GetCompositeSchedule`, `GetDiagnostics`, `SetChargingProfile`, `UnlockConnector`.
+  **OCPP 1.6 roadmap.** The following catalogue actions are in our backlog: `ChangeConfiguration`, `ClearCache`, `ClearChargingProfile`, `GetCompositeSchedule`, `GetDiagnostics`, `SetChargingProfile`, `UnlockConnector`.
 
-- Charge point reservations with automated connector assignment, energy account and RFID linkage, and EVCS confirmation tracking.
+- Charge point reservations with automated connector assignment, energy account and RFID linkage, EVCS confirmation tracking, and control-center cancellation support.
 - [API](https://en.wikipedia.org/wiki/API) integration with [Odoo](https://www.odoo.com/), syncing:
   - Employee credentials via `res.users`
   - Product catalog lookups via `product.product`

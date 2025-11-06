@@ -743,6 +743,7 @@ class CPFirmwareDeploymentAdmin(EntityModelAdmin):
 @admin.register(CPReservation)
 class CPReservationAdmin(EntityModelAdmin):
     form = CPReservationForm
+    actions = ("cancel_reservations",)
     list_display = (
         "location",
         "connector_side_display",
@@ -862,6 +863,49 @@ class CPReservationAdmin(EntityModelAdmin):
     def id_tag_display(self, obj):
         value = obj.id_tag_value
         return value or "-"
+
+    @admin.action(description=_("Cancel selected Reservations"))
+    def cancel_reservations(self, request, queryset):
+        cancelled = 0
+        for reservation in queryset:
+            try:
+                reservation.send_cancel_request()
+            except ValidationError as exc:
+                messages_list: list[str] = []
+                if getattr(exc, "message_dict", None):
+                    for errors in exc.message_dict.values():
+                        messages_list.extend(str(error) for error in errors)
+                elif getattr(exc, "messages", None):
+                    messages_list.extend(str(error) for error in exc.messages)
+                else:
+                    messages_list.append(str(exc))
+                for message in messages_list:
+                    self.message_user(
+                        request,
+                        _("%(reservation)s: %(message)s")
+                        % {"reservation": reservation, "message": message},
+                        level=messages.ERROR,
+                    )
+            except Exception as exc:  # pragma: no cover - defensive
+                self.message_user(
+                    request,
+                    _("%(reservation)s: unable to cancel reservation (%(error)s)")
+                    % {"reservation": reservation, "error": exc},
+                    level=messages.ERROR,
+                )
+            else:
+                cancelled += 1
+        if cancelled:
+            self.message_user(
+                request,
+                ngettext(
+                    "Sent %(count)d cancellation request.",
+                    "Sent %(count)d cancellation requests.",
+                    cancelled,
+                )
+                % {"count": cancelled},
+                level=messages.SUCCESS,
+            )
 
 
 @admin.register(Charger)

@@ -1656,6 +1656,62 @@ class CPReservation(Entity):
         )
         return message_id
 
+    def send_cancel_request(self) -> str:
+        """Dispatch a CancelReservation request for this reservation."""
+
+        if not self.pk:
+            raise ValidationError(_("Save the reservation before sending it to the EVCS."))
+        connector = self.connector
+        if connector is None or connector.connector_id is None:
+            raise ValidationError(_("Unable to determine which connector to cancel."))
+        connection = store.get_connection(connector.charger_id, connector.connector_id)
+        if connection is None:
+            raise ValidationError(
+                _("The selected charge point is not currently connected to the system.")
+            )
+
+        message_id = uuid.uuid4().hex
+        payload = {"reservationId": self.pk}
+        frame = json.dumps([2, message_id, "CancelReservation", payload])
+
+        log_key = store.identity_key(connector.charger_id, connector.connector_id)
+        store.add_log(
+            log_key,
+            f"CancelReservation request: reservation={self.pk}",
+            log_type="charger",
+        )
+        async_to_sync(connection.send)(frame)
+
+        metadata = {
+            "action": "CancelReservation",
+            "charger_id": connector.charger_id,
+            "connector_id": connector.connector_id,
+            "log_key": log_key,
+            "reservation_pk": self.pk,
+            "requested_at": timezone.now(),
+        }
+        store.register_pending_call(message_id, metadata)
+        store.schedule_call_timeout(
+            message_id, action="CancelReservation", log_key=log_key
+        )
+
+        self.ocpp_message_id = message_id
+        self.evcs_status = ""
+        self.evcs_error = ""
+        self.evcs_confirmed = False
+        self.evcs_confirmed_at = None
+        super().save(
+            update_fields=[
+                "ocpp_message_id",
+                "evcs_status",
+                "evcs_error",
+                "evcs_confirmed",
+                "evcs_confirmed_at",
+                "updated_on",
+            ]
+        )
+        return message_id
+
 
 class RFID(CoreRFID):
     class Meta:
