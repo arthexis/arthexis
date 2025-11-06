@@ -67,3 +67,12 @@ def test_network_setup_prefers_dot_one_gateway_when_present() -> None:
     script_contents = script.read_text()
     assert "Multiple default gateways detected for $iface" in script_contents
     assert '[[ "$candidate" =~ ^([0-9]+\\.){3}1$ ]]' in script_contents
+
+
+def test_network_setup_safe_mode_messages_reference_flag() -> None:
+    script = REPO_ROOT / "network-setup.sh"
+    script_contents = script.read_text()
+    assert 'skip_network_step "wlan0 access point configuration"' in script_contents
+    assert "Skipping $desc while running in safe mode" in script_contents
+    assert "Re-run with --unsafe to allow this step." in script_contents
+    assert "--dhcp-reset requires --unsafe" in script_contents
