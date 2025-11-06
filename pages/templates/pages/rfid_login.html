@@ -57,6 +57,8 @@
   const submitBtn = document.querySelector('[data-submit]');
   const loginUrl = '{{ login_api_url|escapejs }}';
   const redirectTarget = '{{ redirect_target|default:""|escapejs }}';
+  const scanUrl = '{{ scan_api_url|default:""|escapejs }}';
+  const pollDelay = 250;
 
   const text = {
     ready: '{% trans "Ready to scan. Hold your RFID card near the reader." %}',
@@ -76,6 +78,8 @@
   let lastScanAt = 0;
   let port = null;
   let reader = null;
+  let remotePollTimer = null;
+  let remoteConnected = false;
 
   function setStatus(message, variant){
     const box = statusBox;
@@ -192,6 +196,82 @@
     authenticate(cleaned);
   }
 
+  function clearRemoteTimer(){
+    if(remotePollTimer !== null){
+      window.clearTimeout(remotePollTimer);
+      remotePollTimer = null;
+    }
+  }
+
+  function scheduleRemotePoll(){
+    clearRemoteTimer();
+    if(!scanUrl){
+      return;
+    }
+    remotePollTimer = window.setTimeout(pollRemoteScanner, pollDelay);
+  }
+
+  async function pollRemoteScanner(){
+    if(!scanUrl){
+      return;
+    }
+    clearRemoteTimer();
+    if(loggingIn){
+      scheduleRemotePoll();
+      return;
+    }
+    try{
+      const response = await fetch(scanUrl, {
+        credentials: 'same-origin',
+        headers: {
+          'Accept': 'application/json',
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+      });
+      if(!response.ok){
+        remoteConnected = false;
+        throw new Error('Request failed');
+      }
+      let data = null;
+      try {
+        data = await response.json();
+      } catch(_err) {
+        data = null;
+      }
+      if(!data){
+        scheduleRemotePoll();
+        return;
+      }
+      if(data.error){
+        remoteConnected = false;
+        if(!loggingIn){
+          setStatus(data.error, 'error');
+        }
+        scheduleRemotePoll();
+        return;
+      }
+      if(Object.prototype.hasOwnProperty.call(data, 'rfid')){
+        if(!remoteConnected){
+          remoteConnected = true;
+          if(!loggingIn){
+            setStatus(text.connected, 'info');
+          }
+        }
+        if(data.rfid){
+          handleScan(data.rfid);
+        }
+      }
+    } catch(_err){
+      if(remoteConnected){
+        remoteConnected = false;
+        if(!loggingIn){
+          setStatus(text.disconnected, 'error');
+        }
+      }
+    }
+    scheduleRemotePoll();
+  }
+
   async function readFromPort(){
     if(!port || !port.readable){
       return;
@@ -297,6 +377,10 @@
     });
   }
 
+  if(scanUrl){
+    pollRemoteScanner();
+  }
+
   window.addEventListener('beforeunload', () => {
     if(reader){
       try { reader.cancel(); } catch(_err) { /* ignore */ }
@@ -304,6 +388,7 @@
     if(port){
       try { port.close(); } catch(_err) { /* ignore */ }
     }
+    clearRemoteTimer();
   });
 
   if(input){

@@ -247,6 +247,13 @@ class LoginViewTests(TestCase):
         resp = self.client.get(reverse("pages:rfid-login"))
         self.assertRedirects(resp, "/")
 
+    def test_rfid_login_page_includes_scan_url(self):
+        self._enable_rfid_scanner()
+        resp = self.client.get(reverse("pages:rfid-login"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.context["login_api_url"], reverse("rfid-login"))
+        self.assertEqual(resp.context["scan_api_url"], reverse("rfid-scan-next"))
+
     def test_homepage_excludes_version_banner_for_anonymous(self):
         response = self.client.get(reverse("pages:index"))
 
