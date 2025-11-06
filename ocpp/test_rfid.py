@@ -707,11 +707,12 @@ class RFIDLastSeenTests(TestCase):
 
 class RFIDDetectionScriptTests(SimpleTestCase):
     @patch("ocpp.rfid.detect._ensure_django")
+    @patch("ocpp.rfid.detect._lockfile_status", return_value=(False, None))
     @patch(
         "ocpp.rfid.irq_wiring_check.check_irq_pin",
         return_value={"irq_pin": DEFAULT_IRQ_PIN},
     )
-    def test_detect_scanner_success(self, mock_check, _mock_setup):
+    def test_detect_scanner_success(self, mock_check, _mock_lock, _mock_setup):
         result = detect_scanner()
         self.assertEqual(
             result,
@@ -723,14 +724,32 @@ class RFIDDetectionScriptTests(SimpleTestCase):
         mock_check.assert_called_once()
 
     @patch("ocpp.rfid.detect._ensure_django")
+    @patch("ocpp.rfid.detect._lockfile_status", return_value=(False, None))
     @patch(
         "ocpp.rfid.irq_wiring_check.check_irq_pin",
         return_value={"error": "no scanner detected"},
     )
-    def test_detect_scanner_failure(self, mock_check, _mock_setup):
+    def test_detect_scanner_failure(self, mock_check, _mock_lock, _mock_setup):
         result = detect_scanner()
         self.assertFalse(result["detected"])
         self.assertEqual(result["reason"], "no scanner detected")
+        mock_check.assert_called_once()
+
+    @patch("ocpp.rfid.detect._ensure_django")
+    @patch(
+        "ocpp.rfid.detect._lockfile_status",
+        return_value=(True, Path("/locks/rfid.lck")),
+    )
+    @patch(
+        "ocpp.rfid.irq_wiring_check.check_irq_pin",
+        return_value={"error": "no scanner detected"},
+    )
+    def test_detect_scanner_assumed_with_lock(self, mock_check, _mock_lock, _mock_setup):
+        result = detect_scanner()
+        self.assertTrue(result["detected"])
+        self.assertTrue(result["assumed"])
+        self.assertEqual(result["reason"], "no scanner detected")
+        self.assertEqual(result["lockfile"], "/locks/rfid.lck")
         mock_check.assert_called_once()
 
     @patch(
@@ -756,6 +775,58 @@ class RFIDDetectionScriptTests(SimpleTestCase):
         self.assertEqual(exit_code, 1)
         self.assertIn("missing hardware", buffer.getvalue())
         mock_detect.assert_called_once()
+
+    @patch(
+        "ocpp.rfid.detect.detect_scanner",
+        return_value={
+            "detected": True,
+            "assumed": True,
+            "reason": "no scanner detected",
+            "lockfile": "/locks/rfid.lck",
+        },
+    )
+    def test_detect_main_assumed_output(self, mock_detect):
+        buffer = io.StringIO()
+        with patch("sys.stdout", new=buffer):
+            exit_code = detect_main([])
+        self.assertEqual(exit_code, 0)
+        self.assertIn("assumed active", buffer.getvalue())
+        self.assertIn("/locks/rfid.lck", buffer.getvalue())
+        mock_detect.assert_called_once()
+
+
+class RFIDLockFileUsageTests(SimpleTestCase):
+    @patch("ocpp.rfid.background_reader.is_configured", return_value=True)
+    def test_queue_result_marks_lock(self, _mock_config):
+        with patch(
+            "ocpp.rfid.background_reader._tag_queue.get",
+            return_value={"rfid": "ABC"},
+        ) as mock_get, patch(
+            "ocpp.rfid.background_reader._mark_scanner_used"
+        ) as mock_mark:
+            result = background_reader.get_next_tag()
+        self.assertEqual(result["rfid"], "ABC")
+        mock_get.assert_called_once()
+        mock_mark.assert_called_once()
+
+    @patch("ocpp.rfid.background_reader.is_configured", return_value=True)
+    def test_direct_read_marks_lock(self, _mock_config):
+        with (
+            patch(
+                "ocpp.rfid.background_reader._tag_queue.get",
+                side_effect=background_reader.queue.Empty,
+            ) as mock_get,
+            patch(
+                "ocpp.rfid.reader.read_rfid",
+                return_value={"rfid": "XYZ"},
+            ) as mock_read,
+            patch("ocpp.rfid.background_reader._mark_scanner_used") as mock_mark,
+        ):
+            result = background_reader.get_next_tag()
+        self.assertEqual(result["rfid"], "XYZ")
+        mock_get.assert_called_once()
+        mock_read.assert_called_once()
+        mock_mark.assert_called_once()
 
 
 class RFIDLandingTests(TestCase):

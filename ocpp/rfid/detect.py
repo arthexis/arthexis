@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import os
 import sys
-from typing import Any, Dict
+from pathlib import Path
+from typing import Any, Dict, Tuple
 
 
 def _ensure_django() -> None:
@@ -23,6 +24,36 @@ def _ensure_django() -> None:
     django.setup()
 
 
+def _lockfile_status() -> Tuple[bool, Path | None]:
+    """Return whether a scanner lock file exists and its path when available."""
+
+    try:
+        from .background_reader import lock_file_path
+    except Exception:  # pragma: no cover - import edge cases
+        return False, None
+
+    try:
+        lock = lock_file_path()
+    except Exception:  # pragma: no cover - settings misconfiguration
+        return False, None
+
+    try:
+        return lock.exists(), lock
+    except Exception:  # pragma: no cover - filesystem errors
+        return False, None
+
+
+def _assume_detected(reason: str | None, lock: Path | None) -> Dict[str, Any]:
+    """Return metadata indicating detection succeeded via lock file."""
+
+    response: Dict[str, Any] = {"detected": True, "assumed": True}
+    if reason:
+        response["reason"] = reason
+    if lock is not None:
+        response["lockfile"] = str(lock)
+    return response
+
+
 def detect_scanner() -> Dict[str, Any]:
     """Return detection metadata for the RFID scanner."""
     try:
@@ -30,22 +61,46 @@ def detect_scanner() -> Dict[str, Any]:
     except Exception as exc:
         return {"detected": False, "reason": str(exc)}
 
+    has_lock, lock_path = _lockfile_status()
+
     try:
         from .irq_wiring_check import check_irq_pin
     except Exception as exc:  # pragma: no cover - unexpected import error
+        if has_lock:
+            return _assume_detected(str(exc), lock_path)
         return {"detected": False, "reason": str(exc)}
 
     result = check_irq_pin()
     if result.get("error"):
+        if has_lock:
+            return _assume_detected(result.get("error"), lock_path)
         return {"detected": False, "reason": result["error"]}
 
-    return {"detected": True, "irq_pin": result.get("irq_pin")}
+    response: Dict[str, Any] = {"detected": True, "irq_pin": result.get("irq_pin")}
+    if has_lock and lock_path is not None:
+        response["lockfile"] = str(lock_path)
+    return response
 
 
 def main(argv: list[str] | None = None) -> int:
     """CLI entry point for ``python -m ocpp.rfid.detect``."""
     result = detect_scanner()
     if result.get("detected"):
+        if result.get("assumed"):
+            lockfile = result.get("lockfile")
+            reason = result.get("reason")
+            if lockfile and reason:
+                print(
+                    f"RFID scanner assumed active via lock file {lockfile} "
+                    f"(detection failed: {reason})"
+                )
+            elif lockfile:
+                print(f"RFID scanner assumed active via lock file {lockfile}")
+            elif reason:
+                print(f"RFID scanner assumed active (detection failed: {reason})")
+            else:  # pragma: no cover - defensive default
+                print("RFID scanner assumed active based on previous usage")
+            return 0
         irq_pin = result.get("irq_pin")
         if irq_pin is None:
             print("RFID scanner detected (IRQ pin undetermined)")

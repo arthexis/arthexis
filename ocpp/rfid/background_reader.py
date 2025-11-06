@@ -34,6 +34,23 @@ def _lock_path() -> Path:
     return Path(settings.BASE_DIR) / "locks" / "rfid.lck"
 
 
+def lock_file_path() -> Path:
+    """Public accessor for the RFID lock file path."""
+
+    return _lock_path()
+
+
+def _mark_scanner_used() -> None:
+    """Update the RFID lock file timestamp to record scanner usage."""
+
+    lock = _lock_path()
+    try:
+        lock.parent.mkdir(parents=True, exist_ok=True)
+        lock.touch()
+    except Exception as exc:  # pragma: no cover - defensive filesystem fallback
+        logger.debug("RFID auto-detect: unable to update lock file %s: %s", lock, exc)
+
+
 def _spi_device_path() -> Path:
     """Return the expected SPI device path for the RFID reader."""
 
@@ -115,7 +132,7 @@ def is_configured() -> bool:
     """Return ``True`` if an RFID reader is configured for this node."""
     global _auto_detect_logged
 
-    lock = _lock_path()
+    lock = lock_file_path()
     if lock.exists():
         return True
 
@@ -235,7 +252,10 @@ def get_next_tag(timeout: float = 0) -> Optional[dict]:
         logger.debug("RFID not configured; skipping read")
         return None
     try:
-        return _tag_queue.get(timeout=timeout)
+        result = _tag_queue.get(timeout=timeout)
+        if result and result.get("rfid"):
+            _mark_scanner_used()
+        return result
     except queue.Empty:
         logger.debug("IRQ queue empty; falling back to direct read")
         try:
@@ -244,6 +264,8 @@ def get_next_tag(timeout: float = 0) -> Optional[dict]:
             res = read_rfid(mfrc=_reader, cleanup=False)
             if res.get("rfid") or res.get("error"):
                 logger.debug("Polling read result: %s", res)
+                if res.get("rfid"):
+                    _mark_scanner_used()
                 return res
         except Exception as exc:  # pragma: no cover - hardware dependent
             logger.debug("Polling read failed: %s", exc)
