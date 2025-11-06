@@ -28,10 +28,6 @@ from django.contrib.auth.admin import (
     GroupAdmin as DjangoGroupAdmin,
     UserAdmin as DjangoUserAdmin,
 )
-from django.contrib.admin import forms as admin_forms
-from django.contrib.auth.forms import (
-    AdminPasswordChangeForm as AuthAdminPasswordChangeForm,
-)
 import logging
 from import_export import resources, fields
 from import_export.admin import ImportExportModelAdmin
@@ -886,19 +882,24 @@ class EnergyAccountRFIDInline(admin.TabularInline):
     verbose_name_plural = "RFIDs"
 
 
-class UserRFIDAssignmentMixin(forms.Form):
-    """Mixin adding RFID assignment support to password change forms."""
+class UserChangeRFIDForm(forms.ModelForm):
+    """Admin change form exposing login RFID assignment."""
 
-    rfid = forms.ModelChoiceField(
-        label=_("RFID"),
+    login_rfid = forms.ModelChoiceField(
+        label=_("Login RFID"),
         queryset=RFID.objects.none(),
         required=False,
         help_text=_("Assign an RFID card to this user for RFID logins."),
     )
 
-    def __init__(self, user, *args, **kwargs):
-        super().__init__(user, *args, **kwargs)
-        field = self.fields["rfid"]
+    class Meta:
+        model = User
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        user = self.instance
+        field = self.fields["login_rfid"]
         account = getattr(user, "energy_account", None)
         if account is not None:
             queryset = RFID.objects.filter(
@@ -943,7 +944,7 @@ class UserRFIDAssignmentMixin(forms.Form):
 
     def save(self, commit=True):
         user = super().save(commit)
-        rfid = self.cleaned_data.get("rfid")
+        rfid = self.cleaned_data.get("login_rfid")
         if not rfid:
             return user
         account = self._ensure_energy_account(user)
@@ -955,21 +956,6 @@ class UserRFIDAssignmentMixin(forms.Form):
         if not account.rfids.filter(pk=rfid.pk).exists():
             account.rfids.add(rfid)
         return user
-
-
-class UserPasswordRFIDChangeForm(UserRFIDAssignmentMixin, AuthAdminPasswordChangeForm):
-    """Extend the admin password form with RFID assignment support."""
-
-
-_AdminPasswordChangeFormBase = admin_forms.AdminPasswordChangeForm
-
-
-class AdminSitePasswordRFIDChangeForm(UserRFIDAssignmentMixin, _AdminPasswordChangeFormBase):
-    """Password change form for admin site that handles RFID assignment."""
-
-
-admin_forms.AdminPasswordChangeForm = AdminSitePasswordRFIDChangeForm
-admin.site.password_change_form = AdminSitePasswordRFIDChangeForm
 
 
 def _raw_instance_value(instance, field_name):
@@ -1648,12 +1634,24 @@ class UserPhoneNumberInline(admin.TabularInline):
 
 
 class UserAdmin(UserDatumAdminMixin, DjangoUserAdmin):
+    form = UserChangeRFIDForm
     fieldsets = _append_operate_as(DjangoUserAdmin.fieldsets)
     add_fieldsets = _append_operate_as(DjangoUserAdmin.add_fieldsets)
     inlines = USER_PROFILE_INLINES + [UserPhoneNumberInline]
     change_form_template = "admin/user_profile_change_form.html"
     _skip_entity_user_datum = True
-    change_password_form = UserPasswordRFIDChangeForm
+
+    def get_fieldsets(self, request, obj=None):
+        fieldsets = list(super().get_fieldsets(request, obj))
+        if obj is not None and fieldsets:
+            name, options = fieldsets[0]
+            fields = list(options.get("fields", ()))
+            if "login_rfid" not in fields:
+                fields.append("login_rfid")
+                options = options.copy()
+                options["fields"] = tuple(fields)
+                fieldsets[0] = (name, options)
+        return fieldsets
 
     def _get_operate_as_profile_template(self):
         opts = self.model._meta
