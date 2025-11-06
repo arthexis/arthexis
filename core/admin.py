@@ -814,6 +814,7 @@ class SecurityGroupAdmin(DjangoGroupAdmin):
     form = SecurityGroupAdminForm
     fieldsets = ((None, {"fields": ("name", "parent", "users", "permissions")}),)
     filter_horizontal = ("permissions",)
+    search_fields = ("name", "parent__name")
 
 
 class InviteLeadAdmin(EntityModelAdmin):

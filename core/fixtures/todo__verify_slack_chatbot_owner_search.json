@@ -1,0 +1,10 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Verify Slack chatbot owner search fields",
+      "url": "/admin/teams/slackbotprofile/add/",
+      "request_details": "Open the Slack Chatbots add form. Use the lookup icon next to the Node, User, and Group fields to search for existing records. Enter partial names in each pop-up and confirm relevant results appear so owners can be selected without scrolling through the full list."
+    }
+  }
+]

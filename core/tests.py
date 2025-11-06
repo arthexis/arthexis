@@ -52,6 +52,7 @@ from core.admin import (
     PackageReleaseAdmin,
     PackageAdmin,
     RFIDResource,
+    SecurityGroupAdmin,
     UserAdmin,
     USER_PROFILE_INLINES,
 )
@@ -308,6 +309,16 @@ class UserAdminInlineTests(TestCase):
             if inline.__class__ in USER_PROFILE_INLINES
         ]
         self.assertEqual(len(other_profiles), len(USER_PROFILE_INLINES))
+
+
+class SecurityGroupAdminTests(TestCase):
+    def setUp(self):
+        self.site = AdminSite()
+        self.admin = SecurityGroupAdmin(SecurityGroup, self.site)
+
+    def test_search_fields_include_name_and_parent(self):
+        self.assertIn("name", self.admin.search_fields)
+        self.assertIn("parent__name", self.admin.search_fields)
 
 
 class RFIDLoginTests(TestCase):
