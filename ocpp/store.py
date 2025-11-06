@@ -718,24 +718,52 @@ def _memory_logs_for_identifier(cid: str, log_type: str) -> list[str]:
     return []
 
 
-def get_logs(cid: str, log_type: str = "charger") -> list[str]:
-    """Return all log entries for the given id and type."""
+def get_logs(
+    cid: str, log_type: str = "charger", *, limit: int | None = None
+) -> list[str]:
+    """Return log entries for the given id and type.
 
-    entries: list[str] = []
+    When ``limit`` is provided only the most recent ``limit`` entries are returned.
+    Reading from disk is performed using a bounded deque to avoid loading the
+    entire file into memory when only a tail subset is needed.
+    """
+
+    max_entries: int | None = None
+    if limit is not None:
+        try:
+            max_entries = int(limit)
+        except (TypeError, ValueError):  # pragma: no cover - defensive
+            max_entries = None
+        if max_entries is not None and max_entries <= 0:
+            return []
+
+    if max_entries is None:
+        entries_list: list[str] = []
+        entries: deque[str] | list[str] = entries_list
+    else:
+        entries_deque: deque[str] = deque(maxlen=max_entries)
+        entries = entries_deque
     seen_paths: set[Path] = set()
     seen_keys: set[str] = set()
     for key in _log_key_candidates(cid, log_type):
         resolved, name = _resolve_log_identifier(key, log_type)
         path = _log_file_for_identifier(resolved, name, log_type)
         if path.exists() and path not in seen_paths:
-            entries.extend(path.read_text(encoding="utf-8").splitlines())
+            if max_entries is None:
+                entries.extend(path.read_text(encoding="utf-8").splitlines())
+            else:
+                with path.open("r", encoding="utf-8") as handle:
+                    for line in handle:
+                        entries.append(line.rstrip("\r\n"))
             seen_paths.add(path)
         memory_entries = _memory_logs_for_identifier(resolved, log_type)
         lower_key = resolved.lower()
         if memory_entries and lower_key not in seen_keys:
             entries.extend(memory_entries)
             seen_keys.add(lower_key)
-    return entries
+    if max_entries is None:
+        return entries_list
+    return list(entries_deque)
 
 
 def clear_log(cid: str, log_type: str = "charger") -> None:
