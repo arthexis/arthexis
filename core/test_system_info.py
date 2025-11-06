@@ -71,6 +71,21 @@ class SystemInfoModeTests(SimpleTestCase):
                 lock_dir.rmdir()
 
 
+class SystemInfoPortLockTests(SimpleTestCase):
+    def test_uses_backend_port_lock_when_present(self):
+        lock_dir = Path(settings.BASE_DIR) / "locks"
+        lock_dir.mkdir(exist_ok=True)
+        port_file = lock_dir / "backend_port.lck"
+        port_file.write_text("9010", encoding="utf-8")
+        try:
+            info = _gather_info()
+            self.assertEqual(info["port"], 9010)
+        finally:
+            port_file.unlink()
+            if not any(lock_dir.iterdir()):
+                lock_dir.rmdir()
+
+
 class SystemInfoRevisionTests(SimpleTestCase):
     @patch("core.system.revision.get_revision", return_value="abcdef1234567890")
     def test_includes_full_revision(self, mock_revision):
@@ -161,6 +176,29 @@ class SystemInfoRunserverDetectionTests(SimpleTestCase):
 
         self.assertTrue(info["running"])
         self.assertEqual(info["port"], 8888)
+
+    @patch("core.system._probe_ports", return_value=(False, None))
+    @patch("core.system.subprocess.run")
+    def test_runserver_fallbacks_to_backend_port_lock(self, mock_run, mock_probe):
+        lock_dir = Path(settings.BASE_DIR) / "locks"
+        lock_dir.mkdir(exist_ok=True)
+        port_file = lock_dir / "backend_port.lck"
+        port_file.write_text("9042", encoding="utf-8")
+        mock_run.return_value = CompletedProcess(
+            args=["pgrep"],
+            returncode=0,
+            stdout="123 python manage.py runserver --noreload\n",
+        )
+
+        try:
+            info = _gather_info()
+        finally:
+            port_file.unlink()
+            if not any(lock_dir.iterdir()):
+                lock_dir.rmdir()
+
+        self.assertTrue(info["running"])
+        self.assertEqual(info["port"], 9042)
 
 
 class SystemSigilValueTests(SimpleTestCase):

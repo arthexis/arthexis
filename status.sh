@@ -4,6 +4,8 @@ set -e
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=scripts/helpers/logging.sh
 . "$BASE_DIR/scripts/helpers/logging.sh"
+# shellcheck source=scripts/helpers/ports.sh
+. "$BASE_DIR/scripts/helpers/ports.sh"
 arthexis_resolve_log_dir "$BASE_DIR" LOG_DIR || exit 1
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 exec > >(tee "$LOG_FILE") 2>&1
@@ -63,7 +65,7 @@ MODE="internal"
 if [ -f "$LOCK_DIR/nginx_mode.lck" ]; then
   MODE="$(cat "$LOCK_DIR/nginx_mode.lck")"
 fi
-PORT=8888
+PORT="$(arthexis_detect_backend_port "$BASE_DIR")"
 
 echo "Nginx mode: $MODE"
 

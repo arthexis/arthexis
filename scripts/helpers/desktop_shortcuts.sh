@@ -1,5 +1,10 @@
 #!/usr/bin/env bash
 
+_ARTHEXIS_HELPER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/helpers/ports.sh
+. "$_ARTHEXIS_HELPER_DIR/ports.sh"
+unset _ARTHEXIS_HELPER_DIR
+
 arthexis_refresh_desktop_shortcuts() {
     local base_dir="$1"
     if [ -z "$base_dir" ]; then
@@ -153,7 +158,7 @@ arthexis_desktop_shortcut_start_unit() {
 
 arthexis_desktop_shortcut_detect_port() {
     local base_dir="$1"
-    local default_port="8888"
+    local default_port="$(arthexis_detect_backend_port "$base_dir")"
 
     local service_lock="$base_dir/locks/service.lck"
     local service_name=""
