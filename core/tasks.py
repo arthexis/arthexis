@@ -16,6 +16,20 @@ from django.utils import timezone
 
 AUTO_UPGRADE_HEALTH_DELAY_SECONDS = 30
 AUTO_UPGRADE_SKIP_LOCK_NAME = "auto_upgrade_skip_revisions.lck"
+AUTO_UPGRADE_NETWORK_FAILURE_LOCK_NAME = "auto_upgrade_network_failures.lck"
+AUTO_UPGRADE_NETWORK_FAILURE_THRESHOLD = 3
+
+_NETWORK_FAILURE_PATTERNS = (
+    "could not resolve host",
+    "couldn't resolve host",
+    "failed to connect",
+    "connection timed out",
+    "network is unreachable",
+    "temporary failure in name resolution",
+    "name or service not known",
+    "could not resolve proxy",
+    "no route to host",
+)
 
 SEVERITY_NORMAL = "normal"
 SEVERITY_LOW = "low"
@@ -128,8 +142,9 @@ def _read_remote_version(base_dir: Path, branch: str) -> str | None:
                     f"origin/{branch}:VERSION",
                 ],
                 cwd=base_dir,
+                stderr=subprocess.STDOUT,
+                text=True,
             )
-            .decode()
             .strip()
         )
     except subprocess.CalledProcessError:  # pragma: no cover - git failure
@@ -176,6 +191,141 @@ def _add_skipped_revision(base_dir: Path, revision: str) -> None:
         )
 
 
+def _network_failure_lock_path(base_dir: Path) -> Path:
+    return base_dir / "locks" / AUTO_UPGRADE_NETWORK_FAILURE_LOCK_NAME
+
+
+def _read_network_failure_count(base_dir: Path) -> int:
+    lock_path = _network_failure_lock_path(base_dir)
+    try:
+        raw_value = lock_path.read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        return 0
+    except OSError:
+        logger.warning("Failed to read auto-upgrade network failure lockfile")
+        return 0
+    if not raw_value:
+        return 0
+    try:
+        return int(raw_value)
+    except ValueError:
+        logger.warning(
+            "Invalid auto-upgrade network failure lockfile contents: %s", raw_value
+        )
+        return 0
+
+
+def _write_network_failure_count(base_dir: Path, count: int) -> None:
+    lock_path = _network_failure_lock_path(base_dir)
+    try:
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        lock_path.write_text(str(count), encoding="utf-8")
+    except OSError:
+        logger.warning("Failed to update auto-upgrade network failure lockfile")
+
+
+def _reset_network_failure_count(base_dir: Path) -> None:
+    lock_path = _network_failure_lock_path(base_dir)
+    try:
+        if lock_path.exists():
+            lock_path.unlink()
+    except OSError:
+        logger.warning("Failed to remove auto-upgrade network failure lockfile")
+
+
+def _extract_error_output(exc: subprocess.CalledProcessError) -> str:
+    parts: list[str] = []
+    for attr in ("stderr", "stdout", "output"):
+        value = getattr(exc, attr, None)
+        if not value:
+            continue
+        if isinstance(value, bytes):
+            try:
+                value = value.decode()
+            except Exception:  # pragma: no cover - best effort decoding
+                value = value.decode(errors="ignore")
+        parts.append(str(value))
+    detail = " ".join(part.strip() for part in parts if part)
+    if not detail:
+        detail = str(exc)
+    return detail
+
+
+def _is_network_failure(exc: subprocess.CalledProcessError) -> bool:
+    command = exc.cmd
+    if isinstance(command, (list, tuple)):
+        if not command:
+            return False
+        first = str(command[0])
+    else:
+        command_str = str(command)
+        first = command_str.split()[0] if command_str else ""
+    if "git" not in first:
+        return False
+    detail = _extract_error_output(exc).lower()
+    return any(pattern in detail for pattern in _NETWORK_FAILURE_PATTERNS)
+
+
+def _record_network_failure(base_dir: Path, detail: str) -> int:
+    count = _read_network_failure_count(base_dir) + 1
+    _write_network_failure_count(base_dir, count)
+    _append_auto_upgrade_log(
+        base_dir,
+        f"Auto-upgrade network failure {count}: {detail}",
+    )
+    return count
+
+
+def _charge_point_active(base_dir: Path) -> bool:
+    lock_path = base_dir / "locks" / "charging.lck"
+    if lock_path.exists():
+        return True
+    try:
+        from ocpp import store  # type: ignore
+    except Exception:
+        return False
+    try:
+        connections = getattr(store, "connections", {})
+    except Exception:  # pragma: no cover - defensive
+        return False
+    return bool(connections)
+
+
+def _trigger_auto_upgrade_reboot(base_dir: Path) -> None:
+    try:
+        subprocess.run(["sudo", "systemctl", "reboot"], check=False)
+    except Exception:  # pragma: no cover - best effort reboot command
+        logger.exception(
+            "Failed to trigger reboot after repeated auto-upgrade network failures"
+        )
+
+
+def _reboot_if_no_charge_point(base_dir: Path) -> None:
+    if _charge_point_active(base_dir):
+        _append_auto_upgrade_log(
+            base_dir,
+            "Skipping reboot after repeated auto-upgrade network failures; a charge point is active",
+        )
+        return
+    _append_auto_upgrade_log(
+        base_dir,
+        "Rebooting due to repeated auto-upgrade network failures",
+    )
+    _trigger_auto_upgrade_reboot(base_dir)
+
+
+def _handle_network_failure_if_applicable(
+    base_dir: Path, exc: subprocess.CalledProcessError
+) -> bool:
+    if not _is_network_failure(exc):
+        return False
+    detail = _extract_error_output(exc)
+    failure_count = _record_network_failure(base_dir, detail)
+    if failure_count >= AUTO_UPGRADE_NETWORK_FAILURE_THRESHOLD:
+        _reboot_if_no_charge_point(base_dir)
+    return True
+
+
 def _resolve_service_url(base_dir: Path) -> str:
     """Return the local URL used to probe the Django suite."""
 
@@ -214,153 +364,178 @@ def check_github_updates() -> None:
     base_dir = Path(__file__).resolve().parent.parent
     mode_file = base_dir / "locks" / "auto_upgrade.lck"
     mode = "version"
-    if mode_file.exists():
+    reset_network_failures = True
+    try:
+        if mode_file.exists():
+            try:
+                raw_mode = mode_file.read_text().strip()
+            except (OSError, UnicodeDecodeError):
+                logger.warning(
+                    "Failed to read auto-upgrade mode lockfile", exc_info=True
+                )
+            else:
+                cleaned_mode = raw_mode.lower()
+                if cleaned_mode:
+                    mode = cleaned_mode
+
+        branch = "main"
         try:
-            raw_mode = mode_file.read_text().strip()
-        except (OSError, UnicodeDecodeError):
-            logger.warning(
-                "Failed to read auto-upgrade mode lockfile", exc_info=True
+            subprocess.run(
+                ["git", "fetch", "origin", branch],
+                cwd=base_dir,
+                check=True,
+                capture_output=True,
+                text=True,
             )
-        else:
-            cleaned_mode = raw_mode.lower()
-            if cleaned_mode:
-                mode = cleaned_mode
+        except subprocess.CalledProcessError as exc:
+            if _handle_network_failure_if_applicable(base_dir, exc):
+                reset_network_failures = False
+            raise
 
-    branch = "main"
-    subprocess.run(["git", "fetch", "origin", branch], cwd=base_dir, check=True)
+        log_file = _auto_upgrade_log_path(base_dir)
+        with log_file.open("a") as fh:
+            fh.write(
+                f"{timezone.now().isoformat()} check_github_updates triggered\n"
+            )
 
-    log_file = _auto_upgrade_log_path(base_dir)
-    with log_file.open("a") as fh:
-        fh.write(
-            f"{timezone.now().isoformat()} check_github_updates triggered\n"
-        )
-
-    notify = None
-    startup = None
-    try:  # pragma: no cover - optional dependency
-        from core.notifications import notify  # type: ignore
-    except Exception:
         notify = None
-    try:  # pragma: no cover - optional dependency
-        from nodes.apps import _startup_notification as startup  # type: ignore
-    except Exception:
         startup = None
+        try:  # pragma: no cover - optional dependency
+            from core.notifications import notify  # type: ignore
+        except Exception:
+            notify = None
+        try:  # pragma: no cover - optional dependency
+            from nodes.apps import _startup_notification as startup  # type: ignore
+        except Exception:
+            startup = None
 
-    remote_revision = (
-        subprocess.check_output(
-            ["git", "rev-parse", f"origin/{branch}"], cwd=base_dir
-        )
-        .decode()
-        .strip()
-    )
+        try:
+            remote_revision = subprocess.check_output(
+                ["git", "rev-parse", f"origin/{branch}"],
+                cwd=base_dir,
+                stderr=subprocess.STDOUT,
+                text=True,
+            ).strip()
+        except subprocess.CalledProcessError as exc:
+            if _handle_network_failure_if_applicable(base_dir, exc):
+                reset_network_failures = False
+            raise
 
-    skipped_revisions = _load_skipped_revisions(base_dir)
-    if remote_revision in skipped_revisions:
-        _append_auto_upgrade_log(
-            base_dir, f"Skipping auto-upgrade for blocked revision {remote_revision}"
-        )
-        if startup:
-            startup()
-        return
-
-    remote_version = _read_remote_version(base_dir, branch)
-    local_version = _read_local_version(base_dir)
-    remote_severity = _resolve_release_severity(remote_version)
-
-    upgrade_stamp = timezone.now().strftime("@ %Y%m%d %H:%M")
-
-    upgrade_was_applied = False
-
-    if mode == "latest":
-        local_revision = (
-            subprocess.check_output(["git", "rev-parse", branch], cwd=base_dir)
-            .decode()
-            .strip()
-        )
-        if local_revision == remote_revision:
-            if startup:
-                startup()
-            return
-
-        if (
-            remote_version
-            and local_version
-            and remote_version != local_version
-            and remote_severity == SEVERITY_LOW
-            and _shares_stable_series(local_version, remote_version)
-        ):
+        skipped_revisions = _load_skipped_revisions(base_dir)
+        if remote_revision in skipped_revisions:
             _append_auto_upgrade_log(
                 base_dir,
-                f"Skipping auto-upgrade for low severity patch {remote_version}",
+                f"Skipping auto-upgrade for blocked revision {remote_revision}",
             )
             if startup:
                 startup()
             return
 
-        if notify:
-            notify("Upgrading...", upgrade_stamp)
-        args = ["./upgrade.sh", "--latest", "--no-restart"]
-        upgrade_was_applied = True
-    else:
-        local_value = local_version or "0"
-        remote_value = remote_version or local_value
+        remote_version = _read_remote_version(base_dir, branch)
+        local_version = _read_local_version(base_dir)
+        remote_severity = _resolve_release_severity(remote_version)
 
-        if local_value == remote_value:
-            if startup:
-                startup()
-            return
+        upgrade_stamp = timezone.now().strftime("@ %Y%m%d %H:%M")
 
-        if (
-            mode == "stable"
-            and local_version
-            and remote_version
-            and remote_version != local_version
-            and _shares_stable_series(local_version, remote_version)
-            and remote_severity != SEVERITY_CRITICAL
-        ):
-            if startup:
-                startup()
-            return
+        upgrade_was_applied = False
 
-        if notify:
-            notify("Upgrading...", upgrade_stamp)
-        if mode == "stable":
-            args = ["./upgrade.sh", "--stable", "--no-restart"]
+        if mode == "latest":
+            local_revision = (
+                subprocess.check_output(
+                    ["git", "rev-parse", branch],
+                    cwd=base_dir,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                )
+                .strip()
+            )
+            if local_revision == remote_revision:
+                if startup:
+                    startup()
+                return
+
+            if (
+                remote_version
+                and local_version
+                and remote_version != local_version
+                and remote_severity == SEVERITY_LOW
+                and _shares_stable_series(local_version, remote_version)
+            ):
+                _append_auto_upgrade_log(
+                    base_dir,
+                    f"Skipping auto-upgrade for low severity patch {remote_version}",
+                )
+                if startup:
+                    startup()
+                return
+
+            if notify:
+                notify("Upgrading...", upgrade_stamp)
+            args = ["./upgrade.sh", "--latest", "--no-restart"]
+            upgrade_was_applied = True
         else:
-            args = ["./upgrade.sh", "--no-restart"]
-        upgrade_was_applied = True
+            local_value = local_version or "0"
+            remote_value = remote_version or local_value
 
-    with log_file.open("a") as fh:
-        fh.write(
-            f"{timezone.now().isoformat()} running: {' '.join(args)}\n"
-        )
+            if local_value == remote_value:
+                if startup:
+                    startup()
+                return
 
-    subprocess.run(args, cwd=base_dir, check=True)
+            if (
+                mode == "stable"
+                and local_version
+                and remote_version
+                and remote_version != local_version
+                and _shares_stable_series(local_version, remote_version)
+                and remote_severity != SEVERITY_CRITICAL
+            ):
+                if startup:
+                    startup()
+                return
 
-    service_file = base_dir / "locks/service.lck"
-    if service_file.exists():
-        service = service_file.read_text().strip()
-        subprocess.run(
-            [
-                "sudo",
-                "systemctl",
-                "kill",
-                "--signal=TERM",
-                service,
-            ]
-        )
-    else:
-        subprocess.run(["pkill", "-f", "manage.py runserver"])
+            if notify:
+                notify("Upgrading...", upgrade_stamp)
+            if mode == "stable":
+                args = ["./upgrade.sh", "--stable", "--no-restart"]
+            else:
+                args = ["./upgrade.sh", "--no-restart"]
+            upgrade_was_applied = True
 
-    if upgrade_was_applied:
-        _append_auto_upgrade_log(
-            base_dir,
-            (
-                "Scheduled post-upgrade health check in %s seconds"
-                % AUTO_UPGRADE_HEALTH_DELAY_SECONDS
-            ),
-        )
-        _schedule_health_check(1)
+        with log_file.open("a") as fh:
+            fh.write(
+                f"{timezone.now().isoformat()} running: {' '.join(args)}\n"
+            )
+
+        subprocess.run(args, cwd=base_dir, check=True)
+
+        service_file = base_dir / "locks/service.lck"
+        if service_file.exists():
+            service = service_file.read_text().strip()
+            subprocess.run(
+                [
+                    "sudo",
+                    "systemctl",
+                    "kill",
+                    "--signal=TERM",
+                    service,
+                ]
+            )
+        else:
+            subprocess.run(["pkill", "-f", "manage.py runserver"])
+
+        if upgrade_was_applied:
+            _append_auto_upgrade_log(
+                base_dir,
+                (
+                    "Scheduled post-upgrade health check in %s seconds"
+                    % AUTO_UPGRADE_HEALTH_DELAY_SECONDS
+                ),
+            )
+            _schedule_health_check(1)
+    finally:
+        if reset_network_failures:
+            _reset_network_failure_count(base_dir)
 
 
 @shared_task
