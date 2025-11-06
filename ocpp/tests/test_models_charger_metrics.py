@@ -15,8 +15,10 @@ import django
 
 django.setup()
 
+from django.db import connection
 from django.utils import timezone
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 
 from ocpp import store
 from ocpp.models import Charger, MeterValue, Transaction
@@ -128,3 +130,43 @@ class ChargerEnergyTotalsTests(TestCase):
             expected_range_total,
             places=6,
         )
+
+    def test_total_kw_for_range_query_count_constant(self):
+        base_serial = "SERIAL-QUERY"
+        connector = Charger.objects.create(
+            charger_id=base_serial,
+            connector_id=1,
+        )
+
+        now = timezone.now()
+        range_start = now - timedelta(hours=2)
+        range_end = now + timedelta(hours=2)
+
+        def add_transaction(offset_minutes: int, energy: str) -> None:
+            start = range_start + timedelta(minutes=offset_minutes)
+            tx = Transaction.objects.create(
+                charger=connector,
+                connector_id=connector.connector_id,
+                meter_start=0,
+                start_time=start,
+                stop_time=start + timedelta(minutes=30),
+            )
+            MeterValue.objects.create(
+                charger=connector,
+                connector_id=connector.connector_id,
+                transaction=tx,
+                timestamp=start + timedelta(minutes=10),
+                energy=Decimal(energy),
+            )
+
+        add_transaction(5, "1.0")
+
+        with CaptureQueriesContext(connection) as ctx_single:
+            connector.total_kw_for_range(range_start, range_end)
+
+        add_transaction(25, "3.5")
+
+        with CaptureQueriesContext(connection) as ctx_multiple:
+            connector.total_kw_for_range(range_start, range_end)
+
+        self.assertEqual(len(ctx_multiple), len(ctx_single))

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import binascii
 import hashlib
 import json
@@ -12,7 +14,7 @@ from decimal import Decimal, InvalidOperation
 from django.conf import settings
 from django.contrib.sites.models import Site
 from django.db import models
-from django.db.models import Q
+from django.db.models import Q, Prefetch
 from django.core.exceptions import ValidationError
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
@@ -663,7 +665,15 @@ class Charger(Entity):
         tx_active = None
         if self.connector_id is not None:
             tx_active = store_module.get_transaction(self.charger_id, self.connector_id)
-        qs = self.transactions.all()
+        qs = self.transactions.all().prefetch_related(
+            Prefetch(
+                "meter_values",
+                queryset=MeterValue.objects.filter(energy__isnull=False).order_by(
+                    "timestamp"
+                ),
+                to_attr="prefetched_meter_values",
+            )
+        )
         if tx_active and tx_active.pk is not None:
             qs = qs.exclude(pk=tx_active.pk)
         total = 0.0
@@ -691,6 +701,15 @@ class Charger(Entity):
             qs = qs.filter(start_time__lt=end)
         if tx_active and tx_active.pk is not None:
             qs = qs.exclude(pk=tx_active.pk)
+        qs = qs.prefetch_related(
+            Prefetch(
+                "meter_values",
+                queryset=MeterValue.objects.filter(energy__isnull=False).order_by(
+                    "timestamp"
+                ),
+                to_attr="prefetched_meter_values",
+            )
+        )
 
         total = 0.0
         for tx in qs:
@@ -979,9 +998,21 @@ class Transaction(Entity):
         if self.meter_stop is not None:
             end_val = float(self.meter_stop) / 1000.0
 
-        readings = list(
-            self.meter_values.filter(energy__isnull=False).order_by("timestamp")
-        )
+        readings: list[MeterValue] | None = None
+        if hasattr(self, "prefetched_meter_values"):
+            readings = list(getattr(self, "prefetched_meter_values"))
+        else:
+            cache = getattr(self, "_prefetched_objects_cache", None)
+            if cache and "meter_values" in cache:
+                readings = list(cache["meter_values"])
+
+        if readings is not None:
+            readings = [reading for reading in readings if reading.energy is not None]
+            readings.sort(key=lambda reading: reading.timestamp)
+        else:
+            readings = list(
+                self.meter_values.filter(energy__isnull=False).order_by("timestamp")
+            )
         if readings:
             if start_val is None:
                 start_val = float(readings[0].energy or 0)

@@ -10,7 +10,7 @@ from asgiref.sync import async_to_sync
 from celery import shared_task
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.db.models import Q
+from django.db.models import Q, Prefetch
 from django.utils import timezone
 from urllib.parse import quote, urlsplit, urlunsplit
 from websocket import WebSocketException, create_connection
@@ -361,9 +361,15 @@ def send_daily_session_report() -> int:
         return 0
 
     start, end, today = _resolve_report_window()
+    meter_value_prefetch = Prefetch(
+        "meter_values",
+        queryset=MeterValue.objects.filter(energy__isnull=False).order_by("timestamp"),
+        to_attr="prefetched_meter_values",
+    )
     transactions = list(
         Transaction.objects.filter(start_time__gte=start, start_time__lt=end)
         .select_related("charger", "account")
+        .prefetch_related(meter_value_prefetch)
         .order_by("start_time")
     )
     if not transactions:

@@ -68,6 +68,7 @@ from .models import (
     ConfigurationKey,
     Simulator,
     MeterReading,
+    MeterValue,
     Location,
     DataTransferMessage,
     CPReservation,
@@ -95,7 +96,8 @@ from .tasks import (
     check_charge_point_configuration,
     schedule_daily_charge_point_configuration_checks,
 )
-from django.db import close_old_connections
+from django.db import close_old_connections, connection
+from django.test.utils import CaptureQueriesContext
 from django.db.utils import OperationalError
 from urllib.parse import unquote, urlparse
 
@@ -4854,6 +4856,28 @@ class DailySessionReportTaskTests(TestCase):
         except FileNotFoundError:
             pass
 
+    def _create_transaction_with_reading(
+        self,
+        charger: Charger,
+        start: datetime,
+        energy: Decimal,
+    ) -> Transaction:
+        transaction = Transaction.objects.create(
+            charger=charger,
+            start_time=start,
+            stop_time=start + timedelta(minutes=30),
+            meter_start=0,
+            connector_id=1,
+        )
+        MeterValue.objects.create(
+            charger=charger,
+            connector_id=1,
+            transaction=transaction,
+            timestamp=start + timedelta(minutes=15),
+            energy=energy,
+        )
+        return transaction
+
     def test_report_sends_email_when_sessions_exist(self):
         User = get_user_model()
         User.objects.create_superuser(
@@ -4906,6 +4930,41 @@ class DailySessionReportTaskTests(TestCase):
 
         self.assertEqual(count, 0)
         mock_send.assert_not_called()
+
+    def test_report_query_count_constant(self):
+        User = get_user_model()
+        User.objects.create_superuser(
+            username="report-admin", email="report-admin@example.com", password="pw"
+        )
+        charger = Charger.objects.create(charger_id="RPT-QUERY", display_name="Pod Q")
+        base_start = timezone.now().replace(second=0, microsecond=0)
+
+        self._create_transaction_with_reading(
+            charger, base_start, Decimal("1.2")
+        )
+
+        with patch("core.mailer.can_send_email", return_value=True), patch(
+            "core.mailer.send"
+        ) as mock_send, CaptureQueriesContext(connection) as ctx_single:
+            count_single = send_daily_session_report()
+
+        self.assertEqual(count_single, 1)
+        mock_send.assert_called_once()
+        single_query_count = len(ctx_single)
+
+        later_start = base_start + timedelta(hours=1)
+        self._create_transaction_with_reading(
+            charger, later_start, Decimal("3.4")
+        )
+
+        with patch("core.mailer.can_send_email", return_value=True), patch(
+            "core.mailer.send"
+        ) as mock_send_multi, CaptureQueriesContext(connection) as ctx_multi:
+            count_multi = send_daily_session_report()
+
+        self.assertEqual(count_multi, 2)
+        mock_send_multi.assert_called_once()
+        self.assertEqual(len(ctx_multi), single_query_count)
 
 
 class TransactionKwTests(TestCase):
