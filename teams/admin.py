@@ -54,6 +54,7 @@ from .models import (
     TOTPDevice,
     GoogleCalendarProfile,
     ManualTask,
+    SlackBotProfile,
 )
 
 
@@ -111,6 +112,39 @@ class OdooProfileAdminProxy(OdooProfileAdmin):
 @admin.register(GoogleCalendarProfile)
 class GoogleCalendarProfileAdminProxy(GoogleCalendarProfileAdmin):
     pass
+
+
+@admin.register(SlackBotProfile)
+class SlackBotProfileAdmin(EntityModelAdmin):
+    list_display = ("__str__", "team_id", "node", "is_enabled")
+    list_filter = ("is_enabled",)
+    search_fields = ("team_id", "bot_user_id", "node__hostname")
+    raw_id_fields = ("node", "user", "group")
+    fieldsets = (
+        (
+            None,
+            {
+                "fields": (
+                    "node",
+                    "user",
+                    "group",
+                    "team_id",
+                    "bot_user_id",
+                    "default_channels",
+                    "is_enabled",
+                )
+            },
+        ),
+        (
+            _("Credentials"),
+            {
+                "fields": (
+                    "bot_token",
+                    "signing_secret",
+                )
+            },
+        ),
+    )
 
 
 @admin.register(ManualTask)
