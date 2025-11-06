@@ -29,6 +29,7 @@ from django.core.management import call_command
 from django.utils import timezone
 import socket
 from core.models import Brand, Todo, WMICode
+from core import user_data
 from core.user_data import dump_user_fixture
 from pages.models import Application, Module, Landing
 
@@ -586,6 +587,7 @@ class SeedDataViewTests(TestCase):
         cls.user = get_user_model().objects.create_superuser("sdadmin", password="pw")
 
     def setUp(self):
+        user_data._seed_fixture_index.cache_clear()
         self.user = type(self).user
         self.client.force_login(self.user)
 
@@ -599,3 +601,20 @@ class SeedDataViewTests(TestCase):
             names,
             {"Terminal", "Watchtower", "Control", "Satellite", "Interface"},
         )
+
+    def test_seed_data_view_scans_fixture_directory_once(self):
+        user_data._seed_fixture_index.cache_clear()
+
+        original_glob = Path.glob
+        call_count = 0
+
+        def counting_glob(self, pattern):
+            nonlocal call_count
+            call_count += 1
+            return original_glob(self, pattern)
+
+        with patch("core.user_data.Path.glob", new=counting_glob):
+            response = self.client.get(reverse("admin:seed_data"))
+            self.assertEqual(response.status_code, 200)
+
+        self.assertEqual(call_count, 1)
