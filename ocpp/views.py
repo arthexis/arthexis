@@ -459,21 +459,21 @@ def _collect_status_events(
                     normalized_target = None
                 if normalized_target not in {connector_id, None}:
                     continue
-                raw_status = payload.get("status")
-                status_bucket = _normalize_timeline_status(
-                    raw_status if isinstance(raw_status, str) else None
-                )
-                payload_timestamp = payload.get("timestamp")
-                if isinstance(payload_timestamp, str):
-                    parsed = parse_datetime(payload_timestamp)
-                    if parsed is not None:
-                        if timezone.is_naive(parsed):
-                            parsed = timezone.make_aware(parsed, timezone=dt_timezone.utc)
-                        event_time = parsed
-            elif message.startswith("Connected"):
-                status_bucket = "available"
-            elif message.startswith("Closed"):
-                status_bucket = "offline"
+            raw_status = payload.get("status")
+            status_bucket = _normalize_timeline_status(
+                raw_status if isinstance(raw_status, str) else None
+            )
+            payload_timestamp = payload.get("timestamp")
+            if isinstance(payload_timestamp, str):
+                parsed = parse_datetime(payload_timestamp)
+                if parsed is not None:
+                    if timezone.is_naive(parsed):
+                        parsed = timezone.make_aware(parsed, timezone=dt_timezone.utc)
+                    event_time = parsed
+        elif message.startswith("Connected"):
+            status_bucket = "available"
+        elif message.startswith("Closed"):
+            status_bucket = "offline"
 
         if not status_bucket:
             continue
