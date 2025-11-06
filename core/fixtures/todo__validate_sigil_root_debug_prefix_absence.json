@@ -1,0 +1,12 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate Sigil root debug prefix absence",
+      "url": "/admin/core/sigilroot/",
+      "request_details": "Confirm the Sigil Root changelist no longer includes the DEBUG prefix and that resolving [DEBUG.*] sigils displays an Unknown sigil root warning instead of resolving to entity data.",
+      "done_on": null,
+      "is_deleted": false
+    }
+  }
+]
