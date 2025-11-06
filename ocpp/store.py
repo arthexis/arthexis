@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 from collections import deque
 from datetime import datetime, timezone
 import json
@@ -32,6 +33,7 @@ pending_calls: dict[str, dict[str, object]] = {}
 _pending_call_events: dict[str, threading.Event] = {}
 _pending_call_results: dict[str, dict[str, object]] = {}
 _pending_call_lock = threading.Lock()
+_pending_call_handles: dict[str, asyncio.TimerHandle] = {}
 triggered_followups: dict[str, list[dict[str, object]]] = {}
 
 # mapping of charger id / cp_path to friendly names used for log files
@@ -45,6 +47,10 @@ LOCK_DIR = BASE_DIR / "locks"
 LOCK_DIR.mkdir(exist_ok=True)
 SESSION_LOCK = LOCK_DIR / "charging.lck"
 _lock_task: asyncio.Task | None = None
+
+_scheduler_loop: asyncio.AbstractEventLoop | None = None
+_scheduler_thread: threading.Thread | None = None
+_scheduler_lock = threading.Lock()
 
 SESSION_LOG_BUFFER_LIMIT = 16
 
@@ -208,13 +214,20 @@ def register_pending_call(message_id: str, metadata: dict[str, object]) -> None:
         event = threading.Event()
         _pending_call_events[message_id] = event
         _pending_call_results.pop(message_id, None)
+        handle = _pending_call_handles.pop(message_id, None)
+    if handle:
+        _cancel_timer_handle(handle)
 
 
 def pop_pending_call(message_id: str) -> dict[str, object] | None:
     """Return and remove metadata for a previously registered call."""
 
     with _pending_call_lock:
-        return pending_calls.pop(message_id, None)
+        metadata = pending_calls.pop(message_id, None)
+        handle = _pending_call_handles.pop(message_id, None)
+    if handle:
+        _cancel_timer_handle(handle)
+    return metadata
 
 
 def record_pending_call_result(
@@ -240,6 +253,9 @@ def record_pending_call_result(
     with _pending_call_lock:
         _pending_call_results[message_id] = result
         event = _pending_call_events.pop(message_id, None)
+        handle = _pending_call_handles.pop(message_id, None)
+    if handle:
+        _cancel_timer_handle(handle)
     if event:
         event.set()
 
@@ -275,29 +291,50 @@ def schedule_call_timeout(
 ) -> None:
     """Schedule a timeout notice if a pending call is not answered."""
 
-    def _notify() -> None:
-        with _pending_call_lock:
-            metadata = pending_calls.get(message_id)
-        if not metadata:
-            return
-        if action and metadata.get("action") != action:
-            return
-        if metadata.get("timeout_notice_sent"):
-            return
-        target_log = log_key or metadata.get("log_key")
-        if not target_log:
-            metadata["timeout_notice_sent"] = True
-            return
-        label = message
-        if not label:
-            action_label = action or str(metadata.get("action") or "Call")
-            label = f"{action_label} request timed out"
-        add_log(target_log, label, log_type=log_type)
-        metadata["timeout_notice_sent"] = True
+    loop = _ensure_scheduler_loop()
 
-    timer = threading.Timer(timeout, _notify)
-    timer.daemon = True
-    timer.start()
+    def _notify() -> None:
+        target_log: str | None = None
+        entry_label: str | None = None
+        with _pending_call_lock:
+            _pending_call_handles.pop(message_id, None)
+            metadata = pending_calls.get(message_id)
+            if not metadata:
+                return
+            if action and metadata.get("action") != action:
+                return
+            if metadata.get("timeout_notice_sent"):
+                return
+            target_log = log_key or metadata.get("log_key")
+            if not target_log:
+                metadata["timeout_notice_sent"] = True
+                return
+            entry_label = message
+            if not entry_label:
+                action_label = action or str(metadata.get("action") or "Call")
+                entry_label = f"{action_label} request timed out"
+            metadata["timeout_notice_sent"] = True
+        if target_log and entry_label:
+            add_log(target_log, entry_label, log_type=log_type)
+
+    future: concurrent.futures.Future[asyncio.TimerHandle] = concurrent.futures.Future()
+
+    def _schedule_timer() -> None:
+        try:
+            handle = loop.call_later(timeout, _notify)
+        except Exception as exc:  # pragma: no cover - defensive
+            future.set_exception(exc)
+            return
+        future.set_result(handle)
+
+    loop.call_soon_threadsafe(_schedule_timer)
+    handle = future.result()
+
+    with _pending_call_lock:
+        previous = _pending_call_handles.pop(message_id, None)
+        _pending_call_handles[message_id] = handle
+    if previous:
+        _cancel_timer_handle(previous)
 
 
 def register_triggered_followup(
@@ -348,6 +385,7 @@ def consume_triggered_followup(
 def clear_pending_calls(serial: str) -> None:
     """Remove any pending calls associated with the provided charger id."""
 
+    to_cancel: list[asyncio.TimerHandle] = []
     with _pending_call_lock:
         to_remove = [
             key
@@ -358,7 +396,52 @@ def clear_pending_calls(serial: str) -> None:
             pending_calls.pop(key, None)
             _pending_call_events.pop(key, None)
             _pending_call_results.pop(key, None)
-    triggered_followups.pop(serial, None)
+            handle = _pending_call_handles.pop(key, None)
+            if handle:
+                to_cancel.append(handle)
+    for handle in to_cancel:
+        _cancel_timer_handle(handle)
+
+
+def _run_scheduler_loop(
+    loop: asyncio.AbstractEventLoop, ready: threading.Event
+) -> None:
+    asyncio.set_event_loop(loop)
+    ready.set()
+    loop.run_forever()
+
+
+def _ensure_scheduler_loop() -> asyncio.AbstractEventLoop:
+    global _scheduler_loop, _scheduler_thread
+
+    loop = _scheduler_loop
+    if loop and loop.is_running():
+        return loop
+    with _scheduler_lock:
+        loop = _scheduler_loop
+        if loop and loop.is_running():
+            return loop
+        loop = asyncio.new_event_loop()
+        ready = threading.Event()
+        thread = threading.Thread(
+            target=_run_scheduler_loop,
+            args=(loop, ready),
+            name="ocpp-store-scheduler",
+            daemon=True,
+        )
+        thread.start()
+        ready.wait()
+        _scheduler_loop = loop
+        _scheduler_thread = thread
+        return loop
+
+
+def _cancel_timer_handle(handle: asyncio.TimerHandle) -> None:
+    loop = _scheduler_loop
+    if loop and loop.is_running():
+        loop.call_soon_threadsafe(handle.cancel)
+    else:  # pragma: no cover - loop stopped during shutdown
+        handle.cancel()
 
 
 def reassign_identity(old_key: str, new_key: str) -> str:
