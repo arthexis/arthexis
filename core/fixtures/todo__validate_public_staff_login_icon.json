@@ -1,0 +1,10 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate public Staff login icon",
+      "url": "/",
+      "request_details": "While logged out, click the Staff icon on the public Constellation site and confirm it routes to the configured login page instead of returning a 404."
+    }
+  }
+]

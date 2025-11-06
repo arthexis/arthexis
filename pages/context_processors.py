@@ -1,5 +1,6 @@
 from utils.sites import get_site
 from django.urls import Resolver404, resolve
+from django.shortcuts import resolve_url
 from django.conf import settings
 from pathlib import Path
 from nodes.models import Node
@@ -148,4 +149,5 @@ def nav_links(request):
         "nav_modules": valid_modules,
         "favicon_url": favicon_url,
         "header_references": header_references,
+        "login_url": resolve_url(settings.LOGIN_URL),
     }
