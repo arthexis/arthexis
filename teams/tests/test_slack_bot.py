@@ -4,12 +4,16 @@ import time
 import urllib.parse
 from unittest import mock
 
+from django.contrib.admin.sites import AdminSite
+from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
-from django.test import TestCase
+from django.test import RequestFactory, TestCase
 from django.urls import reverse
 
 from nodes.models import NetMessage, Node
 
+from teams.admin import SlackBotProfileAdmin
+from teams.forms import SlackBotProfileAdminForm
 from teams.models import SlackBotProfile
 
 
@@ -147,3 +151,43 @@ class SlackBotProfileTests(TestCase):
         payload = f"v0:{timestamp}:{body}".encode("utf-8")
         digest = hmac.new(secret.encode("utf-8"), payload, hashlib.sha256)
         return f"v0={digest.hexdigest()}"
+
+
+class SlackBotProfileAdminTests(TestCase):
+    def setUp(self):
+        user_model = get_user_model()
+        self.user = user_model.objects.create_superuser(
+            username="admin",
+            email="admin@example.com",
+            password="password",
+        )
+        self.site = AdminSite()
+        self.factory = RequestFactory()
+        self.node = Node.objects.create(
+            hostname="local",
+            port=8443,
+            mac_address="AA:BB:CC:DD:EE:FF",
+            current_relation=Node.Relation.SELF,
+        )
+
+    @mock.patch("nodes.models.Node.get_local")
+    def test_initial_node_defaults_to_local(self, mock_get_local):
+        mock_get_local.return_value = self.node
+        request = self.factory.get("/admin/teams/slackbotprofile/add/")
+        request.user = self.user
+
+        admin = SlackBotProfileAdmin(SlackBotProfile, self.site)
+        initial = admin.get_changeform_initial_data(request)
+
+        self.assertEqual(initial.get("node"), self.node.pk)
+        mock_get_local.assert_called_once_with()
+
+    def test_admin_form_sets_help_text_and_placeholders(self):
+        form = SlackBotProfileAdminForm()
+
+        self.assertIn("Defaults to the current node", form.fields["node"].help_text)
+        self.assertIn("Optional", form.fields["user"].help_text)
+        self.assertTrue(form.fields["team_id"].widget.attrs.get("placeholder").startswith("T"))
+        self.assertTrue(
+            form.fields["bot_token"].widget.attrs.get("placeholder", "").startswith("xoxb-")
+        )

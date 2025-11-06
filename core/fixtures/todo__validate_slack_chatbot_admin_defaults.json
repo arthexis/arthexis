@@ -1,0 +1,10 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate Slack chatbot admin defaults",
+      "url": "/admin/teams/slackbotprofile/add/",
+      "request_details": "Open the admin Slack Chatbots add form. Confirm the Node field defaults to the current node and review the new help text for each Slack configuration field to ensure it guides setup."
+    }
+  }
+]
