@@ -47,6 +47,10 @@ from django.contrib import messages
 from django.contrib.admin import helpers
 from django.contrib.auth.models import Permission
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
+from core.celery_utils import (
+    periodic_task_name_variants,
+    slugify_task_name,
+)
 from django.conf import settings
 from django.utils import timezone
 from urllib.parse import urlparse
@@ -1633,8 +1637,11 @@ class NodeRegisterCurrentTests(TestCase):
             port=9000,
             mac_address="00:11:22:33:44:99",
         )
-        task_name = f"poll_clipboard_node_{node.pk}"
-        PeriodicTask.objects.filter(name=task_name).delete()
+        raw_name = f"poll_clipboard_node_{node.pk}"
+        task_name = slugify_task_name(raw_name)
+        PeriodicTask.objects.filter(
+            name__in=periodic_task_name_variants(raw_name)
+        ).delete()
         NodeFeatureAssignment.objects.create(node=node, feature=feature)
         self.assertTrue(PeriodicTask.objects.filter(name=task_name).exists())
         NodeFeatureAssignment.objects.filter(node=node, feature=feature).delete()
@@ -1651,8 +1658,11 @@ class NodeRegisterCurrentTests(TestCase):
             port=9100,
             mac_address="00:11:22:33:44:aa",
         )
-        task_name = f"capture_screenshot_node_{node.pk}"
-        PeriodicTask.objects.filter(name=task_name).delete()
+        raw_name = f"capture_screenshot_node_{node.pk}"
+        task_name = slugify_task_name(raw_name)
+        PeriodicTask.objects.filter(
+            name__in=periodic_task_name_variants(raw_name)
+        ).delete()
         NodeFeatureAssignment.objects.create(node=node, feature=feature)
         self.assertTrue(PeriodicTask.objects.filter(name=task_name).exists())
         NodeFeatureAssignment.objects.filter(node=node, feature=feature).delete()
@@ -1671,14 +1681,18 @@ class NodeRegisterCurrentTests(TestCase):
                 "base_path": settings.BASE_DIR,
             },
         )
-        PeriodicTask.objects.filter(name="pages_purge_landing_leads").delete()
+        raw_name = "pages_purge_landing_leads"
+        task_name = slugify_task_name(raw_name)
+        PeriodicTask.objects.filter(
+            name__in=periodic_task_name_variants(raw_name)
+        ).delete()
         NodeFeatureAssignment.objects.get_or_create(node=node, feature=feature)
         self.assertTrue(
-            PeriodicTask.objects.filter(name="pages_purge_landing_leads").exists()
+            PeriodicTask.objects.filter(name=task_name).exists()
         )
         NodeFeatureAssignment.objects.filter(node=node, feature=feature).delete()
         self.assertFalse(
-            PeriodicTask.objects.filter(name="pages_purge_landing_leads").exists()
+            PeriodicTask.objects.filter(name=task_name).exists()
         )
 
     def test_ocpp_session_report_task_syncs_with_feature(self):
@@ -1694,8 +1708,11 @@ class NodeRegisterCurrentTests(TestCase):
                 "base_path": settings.BASE_DIR,
             },
         )
-        task_name = "ocpp_send_daily_session_report"
-        PeriodicTask.objects.filter(name=task_name).delete()
+        raw_name = "ocpp_send_daily_session_report"
+        task_name = slugify_task_name(raw_name)
+        PeriodicTask.objects.filter(
+            name__in=periodic_task_name_variants(raw_name)
+        ).delete()
 
         with patch("nodes.models.mailer.can_send_email", return_value=True):
             NodeFeatureAssignment.objects.get_or_create(node=node, feature=feature)
@@ -1718,8 +1735,11 @@ class NodeRegisterCurrentTests(TestCase):
                 "base_path": settings.BASE_DIR,
             },
         )
-        task_name = "ocpp_send_daily_session_report"
-        PeriodicTask.objects.filter(name=task_name).delete()
+        raw_name = "ocpp_send_daily_session_report"
+        task_name = slugify_task_name(raw_name)
+        PeriodicTask.objects.filter(
+            name__in=periodic_task_name_variants(raw_name)
+        ).delete()
 
         with patch("nodes.models.mailer.can_send_email", return_value=False):
             NodeFeatureAssignment.objects.get_or_create(node=node, feature=feature)

@@ -38,6 +38,7 @@ class CoreConfig(AppConfig):
             patch_admin_sigil_builder_view,
             generate_model_sigils,
         )
+        from .celery_utils import normalize_periodic_task_name
         from .admin_history import patch_admin_history
 
         from django_otp.plugins.otp_totp.models import TOTPDevice as OTP_TOTPDevice
@@ -222,8 +223,11 @@ class CoreConfig(AppConfig):
                     schedule, _ = IntervalSchedule.objects.get_or_create(
                         every=1, period=IntervalSchedule.HOURS
                     )
-                    PeriodicTask.objects.get_or_create(
-                        name="poll_email_collectors",
+                    task_name = normalize_periodic_task_name(
+                        PeriodicTask.objects, "poll_email_collectors"
+                    )
+                    PeriodicTask.objects.update_or_create(
+                        name=task_name,
                         defaults={
                             "interval": schedule,
                             "task": "core.tasks.poll_email_collectors",
