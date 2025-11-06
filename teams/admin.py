@@ -38,9 +38,13 @@ from core.user_data import (
     _user_allows_user_data,
 )
 from nodes.admin import EmailOutboxAdmin
-from nodes.models import EmailOutbox as CoreEmailOutbox
+from nodes.models import EmailOutbox as CoreEmailOutbox, Node
 
-from .forms import TOTPDeviceAdminForm, TOTPDeviceCalibrationActionForm
+from .forms import (
+    SlackBotProfileAdminForm,
+    TOTPDeviceAdminForm,
+    TOTPDeviceCalibrationActionForm,
+)
 from .models import (
     InviteLead,
     User,
@@ -120,6 +124,7 @@ class SlackBotProfileAdmin(EntityModelAdmin):
     list_filter = ("is_enabled",)
     search_fields = ("team_id", "bot_user_id", "node__hostname")
     raw_id_fields = ("node", "user", "group")
+    form = SlackBotProfileAdminForm
     fieldsets = (
         (
             None,
@@ -145,6 +150,19 @@ class SlackBotProfileAdmin(EntityModelAdmin):
             },
         ),
     )
+
+    def get_changeform_initial_data(self, request):
+        initial = super().get_changeform_initial_data(request)
+        initial = dict(initial) if initial else {}
+        if "node" not in initial or not initial["node"]:
+            current = getattr(request, "node", None)
+            if current is not None:
+                initial["node"] = getattr(current, "pk", current)
+            else:
+                local_node = Node.get_local()
+                if local_node is not None:
+                    initial["node"] = local_node.pk
+        return initial
 
 
 @admin.register(ManualTask)
