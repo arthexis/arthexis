@@ -56,6 +56,11 @@ class Application(Entity):
             return self.name
 
 
+    class Meta:
+        verbose_name = _("Application")
+        verbose_name_plural = _("Applications")
+
+
 class ModuleManager(models.Manager):
     def get_by_natural_key(self, role: str, path: str):
         return self.get(node_role__name=role, path=path)
@@ -222,6 +227,8 @@ class Landing(Entity):
 
     class Meta:
         unique_together = ("module", "path")
+        verbose_name = _("Landing")
+        verbose_name_plural = _("Landings")
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return f"{self.label} ({self.path})"
@@ -515,6 +522,8 @@ class Favorite(Entity):
     class Meta:
         unique_together = ("user", "content_type")
         ordering = ["priority", "pk"]
+        verbose_name = _("Favorite")
+        verbose_name_plural = _("Favorites")
 
 
 class UserStory(Lead):

@@ -114,8 +114,8 @@ class TOTPDevice(CoreTOTPDevice):
     class Meta:
         proxy = True
         app_label = "teams"
-        verbose_name = CoreTOTPDevice._meta.verbose_name
-        verbose_name_plural = CoreTOTPDevice._meta.verbose_name_plural
+        verbose_name = _("TOTP Device")
+        verbose_name_plural = _("TOTP Devices")
 
 
 class GoogleCalendarProfile(CoreGoogleCalendarProfile):

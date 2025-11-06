@@ -1463,15 +1463,15 @@ class CPFirmwareDeployment(Entity):
 
     class Meta:
         ordering = ["-requested_at"]
-        verbose_name = _("CP Firmware deployment")
-        verbose_name_plural = _("CP Firmware deployments")
+        verbose_name = _("CP Firmware Deployment")
+        verbose_name_plural = _("CP Firmware Deployments")
         indexes = [
             models.Index(fields=["ocpp_message_id"]),
             models.Index(fields=["download_token"]),
         ]
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
-        return f"{self.firmware} → {self.charger}" if self.pk else "Firmware deployment"
+        return f"{self.firmware} → {self.charger}" if self.pk else "Firmware Deployment"
 
     def issue_download_token(self, *, lifetime: timedelta | None = None) -> str:
         if lifetime is None:
