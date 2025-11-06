@@ -1,6 +1,6 @@
 {% load i18n ref_tags %}
 <!doctype html>
-<html lang="{{ LANGUAGE_CODE }}" data-bs-theme="light">
+<html lang="{{ LANGUAGE_CODE }}" data-bs-theme="dark">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -325,7 +325,7 @@
   </head>
   <body class="p-3 pb-0 d-flex flex-column min-vh-100">
     <div class="container flex-grow-1 mb-5">
-      <nav class="navbar navbar-expand-lg navbar-light bg-body py-2 m-0">
+      <nav class="navbar navbar-expand-lg navbar-dark bg-dark py-2 m-0">
         <div class="container-fluid">
           <a class="navbar-brand" href="/">{{ badge_site_name|default:"Arthexis" }}</a>
           <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
@@ -402,9 +402,9 @@
               {% endif %}
             </ul>
             <div class="toolbar ms-lg-3 d-flex align-items-center" role="toolbar">
-              <button id="theme-toggle" class="btn btn-sm btn-outline-dark me-2" onclick="toggleTheme()" aria-label="{% trans "Dark Mode" %}">
+              <button id="theme-toggle" class="btn btn-sm btn-outline-light me-2" onclick="toggleTheme()" aria-label="{% trans "Light Mode" %}">
                 <svg aria-hidden="true" width="1.5rem" height="1.5rem">
-                  <use href="#icon-moon"></use>
+                  <use href="#icon-sun"></use>
                 </svg>
               </button>
               <form action="{% url 'set_language' %}" method="post" class="d-inline me-2">
@@ -416,7 +416,7 @@
                   {% endfor %}
                 </select>
               </form>
-              <a class="btn btn-sm btn-outline-dark position-relative user-info-trigger" href="{% if request.user.is_authenticated %}{% url 'admin:index' %}{% else %}{% url 'pages:login' %}{% endif %}" aria-label="{% if request.user.is_authenticated %}{% trans "Admin" %}{% else %}{% trans "Login" %}{% endif %}">
+              <a class="btn btn-sm btn-outline-light position-relative user-info-trigger" href="{% if request.user.is_authenticated %}{% url 'admin:index' %}{% else %}{% url 'pages:login' %}{% endif %}" aria-label="{% if request.user.is_authenticated %}{% trans "Admin" %}{% else %}{% trans "Login" %}{% endif %}">
                 <svg aria-hidden="true" width="1.5rem" height="1.5rem">
                   <use href="#icon-person"></use>
                 </svg>
@@ -426,7 +426,7 @@
                 </div>
                 {% endif %}
               </a>
-              <button id="share-button" class="btn btn-sm btn-outline-dark ms-2" type="button" aria-label="{% trans 'Share' %}">
+              <button id="share-button" class="btn btn-sm btn-outline-light ms-2" type="button" aria-label="{% trans 'Share' %}">
                 <svg aria-hidden="true" width="1.5rem" height="1.5rem">
                   <use href="#icon-share"></use>
                 </svg>
@@ -584,9 +584,11 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
     <script>
-      function setTheme(theme) {
+      function setTheme(theme, persist = true) {
         document.documentElement.setAttribute('data-bs-theme', theme);
-        localStorage.setItem('theme', theme);
+        if (persist) {
+          localStorage.setItem('theme', theme);
+        }
         const toggle = document.getElementById('theme-toggle');
         const icon = toggle.querySelector('use');
         toggle.setAttribute('aria-label', theme === 'dark' ? '{% trans "Light Mode" %}' : '{% trans "Dark Mode" %}');
@@ -613,17 +615,17 @@
       }
 
       function toggleTheme() {
-        const current = document.documentElement.getAttribute('data-bs-theme') || 'light';
-        setTheme(current === 'light' ? 'dark' : 'light');
+        const current = document.documentElement.getAttribute('data-bs-theme') || 'dark';
+        setTheme(current === 'dark' ? 'light' : 'dark');
       }
 
       (function() {
         const saved = localStorage.getItem('theme');
         if (saved) {
           setTheme(saved);
-        } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-          setTheme('dark');
+          return;
         }
+        setTheme('dark', false);
       })();
 
       function syncDebugToolbarTheme() {
