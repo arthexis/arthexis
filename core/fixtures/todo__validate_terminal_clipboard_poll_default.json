@@ -1,0 +1,12 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate Terminal nodes enable Clipboard Poll by default",
+      "url": "admin:nodes_node_changelist",
+      "request_details": "Open the Nodes admin, create or edit a Terminal node, and confirm the Clipboard Poll feature is enabled automatically for the role without manual toggles.",
+      "done_on": null,
+      "is_deleted": false
+    }
+  }
+]

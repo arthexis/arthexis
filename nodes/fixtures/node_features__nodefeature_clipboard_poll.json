@@ -6,7 +6,11 @@
       "is_deleted": false,
       "slug": "clipboard-poll",
       "display": "Clipboard Poll",
-      "roles": []
+      "roles": [
+        [
+          "Terminal"
+        ]
+      ]
     }
   }
 ]
