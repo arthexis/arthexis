@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from functools import lru_cache
 from pathlib import Path
 from io import BytesIO
 from zipfile import ZipFile
@@ -65,9 +66,13 @@ def _fixture_path(user, instance) -> Path:
     return _data_dir(user) / filename
 
 
-def _seed_fixture_path(instance) -> Path | None:
-    label = f"{instance._meta.app_label}.{instance._meta.model_name}"
+_SEED_FIXTURE_IGNORED_FIELDS = {"is_seed_data", "is_deleted", "is_user_data"}
+
+
+@lru_cache(maxsize=1)
+def _seed_fixture_index():
     base = Path(settings.BASE_DIR)
+    index: dict[str, dict[str, object]] = {}
     for path in base.glob("**/fixtures/*.json"):
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
@@ -76,28 +81,55 @@ def _seed_fixture_path(instance) -> Path | None:
         if not isinstance(data, list) or not data:
             continue
         obj = data[0]
-        if obj.get("model") != label:
+        if not isinstance(obj, dict):
             continue
-        pk = obj.get("pk")
-        if pk is not None and pk == instance.pk:
-            return path
-        fields = obj.get("fields", {}) or {}
+        label = obj.get("model")
+        if not isinstance(label, str):
+            continue
+        fields = obj.get("fields") or {}
+        if not isinstance(fields, dict):
+            fields = {}
         comparable_fields = {
             key: value
             for key, value in fields.items()
-            if key not in {"is_seed_data", "is_deleted", "is_user_data"}
+            if key not in _SEED_FIXTURE_IGNORED_FIELDS
         }
+        pk = obj.get("pk")
+        entries = index.setdefault(label, {"pk": {}, "fields": []})
+        pk_index = entries.setdefault("pk", {})
+        field_index = entries.setdefault("fields", [])
+        if pk is not None:
+            pk_index[pk] = path
         if comparable_fields:
-            match = True
-            for field_name, value in comparable_fields.items():
-                if not hasattr(instance, field_name):
-                    match = False
-                    break
-                if getattr(instance, field_name) != value:
-                    match = False
-                    break
-            if match:
-                return path
+            field_index.append((comparable_fields, path))
+    return index
+
+
+def _seed_fixture_path(instance, *, index=None) -> Path | None:
+    label = f"{instance._meta.app_label}.{instance._meta.model_name}"
+    fixture_index = index or _seed_fixture_index()
+    entries = fixture_index.get(label)
+    if not entries:
+        return None
+    pk = getattr(instance, "pk", None)
+    pk_index = entries.get("pk", {})
+    if pk is not None:
+        path = pk_index.get(pk)
+        if path is not None:
+            return path
+    for comparable_fields, path in entries.get("fields", []):
+        match = True
+        if not isinstance(comparable_fields, dict):
+            continue
+        for field_name, value in comparable_fields.items():
+            if not hasattr(instance, field_name):
+                match = False
+                break
+            if getattr(instance, field_name) != value:
+                match = False
+                break
+        if match:
+            return path
     return None
 
 
@@ -581,6 +613,7 @@ def _iter_entity_admin_models():
 
 def _seed_data_view(request):
     sections = []
+    fixture_index = _seed_fixture_index()
     for model, model_admin in _iter_entity_admin_models():
         objs = model.objects.filter(is_seed_data=True)
         if not objs.exists():
@@ -591,7 +624,7 @@ def _seed_data_view(request):
                 f"admin:{obj._meta.app_label}_{obj._meta.model_name}_change",
                 args=[obj.pk],
             )
-            fixture = _seed_fixture_path(obj)
+            fixture = _seed_fixture_path(obj, index=fixture_index)
             items.append({"url": url, "label": str(obj), "fixture": fixture})
         sections.append({"opts": model._meta, "items": items})
     context = admin.site.each_context(request)
