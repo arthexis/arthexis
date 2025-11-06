@@ -191,3 +191,8 @@ class SlackBotProfileAdminTests(TestCase):
         self.assertTrue(
             form.fields["bot_token"].widget.attrs.get("placeholder", "").startswith("xoxb-")
         )
+
+    def test_admin_uses_raw_id_fields_for_related_owners(self):
+        admin = SlackBotProfileAdmin(SlackBotProfile, self.site)
+
+        self.assertEqual(admin.raw_id_fields, ("node", "user", "group"))
