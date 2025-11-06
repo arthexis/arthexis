@@ -324,7 +324,9 @@ class RFIDLoginTests(TestCase):
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["username"], "alice")
+        payload = response.json()
+        self.assertEqual(payload["username"], "alice")
+        self.assertEqual(payload["redirect"], "/")
 
     def test_rfid_login_invalid(self):
         response = self.client.post(
@@ -348,6 +350,7 @@ class RFIDLoginTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json().get("redirect"), "/")
         run_args, run_kwargs = mock_run.call_args
         self.assertEqual(run_args[0], "echo ok")
         self.assertTrue(run_kwargs.get("shell"))
@@ -384,6 +387,7 @@ class RFIDLoginTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json().get("redirect"), "/")
         mock_popen.assert_called_once()
         args, kwargs = mock_popen.call_args
         self.assertEqual(args[0], "echo welcome")
@@ -409,6 +413,24 @@ class RFIDLoginTests(TestCase):
 
         self.assertEqual(response.status_code, 401)
         mock_popen.assert_not_called()
+
+    def test_rfid_login_uses_next_redirect(self):
+        response = self.client.post(
+            reverse("rfid-login"),
+            data={"rfid": "CARD123", "next": "/dashboard/"},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json().get("redirect"), "/dashboard/")
+
+    def test_rfid_login_ignores_unsafe_redirect(self):
+        response = self.client.post(
+            reverse("rfid-login"),
+            data={"rfid": "CARD123", "next": "https://example.com/"},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json().get("redirect"), "/")
 
 
 class RFIDBatchApiTests(TestCase):
@@ -441,6 +463,64 @@ class RFIDBatchApiTests(TestCase):
                 ]
             },
         )
+
+
+class UserAdminPasswordChangeTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.admin = User.objects.create_superuser(
+            username="admin", email="admin@example.com", password="adminpass"
+        )
+        self.user = User.objects.create_user(username="target", password="oldpass")
+        self.client.force_login(self.admin)
+
+    def test_change_password_form_includes_rfid_field(self):
+        tag = RFID.objects.create(rfid="CARD777")
+        EnergyAccount.objects.create(user=self.user, name="TARGET")
+        url = reverse("admin:core_user_password_change", args=[self.user.pk])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "name=\"rfid\"")
+        self.assertContains(response, str(tag.pk))
+
+    def test_change_password_form_assigns_rfid(self):
+        account = EnergyAccount.objects.create(user=self.user, name="TARGET")
+        tag = RFID.objects.create(rfid="CARD778")
+        url = reverse("admin:core_user_password_change", args=[self.user.pk])
+        response = self.client.post(
+            url,
+            {
+                "new_password1": "NewStrongPass123",
+                "new_password2": "NewStrongPass123",
+                "rfid": tag.pk,
+            },
+        )
+        self.assertRedirects(
+            response, reverse("admin:core_user_change", args=[self.user.pk])
+        )
+        account.refresh_from_db()
+        self.assertTrue(account.rfids.filter(pk=tag.pk).exists())
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("NewStrongPass123"))
+
+    def test_change_password_creates_energy_account_when_missing(self):
+        tag = RFID.objects.create(rfid="CARD779")
+        url = reverse("admin:core_user_password_change", args=[self.user.pk])
+        response = self.client.post(
+            url,
+            {
+                "new_password1": "AnotherStrongPass456",
+                "new_password2": "AnotherStrongPass456",
+                "rfid": tag.pk,
+            },
+        )
+        self.assertRedirects(
+            response, reverse("admin:core_user_change", args=[self.user.pk])
+        )
+        account = EnergyAccount.objects.get(user=self.user)
+        self.assertTrue(account.rfids.filter(pk=tag.pk).exists())
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("AnotherStrongPass456"))
 
     def test_export_rfids_color_filter(self):
         RFID.objects.create(rfid="CARD111", color=RFID.WHITE)
