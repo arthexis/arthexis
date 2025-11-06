@@ -1,0 +1,11 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate payment processor profile admin",
+      "url": "/admin/core/openpayprofile/",
+      "request_details": "Open the Payment Processor profile admin page, confirm the Default Processor selector appears with OpenPay and PayPal options, and that the OpenPay and PayPal sections display their respective help text. Create or edit a profile with only OpenPay credentials, only PayPal credentials, and both sets, ensuring the default processor is enforced and verification still succeeds for each scenario.",
+      "is_deleted": false
+    }
+  }
+]
