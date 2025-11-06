@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 from pathlib import Path
 from subprocess import CompletedProcess
 from types import SimpleNamespace
 
 import django
+import pytest
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 django.setup()
@@ -64,8 +66,8 @@ def test_check_github_updates_handles_mode_read_error(monkeypatch, tmp_path):
 
     def fake_check_output(command, *args, **kwargs):
         if "rev-parse" in command:
-            return b"abcdef123456"
-        return b""
+            return "abcdef123456"
+        return ""
 
     monkeypatch.setattr(tasks.subprocess, "run", fake_run)
     monkeypatch.setattr(tasks.subprocess, "check_output", fake_check_output)
@@ -136,9 +138,9 @@ def test_check_github_updates_treats_latest_mode_case_insensitively(
     def fake_check_output(command, *args, **kwargs):
         if "rev-parse" in command:
             if command[-1].startswith("origin/"):
-                return b"remote-sha"
-            return b"local-sha"
-        return b""
+                return "remote-sha"
+            return "local-sha"
+        return ""
 
     monkeypatch.setattr(tasks.subprocess, "run", fake_run)
     monkeypatch.setattr(tasks.subprocess, "check_output", fake_check_output)
@@ -207,8 +209,8 @@ def test_check_github_updates_allows_stable_critical_patch(monkeypatch, tmp_path
 
     def fake_check_output(command, *args, **kwargs):
         if "rev-parse" in command:
-            return b"remote-sha"
-        return b""
+            return "remote-sha"
+        return ""
 
     monkeypatch.setattr(tasks.subprocess, "run", fake_run)
     monkeypatch.setattr(tasks.subprocess, "check_output", fake_check_output)
@@ -278,9 +280,9 @@ def test_check_github_updates_skips_latest_low_severity_patch(monkeypatch, tmp_p
     def fake_check_output(command, *args, **kwargs):
         if "rev-parse" in command:
             if command[-1].startswith("origin/"):
-                return b"remote-sha"
-            return b"local-sha"
-        return b""
+                return "remote-sha"
+            return "local-sha"
+        return ""
 
     monkeypatch.setattr(tasks.subprocess, "run", fake_run)
     monkeypatch.setattr(tasks.subprocess, "check_output", fake_check_output)
@@ -293,6 +295,202 @@ def test_check_github_updates_skips_latest_low_severity_patch(monkeypatch, tmp_p
         for message in messages
     )
     assert startup_calls == [True]
+
+
+def test_check_github_updates_network_failures_trigger_reboot(
+    monkeypatch, tmp_path
+):
+    """Repeated network failures should trigger a reboot when safe."""
+
+    from core import tasks
+
+    log_path = tmp_path / "auto-upgrade.log"
+    network_lock = tmp_path / "auto_upgrade_network_failures.lck"
+
+    def fake_log_path(_base: Path) -> Path:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        return log_path
+
+    monkeypatch.setattr(tasks, "_auto_upgrade_log_path", fake_log_path)
+    messages: list[str] = []
+    monkeypatch.setattr(tasks, "_append_auto_upgrade_log", lambda _base, message: messages.append(message))
+    monkeypatch.setattr(tasks, "_schedule_health_check", lambda *args, **kwargs: None)
+    monkeypatch.setattr(tasks, "_load_skipped_revisions", lambda base: set())
+    monkeypatch.setattr(tasks, "_resolve_release_severity", lambda version: tasks.SEVERITY_NORMAL)
+    monkeypatch.setattr(tasks, "_read_remote_version", lambda base, branch: "0.0.1")
+    monkeypatch.setattr(tasks, "_read_local_version", lambda base: "0.0.0")
+    monkeypatch.setattr(tasks, "_network_failure_lock_path", lambda _base: network_lock)
+    monkeypatch.setattr(tasks, "_charge_point_active", lambda _base: False)
+    reboot_calls: list[bool] = []
+    monkeypatch.setattr(tasks, "_trigger_auto_upgrade_reboot", lambda base: reboot_calls.append(True))
+
+    monkeypatch.setitem(
+        sys.modules,
+        "core.notifications",
+        SimpleNamespace(notify=lambda *args, **kwargs: None),
+    )
+
+    import nodes.apps as nodes_apps
+
+    monkeypatch.setattr(nodes_apps, "_startup_notification", lambda: None)
+
+    def fake_run(command, *args, **kwargs):
+        if command[:2] == ["git", "fetch"]:
+            raise subprocess.CalledProcessError(
+                1,
+                command,
+                None,
+                "fatal: unable to access 'https://example.com': Could not resolve host: example.com",
+            )
+        return CompletedProcess(command, 0)
+
+    def fake_check_output(*args, **kwargs):  # pragma: no cover - should not run
+        raise AssertionError("check_output should not run when fetch fails")
+
+    monkeypatch.setattr(tasks.subprocess, "run", fake_run)
+    monkeypatch.setattr(tasks.subprocess, "check_output", fake_check_output)
+
+    for _ in range(tasks.AUTO_UPGRADE_NETWORK_FAILURE_THRESHOLD):
+        with pytest.raises(subprocess.CalledProcessError):
+            tasks.check_github_updates()
+
+    assert network_lock.read_text(encoding="utf-8") == str(
+        tasks.AUTO_UPGRADE_NETWORK_FAILURE_THRESHOLD
+    )
+    assert reboot_calls == [True]
+    assert any("Rebooting due to repeated auto-upgrade network failures" in msg for msg in messages)
+
+
+def test_check_github_updates_skips_reboot_when_charge_point_active(
+    monkeypatch, tmp_path
+):
+    """An active charge point should prevent automatic reboots."""
+
+    from core import tasks
+
+    log_path = tmp_path / "auto-upgrade.log"
+    network_lock = tmp_path / "auto_upgrade_network_failures.lck"
+    monkeypatch.setattr(tasks, "_auto_upgrade_log_path", lambda _base: log_path)
+    messages: list[str] = []
+    monkeypatch.setattr(tasks, "_append_auto_upgrade_log", lambda _base, message: messages.append(message))
+    monkeypatch.setattr(tasks, "_schedule_health_check", lambda *args, **kwargs: None)
+    monkeypatch.setattr(tasks, "_load_skipped_revisions", lambda base: set())
+    monkeypatch.setattr(tasks, "_resolve_release_severity", lambda version: tasks.SEVERITY_NORMAL)
+    monkeypatch.setattr(tasks, "_read_remote_version", lambda base, branch: "0.0.1")
+    monkeypatch.setattr(tasks, "_read_local_version", lambda base: "0.0.0")
+    monkeypatch.setattr(tasks, "_network_failure_lock_path", lambda _base: network_lock)
+    monkeypatch.setitem(
+        sys.modules,
+        "core.notifications",
+        SimpleNamespace(notify=lambda *args, **kwargs: None),
+    )
+
+    import nodes.apps as nodes_apps
+
+    monkeypatch.setattr(nodes_apps, "_startup_notification", lambda: None)
+
+    monkeypatch.setattr(tasks, "_charge_point_active", lambda _base: True)
+    reboot_calls: list[bool] = []
+    monkeypatch.setattr(tasks, "_trigger_auto_upgrade_reboot", lambda base: reboot_calls.append(True))
+
+    def fake_run(command, *args, **kwargs):
+        if command[:2] == ["git", "fetch"]:
+            raise subprocess.CalledProcessError(
+                1,
+                command,
+                None,
+                "fatal: unable to access 'https://example.com': Could not resolve host: example.com",
+            )
+        return CompletedProcess(command, 0)
+
+    def fake_check_output(*args, **kwargs):  # pragma: no cover - should not run
+        raise AssertionError("check_output should not run when fetch fails")
+
+    monkeypatch.setattr(tasks.subprocess, "run", fake_run)
+    monkeypatch.setattr(tasks.subprocess, "check_output", fake_check_output)
+
+    for _ in range(tasks.AUTO_UPGRADE_NETWORK_FAILURE_THRESHOLD):
+        with pytest.raises(subprocess.CalledProcessError):
+            tasks.check_github_updates()
+
+    assert reboot_calls == []
+    assert network_lock.read_text(encoding="utf-8") == str(
+        tasks.AUTO_UPGRADE_NETWORK_FAILURE_THRESHOLD
+    )
+    assert any("Skipping reboot" in message for message in messages)
+
+
+def test_check_github_updates_resets_network_failures_after_success(
+    monkeypatch, tmp_path
+):
+    """Successful runs should clear the network failure lockfile."""
+
+    from core import tasks
+
+    log_path = tmp_path / "auto-upgrade.log"
+    network_lock = tmp_path / "auto_upgrade_network_failures.lck"
+
+    def fake_log_path(_base: Path) -> Path:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        return log_path
+
+    monkeypatch.setattr(tasks, "_auto_upgrade_log_path", fake_log_path)
+    messages: list[str] = []
+    monkeypatch.setattr(tasks, "_append_auto_upgrade_log", lambda _base, message: messages.append(message))
+    monkeypatch.setattr(tasks, "_schedule_health_check", lambda *args, **kwargs: None)
+    monkeypatch.setattr(tasks, "_load_skipped_revisions", lambda base: set())
+    monkeypatch.setattr(tasks, "_resolve_release_severity", lambda version: tasks.SEVERITY_NORMAL)
+    monkeypatch.setattr(tasks, "_read_remote_version", lambda base, branch: "0.0.1")
+    monkeypatch.setattr(tasks, "_read_local_version", lambda base: "0.0.0")
+    monkeypatch.setattr(tasks, "_network_failure_lock_path", lambda _base: network_lock)
+    monkeypatch.setattr(tasks, "_charge_point_active", lambda _base: False)
+    monkeypatch.setattr(tasks, "_trigger_auto_upgrade_reboot", lambda base: None)
+
+    monkeypatch.setitem(
+        sys.modules,
+        "core.notifications",
+        SimpleNamespace(notify=lambda *args, **kwargs: None),
+    )
+
+    import nodes.apps as nodes_apps
+
+    monkeypatch.setattr(nodes_apps, "_startup_notification", lambda: None)
+
+    fetch_attempts = {"count": 0}
+
+    def fake_run(command, *args, **kwargs):
+        if command[:2] == ["git", "fetch"]:
+            fetch_attempts["count"] += 1
+            if fetch_attempts["count"] == 1:
+                raise subprocess.CalledProcessError(
+                    1,
+                    command,
+                    None,
+                    "fatal: unable to access 'https://example.com': Could not resolve host: example.com",
+                )
+            return CompletedProcess(command, 0)
+        return CompletedProcess(command, 0)
+
+    def fake_check_output(command, *args, **kwargs):
+        if "rev-parse" in command:
+            if command[-1].startswith("origin/"):
+                return "remote-sha"
+            return "local-sha"
+        return ""
+
+    monkeypatch.setattr(tasks.subprocess, "run", fake_run)
+    monkeypatch.setattr(tasks.subprocess, "check_output", fake_check_output)
+
+    with pytest.raises(subprocess.CalledProcessError):
+        tasks.check_github_updates()
+
+    assert network_lock.read_text(encoding="utf-8") == "1"
+
+    # Ensure subsequent run succeeds and clears the counter
+    tasks.check_github_updates()
+
+    assert not network_lock.exists()
+    assert any("Auto-upgrade network failure 1" in message for message in messages)
 
 
 def test_resolve_service_url_handles_case_insensitive_mode(tmp_path):
