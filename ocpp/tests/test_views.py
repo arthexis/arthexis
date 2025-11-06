@@ -7,11 +7,15 @@ import django
 
 django.setup()
 
+from datetime import timedelta
+from decimal import Decimal
+
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.shortcuts import resolve_url
 from django.http import HttpResponse
 from django.test import Client, RequestFactory, TestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.utils.text import slugify
 from django.utils import timezone
@@ -19,6 +23,7 @@ from django.utils.translation import gettext
 from urllib.parse import quote
 from unittest.mock import patch
 
+from django.db import connection
 from nodes.models import Node, NodeRole
 from ocpp import store
 from ocpp.models import Charger, Transaction, RFID
@@ -188,6 +193,81 @@ class ChargerStatusRFIDTests(TestCase):
         self.assertInHTML(
             f"<li>{label_text}: DEADBEEF</li>", response.content.decode()
         )
+
+
+class ChargerStatusQueryTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.user = get_user_model().objects.create_user(
+            username="series-user",
+            email="series@example.com",
+            password="test-password",
+        )
+        self.charger = Charger.objects.create(
+            charger_id="QUERY-TEST",
+            connector_id=1,
+            public_display=True,
+        )
+        self.charger.owner_users.add(self.user)
+        self.client.force_login(self.user)
+
+    def _create_transaction(self, *, start_offset_minutes: int) -> Transaction:
+        start_time = timezone.now() - timedelta(minutes=start_offset_minutes)
+        tx = Transaction.objects.create(
+            charger=self.charger,
+            start_time=start_time,
+            meter_start=0,
+        )
+        for index in range(3):
+            tx.meter_values.create(
+                charger=self.charger,
+                timestamp=start_time + timedelta(minutes=index * 5),
+                energy=Decimal("1.0") + Decimal(index) / Decimal("10"),
+            )
+        return tx
+
+    def test_meter_value_prefetch_keeps_query_count_constant(self):
+        primary_tx = self._create_transaction(start_offset_minutes=60)
+        path = reverse(
+            "charger-status-connector",
+            args=[self.charger.charger_id, self.charger.connector_slug],
+        )
+
+        with CaptureQueriesContext(connection) as initial_queries:
+            response = self.client.get(path, {"session": primary_tx.pk})
+        self.assertEqual(response.status_code, 200)
+        initial_count = len(initial_queries.captured_queries)
+        initial_meter_queries = [
+            query
+            for query in initial_queries.captured_queries
+            if "ocpp_metervalue" in query.get("sql", "").lower()
+        ]
+        initial_helper_queries = [
+            query
+            for query in initial_meter_queries
+            if f'transaction_id" = {primary_tx.pk}' in query.get("sql", "")
+        ]
+
+        self._create_transaction(start_offset_minutes=30)
+
+        with CaptureQueriesContext(connection) as followup_queries:
+            response = self.client.get(path, {"session": primary_tx.pk})
+        self.assertEqual(response.status_code, 200)
+
+        followup_meter_queries = [
+            query
+            for query in followup_queries.captured_queries
+            if "ocpp_metervalue" in query.get("sql", "").lower()
+        ]
+        followup_helper_queries = [
+            query
+            for query in followup_meter_queries
+            if f'transaction_id" = {primary_tx.pk}' in query.get("sql", "")
+        ]
+
+        self.assertEqual(len(followup_helper_queries), len(initial_helper_queries))
+        self.assertLessEqual(len(followup_meter_queries), len(initial_meter_queries) + 2)
+        self.assertLessEqual(len(followup_queries.captured_queries), initial_count + 10)
 
 
 class ChargerLogViewTests(TestCase):

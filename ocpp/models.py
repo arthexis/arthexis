@@ -897,9 +897,13 @@ class Transaction(Entity):
         if self.meter_stop is not None:
             end_val = float(self.meter_stop) / 1000.0
 
-        readings = list(
-            self.meter_values.filter(energy__isnull=False).order_by("timestamp")
-        )
+        prefetched = getattr(self, "prefetched_meter_values", None)
+        if prefetched is None:
+            readings = list(
+                self.meter_values.filter(energy__isnull=False).order_by("timestamp")
+            )
+        else:
+            readings = list(prefetched)
         if readings:
             if start_val is None:
                 start_val = float(readings[0].energy or 0)

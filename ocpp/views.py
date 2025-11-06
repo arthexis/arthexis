@@ -17,6 +17,7 @@ from django.urls import NoReverseMatch, reverse
 from django.conf import settings
 from django.utils import translation, timezone, formats
 from django.core.exceptions import ValidationError
+from django.db.models import Prefetch
 
 from asgiref.sync import async_to_sync
 
@@ -36,6 +37,7 @@ from .models import (
     DataTransferMessage,
     RFID,
     CPFirmwareDeployment,
+    MeterValue,
 )
 from .evcs import (
     _start_simulator,
@@ -1394,19 +1396,29 @@ def charger_status(request, cid, connector=None):
             else (sessions if sessions else None)
         ),
     )
+    meter_value_prefetch = Prefetch(
+        "meter_values",
+        queryset=MeterValue.objects.filter(energy__isnull=False).order_by(
+            "timestamp"
+        ),
+        to_attr="prefetched_meter_values",
+    )
     if charger.connector_id is None:
         transactions_qs = (
             Transaction.objects.filter(charger__charger_id=cid)
             .select_related("charger")
+            .prefetch_related(meter_value_prefetch)
             .order_by("-start_time")
         )
     else:
-        transactions_qs = Transaction.objects.filter(charger=charger).order_by(
-            "-start_time"
+        transactions_qs = (
+            Transaction.objects.filter(charger=charger)
+            .prefetch_related(meter_value_prefetch)
+            .order_by("-start_time")
         )
     paginator = Paginator(transactions_qs, 10)
     page_obj = paginator.get_page(request.GET.get("page"))
-    transactions = page_obj.object_list
+    transactions = list(page_obj.object_list)
     date_view = request.GET.get("dates", "charger").lower()
     if date_view not in {"charger", "received"}:
         date_view = "charger"
@@ -1443,9 +1455,13 @@ def charger_status(request, cid, connector=None):
 
     def _series_from_transaction(tx):
         points: list[tuple[str, float]] = []
-        readings = list(
-            tx.meter_values.filter(energy__isnull=False).order_by("timestamp")
-        )
+        prefetched = getattr(tx, "prefetched_meter_values", None)
+        if prefetched is None:
+            readings = list(
+                tx.meter_values.filter(energy__isnull=False).order_by("timestamp")
+            )
+        else:
+            readings = list(prefetched)
         start_val = None
         if tx.meter_start is not None:
             start_val = float(tx.meter_start) / 1000.0
@@ -1461,6 +1477,18 @@ def charger_status(request, cid, connector=None):
         return points
 
     if tx_obj and (charger.connector_id is not None or past_session):
+        if (
+            getattr(tx_obj, "prefetched_meter_values", None) is None
+            and transactions
+        ):
+            for candidate in transactions:
+                if candidate.pk == tx_obj.pk:
+                    prefetched_values = getattr(
+                        candidate, "prefetched_meter_values", None
+                    )
+                    if prefetched_values is not None:
+                        tx_obj.prefetched_meter_values = prefetched_values
+                    break
         series_points = _series_from_transaction(tx_obj)
         if series_points:
             chart_data["labels"] = [ts for ts, _ in series_points]
