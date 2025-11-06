@@ -522,6 +522,46 @@ class UserAdminPasswordChangeTests(TestCase):
         self.user.refresh_from_db()
         self.assertTrue(self.user.check_password("AnotherStrongPass456"))
 
+
+class AdminSitePasswordChangeTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.admin = User.objects.create_superuser(
+            username="admin", email="admin@example.com", password="adminpass"
+        )
+        self.client.force_login(self.admin)
+
+    def test_admin_password_change_form_includes_rfid_field(self):
+        tag = RFID.objects.create(rfid="CARD880")
+        response = self.client.get(reverse("admin:password_change"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "name=\"rfid\"")
+        self.assertContains(response, str(tag.pk))
+
+    def test_admin_password_change_assigns_rfid(self):
+        other_user = User.objects.create_user(username="other", password="pass12345")
+        other_account = EnergyAccount.objects.create(user=other_user, name="OTHER")
+        tag = RFID.objects.create(rfid="CARD881")
+        other_account.rfids.add(tag)
+        response = self.client.post(
+            reverse("admin:password_change"),
+            {
+                "old_password": "adminpass",
+                "new_password1": "UltraSecurePass123",
+                "new_password2": "UltraSecurePass123",
+                "password1": "UltraSecurePass123",
+                "password2": "UltraSecurePass123",
+                "rfid": tag.pk,
+            },
+        )
+        self.assertRedirects(response, reverse("admin:password_change_done"))
+        self.admin.refresh_from_db()
+        self.assertTrue(self.admin.check_password("UltraSecurePass123"))
+        account = EnergyAccount.objects.get(user=self.admin)
+        self.assertTrue(account.rfids.filter(pk=tag.pk).exists())
+        other_account.refresh_from_db()
+        self.assertFalse(other_account.rfids.filter(pk=tag.pk).exists())
+
     def test_export_rfids_color_filter(self):
         RFID.objects.create(rfid="CARD111", color=RFID.WHITE)
         response = self.client.get(reverse("rfid-batch"), {"color": "W"})
