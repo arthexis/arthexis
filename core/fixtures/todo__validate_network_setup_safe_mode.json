@@ -1,0 +1,12 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate network-setup safe mode skip behavior",
+      "url": "",
+      "request_details": "Run network-setup.sh without --unsafe to confirm that wlan0, wlan1, eth0, and routing steps report safe-mode skips referencing the --unsafe flag. Then rerun with --unsafe to ensure those steps execute and log the resulting changes.",
+      "done_on": null,
+      "is_deleted": false
+    }
+  }
+]

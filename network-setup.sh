@@ -877,6 +877,10 @@ if [[ $DHCP_RESET == true ]]; then
         echo "This script must be run as root" >&2
         exit 1
     fi
+    if [[ $UNSAFE == false ]]; then
+        echo "Error: --dhcp-reset requires --unsafe to modify network connections." >&2
+        exit 1
+    fi
     perform_dhcp_reset
 fi
 
@@ -1041,6 +1045,17 @@ ask_step() {
         fi
     else
         eval "$var=true"
+    fi
+}
+
+# Informational helper for safe-mode skips
+skip_network_step() {
+    local desc="$1"
+    local detail="${2:-}"
+    if [[ -n "$detail" ]]; then
+        echo "Skipping $desc while running in safe mode to preserve $detail. Re-run with --unsafe to allow this step."
+    else
+        echo "Skipping $desc while running in safe mode. Re-run with --unsafe to allow this step."
     fi
 }
 
@@ -1474,14 +1489,27 @@ if [[ $RUN_SERVICES == true ]]; then
 fi
 
 if [[ $RUN_SYSTEMD_NETWORKD == true ]]; then
-    normalize_systemd_networkd_default_route "$NETWORKD_DEFAULT_IFACE"
+    if [[ $UNSAFE == false ]]; then
+        skip_reason=""
+        if [[ -n "$PROTECTED_CONN" && -n "$PROTECTED_DEV" ]]; then
+            skip_reason="connection '$PROTECTED_CONN' on $PROTECTED_DEV"
+        fi
+        skip_network_step "systemd-networkd default route normalization for $NETWORKD_DEFAULT_IFACE" "$skip_reason"
+        unset skip_reason
+    else
+        normalize_systemd_networkd_default_route "$NETWORKD_DEFAULT_IFACE"
+    fi
 fi
 
 if [[ $RUN_AP == true ]]; then
-    if ! nmcli -t -f DEVICE device status | grep -Fxq "wlan0"; then
+    if [[ $UNSAFE == false ]]; then
+        if [[ "$PROTECTED_DEV" == "wlan0" && -n "$PROTECTED_CONN" ]]; then
+            skip_network_step "wlan0 access point configuration" "connection '$PROTECTED_CONN' on wlan0"
+        else
+            skip_network_step "wlan0 access point configuration"
+        fi
+    elif ! nmcli -t -f DEVICE device status | grep -Fxq "wlan0"; then
         echo "Warning: device wlan0 not found; skipping access point configuration." >&2
-    elif [[ $UNSAFE == false && "$PROTECTED_DEV" == "wlan0" ]]; then
-        echo "Skipping wlan0 access point configuration to preserve '$PROTECTED_CONN'."
     else
         nmcli -t -f NAME,DEVICE connection show | awk -F: -v ap="$AP_NAME" -v hl="$HYPERLINE_NAME" -v protect="$PROTECTED_CONN" '$2=="wlan0" && $1!=ap && $1!=hl && $1!=protect {print $1}' | while read -r con; do
             nmcli connection delete "$con"
@@ -1541,7 +1569,13 @@ if [[ $RUN_AP == true ]]; then
 fi
 
 if [[ $RUN_WLAN1_REFRESH == true ]]; then
-    if ! nmcli -t -f DEVICE device status | grep -Fxq "wlan1"; then
+    if [[ $UNSAFE == false ]]; then
+        if [[ "$PROTECTED_DEV" == "wlan1" && -n "$PROTECTED_CONN" ]]; then
+            skip_network_step "wlan1 refresh service installation" "connection '$PROTECTED_CONN' on wlan1"
+        else
+            skip_network_step "wlan1 refresh service installation"
+        fi
+    elif ! nmcli -t -f DEVICE device status | grep -Fxq "wlan1"; then
         echo "Warning: device wlan1 not found; skipping wlan1 refresh service." >&2
     else
         WLAN1_REFRESH_SCRIPT="$BASE_DIR/scripts/wlan1-refresh.sh"
@@ -1638,8 +1672,12 @@ if [[ $RUN_FIREWALL == true ]]; then
 fi
 
 if [[ $RUN_REINSTALL_WLAN1 == true ]]; then
-    if [[ $UNSAFE == false && "$PROTECTED_DEV" == "wlan1" ]]; then
-        echo "Skipping wlan1 connection reinstall to preserve '$PROTECTED_CONN'."
+    if [[ $UNSAFE == false ]]; then
+        if [[ "$PROTECTED_DEV" == "wlan1" && -n "$PROTECTED_CONN" ]]; then
+            skip_network_step "wlan1 connection reinstall" "connection '$PROTECTED_CONN' on wlan1"
+        else
+            skip_network_step "wlan1 connection reinstall"
+        fi
     elif nmcli -t -f DEVICE device status | grep -Fxq "wlan1"; then
         declare -A SEEN_SLUGS=()
         nmcli device disconnect wlan1 || true
@@ -1683,85 +1721,88 @@ if [[ $RUN_REINSTALL_WLAN1 == true ]]; then
 fi
 
 if [[ $RUN_CONFIGURE_NET == true ]]; then
-    if [[ $UNSAFE == false && "$PROTECTED_DEV" == "eth0" ]]; then
-        echo "Skipping eth0 reconfiguration to preserve '$PROTECTED_CONN'."
-    elif ! nmcli -t -f DEVICE device status | grep -Fxq "eth0"; then
-        echo "Warning: device eth0 not found; skipping eth0 configuration." >&2
+    if [[ $UNSAFE == false ]]; then
+        if [[ -n "$PROTECTED_CONN" && -n "$PROTECTED_DEV" ]]; then
+            skip_network_step "NetworkManager connection reconfiguration" "connection '$PROTECTED_CONN' on $PROTECTED_DEV"
+        else
+            skip_network_step "NetworkManager connection reconfiguration"
+        fi
     else
-        nmcli device disconnect eth0 >/dev/null 2>&1 || true
-        target_conn="$ETH0_CONNECTION_NAME"
-        nmcli -t -f NAME,DEVICE connection show | awk -F: -v protect="$PROTECTED_CONN" -v target="$target_conn" '$2=="eth0" && $1!=protect && $1!=target {print $1}' |
-            while read -r con; do
+        if ! nmcli -t -f DEVICE device status | grep -Fxq "eth0"; then
+            echo "Warning: device eth0 not found; skipping eth0 configuration." >&2
+        else
+            nmcli device disconnect eth0 >/dev/null 2>&1 || true
+            target_conn="$ETH0_CONNECTION_NAME"
+            nmcli -t -f NAME,DEVICE connection show | awk -F: -v protect="$PROTECTED_CONN" -v target="$target_conn" '$2=="eth0" && $1!=protect && $1!=target {print $1}' |
+                while read -r con; do
+                    nmcli connection delete "$con"
+                done
+            eth0_ip=""
+            if [[ "$ETH0_MODE_EFFECTIVE" == "client" ]]; then
+                if nmcli -t -f NAME connection show | grep -Fxq "$ETH0_CONNECTION_CLIENT"; then
+                    nmcli connection modify "$ETH0_CONNECTION_CLIENT" \
+                        connection.interface-name eth0 \
+                        ipv4.method auto \
+                        ipv4.never-default no \
+                        ipv4.route-metric 100 \
+                        ipv6.method auto \
+                        ipv6.never-default no \
+                        connection.autoconnect yes \
+                        connection.autoconnect-priority 0
+                else
+                    nmcli connection add type ethernet ifname eth0 con-name "$ETH0_CONNECTION_CLIENT" autoconnect yes \
+                        ipv4.method auto ipv4.never-default no ipv4.route-metric 100 \
+                        ipv6.method auto ipv6.never-default no \
+                        connection.autoconnect-priority 0
+                fi
+            else
+                eth0_ip="${ETH0_SUBNET_BASE}.10/${ETH0_PREFIX}"
+                ETH0_SUBNET_SUFFIX="${ETH0_SUBNET_BASE##*.}"
+                if [[ -z "$ETH0_SUBNET_SUFFIX" || "$ETH0_SUBNET_SUFFIX" == "$ETH0_SUBNET_BASE" ]]; then
+                    ETH0_SUBNET_SUFFIX="$DEFAULT_ETH0_SUBNET_SUFFIX"
+                elif [[ ! "$ETH0_SUBNET_SUFFIX" =~ ^[0-9]+$ ]]; then
+                    ETH0_SUBNET_SUFFIX="$DEFAULT_ETH0_SUBNET_SUFFIX"
+                fi
+                printf -v ETH0_IPV6_SEGMENT "%02x" "$ETH0_SUBNET_SUFFIX"
+                ETH0_IPV6_ADDRESS="fd42:${ETH0_IPV6_SEGMENT}::1/64"
+                if nmcli -t -f NAME connection show | grep -Fxq "$ETH0_CONNECTION_SHARED"; then
+                    nmcli connection modify "$ETH0_CONNECTION_SHARED" \
+                        connection.interface-name eth0 \
+                        ipv4.method shared \
+                        ipv4.addresses "$eth0_ip" \
+                        ipv4.never-default yes \
+                        ipv4.route-metric 10000 \
+                        ipv6.method shared \
+                        ipv6.addresses "$ETH0_IPV6_ADDRESS" \
+                        ipv6.never-default yes \
+                        connection.autoconnect yes \
+                        connection.autoconnect-priority 0
+                else
+                    nmcli connection add type ethernet ifname eth0 con-name "$ETH0_CONNECTION_SHARED" autoconnect yes \
+                        ipv4.method shared ipv4.addresses "$eth0_ip" ipv4.never-default yes \
+                        ipv4.route-metric 10000 ipv6.method shared ipv6.addresses "$ETH0_IPV6_ADDRESS" ipv6.never-default yes \
+                        connection.autoconnect-priority 0
+                fi
+            fi
+            nmcli connection up "$target_conn" >/dev/null 2>&1 || true
+            if [[ "$ETH0_MODE_EFFECTIVE" != "client" && $WLAN1_DETECTED == true ]]; then
+                ensure_forwarding_rule eth0 wlan1
+                ensure_masquerade_rule wlan1
+            fi
+            if [[ "$ETH0_MODE_EFFECTIVE" == "client" ]]; then
+                ensure_dhcp_client_registration eth0
+                echo "Configured eth0 for DHCP client mode via NetworkManager profile '$ETH0_CONNECTION_CLIENT'."
+            else
+                echo "Configured eth0 for DHCP server mode via NetworkManager profile '$ETH0_CONNECTION_SHARED' (${eth0_ip})."
+            fi
+        fi
+
+        if ! nmcli -t -f DEVICE device status | grep -Fxq "wlan0"; then
+            echo "Warning: device wlan0 not found; skipping wlan0 configuration." >&2
+        else
+            nmcli -t -f NAME,DEVICE connection show | awk -F: -v ap="$AP_NAME" -v hl="$HYPERLINE_NAME" -v protect="$PROTECTED_CONN" '$2=="wlan0" && $1!=ap && $1!=hl && $1!=protect {print $1}' | while read -r con; do
                 nmcli connection delete "$con"
             done
-        eth0_ip=""
-        if [[ "$ETH0_MODE_EFFECTIVE" == "client" ]]; then
-            if nmcli -t -f NAME connection show | grep -Fxq "$ETH0_CONNECTION_CLIENT"; then
-                nmcli connection modify "$ETH0_CONNECTION_CLIENT" \
-                    connection.interface-name eth0 \
-                    ipv4.method auto \
-                    ipv4.never-default no \
-                    ipv4.route-metric 100 \
-                    ipv6.method auto \
-                    ipv6.never-default no \
-                    connection.autoconnect yes \
-                    connection.autoconnect-priority 0
-            else
-                nmcli connection add type ethernet ifname eth0 con-name "$ETH0_CONNECTION_CLIENT" autoconnect yes \
-                    ipv4.method auto ipv4.never-default no ipv4.route-metric 100 \
-                    ipv6.method auto ipv6.never-default no \
-                    connection.autoconnect-priority 0
-            fi
-        else
-            eth0_ip="${ETH0_SUBNET_BASE}.10/${ETH0_PREFIX}"
-            ETH0_SUBNET_SUFFIX="${ETH0_SUBNET_BASE##*.}"
-            if [[ -z "$ETH0_SUBNET_SUFFIX" || "$ETH0_SUBNET_SUFFIX" == "$ETH0_SUBNET_BASE" ]]; then
-                ETH0_SUBNET_SUFFIX="$DEFAULT_ETH0_SUBNET_SUFFIX"
-            elif [[ ! "$ETH0_SUBNET_SUFFIX" =~ ^[0-9]+$ ]]; then
-                ETH0_SUBNET_SUFFIX="$DEFAULT_ETH0_SUBNET_SUFFIX"
-            fi
-            printf -v ETH0_IPV6_SEGMENT "%02x" "$ETH0_SUBNET_SUFFIX"
-            ETH0_IPV6_ADDRESS="fd42:${ETH0_IPV6_SEGMENT}::1/64"
-            if nmcli -t -f NAME connection show | grep -Fxq "$ETH0_CONNECTION_SHARED"; then
-                nmcli connection modify "$ETH0_CONNECTION_SHARED" \
-                    connection.interface-name eth0 \
-                    ipv4.method shared \
-                    ipv4.addresses "$eth0_ip" \
-                    ipv4.never-default yes \
-                    ipv4.route-metric 10000 \
-                    ipv6.method shared \
-                    ipv6.addresses "$ETH0_IPV6_ADDRESS" \
-                    ipv6.never-default yes \
-                    connection.autoconnect yes \
-                    connection.autoconnect-priority 0
-            else
-                nmcli connection add type ethernet ifname eth0 con-name "$ETH0_CONNECTION_SHARED" autoconnect yes \
-                    ipv4.method shared ipv4.addresses "$eth0_ip" ipv4.never-default yes \
-                    ipv4.route-metric 10000 ipv6.method shared ipv6.addresses "$ETH0_IPV6_ADDRESS" ipv6.never-default yes \
-                    connection.autoconnect-priority 0
-            fi
-        fi
-        nmcli connection up "$target_conn" >/dev/null 2>&1 || true
-        if [[ "$ETH0_MODE_EFFECTIVE" != "client" && $WLAN1_DETECTED == true ]]; then
-            ensure_forwarding_rule eth0 wlan1
-            ensure_masquerade_rule wlan1
-        fi
-        if [[ "$ETH0_MODE_EFFECTIVE" == "client" ]]; then
-            ensure_dhcp_client_registration eth0
-            echo "Configured eth0 for DHCP client mode via NetworkManager profile '$ETH0_CONNECTION_CLIENT'."
-        else
-            echo "Configured eth0 for DHCP server mode via NetworkManager profile '$ETH0_CONNECTION_SHARED' (${eth0_ip})."
-        fi
-    fi
-
-    if [[ $UNSAFE == false && "$PROTECTED_DEV" == "wlan0" ]]; then
-        echo "Skipping wlan0 reconfiguration to preserve '$PROTECTED_CONN'."
-    elif ! nmcli -t -f DEVICE device status | grep -Fxq "wlan0"; then
-        echo "Warning: device wlan0 not found; skipping wlan0 configuration." >&2
-    else
-        nmcli -t -f NAME,DEVICE connection show | awk -F: -v ap="$AP_NAME" -v hl="$HYPERLINE_NAME" -v protect="$PROTECTED_CONN" '$2=="wlan0" && $1!=ap && $1!=hl && $1!=protect {print $1}' | while read -r con; do
-            nmcli connection delete "$con"
-        done
 
         if [[ $AP_HYPERLINE_BY_USER == true ]]; then
             echo "Skipping Hyperline client connection setup because access point name is '$AP_NAME'."
@@ -1799,25 +1840,20 @@ fi
 
 
 if [[ $RUN_ROUTING == true ]]; then
-    if [[ "$ETH0_MODE_EFFECTIVE" != "client" ]]; then
-        if [[ $UNSAFE == false && "$PROTECTED_DEV" == "eth0" ]]; then
-            :
+    if [[ $UNSAFE == false ]]; then
+        if [[ -n "$PROTECTED_CONN" && -n "$PROTECTED_DEV" ]]; then
+            skip_network_step "routing updates" "connection '$PROTECTED_CONN' on $PROTECTED_DEV"
         else
+            skip_network_step "routing updates"
+        fi
+    else
+        if [[ "$ETH0_MODE_EFFECTIVE" != "client" ]]; then
             ip route del default dev eth0 2>/dev/null || true
         fi
-    fi
-    if [[ $UNSAFE == false && "$PROTECTED_DEV" == "wlan0" ]]; then
-        :
-    else
         ip route del default dev wlan0 2>/dev/null || true
-    fi
 
-    DEFAULT_ROUTE_SET=false
-    if [[ "$ETH0_MODE_EFFECTIVE" == "client" ]]; then
-        if [[ $UNSAFE == false && "$PROTECTED_DEV" == "eth0" ]]; then
-            echo "Skipping default route change to preserve '$PROTECTED_CONN'."
-            DEFAULT_ROUTE_SET=true
-        else
+        DEFAULT_ROUTE_SET=false
+        if [[ "$ETH0_MODE_EFFECTIVE" == "client" ]]; then
             ETH0_GW=$(discover_gateway_address eth0 || true)
             if [[ -z "$ETH0_GW" && -n "$ETH0_DHCP_SERVER" ]]; then
                 echo "Warning: DHCP server $ETH0_DHCP_SERVER is not known to be a gateway; skipping eth0 default route." >&2
@@ -1829,41 +1865,37 @@ if [[ $RUN_ROUTING == true ]]; then
                 echo "Warning: No gateway reported for eth0; falling back to wlan0." >&2
             fi
         fi
-    fi
 
-    if [[ $DEFAULT_ROUTE_SET == false ]]; then
-        if [[ $UNSAFE == false && "$PROTECTED_DEV" == "wlan0" ]]; then
-            echo "Skipping default route change to preserve '$PROTECTED_CONN'."
-        else
+        if [[ $DEFAULT_ROUTE_SET == false ]]; then
             WLAN0_GW=$(nmcli -g IP4.GATEWAY device show wlan0 2>/dev/null | head -n1)
             if [[ -n "$WLAN0_GW" ]]; then
                 ip route replace default via "$WLAN0_GW" dev wlan0 2>/dev/null || true
             fi
         fi
-    fi
 
-    exit_code=0
-    if check_connectivity; then
-        echo "Internet connectivity confirmed."
-    else
-        if ! nmcli -t -f NAME,DEVICE connection show --active | grep -Fxq "hyperline:wlan0" && \
-           nmcli -t -f DEVICE,STATE device status | grep -E '^wlan0:(connecting|connected)' >/dev/null; then
-            sleep 10
-            if check_connectivity; then
-                echo "Internet connectivity confirmed."
+        exit_code=0
+        if check_connectivity; then
+            echo "Internet connectivity confirmed."
+        else
+            if ! nmcli -t -f NAME,DEVICE connection show --active | grep -Fxq "hyperline:wlan0" && \
+               nmcli -t -f DEVICE,STATE device status | grep -E '^wlan0:(connecting|connected)' >/dev/null; then
+                sleep 10
+                if check_connectivity; then
+                    echo "Internet connectivity confirmed."
+                else
+                    echo "No internet connectivity after configuration." >&2
+                    exit_code=1
+                fi
             else
                 echo "No internet connectivity after configuration." >&2
                 exit_code=1
             fi
-        else
-            echo "No internet connectivity after configuration." >&2
-            exit_code=1
         fi
-    fi
 
-    nmcli device status
-    if [[ $exit_code -ne 0 ]]; then
-        exit $exit_code
+        nmcli device status
+        if [[ $exit_code -ne 0 ]]; then
+            exit $exit_code
+        fi
     fi
 fi
 
