@@ -64,6 +64,7 @@ from .models import (
     Transaction,
     Charger,
     ChargerConfiguration,
+    ConfigurationKey,
     Simulator,
     MeterReading,
     Location,
@@ -72,7 +73,7 @@ from .models import (
     CPFirmware,
     CPFirmwareDeployment,
 )
-from .admin import ChargerConfigurationAdmin
+from .admin import ChargerConfigurationAdmin, ConfigurationKeyAdmin, ConfigurationKeyInline
 from .consumers import CSMSConsumer
 from .views import dispatch_action, _transaction_rfid_details, _usage_timeline
 from .status_display import STATUS_BADGE_MAP
@@ -1197,6 +1198,30 @@ class CSMSConsumerTests(TransactionTestCase):
                     "key": "AllowOfflineTxForUnknownId",
                     "value": "false",
                     "readonly": True,
+                }
+            ],
+        )
+        key_rows = await database_sync_to_async(
+            lambda: [
+                {
+                    "key": item.key,
+                    "value": item.value,
+                    "readonly": item.readonly,
+                    "has_value": item.has_value,
+                }
+                for item in ConfigurationKey.objects.filter(
+                    configuration=configuration
+                ).order_by("position", "id")
+            ]
+        )()
+        self.assertEqual(
+            key_rows,
+            [
+                {
+                    "key": "AllowOfflineTxForUnknownId",
+                    "value": "false",
+                    "readonly": True,
+                    "has_value": True,
                 }
             ],
         )
@@ -3228,6 +3253,38 @@ class ChargerConfigurationAdminUnitTests(TestCase):
         self.admin.save_model(request, configuration, form=None, change=True)
         configuration.refresh_from_db()
         self.assertIsNone(configuration.evcs_snapshot_at)
+
+    def test_configuration_key_inline_readonly_helpers(self):
+        configuration = ChargerConfiguration.objects.create(
+            charger_identifier="CFG-INLINE"
+        )
+        configuration.replace_configuration_keys(
+            [
+                {
+                    "key": "HeartbeatInterval",
+                    "value": {"interval": 300},
+                    "readonly": True,
+                    "note": "Check",
+                },
+                {"key": "AuthorizeRemoteTxRequests", "readonly": False},
+            ]
+        )
+        inline = ConfigurationKeyInline(ChargerConfiguration, self.admin.admin_site)
+        entries = list(
+            configuration.configuration_entries.order_by("position", "id")
+        )
+        self.assertEqual(len(entries), 2)
+        self.assertIn("<pre>", inline.value_display(entries[0]))
+        self.assertIn("\"note\"", inline.extra_display(entries[0]))
+        self.assertEqual(inline.value_display(entries[1]), "-")
+        self.assertEqual(inline.extra_display(entries[1]), "-")
+        request = self.request_factory.get("/admin/ocpp/chargerconfiguration/")
+        self.assertFalse(inline.has_add_permission(request, configuration))
+
+    def test_configuration_key_admin_hidden_from_index(self):
+        key_admin = ConfigurationKeyAdmin(ConfigurationKey, AdminSite())
+        perms = key_admin.get_model_perms(self.request_factory.get("/"))
+        self.assertEqual(perms, {})
 
 
 class ConfigurationTaskTests(TestCase):
