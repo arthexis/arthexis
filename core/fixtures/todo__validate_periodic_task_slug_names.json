@@ -1,0 +1,11 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate slugged Celery periodic task names",
+      "url": "/admin/django_celery_beat/periodictask/",
+      "request_details": "Confirm the periodic task changelist shows dash-separated names for existing schedules and that no duplicate entries remain after the slug migration.",
+      "is_deleted": false
+    }
+  }
+]

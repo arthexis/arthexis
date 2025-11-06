@@ -42,6 +42,7 @@ from django.core.management.color import no_style
 from urllib.parse import quote, quote_plus, urlparse
 from zoneinfo import ZoneInfo
 from utils import revision as revision_utils
+from core.celery_utils import normalize_periodic_task_name
 from typing import Any, Type
 from defusedxml import xmlrpc as defused_xmlrpc
 import requests
@@ -2879,7 +2880,8 @@ class ClientReportSchedule(Entity):
                 month_of_year="*",
             )
 
-        name = f"client_report_schedule_{self.pk}"
+        raw_name = f"client_report_schedule_{self.pk}"
+        name = normalize_periodic_task_name(PeriodicTask.objects, raw_name)
         defaults = {
             "crontab": schedule,
             "task": "core.tasks.run_client_report_schedule",

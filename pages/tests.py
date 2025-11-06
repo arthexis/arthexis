@@ -905,8 +905,11 @@ class ViewHistoryLoggingTests(TestCase):
 
     def _reset_purge_task(self):
         from django_celery_beat.models import PeriodicTask
+        from core.celery_utils import periodic_task_name_variants
 
-        PeriodicTask.objects.filter(name="pages_purge_landing_leads").delete()
+        PeriodicTask.objects.filter(
+            name__in=periodic_task_name_variants("pages_purge_landing_leads")
+        ).delete()
 
     def _create_local_node(self):
         node, _ = Node.objects.update_or_create(
@@ -1232,8 +1235,11 @@ class LandingLeadAdminTests(TestCase):
 
     def _reset_purge_task(self):
         from django_celery_beat.models import PeriodicTask
+        from core.celery_utils import periodic_task_name_variants
 
-        PeriodicTask.objects.filter(name="pages_purge_landing_leads").delete()
+        PeriodicTask.objects.filter(
+            name__in=periodic_task_name_variants("pages_purge_landing_leads")
+        ).delete()
 
     def test_changelist_warns_without_celery(self):
         url = reverse("admin:pages_landinglead_changelist")

@@ -29,6 +29,10 @@ from pathlib import Path
 from urllib.parse import urlparse, urlunsplit
 from utils import revision
 from core.notifications import notify_async
+from core.celery_utils import (
+    normalize_periodic_task_name,
+    periodic_task_name_variants,
+)
 from django.core.exceptions import ValidationError
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization, hashes
@@ -1104,10 +1108,13 @@ class Node(Entity):
     def _sync_clipboard_task(self, enabled: bool):
         from django_celery_beat.models import IntervalSchedule, PeriodicTask
 
-        task_name = f"poll_clipboard_node_{self.pk}"
+        raw_task_name = f"poll_clipboard_node_{self.pk}"
         if enabled:
             schedule, _ = IntervalSchedule.objects.get_or_create(
                 every=10, period=IntervalSchedule.SECONDS
+            )
+            task_name = normalize_periodic_task_name(
+                PeriodicTask.objects, raw_task_name
             )
             PeriodicTask.objects.update_or_create(
                 name=task_name,
@@ -1117,16 +1124,21 @@ class Node(Entity):
                 },
             )
         else:
-            PeriodicTask.objects.filter(name=task_name).delete()
+            PeriodicTask.objects.filter(
+                name__in=periodic_task_name_variants(raw_task_name)
+            ).delete()
 
     def _sync_screenshot_task(self, enabled: bool):
         from django_celery_beat.models import IntervalSchedule, PeriodicTask
         import json
 
-        task_name = f"capture_screenshot_node_{self.pk}"
+        raw_task_name = f"capture_screenshot_node_{self.pk}"
         if enabled:
             schedule, _ = IntervalSchedule.objects.get_or_create(
                 every=1, period=IntervalSchedule.MINUTES
+            )
+            task_name = normalize_periodic_task_name(
+                PeriodicTask.objects, raw_task_name
             )
             PeriodicTask.objects.update_or_create(
                 name=task_name,
@@ -1143,7 +1155,9 @@ class Node(Entity):
                 },
             )
         else:
-            PeriodicTask.objects.filter(name=task_name).delete()
+            PeriodicTask.objects.filter(
+                name__in=periodic_task_name_variants(raw_task_name)
+            ).delete()
 
     def _sync_landing_lead_task(self, enabled: bool):
         if not self.is_local:
@@ -1151,7 +1165,10 @@ class Node(Entity):
 
         from django_celery_beat.models import CrontabSchedule, PeriodicTask
 
-        task_name = "pages_purge_landing_leads"
+        raw_task_name = "pages_purge_landing_leads"
+        task_name = normalize_periodic_task_name(
+            PeriodicTask.objects, raw_task_name
+        )
         if enabled:
             schedule, _ = CrontabSchedule.objects.get_or_create(
                 minute="0",
@@ -1170,19 +1187,26 @@ class Node(Entity):
                 },
             )
         else:
-            PeriodicTask.objects.filter(name=task_name).delete()
+            PeriodicTask.objects.filter(
+                name__in=periodic_task_name_variants(raw_task_name)
+            ).delete()
 
     def _sync_ocpp_session_report_task(self, celery_enabled: bool):
         from django_celery_beat.models import CrontabSchedule, PeriodicTask
         from django.db.utils import OperationalError, ProgrammingError
 
-        task_name = "ocpp_send_daily_session_report"
+        raw_task_name = "ocpp_send_daily_session_report"
+        task_name = normalize_periodic_task_name(
+            PeriodicTask.objects, raw_task_name
+        )
 
         if not self.is_local:
             return
 
         if not celery_enabled or not mailer.can_send_email():
-            PeriodicTask.objects.filter(name=task_name).delete()
+            PeriodicTask.objects.filter(
+                name__in=periodic_task_name_variants(raw_task_name)
+            ).delete()
             return
 
         try:
@@ -1211,7 +1235,10 @@ class Node(Entity):
 
         from django_celery_beat.models import IntervalSchedule, PeriodicTask
 
-        task_name = "nodes_poll_upstream_messages"
+        raw_task_name = "nodes_poll_upstream_messages"
+        task_name = normalize_periodic_task_name(
+            PeriodicTask.objects, raw_task_name
+        )
         if celery_enabled:
             schedule, _ = IntervalSchedule.objects.get_or_create(
                 every=5, period=IntervalSchedule.MINUTES
@@ -1225,7 +1252,9 @@ class Node(Entity):
                 },
             )
         else:
-            PeriodicTask.objects.filter(name=task_name).delete()
+            PeriodicTask.objects.filter(
+                name__in=periodic_task_name_variants(raw_task_name)
+            ).delete()
 
     def send_mail(
         self,
