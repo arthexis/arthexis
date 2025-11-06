@@ -40,6 +40,19 @@ determine_node_role() {
   echo "Terminal"
 }
 
+role_uses_failover_branch() {
+  local role="$1"
+
+  case "$role" in
+    Control|Satellite|Watchtower|Constellation)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 cleanup_non_terminal_git_state() {
   local role="$1"
 
@@ -434,7 +447,11 @@ if [[ $FORCE -ne 1 ]]; then
   fi
 fi
 
-create_failover_branch
+if role_uses_failover_branch "$NODE_ROLE_NAME"; then
+  create_failover_branch
+else
+  echo "Skipping failover branch creation for $NODE_ROLE_NAME node."
+fi
 
 auto_realign_branch_for_role "$NODE_ROLE_NAME" "$BRANCH"
 

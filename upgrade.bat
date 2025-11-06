@@ -3,10 +3,33 @@ setlocal
 set "BASE_DIR=%~dp0"
 set "PIP_HELPER=%BASE_DIR%scripts\helpers\pip_install.py"
 set "BACKUP_DIR=%BASE_DIR%backups"
+set "LOCK_DIR=%BASE_DIR%locks"
+set "NODE_ROLE=Terminal"
 cd /d "%BASE_DIR%"
+
+if exist "%LOCK_DIR%\role.lck" (
+    for /f "usebackq tokens=* delims=" %%r in ("%LOCK_DIR%\role.lck") do (
+        if not "%%r"=="" (
+            set "NODE_ROLE=%%r"
+            goto role_determined
+        )
+    )
+)
+:role_determined
+if not defined NODE_ROLE set "NODE_ROLE=Terminal"
+
+set CREATE_FAILOVER=0
+for %%R in (Control Satellite Watchtower Constellation) do (
+    if /I "%NODE_ROLE%"=="%%R" set CREATE_FAILOVER=1
+)
 
 if "%1"=="--revert" goto revert
 
+if %CREATE_FAILOVER%==1 goto create_failover
+echo Skipping failover branch creation for %NODE_ROLE% node.
+goto after_failover
+
+:create_failover
 for /f %%i in ('powershell -NoProfile -Command "(Get-Date).ToString(\"yyyyMMdd\")"') do set DATE=%%i
 set COUNT=1
 :find_branch
@@ -28,6 +51,8 @@ if exist db.sqlite3 (
         echo Saved database backup to backups\failover-%DATE%-%COUNT%.sqlite3
     )
 )
+
+:after_failover
 
 git pull --rebase
 
