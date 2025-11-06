@@ -329,13 +329,15 @@ fi
 # Install nginx configuration and reload
 echo "$NGINX_MODE" > "$LOCK_DIR/nginx_mode.lck"
 echo "$NODE_ROLE" > "$LOCK_DIR/role.lck"
-NGINX_CONF="/etc/nginx/conf.d/arthexis-${NGINX_MODE}.conf"
+NGINX_CONF="/etc/nginx/sites-enabled/arthexis.conf"
 
 # Ensure nginx config directory exists
-sudo mkdir -p /etc/nginx/conf.d
+sudo mkdir -p /etc/nginx/sites-enabled
 
 # Remove existing nginx configs for arthexis* (run in root shell to expand wildcard)
-sudo sh -c 'rm -f /etc/nginx/conf.d/arthexis-*.conf'
+sudo sh -c 'rm -f /etc/nginx/sites-enabled/arthexis*.conf'
+# Clean up legacy locations when present
+sudo sh -c 'rm -f /etc/nginx/conf.d/arthexis-*.conf' || true
 
 FALLBACK_SRC_DIR="$BASE_DIR/config/data/nginx/maintenance"
 FALLBACK_DEST_DIR="/usr/share/arthexis-fallback"
@@ -346,14 +348,40 @@ fi
 
 if [ "$NGINX_MODE" = "public" ]; then
     sudo tee "$NGINX_CONF" > /dev/null <<'NGINXCONF'
-# Redirect all HTTP traffic to HTTPS
 server {
-    listen 80;
-    server_name arthexis.com *.arthexis.com;
-    return 301 https://$host$request_uri;
+    listen 0.0.0.0:80;
+    listen [::]:80;
+    listen 0.0.0.0:8000;
+    listen [::]:8000;
+    listen 0.0.0.0:8080;
+    listen [::]:8080;
+    server_name arthexis.com *.arthexis.com _;
+
+    error_page 500 502 503 504 /maintenance/index.html;
+
+    location = /maintenance/index.html {
+        root /usr/share/arthexis-fallback;
+        add_header Cache-Control "no-store";
+    }
+
+    location /maintenance/ {
+        alias /usr/share/arthexis-fallback/;
+        add_header Cache-Control "no-store";
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:PORT_PLACEHOLDER;
+        proxy_intercept_errors on;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
 }
 
-# HTTPS Server
 server {
     listen 443 ssl;
     server_name arthexis.com *.arthexis.com;
@@ -375,7 +403,6 @@ server {
     include /etc/letsencrypt/options-ssl-nginx.conf;
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
 
-    # Default proxy to web app
     location / {
         proxy_pass http://127.0.0.1:PORT_PLACEHOLDER;
         proxy_intercept_errors on;
@@ -392,8 +419,12 @@ NGINXCONF
 else
     sudo tee "$NGINX_CONF" > /dev/null <<'NGINXCONF'
 server {
-    listen 8000;
-    listen 8080;
+    listen 0.0.0.0:80;
+    listen [::]:80;
+    listen 0.0.0.0:8000;
+    listen [::]:8000;
+    listen 0.0.0.0:8080;
+    listen [::]:8080;
     server_name _;
 
     error_page 500 502 503 504 /maintenance/index.html;
@@ -423,8 +454,6 @@ server {
 NGINXCONF
 fi
 
-
-sudo sed -i "s/PORT_PLACEHOLDER/$PORT/" "$NGINX_CONF"
 
 sudo sed -i "s/PORT_PLACEHOLDER/$PORT/" "$NGINX_CONF"
 

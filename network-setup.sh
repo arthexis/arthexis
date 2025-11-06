@@ -171,7 +171,10 @@ detect_backend_port_from_nginx() {
         mode="$(tr '[:upper:]' '[:lower:]' < "$LOCK_DIR/nginx_mode.lck" 2>/dev/null || echo internal)"
         [[ -z "$mode" ]] && mode="internal"
     fi
-    local conf="/etc/nginx/conf.d/arthexis-${mode}.conf"
+    local conf="/etc/nginx/sites-enabled/arthexis.conf"
+    if [ ! -f "$conf" ]; then
+        conf="/etc/nginx/conf.d/arthexis-${mode}.conf"
+    fi
     if [ ! -f "$conf" ]; then
         return 1
     fi
@@ -228,7 +231,7 @@ detect_backend_port() {
 }
 
 collect_managed_site_ports() {
-    local sites_dir="/etc/nginx/conf.d/arthexis-sites.d"
+    local sites_dir="/etc/nginx/sites-enabled/arthexis-sites.d"
     if [ ! -d "$sites_dir" ]; then
         return 1
     fi
@@ -301,9 +304,9 @@ report_backend_port_sources() {
             [[ -n "$port" ]] && managed_ports+=("$port")
         done <<< "$managed_output"
         local joined="$(join_by ', ' "${managed_ports[@]}")"
-        echo "  managed nginx sites (/etc/nginx/conf.d/arthexis-sites.d): $joined"
+        echo "  managed nginx sites (/etc/nginx/sites-enabled/arthexis-sites.d): $joined"
     else
-        echo "  managed nginx sites (/etc/nginx/conf.d/arthexis-sites.d): none"
+        echo "  managed nginx sites (/etc/nginx/sites-enabled/arthexis-sites.d): none"
     fi
 
     local process_port
@@ -361,7 +364,7 @@ update_nginx_backend_port() {
         mode="$(tr '[:upper:]' '[:lower:]' < "$LOCK_DIR/nginx_mode.lck" 2>/dev/null || echo internal)"
         [[ -z "$mode" ]] && mode="internal"
     fi
-    configs+=("/etc/nginx/conf.d/arthexis-${mode}.conf")
+    configs+=("/etc/nginx/sites-enabled/arthexis.conf")
     configs+=("/etc/nginx/conf.d/arthexis-internal.conf")
     configs+=("/etc/nginx/conf.d/arthexis-public.conf")
 
@@ -1468,7 +1471,7 @@ apply_managed_nginx_sites() {
     local port="$requested_port"
 
     local helper="$BASE_DIR/scripts/helpers/render_nginx_sites.py"
-    local dest_dir="/etc/nginx/conf.d/arthexis-sites.d"
+    local dest_dir="/etc/nginx/sites-enabled/arthexis-sites.d"
 
     if [ ! -f "$helper" ]; then
         echo "Managed site helper not found at $helper; skipping." >&2

@@ -1,0 +1,12 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Confirm nginx sites-enabled migration",
+      "url": "",
+      "request_details": "After upgrading, inspect /etc/nginx/sites-enabled/arthexis.conf and verify it proxies ports 80, 8000, and 8080 to the suite service port (default 8888) on all interfaces, then reload nginx to ensure configuration tests succeed.",
+      "done_on": null,
+      "is_deleted": false
+    }
+  }
+]

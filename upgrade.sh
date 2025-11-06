@@ -485,6 +485,7 @@ fi
 
 if arthexis_can_manage_nginx; then
   arthexis_refresh_nginx_maintenance "$BASE_DIR" \
+    "/etc/nginx/sites-enabled/arthexis.conf" \
     "/etc/nginx/conf.d/arthexis-internal.conf" \
     "/etc/nginx/conf.d/arthexis-public.conf"
 fi
