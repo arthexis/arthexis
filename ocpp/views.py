@@ -1716,17 +1716,9 @@ def charger_log_page(request, cid, connector=None):
         limit_choice = "20"
     limit_index = allowed_values.index(limit_choice)
 
-    log_entries_all = list(store.get_logs(target_id, log_type=log_type) or [])
     download_requested = request.GET.get("download") == "1"
-    if download_requested:
-        download_content = "\n".join(log_entries_all)
-        if download_content and not download_content.endswith("\n"):
-            download_content = f"{download_content}\n"
-        response = HttpResponse(download_content, content_type="text/plain; charset=utf-8")
-        response["Content-Disposition"] = f'attachment; filename="{download_filename}"'
-        return response
 
-    log_entries = log_entries_all
+    limit_value: int | None = None
     if limit_choice != "all":
         try:
             limit_value = int(limit_choice)
@@ -1734,7 +1726,19 @@ def charger_log_page(request, cid, connector=None):
             limit_value = 20
             limit_choice = "20"
             limit_index = allowed_values.index(limit_choice)
-        log_entries = log_entries[-limit_value:]
+    log_entries: list[str]
+    if download_requested:
+        log_entries = list(store.get_logs(target_id, log_type=log_type) or [])
+        download_content = "\n".join(log_entries)
+        if download_content and not download_content.endswith("\n"):
+            download_content = f"{download_content}\n"
+        response = HttpResponse(download_content, content_type="text/plain; charset=utf-8")
+        response["Content-Disposition"] = f'attachment; filename="{download_filename}"'
+        return response
+
+    log_entries = list(
+        store.get_logs(target_id, log_type=log_type, limit=limit_value) or []
+    )
 
     download_params = request.GET.copy()
     download_params["download"] = "1"

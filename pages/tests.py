@@ -10,6 +10,7 @@ django.setup()
 from django.test import Client, RequestFactory, TestCase, SimpleTestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
+from django.shortcuts import resolve_url
 from django.templatetags.static import static
 from urllib.parse import quote
 from django.contrib.auth import get_user_model
@@ -136,7 +137,13 @@ class LoginViewTests(TestCase):
 
     def test_login_link_in_navbar(self):
         resp = self.client.get(reverse("pages:index"))
-        self.assertContains(resp, 'href="/login/"')
+        login_url = resolve_url(settings.LOGIN_URL)
+        self.assertContains(resp, f'href="{login_url}"')
+
+    @override_settings(LOGIN_URL="/staff/login/")
+    def test_login_link_uses_configured_login_url(self):
+        resp = self.client.get(reverse("pages:index"))
+        self.assertContains(resp, 'href="/staff/login/"')
 
     def test_login_page_shows_authenticator_toggle(self):
         resp = self.client.get(reverse("pages:login"))
@@ -2382,6 +2389,68 @@ class PowerNavTests(TestCase):
         icon_index = html.find("dropdown-lock-icon", energy_index, energy_index + 300)
         self.assertEqual(icon_index, -1)
 
+
+class WatchtowerLandingLinkTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.role, _ = NodeRole.objects.get_or_create(name="Watchtower")
+        Node.objects.update_or_create(
+            mac_address=Node.get_current_mac(),
+            defaults={
+                "hostname": "localhost",
+                "address": "127.0.0.1",
+                "role": self.role,
+            },
+        )
+        Site.objects.update_or_create(
+            id=1, defaults={"domain": "testserver", "name": ""}
+        )
+        self.ocpp_app, _ = Application.objects.get_or_create(name="ocpp")
+        self.ocpp_module, _ = Module.objects.get_or_create(
+            node_role=self.role,
+            application=self.ocpp_app,
+            path="/ocpp/",
+        )
+        self.ocpp_module.create_landings()
+
+    def _get_ocpp_module(self, response):
+        for module in response.context["nav_modules"]:
+            if module.path == "/ocpp/":
+                return module
+        return None
+
+    def test_ocpp_landings_present_for_anonymous_users(self):
+        response = self.client.get(reverse("pages:index"))
+        ocpp_module = self._get_ocpp_module(response)
+        self.assertIsNotNone(ocpp_module)
+        landing_by_label = {
+            landing.label: landing for landing in ocpp_module.enabled_landings
+        }
+        expected_landings = {
+            "CPMS Online Dashboard": "/ocpp/cpms/dashboard/",
+            "Charge Point Simulator": "/ocpp/evcs/simulator/",
+            "RFID Tag Validator": "/ocpp/rfid/validator/",
+        }
+        for label, path in expected_landings.items():
+            with self.subTest(label=label):
+                landing = landing_by_label.get(label)
+                self.assertIsNotNone(landing)
+                self.assertEqual(landing.path, path)
+                self.assertTrue(path.startswith("/"))
+                resolve(path)
+
+    def test_simulator_requires_login(self):
+        response = self.client.get(reverse("pages:index"))
+        ocpp_module = self._get_ocpp_module(response)
+        self.assertIsNotNone(ocpp_module)
+        locked_landings = {
+            landing.label: landing
+            for landing in ocpp_module.enabled_landings
+            if getattr(landing, "nav_is_locked", False)
+        }
+        simulator = locked_landings.get("Charge Point Simulator")
+        self.assertIsNotNone(simulator)
+        self.assertTrue(simulator.nav_is_locked)
 
 class StaffNavVisibilityTests(TestCase):
     def setUp(self):

@@ -215,19 +215,21 @@ class ChargerLogViewTests(TestCase):
         request.session = self.client.session
         return request
 
-    def _render_context(self, entries, params: dict | None = None):
+    def _render_context(self, entries, params: dict | None = None, *, ajax: bool = False):
         request = self._request(params)
-        with patch("ocpp.views.store.get_logs", return_value=entries), patch(
+        if ajax:
+            request.META["HTTP_X_REQUESTED_WITH"] = "XMLHttpRequest"
+        with patch("ocpp.views.store.get_logs", return_value=entries) as mock_logs, patch(
             "ocpp.views.render"
         ) as mock_render:
             mock_render.return_value = HttpResponse()
             charger_log_page(request, self.charger.charger_id)
         context = mock_render.call_args[0][2]
-        return context
+        return context, mock_logs
 
     def test_log_view_uses_expected_limit_options(self):
         entries = [f"line {i}" for i in range(1, 6)]
-        context = self._render_context(entries)
+        context, mock_logs = self._render_context(entries)
         self.assertEqual(
             context["log_limit_options"],
             [
@@ -245,27 +247,36 @@ class ChargerLogViewTests(TestCase):
         slug_source = slugify(expected_target) or slugify(self.charger.charger_id) or "log"
         self.assertEqual(context["log_filename"], f"charger-{slug_source}.log")
         self.assertEqual(context["log_content"], "\n".join(entries))
+        mock_logs.assert_called_once_with(expected_target, log_type="charger", limit=20)
 
     def test_log_view_applies_numeric_limit(self):
-        entries = [f"entry {i}" for i in range(1, 101)]
-        context = self._render_context(entries, params={"limit": "40"})
+        entries = [f"entry {i}" for i in range(61, 101)]
+        context, mock_logs = self._render_context(entries, params={"limit": "40"})
         rendered_entries = context["log"]
         self.assertEqual(len(rendered_entries), 40)
         self.assertEqual(rendered_entries[0], "entry 61")
         self.assertEqual(rendered_entries[-1], "entry 100")
         self.assertEqual(context["log_content"], "\n".join(rendered_entries))
+        expected_target = store.identity_key(
+            self.charger.charger_id, self.charger.connector_id
+        )
+        mock_logs.assert_called_once_with(expected_target, log_type="charger", limit=40)
 
     def test_log_view_all_limit_returns_every_entry(self):
         entries = ["first", "second", "third"]
-        context = self._render_context(entries, params={"limit": "all"})
+        context, mock_logs = self._render_context(entries, params={"limit": "all"})
         rendered_entries = context["log"]
         self.assertEqual(rendered_entries, entries)
         self.assertEqual(context["log_content"], "\n".join(entries))
+        expected_target = store.identity_key(
+            self.charger.charger_id, self.charger.connector_id
+        )
+        mock_logs.assert_called_once_with(expected_target, log_type="charger", limit=None)
 
     def test_log_view_download_streams_full_log(self):
         entries = ["download one", "download two"]
         request = self._request(params={"download": "1"})
-        with patch("ocpp.views.store.get_logs", return_value=entries):
+        with patch("ocpp.views.store.get_logs", return_value=entries) as mock_logs:
             response = charger_log_page(request, self.charger.charger_id)
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response["Content-Disposition"].startswith("attachment"))

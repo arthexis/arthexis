@@ -932,14 +932,21 @@ def get_logs(cid: str, log_type: str = "charger") -> list[str]:
         resolved, name = _resolve_log_identifier(key, log_type)
         path = _log_file_for_identifier(resolved, name, log_type)
         if path.exists() and path not in seen_paths:
-            entries.extend(path.read_text(encoding="utf-8").splitlines())
+            if max_entries is None:
+                entries.extend(path.read_text(encoding="utf-8").splitlines())
+            else:
+                with path.open("r", encoding="utf-8") as handle:
+                    for line in handle:
+                        entries.append(line.rstrip("\r\n"))
             seen_paths.add(path)
         memory_entries = _memory_logs_for_identifier(resolved, log_type)
         lower_key = resolved.lower()
         if memory_entries and lower_key not in seen_keys:
             entries.extend(memory_entries)
             seen_keys.add(lower_key)
-    return entries
+    if max_entries is None:
+        return entries_list
+    return list(entries_deque)
 
 
 def clear_log(cid: str, log_type: str = "charger") -> None:
