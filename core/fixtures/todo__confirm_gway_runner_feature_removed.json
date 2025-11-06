@@ -1,0 +1,12 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Confirm gway runner feature removal",
+      "url": "admin:nodes_nodefeature_changelist",
+      "request_details": "Open the Node Features admin page and confirm that the gway runner feature is no longer listed for activation on any nodes.",
+      "done_on": null,
+      "is_deleted": false
+    }
+  }
+]
