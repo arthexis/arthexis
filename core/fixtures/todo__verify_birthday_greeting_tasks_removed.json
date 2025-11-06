@@ -1,0 +1,12 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Verify birthday greeting tasks removed",
+      "url": "/admin/django_celery_beat/periodictask/",
+      "request_details": "Open the Celery periodic task admin and confirm there are no scheduled jobs for birthday greetings or similar notifications.",
+      "done_on": null,
+      "is_deleted": false
+    }
+  }
+]

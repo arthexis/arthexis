@@ -388,7 +388,6 @@ class User(Entity, AbstractUser):
     objects = EntityUserManager()
     all_objects = DjangoUserManager()
     """Custom user model."""
-    birthday = models.DateField(null=True, blank=True)
     data_path = models.CharField(max_length=255, blank=True)
     last_visit_ip_address = models.GenericIPAddressField(null=True, blank=True)
     operate_as = models.ForeignKey(
