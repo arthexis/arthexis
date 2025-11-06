@@ -70,3 +70,19 @@ def test_schedule_call_timeout_cancelled_on_response():
     finally:
         store.clear_pending_calls(serial)
         store.clear_log(log_key, log_type="charger")
+
+
+def test_get_logs_limit_returns_recent_entries():
+    serial = "LIMIT-TAIL"
+    log_key = _prepare_log(serial)
+    try:
+        for index in range(1, 51):
+            store.add_log(log_key, f"entry {index}", log_type="charger")
+        limited = store.get_logs(log_key, log_type="charger", limit=10)
+        assert len(limited) == 10
+        expected_suffixes = [f"entry {index}" for index in range(41, 51)]
+        assert [line.endswith(suffix) for line, suffix in zip(limited, expected_suffixes)] == [
+            True
+        ] * 10
+    finally:
+        store.clear_log(log_key, log_type="charger")
