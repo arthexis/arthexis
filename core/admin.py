@@ -1056,6 +1056,15 @@ class OpenPayProfileAdminForm(forms.ModelForm):
         required=False,
         help_text="Leave blank to keep the current secret.",
     )
+    paypal_client_secret = forms.CharField(
+        widget=forms.PasswordInput(render_value=True),
+        required=False,
+        help_text="Leave blank to keep the current secret.",
+    )
+    paypal_webhook_id = forms.CharField(
+        required=False,
+        help_text="Leave blank to keep the current webhook identifier.",
+    )
 
     class Meta:
         model = OpenPayProfile
@@ -1063,13 +1072,43 @@ class OpenPayProfileAdminForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        openpay_help = _(
+            "Provide merchant ID, public and private keys, and webhook secret from OpenPay."
+        )
+        self.fields["merchant_id"].help_text = openpay_help
+        self.fields["public_key"].help_text = _(
+            "OpenPay public key used for browser integrations."
+        )
+        self.fields["private_key"].help_text = _(
+            "OpenPay private key used for server-side requests. Leave blank to keep the current key."
+        )
+        self.fields["webhook_secret"].help_text = _(
+            "Secret used to sign OpenPay webhooks. Leave blank to keep the current secret."
+        )
+        self.fields["is_production"].help_text = _(
+            "Enable to send requests to OpenPay's live environment."
+        )
+        self.fields["default_processor"].help_text = _(
+            "Select which configured processor to try first when charging."
+        )
+        self.fields["paypal_client_id"].help_text = _(
+            "PayPal REST client ID for your application."
+        )
+        self.fields["paypal_client_secret"].help_text = _(
+            "PayPal REST client secret. Leave blank to keep the current secret."
+        )
+        self.fields["paypal_webhook_id"].help_text = _(
+            "PayPal webhook ID used to validate notifications. Leave blank to keep the current webhook identifier."
+        )
+        self.fields["paypal_is_production"].help_text = _(
+            "Enable to send requests to PayPal's live environment."
+        )
+
         if self.instance.pk:
-            for field in ("private_key", "webhook_secret"):
+            for field in ("private_key", "webhook_secret", "paypal_client_secret", "paypal_webhook_id"):
                 if field in self.fields:
                     self.fields[field].initial = ""
                     self.initial[field] = ""
-        else:
-            self.fields["private_key"].required = True
 
     def clean_private_key(self):
         key = self.cleaned_data.get("private_key")
@@ -1083,11 +1122,31 @@ class OpenPayProfileAdminForm(forms.ModelForm):
             return keep_existing("webhook_secret")
         return secret
 
+    def clean_paypal_client_secret(self):
+        secret = self.cleaned_data.get("paypal_client_secret")
+        if not secret and self.instance.pk:
+            return keep_existing("paypal_client_secret")
+        return secret
+
+    def clean_paypal_webhook_id(self):
+        identifier = self.cleaned_data.get("paypal_webhook_id")
+        if identifier == "" and self.instance.pk:
+            return keep_existing("paypal_webhook_id")
+        return identifier
+
     def _post_clean(self):
         super()._post_clean()
         _restore_sigil_values(
             self,
-            ["merchant_id", "private_key", "public_key", "webhook_secret"],
+            [
+                "merchant_id",
+                "private_key",
+                "public_key",
+                "webhook_secret",
+                "paypal_client_id",
+                "paypal_client_secret",
+                "paypal_webhook_id",
+            ],
         )
 
 
@@ -1327,17 +1386,49 @@ class OpenPayProfileInlineForm(ProfileFormMixin, OpenPayProfileAdminForm):
         if cleaned.get("DELETE") or self.errors:
             return cleaned
 
-        required = ("merchant_id", "private_key", "public_key")
-        provided = [
-            name for name in required if not self._is_empty_value(cleaned.get(name))
-        ]
-        missing = [
-            name for name in required if self._is_empty_value(cleaned.get(name))
-        ]
-        if provided and missing:
+        def _has_value(name: str) -> bool:
+            value = cleaned.get(name)
+            if isinstance(value, KeepExistingValue):
+                return bool(getattr(self.instance, name))
+            return not self._is_empty_value(value)
+
+        openpay_fields = ("merchant_id", "private_key", "public_key")
+        openpay_provided = [name for name in openpay_fields if _has_value(name)]
+        openpay_missing = [name for name in openpay_fields if not _has_value(name)]
+        if openpay_provided and openpay_missing:
             raise forms.ValidationError(
                 _(
                     "Provide merchant ID, private key, and public key to configure OpenPay."
+                )
+            )
+
+        paypal_fields = ("paypal_client_id", "paypal_client_secret")
+        paypal_provided = [name for name in paypal_fields if _has_value(name)]
+        paypal_missing = [name for name in paypal_fields if not _has_value(name)]
+        if paypal_provided and paypal_missing:
+            raise forms.ValidationError(
+                _("Provide PayPal client ID and client secret to configure PayPal.")
+            )
+
+        has_openpay = len(openpay_provided) == len(openpay_fields)
+        has_paypal = len(paypal_provided) == len(paypal_fields)
+
+        if not has_openpay and not has_paypal:
+            raise forms.ValidationError(
+                _("Provide OpenPay or PayPal credentials to configure a payment processor.")
+            )
+
+        default_processor = cleaned.get("default_processor") or OpenPayProfile.PROCESSOR_OPENPAY
+        if default_processor == OpenPayProfile.PROCESSOR_OPENPAY and not has_openpay:
+            raise forms.ValidationError(
+                _(
+                    "OpenPay must be fully configured or select PayPal as the default processor."
+                )
+            )
+        if default_processor == OpenPayProfile.PROCESSOR_PAYPAL and not has_paypal:
+            raise forms.ValidationError(
+                _(
+                    "PayPal must be fully configured or select OpenPay as the default processor."
                 )
             )
         return cleaned
@@ -1912,15 +2003,47 @@ class OdooProfileAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdm
 class OpenPayProfileAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdmin):
     change_form_template = "django_object_actions/change_form.html"
     form = OpenPayProfileAdminForm
-    list_display = ("owner", "merchant_id", "environment", "verified_on")
+    list_display = ("owner", "default_processor_display", "environment", "verified_on")
     readonly_fields = ("verified_on", "verification_reference")
     actions = ["verify_credentials"]
     change_actions = ["verify_credentials_action", "my_profile_action"]
     changelist_actions = ["my_profile"]
     fieldsets = (
         (_("Owner"), {"fields": ("user", "group")}),
-        (_("Gateway"), {"fields": ("merchant_id", "public_key", "is_production")}),
-        (_("Credentials"), {"fields": ("private_key", "webhook_secret")}),
+        (
+            _("Default Processor"),
+            {
+                "fields": ("default_processor",),
+                "description": _(
+                    "Choose which configured processor to contact first when processing payments."
+                ),
+            },
+        ),
+        (
+            _("OpenPay"),
+            {
+                "fields": (
+                    "merchant_id",
+                    "public_key",
+                    "private_key",
+                    "webhook_secret",
+                    "is_production",
+                ),
+                "description": _("Configure OpenPay merchant access."),
+            },
+        ),
+        (
+            _("PayPal"),
+            {
+                "fields": (
+                    "paypal_client_id",
+                    "paypal_client_secret",
+                    "paypal_webhook_id",
+                    "paypal_is_production",
+                ),
+                "description": _("Configure PayPal REST API access."),
+            },
+        ),
         (
             _("Verification"),
             {"fields": ("verified_on", "verification_reference")},
@@ -1931,12 +2054,23 @@ class OpenPayProfileAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModel
     def owner(self, obj):
         return obj.owner_display()
 
+    @admin.display(description=_("Default Processor"))
+    def default_processor_display(self, obj):
+        return obj.get_default_processor_display()
+
     @admin.display(description=_("Environment"))
     def environment(self, obj):
-        return _("Production") if obj.is_production else _("Sandbox")
+        if obj.default_processor == obj.PROCESSOR_PAYPAL:
+            return _("PayPal Production") if obj.paypal_is_production else _("PayPal Sandbox")
+        return _("OpenPay Production") if obj.is_production else _("OpenPay Sandbox")
 
     def _verify_credentials(self, request, profile):
-        owner = profile.owner_display() or profile.merchant_id
+        owner = (
+            profile.owner_display()
+            or profile.merchant_id
+            or profile.paypal_client_id
+            or _("Payment Processor")
+        )
         try:
             profile.verify()
         except ValidationError as exc:

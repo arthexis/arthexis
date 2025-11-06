@@ -755,10 +755,20 @@ class OdooProfile(Profile):
 
 
 class OpenPayProfile(Profile):
-    """Store OpenPay gateway credentials for a user or security group."""
+    """Store payment processor credentials for a user or security group."""
+
+    PROCESSOR_OPENPAY = "openpay"
+    PROCESSOR_PAYPAL = "paypal"
+    PROCESSOR_CHOICES = (
+        (PROCESSOR_OPENPAY, _("OpenPay")),
+        (PROCESSOR_PAYPAL, _("PayPal")),
+    )
 
     SANDBOX_API_URL = "https://sandbox-api.openpay.mx/v1"
     PRODUCTION_API_URL = "https://api.openpay.mx/v1"
+
+    PAYPAL_SANDBOX_API_URL = "https://api-m.sandbox.paypal.com"
+    PAYPAL_PRODUCTION_API_URL = "https://api-m.paypal.com"
 
     profile_fields = (
         "merchant_id",
@@ -766,13 +776,26 @@ class OpenPayProfile(Profile):
         "public_key",
         "is_production",
         "webhook_secret",
+        "paypal_client_id",
+        "paypal_client_secret",
+        "paypal_webhook_id",
+        "paypal_is_production",
     )
 
-    merchant_id = SigilShortAutoField(max_length=100)
-    private_key = SigilShortAutoField(max_length=255)
-    public_key = SigilShortAutoField(max_length=255)
+    default_processor = models.CharField(
+        max_length=20,
+        choices=PROCESSOR_CHOICES,
+        default=PROCESSOR_OPENPAY,
+    )
+    merchant_id = SigilShortAutoField(max_length=100, blank=True)
+    private_key = SigilShortAutoField(max_length=255, blank=True)
+    public_key = SigilShortAutoField(max_length=255, blank=True)
     is_production = models.BooleanField(default=False)
     webhook_secret = SigilShortAutoField(max_length=255, blank=True)
+    paypal_client_id = SigilShortAutoField(max_length=255, blank=True)
+    paypal_client_secret = SigilShortAutoField(max_length=255, blank=True)
+    paypal_webhook_id = SigilShortAutoField(max_length=255, blank=True)
+    paypal_is_production = models.BooleanField(default=False)
     verified_on = models.DateTimeField(null=True, blank=True)
     verification_reference = models.CharField(max_length=255, blank=True, editable=False)
 
@@ -789,6 +812,11 @@ class OpenPayProfile(Profile):
                 or old.public_key != self.public_key
                 or old.is_production != self.is_production
                 or old.webhook_secret != self.webhook_secret
+                or old.default_processor != self.default_processor
+                or old.paypal_client_id != self.paypal_client_id
+                or old.paypal_client_secret != self.paypal_client_secret
+                or old.paypal_webhook_id != self.paypal_webhook_id
+                or old.paypal_is_production != self.paypal_is_production
             ):
                 self._clear_verification()
         super().save(*args, **kwargs)
@@ -796,6 +824,8 @@ class OpenPayProfile(Profile):
     @property
     def is_verified(self):
         return self.verified_on is not None
+
+    # --- OpenPay helpers -------------------------------------------------
 
     def get_api_base_url(self) -> str:
         return self.PRODUCTION_API_URL if self.is_production else self.SANDBOX_API_URL
@@ -812,6 +842,47 @@ class OpenPayProfile(Profile):
 
     def is_sandbox(self) -> bool:
         return not self.is_production
+
+    # --- PayPal helpers --------------------------------------------------
+
+    def get_paypal_api_base_url(self) -> str:
+        return (
+            self.PAYPAL_PRODUCTION_API_URL
+            if self.paypal_is_production
+            else self.PAYPAL_SANDBOX_API_URL
+        )
+
+    def get_paypal_auth(self) -> tuple[str, str]:
+        return (self.paypal_client_id, self.paypal_client_secret)
+
+    # --- Processor utilities --------------------------------------------
+
+    def has_openpay_credentials(self) -> bool:
+        return all(
+            getattr(self, field)
+            for field in ("merchant_id", "private_key", "public_key")
+        )
+
+    def has_paypal_credentials(self) -> bool:
+        return all(
+            getattr(self, field)
+            for field in ("paypal_client_id", "paypal_client_secret")
+        )
+
+    def iter_processors(self):
+        preferred = self.default_processor or self.PROCESSOR_OPENPAY
+        ordered = [preferred]
+        other = (
+            self.PROCESSOR_PAYPAL
+            if preferred == self.PROCESSOR_OPENPAY
+            else self.PROCESSOR_OPENPAY
+        )
+        ordered.append(other)
+        for processor in ordered:
+            if processor == self.PROCESSOR_OPENPAY and self.has_openpay_credentials():
+                yield processor
+            elif processor == self.PROCESSOR_PAYPAL and self.has_paypal_credentials():
+                yield processor
 
     def sign_webhook(self, payload: bytes | str, timestamp: str | None = None) -> str:
         if not self.webhook_secret:
@@ -845,7 +916,7 @@ class OpenPayProfile(Profile):
         self._clear_verification()
         return self
 
-    def verify(self):
+    def _verify_openpay(self):
         url = self.build_api_url("charges")
         try:
             response = requests.get(
@@ -894,13 +965,62 @@ class OpenPayProfile(Profile):
         self.save(update_fields=["verification_reference", "verified_on"])
         return True
 
+    def _verify_paypal(self):
+        url = f"{self.get_paypal_api_base_url()}/v1/oauth2/token"
+        try:
+            response = requests.post(
+                url,
+                auth=self.get_paypal_auth(),
+                data={"grant_type": "client_credentials"},
+                timeout=10,
+            )
+        except requests.RequestException as exc:  # pragma: no cover - network failure
+            self._clear_verification()
+            if self.pk:
+                self.save(update_fields=["verification_reference", "verified_on"])
+            raise ValidationError(
+                _("Unable to verify PayPal credentials: %(error)s")
+                % {"error": exc}
+            ) from exc
+        if response.status_code != 200:
+            self._clear_verification()
+            if self.pk:
+                self.save(update_fields=["verification_reference", "verified_on"])
+            raise ValidationError(_("Invalid PayPal credentials"))
+        try:
+            payload = response.json() or {}
+        except ValueError:
+            payload = {}
+        scope = ""
+        if isinstance(payload, dict):
+            scope = payload.get("scope") or payload.get("access_token") or ""
+        self.verification_reference = f"PayPal: {scope}" if scope else "PayPal"
+        self.verified_on = timezone.now()
+        self.save(update_fields=["verification_reference", "verified_on"])
+        return True
+
+    def verify(self):
+        errors = []
+        for processor in self.iter_processors():
+            try:
+                if processor == self.PROCESSOR_OPENPAY:
+                    return self._verify_openpay()
+                if processor == self.PROCESSOR_PAYPAL:
+                    return self._verify_paypal()
+            except ValidationError as exc:
+                errors.append(exc)
+        if errors:
+            raise errors[-1]
+        raise ValidationError(_("No payment processors are configured."))
+
     def __str__(self):  # pragma: no cover - simple representation
         owner = self.owner_display()
-        return f"{owner} @ {self.merchant_id}" if owner else self.merchant_id
+        identifier = self.merchant_id or self.paypal_client_id or ""
+        return f"{owner} @ {identifier}" if owner and identifier else (owner or identifier)
 
     class Meta:
-        verbose_name = _("OpenPay Merchant")
-        verbose_name_plural = _("OpenPay Merchants")
+        verbose_name = _("Payment Processor")
+        verbose_name_plural = _("Payment Processors")
         constraints = [
             models.CheckConstraint(
                 check=(
