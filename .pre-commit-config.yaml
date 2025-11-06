@@ -27,4 +27,4 @@ repos:
       - id: bandit
         name: bandit
         args: ["-ll", "-iii"]
-        files: ^((app|awg|config|core|gway|nodes|ocpp|pages|projects|scripts|tests|utils)/.*\.py|(manage\.py|env-refresh\.py|vscode_manage\.py))$
+        files: ^((app|awg|config|core|nodes|ocpp|pages|projects|scripts|tests|utils)/.*\.py|(manage\.py|env-refresh\.py|vscode_manage\.py))$

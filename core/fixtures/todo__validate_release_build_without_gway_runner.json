@@ -1,0 +1,12 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate release build without GWAY runner support",
+      "url": "",
+      "request_details": "Run the package release flow on a staging node and confirm importing gway runner modules fails while the build and publish steps complete successfully.",
+      "done_on": null,
+      "is_deleted": false
+    }
+  }
+]

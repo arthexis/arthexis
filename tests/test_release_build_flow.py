@@ -1,5 +1,3 @@
-import importlib
-import runpy
 import subprocess
 import sys
 import types
@@ -29,39 +27,6 @@ def release_sandbox(tmp_path, monkeypatch):
     )
     monkeypatch.chdir(tmp_path)
     return tmp_path
-
-
-def test_gateway_package_module_exposes_release_api(tmp_path, monkeypatch):
-    module_path = (
-        Path(__file__).resolve().parents[1]
-        / "gway"
-        / "projects"
-        / "package"
-        / "package.py"
-    )
-    monkeypatch.chdir(tmp_path)
-
-    module = importlib.import_module("gway.projects.package.package")
-    release_module = importlib.import_module("core.release")
-    expected_names = [
-        "build",
-        "promote",
-        "run_tests",
-        "DEFAULT_PACKAGE",
-        "Package",
-        "Credentials",
-        "GitCredentials",
-        "RepositoryTarget",
-        "ReleaseError",
-        "TestsFailed",
-    ]
-
-    for name in expected_names:
-        assert getattr(module, name) is getattr(release_module, name)
-
-    executed = runpy.run_path(str(module_path))
-    for name in expected_names:
-        assert executed[name] is getattr(release_module, name)
 
 
 def _without_pip_installs(commands: list[list[str]]) -> list[list[str]]:
