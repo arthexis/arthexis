@@ -10,6 +10,7 @@ django.setup()
 from django.test import Client, RequestFactory, TestCase, SimpleTestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
+from django.shortcuts import resolve_url
 from django.templatetags.static import static
 from urllib.parse import quote
 from django.contrib.auth import get_user_model
@@ -136,7 +137,13 @@ class LoginViewTests(TestCase):
 
     def test_login_link_in_navbar(self):
         resp = self.client.get(reverse("pages:index"))
-        self.assertContains(resp, 'href="/login/"')
+        login_url = resolve_url(settings.LOGIN_URL)
+        self.assertContains(resp, f'href="{login_url}"')
+
+    @override_settings(LOGIN_URL="/staff/login/")
+    def test_login_link_uses_configured_login_url(self):
+        resp = self.client.get(reverse("pages:index"))
+        self.assertContains(resp, 'href="/staff/login/"')
 
     def test_login_page_shows_authenticator_toggle(self):
         resp = self.client.get(reverse("pages:login"))
