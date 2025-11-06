@@ -886,7 +886,7 @@ class EnergyAccountRFIDInline(admin.TabularInline):
     verbose_name_plural = "RFIDs"
 
 
-class UserRFIDAssignmentMixin:
+class UserRFIDAssignmentMixin(forms.Form):
     """Mixin adding RFID assignment support to password change forms."""
 
     rfid = forms.ModelChoiceField(
