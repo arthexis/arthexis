@@ -839,7 +839,13 @@ class Node(Entity):
     @property
     def is_local(self):
         """Determine if this node represents the current host."""
-        return self.mac_address == self.get_current_mac()
+        current_mac = self.get_current_mac()
+        stored_mac = (self.mac_address or "").strip()
+        if stored_mac:
+            normalized_stored = stored_mac.replace("-", ":").lower()
+            normalized_current = current_mac.replace("-", ":").lower()
+            return normalized_stored == normalized_current
+        return self.current_relation == self.Relation.SELF
 
     @classmethod
     def _generate_unique_public_endpoint(

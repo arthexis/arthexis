@@ -945,7 +945,13 @@ class CustomLoginView(LoginView):
             }
         )
         node = Node.get_local()
-        has_rfid_scanner = bool(node and node.has_feature("rfid-scanner"))
+        has_rfid_scanner = False
+        if node:
+            try:
+                node.refresh_features()
+            except Exception:
+                logger.exception("Unable to refresh node features for login page")
+            has_rfid_scanner = node.has_feature("rfid-scanner")
         context["show_rfid_login"] = has_rfid_scanner
         if has_rfid_scanner:
             context["rfid_login_url"] = reverse("pages:rfid-login")

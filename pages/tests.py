@@ -126,7 +126,7 @@ class LoginViewTests(TestCase):
     def _enable_rfid_scanner(self):
         node, _ = Node.objects.get_or_create(
             mac_address=Node.get_current_mac(),
-            defaults={"name": "Local"},
+            defaults={"hostname": "local-node"},
         )
         feature, _ = NodeFeature.objects.get_or_create(
             slug="rfid-scanner", defaults={"display": "RFID Scanner"}
@@ -215,6 +215,26 @@ class LoginViewTests(TestCase):
     def test_login_page_shows_rfid_link_when_feature_enabled(self):
         self._enable_rfid_scanner()
         resp = self.client.get(reverse("pages:login"))
+        self.assertContains(resp, reverse("pages:rfid-login"))
+
+    def test_login_page_detects_rfid_lock_without_mac_address(self):
+        Node.objects.all().delete()
+        NodeFeature.objects.get_or_create(
+            slug="rfid-scanner", defaults={"display": "RFID Scanner"}
+        )
+        with tempfile.TemporaryDirectory() as tempdir:
+            locks_dir = Path(tempdir) / "locks"
+            locks_dir.mkdir()
+            (locks_dir / "rfid.lck").touch()
+            Node.objects.create(
+                hostname="local-node",
+                base_path=tempdir,
+                current_relation=Node.Relation.SELF,
+                mac_address=None,
+            )
+
+            resp = self.client.get(reverse("pages:login"))
+
         self.assertContains(resp, reverse("pages:rfid-login"))
 
     def test_rfid_login_page_requires_feature(self):
