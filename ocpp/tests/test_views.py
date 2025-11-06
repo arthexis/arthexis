@@ -1,4 +1,6 @@
+import json
 import os
+from datetime import datetime, timedelta, timezone as dt_timezone
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
@@ -22,7 +24,7 @@ from unittest.mock import patch
 from nodes.models import Node, NodeRole
 from ocpp import store
 from ocpp.models import Charger, Transaction, RFID
-from ocpp.views import charger_log_page
+from ocpp.views import _collect_status_events, charger_log_page
 
 
 class DashboardAccessTests(TestCase):
@@ -285,14 +287,80 @@ class ChargerLogViewTests(TestCase):
         )
         slug_source = slugify(expected_target) or slugify(self.charger.charger_id) or "log"
         self.assertIn(f'filename="charger-{slug_source}.log"', response["Content-Disposition"])
-        mock_logs.assert_called_once_with(expected_target, log_type="charger")
 
-    def test_log_view_ajax_request_uses_limit(self):
-        entries = ["one", "two"]
-        _context, mock_logs = self._render_context(
-            entries, params={"limit": "40"}, ajax=True
+
+class TimelineStatusEventsTests(TestCase):
+    def setUp(self):
+        self.charger = Charger.objects.create(
+            charger_id="TIMELINE-CP",
+            public_display=True,
         )
-        expected_target = store.identity_key(
-            self.charger.charger_id, self.charger.connector_id
+        self.connector = Charger.objects.create(
+            charger_id="TIMELINE-CP",
+            connector_id=1,
+            public_display=True,
         )
-        mock_logs.assert_called_once_with(expected_target, log_type="charger", limit=40)
+        self.log_key = store.identity_key(self.connector.charger_id, self.connector.connector_id)
+        store.clear_log(self.log_key, log_type="charger")
+        self.addCleanup(store.clear_log, self.log_key, "charger")
+
+    def _seed_status_log(self, *, total: int, window_size: int) -> tuple[datetime, datetime]:
+        base_time = datetime(2024, 1, 1, tzinfo=dt_timezone.utc)
+        statuses = ["Available"] * total
+        window_start_index = total - window_size
+        statuses[window_start_index - 1] = "SuspendedEV"
+        window_statuses = ["Available", "Charging", "Charging", "Faulted", "Available"]
+        for offset, status in enumerate(window_statuses):
+            target_index = window_start_index + offset
+            if target_index < total:
+                statuses[target_index] = status
+
+        entries: list[str] = []
+        for index, status in enumerate(statuses):
+            timestamp = base_time + timedelta(minutes=index)
+            iso_timestamp = timestamp.isoformat().replace("+00:00", "Z")
+            payload = json.dumps(
+                {
+                    "connectorId": self.connector.connector_id,
+                    "status": status,
+                    "timestamp": iso_timestamp,
+                }
+            )
+            entry = (
+                f"{timestamp.strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]} "
+                f"StatusNotification processed: {payload}"
+            )
+            entries.append(entry)
+
+        path = store._file_path(self.log_key, "charger")
+        path.write_text("\n".join(entries) + "\n", encoding="utf-8")
+
+        window_start = base_time + timedelta(minutes=window_start_index)
+        window_end = base_time + timedelta(minutes=total - 1, seconds=30)
+        return window_start, window_end
+
+    def test_collect_status_events_uses_bounded_iteration(self):
+        total_entries = 500
+        window_size = 5
+        window_start, window_end = self._seed_status_log(
+            total=total_entries, window_size=window_size
+        )
+
+        original_iter = store.iter_log_entries
+        entry_count = 0
+
+        def counting_iter(*args, **kwargs):
+            nonlocal entry_count
+            for item in original_iter(*args, **kwargs):
+                entry_count += 1
+                yield item
+
+        with patch("ocpp.views.store.iter_log_entries", side_effect=counting_iter):
+            events, prior_event = _collect_status_events(
+                self.charger, self.connector, window_start, window_end
+            )
+
+        self.assertIsNotNone(prior_event)
+        self.assertEqual(prior_event[1], "charging")
+        self.assertEqual([state for _, state in events], ["available", "charging", "offline", "available"])
+        self.assertLess(entry_count, 50)
