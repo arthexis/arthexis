@@ -9,12 +9,21 @@ set -euo pipefail
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=scripts/helpers/logging.sh
 . "$BASE_DIR/scripts/helpers/logging.sh"
+# shellcheck source=scripts/helpers/ports.sh
+. "$BASE_DIR/scripts/helpers/ports.sh"
 arthexis_resolve_log_dir "$BASE_DIR" LOG_DIR || exit 1
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 exec > >(tee "$LOG_FILE") 2>&1
 cd "$BASE_DIR"
 LOCK_DIR="$BASE_DIR/locks"
 mkdir -p "$LOCK_DIR"
+
+BACKEND_PORT_DEFAULT=8888
+BACKEND_PORT_LOCK="$LOCK_DIR/backend_port.lck"
+PORT_CHANGE_REQUESTED=false
+REQUESTED_BACKEND_PORT=""
+CHECK_PORT_ONLY=false
+BACKEND_PORT="$BACKEND_PORT_DEFAULT"
 
 DEFAULT_ETH0_SUBNET_PREFIX="192.168"
 DEFAULT_ETH0_SUBNET_SUFFIX="129"
@@ -25,6 +34,8 @@ usage() {
 Usage: $0 [--password] [--ap NAME] [--no-firewall] [--unsafe] [--interactive|-i] [--vnc] [--no-vnc] [--subnet N[/P]] [--eth0-mode MODE] [--ap-set-password] [--status] [--dhcp-server] [--dhcp-client] [--dhcp-reset]
   --password      Prompt for a new WiFi password even if one is already configured.
   --ap NAME       Set the wlan0 access point name (SSID) to NAME.
+  --port PORT     Persist the backend application port across the installation.
+  --check-port    Report configured backend port values and exit.
   --no-firewall   Skip firewall port validation.
   --unsafe        Allow modification of the active internet connection.
   --interactive, -i  Collect user decisions for each step before executing.
@@ -89,6 +100,342 @@ join_by() {
             printf '%s%s' "$sep" "$item"
         fi
     done
+}
+
+is_valid_port() {
+    local value="$1"
+    if [[ "$value" =~ ^[0-9]+$ ]]; then
+        if (( value >= 1 && value <= 65535 )); then
+            return 0
+        fi
+    fi
+    return 1
+}
+
+read_backend_port_lock() {
+    if [ -f "$BACKEND_PORT_LOCK" ]; then
+        local value
+        value="$(tr -d '\r\n[:space:]' < "$BACKEND_PORT_LOCK" 2>/dev/null || true)"
+        if is_valid_port "$value"; then
+            printf '%s' "$value"
+            return 0
+        fi
+    fi
+    return 1
+}
+
+detect_backend_port_from_service() {
+    local service_name
+    if [ ! -f "$LOCK_DIR/service.lck" ]; then
+        return 1
+    fi
+    service_name="$(tr -d '\r\n' < "$LOCK_DIR/service.lck" 2>/dev/null || true)"
+    if [[ -z "$service_name" ]]; then
+        return 1
+    fi
+
+    local service_file="/etc/systemd/system/${service_name}.service"
+    local exec_line=""
+    if [ -f "$service_file" ]; then
+        exec_line="$(grep -E '^ExecStart=' "$service_file" 2>/dev/null | head -n1)"
+        if [[ -n "$exec_line" ]]; then
+            exec_line="${exec_line#ExecStart=}"
+        fi
+    fi
+
+    if [[ -z "$exec_line" ]] && command -v systemctl >/dev/null 2>&1; then
+        exec_line="$(systemctl show -p ExecStart --value "$service_name" 2>/dev/null | head -n1 || true)"
+    fi
+
+    if [[ -z "$exec_line" ]]; then
+        return 1
+    fi
+
+    local port
+    port="$(printf '%s\n' "$exec_line" | sed -n 's/.*0\\.0\\.0\\.0:\([0-9]\{2,5\}\).*/\1/p')"
+    if [[ -z "$port" ]]; then
+        port="$(printf '%s\n' "$exec_line" | sed -n 's/.*--port[= ]\([0-9]\{2,5\}\).*/\1/p')"
+    fi
+
+    if is_valid_port "$port"; then
+        printf '%s' "$port"
+        return 0
+    fi
+
+    return 1
+}
+
+detect_backend_port_from_nginx() {
+    local mode="internal"
+    if [ -f "$LOCK_DIR/nginx_mode.lck" ]; then
+        mode="$(tr '[:upper:]' '[:lower:]' < "$LOCK_DIR/nginx_mode.lck" 2>/dev/null || echo internal)"
+        [[ -z "$mode" ]] && mode="internal"
+    fi
+    local conf="/etc/nginx/conf.d/arthexis-${mode}.conf"
+    if [ ! -f "$conf" ]; then
+        return 1
+    fi
+    local port
+    port="$(sed -n 's/.*proxy_pass http:\/\/127\.0\.0\.1:\([0-9]\{2,5\}\).*/\1/p' "$conf" | head -n1)"
+    if is_valid_port "$port"; then
+        printf '%s' "$port"
+        return 0
+    fi
+    return 1
+}
+
+detect_backend_port_from_process() {
+    if ! command -v pgrep >/dev/null 2>&1; then
+        return 1
+    fi
+    local line
+    line="$(pgrep -af "manage.py runserver" 2>/dev/null | head -n1)"
+    if [[ -z "$line" ]]; then
+        return 1
+    fi
+    local port
+    port="$(printf '%s\n' "$line" | sed -n 's/.*0\\.0\\.0\\.0:\([0-9]\{2,5\}\).*/\1/p')"
+    if [[ -z "$port" ]]; then
+        port="$(printf '%s\n' "$line" | sed -n 's/.*--port[= ]\([0-9]\{2,5\}\).*/\1/p')"
+    fi
+    if is_valid_port "$port"; then
+        printf '%s' "$port"
+        return 0
+    fi
+    return 1
+}
+
+detect_backend_port() {
+    local port
+    if port="$(read_backend_port_lock 2>/dev/null)"; then
+        printf '%s' "$port"
+        return 0
+    fi
+    if port="$(detect_backend_port_from_service 2>/dev/null)"; then
+        printf '%s' "$port"
+        return 0
+    fi
+    if port="$(detect_backend_port_from_nginx 2>/dev/null)"; then
+        printf '%s' "$port"
+        return 0
+    fi
+    if port="$(detect_backend_port_from_process 2>/dev/null)"; then
+        printf '%s' "$port"
+        return 0
+    fi
+    printf '%s' "$BACKEND_PORT_DEFAULT"
+    return 0
+}
+
+collect_managed_site_ports() {
+    local sites_dir="/etc/nginx/conf.d/arthexis-sites.d"
+    if [ ! -d "$sites_dir" ]; then
+        return 1
+    fi
+    declare -A seen=()
+    local file
+    while IFS= read -r -d '' file; do
+        while IFS= read -r port; do
+            if is_valid_port "$port" && [[ -z "${seen[$port]:-}" ]]; then
+                seen[$port]=1
+                printf '%s\n' "$port"
+            fi
+        done < <(sed -n 's/.*proxy_pass http:\/\/127\.0\.0\.1:\([0-9]\{2,5\}\).*/\1/p' "$file")
+    done < <(find "$sites_dir" -maxdepth 1 -type f -name '*.conf' -print0 2>/dev/null)
+    return 0
+}
+
+report_backend_port_sources() {
+    local resolved="$1"
+
+    echo "Backend port sources:"
+
+    local lock_value=""
+    if lock_value="$(read_backend_port_lock 2>/dev/null)"; then
+        echo "  lock file ($BACKEND_PORT_LOCK): $lock_value"
+    else
+        echo "  lock file ($BACKEND_PORT_LOCK): not set"
+    fi
+
+    if [ -f "$LOCK_DIR/service.lck" ]; then
+        local service_name
+        service_name="$(tr -d '\r\n' < "$LOCK_DIR/service.lck" 2>/dev/null || true)"
+        if [[ -z "$service_name" ]]; then
+            echo "  systemd service: lock empty"
+        elif lock_value="$(detect_backend_port_from_service 2>/dev/null)"; then
+            echo "  systemd service ($service_name): $lock_value"
+        else
+            echo "  systemd service ($service_name): not detected"
+        fi
+    else
+        echo "  systemd service: not installed"
+    fi
+
+    local -a nginx_configs=(
+        "/etc/nginx/conf.d/arthexis-internal.conf"
+        "/etc/nginx/conf.d/arthexis-public.conf"
+    )
+    local found_nginx=false
+    local conf
+    for conf in "${nginx_configs[@]}"; do
+        if [ -f "$conf" ]; then
+            found_nginx=true
+            local port
+            port="$(sed -n 's/.*proxy_pass http:\/\/127\.0\.0\.1:\([0-9]\{2,5\}\).*/\1/p' "$conf" | head -n1)"
+            if is_valid_port "$port"; then
+                echo "  nginx config ($conf): $port"
+            else
+                echo "  nginx config ($conf): not detected"
+            fi
+        fi
+    done
+    if [ "$found_nginx" = false ]; then
+        echo "  nginx config: not installed"
+    fi
+
+    local managed_output
+    managed_output="$(collect_managed_site_ports 2>/dev/null || true)"
+    if [[ -n "$managed_output" ]]; then
+        local -a managed_ports=()
+        while IFS= read -r port; do
+            [[ -n "$port" ]] && managed_ports+=("$port")
+        done <<< "$managed_output"
+        local joined="$(join_by ', ' "${managed_ports[@]}")"
+        echo "  managed nginx sites (/etc/nginx/conf.d/arthexis-sites.d): $joined"
+    else
+        echo "  managed nginx sites (/etc/nginx/conf.d/arthexis-sites.d): none"
+    fi
+
+    local process_port
+    if process_port="$(detect_backend_port_from_process 2>/dev/null)"; then
+        echo "  running process: $process_port"
+    else
+        echo "  running process: not detected"
+    fi
+
+    echo "Resolved backend port: $resolved (fallback $BACKEND_PORT_DEFAULT)"
+}
+
+update_service_backend_port() {
+    local new_port="$1"
+    if [ ! -f "$LOCK_DIR/service.lck" ]; then
+        return 1
+    fi
+    local service_name
+    service_name="$(tr -d '\r\n' < "$LOCK_DIR/service.lck" 2>/dev/null || true)"
+    if [[ -z "$service_name" ]]; then
+        return 1
+    fi
+    local service_file="/etc/systemd/system/${service_name}.service"
+    if [ ! -f "$service_file" ]; then
+        return 1
+    fi
+
+    local changed=false
+    if grep -Eq 'runserver 0\.0\.0\.0:[0-9]+' "$service_file"; then
+        sed -i -E "s/runserver 0\.0\.0\.0:[0-9]+/runserver 0.0.0.0:${new_port}/g" "$service_file"
+        changed=true
+    fi
+    if grep -Eq '--port[= ][0-9]+' "$service_file"; then
+        sed -i -E "s/--port=([0-9]+)/--port=${new_port}/g" "$service_file"
+        sed -i -E "s/--port ([0-9]+)/--port ${new_port}/g" "$service_file"
+        changed=true
+    fi
+
+    if [ "$changed" = true ]; then
+        if command -v systemctl >/dev/null 2>&1; then
+            systemctl daemon-reload >/dev/null 2>&1 || true
+        fi
+        echo "Updated systemd service '$service_name' to use port $new_port."
+        return 0
+    fi
+
+    return 1
+}
+
+update_nginx_backend_port() {
+    local new_port="$1"
+    local -a configs=()
+    local mode="internal"
+    if [ -f "$LOCK_DIR/nginx_mode.lck" ]; then
+        mode="$(tr '[:upper:]' '[:lower:]' < "$LOCK_DIR/nginx_mode.lck" 2>/dev/null || echo internal)"
+        [[ -z "$mode" ]] && mode="internal"
+    fi
+    configs+=("/etc/nginx/conf.d/arthexis-${mode}.conf")
+    configs+=("/etc/nginx/conf.d/arthexis-internal.conf")
+    configs+=("/etc/nginx/conf.d/arthexis-public.conf")
+
+    declare -A seen=()
+    local -a unique=()
+    local conf
+    for conf in "${configs[@]}"; do
+        if [ -f "$conf" ] && [[ -z "${seen[$conf]:-}" ]]; then
+            unique+=("$conf")
+            seen[$conf]=1
+        fi
+    done
+
+    local changed=false
+    for conf in "${unique[@]}"; do
+        local tmp
+        tmp="$(mktemp)"
+        sed -E "s#(proxy_pass http://127\\.0\\.0\\.1:)[0-9]+#\\1${new_port}#g" "$conf" > "$tmp"
+        if ! cmp -s "$tmp" "$conf"; then
+            cp "$tmp" "$conf"
+            echo "Updated nginx configuration '$conf' to proxy to port $new_port."
+            changed=true
+        fi
+        rm -f "$tmp"
+    done
+
+    if [ "$changed" = true ]; then
+        return 0
+    fi
+
+    return 1
+}
+
+apply_backend_port_change() {
+    local new_port="$1"
+    if ! is_valid_port "$new_port"; then
+        echo "Error: --port expects a value between 1 and 65535." >&2
+        exit 1
+    fi
+
+    local current_lock=""
+    current_lock="$(read_backend_port_lock 2>/dev/null || true)"
+    if [[ "$current_lock" != "$new_port" ]]; then
+        echo "$new_port" > "$BACKEND_PORT_LOCK"
+        chmod 644 "$BACKEND_PORT_LOCK" 2>/dev/null || true
+        echo "Persisted backend port $new_port to $BACKEND_PORT_LOCK."
+    fi
+
+    local service_changed=false
+    if update_service_backend_port "$new_port"; then
+        service_changed=true
+    fi
+
+    local nginx_changed=false
+    if update_nginx_backend_port "$new_port"; then
+        nginx_changed=true
+    fi
+
+    BACKEND_PORT="$new_port"
+    apply_managed_nginx_sites "$new_port" || true
+
+    if [ "$nginx_changed" = true ]; then
+        if command -v nginx >/dev/null 2>&1; then
+            if nginx -t >/dev/null 2>&1; then
+                systemctl reload nginx >/dev/null 2>&1 || echo "Warning: nginx reload failed" >&2
+            else
+                echo "Warning: nginx configuration test failed after updating backend port" >&2
+            fi
+        fi
+    fi
+
+    if [ "$service_changed" = true ]; then
+        echo "If the systemd service is running, restart it to apply the new port." >&2
+    fi
 }
 
 describe_device_status() {
@@ -638,6 +985,29 @@ while [[ $# -gt 0 ]]; do
             OTHER_OPTIONS_USED=true
             FORCE_PASSWORD=true
             ;;
+        --port)
+            if [[ $AP_SET_PASSWORD == true ]]; then
+                echo "Error: --ap-set-password cannot be combined with other options." >&2
+                exit 1
+            fi
+            if [[ $# -lt 2 ]]; then
+                echo "Error: --port requires a value." >&2
+                exit 1
+            fi
+            REQUESTED_BACKEND_PORT="$2"
+            PORT_CHANGE_REQUESTED=true
+            OTHER_OPTIONS_USED=true
+            shift
+            ;;
+        --port=*)
+            if [[ $AP_SET_PASSWORD == true ]]; then
+                echo "Error: --ap-set-password cannot be combined with other options." >&2
+                exit 1
+            fi
+            REQUESTED_BACKEND_PORT="${1#--port=}"
+            PORT_CHANGE_REQUESTED=true
+            OTHER_OPTIONS_USED=true
+            ;;
         --ap)
             if [[ $AP_SET_PASSWORD == true ]]; then
                 echo "Error: --ap-set-password cannot be combined with other options." >&2
@@ -824,6 +1194,13 @@ while [[ $# -gt 0 ]]; do
             fi
             DHCP_RESET=true
             ;;
+        --check-port)
+            if [[ $AP_SET_PASSWORD == true ]]; then
+                echo "Error: --ap-set-password cannot be combined with other options." >&2
+                exit 1
+            fi
+            CHECK_PORT_ONLY=true
+            ;;
         --status)
             if [[ $AP_SET_PASSWORD == true ]]; then
                 echo "Error: --ap-set-password cannot be combined with other options." >&2
@@ -859,6 +1236,17 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 
+BACKEND_PORT="$(detect_backend_port)"
+
+if [[ $CHECK_PORT_ONLY == true ]]; then
+    if [[ $AP_SET_PASSWORD == true || $PORT_CHANGE_REQUESTED == true || $OTHER_OPTIONS_USED == true || $STATUS_ONLY == true || $DHCP_RESET == true ]]; then
+        echo "Error: --check-port cannot be combined with other options." >&2
+        exit 1
+    fi
+    report_backend_port_sources "$BACKEND_PORT"
+    exit 0
+fi
+
 if [[ $STATUS_ONLY == true ]]; then
     if [[ $AP_SET_PASSWORD == true ]]; then
         echo "Error: --status cannot be combined with --ap-set-password." >&2
@@ -892,6 +1280,10 @@ fi
 if [[ $AP_SET_PASSWORD == true && $OTHER_OPTIONS_USED == true ]]; then
     echo "Error: --ap-set-password cannot be combined with other options." >&2
     exit 1
+fi
+
+if [[ $PORT_CHANGE_REQUESTED == true ]]; then
+    apply_backend_port_change "$REQUESTED_BACKEND_PORT"
 fi
 
 # Record wlan1 presence for later routing rules and provide early feedback.
@@ -1066,13 +1458,14 @@ slugify() {
 }
 
 apply_managed_nginx_sites() {
+    local requested_port="${1:-$BACKEND_PORT}"
     local config_json="$BASE_DIR/scripts/generated/nginx-sites.json"
     local mode="internal"
     if [ -f "$LOCK_DIR/nginx_mode.lck" ]; then
         mode="$(tr '[:upper:]' '[:lower:]' < "$LOCK_DIR/nginx_mode.lck")"
     fi
 
-    local port="8888"
+    local port="$requested_port"
 
     local helper="$BASE_DIR/scripts/helpers/render_nginx_sites.py"
     local dest_dir="/etc/nginx/conf.d/arthexis-sites.d"
@@ -1641,7 +2034,7 @@ if [[ $RUN_PACKAGES == true ]]; then
 fi
 
 if [[ $RUN_NGINX_SITES == true ]]; then
-    apply_managed_nginx_sites
+    apply_managed_nginx_sites "$BACKEND_PORT"
 fi
 
 if [[ $RUN_FIREWALL == true ]]; then
@@ -1651,9 +2044,9 @@ if [[ $RUN_FIREWALL == true ]]; then
         MODE="$(cat "$LOCK_DIR/nginx_mode.lck")"
     fi
     if [ "$MODE" = "public" ]; then
-        PORTS+=(80 443 8888)
+        PORTS+=(80 443 "$BACKEND_PORT")
     else
-        PORTS+=(8000 8080 8888)
+        PORTS+=(8000 8080 "$BACKEND_PORT")
     fi
 
     if command -v ufw >/dev/null 2>&1; then

@@ -8,6 +8,8 @@ BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$BASE_DIR/scripts/helpers/nginx_maintenance.sh"
 # shellcheck source=scripts/helpers/desktop_shortcuts.sh
 . "$BASE_DIR/scripts/helpers/desktop_shortcuts.sh"
+# shellcheck source=scripts/helpers/ports.sh
+. "$BASE_DIR/scripts/helpers/ports.sh"
 # shellcheck source=scripts/helpers/version_marker.sh
 . "$BASE_DIR/scripts/helpers/version_marker.sh"
 arthexis_resolve_log_dir "$BASE_DIR" LOG_DIR || exit 1
@@ -517,7 +519,7 @@ if [ -f "$LOCK_DIR/service.lck" ]; then
     if [ -f "$LOCK_DIR/nginx_mode.lck" ]; then
       MODE="$(cat "$LOCK_DIR/nginx_mode.lck")"
     fi
-    PORT=8888
+    PORT="$(arthexis_detect_backend_port "$BASE_DIR")"
     EXEC_CMD="$BASE_DIR/.venv/bin/python manage.py runserver 0.0.0.0:$PORT"
     sudo bash -c "cat > '$SERVICE_FILE'" <<SERVICEEOF
 [Unit]

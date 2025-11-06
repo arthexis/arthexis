@@ -11,6 +11,8 @@ PIP_INSTALL_HELPER="$SCRIPT_DIR/scripts/helpers/pip_install.py"
 . "$SCRIPT_DIR/scripts/helpers/desktop_shortcuts.sh"
 # shellcheck source=scripts/helpers/version_marker.sh
 . "$SCRIPT_DIR/scripts/helpers/version_marker.sh"
+# shellcheck source=scripts/helpers/ports.sh
+. "$SCRIPT_DIR/scripts/helpers/ports.sh"
 arthexis_resolve_log_dir "$SCRIPT_DIR" LOG_DIR || exit 1
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 exec > >(tee "$LOG_FILE") 2>&1
@@ -258,7 +260,7 @@ if [ "$LATEST" = true ] && [ "$STABLE" = true ]; then
 fi
 
 if [ -z "$PORT" ]; then
-    PORT=8888
+    PORT="$(arthexis_detect_backend_port "$SCRIPT_DIR")"
 fi
 
 

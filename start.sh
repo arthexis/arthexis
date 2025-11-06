@@ -4,6 +4,8 @@ set -e
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=scripts/helpers/logging.sh
 . "$BASE_DIR/scripts/helpers/logging.sh"
+# shellcheck source=scripts/helpers/ports.sh
+. "$BASE_DIR/scripts/helpers/ports.sh"
 arthexis_resolve_log_dir "$BASE_DIR" LOG_DIR || exit 1
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 exec > >(tee "$LOG_FILE") 2>&1
@@ -76,6 +78,7 @@ if [ -f "$LOCK_DIR/service.lck" ]; then
 fi
 
 # Determine default port based on nginx mode if present
+DEFAULT_PORT="$(arthexis_detect_backend_port "$BASE_DIR")"
 PORT=""
 RELOAD=false
 # Celery workers process Post Office's email queue; enable by default.
@@ -85,7 +88,7 @@ if [ -f "$LOCK_DIR/nginx_mode.lck" ]; then
 else
   MODE="internal"
 fi
-PORT=8888
+PORT="$DEFAULT_PORT"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -106,11 +109,11 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --public)
-      PORT=8888
+      PORT="$DEFAULT_PORT"
       shift
       ;;
     --internal)
-      PORT=8888
+      PORT="$DEFAULT_PORT"
       shift
       ;;
       *)

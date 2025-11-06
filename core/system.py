@@ -903,6 +903,21 @@ def _parse_runserver_port(command_line: str) -> int | None:
     return None
 
 
+def _configured_backend_port(base_dir: Path) -> int:
+    lock_file = base_dir / "locks" / "backend_port.lck"
+    try:
+        raw = lock_file.read_text().strip()
+    except OSError:
+        return 8888
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return 8888
+    if 1 <= value <= 65535:
+        return value
+    return 8888
+
+
 def _detect_runserver_process() -> tuple[bool, int | None]:
     """Return whether the dev server is running and the port if available."""
 
@@ -932,7 +947,7 @@ def _detect_runserver_process() -> tuple[bool, int | None]:
             break
 
     if port is None:
-        port = 8888
+        port = _configured_backend_port(Path(settings.BASE_DIR))
 
     return True, port
 
@@ -981,7 +996,7 @@ def _gather_info() -> dict:
         raw_mode = ""
     mode = raw_mode.lower() or "internal"
     info["mode"] = mode
-    default_port = 8888
+    default_port = _configured_backend_port(base_dir)
     detected_port: int | None = None
 
     screen_file = lock_dir / "screen_mode.lck"

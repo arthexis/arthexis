@@ -6,6 +6,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/scripts/helpers/logging.sh"
 # shellcheck source=scripts/helpers/nginx_maintenance.sh
 . "$SCRIPT_DIR/scripts/helpers/nginx_maintenance.sh"
+# shellcheck source=scripts/helpers/ports.sh
+. "$SCRIPT_DIR/scripts/helpers/ports.sh"
 arthexis_resolve_log_dir "$SCRIPT_DIR" LOG_DIR || exit 1
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 exec > >(tee "$LOG_FILE") 2>&1
@@ -38,6 +40,7 @@ detect_service_port() {
     local service_name="$1"
     local nginx_mode="$2"
     local port=""
+    local fallback="$(arthexis_detect_backend_port "$SCRIPT_DIR")"
 
     if [ -n "$service_name" ]; then
         local service_file="/etc/systemd/system/${service_name}.service"
@@ -54,7 +57,7 @@ detect_service_port() {
     fi
 
     if [ -z "$port" ]; then
-        port=8888
+        port="$fallback"
     fi
 
     echo "$port"
