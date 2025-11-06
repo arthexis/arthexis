@@ -29,6 +29,7 @@ from .models import (
     DataTransferMessage,
     CPReservation,
     CPFirmwareDeployment,
+    RFIDSessionAttempt,
 )
 from .reference_utils import host_is_local_loopback
 from .evcs_discovery import (
@@ -367,6 +368,33 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             message,
             log_type="charger",
         )
+
+    async def _record_rfid_attempt(
+        self,
+        *,
+        rfid: str,
+        status: RFIDSessionAttempt.Status,
+        account: EnergyAccount | None,
+        transaction: Transaction | None = None,
+    ) -> None:
+        """Persist RFID session attempt metadata for reporting."""
+
+        normalized = (rfid or "").strip().upper()
+        if not normalized:
+            return
+
+        charger = self.charger
+
+        def _create_attempt() -> None:
+            RFIDSessionAttempt.objects.create(
+                charger=charger,
+                rfid=normalized,
+                status=status,
+                account=account,
+                transaction=transaction,
+            )
+
+        await database_sync_to_async(_create_attempt)()
 
     async def _assign_connector(self, connector: int | str | None) -> None:
         """Ensure ``self.charger`` matches the provided connector id."""
@@ -1852,12 +1880,23 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                     store.start_session_lock()
                     store.add_session_message(self.store_key, text_data)
                     await self._start_consumption_updates(tx_obj)
+                    await self._record_rfid_attempt(
+                        rfid=id_tag or "",
+                        status=RFIDSessionAttempt.Status.ACCEPTED,
+                        account=account,
+                        transaction=tx_obj,
+                    )
                     reply_payload = {
                         "transactionId": tx_obj.pk,
                         "idTagInfo": {"status": "Accepted"},
                     }
                 else:
                     reply_payload = {"idTagInfo": {"status": "Invalid"}}
+                    await self._record_rfid_attempt(
+                        rfid=id_tag or "",
+                        status=RFIDSessionAttempt.Status.REJECTED,
+                        account=account,
+                    )
             elif action == "StopTransaction":
                 tx_id = payload.get("transactionId")
                 tx_obj = store.transactions.pop(self.store_key, None)
