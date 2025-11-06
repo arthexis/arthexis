@@ -397,6 +397,45 @@ class CPReservationTests(TransactionTestCase):
         self.assertIsNotNone(metadata)
         self.assertEqual(metadata.get("reservation_pk"), reservation.pk)
 
+    def test_send_cancel_request_dispatches_frame(self):
+        start = timezone.now() + timedelta(hours=1)
+        reservation = CPReservation.objects.create(
+            location=self.location,
+            start_time=start,
+            duration_minutes=30,
+            id_tag="TAG010",
+        )
+
+        class DummyConnection:
+            def __init__(self):
+                self.sent: list[str] = []
+
+            async def send(self, message):
+                self.sent.append(message)
+
+        ws = DummyConnection()
+        store.set_connection(
+            reservation.connector.charger_id,
+            reservation.connector.connector_id,
+            ws,
+        )
+        self.addCleanup(
+            store.pop_connection,
+            reservation.connector.charger_id,
+            reservation.connector.connector_id,
+        )
+
+        message_id = reservation.send_cancel_request()
+        self.assertTrue(ws.sent)
+        frame = json.loads(ws.sent[0])
+        self.assertEqual(frame[0], 2)
+        self.assertEqual(frame[2], "CancelReservation")
+        self.assertEqual(frame[3]["reservationId"], reservation.pk)
+        metadata = store.pending_calls.get(message_id)
+        self.assertIsNotNone(metadata)
+        self.assertEqual(metadata.get("reservation_pk"), reservation.pk)
+        self.assertEqual(metadata.get("action"), "CancelReservation")
+
     def test_call_result_marks_reservation_confirmed(self):
         start = timezone.now() + timedelta(hours=1)
         reservation = CPReservation.objects.create(
@@ -482,6 +521,95 @@ class CPReservationTests(TransactionTestCase):
         reservation.refresh_from_db()
         self.assertFalse(reservation.evcs_confirmed)
         self.assertEqual(reservation.evcs_status, "")
+        self.assertIsNone(reservation.evcs_confirmed_at)
+        self.assertIn("Rejected", reservation.evcs_error or "")
+
+    def test_cancel_reservation_result_updates_status(self):
+        start = timezone.now() + timedelta(hours=1)
+        reservation = CPReservation.objects.create(
+            location=self.location,
+            start_time=start,
+            duration_minutes=45,
+            id_tag="TAG008",
+        )
+        log_key = store.identity_key(
+            reservation.connector.charger_id, reservation.connector.connector_id
+        )
+        message_id = "cancel-success"
+        store.register_pending_call(
+            message_id,
+            {
+                "action": "CancelReservation",
+                "charger_id": reservation.connector.charger_id,
+                "connector_id": reservation.connector.connector_id,
+                "log_key": log_key,
+                "reservation_pk": reservation.pk,
+            },
+        )
+
+        consumer = CSMSConsumer()
+        consumer.scope = {"headers": [], "client": ("127.0.0.1", 1234)}
+        consumer.charger_id = reservation.connector.charger_id
+        consumer.store_key = log_key
+        consumer.connector_value = reservation.connector.connector_id
+        consumer.charger = reservation.connector
+        consumer.aggregate_charger = self.aggregate
+        consumer._consumption_task = None
+        consumer._consumption_message_uuid = None
+        consumer.send = AsyncMock()
+
+        async_to_sync(consumer._handle_call_result)(
+            message_id, {"status": "Accepted"}
+        )
+        reservation.refresh_from_db()
+        self.assertEqual(reservation.evcs_status, "Accepted")
+        self.assertFalse(reservation.evcs_confirmed)
+        self.assertIsNone(reservation.evcs_confirmed_at)
+        self.assertEqual(reservation.evcs_error, "")
+
+    def test_cancel_reservation_error_updates_status(self):
+        start = timezone.now() + timedelta(hours=1)
+        reservation = CPReservation.objects.create(
+            location=self.location,
+            start_time=start,
+            duration_minutes=45,
+            id_tag="TAG009",
+        )
+        log_key = store.identity_key(
+            reservation.connector.charger_id, reservation.connector.connector_id
+        )
+        message_id = "cancel-error"
+        store.register_pending_call(
+            message_id,
+            {
+                "action": "CancelReservation",
+                "charger_id": reservation.connector.charger_id,
+                "connector_id": reservation.connector.connector_id,
+                "log_key": log_key,
+                "reservation_pk": reservation.pk,
+            },
+        )
+
+        consumer = CSMSConsumer()
+        consumer.scope = {"headers": [], "client": ("127.0.0.1", 1234)}
+        consumer.charger_id = reservation.connector.charger_id
+        consumer.store_key = log_key
+        consumer.connector_value = reservation.connector.connector_id
+        consumer.charger = reservation.connector
+        consumer.aggregate_charger = self.aggregate
+        consumer._consumption_task = None
+        consumer._consumption_message_uuid = None
+        consumer.send = AsyncMock()
+
+        async_to_sync(consumer._handle_call_error)(
+            message_id,
+            "Rejected",
+            "Connector busy",
+            {"reason": "occupied"},
+        )
+        reservation.refresh_from_db()
+        self.assertEqual(reservation.evcs_status, "")
+        self.assertFalse(reservation.evcs_confirmed)
         self.assertIsNone(reservation.evcs_confirmed_at)
         self.assertIn("Rejected", reservation.evcs_error or "")
 

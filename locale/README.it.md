@@ -30,6 +30,7 @@ Costellazione Arthexis è una [suite software](https://it.wikipedia.org/wiki/Sui
 
   | Azione | Cosa facciamo |
   | --- | --- |
+  | `CancelReservation` | Annulliamo prenotazioni in sospeso e liberiamo i connettori direttamente dal centro di controllo. |
   | `ChangeAvailability` | Impostiamo connettori o stazione tra operativa e fuori servizio. |
   | `DataTransfer` | Inviamo comandi specifici del fornitore e registriamo la risposta del punto di ricarica. |
   | `GetConfiguration` | Interroghiamo il dispositivo sui valori correnti delle chiavi di configurazione monitorate. |
@@ -42,9 +43,9 @@ Costellazione Arthexis è una [suite software](https://it.wikipedia.org/wiki/Sui
   | `TriggerMessage` | Chiediamo al dispositivo un aggiornamento immediato (ad esempio stato o diagnostica). |
   | `UpdateFirmware` | Distribuiamo pacchetti firmware ai charger con token di download sicuri e tracciamo le risposte di installazione. |
 
-  **Roadmap OCPP 1.6.** Le seguenti azioni del catalogo sono nel nostro backlog: `CancelReservation`, `ChangeConfiguration`, `ClearCache`, `ClearChargingProfile`, `GetCompositeSchedule`, `GetDiagnostics`, `SetChargingProfile`, `UnlockConnector`.
+  **Roadmap OCPP 1.6.** Le seguenti azioni del catalogo sono nel nostro backlog: `ChangeConfiguration`, `ClearCache`, `ClearChargingProfile`, `GetCompositeSchedule`, `GetDiagnostics`, `SetChargingProfile`, `UnlockConnector`.
 
-- Prenotazioni dei punti di ricarica con assegnazione automatica del connettore, collegamento agli Energy Account e ai RFID, e conferma EVCS.
+- Prenotazioni dei punti di ricarica con assegnazione automatica del connettore, collegamento agli Energy Account e ai RFID, conferma EVCS e annullamento dal centro di controllo.
 
 - Integrazione [API](https://it.wikipedia.org/wiki/Application_programming_interface) con [Odoo](https://www.odoo.com/) per:
   - Sincronizzare le credenziali dei dipendenti tramite `res.users`
