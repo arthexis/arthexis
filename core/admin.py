@@ -28,7 +28,10 @@ from django.contrib.auth.admin import (
     GroupAdmin as DjangoGroupAdmin,
     UserAdmin as DjangoUserAdmin,
 )
-from django.contrib.auth.forms import AdminPasswordChangeForm
+from django.contrib.admin import forms as admin_forms
+from django.contrib.auth.forms import (
+    AdminPasswordChangeForm as AuthAdminPasswordChangeForm,
+)
 import logging
 from import_export import resources, fields
 from import_export.admin import ImportExportModelAdmin
@@ -883,8 +886,8 @@ class EnergyAccountRFIDInline(admin.TabularInline):
     verbose_name_plural = "RFIDs"
 
 
-class UserPasswordRFIDChangeForm(AdminPasswordChangeForm):
-    """Extend the admin password form with RFID assignment support."""
+class UserRFIDAssignmentMixin:
+    """Mixin adding RFID assignment support to password change forms."""
 
     rfid = forms.ModelChoiceField(
         label=_("RFID"),
@@ -952,6 +955,21 @@ class UserPasswordRFIDChangeForm(AdminPasswordChangeForm):
         if not account.rfids.filter(pk=rfid.pk).exists():
             account.rfids.add(rfid)
         return user
+
+
+class UserPasswordRFIDChangeForm(UserRFIDAssignmentMixin, AuthAdminPasswordChangeForm):
+    """Extend the admin password form with RFID assignment support."""
+
+
+_AdminPasswordChangeFormBase = admin_forms.AdminPasswordChangeForm
+
+
+class AdminSitePasswordRFIDChangeForm(UserRFIDAssignmentMixin, _AdminPasswordChangeFormBase):
+    """Password change form for admin site that handles RFID assignment."""
+
+
+admin_forms.AdminPasswordChangeForm = AdminSitePasswordRFIDChangeForm
+admin.site.password_change_form = AdminSitePasswordRFIDChangeForm
 
 
 def _raw_instance_value(instance, field_name):
