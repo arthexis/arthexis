@@ -433,43 +433,32 @@ def _collect_status_events(
         keys.append(store.identity_key(serial, None))
         keys.append(store.pending_key(serial))
 
-    seen_entries: set[str] = set()
     events: list[tuple[datetime, str]] = []
     latest_before_window: tuple[datetime, str] | None = None
 
-    for key in keys:
-        for entry in store.get_logs(key, log_type="charger"):
-            if entry in seen_entries:
-                continue
-            seen_entries.add(entry)
-            if len(entry) < 24:
-                continue
-            timestamp_raw = entry[:23]
-            message = entry[24:].strip()
+    for entry in store.iter_log_entries(keys, log_type="charger", since=window_start):
+        if len(entry.text) < 24:
+            continue
+        message = entry.text[24:].strip()
+        log_timestamp = entry.timestamp
+
+        event_time = log_timestamp
+        status_bucket: str | None = None
+
+        if message.startswith("StatusNotification processed:"):
+            payload_text = message.split(":", 1)[1].strip()
             try:
-                log_timestamp = datetime.strptime(
-                    timestamp_raw, "%Y-%m-%d %H:%M:%S.%f"
-                ).replace(tzinfo=dt_timezone.utc)
-            except ValueError:
+                payload = json.loads(payload_text)
+            except json.JSONDecodeError:
                 continue
-
-            event_time = log_timestamp
-            status_bucket: str | None = None
-
-            if message.startswith("StatusNotification processed:"):
-                payload_text = message.split(":", 1)[1].strip()
+            target_id = payload.get("connectorId")
+            if connector_id is not None:
                 try:
-                    payload = json.loads(payload_text)
-                except json.JSONDecodeError:
+                    normalized_target = int(target_id)
+                except (TypeError, ValueError):
+                    normalized_target = None
+                if normalized_target not in {connector_id, None}:
                     continue
-                target_id = payload.get("connectorId")
-                if connector_id is not None:
-                    try:
-                        normalized_target = int(target_id)
-                    except (TypeError, ValueError):
-                        normalized_target = None
-                    if normalized_target not in {connector_id, None}:
-                        continue
                 raw_status = payload.get("status")
                 status_bucket = _normalize_timeline_status(
                     raw_status if isinstance(raw_status, str) else None
@@ -486,19 +475,19 @@ def _collect_status_events(
             elif message.startswith("Closed"):
                 status_bucket = "offline"
 
-            if not status_bucket:
-                continue
+        if not status_bucket:
+            continue
 
-            if event_time < window_start:
-                if (
-                    latest_before_window is None
-                    or event_time > latest_before_window[0]
-                ):
-                    latest_before_window = (event_time, status_bucket)
-                continue
-            if event_time > window_end:
-                continue
-            events.append((event_time, status_bucket))
+        if event_time < window_start:
+            if (
+                latest_before_window is None
+                or event_time > latest_before_window[0]
+            ):
+                latest_before_window = (event_time, status_bucket)
+            break
+        if event_time > window_end:
+            continue
+        events.append((event_time, status_bucket))
 
     events.sort(key=lambda item: item[0])
 

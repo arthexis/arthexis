@@ -5,11 +5,16 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 from collections import deque
+from dataclasses import dataclass
 from datetime import datetime, timezone
 import json
+import os
 from pathlib import Path
 import re
 import threading
+import heapq
+import itertools
+from typing import Iterable, Iterator
 
 from core.log_paths import select_log_dir
 
@@ -53,6 +58,14 @@ _scheduler_thread: threading.Thread | None = None
 _scheduler_lock = threading.Lock()
 
 SESSION_LOG_BUFFER_LIMIT = 16
+
+
+@dataclass(frozen=True)
+class LogEntry:
+    """Structured log entry returned by :func:`iter_log_entries`."""
+
+    timestamp: datetime
+    text: str
 
 
 def connector_slug(value: int | str | None) -> str:
@@ -701,10 +714,17 @@ def _resolve_log_identifier(cid: str, log_type: str) -> tuple[str, str | None]:
 def _log_file_for_identifier(cid: str, name: str | None, log_type: str) -> Path:
     path = _file_path(cid, log_type)
     if not path.exists():
-        target = f"{log_type}.{_safe_name(name or cid).lower()}"
-        for file in LOG_DIR.glob(f"{log_type}.*.log"):
-            if file.stem.lower() == target:
-                path = file
+        candidates = [_safe_name(name or cid).lower()]
+        cid_candidate = _safe_name(cid).lower()
+        if cid_candidate not in candidates:
+            candidates.append(cid_candidate)
+        for candidate in candidates:
+            target = f"{log_type}.{candidate}"
+            for file in LOG_DIR.glob(f"{log_type}.*.log"):
+                if file.stem.lower() == target:
+                    path = file
+                    break
+            if path.exists():
                 break
     return path
 
@@ -716,6 +736,190 @@ def _memory_logs_for_identifier(cid: str, log_type: str) -> list[str]:
         if key.lower() == lower:
             return list(entries)
     return []
+
+
+def _parse_log_timestamp(entry: str) -> datetime | None:
+    """Return the parsed timestamp for a log entry, if available."""
+
+    if len(entry) < 24:
+        return None
+    try:
+        timestamp = datetime.strptime(entry[:23], "%Y-%m-%d %H:%M:%S.%f")
+    except ValueError:
+        return None
+    return timestamp.replace(tzinfo=timezone.utc)
+
+
+def _iter_file_lines_reverse(path: Path, *, limit: int | None = None) -> Iterator[str]:
+    """Yield lines from ``path`` starting with the newest entries."""
+
+    if not path.exists():
+        return
+
+    chunk_size = 4096
+    remaining = limit
+    with path.open("rb") as handle:
+        handle.seek(0, os.SEEK_END)
+        position = handle.tell()
+        buffer = b""
+        while position > 0:
+            read_size = min(chunk_size, position)
+            position -= read_size
+            handle.seek(position)
+            chunk = handle.read(read_size)
+            buffer = chunk + buffer
+            lines = buffer.split(b"\n")
+            buffer = lines.pop(0)
+            for line in reversed(lines):
+                if not line:
+                    continue
+                try:
+                    text = line.decode("utf-8")
+                except UnicodeDecodeError:
+                    text = line.decode("utf-8", errors="ignore")
+                yield text
+                if remaining is not None:
+                    remaining -= 1
+                    if remaining <= 0:
+                        return
+        if buffer:
+            try:
+                text = buffer.decode("utf-8")
+            except UnicodeDecodeError:
+                text = buffer.decode("utf-8", errors="ignore")
+            if text:
+                yield text
+
+
+def _iter_log_entries_for_key(
+    cid: str,
+    name: str | None,
+    log_type: str,
+    *,
+    since: datetime | None = None,
+    limit: int | None = None,
+) -> Iterator[LogEntry]:
+    """Yield structured log entries for a specific identifier."""
+
+    yielded = 0
+    seen_for_key: set[str] = set()
+    memory_entries = _memory_logs_for_identifier(cid, log_type)
+    for entry in reversed(memory_entries):
+        if entry in seen_for_key:
+            continue
+        timestamp = _parse_log_timestamp(entry)
+        if timestamp is None:
+            continue
+        seen_for_key.add(entry)
+        yield LogEntry(timestamp=timestamp, text=entry)
+        yielded += 1
+        if since is not None and timestamp < since:
+            return
+        if limit is not None and yielded >= limit:
+            return
+
+    path = _log_file_for_identifier(cid, name, log_type)
+    file_limit = None
+    if limit is not None:
+        file_limit = max(limit - yielded, 0)
+        if file_limit == 0:
+            return
+    for entry in _iter_file_lines_reverse(path, limit=file_limit):
+        if entry in seen_for_key:
+            continue
+        timestamp = _parse_log_timestamp(entry)
+        if timestamp is None:
+            continue
+        seen_for_key.add(entry)
+        yield LogEntry(timestamp=timestamp, text=entry)
+        yielded += 1
+        if since is not None and timestamp < since:
+            return
+        if limit is not None and yielded >= limit:
+            return
+
+
+def iter_log_entries(
+    identifiers: str | Iterable[str],
+    log_type: str = "charger",
+    *,
+    since: datetime | None = None,
+    limit: int | None = None,
+) -> Iterator[LogEntry]:
+    """Yield log entries ordered from newest to oldest.
+
+    ``identifiers`` may be a single charger identifier or an iterable of
+    identifiers. Results are de-duplicated across matching memory and file
+    sources and iteration stops once entries fall before ``since`` or ``limit``
+    is reached.
+    """
+
+    if isinstance(identifiers, str):
+        requested: list[str] = [identifiers]
+    else:
+        requested = list(identifiers)
+
+    seen_keys: set[str] = set()
+    sources: list[tuple[str, str | None]] = []
+    for identifier in requested:
+        for key in _log_key_candidates(identifier, log_type):
+            lower_key = key.lower()
+            if lower_key in seen_keys:
+                continue
+            seen_keys.add(lower_key)
+            resolved, name = _resolve_log_identifier(key, log_type)
+            sources.append((resolved, name))
+
+    heap: list[tuple[float, int, LogEntry, Iterator[LogEntry]]] = []
+    counter = itertools.count()
+    seen_entries: set[str] = set()
+    total_yielded = 0
+
+    for resolved, name in sources:
+        iterator = _iter_log_entries_for_key(
+            resolved,
+            name,
+            log_type,
+            since=since,
+            limit=limit,
+        )
+        try:
+            entry = next(iterator)
+        except StopIteration:
+            continue
+        heapq.heappush(
+            heap,
+            (
+                -entry.timestamp.timestamp(),
+                next(counter),
+                entry,
+                iterator,
+            ),
+        )
+
+    while heap:
+        _, _, entry, iterator = heapq.heappop(heap)
+        if entry.text not in seen_entries:
+            seen_entries.add(entry.text)
+            yield entry
+            total_yielded += 1
+            if limit is not None and total_yielded >= limit:
+                return
+            if since is not None and entry.timestamp < since:
+                return
+        try:
+            next_entry = next(iterator)
+        except StopIteration:
+            continue
+        heapq.heappush(
+            heap,
+            (
+                -next_entry.timestamp.timestamp(),
+                next(counter),
+                next_entry,
+                iterator,
+            ),
+        )
 
 
 def get_logs(cid: str, log_type: str = "charger") -> list[str]:
