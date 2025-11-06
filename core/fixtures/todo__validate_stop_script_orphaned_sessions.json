@@ -1,0 +1,12 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate stop script ignores orphaned sessions",
+      "url": "",
+      "request_details": "Use python manage.py shell to create an ocpp.Transaction without assigning a connector and run ./stop.sh to confirm the script exits successfully without reporting active charging sessions.",
+      "done_on": null,
+      "is_deleted": false
+    }
+  }
+]

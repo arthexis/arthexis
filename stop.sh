@@ -59,7 +59,14 @@ if override:
 
 from ocpp.models import Transaction
 
-print(Transaction.objects.filter(stop_time__isnull=True).count())
+active_sessions = Transaction.objects.filter(stop_time__isnull=True)
+active_sessions = active_sessions.filter(
+    charger__isnull=False,
+    charger__is_deleted=False,
+    charger__connector_id__isnull=False,
+)
+
+print(active_sessions.count())
 PY
   )
   ACTIVE_STATUS=$?
