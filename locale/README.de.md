@@ -33,14 +33,16 @@ Die Arthexis-Konstellation ist eine [narrativ orientierte](https://de.wikipedia.
   | `ChangeAvailability` | Schalten Anschlüsse oder die gesamte Station zwischen betriebsbereit und außer Betrieb. |
   | `DataTransfer` | Senden herstellerspezifische Befehle und protokollieren die Antwort des Ladepunkts. |
   | `GetConfiguration` | Fragen die aktuellen Werte der überwachten Konfigurationsschlüssel ab. |
+  | `GetLocalListVersion` | Rufen die aktuelle RFID-Whitelist-Version ab und synchronisieren die vom Ladepunkt gemeldeten Einträge. |
   | `RemoteStartTransaction` | Starten Ladevorgänge remote für identifizierte Kundinnen und Kunden oder Tokens. |
   | `RemoteStopTransaction` | Beenden aktive Ladevorgänge aus der Leitwarte. |
   | `ReserveNow` | Reservieren Anschlüsse für kommende Sitzungen mit automatischer Zuweisung und Bestätigungsnachverfolgung. |
   | `Reset` | Fordern einen Soft- oder Hard-Reset zur Fehlerbehebung an. |
+  | `SendLocalList` | Veröffentlichen freigegebene und genehmigte RFIDs als lokale Autorisierungsliste des Ladepunkts. |
   | `TriggerMessage` | Fordern sofortige Nachrichten an (z. B. Status oder Diagnose). |
   | `UpdateFirmware` | Liefern Firmwarepakete an Ladepunkte mit sicheren Download-Tokens und verfolgen Installationsrückmeldungen. |
 
-  **OCPP-1.6-Roadmap.** Folgende Katalog-Aktionen stehen auf unserer To-do-Liste: `CancelReservation`, `ChangeConfiguration`, `ClearCache`, `ClearChargingProfile`, `GetCompositeSchedule`, `GetDiagnostics`, `GetLocalListVersion`, `SendLocalList`, `SetChargingProfile`, `UnlockConnector`.
+  **OCPP-1.6-Roadmap.** Folgende Katalog-Aktionen stehen auf unserer To-do-Liste: `CancelReservation`, `ChangeConfiguration`, `ClearCache`, `ClearChargingProfile`, `GetCompositeSchedule`, `GetDiagnostics`, `SetChargingProfile`, `UnlockConnector`.
 
 - Ladepunktreservierungen mit automatischer Anschlusswahl, Verknüpfung zu Energiekonten und RFID-Tags sowie EVCS-Bestätigung.
 

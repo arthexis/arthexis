@@ -1103,6 +1103,101 @@ def _toggle_rfid(
     return True, detail, {"require_rfid": enable_bool}
 
 
+def _send_local_rfid_list_remote(
+    charger: Charger, payload: Mapping | None = None
+) -> tuple[bool, str, dict[str, object]]:
+    connector_value = charger.connector_id
+    ws = store.get_connection(charger.charger_id, connector_value)
+    if ws is None:
+        return False, "no active connection", {}
+    authorization_list = []
+    if payload is not None:
+        authorization_list = payload.get("local_authorization_list", []) or []
+    if not isinstance(authorization_list, list):
+        return False, "local_authorization_list must be a list", {}
+    list_version = None
+    if payload is not None:
+        list_version = payload.get("list_version")
+    if list_version is None:
+        list_version_value = (charger.local_auth_list_version or 0) + 1
+    else:
+        try:
+            list_version_value = int(list_version)
+        except (TypeError, ValueError):
+            return False, "invalid list_version", {}
+        if list_version_value <= 0:
+            return False, "invalid list_version", {}
+    update_type = "Full"
+    if payload is not None and payload.get("update_type"):
+        update_type = str(payload.get("update_type") or "").strip() or "Full"
+    message_id = uuid.uuid4().hex
+    msg_payload = {
+        "listVersion": list_version_value,
+        "updateType": update_type,
+        "localAuthorizationList": authorization_list,
+    }
+    msg = json.dumps([2, message_id, "SendLocalList", msg_payload])
+    try:
+        async_to_sync(ws.send)(msg)
+    except Exception as exc:
+        return False, f"failed to send SendLocalList ({exc})", {}
+    log_key = store.identity_key(charger.charger_id, connector_value)
+    store.add_log(log_key, f"< {msg}", log_type="charger")
+    store.register_pending_call(
+        message_id,
+        {
+            "action": "SendLocalList",
+            "charger_id": charger.charger_id,
+            "connector_id": connector_value,
+            "log_key": log_key,
+            "list_version": list_version_value,
+            "list_size": len(authorization_list),
+            "requested_at": timezone.now(),
+        },
+    )
+    store.schedule_call_timeout(
+        message_id,
+        action="SendLocalList",
+        log_key=log_key,
+        message="SendLocalList request timed out",
+    )
+    return True, "SendLocalList dispatched", {}
+
+
+def _get_local_list_version_remote(
+    charger: Charger, payload: Mapping | None = None
+) -> tuple[bool, str, dict[str, object]]:
+    connector_value = charger.connector_id
+    ws = store.get_connection(charger.charger_id, connector_value)
+    if ws is None:
+        return False, "no active connection", {}
+    message_id = uuid.uuid4().hex
+    msg = json.dumps([2, message_id, "GetLocalListVersion", {}])
+    try:
+        async_to_sync(ws.send)(msg)
+    except Exception as exc:
+        return False, f"failed to send GetLocalListVersion ({exc})", {}
+    log_key = store.identity_key(charger.charger_id, connector_value)
+    store.add_log(log_key, f"< {msg}", log_type="charger")
+    store.register_pending_call(
+        message_id,
+        {
+            "action": "GetLocalListVersion",
+            "charger_id": charger.charger_id,
+            "connector_id": connector_value,
+            "log_key": log_key,
+            "requested_at": timezone.now(),
+        },
+    )
+    store.schedule_call_timeout(
+        message_id,
+        action="GetLocalListVersion",
+        log_key=log_key,
+        message="GetLocalListVersion request timed out",
+    )
+    return True, "GetLocalListVersion requested", {}
+
+
 def _change_availability_remote(
     charger: Charger, payload: Mapping | None = None
 ) -> tuple[bool, str, dict[str, object]]:
@@ -1220,6 +1315,8 @@ REMOTE_ACTIONS = {
     "get-configuration": _send_get_configuration,
     "reset": _send_reset,
     "toggle-rfid": _toggle_rfid,
+    "send-local-rfid-list": _send_local_rfid_list_remote,
+    "get-local-list-version": _get_local_list_version_remote,
     "change-availability": _change_availability_remote,
     "set-availability-state": _set_availability_state_remote,
     "remote-stop": _remote_stop_transaction_remote,

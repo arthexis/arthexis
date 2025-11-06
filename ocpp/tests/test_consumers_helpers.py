@@ -16,6 +16,17 @@ from ocpp.consumers import (
     SERIAL_QUERY_PARAM_NAMES,
     _resolve_client_ip,
 )
+from ocpp import store
+from ocpp.models import Charger
+from core.models import RFID
+from asgiref.sync import async_to_sync
+
+
+@pytest.fixture(autouse=True)
+def _clear_store_state():
+    store.pending_calls.clear()
+    yield
+    store.pending_calls.clear()
 
 
 @pytest.mark.parametrize(
@@ -109,3 +120,88 @@ def test_extract_serial_identifier_falls_back_to_url_route():
     }
 
     assert consumer._extract_serial_identifier() == "FALLBACK"
+
+
+def test_ensure_rfid_seen_marks_allowed_and_released():
+    charger = Charger.objects.create(charger_id="CPRFID")
+    consumer = CSMSConsumer()
+    consumer.charger_id = "CPRFID"
+    consumer.connector_value = None
+    consumer.charger = charger
+    consumer.aggregate_charger = charger
+
+    tag = async_to_sync(consumer._ensure_rfid_seen)("feedface")
+
+    tag.refresh_from_db()
+    assert tag.allowed is True
+    assert tag.released is True
+
+
+def test_handle_send_local_list_result_updates_version():
+    charger = Charger.objects.create(charger_id="CP001")
+    consumer = CSMSConsumer()
+    consumer.charger_id = "CP001"
+    consumer.connector_value = None
+    consumer.store_key = store.identity_key("CP001", None)
+    consumer.charger = charger
+    consumer.aggregate_charger = charger
+
+    store.register_pending_call(
+        "msg-send",
+        {
+            "action": "SendLocalList",
+            "charger_id": "CP001",
+            "log_key": consumer.store_key,
+            "list_version": 4,
+        },
+    )
+
+    async_to_sync(consumer._handle_call_result)(
+        "msg-send",
+        {"status": "Accepted"},
+    )
+
+    charger.refresh_from_db()
+    assert charger.local_auth_list_version == 4
+    assert charger.local_auth_list_updated_at is not None
+
+
+def test_handle_get_local_list_version_applies_entries():
+    charger = Charger.objects.create(charger_id="CP002")
+    consumer = CSMSConsumer()
+    consumer.charger_id = "CP002"
+    consumer.connector_value = None
+    consumer.store_key = store.identity_key("CP002", None)
+    consumer.charger = charger
+    consumer.aggregate_charger = charger
+
+    store.register_pending_call(
+        "msg-get",
+        {
+            "action": "GetLocalListVersion",
+            "charger_id": "CP002",
+            "log_key": consumer.store_key,
+        },
+    )
+
+    payload = {
+        "listVersion": 7,
+        "localAuthorizationList": [
+            {"idTag": "ABC123", "idTagInfo": {"status": "Accepted"}},
+            {"idTag": "DEF456", "idTagInfo": {"status": "Blocked"}},
+        ],
+    }
+
+    async_to_sync(consumer._handle_call_result)("msg-get", payload)
+
+    charger.refresh_from_db()
+    assert charger.local_auth_list_version == 7
+    assert charger.local_auth_list_updated_at is not None
+
+    accepted = RFID.objects.get(rfid="ABC123")
+    blocked = RFID.objects.get(rfid="DEF456")
+
+    assert accepted.allowed is True
+    assert accepted.released is True
+    assert blocked.allowed is False
+    assert blocked.released is False

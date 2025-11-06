@@ -47,6 +47,7 @@ from .transactions_io import (
 from .status_display import STATUS_BADGE_MAP, ERROR_OK_VALUES
 from .views import _charger_state, _live_sessions
 from core.admin import SaveBeforeChangeAction
+from core.models import RFID as CoreRFID
 from core.user_data import EntityModelAdmin
 from nodes.models import Node
 
@@ -927,6 +928,15 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
             {"fields": ("public_display", "require_rfid", "configuration")},
         ),
         (
+            "Local authorization",
+            {
+                "fields": (
+                    "local_auth_list_version",
+                    "local_auth_list_updated_at",
+                )
+            },
+        ),
+        (
             "Network",
             {
                 "fields": (
@@ -968,6 +978,8 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         "availability_request_status_at",
         "availability_request_details",
         "configuration",
+        "local_auth_list_version",
+        "local_auth_list_updated_at",
         "forwarded_to",
         "forwarding_watermark",
         "last_online_at",
@@ -992,6 +1004,8 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         "purge_data",
         "fetch_cp_configuration",
         "toggle_rfid_authentication",
+        "send_rfid_list_to_evcs",
+        "update_rfids_from_evcs",
         "recheck_charger_status",
         "change_availability_operative",
         "change_availability_inoperative",
@@ -1253,6 +1267,21 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
             return obj.location.name
         return obj.charger_id
 
+    def _build_local_authorization_list(self) -> list[dict[str, object]]:
+        """Return the payload for SendLocalList with released and allowed RFIDs."""
+
+        entries: list[dict[str, object]] = []
+        queryset = (
+            CoreRFID.objects.filter(released=True, allowed=True)
+            .order_by("rfid")
+            .only("rfid")
+        )
+        for tag in queryset.iterator():
+            entry: dict[str, object] = {"idTag": tag.rfid}
+            entry["idTagInfo"] = {"status": "Accepted"}
+            entries.append(entry)
+        return entries
+
     @admin.display(boolean=True, description="Local")
     def local_indicator(self, obj):
         return obj.is_local
@@ -1468,6 +1497,183 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
             self.message_user(
                 request,
                 f"Updated RFID authentication: {summary}",
+            )
+
+    @admin.action(description="Send RFID list to EVCS")
+    def send_rfid_list_to_evcs(self, request, queryset):
+        authorization_list = self._build_local_authorization_list()
+        update_type = "Full"
+        sent = 0
+        local_node = None
+        private_key = None
+        remote_unavailable = False
+        for charger in queryset:
+            list_version = (charger.local_auth_list_version or 0) + 1
+            if charger.is_local:
+                connector_value = charger.connector_id
+                ws = store.get_connection(charger.charger_id, connector_value)
+                if ws is None:
+                    self.message_user(
+                        request,
+                        f"{charger}: no active connection",
+                        level=messages.ERROR,
+                    )
+                    continue
+                message_id = uuid.uuid4().hex
+                payload = {
+                    "listVersion": list_version,
+                    "updateType": update_type,
+                    "localAuthorizationList": authorization_list,
+                }
+                msg = json.dumps([2, message_id, "SendLocalList", payload])
+                try:
+                    async_to_sync(ws.send)(msg)
+                except Exception as exc:  # pragma: no cover - network error
+                    self.message_user(
+                        request,
+                        f"{charger}: failed to send SendLocalList ({exc})",
+                        level=messages.ERROR,
+                    )
+                    continue
+                log_key = store.identity_key(charger.charger_id, connector_value)
+                store.add_log(log_key, f"< {msg}", log_type="charger")
+                store.register_pending_call(
+                    message_id,
+                    {
+                        "action": "SendLocalList",
+                        "charger_id": charger.charger_id,
+                        "connector_id": connector_value,
+                        "log_key": log_key,
+                        "list_version": list_version,
+                        "list_size": len(authorization_list),
+                        "requested_at": timezone.now(),
+                    },
+                )
+                store.schedule_call_timeout(
+                    message_id,
+                    action="SendLocalList",
+                    log_key=log_key,
+                    message="SendLocalList request timed out",
+                )
+                sent += 1
+                continue
+
+            if not charger.allow_remote:
+                self.message_user(
+                    request,
+                    f"{charger}: remote administration is disabled.",
+                    level=messages.ERROR,
+                )
+                continue
+            if remote_unavailable:
+                continue
+            if local_node is None:
+                local_node, private_key = self._prepare_remote_credentials(request)
+                if not local_node or not private_key:
+                    remote_unavailable = True
+                    continue
+            extra = {
+                "local_authorization_list": [entry.copy() for entry in authorization_list],
+                "list_version": list_version,
+                "update_type": update_type,
+            }
+            success, updates = self._call_remote_action(
+                request,
+                local_node,
+                private_key,
+                charger,
+                "send-local-rfid-list",
+                extra,
+            )
+            if success:
+                self._apply_remote_updates(charger, updates)
+                sent += 1
+
+        if sent:
+            self.message_user(
+                request,
+                f"Sent SendLocalList to {sent} charger(s)",
+            )
+
+    @admin.action(description="Update RFIDs from EVCS")
+    def update_rfids_from_evcs(self, request, queryset):
+        requested = 0
+        local_node = None
+        private_key = None
+        remote_unavailable = False
+        for charger in queryset:
+            if charger.is_local:
+                connector_value = charger.connector_id
+                ws = store.get_connection(charger.charger_id, connector_value)
+                if ws is None:
+                    self.message_user(
+                        request,
+                        f"{charger}: no active connection",
+                        level=messages.ERROR,
+                    )
+                    continue
+                message_id = uuid.uuid4().hex
+                payload: dict[str, object] = {}
+                msg = json.dumps([2, message_id, "GetLocalListVersion", payload])
+                try:
+                    async_to_sync(ws.send)(msg)
+                except Exception as exc:  # pragma: no cover - network error
+                    self.message_user(
+                        request,
+                        f"{charger}: failed to send GetLocalListVersion ({exc})",
+                        level=messages.ERROR,
+                    )
+                    continue
+                log_key = store.identity_key(charger.charger_id, connector_value)
+                store.add_log(log_key, f"< {msg}", log_type="charger")
+                store.register_pending_call(
+                    message_id,
+                    {
+                        "action": "GetLocalListVersion",
+                        "charger_id": charger.charger_id,
+                        "connector_id": connector_value,
+                        "log_key": log_key,
+                        "requested_at": timezone.now(),
+                    },
+                )
+                store.schedule_call_timeout(
+                    message_id,
+                    action="GetLocalListVersion",
+                    log_key=log_key,
+                    message="GetLocalListVersion request timed out",
+                )
+                requested += 1
+                continue
+
+            if not charger.allow_remote:
+                self.message_user(
+                    request,
+                    f"{charger}: remote administration is disabled.",
+                    level=messages.ERROR,
+                )
+                continue
+            if remote_unavailable:
+                continue
+            if local_node is None:
+                local_node, private_key = self._prepare_remote_credentials(request)
+                if not local_node or not private_key:
+                    remote_unavailable = True
+                    continue
+            success, updates = self._call_remote_action(
+                request,
+                local_node,
+                private_key,
+                charger,
+                "get-local-list-version",
+            )
+            if success:
+                self._apply_remote_updates(charger, updates)
+                requested += 1
+
+        if requested:
+            self.message_user(
+                request,
+                f"Requested GetLocalListVersion from {requested} charger(s)",
             )
 
     def _dispatch_change_availability(self, request, queryset, availability_type: str):

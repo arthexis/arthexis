@@ -243,6 +243,18 @@ class Charger(Entity):
             "Latest GetConfiguration response received from this charge point."
         ),
     )
+    local_auth_list_version = models.PositiveIntegerField(
+        _("Local list version"),
+        null=True,
+        blank=True,
+        help_text=_("Last RFID list version acknowledged by the charge point."),
+    )
+    local_auth_list_updated_at = models.DateTimeField(
+        _("Local list updated at"),
+        null=True,
+        blank=True,
+        help_text=_("When the charge point reported or accepted the RFID list."),
+    )
     node_origin = models.ForeignKey(
         "nodes.Node",
         on_delete=models.SET_NULL,
