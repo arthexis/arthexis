@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+import tempfile
 from collections import deque
 from importlib import util as importlib_util
 from pathlib import Path
@@ -3224,6 +3225,101 @@ class ChargerAdminTests(TestCase):
             store.pending_calls.clear()
             store.clear_log(log_key, log_type="charger")
             store.clear_log(pending_key, log_type="charger")
+
+    def test_get_diagnostics_downloads_file_to_work_directory(self):
+        charger = Charger.objects.create(
+            charger_id="DIAGADMIN",
+            diagnostics_location="https://example.com/diag.tar.gz",
+            diagnostics_status="Uploaded",
+        )
+        fixed_now = datetime(2024, 1, 2, 3, 4, 5, tzinfo=dt_timezone.utc)
+        with tempfile.TemporaryDirectory() as tempdir:
+            base_path = Path(tempdir)
+            response_mock = Mock()
+            response_mock.status_code = 200
+            response_mock.iter_content.return_value = [b"diagnostics"]
+            response_mock.headers = {
+                "Content-Disposition": 'attachment; filename="diagnostics.tar.gz"'
+            }
+            response_mock.close = Mock()
+            with override_settings(BASE_DIR=base_path):
+                with patch("ocpp.admin.requests.get", return_value=response_mock) as mock_get:
+                    with patch("ocpp.admin.timezone.now", return_value=fixed_now):
+                        url = reverse("admin:ocpp_charger_changelist")
+                        response = self.client.post(
+                            url,
+                            {
+                                "action": "get_diagnostics",
+                                "_selected_action": [charger.pk],
+                            },
+                            follow=True,
+                        )
+                self.assertEqual(response.status_code, 200)
+            work_dir = base_path / "work" / "ocpp-admin" / "diagnostics"
+            self.assertTrue(work_dir.exists())
+            files = list(work_dir.glob("*"))
+            self.assertEqual(len(files), 1)
+            saved_file = files[0]
+            self.assertEqual(saved_file.read_bytes(), b"diagnostics")
+            asset_path = saved_file.relative_to(base_path / "work" / "ocpp-admin").as_posix()
+            asset_url = "http://testserver" + reverse(
+                "pages:readme-asset", kwargs={"source": "work", "asset": asset_path}
+            )
+            self.assertContains(response, asset_url)
+            self.assertContains(response, str(saved_file))
+            mock_get.assert_called_once_with(
+                "https://example.com/diag.tar.gz", stream=True, timeout=15
+            )
+            response_mock.close.assert_called_once()
+
+    def test_get_diagnostics_requires_location_reports_warning(self):
+        charger = Charger.objects.create(charger_id="DIAGNOLOC")
+        with tempfile.TemporaryDirectory() as tempdir:
+            base_path = Path(tempdir)
+            with override_settings(BASE_DIR=base_path):
+                url = reverse("admin:ocpp_charger_changelist")
+                response = self.client.post(
+                    url,
+                    {"action": "get_diagnostics", "_selected_action": [charger.pk]},
+                    follow=True,
+                )
+            self.assertEqual(response.status_code, 200)
+            self.assertContains(response, "DIAGNOLOC: no diagnostics location reported.")
+            work_dir = base_path / "work" / "ocpp-admin" / "diagnostics"
+            self.assertTrue(work_dir.exists())
+            self.assertFalse(list(work_dir.iterdir()))
+
+    def test_get_diagnostics_handles_download_error(self):
+        charger = Charger.objects.create(
+            charger_id="DIAGFAIL",
+            diagnostics_location="https://example.com/diag.tar",
+        )
+        response_mock = Mock()
+        response_mock.status_code = 500
+        response_mock.iter_content.return_value = []
+        response_mock.headers = {}
+        response_mock.close = Mock()
+        with tempfile.TemporaryDirectory() as tempdir:
+            base_path = Path(tempdir)
+            with override_settings(BASE_DIR=base_path):
+                with patch("ocpp.admin.requests.get", return_value=response_mock):
+                    url = reverse("admin:ocpp_charger_changelist")
+                    response = self.client.post(
+                        url,
+                        {
+                            "action": "get_diagnostics",
+                            "_selected_action": [charger.pk],
+                        },
+                        follow=True,
+                    )
+                self.assertEqual(response.status_code, 200)
+                self.assertContains(
+                    response, "DIAGFAIL: Diagnostics download returned status 500."
+                )
+            work_dir = base_path / "work" / "ocpp-admin" / "diagnostics"
+            self.assertTrue(work_dir.exists())
+            self.assertFalse(list(work_dir.iterdir()))
+            response_mock.close.assert_called_once()
 
 
 class ChargerConfigurationAdminUnitTests(TestCase):

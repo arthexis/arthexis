@@ -5,14 +5,17 @@ from django import forms
 import asyncio
 import base64
 from datetime import datetime, time, timedelta
+from pathlib import Path
+from urllib.parse import urlparse, unquote
+import contextlib
 import json
 from typing import Any
-
 from django.shortcuts import redirect
 from django.utils import formats, timezone, translation
 from django.utils.translation import gettext_lazy as _, ngettext
 from django.utils.dateparse import parse_datetime
-from django.utils.html import format_html
+from django.utils.html import format_html, format_html_join
+from django.utils.text import slugify
 from django.urls import path, reverse
 from django.http import HttpResponse, HttpResponseRedirect
 from django.template.response import TemplateResponse
@@ -25,6 +28,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 from django.db import transaction
 from django.core.exceptions import ValidationError
+from django.conf import settings
 
 from .models import (
     Charger,
@@ -1094,6 +1098,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         "send_rfid_list_to_evcs",
         "update_rfids_from_evcs",
         "recheck_charger_status",
+        "get_diagnostics",
         "change_availability_operative",
         "change_availability_inoperative",
         "set_availability_state_operative",
@@ -1102,6 +1107,131 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         "reset_chargers",
         "delete_selected",
     ]
+
+    class DiagnosticsDownloadError(Exception):
+        """Raised when diagnostics downloads fail."""
+
+    def _diagnostics_directory_for(self, user) -> tuple[Path, Path]:
+        username = getattr(user, "get_username", None)
+        if callable(username):
+            username = username()
+        else:
+            username = getattr(user, "username", "")
+        if not username:
+            username = str(getattr(user, "pk", "user"))
+        username_component = Path(str(username)).name or "user"
+        base_dir = Path(settings.BASE_DIR)
+        user_dir = base_dir / "work" / username_component
+        diagnostics_dir = user_dir / "diagnostics"
+        diagnostics_dir.mkdir(parents=True, exist_ok=True)
+        return diagnostics_dir, user_dir
+
+    def _content_disposition_filename(self, header_value: str) -> str:
+        for part in header_value.split(";"):
+            candidate = part.strip()
+            lower = candidate.lower()
+            if lower.startswith("filename*="):
+                value = candidate.split("=", 1)[1].strip()
+                if value.lower().startswith("utf-8''"):
+                    value = value[7:]
+                return Path(unquote(value.strip('"'))).name
+            if lower.startswith("filename="):
+                value = candidate.split("=", 1)[1].strip().strip('"')
+                return Path(value).name
+        return ""
+
+    def _diagnostics_filename(self, charger: Charger, location: str, response) -> str:
+        parsed = urlparse(location)
+        candidate = Path(parsed.path or "").name
+        header_name = ""
+        content_disposition = response.headers.get("Content-Disposition") if hasattr(response, "headers") else None
+        if content_disposition:
+            header_name = self._content_disposition_filename(content_disposition)
+        if header_name:
+            candidate = header_name
+        if not candidate:
+            candidate = "diagnostics.log"
+        path_candidate = Path(candidate)
+        suffix = "".join(path_candidate.suffixes)
+        if suffix:
+            base_name = candidate[: -len(suffix)]
+        else:
+            base_name = candidate
+            suffix = ".log"
+        base_name = base_name.rstrip(".")
+        if not base_name:
+            base_name = "diagnostics"
+        charger_slug = slugify(charger.charger_id or charger.display_name or str(charger.pk or "charger"))
+        if not charger_slug:
+            charger_slug = "charger"
+        diagnostics_slug = slugify(base_name) or "diagnostics"
+        timestamp = timezone.now().strftime("%Y%m%d%H%M%S")
+        return f"{charger_slug}-{diagnostics_slug}-{timestamp}{suffix}"
+
+    def _unique_diagnostics_path(self, directory: Path, filename: str) -> Path:
+        base_path = Path(filename)
+        suffix = "".join(base_path.suffixes)
+        if suffix:
+            base_name = filename[: -len(suffix)]
+        else:
+            base_name = filename
+            suffix = ""
+        base_name = base_name.rstrip(".") or "diagnostics"
+        candidate = directory / f"{base_name}{suffix}"
+        counter = 1
+        while candidate.exists():
+            candidate = directory / f"{base_name}-{counter}{suffix}"
+            counter += 1
+        return candidate
+
+    def _download_diagnostics(
+        self,
+        request,
+        charger: Charger,
+        location: str,
+        diagnostics_dir: Path,
+        user_dir: Path,
+    ) -> tuple[Path, str]:
+        parsed = urlparse(location)
+        scheme = (parsed.scheme or "").lower()
+        if scheme not in {"http", "https"}:
+            raise self.DiagnosticsDownloadError(
+                _("Diagnostics location must use HTTP or HTTPS.")
+            )
+        try:
+            response = requests.get(location, stream=True, timeout=15)
+        except RequestException as exc:
+            raise self.DiagnosticsDownloadError(
+                _("Failed to download diagnostics: %s") % exc
+            ) from exc
+        try:
+            if response.status_code != 200:
+                raise self.DiagnosticsDownloadError(
+                    _("Diagnostics download returned status %s.")
+                    % response.status_code
+                )
+            filename = self._diagnostics_filename(charger, location, response)
+            destination = self._unique_diagnostics_path(diagnostics_dir, filename)
+            try:
+                with destination.open("wb") as handle:
+                    for chunk in response.iter_content(chunk_size=65536):
+                        if not chunk:
+                            continue
+                        handle.write(chunk)
+            except OSError as exc:
+                raise self.DiagnosticsDownloadError(
+                    _("Unable to write diagnostics file: %s") % exc
+                ) from exc
+        finally:
+            with contextlib.suppress(Exception):
+                response.close()
+        relative_asset = destination.relative_to(user_dir).as_posix()
+        asset_url = reverse(
+            "pages:readme-asset",
+            kwargs={"source": "work", "asset": relative_asset},
+        )
+        absolute_url = request.build_absolute_uri(asset_url)
+        return destination, absolute_url
 
     def _prepare_remote_credentials(self, request):
         local = Node.get_local()
@@ -1247,6 +1377,55 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         Charger.objects.filter(pk=charger.pk).update(**applied)
         for field, value in applied.items():
             setattr(charger, field, value)
+
+    @admin.action(description="Get diagnostics")
+    def get_diagnostics(self, request, queryset):
+        diagnostics_dir, user_dir = self._diagnostics_directory_for(request.user)
+        successes: list[tuple[Charger, str, Path]] = []
+        for charger in queryset:
+            location = (charger.diagnostics_location or "").strip()
+            if not location:
+                self.message_user(
+                    request,
+                    _("%(charger)s: no diagnostics location reported.")
+                    % {"charger": charger},
+                    level=messages.WARNING,
+                )
+                continue
+            try:
+                destination, asset_url = self._download_diagnostics(
+                    request,
+                    charger,
+                    location,
+                    diagnostics_dir,
+                    user_dir,
+                )
+            except self.DiagnosticsDownloadError as exc:
+                self.message_user(
+                    request,
+                    _("%(charger)s: %(error)s")
+                    % {"charger": charger, "error": exc},
+                    level=messages.ERROR,
+                )
+                continue
+            successes.append((charger, asset_url, destination))
+
+        if successes:
+            summary = ngettext(
+                "Retrieved diagnostics for %(count)d charger.",
+                "Retrieved diagnostics for %(count)d chargers.",
+                len(successes),
+            ) % {"count": len(successes)}
+            details = format_html_join(
+                "",
+                "<li>{}: <a href=\"{}\" target=\"_blank\">{}</a> (<code>{}</code>)</li>",
+                (
+                    (charger, url, destination.name, destination)
+                    for charger, url, destination in successes
+                ),
+            )
+            message = format_html("{}<ul>{}</ul>", summary, details)
+            self.message_user(request, message, level=messages.SUCCESS)
 
     def get_readonly_fields(self, request, obj=None):
         readonly = list(super().get_readonly_fields(request, obj))
