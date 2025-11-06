@@ -23,13 +23,6 @@
                 {% if ct_id %}
                   <a href="{% url 'admin:favorite_toggle' ct_id %}?next={{ request.get_full_path|urlencode }}" class="favorite-star favorited" title="Toggle favorite">&#9733;</a>
                 {% endif %}
-                {% model_db_status app.app_label model.object_name as model_ok %}
-                {% if model_ok %}
-                  {% translate 'Installed' as status_label %}
-                {% else %}
-                  {% translate 'Missing' as status_label %}
-                {% endif %}
-                <span class="model-status {% if model_ok %}ok{% else %}missing{% endif %}" title="{{ status_label }}" aria-label="{{ status_label }}"></span>
                 {% if model.admin_url %}
                   <a href="{{ model.admin_url }}"{% if model.admin_url in request.path|urlencode %} aria-current="page"{% endif %}>{{ fav.custom_label|default:model.name }}</a>
                 {% else %}
@@ -140,13 +133,6 @@
                 {% if ct_id %}
                   <a href="{% url 'admin:favorite_toggle' ct_id %}?next={{ request.get_full_path|urlencode }}" class="favorite-star{% if fav %} favorited{% endif %}" title="Toggle favorite">&#9733;</a>
                 {% endif %}
-                {% model_db_status app.app_label model.object_name as model_ok %}
-                {% if model_ok %}
-                  {% translate 'Installed' as status_label %}
-                {% else %}
-                  {% translate 'Missing' as status_label %}
-                {% endif %}
-                <span class="model-status {% if model_ok %}ok{% else %}missing{% endif %}" title="{{ status_label }}" aria-label="{{ status_label }}"></span>
                 {% if model.admin_url %}
                   <a href="{{ model.admin_url }}"{% if model.admin_url in request.path|urlencode %} aria-current="page"{% endif %}>{{ fav.custom_label|default:model.name }}</a>
                 {% else %}
