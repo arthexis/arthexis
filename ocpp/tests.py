@@ -1941,6 +1941,35 @@ class CSMSConsumerTests(TransactionTestCase):
         data = json.loads(files[0].read_text())
         self.assertTrue(any("StartTransaction" in m["message"] for m in data))
 
+    def test_session_log_buffer_bounded(self):
+        cid = "BUFFER-LIMIT"
+        session_dir = Path("logs") / "sessions" / cid
+        if session_dir.exists():
+            for file_path in session_dir.glob("*.json"):
+                file_path.unlink()
+
+        tx_id = 999
+        store.start_session_log(cid, tx_id)
+        self.addCleanup(lambda: store.history.pop(cid, None))
+
+        try:
+            metadata = store.history[cid]
+            path = metadata["path"]
+            message_count = store.SESSION_LOG_BUFFER_LIMIT * 3 + 5
+            for idx in range(message_count):
+                store.add_session_message(cid, f"message {idx}")
+                buffer = metadata["buffer"]
+                self.assertLessEqual(len(buffer), store.SESSION_LOG_BUFFER_LIMIT)
+        finally:
+            store.end_session_log(cid)
+
+        self.assertTrue(path.exists())
+        try:
+            payload = json.loads(path.read_text())
+            self.assertEqual(len(payload), message_count)
+        finally:
+            path.unlink(missing_ok=True)
+
     async def test_second_connection_closes_first(self):
         communicator1 = WebsocketCommunicator(application, "/DUPLICATE/")
         connected, _ = await communicator1.connect()

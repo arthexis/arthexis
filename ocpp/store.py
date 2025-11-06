@@ -42,6 +42,8 @@ LOCK_DIR.mkdir(exist_ok=True)
 SESSION_LOCK = LOCK_DIR / "charging.lck"
 _lock_task: asyncio.Task | None = None
 
+SESSION_LOG_BUFFER_LIMIT = 16
+
 
 def connector_slug(value: int | str | None) -> str:
     """Return the canonical slug for a connector value."""
@@ -452,10 +454,29 @@ def _session_folder(cid: str) -> Path:
 def start_session_log(cid: str, tx_id: int) -> None:
     """Begin logging a session for the given charger and transaction id."""
 
+    existing = history.pop(cid, None)
+    if existing:
+        try:
+            _finalize_session(existing)
+        except Exception:
+            # If finalizing the previous session fails we still want to reset
+            # the session metadata so the new session can proceed.
+            pass
+
+    start = datetime.now(timezone.utc)
+    folder = _session_folder(cid)
+    date = start.strftime("%Y%m%d")
+    filename = f"{date}_{tx_id}.json"
+    path = folder / filename
+    handle = path.open("w", encoding="utf-8")
+    handle.write("[")
     history[cid] = {
         "transaction": tx_id,
-        "start": datetime.now(timezone.utc),
-        "messages": [],
+        "start": start,
+        "path": path,
+        "handle": handle,
+        "buffer": [],
+        "first": True,
     }
 
 
@@ -465,14 +486,19 @@ def add_session_message(cid: str, message: str) -> None:
     sess = history.get(cid)
     if not sess:
         return
-    sess["messages"].append(
+    buffer: list[str] = sess.setdefault("buffer", [])
+    payload = json.dumps(
         {
             "timestamp": datetime.now(timezone.utc)
             .isoformat()
             .replace("+00:00", "Z"),
             "message": message,
-        }
+        },
+        ensure_ascii=False,
     )
+    buffer.append(payload)
+    if len(buffer) >= SESSION_LOG_BUFFER_LIMIT:
+        _flush_session_buffer(sess)
 
 
 def end_session_log(cid: str) -> None:
@@ -481,13 +507,42 @@ def end_session_log(cid: str) -> None:
     sess = history.pop(cid, None)
     if not sess:
         return
-    folder = _session_folder(cid)
-    date = sess["start"].strftime("%Y%m%d")
-    tx_id = sess.get("transaction")
-    filename = f"{date}_{tx_id}.json"
-    path = folder / filename
-    with path.open("w", encoding="utf-8") as handle:
-        json.dump(sess["messages"], handle, ensure_ascii=False, indent=2)
+    _finalize_session(sess)
+
+
+def _flush_session_buffer(sess: dict[str, object]) -> None:
+    handle = sess.get("handle")
+    buffer = sess.get("buffer")
+    if not handle or not buffer:
+        return
+    first = bool(sess.get("first", True))
+    for raw in list(buffer):
+        if not first:
+            handle.write(",")
+        handle.write("\n  ")
+        handle.write(raw)
+        first = False
+    handle.flush()
+    buffer.clear()
+    sess["first"] = first
+
+
+def _finalize_session(sess: dict[str, object]) -> None:
+    handle = sess.get("handle")
+    try:
+        _flush_session_buffer(sess)
+        if handle:
+            if sess.get("first", True):
+                handle.write("]\n")
+            else:
+                handle.write("\n]\n")
+            handle.flush()
+    finally:
+        if handle:
+            try:
+                handle.close()
+            except Exception:
+                pass
 
 
 def _log_key_candidates(cid: str, log_type: str) -> list[str]:
