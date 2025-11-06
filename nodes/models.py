@@ -4,6 +4,7 @@ from collections.abc import Iterable
 from copy import deepcopy
 from dataclasses import dataclass
 from django.db import models
+from django.apps import apps
 from django.db.models import Q
 from django.db.utils import DatabaseError
 from django.db.models.signals import post_delete
@@ -1866,8 +1867,43 @@ class NetMessage(Entity):
         )
         if normalized_attachments:
             msg.apply_attachments(normalized_attachments)
+        msg.notify_slack()
         msg.propagate(seen=seen or [])
         return msg
+
+    def notify_slack(self):
+        """Send this Net Message to any Slack chatbots owned by the origin node."""
+
+        try:
+            SlackBotProfile = apps.get_model("teams", "SlackBotProfile")
+        except (LookupError, ValueError):
+            return
+        if SlackBotProfile is None:
+            return
+
+        origin = self.node_origin
+        if origin is None:
+            origin = Node.get_local()
+        if not origin:
+            return
+
+        try:
+            bots = SlackBotProfile.objects.filter(node=origin, is_enabled=True)
+        except Exception:  # pragma: no cover - database errors surfaced in logs
+            logger.exception(
+                "Failed to load Slack chatbots for node %s", getattr(origin, "pk", None)
+            )
+            return
+
+        for bot in bots:
+            try:
+                bot.broadcast_net_message(self)
+            except Exception:  # pragma: no cover - network errors logged for diagnosis
+                logger.exception(
+                    "Slack bot %s failed to broadcast NetMessage %s",
+                    getattr(bot, "pk", None),
+                    getattr(self, "pk", None),
+                )
 
     @staticmethod
     def normalize_attachments(
