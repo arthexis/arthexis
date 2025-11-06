@@ -43,6 +43,7 @@ from django.test import (
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.contrib import admin
+from django.contrib import messages
 from django.contrib.admin import helpers
 from django.contrib.auth.models import Permission
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
@@ -54,6 +55,7 @@ from . import dns as dns_utils
 from selenium.common.exceptions import WebDriverException
 from .classifiers import run_default_classifiers
 from .utils import capture_rpi_snapshot, capture_screenshot, save_screenshot
+from .feature_checks import feature_checks
 from django.db.utils import DatabaseError
 
 from .admin import NodeAdmin
@@ -2200,6 +2202,34 @@ class NodeAdminTests(TestCase):
         self.assertContains(
             response,
             "RFID Scanner is not enabled on localnode. This feature cannot be enabled manually.",
+            html=False,
+        )
+        self.assertContains(
+            response, "Completed 0 of 1 feature check(s) successfully.", html=False
+        )
+
+    @pytest.mark.feature("audio-capture")
+    @patch("nodes.models.Node._has_audio_capture_device", return_value=False)
+    def test_check_features_for_eligibility_audio_capture_requires_device(
+        self, mock_device
+    ):
+        self._create_local_node()
+        feature, _ = NodeFeature.objects.get_or_create(
+            slug="audio-capture", defaults={"display": "Audio Capture"}
+        )
+        changelist_url = reverse("admin:nodes_nodefeature_changelist")
+        response = self.client.post(
+            changelist_url,
+            {
+                "action": "check_features_for_eligibility",
+                "_selected_action": [str(feature.pk)],
+            },
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "No audio recording device detected on localnode for Audio Capture. This feature can be enabled manually.",
             html=False,
         )
         self.assertContains(
@@ -4627,6 +4657,72 @@ class NodeFeatureTests(TestCase):
         self.assertFalse(
             NodeFeatureAssignment.objects.filter(node=node, feature=feature).exists()
         )
+
+
+class AudioCaptureDetectionTests(TestCase):
+    def test_has_audio_capture_device_true(self):
+        with TemporaryDirectory() as tmp:
+            pcm_path = Path(tmp) / "pcm"
+            pcm_path.write_text(
+                "00-00: USB Audio : USB Audio : playback 1 : capture 1\n",
+                encoding="utf-8",
+            )
+            with patch.object(Node, "AUDIO_CAPTURE_PCM_PATH", pcm_path):
+                self.assertTrue(Node._has_audio_capture_device())
+
+    def test_has_audio_capture_device_false_without_capture(self):
+        with TemporaryDirectory() as tmp:
+            pcm_path = Path(tmp) / "pcm"
+            pcm_path.write_text(
+                "00-00: USB Audio : USB Audio : playback 1\n",
+                encoding="utf-8",
+            )
+            with patch.object(Node, "AUDIO_CAPTURE_PCM_PATH", pcm_path):
+                self.assertFalse(Node._has_audio_capture_device())
+
+    def test_has_audio_capture_device_false_when_file_missing(self):
+        with TemporaryDirectory() as tmp:
+            pcm_path = Path(tmp) / "pcm"
+        with patch.object(Node, "AUDIO_CAPTURE_PCM_PATH", pcm_path):
+            self.assertFalse(Node._has_audio_capture_device())
+
+
+class AudioCaptureFeatureCheckTests(TestCase):
+    def setUp(self):
+        self.node = Node.objects.create(
+            hostname="localnode",
+            address="127.0.0.1",
+            port=8888,
+            mac_address=Node.get_current_mac(),
+        )
+        self.feature, _ = NodeFeature.objects.get_or_create(
+            slug="audio-capture", defaults={"display": "Audio Capture"}
+        )
+
+    @pytest.mark.feature("audio-capture")
+    @patch("nodes.models.Node._has_audio_capture_device", return_value=False)
+    def test_feature_check_warns_without_device(self, mock_device):
+        result = feature_checks.run(self.feature, node=self.node)
+        self.assertFalse(result.success)
+        self.assertIn("No audio recording device detected", result.message)
+        self.assertEqual(result.level, messages.WARNING)
+
+    @pytest.mark.feature("audio-capture")
+    @patch("nodes.models.Node._has_audio_capture_device", return_value=True)
+    def test_feature_check_warns_when_feature_disabled(self, mock_device):
+        result = feature_checks.run(self.feature, node=self.node)
+        self.assertFalse(result.success)
+        self.assertIn("is not enabled", result.message)
+        self.assertEqual(result.level, messages.WARNING)
+
+    @pytest.mark.feature("audio-capture")
+    @patch("nodes.models.Node._has_audio_capture_device", return_value=True)
+    def test_feature_check_passes_when_enabled(self, mock_device):
+        NodeFeatureAssignment.objects.get_or_create(node=self.node, feature=self.feature)
+        result = feature_checks.run(self.feature, node=self.node)
+        self.assertTrue(result.success)
+        self.assertIn("recording device is available", result.message)
+        self.assertEqual(result.level, messages.SUCCESS)
 
 
 class CeleryReportAdminViewTests(TestCase):

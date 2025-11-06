@@ -91,6 +91,36 @@ class FeatureCheckRegistry:
 feature_checks = FeatureCheckRegistry()
 
 
+@feature_checks.register("audio-capture")
+def _check_audio_capture(feature: "NodeFeature", node: Optional["Node"]):
+    from .models import Node
+
+    target: Optional["Node"] = node or Node.get_local()
+    if target is None:
+        return FeatureCheckResult(
+            False,
+            f"No local node is registered; cannot verify {feature.display}.",
+            messages.WARNING,
+        )
+    if not Node._has_audio_capture_device():
+        return FeatureCheckResult(
+            False,
+            f"No audio recording device detected on {target.hostname} for {feature.display}.",
+            messages.WARNING,
+        )
+    if not target.has_feature("audio-capture"):
+        return FeatureCheckResult(
+            False,
+            f"{feature.display} is not enabled on {target.hostname}.",
+            messages.WARNING,
+        )
+    return FeatureCheckResult(
+        True,
+        f"{feature.display} is enabled on {target.hostname} and a recording device is available.",
+        messages.SUCCESS,
+    )
+
+
 @feature_checks.register_default
 def _default_feature_check(
     feature: "NodeFeature", node: Optional["Node"]
