@@ -258,6 +258,7 @@ class Node(Entity):
     RPI_CAMERA_DEVICE = Path("/dev/video0")
     RPI_CAMERA_BINARIES = ("rpicam-hello", "rpicam-still", "rpicam-vid")
     AP_ROUTER_SSID = "gelectriic-ap"
+    AUDIO_CAPTURE_PCM_PATH = Path("/proc/asound/pcm")
     NMCLI_TIMEOUT = 5
     AUTO_MANAGED_FEATURES = set(FEATURE_LOCK_MAP.keys()) | {
         "gui-toast",
@@ -965,6 +966,29 @@ class Node(Entity):
             if result.returncode != 0:
                 return False
         return True
+
+    @classmethod
+    def _has_audio_capture_device(cls) -> bool:
+        """Return ``True`` when an audio capture device is available."""
+
+        pcm_path = cls.AUDIO_CAPTURE_PCM_PATH
+        try:
+            contents = pcm_path.read_text(errors="ignore")
+        except OSError:
+            return False
+        for line in contents.splitlines():
+            candidate = line.strip()
+            if not candidate:
+                continue
+            lower_candidate = candidate.lower()
+            if "capture" not in lower_candidate:
+                continue
+            match = re.search(r"capture\s+(\d+)", lower_candidate)
+            if not match:
+                continue
+            if int(match.group(1)) > 0:
+                return True
+        return False
 
     @classmethod
     def _hosts_gelectriic_ap(cls) -> bool:

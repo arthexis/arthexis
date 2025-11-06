@@ -6,7 +6,11 @@
       "is_deleted": false,
       "slug": "audio-capture",
       "display": "Audio Capture",
-      "roles": []
+      "roles": [
+        [
+          "Control"
+        ]
+      ]
     }
   }
 ]
