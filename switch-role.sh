@@ -50,7 +50,10 @@ detect_service_port() {
     fi
 
     if [ -z "$port" ]; then
-        local nginx_conf="/etc/nginx/conf.d/arthexis-${nginx_mode}.conf"
+        local nginx_conf="/etc/nginx/sites-enabled/arthexis.conf"
+        if [ ! -f "$nginx_conf" ]; then
+            nginx_conf="/etc/nginx/conf.d/arthexis-${nginx_mode}.conf"
+        fi
         if [ -f "$nginx_conf" ]; then
             port=$(grep -E 'proxy_pass http://127\.0\.0\.1:[0-9]+' "$nginx_conf" | head -n1 | sed -E 's/.*127\.0\.0\.1:([0-9]+).*/\1/')
         fi
@@ -355,7 +358,7 @@ elif [ "$AUTO_UPGRADE_MODE" = "disable" ]; then
 fi
 
 if arthexis_can_manage_nginx; then
-    arthexis_refresh_nginx_maintenance "$BASE_DIR" "/etc/nginx/conf.d/arthexis-${NGINX_MODE}.conf"
+    arthexis_refresh_nginx_maintenance "$BASE_DIR" "/etc/nginx/sites-enabled/arthexis.conf"
 fi
 
 if [ "$UPDATE" = true ]; then

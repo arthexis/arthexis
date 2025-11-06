@@ -49,7 +49,8 @@ arthexis_refresh_nginx_maintenance() {
   local update_script="$base_dir/scripts/helpers/update_nginx_maintenance.py"
 
   if [ ${#configs[@]} -eq 0 ]; then
-    configs=("/etc/nginx/conf.d/arthexis-internal.conf" \
+    configs=("/etc/nginx/sites-enabled/arthexis.conf" \
+      "/etc/nginx/conf.d/arthexis-internal.conf" \
       "/etc/nginx/conf.d/arthexis-public.conf")
   fi
 
