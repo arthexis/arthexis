@@ -9,7 +9,7 @@ from django.apps import apps
 from django.contrib import admin
 from django.contrib.contenttypes.models import ContentType
 from django.core.cache import cache
-from django.db import connection, DatabaseError
+from django.db import DatabaseError
 from django.db.models import Count, Exists, OuterRef, Q
 from django.db.models import Model
 from django.db.models.signals import post_delete, post_save
@@ -354,25 +354,6 @@ def related_admin_models(opts):
 
     related.sort(key=lambda item: item["label"])
     return related
-
-
-@register.simple_tag(takes_context=True)
-def model_db_status(context, app_label: str, model_name: str) -> bool:
-    """Return ``True`` if the model's database table exists.
-
-    The table list is cached on the template context to avoid repeated
-    introspection queries within a single request.
-    """
-    cache_key = "_model_status_tables"
-    tables = context.get(cache_key)
-    if tables is None:
-        tables = set(connection.introspection.table_names())
-        context[cache_key] = tables
-    try:
-        model = apps.get_model(app_label, model_name)
-    except LookupError:
-        return False
-    return model._meta.db_table in tables
 
 
 @register.simple_tag(takes_context=True)

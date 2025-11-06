@@ -1473,6 +1473,9 @@ class AdminModelStatusTests(TestCase):
         resp = self.client.get(reverse("admin:index"))
         self.assertNotContains(resp, "class=\"model-status")
 
+        changelist = self.client.get(reverse("admin:pages_application_changelist"))
+        self.assertNotContains(changelist, "class=\"model-status")
+
 
 class _FakeQuerySet(list):
     def only(self, *args, **kwargs):
