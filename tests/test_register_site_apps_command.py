@@ -35,7 +35,7 @@ class RegisterSiteAppsCommandTests(TestCase):
 
         node = Node.objects.get(hostname=socket.gethostname())
         self.assertFalse(node.enable_public_api)
-        self.assertFalse(node.features.filter(slug="clipboard-poll").exists())
+        self.assertTrue(node.features.filter(slug="clipboard-poll").exists())
         self.assertFalse(node.features.filter(slug="screenshot-poll").exists())
         role = NodeRole.objects.get(name="Terminal")
 

@@ -925,12 +925,40 @@ class Node(Entity):
         if self.public_endpoint != endpoint_value:
             self.public_endpoint = endpoint_value
             include_update_field("public_endpoint")
+        is_new = self.pk is None
         super().save(*args, **kwargs)
         if self.pk:
+            if is_new:
+                self._apply_role_manual_features()
             self.refresh_features()
 
     def has_feature(self, slug: str) -> bool:
         return self.features.filter(slug=slug).exists()
+
+    def _apply_role_manual_features(self) -> None:
+        """Enable manual features configured as defaults for this node's role."""
+
+        if not self.role_id:
+            return
+
+        role_features = self.role.features.filter(
+            slug__in=self.MANUAL_FEATURE_SLUGS
+        ).values_list("slug", flat=True)
+        desired = set(role_features)
+        if not desired:
+            return
+
+        existing = set(
+            self.features.filter(slug__in=desired).values_list("slug", flat=True)
+        )
+        missing = desired - existing
+        if not missing:
+            return
+
+        for feature in NodeFeature.objects.filter(slug__in=missing):
+            NodeFeatureAssignment.objects.update_or_create(
+                node=self, feature=feature
+            )
 
     @classmethod
     def _has_rpi_camera(cls) -> bool:

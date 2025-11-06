@@ -127,6 +127,23 @@ class NodeTests(TestCase):
         NodeRole.objects.get_or_create(name="Terminal")
         NodeRole.objects.get_or_create(name="Interface")
 
+    def test_terminal_role_enables_clipboard_feature_by_default(self):
+        role = NodeRole.objects.get(name="Terminal")
+        feature, _ = NodeFeature.objects.get_or_create(
+            slug="clipboard-poll", defaults={"display": "Clipboard Poll"}
+        )
+        feature.roles.add(role)
+
+        node = Node.objects.create(
+            hostname="terminal-node",
+            address="10.0.0.5",
+            port=8888,
+            mac_address="aa:bb:cc:dd:ee:ff",
+            role=role,
+        )
+
+        self.assertTrue(node.has_feature("clipboard-poll"))
+
 
 class NodeGetLocalDatabaseUnavailableTests(SimpleTestCase):
     def test_get_local_handles_database_errors(self):
