@@ -29,6 +29,7 @@ from django.core.exceptions import ValidationError
 from .models import (
     Charger,
     ChargerConfiguration,
+    ConfigurationKey,
     Simulator,
     MeterValue,
     Transaction,
@@ -221,6 +222,44 @@ class LogViewAdminMixin:
         return TemplateResponse(request, self.log_template_name, context)
 
 
+class ConfigurationKeyInline(admin.TabularInline):
+    model = ConfigurationKey
+    extra = 0
+    can_delete = False
+    ordering = ("position", "id")
+    readonly_fields = (
+        "position",
+        "key",
+        "readonly",
+        "value_display",
+        "extra_display",
+    )
+    fields = readonly_fields
+    show_change_link = False
+
+    def has_add_permission(self, request, obj=None):  # pragma: no cover - admin hook
+        return False
+
+    @admin.display(description=_("Value"))
+    def value_display(self, obj):
+        if not obj.has_value:
+            return "-"
+        value = obj.value
+        if isinstance(value, (dict, list)):
+            formatted = json.dumps(value, indent=2, ensure_ascii=False)
+            return format_html("<pre>{}</pre>", formatted)
+        if value in (None, ""):
+            return "-"
+        return str(value)
+
+    @admin.display(description=_("Extra data"))
+    def extra_display(self, obj):
+        if not obj.extra_data:
+            return "-"
+        formatted = json.dumps(obj.extra_data, indent=2, ensure_ascii=False)
+        return format_html("<pre>{}</pre>", formatted)
+
+
 @admin.register(ChargerConfiguration)
 class ChargerConfigurationAdmin(admin.ModelAdmin):
     list_display = (
@@ -239,10 +278,10 @@ class ChargerConfigurationAdmin(admin.ModelAdmin):
         "created_at",
         "updated_at",
         "linked_chargers",
-        "configuration_keys_display",
         "unknown_keys_display",
         "raw_payload_display",
     )
+    inlines = (ConfigurationKeyInline,)
     fieldsets = (
         (
             None,
@@ -262,7 +301,6 @@ class ChargerConfigurationAdmin(admin.ModelAdmin):
             "Payload",
             {
                 "fields": (
-                    "configuration_keys_display",
                     "unknown_keys_display",
                     "raw_payload_display",
                 )
@@ -293,10 +331,6 @@ class ChargerConfigurationAdmin(admin.ModelAdmin):
         formatted = json.dumps(data, indent=2, ensure_ascii=False)
         return format_html("<pre>{}</pre>", formatted)
 
-    @admin.display(description="configurationKey")
-    def configuration_keys_display(self, obj):
-        return self._render_json(obj.configuration_keys)
-
     @admin.display(description="unknownKey")
     def unknown_keys_display(self, obj):
         return self._render_json(obj.unknown_keys)
@@ -314,6 +348,15 @@ class ChargerConfigurationAdmin(admin.ModelAdmin):
     def save_model(self, request, obj, form, change):
         obj.evcs_snapshot_at = None
         super().save_model(request, obj, form, change)
+
+
+@admin.register(ConfigurationKey)
+class ConfigurationKeyAdmin(admin.ModelAdmin):
+    list_display = ("configuration", "key", "position", "readonly")
+    ordering = ("configuration", "position", "id")
+
+    def get_model_perms(self, request):  # pragma: no cover - admin hook
+        return {}
 
 
 @admin.register(Location)

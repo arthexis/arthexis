@@ -742,6 +742,43 @@ class Charger(Entity):
         super().delete(*args, **kwargs)
 
 
+class ConfigurationKey(models.Model):
+    """Single configurationKey entry from a GetConfiguration payload."""
+
+    configuration = models.ForeignKey(
+        "ChargerConfiguration",
+        on_delete=models.CASCADE,
+        related_name="configuration_entries",
+    )
+    position = models.PositiveIntegerField(default=0)
+    key = models.CharField(max_length=255)
+    readonly = models.BooleanField(default=False)
+    has_value = models.BooleanField(default=False)
+    value = models.JSONField(null=True, blank=True)
+    extra_data = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ["position", "id"]
+        verbose_name = _("Configuration Key")
+        verbose_name_plural = _("Configuration Keys")
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return self.key
+
+    def as_dict(self) -> dict[str, object]:
+        data: dict[str, object] = {"key": self.key, "readonly": self.readonly}
+        if self.has_value:
+            data["value"] = self.value
+        if self.extra_data:
+            data.update(self.extra_data)
+        return data
+
+
+class ChargerConfigurationManager(models.Manager):
+    def get_queryset(self):
+        return super().get_queryset().prefetch_related("configuration_entries")
+
+
 class ChargerConfiguration(models.Model):
     """Persisted configuration package returned by a charge point."""
 
@@ -751,11 +788,6 @@ class ChargerConfiguration(models.Model):
         null=True,
         blank=True,
         help_text=_("Connector that returned this configuration (if specified)."),
-    )
-    configuration_keys = models.JSONField(
-        default=list,
-        blank=True,
-        help_text=_("Entries from the configurationKey list."),
     )
     unknown_keys = models.JSONField(
         default=list,
@@ -778,6 +810,8 @@ class ChargerConfiguration(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    objects = ChargerConfigurationManager()
+
     class Meta:
         ordering = ["-created_at"]
         verbose_name = _("CP Configuration")
@@ -793,6 +827,54 @@ class ChargerConfiguration(models.Model):
             "serial": self.charger_identifier,
             "connector": connector,
         }
+
+    @property
+    def configuration_keys(self) -> list[dict[str, object]]:
+        return [entry.as_dict() for entry in self.configuration_entries.all()]
+
+    def replace_configuration_keys(self, entries: list[dict[str, object]] | None) -> None:
+        ConfigurationKey.objects.filter(configuration=self).delete()
+        if not entries:
+            if hasattr(self, "_prefetched_objects_cache"):
+                self._prefetched_objects_cache.pop("configuration_entries", None)
+            return
+
+        key_objects: list[ConfigurationKey] = []
+        for position, entry in enumerate(entries):
+            if not isinstance(entry, dict):
+                continue
+            key_text = str(entry.get("key") or "").strip()
+            if not key_text:
+                continue
+            readonly = bool(entry.get("readonly"))
+            has_value = "value" in entry
+            value = entry.get("value") if has_value else None
+            extras = {
+                field_key: field_value
+                for field_key, field_value in entry.items()
+                if field_key not in {"key", "readonly", "value"}
+            }
+            key_objects.append(
+                ConfigurationKey(
+                    configuration=self,
+                    position=position,
+                    key=key_text,
+                    readonly=readonly,
+                    has_value=has_value,
+                    value=value,
+                    extra_data=extras,
+                )
+            )
+        created_keys = ConfigurationKey.objects.bulk_create(key_objects)
+        if hasattr(self, "_prefetched_objects_cache"):
+            if created_keys:
+                refreshed = list(
+                    ConfigurationKey.objects.filter(configuration=self)
+                    .order_by("position", "id")
+                )
+                self._prefetched_objects_cache["configuration_entries"] = refreshed
+            else:
+                self._prefetched_objects_cache.pop("configuration_entries", None)
 
 
 class Transaction(Entity):

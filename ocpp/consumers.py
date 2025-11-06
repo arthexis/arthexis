@@ -858,11 +858,11 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         configuration = ChargerConfiguration.objects.create(
             charger_identifier=self.charger_id,
             connector_id=connector_value,
-            configuration_keys=normalized_entries,
             unknown_keys=unknown_values,
             evcs_snapshot_at=timezone.now(),
             raw_payload=raw_payload,
         )
+        configuration.replace_configuration_keys(normalized_entries)
         Charger.objects.filter(charger_id=self.charger_id).update(
             configuration=configuration
         )

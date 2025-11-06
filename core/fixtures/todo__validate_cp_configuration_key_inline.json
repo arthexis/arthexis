@@ -1,0 +1,12 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate CP Configuration key inline table",
+      "url": "/admin/ocpp/chargerconfiguration/",
+      "request_details": "Open a CP Configuration entry in the admin and verify the Configuration Keys inline lists each key with its readonly flag, value, and any extra payload details. Confirm the raw payload and unknown key sections still render correctly.",
+      "done_on": null,
+      "is_deleted": false
+    }
+  }
+]

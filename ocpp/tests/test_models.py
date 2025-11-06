@@ -19,7 +19,12 @@ from django.utils import timezone
 
 from core.models import EnergyTariff, Reference, SecurityGroup
 
-from ocpp.models import Charger, Location
+from ocpp.models import (
+    Charger,
+    ChargerConfiguration,
+    ConfigurationKey,
+    Location,
+)
 from nodes.models import Node
 
 
@@ -230,6 +235,96 @@ class ChargerSerialValidationTests(TestCase):
         self.assertIn(
             "Serial Number placeholder values such as <charger_id> are not allowed.",
             message_dict["charger_id"],
+        )
+
+
+class ChargerConfigurationKeyTests(TestCase):
+    def test_replace_configuration_keys_creates_related_entries(self):
+        configuration = ChargerConfiguration.objects.create(
+            charger_identifier="CFG-KEYS"
+        )
+
+        configuration.replace_configuration_keys(
+            [
+                {
+                    "key": "HeartbeatInterval",
+                    "value": "300",
+                    "readonly": True,
+                    "channel": "A",
+                },
+                {
+                    "key": "AuthorizeRemoteTxRequests",
+                    "readonly": False,
+                },
+                {"key": ""},
+                "invalid",
+            ]
+        )
+
+        rows = list(
+            ConfigurationKey.objects.filter(configuration=configuration)
+            .order_by("position", "id")
+        )
+        self.assertEqual(len(rows), 2)
+
+        first, second = rows
+        self.assertEqual(first.key, "HeartbeatInterval")
+        self.assertTrue(first.has_value)
+        self.assertEqual(first.value, "300")
+        self.assertTrue(first.readonly)
+        self.assertEqual(first.extra_data, {"channel": "A"})
+
+        self.assertEqual(second.key, "AuthorizeRemoteTxRequests")
+        self.assertFalse(second.has_value)
+        self.assertIsNone(second.value)
+        self.assertFalse(second.readonly)
+        self.assertEqual(second.extra_data, {})
+
+        self.assertEqual(
+            configuration.configuration_keys,
+            [
+                {
+                    "key": "HeartbeatInterval",
+                    "readonly": True,
+                    "value": "300",
+                    "channel": "A",
+                },
+                {
+                    "key": "AuthorizeRemoteTxRequests",
+                    "readonly": False,
+                },
+            ],
+        )
+
+    def test_replace_configuration_keys_overwrites_existing_entries(self):
+        configuration = ChargerConfiguration.objects.create(
+            charger_identifier="CFG-OVERWRITE"
+        )
+
+        configuration.replace_configuration_keys([
+            {"key": "HeartbeatInterval", "value": "300"}
+        ])
+        configuration.replace_configuration_keys([
+            {"key": "MeterValueSampleInterval", "value": 900}
+        ])
+
+        rows = list(
+            ConfigurationKey.objects.filter(configuration=configuration)
+            .order_by("position", "id")
+        )
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0].key, "MeterValueSampleInterval")
+        self.assertTrue(rows[0].has_value)
+        self.assertEqual(rows[0].value, 900)
+        self.assertEqual(
+            configuration.configuration_keys,
+            [
+                {
+                    "key": "MeterValueSampleInterval",
+                    "value": 900,
+                    "readonly": False,
+                }
+            ],
         )
 
 
