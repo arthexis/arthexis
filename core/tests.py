@@ -5,6 +5,7 @@ import django
 
 django.setup()
 
+from django import forms
 from django.test import Client, TestCase, RequestFactory, override_settings
 from django.urls import reverse
 from django.http import HttpRequest
@@ -474,25 +475,23 @@ class UserAdminPasswordChangeTests(TestCase):
         self.user = User.objects.create_user(username="target", password="oldpass")
         self.client.force_login(self.admin)
 
-    def test_change_password_form_includes_rfid_field(self):
-        tag = RFID.objects.create(rfid="CARD777")
-        EnergyAccount.objects.create(user=self.user, name="TARGET")
+    def test_change_password_form_excludes_rfid_field(self):
         url = reverse("admin:core_user_password_change", args=[self.user.pk])
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "name=\"rfid\"")
-        self.assertContains(response, str(tag.pk))
+        self.assertNotContains(response, 'name="rfid"')
+        self.assertNotContains(response, "Login RFID")
 
-    def test_change_password_form_assigns_rfid(self):
+    def test_change_password_does_not_alter_existing_rfid_assignment(self):
         account = EnergyAccount.objects.create(user=self.user, name="TARGET")
         tag = RFID.objects.create(rfid="CARD778")
+        account.rfids.add(tag)
         url = reverse("admin:core_user_password_change", args=[self.user.pk])
         response = self.client.post(
             url,
             {
                 "new_password1": "NewStrongPass123",
                 "new_password2": "NewStrongPass123",
-                "rfid": tag.pk,
             },
         )
         self.assertRedirects(
@@ -503,24 +502,67 @@ class UserAdminPasswordChangeTests(TestCase):
         self.user.refresh_from_db()
         self.assertTrue(self.user.check_password("NewStrongPass123"))
 
-    def test_change_password_creates_energy_account_when_missing(self):
-        tag = RFID.objects.create(rfid="CARD779")
-        url = reverse("admin:core_user_password_change", args=[self.user.pk])
-        response = self.client.post(
-            url,
-            {
-                "new_password1": "AnotherStrongPass456",
-                "new_password2": "AnotherStrongPass456",
-                "rfid": tag.pk,
-            },
+
+class UserAdminLoginRFIDTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.admin = User.objects.create_superuser(
+            username="admin", email="admin@example.com", password="adminpass"
         )
+        self.user = User.objects.create_user(username="target", password="oldpass")
+        self.client.force_login(self.admin)
+
+    def _build_change_form_data(self, response, **overrides):
+        form = response.context["adminform"].form
+        data = {}
+        for name, field in form.fields.items():
+            if isinstance(field, forms.ModelMultipleChoiceField):
+                initial = form.initial.get(name, field.initial) or []
+                data[name] = [str(value.pk) for value in initial]
+            elif isinstance(field, forms.BooleanField):
+                initial = form.initial.get(name, field.initial)
+                if initial:
+                    data[name] = "on"
+            elif name != "login_rfid":
+                value = form.initial.get(name, field.initial)
+                data[name] = "" if value is None else value
+        data["_save"] = "Save"
+        data.update({key: value for key, value in overrides.items() if value is not None})
+        return data
+
+    def test_change_form_includes_login_rfid_field(self):
+        tag = RFID.objects.create(rfid="CARD777")
+        EnergyAccount.objects.create(user=self.user, name="TARGET")
+        url = reverse("admin:core_user_change", args=[self.user.pk])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'name="login_rfid"')
+        self.assertContains(response, str(tag.pk))
+
+    def test_change_form_assigns_login_rfid(self):
+        account = EnergyAccount.objects.create(user=self.user, name="TARGET")
+        tag = RFID.objects.create(rfid="CARD778")
+        url = reverse("admin:core_user_change", args=[self.user.pk])
+        response = self.client.get(url)
+        form_data = self._build_change_form_data(response, login_rfid=str(tag.pk))
+        post_response = self.client.post(url, form_data)
         self.assertRedirects(
-            response, reverse("admin:core_user_change", args=[self.user.pk])
+            post_response, reverse("admin:core_user_change", args=[self.user.pk])
+        )
+        account.refresh_from_db()
+        self.assertTrue(account.rfids.filter(pk=tag.pk).exists())
+
+    def test_change_form_creates_energy_account_when_missing(self):
+        tag = RFID.objects.create(rfid="CARD779")
+        url = reverse("admin:core_user_change", args=[self.user.pk])
+        response = self.client.get(url)
+        form_data = self._build_change_form_data(response, login_rfid=str(tag.pk))
+        post_response = self.client.post(url, form_data)
+        self.assertRedirects(
+            post_response, reverse("admin:core_user_change", args=[self.user.pk])
         )
         account = EnergyAccount.objects.get(user=self.user)
         self.assertTrue(account.rfids.filter(pk=tag.pk).exists())
-        self.user.refresh_from_db()
-        self.assertTrue(self.user.check_password("AnotherStrongPass456"))
 
 
 class AdminSitePasswordChangeTests(TestCase):
@@ -531,18 +573,16 @@ class AdminSitePasswordChangeTests(TestCase):
         )
         self.client.force_login(self.admin)
 
-    def test_admin_password_change_form_includes_rfid_field(self):
-        tag = RFID.objects.create(rfid="CARD880")
+    def test_admin_password_change_form_excludes_rfid_field(self):
         response = self.client.get(reverse("admin:password_change"))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "name=\"rfid\"")
-        self.assertContains(response, str(tag.pk))
+        self.assertNotContains(response, 'name="rfid"')
+        self.assertNotContains(response, "Login RFID")
 
-    def test_admin_password_change_assigns_rfid(self):
-        other_user = User.objects.create_user(username="other", password="pass12345")
-        other_account = EnergyAccount.objects.create(user=other_user, name="OTHER")
+    def test_admin_password_change_keeps_existing_rfid_assignment(self):
+        account = EnergyAccount.objects.create(user=self.admin, name="ADMIN")
         tag = RFID.objects.create(rfid="CARD881")
-        other_account.rfids.add(tag)
+        account.rfids.add(tag)
         response = self.client.post(
             reverse("admin:password_change"),
             {
@@ -551,16 +591,13 @@ class AdminSitePasswordChangeTests(TestCase):
                 "new_password2": "UltraSecurePass123",
                 "password1": "UltraSecurePass123",
                 "password2": "UltraSecurePass123",
-                "rfid": tag.pk,
             },
         )
         self.assertRedirects(response, reverse("admin:password_change_done"))
         self.admin.refresh_from_db()
         self.assertTrue(self.admin.check_password("UltraSecurePass123"))
-        account = EnergyAccount.objects.get(user=self.admin)
+        account.refresh_from_db()
         self.assertTrue(account.rfids.filter(pk=tag.pk).exists())
-        other_account.refresh_from_db()
-        self.assertFalse(other_account.rfids.filter(pk=tag.pk).exists())
 
     def test_export_rfids_color_filter(self):
         RFID.objects.create(rfid="CARD111", color=RFID.WHITE)

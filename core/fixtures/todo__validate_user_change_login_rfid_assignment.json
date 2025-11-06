@@ -1,0 +1,12 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate user change Login RFID assignment",
+      "url": "admin:core_user_changelist",
+      "request_details": "Log in as a superuser, open a user change form, and verify the Login RFID dropdown lists available cards. Assign a card, save the form, and confirm the card is linked to the selected user and removed from any previous account.",
+      "done_on": null,
+      "is_deleted": false
+    }
+  }
+]
