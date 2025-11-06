@@ -1,7 +1,8 @@
 from django.contrib import admin, messages
 from django.contrib.admin.sites import NotRegistered
+from django.core.exceptions import ValidationError
 from django.utils import formats, timezone
-from django.utils.translation import gettext_lazy as _
+from django.utils.translation import gettext_lazy as _, ngettext
 
 from django_otp.plugins.otp_totp.models import TOTPDevice as CoreTOTPDevice
 from django_otp.plugins.otp_totp.admin import (
@@ -169,20 +170,101 @@ class SlackBotProfileAdmin(EntityModelAdmin):
 class ManualTaskAdmin(EntityModelAdmin):
     list_display = (
         "title",
+        "assigned_user",
+        "assigned_group",
         "node",
         "location",
         "scheduled_start",
         "scheduled_end",
+        "enable_notifications",
     )
-    list_filter = ("node", "location")
+    list_filter = ("node", "location", "enable_notifications")
     search_fields = (
         "title",
         "description",
         "node__hostname",
         "location__name",
+        "assigned_user__username",
+        "assigned_user__email",
+        "assigned_group__name",
     )
-    raw_id_fields = ("node", "location")
+    raw_id_fields = ("node", "location", "assigned_user", "assigned_group")
     date_hierarchy = "scheduled_start"
+    actions = ("make_cp_reservations",)
+    fieldsets = (
+        (
+            None,
+            {
+                "fields": (
+                    "title",
+                    "description",
+                    "assigned_user",
+                    "assigned_group",
+                    "enable_notifications",
+                )
+            },
+        ),
+        (
+            _("Scope"),
+            {
+                "fields": (
+                    "node",
+                    "location",
+                )
+            },
+        ),
+        (
+            _("Schedule"),
+            {"fields": ("scheduled_start", "scheduled_end")},
+        ),
+    )
+
+    @admin.action(description=_("Make Reservation at CP"))
+    def make_cp_reservations(self, request, queryset):
+        success_count = 0
+        for task in queryset:
+            try:
+                task.create_cp_reservation()
+            except ValidationError as exc:
+                for message in self._normalize_validation_error(exc):
+                    self.message_user(
+                        request,
+                        _("%(task)s: %(message)s")
+                        % {"task": task, "message": message},
+                        level=messages.WARNING,
+                    )
+            except Exception as exc:  # pragma: no cover - defensive guard
+                self.message_user(
+                    request,
+                    _("%(task)s: %(error)s")
+                    % {"task": task, "error": str(exc)},
+                    level=messages.ERROR,
+                )
+            else:
+                success_count += 1
+        if success_count:
+            message = ngettext(
+                "Created %(count)d reservation.",
+                "Created %(count)d reservations.",
+                success_count,
+            ) % {"count": success_count}
+            self.message_user(request, message, level=messages.SUCCESS)
+
+    @staticmethod
+    def _normalize_validation_error(error: ValidationError) -> list[str]:
+        messages_list: list[str] = []
+        if error.message_dict:
+            for field, values in error.message_dict.items():
+                for value in values:
+                    if field == "__all__":
+                        messages_list.append(str(value))
+                    else:
+                        messages_list.append(f"{field}: {value}")
+        elif error.messages:
+            messages_list.extend(str(value) for value in error.messages)
+        else:
+            messages_list.append(str(error))
+        return messages_list
 
 
 try:
