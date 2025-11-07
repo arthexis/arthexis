@@ -28,13 +28,13 @@
           {% endif %}
         </div>
         <div class="card-body">
-          {% if charger.last_status or charger.last_error_code or charger.last_status_timestamp or charger.last_status_vendor_info %}
+          {% if charger.last_status or charger_error_code or charger.last_status_timestamp or charger.last_status_vendor_info %}
           <div class="mb-3 text-muted small">
             {% if charger.last_status %}
             <p class="mb-1"><span data-i18n="status_reported_label">{% trans "Reported status" %}</span>: {{ charger.last_status }}</p>
             {% endif %}
-            {% if charger.last_error_code %}
-            <p class="mb-1"><span data-i18n="status_error_label">{% trans "Error code" %}</span>: {{ charger.last_error_code }}</p>
+            {% if charger_error_code %}
+            <p class="mb-1"><span data-i18n="status_error_label">{% trans "Error code" %}</span>: {{ charger_error_code }}</p>
             {% endif %}
             {% if charger.last_status_timestamp %}
             <p class="mb-1"><span data-i18n="status_updated_label">{% trans "Last status update" %}</span>: {{ charger.last_status_timestamp|date:"SHORT_DATETIME_FORMAT" }}</p>

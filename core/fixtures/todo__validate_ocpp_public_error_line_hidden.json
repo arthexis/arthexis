@@ -1,0 +1,11 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate OCPP public pages hide no-error status lines",
+      "url": "/ocpp/c/<charger-id>/",
+      "request_details": "Set a charge point's last error code to NoError (or clear it) and confirm the public landing page and authenticated status view hide the Error code line. Then set a real error code and confirm the line reappears on both pages.",
+      "version": "0.1.28"
+    }
+  }
+]

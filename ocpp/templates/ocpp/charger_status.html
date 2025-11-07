@@ -134,8 +134,8 @@
   {% endif %}
   <div class="row mb-4">
     <div class="col-md-4">
-      {% if charger.last_error_code %}
-      <p class="text-muted small mb-1" id="last-status-error">{% trans "Error code" %}: {{ charger.last_error_code }}</p>
+      {% if charger_error_code %}
+      <p class="text-muted small mb-1" id="last-status-error">{% trans "Error code" %}: {{ charger_error_code }}</p>
       {% endif %}
       {% if charger.last_status_timestamp %}
       <p class="text-muted small mb-1" id="last-status-timestamp">{% trans "Last status update" %}: {{ charger.last_status_timestamp|date:"SHORT_DATETIME_FORMAT" }}</p>
