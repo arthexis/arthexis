@@ -868,6 +868,88 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         )
         return configuration
 
+    def _apply_change_configuration_snapshot(
+        self,
+        key: str,
+        value: str | None,
+        connector_hint: int | str | None,
+    ) -> ChargerConfiguration:
+        connector_value: int | None = None
+        if connector_hint not in (None, ""):
+            try:
+                connector_value = int(connector_hint)
+            except (TypeError, ValueError):
+                connector_value = None
+
+        queryset = ChargerConfiguration.objects.filter(
+            charger_identifier=self.charger_id
+        )
+        if connector_value is None:
+            queryset = queryset.filter(connector_id__isnull=True)
+        else:
+            queryset = queryset.filter(connector_id=connector_value)
+
+        configuration = queryset.order_by("-created_at").first()
+        if configuration is None:
+            configuration = ChargerConfiguration.objects.create(
+                charger_identifier=self.charger_id,
+                connector_id=connector_value,
+                unknown_keys=[],
+                evcs_snapshot_at=timezone.now(),
+                raw_payload={},
+            )
+
+        entries = configuration.configuration_keys
+        updated = False
+        for entry in entries:
+            if entry.get("key") == key:
+                updated = True
+                if value is None:
+                    entry.pop("value", None)
+                else:
+                    entry["value"] = value
+        if not updated:
+            new_entry: dict[str, object] = {"key": key, "readonly": False}
+            if value is not None:
+                new_entry["value"] = value
+            entries.append(new_entry)
+
+        configuration.replace_configuration_keys(entries)
+
+        raw_payload = configuration.raw_payload or {}
+        if not isinstance(raw_payload, dict):
+            raw_payload = {}
+        else:
+            raw_payload = dict(raw_payload)
+
+        payload_entries: list[dict[str, object]] = []
+        seen = False
+        for item in raw_payload.get("configurationKey", []):
+            if not isinstance(item, dict):
+                continue
+            entry_copy = dict(item)
+            if str(entry_copy.get("key") or "") == key:
+                if value is None:
+                    entry_copy.pop("value", None)
+                else:
+                    entry_copy["value"] = value
+                seen = True
+            payload_entries.append(entry_copy)
+        if not seen:
+            payload_entry: dict[str, object] = {"key": key}
+            if value is not None:
+                payload_entry["value"] = value
+            payload_entries.append(payload_entry)
+
+        raw_payload["configurationKey"] = payload_entries
+        configuration.raw_payload = raw_payload
+        configuration.evcs_snapshot_at = timezone.now()
+        configuration.save(update_fields=["raw_payload", "evcs_snapshot_at", "updated_at"])
+        Charger.objects.filter(charger_id=self.charger_id).update(
+            configuration=configuration
+        )
+        return configuration
+
     async def _handle_call_result(self, message_id: str, payload: dict | None) -> None:
         metadata = store.pop_pending_call(message_id)
         if not metadata:
@@ -877,6 +959,46 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         action = metadata.get("action")
         log_key = metadata.get("log_key") or self.store_key
         payload_data = payload if isinstance(payload, dict) else {}
+        if action == "ChangeConfiguration":
+            key_value = str(metadata.get("key") or "").strip()
+            status_value = str(payload_data.get("status") or "").strip()
+            stored_value = metadata.get("value")
+            parts: list[str] = []
+            if status_value:
+                parts.append(f"status={status_value}")
+            if key_value:
+                parts.append(f"key={key_value}")
+            if stored_value is not None:
+                parts.append(f"value={stored_value}")
+            message = "ChangeConfiguration result"
+            if parts:
+                message += ": " + ", ".join(parts)
+            store.add_log(log_key, message, log_type="charger")
+            if status_value.casefold() in {"accepted", "rebootrequired"} and key_value:
+                connector_hint = metadata.get("connector_id")
+
+                def _apply() -> ChargerConfiguration:
+                    return self._apply_change_configuration_snapshot(
+                        key_value,
+                        stored_value if isinstance(stored_value, str) else None,
+                        connector_hint,
+                    )
+
+                configuration = await database_sync_to_async(_apply)()
+                if configuration:
+                    if self.charger and self.charger.charger_id == self.charger_id:
+                        self.charger.configuration = configuration
+                    if (
+                        self.aggregate_charger
+                        and self.aggregate_charger.charger_id == self.charger_id
+                    ):
+                        self.aggregate_charger.configuration = configuration
+            store.record_pending_call_result(
+                message_id,
+                metadata=metadata,
+                payload=payload_data,
+            )
+            return
         if action == "DataTransfer":
             message_pk = metadata.get("message_pk")
             if not message_pk:
@@ -1196,6 +1318,36 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             return
         action = metadata.get("action")
         log_key = metadata.get("log_key") or self.store_key
+        if action == "ChangeConfiguration":
+            key_value = str(metadata.get("key") or "").strip()
+            parts: list[str] = []
+            if key_value:
+                parts.append(f"key={key_value}")
+            if error_code:
+                parts.append(f"code={str(error_code).strip()}")
+            if description:
+                parts.append(f"description={str(description).strip()}")
+            if details:
+                try:
+                    parts.append(
+                        "details="
+                        + json.dumps(details, sort_keys=True, ensure_ascii=False)
+                    )
+                except TypeError:
+                    parts.append(f"details={details}")
+            message = "ChangeConfiguration error"
+            if parts:
+                message += ": " + ", ".join(parts)
+            store.add_log(log_key, message, log_type="charger")
+            store.record_pending_call_result(
+                message_id,
+                metadata=metadata,
+                success=False,
+                error_code=error_code,
+                error_description=description,
+                error_details=details,
+            )
+            return
         if action == "DataTransfer":
             message_pk = metadata.get("message_pk")
             if not message_pk:

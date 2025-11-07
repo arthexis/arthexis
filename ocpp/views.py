@@ -50,6 +50,7 @@ CALL_ACTION_LABELS = {
     "RemoteStartTransaction": _("Remote start transaction"),
     "RemoteStopTransaction": _("Remote stop transaction"),
     "ChangeAvailability": _("Change availability"),
+    "ChangeConfiguration": _("Change configuration"),
     "DataTransfer": _("Data transfer"),
     "Reset": _("Reset"),
     "TriggerMessage": _("Trigger message"),
@@ -60,6 +61,7 @@ CALL_EXPECTED_STATUSES: dict[str, set[str]] = {
     "RemoteStartTransaction": {"Accepted"},
     "RemoteStopTransaction": {"Accepted"},
     "ChangeAvailability": {"Accepted", "Scheduled"},
+    "ChangeConfiguration": {"Accepted", "Rejected", "RebootRequired"},
     "DataTransfer": {"Accepted"},
     "Reset": {"Accepted"},
     "TriggerMessage": {"Accepted"},
@@ -151,6 +153,7 @@ def _evaluate_pending_call_result(
     if expected_statuses is not None:
         status_value = str(payload_dict.get("status") or "").strip()
         normalized_expected = {value.casefold() for value in expected_statuses if value}
+        remaining = {k: v for k, v in payload_dict.items() if k != "status"}
         if not status_value:
             detail = _("%(action)s response did not include a status.") % {
                 "action": action_label,
@@ -161,7 +164,15 @@ def _evaluate_pending_call_result(
                 "action": action_label,
                 "status": status_value,
             }
-            remaining = {k: v for k, v in payload_dict.items() if k != "status"}
+            extra = _format_details(remaining)
+            if extra:
+                detail += " " + _("Details: %(details)s") % {"details": extra}
+            return False, detail, 400
+        if status_value.casefold() == "rejected":
+            detail = _("%(action)s rejected with status %(status)s.") % {
+                "action": action_label,
+                "status": status_value,
+            }
             extra = _format_details(remaining)
             if extra:
                 detail += " " + _("Details: %(details)s") % {"details": extra}
@@ -1530,6 +1541,7 @@ def charger_status(request, cid, connector=None):
         and not has_active_session
         and not past_session
     )
+    can_change_configuration = bool(is_connected and request.user.is_staff)
     remote_start_messages = None
     if can_remote_start:
         remote_start_messages = {
@@ -1537,6 +1549,14 @@ def charger_status(request, cid, connector=None):
             "sending": str(_("Sending remote start request...")),
             "success": str(_("Remote start command queued.")),
             "error": str(_("Unable to send remote start request.")),
+        }
+    change_configuration_messages = None
+    if can_change_configuration:
+        change_configuration_messages = {
+            "key_required": str(_("Configuration key is required.")),
+            "sending": str(_("Sending configuration update...")),
+            "success": str(_("Configuration change accepted.")),
+            "error": str(_("Unable to update configuration.")),
         }
     action_url = _reverse_connector_url("charger-action", cid, connector_slug)
     chart_should_animate = bool(has_active_session and not past_session)
@@ -1565,7 +1585,9 @@ def charger_status(request, cid, connector=None):
             "is_connected": is_connected,
             "is_idle": is_connected and not has_active_session,
             "can_remote_start": can_remote_start,
+            "can_change_configuration": can_change_configuration,
             "remote_start_messages": remote_start_messages,
+            "change_configuration_messages": change_configuration_messages,
             "action_url": action_url,
             "show_chart": bool(
                 chart_data["datasets"]
@@ -1921,6 +1943,65 @@ def dispatch_action(request, cid, connector=None):
             Charger.objects.filter(pk=charger_obj.pk).update(**updates)
             for field, value in updates.items():
                 setattr(charger_obj, field, value)
+    elif action == "change_configuration":
+        raw_key = data.get("key")
+        if not isinstance(raw_key, str) or not raw_key.strip():
+            return JsonResponse({"detail": "key required"}, status=400)
+        key_value = raw_key.strip()
+        raw_value = data.get("value", None)
+        value_included = False
+        value_text: str | None = None
+        if raw_value is not None:
+            if isinstance(raw_value, (str, int, float, bool)):
+                value_included = True
+                if isinstance(raw_value, str):
+                    value_text = raw_value
+                else:
+                    value_text = str(raw_value)
+            else:
+                return JsonResponse(
+                    {"detail": "value must be a string, number, or boolean"},
+                    status=400,
+                )
+        payload = {"key": key_value}
+        if value_included:
+            payload["value"] = value_text
+        message_id = uuid.uuid4().hex
+        ocpp_action = "ChangeConfiguration"
+        expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
+        msg = json.dumps([2, message_id, "ChangeConfiguration", payload])
+        async_to_sync(ws.send)(msg)
+        requested_at = timezone.now()
+        store.register_pending_call(
+            message_id,
+            {
+                "action": "ChangeConfiguration",
+                "charger_id": cid,
+                "connector_id": connector_value,
+                "log_key": log_key,
+                "key": key_value,
+                "value": value_text,
+                "requested_at": requested_at,
+            },
+        )
+        timeout_message = str(_("Change configuration request timed out."))
+        store.schedule_call_timeout(
+            message_id,
+            action="ChangeConfiguration",
+            log_key=log_key,
+            message=timeout_message,
+        )
+        if value_included and value_text is not None:
+            change_message = str(
+                _("Requested configuration change for %(key)s to %(value)s")
+                % {"key": key_value, "value": value_text}
+            )
+        else:
+            change_message = str(
+                _("Requested configuration change for %(key)s")
+                % {"key": key_value}
+            )
+        store.add_log(log_key, change_message, log_type="charger")
     elif action == "data_transfer":
         vendor_id = data.get("vendorId")
         if not isinstance(vendor_id, str) or not vendor_id.strip():
