@@ -1,0 +1,13 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Verify Constellation gateway devices are created",
+      "url": "",
+      "request_details": "Run the network-setup.sh --constellation workflow on a Linux watchtower and confirm dummy interfaces gwN are created for each node listed by the hub. Inspect `ip link` output to ensure every Constellation node shows a gw device with the matching alias, and confirm stale gw devices are removed after peers are deleted or lose their overlay assignments.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.28"
+    }
+  }
+]

@@ -4,6 +4,7 @@ import asyncio
 from asyncio import subprocess as aio_subprocess
 from array import array
 from contextlib import suppress
+import json
 import logging
 import shutil
 from typing import Iterable
@@ -32,6 +33,9 @@ class AudioCaptureConsumer(AsyncWebsocketConsumer):
         self.process: asyncio.subprocess.Process | None = None
         self.stream_task: asyncio.Task | None = None
         self._connection_open = False
+
+    async def send_json(self, content: dict[str, object], close: bool = False):
+        await self.send(text_data=json.dumps(content), close=close)
 
     async def connect(self):
         feature_enabled = await sync_to_async(self._is_feature_enabled)()

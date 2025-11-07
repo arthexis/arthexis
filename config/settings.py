@@ -666,10 +666,18 @@ CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "memory://")
 CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", "cache+memory://")
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 
+CONSTELLATION_UDP_PROBE_INTERVAL_SECONDS = int(
+    os.environ.get("CONSTELLATION_UDP_PROBE_INTERVAL_SECONDS", "30")
+)
+
 CELERY_BEAT_SCHEDULE = {
     "heartbeat": {
         "task": "core.tasks.heartbeat",
         "schedule": crontab(minute="*/5"),
+    },
+    "constellation_udp_probe": {
+        "task": "nodes.tasks.kickstart_constellation_udp",
+        "schedule": timedelta(seconds=CONSTELLATION_UDP_PROBE_INTERVAL_SECONDS),
     },
     "ocpp_configuration_check": {
         "task": "ocpp.tasks.schedule_daily_charge_point_configuration_checks",

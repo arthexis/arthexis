@@ -1,5 +1,6 @@
 import base64
 import ipaddress
+import ipaddress
 import json
 import re
 import secrets
@@ -32,6 +33,7 @@ from utils.api import api_login_required
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 
+from django.db import IntegrityError, transaction
 from django.db.models import Q
 
 from core.models import RFID
@@ -60,6 +62,148 @@ from .utils import capture_screenshot, save_screenshot
 PROXY_TOKEN_SALT = "nodes.proxy.session"
 PROXY_TOKEN_TIMEOUT = 300
 PROXY_CACHE_PREFIX = "nodes:proxy-session:"
+
+
+_CONSTELLATION_SUBNET_VALUE = getattr(settings, "CONSTELLATION_WG_SUBNET", "10.88.0.0/24")
+try:
+    CONSTELLATION_SUBNET = ipaddress.ip_network(
+        _CONSTELLATION_SUBNET_VALUE, strict=False
+    )
+except ValueError:  # pragma: no cover - defensive fallback for misconfiguration
+    CONSTELLATION_SUBNET = ipaddress.ip_network("10.88.0.0/24")
+
+CONSTELLATION_INTERFACE = getattr(
+    settings, "CONSTELLATION_WG_INTERFACE", "wg-constellation"
+)
+try:
+    CONSTELLATION_PORT = int(getattr(settings, "CONSTELLATION_WG_PORT", 51820))
+except (TypeError, ValueError):  # pragma: no cover - defensive fallback
+    CONSTELLATION_PORT = 51820
+CONSTELLATION_ENDPOINT = getattr(settings, "CONSTELLATION_WG_ENDPOINT", "")
+CONSTELLATION_STATE_DIR = Path(
+    getattr(
+        settings,
+        "CONSTELLATION_WG_STATE_DIR",
+        Path(settings.BASE_DIR) / "security" / "wireguard",
+    )
+)
+CONSTELLATION_PUBLIC_KEY_PATH = CONSTELLATION_STATE_DIR / f"{CONSTELLATION_INTERFACE}.pub"
+CONSTELLATION_PEERS_PATH = CONSTELLATION_STATE_DIR / "peers.json"
+CONSTELLATION_LOCK_PATH = Path(settings.BASE_DIR) / "locks" / "constellation_ip.lck"
+CONSTELLATION_DEVICE_PATTERN = re.compile(r"^gw[0-9]{1,6}$")
+
+
+def _normalize_constellation_ip(value: str) -> str:
+    value = (value or "").strip()
+    if not value:
+        return ""
+    try:
+        return str(ipaddress.ip_address(value))
+    except ValueError:
+        return ""
+
+
+def _ensure_constellation_device(node: Node) -> str | None:
+    """Assign and return a unique Constellation device label for ``node``."""
+
+    current = (node.constellation_device or "").strip()
+    if current and CONSTELLATION_DEVICE_PATTERN.fullmatch(current):
+        return current
+
+    attempt = 1
+    while True:
+        candidate = f"gw{attempt}"
+        try:
+            with transaction.atomic():
+                try:
+                    node.refresh_from_db(fields=["constellation_device"], using=None)
+                except node.__class__.DoesNotExist:
+                    return None
+                current = (node.constellation_device or "").strip()
+                if current and CONSTELLATION_DEVICE_PATTERN.fullmatch(current):
+                    return current
+                node.constellation_device = candidate
+                node.save(update_fields=["constellation_device"])
+                return candidate
+        except IntegrityError:
+            attempt += 1
+            continue
+
+
+def _load_constellation_peers() -> dict[str, dict]:
+    if not CONSTELLATION_PEERS_PATH.exists():
+        return {}
+    try:
+        raw = json.loads(CONSTELLATION_PEERS_PATH.read_text())
+    except (OSError, json.JSONDecodeError):
+        return {}
+    if isinstance(raw, dict):
+        peers = raw.get("peers")
+        if isinstance(peers, dict):
+            return peers
+        return raw
+    return {}
+
+
+def _save_constellation_peers(peers: dict[str, dict]) -> None:
+    try:
+        CONSTELLATION_STATE_DIR.mkdir(parents=True, exist_ok=True)
+        tmp_path = CONSTELLATION_PEERS_PATH.with_suffix(".tmp")
+        tmp_path.write_text(json.dumps({"peers": peers}, indent=2, sort_keys=True))
+        tmp_path.replace(CONSTELLATION_PEERS_PATH)
+    except OSError:
+        pass
+
+
+def _write_constellation_lock(ip_value: str) -> None:
+    if not ip_value:
+        return
+    try:
+        CONSTELLATION_LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
+        CONSTELLATION_LOCK_PATH.write_text(f"{ip_value}\n")
+    except OSError:
+        pass
+
+
+def _resolve_constellation_endpoint(request, local_node: Node) -> tuple[str, int]:
+    host = ""
+    port = CONSTELLATION_PORT
+    explicit = (CONSTELLATION_ENDPOINT or "").strip()
+    if explicit:
+        explicit_host, explicit_port = split_domain_port(explicit)
+        host = explicit_host or explicit
+        if explicit_port:
+            try:
+                port = int(explicit_port)
+            except ValueError:
+                port = CONSTELLATION_PORT
+    if not host:
+        domain = _get_host_domain(request)
+        if domain:
+            host = domain
+    if not host and getattr(local_node, "network_hostname", ""):
+        host = local_node.network_hostname
+    if not host and getattr(local_node, "hostname", ""):
+        host = local_node.hostname
+    if not host:
+        host = local_node.get_primary_contact() or host
+    if not host:
+        try:
+            raw_host = request.get_host()
+        except Exception:  # pragma: no cover - defensive
+            raw_host = ""
+        if raw_host:
+            fallback_host, fallback_port = split_domain_port(raw_host)
+            if fallback_host:
+                host = fallback_host
+            if fallback_port:
+                try:
+                    port = int(fallback_port)
+                except ValueError:
+                    port = CONSTELLATION_PORT
+    if port <= 0 or port > 65535:
+        port = CONSTELLATION_PORT
+    return host, port
 
 
 def _load_signed_node(
@@ -376,6 +520,8 @@ def node_list(request):
             "address": node.address,
             "ipv4_address": node.ipv4_address,
             "ipv6_address": node.ipv6_address,
+            "constellation_ip": node.constellation_ip,
+            "constellation_device": node.constellation_device,
             "port": node.port,
             "last_seen": node.last_seen,
             "features": list(node.features.values_list("slug", flat=True)),
@@ -383,6 +529,184 @@ def node_list(request):
         for node in Node.objects.prefetch_related("features")
     ]
     return JsonResponse({"nodes": nodes})
+
+
+@csrf_exempt
+def constellation_setup(request):
+    """Assign and return WireGuard configuration details for Constellation peers."""
+
+    if request.method != "POST":
+        return JsonResponse({"detail": "POST required"}, status=405)
+
+    try:
+        payload = json.loads(request.body.decode() or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"detail": "invalid json"}, status=400)
+
+    mac_address = (payload.get("mac_address") or "").strip().lower()
+    if not mac_address:
+        return JsonResponse({"detail": "mac_address required"}, status=400)
+
+    public_key = (payload.get("public_key") or "").strip()
+    if not public_key:
+        return JsonResponse({"detail": "public_key required"}, status=400)
+
+    endpoint_hint = (payload.get("endpoint") or "").strip()
+    hostname_hint = (payload.get("hostname") or "").strip()
+
+    node = Node.objects.filter(mac_address__iexact=mac_address).first()
+    if node is None:
+        return JsonResponse({"detail": "unknown node"}, status=404)
+
+    local_node = Node.get_local()
+    if local_node is None:
+        local_node, _ = Node.register_current()
+    if local_node is None:
+        return JsonResponse({"detail": "constellation hub unavailable"}, status=503)
+
+    role_name = (local_node.role.name if local_node.role_id else "").lower()
+    if role_name != "watchtower":
+        return JsonResponse({"detail": "constellation hub not configured"}, status=503)
+
+    hub_ip = _normalize_constellation_ip(local_node.constellation_ip)
+    if not hub_ip:
+        host_iter = CONSTELLATION_SUBNET.hosts()
+        try:
+            hub_ip_candidate = str(next(host_iter))
+        except StopIteration:  # pragma: no cover - subnet misconfiguration
+            return JsonResponse({"detail": "constellation subnet has no hosts"}, status=503)
+        hub_ip = hub_ip_candidate
+        local_node.constellation_ip = hub_ip
+        local_node.save(update_fields=["constellation_ip"])
+        _write_constellation_lock(hub_ip)
+
+    assigned_ip = _normalize_constellation_ip(node.constellation_ip)
+    if assigned_ip:
+        try:
+            if ipaddress.ip_address(assigned_ip) not in CONSTELLATION_SUBNET:
+                assigned_ip = ""
+        except ValueError:
+            assigned_ip = ""
+        if assigned_ip == hub_ip:
+            assigned_ip = ""
+
+    used_ips: set[str] = set()
+    for value in (
+        Node.objects.exclude(pk=node.pk)
+        .exclude(constellation_ip__isnull=True)
+        .values_list("constellation_ip", flat=True)
+    ):
+        normalized = _normalize_constellation_ip(value)
+        if normalized:
+            used_ips.add(normalized)
+    used_ips.add(hub_ip)
+
+    if node.pk == local_node.pk:
+        assigned_ip = hub_ip
+
+    if not assigned_ip:
+        for host in CONSTELLATION_SUBNET.hosts():
+            candidate = str(host)
+            if candidate == hub_ip or candidate in used_ips:
+                continue
+            assigned_ip = candidate
+            break
+
+    if not assigned_ip:
+        return JsonResponse({"detail": "no available constellation addresses"}, status=503)
+
+    if _normalize_constellation_ip(node.constellation_ip) != assigned_ip:
+        node.constellation_ip = assigned_ip
+        node.save(update_fields=["constellation_ip"])
+
+    hub_device = _ensure_constellation_device(local_node)
+    peer_device = _ensure_constellation_device(node)
+
+    peers_state = _load_constellation_peers()
+    peer_entry = {
+        "public_key": public_key,
+        "ip": assigned_ip,
+        "allowed_ips": [f"{assigned_ip}/32"],
+        "hostname": hostname_hint or node.hostname or mac_address,
+        "node_id": node.pk,
+        "last_seen": timezone.now().isoformat(),
+    }
+    if peer_device:
+        peer_entry["constellation_device"] = peer_device
+    if endpoint_hint:
+        peer_entry["endpoint"] = endpoint_hint
+    peers_state[mac_address] = peer_entry
+    _save_constellation_peers(peers_state)
+
+    try:
+        hub_public_key = CONSTELLATION_PUBLIC_KEY_PATH.read_text().strip()
+    except OSError:
+        hub_public_key = ""
+    if not hub_public_key:
+        return JsonResponse({"detail": "constellation hub key unavailable"}, status=503)
+
+    endpoint_host, endpoint_port = _resolve_constellation_endpoint(request, local_node)
+    hub_allowed = [str(CONSTELLATION_SUBNET)]
+    hub_data = {
+        "public_key": hub_public_key,
+        "endpoint_host": endpoint_host,
+        "endpoint_port": endpoint_port,
+        "allowed_ips": hub_allowed,
+        "constellation_ip": hub_ip,
+        "persistent_keepalive": 25,
+    }
+
+    peer_configs: list[dict[str, object]] = []
+    peer_devices: dict[str, str] = {}
+    mac_map = [key.lower() for key in peers_state.keys()]
+    if mac_map:
+        filters = Q()
+        for mac in mac_map:
+            filters |= Q(mac_address__iexact=mac)
+        if filters:
+            for record in Node.objects.filter(filters):
+                if record.mac_address:
+                    peer_devices[record.mac_address.lower()] = (
+                        record.constellation_device or ""
+                    )
+    if node.pk == local_node.pk:
+        for peer_mac, entry in peers_state.items():
+            if peer_mac == mac_address:
+                continue
+            peer_key = (entry.get("public_key") or "").strip()
+            peer_ip = _normalize_constellation_ip(entry.get("ip", ""))
+            if not peer_key or not peer_ip:
+                continue
+            allowed_ips = entry.get("allowed_ips") or [f"{peer_ip}/32"]
+            device_name = (
+                peer_devices.get(peer_mac.lower())
+                or (entry.get("constellation_device") or "")
+            )
+            peer_configs.append(
+                {
+                    "mac_address": peer_mac,
+                    "public_key": peer_key,
+                    "constellation_ip": peer_ip,
+                    "allowed_ips": allowed_ips,
+                    "endpoint": entry.get("endpoint", ""),
+                    "node_id": entry.get("node_id"),
+                    "last_seen": entry.get("last_seen"),
+                    "constellation_device": device_name,
+                }
+            )
+
+    response = {
+        "interface": CONSTELLATION_INTERFACE,
+        "assigned_ip": assigned_ip,
+        "address": f"{assigned_ip}/{CONSTELLATION_SUBNET.prefixlen}",
+        "subnet": str(CONSTELLATION_SUBNET),
+        "hub": {**hub_data, "constellation_device": hub_device or ""},
+        "dns": [hub_ip],
+        "peers": peer_configs,
+        "constellation_device": peer_device or "",
+    }
+
+    return JsonResponse(response)
 
 
 @csrf_exempt
@@ -426,6 +750,8 @@ def node_info(request):
         "address": address,
         "ipv4_address": node.ipv4_address,
         "ipv6_address": node.ipv6_address,
+        "constellation_ip": node.constellation_ip,
+        "constellation_device": node.constellation_device,
         "port": advertised_port,
         "mac_address": node.mac_address,
         "public_key": node.public_key,
@@ -539,6 +865,7 @@ def register_node(request):
     network_hostname = (data.get("network_hostname") or "").strip()
     ipv4_address = (data.get("ipv4_address") or "").strip()
     ipv6_address = (data.get("ipv6_address") or "").strip()
+    constellation_ip = (data.get("constellation_ip") or "").strip()
     port = data.get("port", 8888)
     mac_address = (data.get("mac_address") or "").strip()
     public_key = data.get("public_key")
@@ -562,11 +889,11 @@ def register_node(request):
         )
         return _add_cors_headers(request, response)
 
-    if not any([address, network_hostname, ipv4_address, ipv6_address]):
+    if not any([address, network_hostname, ipv4_address, ipv6_address, constellation_ip]):
         response = JsonResponse(
             {
                 "detail": "at least one of address, network_hostname, "
-                "ipv4_address or ipv6_address must be provided",
+                "ipv4_address, ipv6_address or constellation_ip must be provided",
             },
             status=400,
         )
@@ -600,6 +927,7 @@ def register_node(request):
     address_value = address or None
     ipv4_value = ipv4_address or None
     ipv6_value = ipv6_address or None
+    constellation_value = constellation_ip or None
 
     for candidate in (address, network_hostname, hostname):
         candidate = (candidate or "").strip()
@@ -613,6 +941,12 @@ def register_node(request):
             ipv4_value = str(parsed_ip)
         elif parsed_ip.version == 6 and not ipv6_value:
             ipv6_value = str(parsed_ip)
+    if constellation_value:
+        try:
+            constellation_value = str(ipaddress.ip_address(constellation_value))
+        except ValueError:
+            constellation_value = None
+
     defaults = {
         "hostname": hostname,
         "network_hostname": network_hostname,
@@ -621,6 +955,7 @@ def register_node(request):
         "ipv6_address": ipv6_value,
         "port": port,
     }
+    defaults["constellation_ip"] = constellation_value
     role_name = str(data.get("role") or data.get("role_name") or "").strip()
     desired_role = None
     if role_name and (verified or request.user.is_authenticated):
@@ -650,6 +985,7 @@ def register_node(request):
             ("address", address_value),
             ("ipv4_address", ipv4_value),
             ("ipv6_address", ipv6_value),
+            ("constellation_ip", constellation_value),
             ("port", port),
         ):
             if getattr(node, field) != value:

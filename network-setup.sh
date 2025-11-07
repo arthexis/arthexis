@@ -29,12 +29,24 @@ DEFAULT_ETH0_SUBNET_PREFIX="192.168"
 DEFAULT_ETH0_SUBNET_SUFFIX="129"
 DEFAULT_ETH0_SUBNET_BASE="${DEFAULT_ETH0_SUBNET_PREFIX}.${DEFAULT_ETH0_SUBNET_SUFFIX}"
 
+CONSTELLATION_HUB=""
+CONSTELLATION_INTERFACE="wg-constellation"
+CONSTELLATION_CONFIG="/etc/wireguard/${CONSTELLATION_INTERFACE}.conf"
+CONSTELLATION_KEYS_DIR="$BASE_DIR/security/wireguard"
+CONSTELLATION_PRIVATE_KEY="$CONSTELLATION_KEYS_DIR/${CONSTELLATION_INTERFACE}.key"
+CONSTELLATION_PUBLIC_KEY="$CONSTELLATION_KEYS_DIR/${CONSTELLATION_INTERFACE}.pub"
+CONSTELLATION_LOCK_FILE="$LOCK_DIR/constellation_ip.lck"
+CONSTELLATION_DEVICE_MANIFEST="$LOCK_DIR/constellation_devices.json"
+CONSTELLATION_PORT=51820
+
 usage() {
     cat <<USAGE
 Usage: $0 [--password] [--ap NAME] [--no-firewall] [--unsafe] [--interactive|-i] [--vnc] [--no-vnc] [--subnet N[/P]] [--eth0-mode MODE] [--ap-set-password] [--status] [--dhcp-server] [--dhcp-client] [--dhcp-reset]
   --password      Prompt for a new WiFi password even if one is already configured.
   --ap NAME       Set the wlan0 access point name (SSID) to NAME.
   --port PORT     Persist the backend application port across the installation.
+  --constellation HUB
+                  Configure the Constellation WireGuard overlay using HUB as the watchtower endpoint.
   --check-port    Report configured backend port values and exit.
   --no-firewall   Skip firewall port validation.
   --unsafe        Allow modification of the active internet connection.
@@ -206,6 +218,397 @@ detect_backend_port_from_process() {
         return 0
     fi
     return 1
+}
+
+normalize_constellation_target() {
+    local target="$1"
+    target="${target#${target%%[![:space:]]*}}"
+    target="${target%${target##*[![:space:]]}}"
+    if [[ -z "$target" ]]; then
+        return 1
+    fi
+    if [[ "$target" =~ ^https?:// ]]; then
+        printf '%s' "${target%/}"
+    else
+        printf 'https://%s' "${target%/}"
+    fi
+    return 0
+}
+
+constellation_mac_address() {
+    if ! command -v python3 >/dev/null 2>&1; then
+        return 1
+    fi
+    python3 - <<'PY'
+import uuid
+value = f"{uuid.getnode():012x}"
+print(":".join(value[i:i+2] for i in range(0, 12, 2)))
+PY
+}
+
+ensure_constellation_keys() {
+    if ! command -v wg >/dev/null 2>&1; then
+        echo "WireGuard tool 'wg' is required for Constellation configuration." >&2
+        return 1
+    fi
+    mkdir -p "$CONSTELLATION_KEYS_DIR"
+    if [[ ! -s "$CONSTELLATION_PRIVATE_KEY" ]]; then
+        umask 077
+        if ! wg genkey > "$CONSTELLATION_PRIVATE_KEY"; then
+            echo "Failed to generate Constellation private key at $CONSTELLATION_PRIVATE_KEY." >&2
+            return 1
+        fi
+    fi
+    if [[ ! -s "$CONSTELLATION_PUBLIC_KEY" ]]; then
+        umask 077
+        if ! wg pubkey < "$CONSTELLATION_PRIVATE_KEY" > "$CONSTELLATION_PUBLIC_KEY"; then
+            echo "Failed to derive Constellation public key at $CONSTELLATION_PUBLIC_KEY." >&2
+            return 1
+        fi
+    fi
+    return 0
+}
+
+ensure_constellation_device() {
+    local name="$1"
+    local alias_value="$2"
+
+    if [[ -z "$name" ]]; then
+        return 0
+    fi
+    if ! command -v ip >/dev/null 2>&1; then
+        return 0
+    fi
+
+    if ip link show "$name" >/dev/null 2>&1; then
+        if [[ -n "$alias_value" ]]; then
+            ip link set dev "$name" alias "Constellation ${alias_value}" >/dev/null 2>&1 || true
+        fi
+        return 0
+    fi
+
+    if ip link add dev "$name" type dummy >/dev/null 2>&1; then
+        ip link set dev "$name" up >/dev/null 2>&1 || true
+        if [[ -n "$alias_value" ]]; then
+            ip link set dev "$name" alias "Constellation ${alias_value}" >/dev/null 2>&1 || true
+        fi
+        echo "Provisioned Constellation device '$name'."
+    else
+        echo "Warning: failed to create Constellation device '$name'." >&2
+    fi
+}
+
+prune_constellation_devices() {
+    local desired="$1"
+    declare -A keep=()
+    local entry
+    while IFS= read -r entry; do
+        [[ -z "$entry" ]] && continue
+        keep["$entry"]=1
+    done <<< "$desired"
+
+    if ! command -v ip >/dev/null 2>&1; then
+        return 0
+    fi
+
+    local existing
+    while IFS= read -r existing; do
+        [[ -z "$existing" ]] && continue
+        if [[ -z "${keep[$existing]:-}" ]]; then
+            ip link delete "$existing" >/dev/null 2>&1 || true
+            echo "Removed stale Constellation device '$existing'."
+        fi
+    done < <(ip -o link show 2>/dev/null | awk -F': ' '/^[0-9]+: gw[0-9]+(@|:)/ {split($2,a,":"); split(a[1],b,"@"); print b[0]}')
+}
+
+synchronize_constellation_devices() {
+    local payload="$1"
+    if [[ -z "$payload" ]]; then
+        prune_constellation_devices ""
+        return 0
+    fi
+    if [[ "$(uname -s)" != "Linux" ]]; then
+        return 0
+    fi
+    if ! command -v python3 >/dev/null 2>&1; then
+        return 0
+    fi
+
+    local parser_output
+    parser_output="$(printf '%s' "$payload" | python3 - "$CONSTELLATION_DEVICE_MANIFEST" <<'PY')"
+import json
+import pathlib
+import sys
+
+manifest_path = pathlib.Path(sys.argv[1])
+try:
+    data = json.loads(sys.stdin.read() or "{}")
+except json.JSONDecodeError:
+    data = {}
+
+entries = []
+seen = set()
+
+def add_entry(name, alias):
+    if not name:
+        return
+    name = name.strip()
+    if not name or name in seen:
+        return
+    seen.add(name)
+    entries.append({"name": name, "alias": (alias or "").strip()})
+
+add_entry(data.get("constellation_device"), data.get("assigned_ip"))
+hub = data.get("hub") or {}
+add_entry(hub.get("constellation_device"), hub.get("constellation_ip"))
+for peer in data.get("peers") or []:
+    if isinstance(peer, dict):
+        add_entry(peer.get("constellation_device"), peer.get("constellation_ip"))
+
+try:
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(json.dumps(entries, indent=2) + "\n")
+except OSError:
+    pass
+
+for item in entries:
+    print(f"{item['name']}|{item['alias']}")
+PY
+"
+    if [[ $? -ne 0 ]]; then
+        echo "Warning: failed to parse Constellation device assignments." >&2
+        return 1
+    fi
+
+    local desired_list=""
+    local name alias
+    while IFS='|' read -r name alias; do
+        [[ -z "$name" ]] && continue
+        desired_list+="$name"$'\n'
+        ensure_constellation_device "$name" "$alias"
+    done <<< "$parser_output"
+
+    prune_constellation_devices "$desired_list"
+    return 0
+}
+
+apply_constellation_config() {
+    python3 - "$CONSTELLATION_PRIVATE_KEY" "$CONSTELLATION_CONFIG" "$CONSTELLATION_LOCK_FILE" <<'PY'
+import json
+import pathlib
+import sys
+
+private_key_path = pathlib.Path(sys.argv[1])
+config_path = pathlib.Path(sys.argv[2])
+lock_path = pathlib.Path(sys.argv[3])
+
+payload = sys.stdin.read()
+try:
+    response = json.loads(payload)
+except json.JSONDecodeError as exc:
+    sys.stderr.write(f"Invalid Constellation response: {exc}\n")
+    sys.exit(1)
+
+if not private_key_path.exists():
+    sys.stderr.write(f"Constellation private key {private_key_path} not found.\n")
+    sys.exit(1)
+private_key = private_key_path.read_text().strip()
+if not private_key:
+    sys.stderr.write(f"Constellation private key {private_key_path} is empty.\n")
+    sys.exit(1)
+
+assigned_ip = (response.get("assigned_ip") or "").strip()
+if not assigned_ip:
+    sys.stderr.write("Constellation response missing assigned_ip.\n")
+    sys.exit(1)
+
+address = (response.get("address") or "").strip()
+if not address:
+    subnet = (response.get("subnet") or "").strip()
+    prefix = "32"
+    if "/" in subnet:
+        prefix = subnet.split("/", 1)[1]
+    address = f"{assigned_ip}/{prefix}"
+
+hub = response.get("hub") or {}
+hub_ip = (hub.get("constellation_ip") or "").strip()
+is_hub = bool(hub_ip and hub_ip == assigned_ip)
+
+lines = [
+    "[Interface]",
+    f"PrivateKey = {private_key}",
+    f"Address = {address}",
+]
+
+listen_port = hub.get("endpoint_port")
+try:
+    listen_port = int(listen_port)
+except (TypeError, ValueError):
+    listen_port = None
+
+dns_values = response.get("dns") or []
+if dns_values:
+    lines.append(f"DNS = {', '.join(dns_values)}")
+if is_hub and listen_port:
+    lines.append(f"ListenPort = {listen_port}")
+
+def format_endpoint(host, port):
+    host = (host or "").strip()
+    if not host or port is None:
+        return ""
+    if ":" in host and not host.startswith("["):
+        host = f"[{host}]"
+    return f"{host}:{port}"
+
+if not is_hub:
+    peer_key = (hub.get("public_key") or "").strip()
+    if not peer_key:
+        sys.stderr.write("Constellation response missing hub public key.\n")
+        sys.exit(1)
+    lines.extend(
+        [
+            "",
+            "[Peer]",
+            f"PublicKey = {peer_key}",
+        ]
+    )
+    allowed = hub.get("allowed_ips") or []
+    subnet = response.get("subnet")
+    if not allowed and subnet:
+        allowed = [subnet]
+    if allowed:
+        lines.append(f"AllowedIPs = {', '.join(allowed)}")
+    endpoint = format_endpoint(hub.get("endpoint_host"), listen_port or hub.get("endpoint_port"))
+    if endpoint:
+        lines.append(f"Endpoint = {endpoint}")
+    keepalive = hub.get("persistent_keepalive")
+    try:
+        keepalive = int(keepalive)
+    except (TypeError, ValueError):
+        keepalive = None
+    if keepalive:
+        lines.append(f"PersistentKeepalive = {keepalive}")
+else:
+    for peer in response.get("peers") or []:
+        peer_key = (peer.get("public_key") or "").strip()
+        peer_ip = (peer.get("constellation_ip") or "").strip()
+        if not peer_key or not peer_ip:
+            continue
+        lines.extend([
+            "",
+            "[Peer]",
+            f"PublicKey = {peer_key}",
+            f"AllowedIPs = {', '.join(peer.get('allowed_ips') or [f'{peer_ip}/32'])}",
+        ])
+        endpoint = (peer.get("endpoint") or "").strip()
+        if endpoint:
+            lines.append(f"Endpoint = {endpoint}")
+        keepalive = peer.get("persistent_keepalive")
+        try:
+            keepalive = int(keepalive)
+        except (TypeError, ValueError):
+            keepalive = None
+        if keepalive:
+            lines.append(f"PersistentKeepalive = {keepalive}")
+
+config_path.parent.mkdir(parents=True, exist_ok=True)
+config_path.write_text("\n".join(lines) + "\n")
+lock_path.parent.mkdir(parents=True, exist_ok=True)
+lock_path.write_text(f"{assigned_ip}\n")
+print(assigned_ip)
+PY
+}
+
+configure_constellation_wireguard() {
+    local hub_target="$1"
+    local normalized
+    normalized=$(normalize_constellation_target "$hub_target") || {
+        echo "Invalid --constellation value: $hub_target" >&2
+        return 1
+    }
+    if ! command -v curl >/dev/null 2>&1; then
+        echo "curl is required for Constellation configuration." >&2
+        return 1
+    fi
+    if ! command -v python3 >/dev/null 2>&1; then
+        echo "python3 is required for Constellation configuration." >&2
+        return 1
+    fi
+    if ! command -v wg >/dev/null 2>&1 || ! command -v wg-quick >/dev/null 2>&1; then
+        echo "WireGuard tools 'wg' and 'wg-quick' are required." >&2
+        return 1
+    fi
+
+    if ! ensure_constellation_keys; then
+        return 1
+    fi
+
+    local mac
+    mac=$(constellation_mac_address) || {
+        echo "Unable to determine local MAC address for Constellation registration." >&2
+        return 1
+    }
+
+    local hostname
+    hostname="$(hostname 2>/dev/null || echo arthexis-node)"
+
+    local payload
+    payload=$(python3 - "$mac" "$CONSTELLATION_PUBLIC_KEY" "$hostname" <<'PY'
+import json
+import sys
+
+mac = sys.argv[1]
+public_key_path = sys.argv[2]
+hostname = sys.argv[3]
+
+with open(public_key_path, "r", encoding="utf-8") as fh:
+    public_key = fh.read().strip()
+
+print(json.dumps({
+    "mac_address": mac,
+    "public_key": public_key,
+    "hostname": hostname,
+}))
+PY
+) || {
+        echo "Failed to build Constellation registration payload." >&2
+        return 1
+    }
+
+    local url="${normalized%/}/nodes/constellation/setup/"
+    local response
+    response=$(curl -fsS --max-time 20 -H "Content-Type: application/json" -d "$payload" "$url") || {
+        echo "Failed to contact Constellation hub at $url" >&2
+        return 1
+    }
+
+    local assigned_ip
+    assigned_ip=$(printf '%s\n' "$response" | apply_constellation_config) || {
+        echo "Failed to apply Constellation configuration." >&2
+        return 1
+    }
+
+    synchronize_constellation_devices "$response" || true
+
+    if [[ -n "$assigned_ip" ]]; then
+        printf '%s\n' "$assigned_ip" > "$CONSTELLATION_LOCK_FILE"
+    fi
+
+    if wg show "$CONSTELLATION_INTERFACE" >/dev/null 2>&1; then
+        wg-quick down "$CONSTELLATION_INTERFACE" || true
+    fi
+    if wg-quick up "$CONSTELLATION_INTERFACE"; then
+        if command -v systemctl >/dev/null 2>&1; then
+            systemctl enable "wg-quick@${CONSTELLATION_INTERFACE}" >/dev/null 2>&1 || true
+            systemctl restart "wg-quick@${CONSTELLATION_INTERFACE}" >/dev/null 2>&1 || true
+        fi
+        echo "Constellation WireGuard interface '$CONSTELLATION_INTERFACE' configured with $assigned_ip."
+    else
+        echo "Failed to activate WireGuard interface '$CONSTELLATION_INTERFACE'." >&2
+        return 1
+    fi
+
+    return 0
 }
 
 detect_backend_port() {
@@ -1009,6 +1412,27 @@ while [[ $# -gt 0 ]]; do
             fi
             REQUESTED_BACKEND_PORT="${1#--port=}"
             PORT_CHANGE_REQUESTED=true
+            OTHER_OPTIONS_USED=true
+            ;;
+        --constellation)
+            if [[ $AP_SET_PASSWORD == true ]]; then
+                echo "Error: --ap-set-password cannot be combined with other options." >&2
+                exit 1
+            fi
+            if [[ $# -lt 2 ]]; then
+                echo "Error: --constellation requires a hub value." >&2
+                exit 1
+            fi
+            CONSTELLATION_HUB="$2"
+            OTHER_OPTIONS_USED=true
+            shift
+            ;;
+        --constellation=*)
+            if [[ $AP_SET_PASSWORD == true ]]; then
+                echo "Error: --ap-set-password cannot be combined with other options." >&2
+                exit 1
+            fi
+            CONSTELLATION_HUB="${1#--constellation=}"
             OTHER_OPTIONS_USED=true
             ;;
         --ap)
@@ -1849,7 +2273,7 @@ else
     RUN_AP=false
 fi
 if [[ $NMCLI_AVAILABLE == true ]]; then
-    ask_step RUN_WLAN1_REFRESH "Install wlan1 device refresh service"
+ask_step RUN_WLAN1_REFRESH "Install wlan1 device refresh service"
 else
     RUN_WLAN1_REFRESH=false
 fi
@@ -1857,6 +2281,11 @@ fi
 RUN_SYSTEMD_NETWORKD=false
 if [[ $SYSTEMD_NETWORKD_ACTIVE == true && $NETWORKD_DUPLICATE_ROUTES == true && $NMCLI_AVAILABLE == false ]]; then
     ask_step RUN_SYSTEMD_NETWORKD "Normalize systemd-networkd default route for $NETWORKD_DEFAULT_IFACE"
+fi
+
+RUN_CONSTELLATION=false
+if [[ -n "$CONSTELLATION_HUB" ]]; then
+    ask_step RUN_CONSTELLATION "Configure Constellation WireGuard overlay for $CONSTELLATION_HUB"
 fi
 
 ask_step RUN_PACKAGES "Ensure required packages and SSH service"
@@ -2026,12 +2455,24 @@ if [[ $RUN_PACKAGES == true ]]; then
 
     ensure_pkg nginx nginx
     ensure_pkg sshd openssh-server
+    ensure_pkg wg wireguard-tools
     ensure_service ssh
 
     if command -v ufw >/dev/null 2>&1; then
         STATUS=$(ufw status 2>/dev/null || true)
         if ! echo "$STATUS" | grep -iq "inactive"; then
             ufw allow 22/tcp || true
+        fi
+    fi
+fi
+
+if [[ $RUN_CONSTELLATION == true ]]; then
+    if [[ $UNSAFE == false ]]; then
+        skip_network_step "Constellation WireGuard configuration" "hub $CONSTELLATION_HUB"
+    else
+        if ! configure_constellation_wireguard "$CONSTELLATION_HUB"; then
+            echo "Constellation WireGuard configuration failed." >&2
+            exit 1
         fi
     fi
 fi
