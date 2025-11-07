@@ -392,6 +392,70 @@ PY
     return 0
 }
 
+restore_constellation_devices_from_manifest() {
+    if [[ "$(uname -s)" != "Linux" ]]; then
+        return 0
+    fi
+    if [[ ! -f "$CONSTELLATION_DEVICE_MANIFEST" ]]; then
+        prune_constellation_devices ""
+        return 0
+    fi
+    if ! command -v python3 >/dev/null 2>&1; then
+        return 0
+    fi
+
+    local parser_output
+    parser_output="$(python3 - "$CONSTELLATION_DEVICE_MANIFEST" <<'PY')"
+import json
+import pathlib
+import sys
+
+manifest_path = pathlib.Path(sys.argv[1])
+try:
+    raw = manifest_path.read_text()
+except OSError:
+    sys.exit(0)
+
+try:
+    data = json.loads(raw)
+except json.JSONDecodeError:
+    data = []
+
+if isinstance(data, dict):
+    entries = data.get("entries")
+    if not isinstance(entries, list):
+        entries = []
+else:
+    entries = data if isinstance(data, list) else []
+
+seen = set()
+for entry in entries:
+    if not isinstance(entry, dict):
+        continue
+    name = (entry.get("name") or "").strip()
+    if not name or name in seen:
+        continue
+    seen.add(name)
+    alias = (entry.get("alias") or "").strip()
+    print(f"{name}|{alias}")
+PY
+"
+    local status=$?
+    if [[ $status -ne 0 ]]; then
+        return 0
+    fi
+
+    local desired_list=""
+    local name alias
+    while IFS='|' read -r name alias; do
+        [[ -z "$name" ]] && continue
+        desired_list+="$name"$'\n'
+        ensure_constellation_device "$name" "$alias"
+    done <<< "$parser_output"
+
+    prune_constellation_devices "$desired_list"
+}
+
 apply_constellation_config() {
     python3 - "$CONSTELLATION_PRIVATE_KEY" "$CONSTELLATION_CONFIG" "$CONSTELLATION_LOCK_FILE" <<'PY'
 import json
@@ -1712,6 +1776,8 @@ fi
 if [[ $PORT_CHANGE_REQUESTED == true ]]; then
     apply_backend_port_change "$REQUESTED_BACKEND_PORT"
 fi
+
+restore_constellation_devices_from_manifest
 
 # Record wlan1 presence for later routing rules and provide early feedback.
 if command -v nmcli >/dev/null 2>&1; then
