@@ -16,6 +16,7 @@ from django.utils.translation import gettext_lazy as _, ngettext
 from django.utils.dateparse import parse_datetime
 from django.utils.html import format_html, format_html_join
 from django.utils.text import slugify
+from django.contrib.admin.utils import quote
 from django.urls import path, reverse
 from django.http import HttpResponse, HttpResponseRedirect
 from django.template.response import TemplateResponse
@@ -210,8 +211,13 @@ class LogViewAdminMixin:
     def log_view(self, request, object_id):
         obj = self.get_object(request, object_id)
         if obj is None:
+            info = self.model._meta.app_label, self.model._meta.model_name
+            changelist_url = reverse(
+                "admin:%s_%s_changelist" % info,
+                current_app=self.admin_site.name,
+            )
             self.message_user(request, "Log is not available.", messages.ERROR)
-            return redirect("..")
+            return redirect(changelist_url)
         identifier = self.get_log_identifier(obj)
         log_entries = store.get_logs(identifier, log_type=self.log_type)
         log_file = store._file_path(identifier, log_type=self.log_type)
@@ -1468,9 +1474,13 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
 
     def log_link(self, obj):
         from django.utils.html import format_html
-        from django.urls import reverse
 
-        url = reverse("admin:ocpp_charger_log", args=[obj.pk])
+        info = self.model._meta.app_label, self.model._meta.model_name
+        url = reverse(
+            "admin:%s_%s_log" % info,
+            args=[quote(obj.pk)],
+            current_app=self.admin_site.name,
+        )
         return format_html('<a href="{}" target="_blank">view</a>', url)
 
     log_link.short_description = "Log"

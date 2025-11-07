@@ -58,6 +58,7 @@ from django.core.exceptions import ValidationError
 from pages.models import Application, Module
 from nodes.models import Node, NodeRole
 from django.contrib.admin.sites import AdminSite
+from django.contrib.admin.utils import quote
 
 from config.asgi import application
 
@@ -75,7 +76,12 @@ from .models import (
     CPFirmware,
     CPFirmwareDeployment,
 )
-from .admin import ChargerConfigurationAdmin, ConfigurationKeyAdmin, ConfigurationKeyInline
+from .admin import (
+    ChargerAdmin,
+    ChargerConfigurationAdmin,
+    ConfigurationKeyAdmin,
+    ConfigurationKeyInline,
+)
 from .consumers import CSMSConsumer
 from .views import dispatch_action, _transaction_rfid_details, _usage_timeline
 from .status_display import STATUS_BADGE_MAP
@@ -3099,6 +3105,19 @@ class ChargerAdminTests(TestCase):
         log_url = reverse("admin:ocpp_charger_log", args=[charger.pk])
         self.assertContains(resp, log_url)
 
+    def test_admin_log_link_uses_admin_namespace(self):
+        charger = Charger.objects.create(charger_id="LINKADMIN")
+        site = AdminSite(name="constellation-admin")
+        admin = ChargerAdmin(Charger, site)
+        with patch("ocpp.admin.reverse", return_value="/custom/log/") as mock_reverse:
+            link = admin.log_link(charger)
+        mock_reverse.assert_called_once_with(
+            "admin:ocpp_charger_log",
+            args=[quote(charger.pk)],
+            current_app=site.name,
+        )
+        self.assertIn("/custom/log/", link)
+
     def test_admin_status_overrides_available_when_active_session(self):
         charger = Charger.objects.create(
             charger_id="ADMINCHARGE",
@@ -3206,6 +3225,17 @@ class ChargerAdminTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "entry")
         store.clear_log(log_id, log_type="charger")
+
+    def test_admin_log_view_redirects_when_charger_missing(self):
+        charger = Charger.objects.create(charger_id="LOGBROKEN")
+        url = reverse("admin:ocpp_charger_log", args=[charger.pk])
+        charger.delete()
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response["Location"],
+            reverse("admin:ocpp_charger_changelist"),
+        )
 
     def test_admin_change_links_landing_page(self):
         charger = Charger.objects.create(charger_id="CHANGE1")
