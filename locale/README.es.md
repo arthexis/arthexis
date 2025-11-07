@@ -107,7 +107,7 @@ Los nodos Terminal pueden iniciarse directamente con los siguientes scripts sin 
      - `--terminal`: rol predeterminado si no se especifica y recomendado si no sabes cuál elegir. Los nodos Terminal también pueden usar los scripts anteriores para iniciar/detener sin instalar.
      - `--control`: prepara el equipo de control para pruebas de un solo dispositivo.
      - `--satellite`: configura el nodo perimetral de adquisición de datos.
-     - `--constellation`: habilita la pila de orquestación multiusuario.
+     - `--watchtower`: habilita la pila de orquestación multiusuario.
    - Usa `./install.sh --help` para ver la lista completa de flags si necesitas personalizar el nodo más allá del rol.
    - Actualiza con [`./upgrade.sh`](upgrade.sh).
    - Consulta el [Manual de scripts de instalación y ciclo de vida](docs/development/install-lifecycle-scripts-manual.md) para ver la descripción completa de los flags y las notas operativas.

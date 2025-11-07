@@ -17,8 +17,7 @@ Passing a role flag applies a curated bundle of options. Each preset still honou
 | `--terminal` (default) | Local workstation profile. Leaves auto-upgrade disabled, uses the internal Nginx template, reserves port 8888 unless overridden, and enables Celery for email delivery.【F:install.sh†L198-L205】 |
 | `--control` | Appliance profile. Requires Nginx and Redis, enables Celery, LCD, Control-specific locks, auto-upgrade (latest track), internal Nginx, and writes the `Control` role lock. Sets default service name `arthexis`.【F:install.sh†L207-L222】【F:install.sh†L270-L306】 |
 | `--satellite` | Edge node profile. Requires Nginx and Redis, enables Celery, sets auto-upgrade to latest, and configures the internal Nginx template.【F:install.sh†L183-L194】 |
-| `--watchtower` | Multi-tenant profile. Requires Nginx and Redis, keeps Celery on, switches to the public Nginx proxy with HTTPS expectations, and tracks stable releases unless overridden.【F:install.sh†L223-L241】 |
-| `--constellation` | Deprecated alias for Watchtower; prints a warning but behaves identically so legacy tooling continues to work.【F:install.sh†L242-L252】 |
+| `--watchtower` | Multi-tenant profile. Requires Nginx and Redis, keeps Celery on, switches to the public Nginx proxy with HTTPS expectations, and tracks stable releases unless overridden.【F:install.sh†L225-L233】 |
 
 **General options**
 

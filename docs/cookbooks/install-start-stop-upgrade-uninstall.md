@@ -41,7 +41,6 @@ Run the installer from the project root. Every installer writes a timestamped lo
 | `--clean` | Deletes an existing SQLite database after first backing it up with a timestamp that includes the git revision. Use this when reinstalling on a development machine and you do not need existing data.【F:install.sh†L111-L152】 |
 | `--start` | Immediately runs `start.sh` after installation completes so the services come up without a separate command.【F:install.sh†L112-L115】【F:install.sh†L307-L309】 |
 | `--satellite`, `--terminal`, `--control`, `--watchtower` | High-level presets that bundle multiple flags and dependency checks for each node role. See [Role presets](#12-role-presets). |
-| `--constellation` | Deprecated synonym for `--watchtower`. The script prints a warning and then applies the Watchtower defaults.【F:install.sh†L205-L229】 |
 
 Most flags only tweak configuration files and lock states; they do not persist secrets or environment variables. Review the generated `.env` files or rerun the installer with `--clean` when you need a fresh database snapshot.
 
@@ -52,7 +51,7 @@ Role flags set opinionated defaults and verify external dependencies before proc
 - **`--satellite`** – Requires nginx and Redis to be installed and running. Enables auto-upgrades, internal nginx, Celery, and marks the node as `Satellite`. Redis connection details are written to `redis.env`.【F:install.sh†L116-L146】【F:install.sh†L149-L156】
 - **`--terminal`** – The lightest profile. Leaves auto-upgrades off, keeps nginx internal, targets the latest package set, and enables Celery for background tasks.【F:install.sh†L212-L219】
 - **`--control`** – For lab control stations. Requires nginx and Redis, enables auto-upgrades, Celery, LCD control, and writes the `control.lck` flag so future scripts manage the accessory services.【F:install.sh†L220-L234】
-- **`--watchtower`** – Cloud-oriented role (also used when `--constellation` is supplied). Requires nginx, flips nginx into public mode, enables auto-upgrades and Celery, and records the `Watchtower` role for downstream tooling.【F:install.sh†L235-L255】
+- **`--watchtower`** – Cloud-oriented role. Requires nginx, flips nginx into public mode, enables auto-upgrades and Celery, and records the `Watchtower` role for downstream tooling.【F:install.sh†L225-L233】
 
 During installation, the script ensures the Python virtual environment exists, seeds nginx fallback assets, and writes fully rendered nginx vhosts (public or internal) with the correct upstream port substitution.【F:install.sh†L170-L309】 System prompts appear when prerequisites (nginx or Redis) are missing, explaining how to install them on Debian/Ubuntu systems.【F:install.sh†L33-L74】【F:install.sh†L124-L156】
 

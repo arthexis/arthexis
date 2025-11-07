@@ -16,10 +16,10 @@ def test_install_script_includes_terminal_flag():
     assert "--terminal" in content
 
 
-def test_install_script_includes_constellation_flag():
+def test_install_script_includes_watchtower_flag():
     script_path = Path(__file__).resolve().parent.parent / "install.sh"
     content = script_path.read_text()
-    assert "--constellation" in content
+    assert "--watchtower" in content
 
 
 def test_install_script_excludes_virtual_flag():
@@ -50,7 +50,7 @@ def test_install_script_requires_nginx_for_roles():
     expected_requirements = {
         "satellite": "satellite",
         "control": "control",
-        "constellation": "watchtower",
+        "watchtower": "watchtower",
     }
     for flag, requirement in expected_requirements.items():
         assert f"--{flag}" in content
@@ -71,9 +71,9 @@ def test_install_script_role_defaults():
     assert "AUTO_UPGRADE=true" in satellite
     assert "LATEST=false" in satellite
 
-    constellation = block("constellation")
-    assert "AUTO_UPGRADE=true" in constellation
-    assert "LATEST=false" in constellation
+    watchtower = block("watchtower")
+    assert "AUTO_UPGRADE=true" in watchtower
+    assert "LATEST=false" in watchtower
 
     control = block("control")
     assert "AUTO_UPGRADE=true" in control

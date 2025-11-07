@@ -233,19 +233,6 @@ while [[ $# -gt 0 ]]; do
             REQUIRES_REDIS=true
             shift
             ;;
-        --constellation)
-            echo "The Constellation role has been renamed to Watchtower." >&2
-            echo "Use --watchtower for future invocations." >&2
-            require_nginx "watchtower"
-            AUTO_UPGRADE=true
-            NGINX_MODE="public"
-            SERVICE="arthexis"
-            ENABLE_CELERY=true
-            LATEST=false
-            NODE_ROLE="Watchtower"
-            REQUIRES_REDIS=true
-            shift
-            ;;
         *)
             usage
             ;;
