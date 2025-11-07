@@ -1,0 +1,11 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Verify charge point admin log view",
+      "url": "/admin/ocpp/charger/",
+      "request_details": "Open the charge point changelist in the Django admin and click the Log link for a charge point. Confirm the log view loads without a 404 and displays the log page heading.",
+      "version": "0.1.28"
+    }
+  }
+]
