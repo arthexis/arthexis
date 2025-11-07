@@ -451,9 +451,9 @@ msgstr ""
 msgid "Energy consumption must be greater than zero."
 msgstr ""
 
-#: config/settings.py:588
-msgid "Spanish"
-msgstr "Español"
+#: config/settings.py:571
+msgid "Spanish (Latin America)"
+msgstr "Español (Latinoamérica)"
 
 #: config/settings.py:589
 msgid "English"
