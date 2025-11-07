@@ -33,6 +33,7 @@ from utils.api import api_login_required
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 
+from django.db import IntegrityError, transaction
 from django.db.models import Q
 
 from core.models import RFID
@@ -89,6 +90,7 @@ CONSTELLATION_STATE_DIR = Path(
 CONSTELLATION_PUBLIC_KEY_PATH = CONSTELLATION_STATE_DIR / f"{CONSTELLATION_INTERFACE}.pub"
 CONSTELLATION_PEERS_PATH = CONSTELLATION_STATE_DIR / "peers.json"
 CONSTELLATION_LOCK_PATH = Path(settings.BASE_DIR) / "locks" / "constellation_ip.lck"
+CONSTELLATION_DEVICE_PATTERN = re.compile(r"^gw[0-9]{1,6}$")
 
 
 def _normalize_constellation_ip(value: str) -> str:
@@ -99,6 +101,33 @@ def _normalize_constellation_ip(value: str) -> str:
         return str(ipaddress.ip_address(value))
     except ValueError:
         return ""
+
+
+def _ensure_constellation_device(node: Node) -> str | None:
+    """Assign and return a unique Constellation device label for ``node``."""
+
+    current = (node.constellation_device or "").strip()
+    if current and CONSTELLATION_DEVICE_PATTERN.fullmatch(current):
+        return current
+
+    attempt = 1
+    while True:
+        candidate = f"gw{attempt}"
+        try:
+            with transaction.atomic():
+                try:
+                    node.refresh_from_db(fields=["constellation_device"], using=None)
+                except node.__class__.DoesNotExist:
+                    return None
+                current = (node.constellation_device or "").strip()
+                if current and CONSTELLATION_DEVICE_PATTERN.fullmatch(current):
+                    return current
+                node.constellation_device = candidate
+                node.save(update_fields=["constellation_device"])
+                return candidate
+        except IntegrityError:
+            attempt += 1
+            continue
 
 
 def _load_constellation_peers() -> dict[str, dict]:
@@ -492,6 +521,7 @@ def node_list(request):
             "ipv4_address": node.ipv4_address,
             "ipv6_address": node.ipv6_address,
             "constellation_ip": node.constellation_ip,
+            "constellation_device": node.constellation_device,
             "port": node.port,
             "last_seen": node.last_seen,
             "features": list(node.features.values_list("slug", flat=True)),
@@ -589,6 +619,9 @@ def constellation_setup(request):
         node.constellation_ip = assigned_ip
         node.save(update_fields=["constellation_ip"])
 
+    hub_device = _ensure_constellation_device(local_node)
+    peer_device = _ensure_constellation_device(node)
+
     peers_state = _load_constellation_peers()
     peer_entry = {
         "public_key": public_key,
@@ -598,6 +631,8 @@ def constellation_setup(request):
         "node_id": node.pk,
         "last_seen": timezone.now().isoformat(),
     }
+    if peer_device:
+        peer_entry["constellation_device"] = peer_device
     if endpoint_hint:
         peer_entry["endpoint"] = endpoint_hint
     peers_state[mac_address] = peer_entry
@@ -622,6 +657,18 @@ def constellation_setup(request):
     }
 
     peer_configs: list[dict[str, object]] = []
+    peer_devices: dict[str, str] = {}
+    mac_map = [key.lower() for key in peers_state.keys()]
+    if mac_map:
+        filters = Q()
+        for mac in mac_map:
+            filters |= Q(mac_address__iexact=mac)
+        if filters:
+            for record in Node.objects.filter(filters):
+                if record.mac_address:
+                    peer_devices[record.mac_address.lower()] = (
+                        record.constellation_device or ""
+                    )
     if node.pk == local_node.pk:
         for peer_mac, entry in peers_state.items():
             if peer_mac == mac_address:
@@ -631,6 +678,10 @@ def constellation_setup(request):
             if not peer_key or not peer_ip:
                 continue
             allowed_ips = entry.get("allowed_ips") or [f"{peer_ip}/32"]
+            device_name = (
+                peer_devices.get(peer_mac.lower())
+                or (entry.get("constellation_device") or "")
+            )
             peer_configs.append(
                 {
                     "mac_address": peer_mac,
@@ -640,6 +691,7 @@ def constellation_setup(request):
                     "endpoint": entry.get("endpoint", ""),
                     "node_id": entry.get("node_id"),
                     "last_seen": entry.get("last_seen"),
+                    "constellation_device": device_name,
                 }
             )
 
@@ -648,9 +700,10 @@ def constellation_setup(request):
         "assigned_ip": assigned_ip,
         "address": f"{assigned_ip}/{CONSTELLATION_SUBNET.prefixlen}",
         "subnet": str(CONSTELLATION_SUBNET),
-        "hub": hub_data,
+        "hub": {**hub_data, "constellation_device": hub_device or ""},
         "dns": [hub_ip],
         "peers": peer_configs,
+        "constellation_device": peer_device or "",
     }
 
     return JsonResponse(response)
@@ -698,6 +751,7 @@ def node_info(request):
         "ipv4_address": node.ipv4_address,
         "ipv6_address": node.ipv6_address,
         "constellation_ip": node.constellation_ip,
+        "constellation_device": node.constellation_device,
         "port": advertised_port,
         "mac_address": node.mac_address,
         "public_key": node.public_key,

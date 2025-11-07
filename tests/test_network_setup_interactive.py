@@ -83,3 +83,11 @@ def test_network_setup_safe_mode_messages_reference_flag() -> None:
     assert "Skipping $desc while running in safe mode" in script_contents
     assert "Re-run with --unsafe to allow this step." in script_contents
     assert "--dhcp-reset requires --unsafe" in script_contents
+
+
+def test_network_setup_restores_constellation_device_manifest() -> None:
+    script = REPO_ROOT / "network-setup.sh"
+    script_contents = script.read_text()
+    occurrences = script_contents.count("restore_constellation_devices_from_manifest")
+    assert occurrences >= 2
+    assert "CONSTELLATION_DEVICE_MANIFEST" in script_contents

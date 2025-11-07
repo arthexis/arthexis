@@ -1085,8 +1085,14 @@ class ConstellationSetupViewTests(TestCase):
         data = response.json()
         peer.refresh_from_db()
         self.assertEqual(peer.constellation_ip, data["assigned_ip"])
+        self.assertTrue(peer.constellation_device)
+        self.assertTrue(peer.constellation_device.startswith("gw"))
+        self.assertEqual(data["constellation_device"], peer.constellation_device)
         self.local_node.refresh_from_db()
         self.assertEqual(data["hub"]["constellation_ip"], self.local_node.constellation_ip)
+        self.assertEqual(
+            data["hub"]["constellation_device"], self.local_node.constellation_device
+        )
         self.assertTrue((self.state_dir / "peers.json").exists())
 
     def test_reuses_existing_constellation_ip(self):
@@ -1112,6 +1118,7 @@ class ConstellationSetupViewTests(TestCase):
         peer.refresh_from_db()
         self.assertEqual(peer.constellation_ip, "10.88.0.50")
         self.assertEqual(data["assigned_ip"], "10.88.0.50")
+        self.assertTrue(peer.constellation_device)
 
     def test_requires_watchtower_role(self):
         terminal_role, _ = NodeRole.objects.get_or_create(name="Terminal")
@@ -1165,6 +1172,44 @@ class ConstellationSetupViewTests(TestCase):
         data = response.json()
         self.assertEqual(data["assigned_ip"], data["hub"]["constellation_ip"])
         self.assertGreaterEqual(len(data.get("peers", [])), 1)
+        for peer_entry in data.get("peers", []):
+            self.assertTrue(peer_entry.get("constellation_device"))
+            self.assertTrue(peer_entry["constellation_device"].startswith("gw"))
+
+    def test_assigns_incremental_constellation_device_names(self):
+        first_peer = Node.objects.create(
+            hostname="peer-one",
+            address="198.51.100.20",
+            port=8084,
+            mac_address="02:00:00:00:00:31",
+        )
+        second_peer = Node.objects.create(
+            hostname="peer-two",
+            address="198.51.100.21",
+            port=8085,
+            mac_address="02:00:00:00:00:32",
+        )
+
+        for peer in (first_peer, second_peer):
+            payload = {
+                "mac_address": peer.mac_address,
+                "public_key": f"{peer.hostname}-key",
+                "hostname": peer.hostname,
+            }
+            response = self.client.post(
+                self.url,
+                data=json.dumps(payload),
+                content_type="application/json",
+            )
+            self.assertEqual(response.status_code, 200)
+
+        self.local_node.refresh_from_db()
+        first_peer.refresh_from_db()
+        second_peer.refresh_from_db()
+
+        self.assertEqual(self.local_node.constellation_device, "gw1")
+        self.assertEqual(first_peer.constellation_device, "gw2")
+        self.assertEqual(second_peer.constellation_device, "gw3")
 
 class RegisterVisitorNodeMessageTests(TestCase):
     def setUp(self):

@@ -248,6 +248,7 @@ class NodeAdmin(EntityModelAdmin):
         "mac_address_display",
         "role",
         "relation",
+        "constellation_device",
         "last_seen",
         "visit_link",
     )
@@ -271,6 +272,7 @@ class NodeAdmin(EntityModelAdmin):
                     "ipv4_address",
                     "ipv6_address",
                     "constellation_ip",
+                    "constellation_device",
                     "address",
                     "mac_address",
                     "port",

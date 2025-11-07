@@ -218,6 +218,7 @@ class Node(Entity):
         protocol="IPv6", blank=True, null=True
     )
     constellation_ip = models.GenericIPAddressField(blank=True, null=True)
+    constellation_device = models.CharField(max_length=16, blank=True, null=True)
     address = models.GenericIPAddressField(blank=True, null=True)
     mac_address = models.CharField(max_length=17, unique=True, null=True, blank=True)
     port = models.PositiveIntegerField(default=8888)
@@ -272,6 +273,15 @@ class Node(Entity):
         "ap-router",
     }
     MANUAL_FEATURE_SLUGS = {"clipboard-poll", "screenshot-poll", "audio-capture"}
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["constellation_device"],
+                condition=Q(constellation_device__isnull=False),
+                name="nodes_node_constellation_device_unique",
+            )
+        ]
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return f"{self.hostname}:{self.port}"

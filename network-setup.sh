@@ -36,6 +36,7 @@ CONSTELLATION_KEYS_DIR="$BASE_DIR/security/wireguard"
 CONSTELLATION_PRIVATE_KEY="$CONSTELLATION_KEYS_DIR/${CONSTELLATION_INTERFACE}.key"
 CONSTELLATION_PUBLIC_KEY="$CONSTELLATION_KEYS_DIR/${CONSTELLATION_INTERFACE}.pub"
 CONSTELLATION_LOCK_FILE="$LOCK_DIR/constellation_ip.lck"
+CONSTELLATION_DEVICE_MANIFEST="$LOCK_DIR/constellation_devices.json"
 CONSTELLATION_PORT=51820
 
 usage() {
@@ -268,6 +269,193 @@ ensure_constellation_keys() {
     return 0
 }
 
+ensure_constellation_device() {
+    local name="$1"
+    local alias_value="$2"
+
+    if [[ -z "$name" ]]; then
+        return 0
+    fi
+    if ! command -v ip >/dev/null 2>&1; then
+        return 0
+    fi
+
+    if ip link show "$name" >/dev/null 2>&1; then
+        if [[ -n "$alias_value" ]]; then
+            ip link set dev "$name" alias "Constellation ${alias_value}" >/dev/null 2>&1 || true
+        fi
+        return 0
+    fi
+
+    if ip link add dev "$name" type dummy >/dev/null 2>&1; then
+        ip link set dev "$name" up >/dev/null 2>&1 || true
+        if [[ -n "$alias_value" ]]; then
+            ip link set dev "$name" alias "Constellation ${alias_value}" >/dev/null 2>&1 || true
+        fi
+        echo "Provisioned Constellation device '$name'."
+    else
+        echo "Warning: failed to create Constellation device '$name'." >&2
+    fi
+}
+
+prune_constellation_devices() {
+    local desired="$1"
+    declare -A keep=()
+    local entry
+    while IFS= read -r entry; do
+        [[ -z "$entry" ]] && continue
+        keep["$entry"]=1
+    done <<< "$desired"
+
+    if ! command -v ip >/dev/null 2>&1; then
+        return 0
+    fi
+
+    local existing
+    while IFS= read -r existing; do
+        [[ -z "$existing" ]] && continue
+        if [[ -z "${keep[$existing]:-}" ]]; then
+            ip link delete "$existing" >/dev/null 2>&1 || true
+            echo "Removed stale Constellation device '$existing'."
+        fi
+    done < <(ip -o link show 2>/dev/null | awk -F': ' '/^[0-9]+: gw[0-9]+(@|:)/ {split($2,a,":"); split(a[1],b,"@"); print b[0]}')
+}
+
+synchronize_constellation_devices() {
+    local payload="$1"
+    if [[ -z "$payload" ]]; then
+        prune_constellation_devices ""
+        return 0
+    fi
+    if [[ "$(uname -s)" != "Linux" ]]; then
+        return 0
+    fi
+    if ! command -v python3 >/dev/null 2>&1; then
+        return 0
+    fi
+
+    local parser_output
+    parser_output="$(printf '%s' "$payload" | python3 - "$CONSTELLATION_DEVICE_MANIFEST" <<'PY')"
+import json
+import pathlib
+import sys
+
+manifest_path = pathlib.Path(sys.argv[1])
+try:
+    data = json.loads(sys.stdin.read() or "{}")
+except json.JSONDecodeError:
+    data = {}
+
+entries = []
+seen = set()
+
+def add_entry(name, alias):
+    if not name:
+        return
+    name = name.strip()
+    if not name or name in seen:
+        return
+    seen.add(name)
+    entries.append({"name": name, "alias": (alias or "").strip()})
+
+add_entry(data.get("constellation_device"), data.get("assigned_ip"))
+hub = data.get("hub") or {}
+add_entry(hub.get("constellation_device"), hub.get("constellation_ip"))
+for peer in data.get("peers") or []:
+    if isinstance(peer, dict):
+        add_entry(peer.get("constellation_device"), peer.get("constellation_ip"))
+
+try:
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(json.dumps(entries, indent=2) + "\n")
+except OSError:
+    pass
+
+for item in entries:
+    print(f"{item['name']}|{item['alias']}")
+PY
+"
+    if [[ $? -ne 0 ]]; then
+        echo "Warning: failed to parse Constellation device assignments." >&2
+        return 1
+    fi
+
+    local desired_list=""
+    local name alias
+    while IFS='|' read -r name alias; do
+        [[ -z "$name" ]] && continue
+        desired_list+="$name"$'\n'
+        ensure_constellation_device "$name" "$alias"
+    done <<< "$parser_output"
+
+    prune_constellation_devices "$desired_list"
+    return 0
+}
+
+restore_constellation_devices_from_manifest() {
+    if [[ "$(uname -s)" != "Linux" ]]; then
+        return 0
+    fi
+    if [[ ! -f "$CONSTELLATION_DEVICE_MANIFEST" ]]; then
+        prune_constellation_devices ""
+        return 0
+    fi
+    if ! command -v python3 >/dev/null 2>&1; then
+        return 0
+    fi
+
+    local parser_output
+    parser_output="$(python3 - "$CONSTELLATION_DEVICE_MANIFEST" <<'PY')"
+import json
+import pathlib
+import sys
+
+manifest_path = pathlib.Path(sys.argv[1])
+try:
+    raw = manifest_path.read_text()
+except OSError:
+    sys.exit(0)
+
+try:
+    data = json.loads(raw)
+except json.JSONDecodeError:
+    data = []
+
+if isinstance(data, dict):
+    entries = data.get("entries")
+    if not isinstance(entries, list):
+        entries = []
+else:
+    entries = data if isinstance(data, list) else []
+
+seen = set()
+for entry in entries:
+    if not isinstance(entry, dict):
+        continue
+    name = (entry.get("name") or "").strip()
+    if not name or name in seen:
+        continue
+    seen.add(name)
+    alias = (entry.get("alias") or "").strip()
+    print(f"{name}|{alias}")
+PY
+"
+    local status=$?
+    if [[ $status -ne 0 ]]; then
+        return 0
+    fi
+
+    local desired_list=""
+    local name alias
+    while IFS='|' read -r name alias; do
+        [[ -z "$name" ]] && continue
+        desired_list+="$name"$'\n'
+        ensure_constellation_device "$name" "$alias"
+    done <<< "$parser_output"
+
+    prune_constellation_devices "$desired_list"
+}
+
 apply_constellation_config() {
     python3 - "$CONSTELLATION_PRIVATE_KEY" "$CONSTELLATION_CONFIG" "$CONSTELLATION_LOCK_FILE" <<'PY'
 import json
@@ -463,6 +651,8 @@ PY
         echo "Failed to apply Constellation configuration." >&2
         return 1
     }
+
+    synchronize_constellation_devices "$response" || true
 
     if [[ -n "$assigned_ip" ]]; then
         printf '%s\n' "$assigned_ip" > "$CONSTELLATION_LOCK_FILE"
@@ -1586,6 +1776,8 @@ fi
 if [[ $PORT_CHANGE_REQUESTED == true ]]; then
     apply_backend_port_change "$REQUESTED_BACKEND_PORT"
 fi
+
+restore_constellation_devices_from_manifest
 
 # Record wlan1 presence for later routing rules and provide early feedback.
 if command -v nmcli >/dev/null 2>&1; then
