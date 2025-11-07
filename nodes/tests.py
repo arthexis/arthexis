@@ -44,6 +44,7 @@ from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.contrib import admin
 from django.contrib import messages
+from django.contrib.messages import get_messages
 from django.contrib.admin import helpers
 from django.contrib.auth.models import Permission
 from django_celery_beat.models import IntervalSchedule, PeriodicTask
@@ -2536,6 +2537,68 @@ class NodeAdminTests(TestCase):
             padding.PKCS1v15(),
             hashes.SHA256(),
         )
+
+    @patch("nodes.admin.push_forwarded_charge_points.delay")
+    @patch.object(NodeAdmin, "_send_forwarding_metadata", return_value=True)
+    @patch.object(NodeAdmin, "_attempt_forwarding_probe", return_value=True)
+    def test_start_charge_point_forwarding_action_updates_forwarded_to(
+        self,
+        mock_attempt,
+        mock_send,
+        mock_delay,
+    ):
+        local = self._create_local_node()
+        local.public_endpoint = "local-forward"
+        key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        private_bytes = key.private_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PrivateFormat.TraditionalOpenSSL,
+            encryption_algorithm=serialization.NoEncryption(),
+        )
+        public_bytes = key.public_key().public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        security_dir = Path(settings.BASE_DIR) / "security"
+        security_dir.mkdir(parents=True, exist_ok=True)
+        (security_dir / local.public_endpoint).write_bytes(private_bytes)
+        (security_dir / f"{local.public_endpoint}.pub").write_bytes(public_bytes)
+        local.public_key = public_bytes.decode()
+        local.save(update_fields=["public_endpoint", "public_key"])
+
+        remote = Node.objects.create(
+            hostname="remote",
+            address="127.0.0.2",
+            port=8010,
+            mac_address="aa:bb:cc:dd:ee:ff",
+        )
+
+        charger = Charger.objects.create(
+            charger_id="FORWARD-CP-1",
+            export_transactions=True,
+            node_origin=local,
+        )
+
+        response = self.client.post(
+            reverse("admin:nodes_node_changelist"),
+            {
+                "action": "start_charge_point_forwarding",
+                "_selected_action": [str(remote.pk)],
+            },
+            follow=True,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        charger.refresh_from_db()
+        self.assertEqual(charger.forwarded_to, remote)
+        stored_messages = [str(message) for message in get_messages(response.wsgi_request)]
+        self.assertTrue(
+            any("Forwarding enabled" in message for message in stored_messages),
+            stored_messages,
+        )
+        mock_attempt.assert_called_once()
+        mock_send.assert_called_once()
+        mock_delay.assert_called_once()
 
     @patch("nodes.admin.requests.post")
     def test_import_rfids_links_existing_accounts_only(self, mock_post):
