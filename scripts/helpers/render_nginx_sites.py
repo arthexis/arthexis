@@ -5,124 +5,20 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 import sys
-import textwrap
 from pathlib import Path
 
+ROOT = Path(__file__).resolve().parents[2]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
-DEFAULT_CERT_DIR = Path("/etc/letsencrypt/live/arthexis.com")
-CERTIFICATE_PATH = DEFAULT_CERT_DIR / "fullchain.pem"
-CERTIFICATE_KEY_PATH = DEFAULT_CERT_DIR / "privkey.pem"
-SSL_OPTIONS_PATH = Path("/etc/letsencrypt/options-ssl-nginx.conf")
-SSL_DHPARAM_PATH = Path("/etc/letsencrypt/ssl-dhparams.pem")
-MAINTENANCE_ROOT = Path("/usr/share/arthexis-fallback")
-
-
-def _slugify(domain: str) -> str:
-    slug = re.sub(r"[^a-z0-9]+", "-", domain.lower()).strip("-")
-    return slug or "site"
-
-
-def _maintenance_block() -> str:
-    return textwrap.dedent(
-        f"""
-        error_page 500 502 503 504 /maintenance/index.html;
-
-        location = /maintenance/index.html {{
-            root {MAINTENANCE_ROOT};
-            add_header Cache-Control "no-store";
-        }}
-
-        location /maintenance/ {{
-            alias {MAINTENANCE_ROOT}/;
-            add_header Cache-Control "no-store";
-        }}
-        """
-    ).strip()
-
-
-def _proxy_block(port: int) -> str:
-    return textwrap.dedent(
-        f"""
-        location / {{
-            proxy_pass http://127.0.0.1:{port}/;
-            proxy_intercept_errors on;
-            proxy_http_version 1.1;
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection "upgrade";
-            proxy_set_header Host $host;
-            proxy_set_header X-Real-IP $remote_addr;
-            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_set_header X-Forwarded-Proto $scheme;
-        }}
-        """
-    ).strip()
-
-
-def _http_proxy_server(domain: str, port: int) -> str:
-    maintenance = textwrap.indent(_maintenance_block(), "    ")
-    proxy = textwrap.indent(_proxy_block(port), "    ")
-    return textwrap.dedent(
-        f"""
-        server {{
-            listen 80;
-            server_name {domain};
-
-{maintenance}
-
-{proxy}
-        }}
-        """
-    ).strip()
-
-
-def _http_redirect_server(domain: str) -> str:
-    return textwrap.dedent(
-        f"""
-        server {{
-            listen 80;
-            server_name {domain};
-            return 301 https://$host$request_uri;
-        }}
-        """
-    ).strip()
-
-
-def _https_proxy_server(domain: str, port: int) -> str:
-    maintenance = textwrap.indent(_maintenance_block(), "    ")
-    proxy = textwrap.indent(_proxy_block(port), "    ")
-    return textwrap.dedent(
-        f"""
-        server {{
-            listen 443 ssl;
-            server_name {domain};
-
-{maintenance}
-
-            ssl_certificate {CERTIFICATE_PATH};
-            ssl_certificate_key {CERTIFICATE_KEY_PATH};
-            include {SSL_OPTIONS_PATH};
-            ssl_dhparam {SSL_DHPARAM_PATH};
-
-{proxy}
-        }}
-        """
-    ).strip()
-
-
-def _write_if_changed(path: Path, content: str) -> bool:
-    try:
-        existing = path.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        existing = None
-
-    normalized = content.rstrip("\n")
-    if existing is not None and existing.rstrip("\n") == normalized:
-        return False
-
-    path.write_text(normalized + "\n", encoding="utf-8")
-    return True
+from scripts.helpers.nginx_config import (
+    http_proxy_server,
+    http_redirect_server,
+    https_proxy_server,
+    slugify,
+    write_if_changed,
+)
 
 
 def apply_sites(
@@ -150,7 +46,7 @@ def apply_sites(
         if not domain:
             continue
         require_https = bool(entry.get("require_https"))
-        slug = _slugify(domain)
+        slug = slugify(domain)
         target = dest_dir / f"arthexis-site-{slug}.conf"
         seen_paths.add(target)
 
@@ -159,19 +55,19 @@ def apply_sites(
         ]
 
         if require_https and mode == "public":
-            blocks.append(_http_redirect_server(domain))
+            blocks.append(http_redirect_server(domain))
         else:
-            blocks.append(_http_proxy_server(domain, port))
+            blocks.append(http_proxy_server(domain, port))
 
         if mode == "public":
-            blocks.append(_https_proxy_server(domain, port))
+            blocks.append(https_proxy_server(domain, port))
         elif require_https:
             blocks.append(
                 "# HTTPS requested but unavailable in internal mode; update nginx_mode.lck to 'public'."
             )
 
         content = "\n\n".join(blocks)
-        if _write_if_changed(target, content):
+        if write_if_changed(target, content):
             changed = True
 
     for path in dest_dir.glob("arthexis-site-*.conf"):

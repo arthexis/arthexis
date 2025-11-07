@@ -346,116 +346,14 @@ if [ -d "$FALLBACK_SRC_DIR" ]; then
     sudo cp -r "$FALLBACK_SRC_DIR"/. "$FALLBACK_DEST_DIR"/
 fi
 
-if [ "$NGINX_MODE" = "public" ]; then
-    sudo tee "$NGINX_CONF" > /dev/null <<'NGINXCONF'
-server {
-    listen 0.0.0.0:80;
-    listen [::]:80;
-    listen 0.0.0.0:8000;
-    listen [::]:8000;
-    listen 0.0.0.0:8080;
-    listen [::]:8080;
-    server_name arthexis.com *.arthexis.com _;
-
-    error_page 500 502 503 504 /maintenance/index.html;
-
-    location = /maintenance/index.html {
-        root /usr/share/arthexis-fallback;
-        add_header Cache-Control "no-store";
-    }
-
-    location /maintenance/ {
-        alias /usr/share/arthexis-fallback/;
-        add_header Cache-Control "no-store";
-    }
-
-    location / {
-        proxy_pass http://127.0.0.1:PORT_PLACEHOLDER;
-        proxy_intercept_errors on;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-
-server {
-    listen 443 ssl;
-    server_name arthexis.com *.arthexis.com;
-
-    error_page 500 502 503 504 /maintenance/index.html;
-
-    location = /maintenance/index.html {
-        root /usr/share/arthexis-fallback;
-        add_header Cache-Control "no-store";
-    }
-
-    location /maintenance/ {
-        alias /usr/share/arthexis-fallback/;
-        add_header Cache-Control "no-store";
-    }
-
-    ssl_certificate /etc/letsencrypt/live/arthexis.com/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/arthexis.com/privkey.pem;
-    include /etc/letsencrypt/options-ssl-nginx.conf;
-    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
-
-    location / {
-        proxy_pass http://127.0.0.1:PORT_PLACEHOLDER;
-        proxy_intercept_errors on;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-NGINXCONF
-else
-    sudo tee "$NGINX_CONF" > /dev/null <<'NGINXCONF'
-server {
-    listen 0.0.0.0:80;
-    listen [::]:80;
-    listen 0.0.0.0:8000;
-    listen [::]:8000;
-    listen 0.0.0.0:8080;
-    listen [::]:8080;
-    server_name _;
-
-    error_page 500 502 503 504 /maintenance/index.html;
-
-    location = /maintenance/index.html {
-        root /usr/share/arthexis-fallback;
-        add_header Cache-Control "no-store";
-    }
-
-    location /maintenance/ {
-        alias /usr/share/arthexis-fallback/;
-        add_header Cache-Control "no-store";
-    }
-
-    location / {
-        proxy_pass http://127.0.0.1:PORT_PLACEHOLDER;
-        proxy_intercept_errors on;
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
-NGINXCONF
+NGINX_RENDERER="$SCRIPT_DIR/scripts/helpers/render_nginx_default.py"
+if ! sudo python3 "$NGINX_RENDERER" \
+    --mode "$NGINX_MODE" \
+    --port "$PORT" \
+    --dest "$NGINX_CONF"; then
+    echo "Failed to render nginx configuration" >&2
+    exit 1
 fi
-
-
-sudo sed -i "s/PORT_PLACEHOLDER/$PORT/" "$NGINX_CONF"
 
 if arthexis_can_manage_nginx; then
     arthexis_refresh_nginx_maintenance "$SCRIPT_DIR" "$NGINX_CONF"
