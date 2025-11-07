@@ -245,6 +245,7 @@ class NodeAdmin(EntityModelAdmin):
         "hostname",
         "primary_ip",
         "port",
+        "mac_address_display",
         "role",
         "relation",
         "constellation_device",
@@ -367,6 +368,10 @@ class NodeAdmin(EntityModelAdmin):
     @admin.display(description=_("Relation"), ordering="current_relation")
     def relation(self, obj):
         return obj.get_current_relation_display()
+
+    @admin.display(description=_("MAC address"), ordering="mac_address")
+    def mac_address_display(self, obj):
+        return obj.mac_address or "—"
 
     @admin.display(description=_("IP Address"), ordering="address")
     def primary_ip(self, obj):
