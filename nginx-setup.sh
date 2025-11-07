@@ -165,6 +165,8 @@ NGINX_CONF="/etc/nginx/sites-enabled/arthexis.conf"
 
 sudo mkdir -p /etc/nginx/sites-enabled
 sudo sh -c 'rm -f /etc/nginx/sites-enabled/arthexis*.conf'
+sudo sh -c 'rm -f /etc/nginx/sites-enabled/default'
+sudo sh -c 'rm -f /etc/nginx/sites-available/default' || true
 sudo sh -c 'rm -f /etc/nginx/conf.d/arthexis-*.conf' || true
 
 FALLBACK_SRC_DIR="$BASE_DIR/config/data/nginx/maintenance"
