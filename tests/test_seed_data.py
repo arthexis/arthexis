@@ -514,6 +514,49 @@ class EnvRefreshTodoFixtureTests(TestCase):
             Todo.all_objects.filter(request=request_text, is_deleted=True).exists()
         )
 
+    def test_env_refresh_applies_completed_todo_updates(self):
+        todo = Todo.objects.create(request="Task", is_seed_data=True)
+        done_on_value = timezone.now().replace(microsecond=0)
+        fixture_path = self.fixture_root / "todo__task_env_refresh_completion.json"
+        fixture_data = [
+            {
+                "model": "core.todo",
+                "fields": {
+                    "request": "Task",
+                    "url": "",
+                    "request_details": "",
+                    "done_on": done_on_value.isoformat(),
+                    "done_version": "9.9.9",
+                    "done_revision": "rev-test",
+                    "done_username": "release",
+                    "is_deleted": False,
+                },
+            }
+        ]
+        fixture_path.write_text(json.dumps(fixture_data, indent=2) + "\n", encoding="utf-8")
+        relative = fixture_path.relative_to(self.base_dir)
+        self.env_refresh._fixture_files = lambda: [str(relative)]
+
+        from django.core.management import call_command as django_call
+
+        def _call_command(name, *args, **kwargs):
+            self._commands.append((name, args, kwargs))
+            if name == "loaddata":
+                return django_call(name, *args, **kwargs)
+            return None
+
+        self.env_refresh.call_command = _call_command
+
+        self.env_refresh.run_database_tasks()
+
+        todo.refresh_from_db()
+        self.assertIsNotNone(todo.done_on)
+        self.assertEqual(todo.done_on.replace(microsecond=0), done_on_value)
+        self.assertEqual(todo.done_version, "9.9.9")
+        self.assertEqual(todo.done_revision, "rev-test")
+        self.assertEqual(todo.done_username, "release")
+        self.assertTrue(todo.is_seed_data)
+
 
 class EnvRefreshUserDataTests(TransactionTestCase):
     def setUp(self):
