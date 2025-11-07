@@ -7,7 +7,9 @@ from collections import deque
 import inspect
 import json
 import logging
+import uuid
 from urllib.parse import parse_qs
+from django.conf import settings
 from django.utils import timezone
 from core.models import EnergyAccount, Reference, RFID as CoreRFID
 from nodes.models import NetMessage
@@ -28,6 +30,7 @@ from .models import (
     MeterValue,
     DataTransferMessage,
     CPReservation,
+    CPFirmware,
     CPFirmwareDeployment,
     RFIDSessionAttempt,
 )
@@ -44,6 +47,11 @@ FORWARDED_PAIR_RE = re.compile(r"for=(?:\"?)(?P<value>[^;,\"\s]+)(?:\"?)", re.IG
 
 
 logger = logging.getLogger(__name__)
+
+
+# Default vendor identifier used when requesting firmware via DataTransfer for
+# chargers that do not yet have stored firmware records.
+DEFAULT_FIRMWARE_VENDOR_ID = "org.openchargealliance.firmware"
 
 
 # Query parameter keys that may contain the charge point serial. Keys are
@@ -263,6 +271,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         self.aggregate_charger: Charger | None = None
         self._consumption_task: asyncio.Task | None = None
         self._consumption_message_uuid: str | None = None
+        self._initial_metadata_task: asyncio.Task | None = None
         subprotocol = None
         offered = self.scope.get("subprotocols", [])
         if "ocpp1.6" in offered:
@@ -314,6 +323,42 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             friendly_name,
             log_type="charger",
         )
+
+        fetch_configuration = False
+        fetch_firmware = False
+        if not created:
+
+            def _check_existing_metadata() -> tuple[bool, bool]:
+                has_configuration = ChargerConfiguration.objects.filter(
+                    charger_identifier=self.charger_id
+                ).exists()
+                charger_pk = getattr(self.charger, "pk", None)
+                has_firmware = False
+                if charger_pk:
+                    has_firmware = CPFirmware.objects.filter(
+                        source_charger_id=charger_pk
+                    ).exists()
+                return has_configuration, has_firmware
+
+            has_configuration, has_firmware = await database_sync_to_async(
+                _check_existing_metadata
+            )()
+            fetch_configuration = not has_configuration
+            fetch_firmware = not has_firmware
+
+        if fetch_configuration or fetch_firmware:
+            log_key = self.store_key
+            task = asyncio.create_task(
+                self._fetch_initial_metadata(
+                    log_key=log_key,
+                    fetch_configuration=fetch_configuration,
+                    fetch_firmware=fetch_firmware,
+                )
+            )
+            task.add_done_callback(
+                lambda _: setattr(self, "_initial_metadata_task", None)
+            )
+            self._initial_metadata_task = task
 
     async def _get_account(self, id_tag: str) -> EnergyAccount | None:
         """Return the energy account for the provided RFID if valid."""
@@ -525,6 +570,139 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         )
         self.store_key = new_key
         self.connector_value = connector_value
+
+    async def _fetch_initial_metadata(
+        self,
+        *,
+        log_key: str,
+        fetch_configuration: bool,
+        fetch_firmware: bool,
+    ) -> None:
+        """Request configuration and firmware snapshots when missing."""
+
+        if not (fetch_configuration or fetch_firmware):
+            return
+        connector_value = self.connector_value
+        try:
+            if fetch_configuration:
+                await self._request_configuration_snapshot(
+                    log_key=log_key, connector_value=connector_value
+                )
+            if fetch_firmware:
+                await self._request_firmware_snapshot(
+                    log_key=log_key, connector_value=connector_value
+                )
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # pragma: no cover - defensive guard
+            logger.exception(
+                "Failed to dispatch automatic metadata requests for charger %s",
+                self.charger_id,
+            )
+
+    async def _request_configuration_snapshot(
+        self, *, log_key: str, connector_value: int | None
+    ) -> bool:
+        """Send a GetConfiguration call for the current connection."""
+
+        message_id = uuid.uuid4().hex
+        frame = json.dumps([2, message_id, "GetConfiguration", {}])
+        try:
+            await self.send(frame)
+        except Exception as exc:  # pragma: no cover - network error
+            logger.warning(
+                "Automatic GetConfiguration request for %s failed: %s",
+                self.charger_id,
+                exc,
+            )
+            return False
+
+        store.add_log(log_key, f"< {frame}", log_type="charger")
+        store.register_pending_call(
+            message_id,
+            {
+                "action": "GetConfiguration",
+                "charger_id": self.charger_id,
+                "connector_id": connector_value,
+                "log_key": log_key,
+                "requested_at": timezone.now(),
+            },
+        )
+        store.schedule_call_timeout(
+            message_id,
+            timeout=5.0,
+            action="GetConfiguration",
+            log_key=log_key,
+            message=(
+                "GetConfiguration timed out: charger did not respond"
+                " (operation may not be supported)"
+            ),
+        )
+        return True
+
+    async def _request_firmware_snapshot(
+        self, *, log_key: str, connector_value: int | None
+    ) -> bool:
+        """Send a firmware download request via DataTransfer."""
+
+        charger = self.charger
+        if not charger or not getattr(charger, "pk", None):
+            return False
+
+        vendor_setting = getattr(
+            settings, "OCPP_AUTOMATIC_FIRMWARE_VENDOR_ID", DEFAULT_FIRMWARE_VENDOR_ID
+        )
+        vendor_id = str(vendor_setting or "").strip() or DEFAULT_FIRMWARE_VENDOR_ID
+        message_id = uuid.uuid4().hex
+        payload = {"vendorId": vendor_id, "messageId": "DownloadFirmware"}
+        frame = json.dumps([2, message_id, "DataTransfer", payload])
+        try:
+            await self.send(frame)
+        except Exception as exc:  # pragma: no cover - network error
+            logger.warning(
+                "Automatic firmware request for %s failed: %s",
+                self.charger_id,
+                exc,
+            )
+            return False
+
+        def _create_message():
+            return DataTransferMessage.objects.create(
+                charger=charger,
+                connector_id=connector_value,
+                direction=DataTransferMessage.DIRECTION_CSMS_TO_CP,
+                ocpp_message_id=message_id,
+                vendor_id=vendor_id,
+                message_id="DownloadFirmware",
+                payload=payload,
+                status="Pending",
+            )
+
+        message = await database_sync_to_async(_create_message)()
+        if not message:
+            return False
+
+        store.add_log(
+            log_key,
+            "Requested firmware download via DataTransfer.",
+            log_type="charger",
+        )
+        store.register_pending_call(
+            message_id,
+            {
+                "action": "DataTransfer",
+                "charger_id": self.charger_id,
+                "connector_id": connector_value,
+                "log_key": log_key,
+                "message_pk": message.pk,
+            },
+        )
+        store.schedule_call_timeout(
+            message_id,
+            action="DataTransfer",
+            log_key=log_key,
+        )
+        return True
 
     def _ensure_console_reference(self) -> None:
         """Create or update a header reference for the connected charger."""
@@ -2012,6 +2190,14 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         if tx_obj:
             await self._update_consumption_message(tx_obj.pk)
         await self._cancel_consumption_message()
+        metadata_task = getattr(self, "_initial_metadata_task", None)
+        if metadata_task is not None:
+            metadata_task.cancel()
+            try:
+                await metadata_task
+            except asyncio.CancelledError:
+                pass
+            self._initial_metadata_task = None
         store.connections.pop(self.store_key, None)
         pending_key = store.pending_key(self.charger_id)
         if self.store_key != pending_key:
