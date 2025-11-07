@@ -14,7 +14,7 @@ from decimal import Decimal, InvalidOperation
 from django.conf import settings
 from django.contrib.sites.models import Site
 from django.db import models
-from django.db.models import Q, Prefetch
+from django.db.models import DecimalField, OuterRef, Prefetch, Q, Subquery
 from django.core.exceptions import ValidationError
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
@@ -662,30 +662,7 @@ class Charger(Entity):
     def _total_kw_single(self, store_module) -> float:
         """Return total kW for this specific charger identity."""
 
-        tx_active = None
-        if self.connector_id is not None:
-            tx_active = store_module.get_transaction(self.charger_id, self.connector_id)
-        qs = self.transactions.all().prefetch_related(
-            Prefetch(
-                "meter_values",
-                queryset=MeterValue.objects.filter(energy__isnull=False).order_by(
-                    "timestamp"
-                ),
-                to_attr="prefetched_meter_values",
-            )
-        )
-        if tx_active and tx_active.pk is not None:
-            qs = qs.exclude(pk=tx_active.pk)
-        total = 0.0
-        for tx in qs:
-            kw = tx.kw
-            if kw:
-                total += kw
-        if tx_active:
-            kw = tx_active.kw
-            if kw:
-                total += kw
-        return total
+        return self._total_kw_range_single(store_module)
 
     def _total_kw_range_single(self, store_module, start=None, end=None) -> float:
         """Return total kW for a date range for this charger."""
@@ -701,18 +678,10 @@ class Charger(Entity):
             qs = qs.filter(start_time__lt=end)
         if tx_active and tx_active.pk is not None:
             qs = qs.exclude(pk=tx_active.pk)
-        qs = qs.prefetch_related(
-            Prefetch(
-                "meter_values",
-                queryset=MeterValue.objects.filter(energy__isnull=False).order_by(
-                    "timestamp"
-                ),
-                to_attr="prefetched_meter_values",
-            )
-        )
+        qs = annotate_transaction_energy_bounds(qs)
 
         total = 0.0
-        for tx in qs:
+        for tx in qs.iterator():
             kw = tx.kw
             if kw:
                 total += kw
@@ -998,29 +967,63 @@ class Transaction(Entity):
         if self.meter_stop is not None:
             end_val = float(self.meter_stop) / 1000.0
 
-        readings: list[MeterValue] | None = None
-        if hasattr(self, "prefetched_meter_values"):
-            readings = list(getattr(self, "prefetched_meter_values"))
-        else:
-            cache = getattr(self, "_prefetched_objects_cache", None)
-            if cache and "meter_values" in cache:
-                readings = list(cache["meter_values"])
+        def _coerce(value):
+            if value in {None, ""}:
+                return None
+            try:
+                return float(value)
+            except (TypeError, ValueError, InvalidOperation):
+                return None
 
-        if readings is not None:
-            readings = [reading for reading in readings if reading.energy is not None]
-            readings.sort(key=lambda reading: reading.timestamp)
-        else:
-            readings = list(
-                self.meter_values.filter(energy__isnull=False).order_by("timestamp")
-            )
-        if readings:
+        if start_val is None:
+            annotated_start = getattr(self, "meter_energy_start", None)
+            if annotated_start is None:
+                annotated_start = getattr(self, "report_meter_energy_start", None)
+            start_val = _coerce(annotated_start)
+
+        if end_val is None:
+            annotated_end = getattr(self, "meter_energy_end", None)
+            if annotated_end is None:
+                annotated_end = getattr(self, "report_meter_energy_end", None)
+            end_val = _coerce(annotated_end)
+
+        readings: list[MeterValue] | None = None
+        if start_val is None or end_val is None:
+            if hasattr(self, "prefetched_meter_values"):
+                readings = [
+                    reading
+                    for reading in getattr(self, "prefetched_meter_values")
+                    if getattr(reading, "energy", None) is not None
+                ]
+            else:
+                cache = getattr(self, "_prefetched_objects_cache", None)
+                if cache and "meter_values" in cache:
+                    readings = [
+                        reading
+                        for reading in cache["meter_values"]
+                        if getattr(reading, "energy", None) is not None
+                    ]
+
+            if readings is not None:
+                readings.sort(key=lambda reading: reading.timestamp)
+
+        if readings is not None and readings:
             if start_val is None:
-                start_val = float(readings[0].energy or 0)
-            # Always use the latest available reading for the end value when a
-            # stop meter has not been recorded yet. This allows active
-            # transactions to report totals using their most recent reading.
+                start_val = _coerce(readings[0].energy)
             if end_val is None:
-                end_val = float(readings[-1].energy or 0)
+                end_val = _coerce(readings[-1].energy)
+        elif start_val is None or end_val is None:
+            readings_qs = self.meter_values.filter(energy__isnull=False).order_by(
+                "timestamp"
+            )
+            if start_val is None:
+                first_energy = readings_qs.values_list("energy", flat=True).first()
+                start_val = _coerce(first_energy)
+            if end_val is None:
+                last_energy = readings_qs.order_by("-timestamp").values_list(
+                    "energy", flat=True
+                ).first()
+                end_val = _coerce(last_energy)
 
         if start_val is None or end_val is None:
             return 0.0
@@ -1158,6 +1161,28 @@ class MeterReading(MeterValue):
         proxy = True
         verbose_name = _("Meter Value")
         verbose_name_plural = _("Meter Values")
+
+
+def annotate_transaction_energy_bounds(
+    queryset, *, start_field: str = "meter_energy_start", end_field: str = "meter_energy_end"
+):
+    """Annotate transactions with their earliest and latest energy readings."""
+
+    energy_qs = MeterValue.objects.filter(
+        transaction=OuterRef("pk"), energy__isnull=False
+    )
+    start_subquery = energy_qs.order_by("timestamp").values("energy")[:1]
+    end_subquery = energy_qs.order_by("-timestamp").values("energy")[:1]
+
+    annotations = {
+        start_field: Subquery(
+            start_subquery, output_field=DecimalField(max_digits=12, decimal_places=3)
+        ),
+        end_field: Subquery(
+            end_subquery, output_field=DecimalField(max_digits=12, decimal_places=3)
+        ),
+    }
+    return queryset.annotate(**annotations)
 
 
 class Simulator(Entity):

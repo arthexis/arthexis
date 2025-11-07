@@ -3487,7 +3487,11 @@ class ClientReport(Entity):
     @staticmethod
     def _build_dataset(start_date=None, end_date=None, *, chargers=None):
         from datetime import datetime, time, timedelta, timezone as pytimezone
-        from ocpp.models import Charger, Transaction
+        from ocpp.models import (
+            Charger,
+            Transaction,
+            annotate_transaction_energy_bounds,
+        )
 
         qs = Transaction.objects.all()
 
@@ -3510,7 +3514,12 @@ class ClientReport(Entity):
             if selected_base_ids:
                 qs = qs.filter(charger__charger_id__in=selected_base_ids)
 
-        qs = qs.select_related("account", "charger").prefetch_related("meter_values")
+        qs = qs.select_related("account", "charger")
+        qs = annotate_transaction_energy_bounds(
+            qs,
+            start_field="report_meter_energy_start",
+            end_field="report_meter_energy_end",
+        )
         transactions = list(qs.order_by("start_time", "pk"))
 
         rfid_values = {tx.rfid for tx in transactions if tx.rfid}
@@ -3662,20 +3671,34 @@ class ClientReport(Entity):
         start_value = _convert(getattr(tx, "meter_start", None))
         end_value = _convert(getattr(tx, "meter_stop", None))
 
-        readings_manager = getattr(tx, "meter_values", None)
-        readings = []
-        if readings_manager is not None:
-            readings = [
-                reading
-                for reading in readings_manager.all()
-                if getattr(reading, "energy", None) is not None
-            ]
-        if readings:
-            readings.sort(key=lambda item: item.timestamp)
-            if start_value is None:
-                start_value = float(readings[0].energy or 0)
-            if end_value is None:
-                end_value = float(readings[-1].energy or 0)
+        def _coerce_energy(value):
+            if value in {None, ""}:
+                return None
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                return None
+
+        if start_value is None:
+            annotated_start = getattr(tx, "report_meter_energy_start", None)
+            start_value = _coerce_energy(annotated_start)
+
+        if end_value is None:
+            annotated_end = getattr(tx, "report_meter_energy_end", None)
+            end_value = _coerce_energy(annotated_end)
+
+        if start_value is None or end_value is None:
+            readings_manager = getattr(tx, "meter_values", None)
+            if readings_manager is not None:
+                qs = readings_manager.filter(energy__isnull=False).order_by("timestamp")
+                if start_value is None:
+                    first_energy = qs.values_list("energy", flat=True).first()
+                    start_value = _coerce_energy(first_energy)
+                if end_value is None:
+                    last_energy = qs.order_by("-timestamp").values_list(
+                        "energy", flat=True
+                    ).first()
+                    end_value = _coerce_energy(last_energy)
 
         return start_value, end_value
 
