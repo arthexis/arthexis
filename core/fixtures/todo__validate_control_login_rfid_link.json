@@ -4,7 +4,8 @@
     "fields": {
       "request": "Validate Control login RFID link",
       "url": "/login/",
-      "request_details": "On a Control node, ensure the Login page shows the 'Log in with RFID' link and that selecting it loads the RFID login screen."
+      "request_details": "On a Control node, ensure the Login page shows the 'Log in with RFID' link and that selecting it loads the RFID login screen.",
+      "version": "0.1.28"
     }
   }
 ]

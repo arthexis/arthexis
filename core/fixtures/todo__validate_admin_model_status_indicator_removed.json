@@ -6,7 +6,8 @@
       "url": "/admin/",
       "request_details": "Open the admin dashboard and an app changelist sidebar to confirm the green model status dot no longer appears next to model names.",
       "done_on": null,
-      "is_deleted": false
+      "is_deleted": false,
+      "version": "0.1.28"
     }
   }
 ]

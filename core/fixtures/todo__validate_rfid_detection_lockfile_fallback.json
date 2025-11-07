@@ -4,7 +4,8 @@
     "fields": {
       "request": "Validate RFID scanner detection lock fallback",
       "url": "",
-      "request_details": "On a Control node with a previously working RFID scanner, remove or disable the hardware libraries so auto-detection fails but leave the lock file at locks/rfid.lck. Run `python -m ocpp.rfid.detect` and confirm it reports the scanner as assumed active via the lock file while noting the detection failure reason."
+      "request_details": "On a Control node with a previously working RFID scanner, remove or disable the hardware libraries so auto-detection fails but leave the lock file at locks/rfid.lck. Run `python -m ocpp.rfid.detect` and confirm it reports the scanner as assumed active via the lock file while noting the detection failure reason.",
+      "version": "0.1.28"
     }
   }
 ]

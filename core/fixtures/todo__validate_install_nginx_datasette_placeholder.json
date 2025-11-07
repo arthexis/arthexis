@@ -6,7 +6,8 @@
       "url": "",
       "request_details": "Perform a satellite installation after an upgrade and verify nginx.conf rewrites the Datasette upstream to the numeric port instead of leaving a DATA_ placeholder so nginx -t succeeds.",
       "done_on": null,
-      "is_deleted": false
+      "is_deleted": false,
+      "version": "0.1.28"
     }
   }
 ]

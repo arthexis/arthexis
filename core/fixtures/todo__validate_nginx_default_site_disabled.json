@@ -6,7 +6,8 @@
       "url": "",
       "request_details": "Run nginx-setup.sh on a host with nginx installed, then confirm /etc/nginx/sites-enabled/default and /etc/nginx/sites-available/default are absent before reloading nginx.",
       "done_on": null,
-      "is_deleted": false
+      "is_deleted": false,
+      "version": "0.1.28"
     }
   }
 ]

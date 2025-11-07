@@ -6,7 +6,8 @@
       "url": "",
       "request_details": "Create an active ocpp.Transaction with a charger/connector assigned (for example via python manage.py shell) so stop.sh would normally block the upgrade. Run ./upgrade.sh --force and confirm the script reaches the environment refresh step instead of aborting after calling stop.sh, demonstrating that --force propagates to stop.sh.",
       "done_on": null,
-      "is_deleted": false
+      "is_deleted": false,
+      "version": "0.1.28"
     }
   }
 ]

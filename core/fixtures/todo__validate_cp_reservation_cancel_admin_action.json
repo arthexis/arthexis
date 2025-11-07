@@ -6,7 +6,8 @@
       "url": "/admin/ocpp/cpreservation/",
       "request_details": "From the CP Reservation changelist, select a reservation tied to a connected charger, run the 'Cancel selected Reservations' action, and confirm the charger log records a CancelReservation call and the reservation reflects the EVCS response.",
       "done_on": null,
-      "is_deleted": false
+      "is_deleted": false,
+      "version": "0.1.28"
     }
   }
 ]

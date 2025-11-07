@@ -6,7 +6,8 @@
       "url": "/admin/ocpp/charger/",
       "request_details": "Confirm that connector identifiers display as letters (A, B, …) in the admin charger list and detail views, on the public charger status page, within generated client and RFID reports, and in the output of the `python manage.py charger_status --cp A` command.",
       "done_on": null,
-      "is_deleted": false
+      "is_deleted": false,
+      "version": "0.1.28"
     }
   }
 ]

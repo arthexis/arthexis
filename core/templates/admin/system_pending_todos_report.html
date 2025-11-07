@@ -43,7 +43,7 @@
             <th scope="col">{% trans "Request" %}</th>
             <th scope="col">{% trans "Details" %}</th>
             <th scope="col">{% trans "URL" %}</th>
-            <th scope="col">{% trans "Generated for" %}</th>
+            <th scope="col">{% trans "Release" %}</th>
             <th scope="col">{% trans "Links" %}</th>
             <th scope="col">{% trans "Approve" %}</th>
           </tr>
@@ -91,6 +91,17 @@
                 {{ form.url }}
               </td>
               <td class="generated-for">
+                <div class="generated-field">
+                  <span class="label">{% trans "Target version" %}</span>
+                  {% if form.version.errors %}
+                    <div class="errorlist">
+                      {% for error in form.version.errors %}
+                        <div>{{ error }}</div>
+                      {% endfor %}
+                    </div>
+                  {% endif %}
+                  {{ form.version }}
+                </div>
                 <div class="generated-field">
                   <span class="label">{% trans "Version" %}</span>
                   {% if form.generated_for_version.errors %}

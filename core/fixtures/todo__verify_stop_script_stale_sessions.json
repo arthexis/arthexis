@@ -6,7 +6,8 @@
       "url": "admin:ocpp_transaction_changelist",
       "request_details": "Create an ocpp.Transaction tied to a charger connector, remove locks/charging.lck, run ./stop.sh, and confirm the script logs the stale-session notice while completing successfully.",
       "done_on": null,
-      "is_deleted": false
+      "is_deleted": false,
+      "version": "0.1.28"
     }
   }
 ]

@@ -4,7 +4,8 @@
     "fields": {
       "request": "Validate audio capture feature check",
       "url": "/admin/nodes/nodefeature/",
-      "request_details": "On a Control node with Audio Capture enabled, run the 'Check features for eligibility' action for Audio Capture. Confirm it reports success when a recording device is present and warns when no recorder is detected."
+      "request_details": "On a Control node with Audio Capture enabled, run the 'Check features for eligibility' action for Audio Capture. Confirm it reports success when a recording device is present and warns when no recorder is detected.",
+      "version": "0.1.28"
     }
   }
 ]
