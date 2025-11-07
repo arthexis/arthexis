@@ -81,7 +81,6 @@ from .views import dispatch_action, _transaction_rfid_details, _usage_timeline
 from .status_display import STATUS_BADGE_MAP
 from core.models import EnergyAccount, EnergyCredit, Reference, RFID, SecurityGroup
 from . import store
-from django.db.models.deletion import ProtectedError
 from decimal import Decimal
 import json
 import websockets
@@ -3195,8 +3194,11 @@ class ChargerAdminTests(TestCase):
             start_time=timezone.now(),
         )
         delete_url = reverse("admin:ocpp_charger_delete", args=[charger.pk])
-        with self.assertRaises(ProtectedError):
-            self.client.post(delete_url, {"post": "yes"})
+        response = self.client.post(delete_url, {"post": "yes"}, follow=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response, "Purge charger data before deleting this charger."
+        )
         self.assertTrue(Charger.objects.filter(pk=charger.pk).exists())
         url = reverse("admin:ocpp_charger_changelist")
         self.client.post(

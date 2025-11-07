@@ -27,6 +27,7 @@ from requests import RequestException
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 from django.db import transaction
+from django.db.models.deletion import ProtectedError
 from django.core.exceptions import ValidationError
 from django.conf import settings
 
@@ -2367,6 +2368,22 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
     def delete_queryset(self, request, queryset):
         for obj in queryset:
             obj.delete()
+
+    def delete_view(self, request, object_id, extra_context=None):
+        try:
+            return super().delete_view(
+                request, object_id, extra_context=extra_context
+            )
+        except ProtectedError:
+            if request.method == "POST":
+                self.message_user(
+                    request,
+                    _("Purge charger data before deleting this charger."),
+                    level=messages.ERROR,
+                )
+                change_url = reverse("admin:ocpp_charger_change", args=[object_id])
+                return HttpResponseRedirect(change_url)
+            raise
 
     def total_kw_display(self, obj):
         return round(obj.total_kw, 2)
