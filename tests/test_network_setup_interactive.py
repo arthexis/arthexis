@@ -20,6 +20,7 @@ def test_network_setup_help_includes_flags() -> None:
     assert "--interactive" in result.stdout
     assert "--unsafe" in result.stdout
     assert "--subnet" in result.stdout
+    assert "--constellation" in result.stdout
     assert "--no-watchdog" not in result.stdout
 
 
@@ -43,6 +44,12 @@ def test_network_setup_wlan1_drop_rule_removed() -> None:
     assert "-o wlan1 -j DROP" not in script_contents
     assert "ensure_forwarding_rule wlan0 wlan1" in script_contents
     assert "ensure_forwarding_rule eth0 wlan1" in script_contents
+
+
+def test_network_setup_includes_wireguard_package_install() -> None:
+    script = REPO_ROOT / "network-setup.sh"
+    script_contents = script.read_text()
+    assert "ensure_pkg wg wireguard-tools" in script_contents
 
 
 def test_network_setup_warns_when_wlan1_missing() -> None:

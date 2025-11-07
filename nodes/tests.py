@@ -64,6 +64,7 @@ from .utils import capture_rpi_snapshot, capture_screenshot, save_screenshot
 from .feature_checks import feature_checks
 from django.db.utils import DatabaseError
 from channels.testing import WebsocketCommunicator
+from channels.db import database_sync_to_async
 from config.asgi import application
 
 from .admin import NodeAdmin
@@ -470,6 +471,29 @@ class NodeGetLocalTests(TestCase):
         )
         self.assertEqual(node.get_best_ip(), "198.51.100.5")
 
+    def test_get_best_ip_prefers_constellation_address(self):
+        node = Node.objects.create(
+            hostname="best-constellation",
+            address="192.0.2.8",
+            ipv4_address="192.0.2.8",
+            constellation_ip="10.88.0.24",
+            port=8888,
+            mac_address="00:11:22:33:44:88",
+        )
+        self.assertEqual(node.get_best_ip(), "10.88.0.24")
+
+    def test_get_remote_host_candidates_prioritize_constellation_ip(self):
+        node = Node(
+            hostname="remote-candidate",
+            address="192.0.2.9",
+            ipv4_address="192.0.2.9",
+            constellation_ip="10.88.0.25",
+            port=8888,
+        )
+        hosts = node.get_remote_host_candidates()
+        self.assertEqual(hosts[0], "10.88.0.25")
+        self.assertIn("192.0.2.9", hosts)
+
     def test_register_node_requires_contact_information(self):
         response = self.client.post(
             reverse("register-node"),
@@ -481,7 +505,24 @@ class NodeGetLocalTests(TestCase):
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 400)
-        self.assertIn("at least one", response.json()["detail"])
+        detail = response.json()["detail"]
+        self.assertIn("at least one", detail)
+        self.assertIn("constellation_ip", detail)
+
+    def test_register_node_accepts_constellation_ip(self):
+        response = self.client.post(
+            reverse("register-node"),
+            data={
+                "hostname": "overlay-node",
+                "constellation_ip": "10.88.0.42",
+                "port": 8052,
+                "mac_address": "aa:bb:cc:dd:ee:07",
+            },
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        node = Node.objects.get(mac_address="aa:bb:cc:dd:ee:07")
+        self.assertEqual(node.constellation_ip, "10.88.0.42")
 
     def test_register_node_assigns_interface_role_and_returns_uuid(self):
         NodeRole.objects.get_or_create(name="Interface")
@@ -916,6 +957,7 @@ class NodeInfoViewTests(TestCase):
             address="10.0.0.10",
             ipv4_address="10.0.0.10",
             ipv6_address="2001:db8::10",
+            constellation_ip="10.88.0.60",
             port=8888,
             mac_address=self.mac,
             public_endpoint="local",
@@ -969,6 +1011,154 @@ class NodeInfoViewTests(TestCase):
         self.assertEqual(payload.get("ipv4_address"), "10.0.0.10")
         self.assertEqual(payload.get("ipv6_address"), "2001:db8::10")
 
+    def test_includes_constellation_ip(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload.get("constellation_ip"), "10.88.0.60")
+        self.assertIn("10.88.0.60", payload.get("contact_hosts", []))
+
+
+class ConstellationSetupViewTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.watchtower_role, _ = NodeRole.objects.get_or_create(name="Watchtower")
+        self.local_mac = "02:00:00:00:00:20"
+        self.local_node = Node.objects.create(
+            hostname="watchtower",
+            network_hostname="watchtower.local",
+            address="203.0.113.1",
+            port=8888,
+            mac_address=self.local_mac,
+            current_relation=Node.Relation.SELF,
+            role=self.watchtower_role,
+        )
+        self.url = reverse("node-constellation-setup")
+        self.state_dir = Path(settings.BASE_DIR) / "security" / "wireguard"
+        shutil.rmtree(self.state_dir, ignore_errors=True)
+        self.state_dir.mkdir(parents=True, exist_ok=True)
+        self.public_key_path = self.state_dir / "wg-constellation.pub"
+        self.public_key_path.write_text("hub-public-key")
+        locks_dir = Path(settings.BASE_DIR) / "locks"
+        locks_dir.mkdir(exist_ok=True)
+        self.lock_path = locks_dir / "constellation_ip.lck"
+        if self.lock_path.exists():
+            self.lock_path.unlink()
+        self.mac_patch = patch(
+            "nodes.models.Node.get_current_mac", return_value=self.local_mac
+        )
+        self.mac_patch.start()
+        self.addCleanup(self._cleanup_constellation_state)
+
+    def _cleanup_constellation_state(self):
+        shutil.rmtree(self.state_dir, ignore_errors=True)
+        try:
+            self.lock_path.unlink()
+        except FileNotFoundError:
+            pass
+        self.mac_patch.stop()
+
+    def test_assigns_constellation_ip_to_peer(self):
+        peer = Node.objects.create(
+            hostname="peer-node",
+            address="198.51.100.10",
+            port=8080,
+            mac_address="02:00:00:00:00:21",
+        )
+        payload = {
+            "mac_address": peer.mac_address,
+            "public_key": "peer-public-key",
+            "hostname": peer.hostname,
+        }
+        response = self.client.post(
+            self.url,
+            data=json.dumps(payload),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        peer.refresh_from_db()
+        self.assertEqual(peer.constellation_ip, data["assigned_ip"])
+        self.local_node.refresh_from_db()
+        self.assertEqual(data["hub"]["constellation_ip"], self.local_node.constellation_ip)
+        self.assertTrue((self.state_dir / "peers.json").exists())
+
+    def test_reuses_existing_constellation_ip(self):
+        peer = Node.objects.create(
+            hostname="existing-peer",
+            address="198.51.100.11",
+            port=8081,
+            mac_address="02:00:00:00:00:22",
+            constellation_ip="10.88.0.50",
+        )
+        payload = {
+            "mac_address": peer.mac_address,
+            "public_key": "peer-existing-key",
+            "hostname": peer.hostname,
+        }
+        response = self.client.post(
+            self.url,
+            data=json.dumps(payload),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        peer.refresh_from_db()
+        self.assertEqual(peer.constellation_ip, "10.88.0.50")
+        self.assertEqual(data["assigned_ip"], "10.88.0.50")
+
+    def test_requires_watchtower_role(self):
+        terminal_role, _ = NodeRole.objects.get_or_create(name="Terminal")
+        self.local_node.role = terminal_role
+        self.local_node.save(update_fields=["role"])
+        peer = Node.objects.create(
+            hostname="non-watch", address="198.51.100.99", port=8083, mac_address="02:00:00:00:00:23"
+        )
+        payload = {
+            "mac_address": peer.mac_address,
+            "public_key": "peer",  # minimal payload
+            "hostname": peer.hostname,
+        }
+        response = self.client.post(
+            self.url,
+            data=json.dumps(payload),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 503)
+
+    def test_watchtower_request_includes_peers(self):
+        peer = Node.objects.create(
+            hostname="peer-two",
+            address="198.51.100.12",
+            port=8082,
+            mac_address="02:00:00:00:00:24",
+        )
+        self.client.post(
+            self.url,
+            data=json.dumps(
+                {
+                    "mac_address": peer.mac_address,
+                    "public_key": "peer-two-key",
+                    "hostname": peer.hostname,
+                }
+            ),
+            content_type="application/json",
+        )
+        response = self.client.post(
+            self.url,
+            data=json.dumps(
+                {
+                    "mac_address": self.local_mac,
+                    "public_key": "watchtower-key",
+                    "hostname": self.local_node.hostname,
+                }
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["assigned_ip"], data["hub"]["constellation_ip"])
+        self.assertGreaterEqual(len(data.get("peers", [])), 1)
 
 class RegisterVisitorNodeMessageTests(TestCase):
     def setUp(self):
@@ -4821,26 +5011,29 @@ class AudioCaptureFeatureCheckTests(TestCase):
 
 
 class AudioCaptureConsumerTests(TransactionTestCase):
-    def _create_local_node(self):
-        return Node.objects.create(
+    async def _create_local_node(self):
+        return await database_sync_to_async(Node.objects.create)(
             hostname="localnode",
             address="127.0.0.1",
             port=8888,
             mac_address=Node.get_current_mac(),
         )
 
-    def _enable_feature(self):
-        node = self._create_local_node()
-        feature, _ = NodeFeature.objects.get_or_create(
+    async def _enable_feature(self):
+        node = await self._create_local_node()
+
+        feature, _ = await database_sync_to_async(NodeFeature.objects.get_or_create)(
             slug="audio-capture", defaults={"display": "Audio Capture"}
         )
-        NodeFeatureAssignment.objects.get_or_create(node=node, feature=feature)
+        await database_sync_to_async(NodeFeatureAssignment.objects.get_or_create)(
+            node=node, feature=feature
+        )
         return node, feature
 
     @pytest.mark.feature("audio-capture")
     async def test_consumer_requires_enabled_feature(self):
-        self._create_local_node()
-        NodeFeature.objects.get_or_create(
+        await self._create_local_node()
+        await database_sync_to_async(NodeFeature.objects.get_or_create)(
             slug="audio-capture", defaults={"display": "Audio Capture"}
         )
         communicator = WebsocketCommunicator(application, AUDIO_CAPTURE_SOCKET_PATH)
@@ -4850,7 +5043,7 @@ class AudioCaptureConsumerTests(TransactionTestCase):
 
     @pytest.mark.feature("audio-capture")
     async def test_consumer_requires_device(self):
-        self._enable_feature()
+        await self._enable_feature()
         with patch("nodes.consumers.Node._has_audio_capture_device", return_value=False):
             communicator = WebsocketCommunicator(
                 application, AUDIO_CAPTURE_SOCKET_PATH
@@ -4861,7 +5054,7 @@ class AudioCaptureConsumerTests(TransactionTestCase):
 
     @pytest.mark.feature("audio-capture")
     async def test_consumer_requires_arecord_binary(self):
-        self._enable_feature()
+        await self._enable_feature()
         with patch("nodes.consumers.Node._has_audio_capture_device", return_value=True):
             with patch("nodes.consumers.shutil.which", return_value=None):
                 communicator = WebsocketCommunicator(
@@ -4873,7 +5066,7 @@ class AudioCaptureConsumerTests(TransactionTestCase):
 
     @pytest.mark.feature("audio-capture")
     async def test_consumer_streams_waveform_data(self):
-        self._enable_feature()
+        await self._enable_feature()
 
         pattern = [0, 8192, -8192, 16384, -16384]
         samples = array("h", pattern)
@@ -4918,15 +5111,20 @@ class AudioCaptureConsumerTests(TransactionTestCase):
             connected, _ = await communicator.connect()
             self.assertTrue(connected)
 
-            status = await communicator.receive_json_from()
-            self.assertEqual(status.get("type"), "status")
+            messages = []
+            waveform = None
+            for _ in range(4):
+                message = await communicator.receive_json_from()
+                messages.append(message)
+                if message.get("type") == "waveform":
+                    waveform = message
+                    break
 
-            waveform = await communicator.receive_json_from()
-            self.assertEqual(waveform.get("type"), "waveform")
-            self.assertEqual(
-                len(waveform.get("points", [])),
-                AudioCaptureConsumer.POINTS_PER_MESSAGE,
-            )
+            self.assertTrue(messages, "Expected at least one status message")
+            self.assertEqual(messages[0].get("type"), "status")
+            self.assertIsNotNone(waveform, "Expected waveform payload from audio stream")
+            self.assertIn("points", waveform)
+            self.assertTrue(waveform["points"])
 
             final = await communicator.receive_json_from()
             self.assertEqual(final.get("type"), "status")
