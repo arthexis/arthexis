@@ -2,7 +2,7 @@
 {% load i18n %}
 
 {% block content %}
-<div id="content-main" class="audio-capture">
+<div id="content-main" class="audio-capture" data-socket-path="{{ socket_path }}">
   <div class="module">
     <h2>
       {% blocktrans with feature_name=feature.display %}
@@ -11,9 +11,8 @@
     </h2>
     <p class="help">
       {% blocktrans %}
-        Grant microphone access when prompted to preview the live waveform.
-        Use the controls below to capture a temporary recording and download it
-        once you stop.
+        This preview streams live audio data from the node microphone. Reload the page if
+        the connection drops.
       {% endblocktrans %}
     </p>
     <div class="audio-capture__monitor" role="group" aria-label="{% trans "Live audio waveform" %}">
@@ -25,25 +24,8 @@
         {% trans "Waveform preview requires canvas support." %}
       </canvas>
       <p id="audio-capture-status" class="audio-capture__status" aria-live="polite">
-        {% trans "Initializing audio preview…" %}
+        {% trans "Connecting to node microphone…" %}
       </p>
-    </div>
-    <div class="audio-capture__controls">
-      <button type="button" class="button" id="audio-capture-start">
-        {% trans "Start recording" %}
-      </button>
-      <button type="button" class="button button-danger" id="audio-capture-stop" disabled>
-        {% trans "Stop recording" %}
-      </button>
-      <a
-        id="audio-capture-download"
-        class="button audio-capture__download"
-        href="#"
-        download="recording.webm"
-        hidden
-      >
-        {% trans "Download recording" %}
-      </a>
     </div>
   </div>
 </div>
@@ -74,25 +56,6 @@
   .audio-capture__status--error {
     color: #f8d7da;
   }
-
-  .audio-capture__controls {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-  }
-
-  .audio-capture__controls .button-danger {
-    background: #ba2121;
-  }
-
-  .audio-capture__controls .button-danger:hover,
-  .audio-capture__controls .button-danger:focus {
-    background: #a51d1d;
-  }
-
-  .audio-capture__download[hidden] {
-    display: none;
-  }
 </style>
 {% endblock %}
 
@@ -100,209 +63,148 @@
 {{ block.super }}
 <script>
   document.addEventListener("DOMContentLoaded", () => {
+    const container = document.querySelector(".audio-capture");
     const canvas = document.getElementById("audio-capture-waveform");
     const statusEl = document.getElementById("audio-capture-status");
-    const startBtn = document.getElementById("audio-capture-start");
-    const stopBtn = document.getElementById("audio-capture-stop");
-    const downloadLink = document.getElementById("audio-capture-download");
 
-    let audioContext;
-    let analyser;
-    let mediaStream;
-    let mediaRecorder;
-    let animationFrame;
-    let recordedChunks = [];
-    let canvasCtx = canvas.getContext("2d");
+    if (!container || !canvas || !statusEl) {
+      return;
+    }
 
-    resizeCanvas();
+    const canvasCtx = canvas.getContext("2d");
+    if (!canvasCtx) {
+      statusEl.textContent = "{% trans "Waveform preview is not supported in this browser." %}";
+      statusEl.classList.add("audio-capture__status--error");
+      return;
+    }
 
-    function setStatus(message, isError = false) {
+    function setStatus(message, level = "info") {
       statusEl.textContent = message;
-      statusEl.classList.toggle("audio-capture__status--error", isError);
+      statusEl.classList.toggle("audio-capture__status--error", level === "error");
     }
 
-    function cleanupRecording() {
-      if (downloadLink.dataset.objectUrl) {
-        URL.revokeObjectURL(downloadLink.dataset.objectUrl);
-        delete downloadLink.dataset.objectUrl;
-      }
-      downloadLink.hidden = true;
-      downloadLink.removeAttribute("href");
+    const socketPath = container.dataset.socketPath;
+    if (!socketPath) {
+      setStatus("{% trans "Audio capture socket path is unavailable." %}", "error");
+      return;
     }
+
+    let socket;
+    let animationFrame;
+    let latestPoints = [];
 
     function resizeCanvas() {
-      if (!canvasCtx) {
-        return;
-      }
       const ratio = window.devicePixelRatio || 1;
       const width = canvas.clientWidth;
       const height = canvas.clientHeight || canvas.height;
       canvas.width = Math.floor(width * ratio);
       canvas.height = Math.floor(height * ratio);
       canvasCtx.setTransform(ratio, 0, 0, ratio, 0, 0);
+      drawWaveform(latestPoints);
     }
 
-    function drawWaveform() {
-      if (!analyser) {
-        return;
+    function clampValue(value) {
+      if (Number.isNaN(value)) {
+        return 0;
       }
-      const bufferLength = analyser.fftSize;
-      const dataArray = new Uint8Array(bufferLength);
-      analyser.getByteTimeDomainData(dataArray);
+      return Math.max(-1, Math.min(1, value));
+    }
 
+    function drawWaveform(points) {
       const width = canvas.clientWidth;
       const height = canvas.clientHeight;
       canvasCtx.clearRect(0, 0, width, height);
       canvasCtx.fillStyle = "#030910";
       canvasCtx.fillRect(0, 0, width, height);
+      if (!Array.isArray(points) || points.length === 0) {
+        return;
+      }
       canvasCtx.lineWidth = 2;
       canvasCtx.strokeStyle = "#4db6ff";
       canvasCtx.beginPath();
-
-      const sliceWidth = width / bufferLength;
+      const step = width / points.length;
       let x = 0;
-      for (let i = 0; i < bufferLength; i++) {
-        const v = dataArray[i] / 128.0;
-        const y = (v * height) / 2;
-        if (i === 0) {
+      points.forEach((raw, index) => {
+        const value = clampValue(Number(raw));
+        const y = height / 2 - (value * height) / 2;
+        if (index === 0) {
           canvasCtx.moveTo(x, y);
         } else {
           canvasCtx.lineTo(x, y);
         }
-        x += sliceWidth;
-      }
-
+        x += step;
+      });
       canvasCtx.lineTo(width, height / 2);
       canvasCtx.stroke();
-      animationFrame = requestAnimationFrame(drawWaveform);
     }
 
-    async function initializePreview() {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        setStatus("{% trans "Audio capture is not supported in this browser." %}", true);
-        startBtn.disabled = true;
+    function scheduleDraw(points) {
+      latestPoints = points;
+      if (animationFrame) {
+        cancelAnimationFrame(animationFrame);
+      }
+      animationFrame = requestAnimationFrame(() => drawWaveform(latestPoints));
+    }
+
+    function handleMessage(event) {
+      let payload;
+      try {
+        payload = JSON.parse(event.data);
+      } catch (error) {
+        console.error(error);
         return;
       }
-      try {
-        mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        setStatus("{% trans "Microphone ready. Press start to record." %}");
-        audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        const source = audioContext.createMediaStreamSource(mediaStream);
-        analyser = audioContext.createAnalyser();
-        analyser.fftSize = 2048;
-        source.connect(analyser);
-        resizeCanvas();
-        drawWaveform();
-      } catch (error) {
-        console.error(error);
-        setStatus("{% trans "Microphone access was denied." %}", true);
-        startBtn.disabled = true;
+      if (!payload || typeof payload !== "object") {
+        return;
+      }
+      if (payload.type === "waveform" && Array.isArray(payload.points)) {
+        scheduleDraw(payload.points);
+      } else if (payload.type === "status" && typeof payload.message === "string") {
+        setStatus(payload.message);
+      } else if (payload.type === "error" && typeof payload.message === "string") {
+        setStatus(payload.message, "error");
       }
     }
 
-    function ensureRecorder() {
-      if (!mediaStream) {
-        return null;
-      }
-      if (typeof MediaRecorder === "undefined") {
-        return null;
-      }
-      if (mediaRecorder) {
-        return mediaRecorder;
-      }
+    function connect() {
+      const scheme = window.location.protocol === "https:" ? "wss" : "ws";
+      const url = `${scheme}://${window.location.host}${socketPath}`;
       try {
-        mediaRecorder = new MediaRecorder(mediaStream);
+        socket = new WebSocket(url);
       } catch (error) {
         console.error(error);
-        return null;
+        setStatus("{% trans "Unable to open WebSocket connection." %}", "error");
+        return;
       }
-      mediaRecorder.ondataavailable = (event) => {
-        if (event.data && event.data.size) {
-          recordedChunks.push(event.data);
+      socket.addEventListener("open", () => {
+        setStatus("{% trans "Connected. Waiting for audio samples…" %}");
+      });
+      socket.addEventListener("message", handleMessage);
+      socket.addEventListener("close", (event) => {
+        if (event.code === 1000) {
+          setStatus("{% trans "Audio preview finished." %}");
+        } else {
+          setStatus("{% trans "Connection closed unexpectedly. Reload to retry." %}", "error");
         }
-      };
-      mediaRecorder.onstop = () => {
-        if (!recordedChunks.length) {
-          setStatus("{% trans "No audio was captured." %}", true);
-          return;
-        }
-        const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || "audio/webm" });
-        recordedChunks = [];
-        cleanupRecording();
-        const objectUrl = URL.createObjectURL(blob);
-        downloadLink.href = objectUrl;
-        downloadLink.dataset.objectUrl = objectUrl;
-        downloadLink.hidden = false;
-        const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-        downloadLink.download = `recording-${timestamp}.webm`;
-        setStatus("{% trans "Recording ready. Use the download button to save it." %}");
-      };
-      mediaRecorder.onerror = (event) => {
-        console.error(event.error);
-        setStatus("{% trans "Recording error. Please try again." %}", true);
-        startBtn.disabled = false;
-        stopBtn.disabled = true;
-      };
-      return mediaRecorder;
+      });
+      socket.addEventListener("error", () => {
+        setStatus("{% trans "WebSocket error. Check node logs for details." %}", "error");
+      });
     }
-
-    startBtn.addEventListener("click", () => {
-      cleanupRecording();
-      const recorder = ensureRecorder();
-      if (!recorder) {
-        setStatus("{% trans "Recording is not supported in this browser." %}", true);
-        return;
-      }
-      recordedChunks = [];
-      try {
-        recorder.start();
-      } catch (error) {
-        console.error(error);
-        setStatus("{% trans "Unable to start recording." %}", true);
-        return;
-      }
-      startBtn.disabled = true;
-      stopBtn.disabled = false;
-      setStatus("{% trans "Recording… press stop when finished." %}");
-    });
-
-    stopBtn.addEventListener("click", () => {
-      if (!mediaRecorder || mediaRecorder.state === "inactive") {
-        return;
-      }
-      try {
-        mediaRecorder.stop();
-      } catch (error) {
-        console.error(error);
-        setStatus("{% trans "Unable to stop recording." %}", true);
-        return;
-      }
-      startBtn.disabled = false;
-      stopBtn.disabled = true;
-    });
 
     window.addEventListener("beforeunload", () => {
       if (animationFrame) {
         cancelAnimationFrame(animationFrame);
       }
-      if (analyser) {
-        analyser.disconnect();
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.close();
       }
-      if (mediaRecorder && mediaRecorder.state !== "inactive") {
-        mediaRecorder.stop();
-      }
-      if (audioContext) {
-        audioContext.close();
-      }
-      if (mediaStream) {
-        mediaStream.getTracks().forEach((track) => track.stop());
-      }
-      cleanupRecording();
     });
 
     window.addEventListener("resize", resizeCanvas);
 
-    initializePreview();
+    resizeCanvas();
+    connect();
   });
 </script>
 {% endblock %}
