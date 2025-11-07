@@ -10,7 +10,9 @@ import django
 
 django.setup()
 
-from django.test import SimpleTestCase
+from django.conf import settings
+from django.contrib.auth.models import AnonymousUser
+from django.test import RequestFactory, SimpleTestCase
 
 from core.models import ClientReportSchedule
 
@@ -18,6 +20,10 @@ from pages.views import ClientReportForm
 
 
 class ClientReportFormTests(SimpleTestCase):
+    def setUp(self):
+        super().setUp()
+        self.factory = RequestFactory()
+
     def test_invalid_week_string_raises_validation_error(self):
         form = ClientReportForm(
             data={
@@ -62,3 +68,17 @@ class ClientReportFormTests(SimpleTestCase):
             "Report title cannot contain control characters.",
             form.errors.get("title", []),
         )
+
+    def test_language_choices_match_supported_languages(self):
+        form = ClientReportForm()
+        expected_choices = list(settings.LANGUAGES)
+        self.assertEqual(form.fields["language"].choices, expected_choices)
+
+    def test_default_language_matches_request_language(self):
+        request = self.factory.get("/client-report/")
+        request.user = AnonymousUser()
+        request.LANGUAGE_CODE = "de-de"
+
+        form = ClientReportForm(request=request)
+
+        self.assertEqual(form.fields["language"].initial, "de")
