@@ -1,6 +1,8 @@
 import base64
+import ipaddress
 import json
 import logging
+import socket
 from pathlib import Path
 
 import pyperclip
@@ -10,10 +12,105 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from pyperclip import PyperclipException
 
+from django.conf import settings
+
 from .models import ContentSample, NetMessage, Node
 from .utils import capture_screenshot, save_screenshot
 
 logger = logging.getLogger(__name__)
+
+
+CONSTELLATION_PROBE_PAYLOAD = b"constellation-udp-probe"
+
+def _iter_constellation_probe_addresses(node: Node) -> list[str]:
+    """Return unique IP addresses that may reach ``node``."""
+
+    addresses: list[str] = []
+    direct_ip = (getattr(node, "constellation_ip", "") or "").strip()
+    if direct_ip:
+        try:
+            ipaddress.ip_address(direct_ip)
+        except ValueError:
+            pass
+        else:
+            addresses.append(direct_ip)
+    for candidate in node.get_remote_host_candidates():
+        candidate = (candidate or "").strip()
+        if not candidate:
+            continue
+        try:
+            ipaddress.ip_address(candidate)
+        except ValueError:
+            continue
+        if candidate not in addresses:
+            addresses.append(candidate)
+    return addresses
+
+
+def _send_udp_probe(address: str, port: int) -> bool:
+    """Send a UDP probe packet to ``address`` and return ``True`` on success."""
+
+    try:
+        parsed = ipaddress.ip_address(address)
+    except ValueError:
+        return False
+
+    family = socket.AF_INET6 if parsed.version == 6 else socket.AF_INET
+    try:
+        with socket.socket(family, socket.SOCK_DGRAM) as sock:
+            sock.setblocking(False)
+            sock.sendto(CONSTELLATION_PROBE_PAYLOAD, (address, port))
+    except OSError as exc:  # pragma: no cover - network stack dependent
+        logger.debug("Constellation UDP probe to %s:%s failed: %s", address, port, exc)
+        return False
+    return True
+
+
+@shared_task
+def kickstart_constellation_udp() -> int:
+    """Probe constellation peers to encourage WireGuard synchronization."""
+
+    local = Node.get_local()
+    if not local or not (local.constellation_ip or "").strip():
+        logger.debug(
+            "Skipping constellation UDP kickstart: local node lacks an overlay address"
+        )
+        return 0
+
+    try:
+        port = int(getattr(settings, "CONSTELLATION_WG_PORT", 51820))
+    except (TypeError, ValueError):
+        port = 51820
+
+    local_pk = getattr(local, "pk", None)
+    local_mac = (local.mac_address or "").strip().lower()
+    local_ip = (local.constellation_ip or "").strip()
+
+    queryset = Node.objects.filter(constellation_ip__isnull=False).order_by("pk")
+    if local_pk is not None:
+        queryset = queryset.exclude(pk=local_pk)
+
+    probes_sent = 0
+    seen: set[tuple[str, int]] = set()
+
+    for peer in queryset.iterator():
+        peer_mac = (peer.mac_address or "").strip().lower()
+        if local_mac and peer_mac and peer_mac == local_mac:
+            continue
+        if not (peer.constellation_ip or "").strip():
+            continue
+
+        for address in _iter_constellation_probe_addresses(peer):
+            if local_ip and address == local_ip:
+                continue
+            target = (address, port)
+            if target in seen:
+                continue
+            if _send_udp_probe(address, port):
+                probes_sent += 1
+            seen.add(target)
+
+    return probes_sent
 
 
 @shared_task

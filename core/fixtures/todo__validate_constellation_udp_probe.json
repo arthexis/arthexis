@@ -1,0 +1,13 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate Constellation UDP kickstart probes",
+      "url": "",
+      "request_details": "Start the celery beat + worker stack and confirm the new 30-second Constellation probe task triggers UDP traffic to peers with overlay addresses. Watch tcpdump or wg show to ensure handshakes occur for nodes with constellation IPs after enabling the constellation interface.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.28"
+    }
+  }
+]

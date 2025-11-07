@@ -671,6 +671,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "core.tasks.heartbeat",
         "schedule": crontab(minute="*/5"),
     },
+    "constellation_udp_probe": {
+        "task": "nodes.tasks.kickstart_constellation_udp",
+        "schedule": timedelta(seconds=30),
+    },
     "ocpp_configuration_check": {
         "task": "ocpp.tasks.schedule_daily_charge_point_configuration_checks",
         "schedule": crontab(minute=0, hour=0),

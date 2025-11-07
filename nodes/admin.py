@@ -250,7 +250,13 @@ class NodeAdmin(EntityModelAdmin):
         "last_seen",
         "visit_link",
     )
-    search_fields = ("hostname", "network_hostname", "address", "mac_address")
+    search_fields = (
+        "hostname",
+        "network_hostname",
+        "address",
+        "constellation_ip",
+        "mac_address",
+    )
     change_list_template = "admin/nodes/node/change_list.html"
     change_form_template = "admin/nodes/node/change_form.html"
     form = NodeAdminForm
@@ -263,6 +269,7 @@ class NodeAdmin(EntityModelAdmin):
                     "network_hostname",
                     "ipv4_address",
                     "ipv6_address",
+                    "constellation_ip",
                     "address",
                     "mac_address",
                     "port",
