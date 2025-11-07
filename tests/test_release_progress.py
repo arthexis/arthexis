@@ -1132,3 +1132,75 @@ class ReleaseProgressViewTests(TestCase):
         todo.refresh_from_db()
         self.assertIsNotNone(todo.done_on)
         self.assertTrue(fx.exists())
+
+
+class SyncWithOriginMainTests(TestCase):
+    def setUp(self):
+        self.log_path = Path("logs") / "sync-with-origin-main.log"
+        if self.log_path.exists():
+            self.log_path.unlink()
+
+    def tearDown(self):
+        if self.log_path.exists():
+            self.log_path.unlink()
+
+    @mock.patch("core.views._has_remote", return_value=True)
+    def test_auto_commits_todo_fixtures_before_rebase(self, has_remote):
+        commands: list[list[str]] = []
+
+        def fake_run(cmd, capture_output=False, text=False, check=False, **kwargs):
+            commands.append(list(cmd))
+            if cmd[:3] == ["git", "status", "--porcelain"]:
+                stdout = (
+                    " M core/fixtures/todo__validate_admin.json\n"
+                    "?? core/fixtures/todo__validate_dashboard.json\n"
+                )
+                return subprocess.CompletedProcess(cmd, 0, stdout=stdout, stderr="")
+            if cmd[:4] == ["git", "diff", "--cached", "--name-only"]:
+                stdout = (
+                    "core/fixtures/todo__validate_admin.json\n"
+                    "core/fixtures/todo__validate_dashboard.json\n"
+                )
+                return subprocess.CompletedProcess(cmd, 0, stdout=stdout, stderr="")
+            if cmd[:2] == ["git", "add"]:
+                return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+            if cmd[:3] == ["git", "commit", "-m"]:
+                return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+            if cmd[:3] == ["git", "fetch", "origin"]:
+                return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+            if cmd[:2] == ["git", "rebase"]:
+                return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+            raise AssertionError(f"Unexpected command: {cmd}")
+
+        with mock.patch("core.views.subprocess.run", side_effect=fake_run):
+            core_views._sync_with_origin_main(self.log_path)
+
+        add_commands = [cmd for cmd in commands if cmd[:2] == ["git", "add"]]
+        self.assertEqual(
+            add_commands,
+            [
+                [
+                    "git",
+                    "add",
+                    "core/fixtures/todo__validate_admin.json",
+                    "core/fixtures/todo__validate_dashboard.json",
+                ]
+            ],
+        )
+        self.assertIn(
+            ["git", "commit", "-m", "chore: update TODO fixtures"],
+            commands,
+        )
+        fetch_index = commands.index(["git", "fetch", "origin", "main"])
+        commit_index = commands.index(
+            ["git", "commit", "-m", "chore: update TODO fixtures"]
+        )
+        self.assertLess(commit_index, fetch_index)
+
+        log_text = self.log_path.read_text(encoding="utf-8")
+        self.assertIn(
+            "Staged TODO fixtures core/fixtures/todo__validate_admin.json, "
+            "core/fixtures/todo__validate_dashboard.json",
+            log_text,
+        )
+        self.assertIn("Committed TODO fixtures (chore: update TODO fixtures)", log_text)
