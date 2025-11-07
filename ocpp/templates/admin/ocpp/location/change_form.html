@@ -6,7 +6,7 @@
     {% for charger in original.chargers.all %}
       <li>
         <a href="{% url 'admin:ocpp_charger_change' charger.pk %}">
-          {% trans "Charge Point" %}: {{ charger.charger_id }}{% if charger.connector_id %} #{{ charger.connector_id }}{% endif %}
+          {% trans "Charge Point" %}: {{ charger.charger_id }}{% if charger.connector_letter %} #{{ charger.connector_letter }}{% endif %}
         </a>
       </li>
     {% endfor %}

@@ -396,8 +396,13 @@ def send_daily_session_report() -> int:
             stop_local - start_local if stop_local else None
         )
         account = transaction.account.name if transaction.account else "N/A"
+        connector_letter = Charger.connector_letter_from_value(
+            transaction.connector_id
+        )
         connector = (
-            f"Connector {transaction.connector_id}" if transaction.connector_id else None
+            f"Connector {connector_letter}"
+            if connector_letter
+            else None
         )
         lines.append(f"{index}. {_format_charger(transaction)}")
         lines.append(f"   Account: {account}")

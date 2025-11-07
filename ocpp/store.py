@@ -922,10 +922,23 @@ def iter_log_entries(
         )
 
 
-def get_logs(cid: str, log_type: str = "charger") -> list[str]:
+def get_logs(
+    cid: str, log_type: str = "charger", *, limit: int | None = None
+) -> list[str]:
     """Return all log entries for the given id and type."""
 
-    entries: list[str] = []
+    entries_list: list[str] = []
+    max_entries: int | None = None
+    entries_deque: deque[str] | None = None
+    if limit is not None:
+        try:
+            parsed_limit = int(limit)
+        except (TypeError, ValueError):
+            parsed_limit = None
+        if parsed_limit is not None and parsed_limit > 0:
+            max_entries = parsed_limit
+            entries_deque = deque(maxlen=max_entries)
+
     seen_paths: set[Path] = set()
     seen_keys: set[str] = set()
     for key in _log_key_candidates(cid, log_type):
@@ -933,19 +946,26 @@ def get_logs(cid: str, log_type: str = "charger") -> list[str]:
         path = _log_file_for_identifier(resolved, name, log_type)
         if path.exists() and path not in seen_paths:
             if max_entries is None:
-                entries.extend(path.read_text(encoding="utf-8").splitlines())
+                entries_list.extend(path.read_text(encoding="utf-8").splitlines())
             else:
                 with path.open("r", encoding="utf-8") as handle:
                     for line in handle:
-                        entries.append(line.rstrip("\r\n"))
+                        if entries_deque is not None:
+                            entries_deque.append(line.rstrip("\r\n"))
             seen_paths.add(path)
         memory_entries = _memory_logs_for_identifier(resolved, log_type)
         lower_key = resolved.lower()
         if memory_entries and lower_key not in seen_keys:
-            entries.extend(memory_entries)
+            if max_entries is None:
+                entries_list.extend(memory_entries)
+            elif entries_deque is not None:
+                for entry in memory_entries:
+                    entries_deque.append(entry)
             seen_keys.add(lower_key)
     if max_entries is None:
         return entries_list
+    if entries_deque is None:
+        return []
     return list(entries_deque)
 
 

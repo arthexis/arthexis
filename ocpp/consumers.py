@@ -2055,7 +2055,13 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                     connector_slug_value
                     and connector_slug_value != store.AGGREGATE_SLUG
                 ):
-                    suffix = f" (connector {connector_slug_value})"
+                    connector_letter = Charger.connector_letter_from_slug(
+                        connector_slug_value
+                    )
+                    if connector_letter:
+                        suffix = f" (connector {connector_letter})"
+                    else:
+                        suffix = f" (connector {connector_slug_value})"
                 store.add_log(
                     follow_up_log_key,
                     f"TriggerMessage follow-up received: {target_label}{suffix}",

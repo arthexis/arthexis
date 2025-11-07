@@ -24,7 +24,7 @@
           <tbody>
             {% for row in evcs.transactions %}
               <tr>
-                <td>{% if row.connector is not None %}{{ row.connector }}{% else %}&mdash;{% endif %}</td>
+                <td>{% if row.connector is not None or row.connector_label %}{{ row.connector_label|default:row.connector }}{% else %}&mdash;{% endif %}</td>
                 <td>{% if row.start_kwh is not None %}{{ row.start_kwh|floatformat:2 }}{% else %}&mdash;{% endif %}</td>
                 <td>{% if row.end_kwh is not None %}{{ row.end_kwh|floatformat:2 }}{% else %}&mdash;{% endif %}</td>
                 <td>{{ row.session_kwh|floatformat:2 }}</td>

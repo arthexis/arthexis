@@ -20,7 +20,7 @@
         <a href="{{ item.status_url }}">{{ item.display_name }}</a>
       </td>
       <td>
-        {{ item.charger.charger_id }}{% if item.charger.connector_id %} #{{ item.charger.connector_id }}{% endif %}
+        {{ item.charger.charger_id }}{% if item.charger.connector_letter %} #{{ item.charger.connector_letter }}{% endif %}
       </td>
       <td class="text-end">{{ item.stats.total_kw|floatformat:2 }}</td>
       <td class="text-end">{{ item.stats.today_kw|floatformat:2 }}</td>

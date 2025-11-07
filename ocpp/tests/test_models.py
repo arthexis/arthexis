@@ -204,6 +204,30 @@ class ChargerManagerNodeTests(TestCase):
         self.assertIsNone(unmanaged.manager_node)
         self.assertIsNone(unmanaged.manager_node_id)
 
+
+class ChargerConnectorLabelTests(TestCase):
+    def test_connector_labels_use_letters(self):
+        connector_a = Charger.objects.create(
+            charger_id="LETTER-A", connector_id=1
+        )
+        connector_b = Charger.objects.create(
+            charger_id="LETTER-B", connector_id=2
+        )
+        connector_c = Charger.objects.create(
+            charger_id="LETTER-C", connector_id=3
+        )
+
+        self.assertEqual(connector_a.connector_letter, "A")
+        self.assertEqual(str(connector_a.connector_label), "Connector A (Left)")
+        self.assertEqual(connector_b.connector_letter, "B")
+        self.assertEqual(str(connector_b.connector_label), "Connector B (Right)")
+        self.assertEqual(connector_c.connector_letter, "C")
+        self.assertEqual(str(connector_c.connector_label), "Connector C")
+
+    def test_letter_conversion_handles_multiple_cycles(self):
+        self.assertEqual(Charger.connector_letter_from_value(27), "AA")
+
+
 class ChargerSerialValidationTests(TestCase):
     def test_validate_serial_strips_and_rejects_invalid_values(self):
         self.assertEqual(Charger.validate_serial("  ABC  "), "ABC")

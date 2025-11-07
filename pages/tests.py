@@ -3128,7 +3128,7 @@ class FavoriteTests(TestCase):
 
         expected = "1 / 2"
         badge_label = gettext(
-            "%(available)s chargers reporting Available status with a CP number, out of %(total)s total Available chargers. %(missing)s Available chargers are missing a connector number."
+            "%(available)s chargers reporting Available status with a CP number, out of %(total)s total Available chargers. %(missing)s Available chargers are missing a connector letter."
         ) % {"available": 1, "total": 2, "missing": 1}
 
         self.assertContains(resp, expected)

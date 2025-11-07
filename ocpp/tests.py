@@ -3098,7 +3098,7 @@ class ChargerAdminTests(TestCase):
     def test_admin_changelist_displays_quick_stats(self):
         charger = Charger.objects.create(charger_id="STATMAIN", display_name="Main EVCS")
         connector = Charger.objects.create(
-            charger_id="STATMAIN", connector_id=1, display_name="Connector 1"
+            charger_id="STATMAIN", connector_id=1, display_name="Connector A"
         )
         start = timezone.now() - timedelta(minutes=30)
         Transaction.objects.create(

@@ -102,7 +102,7 @@ class Command(BaseCommand):
                         "No chargers found matching aggregate connector 'all'."
                     )
                 raise CommandError(
-                    f"No chargers found matching connector id '{connector_filter}'."
+                    f"No chargers found matching connector '{cp_raw}'."
                 )
             if match_count > 1:
                 self.stdout.write(
@@ -227,21 +227,24 @@ class Command(BaseCommand):
             return store.AGGREGATE_SLUG, None
 
         try:
+            return Charger.connector_value_from_letter(normalized), None
+        except ValueError:
+            pass
+
+        try:
             connector = int(normalized)
         except ValueError:
             return None, normalized
 
         if connector <= 0:
-            raise CommandError("--cp requires a positive connector number.")
+            raise CommandError(
+                "--cp requires a connector identifier (A, B, ...)."
+            )
 
         return connector, None
 
     def _render_tail(self, charger: Charger, limit: int) -> None:
-        connector_label = (
-            f"connector {charger.connector_id}"
-            if charger.connector_id is not None
-            else "all connectors"
-        )
+        connector_label = self._connector_descriptor(charger)
         heading = f"Log tail ({connector_label}; last {limit} entries)"
         self.stdout.write("")
         self.stdout.write(self.style.MIGRATE_HEADING(heading))
@@ -363,7 +366,7 @@ class Command(BaseCommand):
                     "serial": charger.charger_id,
                     "name": charger.display_name or "-",
                     "connector": (
-                        str(charger.connector_id)
+                        Charger.connector_letter_from_value(charger.connector_id)
                         if charger.connector_id is not None
                         else "all"
                     ),
@@ -404,11 +407,7 @@ class Command(BaseCommand):
                 self.stdout.write("")
 
             heading = charger.display_name or charger.charger_id
-            connector_label = (
-                f"connector {charger.connector_id}"
-                if charger.connector_id is not None
-                else "all connectors"
-            )
+            connector_label = self._connector_descriptor(charger)
             heading_text = f"{heading} ({connector_label})"
             self.stdout.write(self.style.MIGRATE_HEADING(heading_text))
 
@@ -484,6 +483,15 @@ class Command(BaseCommand):
                 )
                 self.stdout.write("Last Meter Values:")
                 self.stdout.write(meter_values)
+
+    @staticmethod
+    def _connector_descriptor(charger: Charger) -> str:
+        if charger.connector_id is None:
+            return "all connectors"
+        letter = Charger.connector_letter_from_value(charger.connector_id)
+        if letter:
+            return f"connector {letter}"
+        return f"connector {charger.connector_id}"
 
     @staticmethod
     def _format_dt(value: datetime | None) -> str | None:
