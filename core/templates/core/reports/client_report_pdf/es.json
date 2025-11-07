@@ -1,0 +1,20 @@
+{
+  "title": "Informe de consumo",
+  "period": "Período: {start} a {end}",
+  "total_kw_all_time": "kW totales (histórico)",
+  "total_kw_period": "kW totales (período)",
+  "connector": "Conector",
+  "account": "Cuenta",
+  "session_kwh": "kW por sesión",
+  "session_start": "Inicio de la sesión",
+  "session_end": "Fin de la sesión",
+  "time": "Tiempo",
+  "rfid_label": "Etiqueta RFID",
+  "no_sessions_period": "No se registraron sesiones de carga para el período seleccionado.",
+  "no_sessions_point": "No se registraron sesiones de carga para este punto de carga.",
+  "no_structured_data": "No hay datos estructurados disponibles para este informe.",
+  "report_totals": "Totales del informe",
+  "total_kw_period_line": "kW totales durante el período",
+  "charge_point": "Punto de carga",
+  "charge_point_serial": "{name} (Serie: {serial})"
+}

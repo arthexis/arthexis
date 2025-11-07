@@ -1554,15 +1554,17 @@ def client_report(request):
                     return HttpResponseRedirect(redirect_url)
     download_url = None
     download_param = request.GET.get("download")
-    if download_param and request.user.is_authenticated:
+    if download_param:
         try:
             download_id = int(download_param)
         except (TypeError, ValueError):
             download_id = None
-        if download_id:
+        if download_id and request.user.is_authenticated:
             download_url = reverse(
                 "pages:client-report-download", args=[download_id]
             )
+        if download_url:
+            setattr(request, "live_update_interval", None)
 
     try:
         login_url = reverse("pages:login")

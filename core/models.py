@@ -3869,6 +3869,43 @@ class ClientReport(Entity):
         except ValueError:
             return str(path)
 
+    @classmethod
+    def _load_pdf_template(cls, language_code: str | None) -> dict[str, str]:
+        from django.template import TemplateDoesNotExist
+        from django.template.loader import render_to_string
+
+        candidates: list[str] = []
+        normalized = cls.normalize_language(language_code)
+        if normalized:
+            candidates.append(normalized)
+
+        default_code = default_report_language()
+        if default_code and default_code not in candidates:
+            candidates.append(default_code)
+
+        if "en" not in candidates:
+            candidates.append("en")
+
+        for code in dict.fromkeys(candidates):
+            template_name = f"core/reports/client_report_pdf/{code}.json"
+            try:
+                rendered = render_to_string(template_name)
+            except TemplateDoesNotExist:
+                continue
+            if not rendered:
+                continue
+            try:
+                data = json.loads(rendered)
+            except json.JSONDecodeError:
+                logger.warning(
+                    "Invalid client report PDF template %s", template_name, exc_info=True
+                )
+                continue
+            if isinstance(data, dict):
+                return data
+
+        return {}
+
     @staticmethod
     def resolve_reply_to_for_owner(owner) -> list[str]:
         if not owner:
@@ -3937,9 +3974,16 @@ class ClientReport(Entity):
             )
 
             story: list = []
+            labels = self._load_pdf_template(language_code)
 
-            report_title = self.normalize_title(self.title) or gettext(
-                "Consumer Report"
+            def label(key: str, default: str) -> str:
+                value = labels.get(key) if isinstance(labels, dict) else None
+                if isinstance(value, str) and value.strip():
+                    return value
+                return gettext(default)
+
+            report_title = self.normalize_title(self.title) or label(
+                "title", "Consumer Report"
             )
             story.append(Paragraph(report_title, title_style))
 
@@ -3949,32 +3993,58 @@ class ClientReport(Entity):
             end_display = formats.date_format(
                 self.end_date, format="DATE_FORMAT", use_l10n=True
             )
-            story.append(
-                Paragraph(
-                    gettext("Period: %(start)s to %(end)s")
-                    % {"start": start_display, "end": end_display},
-                    emphasis_style,
-                )
-            )
+            default_period_text = gettext("Period: %(start)s to %(end)s") % {
+                "start": start_display,
+                "end": end_display,
+            }
+            period_template = labels.get("period") if isinstance(labels, dict) else None
+            if isinstance(period_template, str):
+                try:
+                    period_text = period_template.format(
+                        start=start_display, end=end_display
+                    )
+                except (KeyError, IndexError, ValueError):
+                    logger.warning(
+                        "Invalid period template for client report PDF: %s",
+                        period_template,
+                    )
+                    period_text = default_period_text
+            else:
+                period_text = default_period_text
+            story.append(Paragraph(period_text, emphasis_style))
             story.append(Spacer(1, 0.25 * inch))
 
-            total_kw_all_time_label = gettext("Total kW (all time)")
-            total_kw_period_label = gettext("Total kW (period)")
-            connector_label = gettext("Connector")
-            account_label = gettext("Account")
-            session_kwh_label = gettext("Session kW")
-            time_label = gettext("Time")
-            no_sessions_period = gettext(
-                "No charging sessions recorded for the selected period."
+            total_kw_all_time_label = label("total_kw_all_time", "Total kW (all time)")
+            total_kw_period_label = label("total_kw_period", "Total kW (period)")
+            connector_label = label("connector", "Connector")
+            account_label = label("account", "Account")
+            session_kwh_label = label("session_kwh", "Session kW")
+            session_start_label = label("session_start", "Session start")
+            session_end_label = label("session_end", "Session end")
+            time_label = label("time", "Time")
+            rfid_label = label("rfid_label", "RFID label")
+            no_sessions_period = label(
+                "no_sessions_period",
+                "No charging sessions recorded for the selected period.",
             )
-            no_sessions_point = gettext(
-                "No charging sessions recorded for this charge point."
+            no_sessions_point = label(
+                "no_sessions_point",
+                "No charging sessions recorded for this charge point.",
             )
-            no_structured_data = gettext(
-                "No structured data is available for this report."
+            no_structured_data = label(
+                "no_structured_data",
+                "No structured data is available for this report.",
             )
-            report_totals_label = gettext("Report totals")
-            total_kw_period_line = gettext("Total kW during period")
+            report_totals_label = label("report_totals", "Report totals")
+            total_kw_period_line = label(
+                "total_kw_period_line", "Total kW during period"
+            )
+            charge_point_label = label("charge_point", "Charge Point")
+            serial_template = (
+                labels.get("charge_point_serial")
+                if isinstance(labels, dict)
+                else None
+            )
 
             def format_datetime(value):
                 if not value:
@@ -3999,13 +4069,21 @@ class ClientReport(Entity):
                     if index:
                         story.append(Spacer(1, 0.2 * inch))
 
-                    display_name = evcs.get("display_name") or gettext("Charge Point")
+                    display_name = evcs.get("display_name") or charge_point_label
                     serial_number = evcs.get("serial_number")
                     if serial_number:
-                        header_text = gettext("%(name)s (Serial: %(serial)s)") % {
-                            "name": display_name,
-                            "serial": serial_number,
-                        }
+                        if isinstance(serial_template, str):
+                            try:
+                                header_text = serial_template.format(
+                                    name=display_name, serial=serial_number
+                                )
+                            except (KeyError, IndexError, ValueError):
+                                header_text = serial_template
+                        else:
+                            header_text = gettext("%(name)s (Serial: %(serial)s)") % {
+                                "name": display_name,
+                                "serial": serial_number,
+                            }
                     else:
                         header_text = display_name
                     story.append(Paragraph(header_text, subtitle_style))
@@ -4024,11 +4102,11 @@ class ClientReport(Entity):
                         table_data = [
                             [
                                 session_kwh_label,
-                                gettext("Session start"),
-                                gettext("Session end"),
+                                session_start_label,
+                                session_end_label,
                                 time_label,
                                 connector_label,
-                                gettext("RFID label"),
+                                rfid_label,
                                 account_label,
                             ]
                         ]
