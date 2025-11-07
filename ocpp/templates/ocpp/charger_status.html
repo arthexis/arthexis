@@ -220,6 +220,92 @@
       </div>
       {{ remote_start_messages|json_script:"remote-start-i18n" }}
       {% endif %}
+      {% if can_set_charging_profile %}
+      <div class="card border-primary mt-3" id="charging-profile-card">
+        <div class="card-body">
+          <h2 class="h5 mb-2">{% trans "Charging profile" %}</h2>
+          <p class="text-muted small mb-3">{% trans "Upload or paste a csChargingProfiles JSON document to deliver a scheduled charging plan to the charge point." %}</p>
+          <form id="charging-profile-form" class="row gy-3" action="{{ action_url }}" method="post" data-default-connector="{{ charging_profile_default_connector }}">
+            <div class="col-12 col-md-4">
+              <label class="form-label" for="charging-profile-connector">{% trans "Connector ID" %}</label>
+              <input type="number" min="0" step="1" class="form-control" id="charging-profile-connector" value="{{ charging_profile_default_connector }}" />
+              <div class="form-text">{% trans "Use 0 to target the entire charge point." %}</div>
+            </div>
+            <div class="col-12">
+              <label class="form-label" for="charging-profile-json">{% trans "Charging profile JSON" %}</label>
+              <textarea id="charging-profile-json" class="form-control" rows="8" placeholder="{%- trans "Paste the csChargingProfiles object here" -%}"></textarea>
+            </div>
+            <div class="col-12 col-md-6">
+              <label class="form-label" for="charging-profile-file">{% trans "Upload JSON file" %}</label>
+              <input type="file" class="form-control" id="charging-profile-file" accept="application/json,.json" />
+            </div>
+            <div class="col-12 col-md-6 d-flex align-items-end">
+              <button type="submit" class="btn btn-primary w-100">{% trans "Send profile" %}</button>
+            </div>
+          </form>
+          <div id="charging-profile-feedback" class="mt-2 small text-muted" aria-live="polite"></div>
+          {% if charging_profile_status %}
+          <div class="mt-3">
+            <h3 class="h6 mb-1">{% trans "Last response" %}</h3>
+            <p class="mb-1 small text-muted">
+              {% if charging_profile_status.status %}{% trans "Status" %}: {{ charging_profile_status.status }}<br />{% endif %}
+              {% if charging_profile_status.timestamp %}{% trans "Received" %}: {{ charging_profile_status.timestamp|date:"SHORT_DATETIME_FORMAT" }}{% endif %}
+            </p>
+            {% if charging_profile_status.details %}
+            <p class="mb-0 small text-muted">{{ charging_profile_status.details }}</p>
+            {% endif %}
+          </div>
+          {% endif %}
+          {% if charging_profile_pending %}
+          <div class="mt-3">
+            <p class="mb-0 small text-muted">{% trans "A charging profile update is awaiting confirmation from the charge point." %}</p>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+      {{ charging_profile_messages|json_script:"charging-profile-i18n" }}
+      {% if charging_profile_recent_profiles %}
+      <div class="card border-light-subtle mt-3">
+        <div class="card-body">
+          <h3 class="h6 mb-3">{% trans "Recently applied profiles" %}</h3>
+          <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+              <thead>
+                <tr>
+                  <th scope="col">{% trans "Profile" %}</th>
+                  <th scope="col">{% trans "Stack" %}</th>
+                  <th scope="col">{% trans "Purpose" %}</th>
+                  <th scope="col">{% trans "Kind" %}</th>
+                  <th scope="col">{% trans "Connector" %}</th>
+                  <th scope="col">{% trans "Applied" %}</th>
+                  <th scope="col">{% trans "Valid window" %}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for profile in charging_profile_recent_profiles %}
+                <tr>
+                  <td>{{ profile.profile_id }}</td>
+                  <td>{{ profile.stack_level }}</td>
+                  <td>{{ profile.purpose }}</td>
+                  <td>
+                    {{ profile.kind }}{% if profile.recurrency_kind %}<br /><span class="text-muted small">{{ profile.recurrency_kind }}</span>{% endif %}
+                  </td>
+                  <td>{{ profile.connector_id|default:"-" }}</td>
+                  <td>{{ profile.applied_at|date:"SHORT_DATETIME_FORMAT" }}</td>
+                  <td>
+                    {% if profile.valid_from %}{{ profile.valid_from|date:"SHORT_DATETIME_FORMAT" }}{% else %}-{% endif %}
+                    <br />
+                    {% if profile.valid_to %}{{ profile.valid_to|date:"SHORT_DATETIME_FORMAT" }}{% else %}-{% endif %}
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+      {% endif %}
     </div>
     <div class="col-md-8">
       {% if show_chart %}
@@ -608,6 +694,9 @@
           if (typeof window.setupRemoteStartForm === 'function') {
             window.setupRemoteStartForm(current);
           }
+          if (typeof window.setupChargingProfileForm === 'function') {
+            window.setupChargingProfileForm(current);
+          }
           if (oldCanvas) {
             const placeholder = current.querySelector('#kw-chart');
             if (placeholder) {
@@ -782,6 +871,197 @@
       document.addEventListener('DOMContentLoaded', () => setupRemoteStartForm(document));
     } else {
       setupRemoteStartForm(document);
+    }
+  })();
+</script>
+{% endif %}
+{% if can_set_charging_profile %}
+<script>
+  (function () {
+    function setupChargingProfileForm(root = document) {
+      if (!root || !root.querySelector) {
+        return;
+      }
+      const form = root.querySelector('#charging-profile-form');
+      if (!form || form.dataset.chargingProfileBound === 'true') {
+        return;
+      }
+
+      const connectorInput = form.querySelector('#charging-profile-connector');
+      const jsonInput = form.querySelector('#charging-profile-json');
+      const fileInput = form.querySelector('#charging-profile-file');
+      const feedback = root.querySelector('#charging-profile-feedback') || document.getElementById('charging-profile-feedback');
+      const submit = form.querySelector('button[type="submit"]');
+      if (!submit) {
+        return;
+      }
+
+      const actionUrl = form.getAttribute('action');
+      const defaultConnector = form.dataset.defaultConnector || '';
+      const messagesEl = root.querySelector('#charging-profile-i18n') || document.getElementById('charging-profile-i18n');
+      let messages = { connectorRequired: '', invalidProfile: '', sending: '', success: '', error: '', rejected: '' };
+      if (messagesEl) {
+        try {
+          messages = JSON.parse(messagesEl.textContent);
+        } catch (err) {
+          // Ignore parse errors and keep defaults.
+        }
+      }
+
+      const clearFeedback = () => {
+        if (feedback) {
+          feedback.textContent = '';
+          feedback.className = 'mt-2 small text-muted';
+        }
+        if (connectorInput) {
+          connectorInput.classList.remove('is-invalid');
+        }
+        if (jsonInput) {
+          jsonInput.classList.remove('is-invalid');
+        }
+      };
+
+      const showError = (message) => {
+        if (!feedback) {
+          return;
+        }
+        feedback.textContent = message || messages.error || '';
+        feedback.className = 'mt-2 small text-danger';
+      };
+
+      const showSuccess = (message) => {
+        if (!feedback) {
+          return;
+        }
+        feedback.textContent = message || messages.success || '';
+        feedback.className = 'mt-2 small text-success';
+      };
+
+      form.dataset.chargingProfileBound = 'true';
+
+      if (connectorInput) {
+        connectorInput.addEventListener('input', clearFeedback);
+      }
+      if (jsonInput) {
+        jsonInput.addEventListener('input', clearFeedback);
+      }
+      if (fileInput) {
+        fileInput.addEventListener('change', () => {
+          clearFeedback();
+          const file = fileInput.files && fileInput.files[0];
+          if (!file || !jsonInput) {
+            return;
+          }
+          const reader = new FileReader();
+          reader.onload = () => {
+            jsonInput.value = reader.result || '';
+          };
+          reader.onerror = () => {
+            showError(messages.invalidProfile || '');
+          };
+          reader.readAsText(file);
+        });
+      }
+
+      form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        clearFeedback();
+
+        let connectorValue = connectorInput ? connectorInput.value.trim() : '';
+        if (!connectorValue && defaultConnector !== '') {
+          connectorValue = defaultConnector;
+          if (connectorInput) {
+            connectorInput.value = connectorValue;
+          }
+        }
+        let connectorId = null;
+        if (connectorValue !== '') {
+          connectorId = Number(connectorValue);
+          if (Number.isNaN(connectorId) || connectorId < 0) {
+            showError(messages.connectorRequired || '');
+            if (connectorInput) {
+              connectorInput.focus();
+              connectorInput.classList.add('is-invalid');
+            }
+            return;
+          }
+        }
+
+        if (!jsonInput || !jsonInput.value.trim()) {
+          showError(messages.invalidProfile || '');
+          if (jsonInput) {
+            jsonInput.focus();
+            jsonInput.classList.add('is-invalid');
+          }
+          return;
+        }
+
+        let profileData;
+        try {
+          profileData = JSON.parse(jsonInput.value);
+        } catch (err) {
+          showError(messages.invalidProfile || '');
+          jsonInput.classList.add('is-invalid');
+          jsonInput.focus();
+          return;
+        }
+
+        submit.disabled = true;
+        if (feedback) {
+          feedback.textContent = messages.sending || '';
+          feedback.className = 'mt-2 small text-muted';
+        }
+
+        const payload = { action: 'set_charging_profile', csChargingProfiles: profileData };
+        if (connectorId !== null) {
+          payload.connectorId = connectorId;
+        }
+
+        fetch(actionUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
+          .then((response) =>
+            response
+              .json()
+              .catch(() => ({}))
+              .then((data) => ({ ok: response.ok, status: response.status, data }))
+          )
+          .then(({ ok, status, data }) => {
+            if (ok) {
+              const detail = data && typeof data.detail === 'string' && data.detail ? data.detail : messages.success || '';
+              showSuccess(detail);
+              if (connectorInput) {
+                connectorInput.classList.remove('is-invalid');
+              }
+              if (jsonInput) {
+                jsonInput.classList.remove('is-invalid');
+              }
+            } else {
+              const detail = data && typeof data.detail === 'string' && data.detail
+                ? data.detail
+                : status === 409
+                  ? messages.rejected || messages.error || ''
+                  : messages.error || '';
+              showError(detail);
+            }
+          })
+          .catch(() => {
+            showError(messages.error || '');
+          })
+          .finally(() => {
+            submit.disabled = false;
+          });
+      });
+    }
+
+    window.setupChargingProfileForm = setupChargingProfileForm;
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', () => setupChargingProfileForm(document));
+    } else {
+      setupChargingProfileForm(document);
     }
   })();
 </script>

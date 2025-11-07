@@ -203,6 +203,41 @@ class Charger(Entity):
         default="",
         help_text="Additional details from the last ChangeAvailability response.",
     )
+    charging_profile_requested_at = models.DateTimeField(
+        _("Profile Requested At"),
+        null=True,
+        blank=True,
+        help_text="When a SetChargingProfile request was last submitted.",
+    )
+    charging_profile_request_status = models.CharField(
+        _("Profile Request Status"),
+        max_length=32,
+        blank=True,
+        default="",
+        help_text=(
+            "Latest status reported by the charge point for a SetChargingProfile "
+            "request."
+        ),
+    )
+    charging_profile_request_status_at = models.DateTimeField(
+        _("Profile Status At"),
+        null=True,
+        blank=True,
+        help_text="When the SetChargingProfile status was recorded.",
+    )
+    charging_profile_request_details = models.CharField(
+        _("Profile Request Details"),
+        max_length=255,
+        blank=True,
+        default="",
+        help_text="Additional details returned with the SetChargingProfile status.",
+    )
+    charging_profile_pending_profile = models.JSONField(
+        _("Pending Charging Profile"),
+        null=True,
+        blank=True,
+        help_text="Charging profile payload awaiting confirmation from the charge point.",
+    )
     temperature = models.DecimalField(
         max_digits=5, decimal_places=1, null=True, blank=True
     )
@@ -1266,6 +1301,55 @@ class Simulator(Entity):
         if self.ws_port:
             return f"ws://{self.host}:{self.ws_port}/{path}"
         return f"ws://{self.host}/{path}"
+
+
+class ChargingProfileApplication(models.Model):
+    """Record of charging profiles applied via SetChargingProfile."""
+
+    charger = models.ForeignKey(
+        "Charger",
+        on_delete=models.CASCADE,
+        related_name="applied_charging_profiles",
+    )
+    connector_id = models.PositiveIntegerField(
+        _("Connector ID"),
+        null=True,
+        blank=True,
+    )
+    ocpp_message_id = models.CharField(
+        _("OCPP message ID"),
+        max_length=64,
+        blank=True,
+    )
+    profile_id = models.PositiveIntegerField(_("Profile ID"))
+    stack_level = models.PositiveIntegerField(_("Stack level"))
+    purpose = models.CharField(_("Purpose"), max_length=32)
+    kind = models.CharField(_("Kind"), max_length=32)
+    recurrency_kind = models.CharField(
+        _("Recurrency"), max_length=16, blank=True, default=""
+    )
+    valid_from = models.DateTimeField(_("Valid from"), null=True, blank=True)
+    valid_to = models.DateTimeField(_("Valid to"), null=True, blank=True)
+    transaction_id = models.CharField(
+        _("Transaction ID"), max_length=64, blank=True, default=""
+    )
+    charging_schedules = models.JSONField(default=list, blank=True)
+    raw_profile = models.JSONField(default=dict, blank=True)
+    applied_at = models.DateTimeField(default=timezone.now)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-applied_at", "-created_at"]
+        verbose_name = _("Charging Profile")
+        verbose_name_plural = _("Charging Profiles")
+        indexes = [
+            models.Index(fields=["charger", "connector_id"], name="ocpp_cpapp_chg_conn_idx"),
+            models.Index(fields=["profile_id"], name="ocpp_cpapp_profile_idx"),
+        ]
+
+    def __str__(self) -> str:  # pragma: no cover - representation helper
+        return f"{self.charger} · {self.profile_id} (stack {self.stack_level})"
 
 
 class DataTransferMessage(models.Model):

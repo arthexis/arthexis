@@ -1,0 +1,12 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate charging profile delivery feedback",
+      "url": "/admin/ocpp/charger/",
+      "request_details": "Use the admin 'Send charging profile' action to upload a csChargingProfiles JSON payload for a connected charger, confirm the charger status page surfaces the acceptance or rejection message, and verify the Charging Profile admin lists the applied profile entry.",
+      "done_on": null,
+      "is_deleted": false
+    }
+  }
+]

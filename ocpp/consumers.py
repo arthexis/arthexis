@@ -30,6 +30,7 @@ from .models import (
     CPReservation,
     CPFirmwareDeployment,
     RFIDSessionAttempt,
+    ChargingProfileApplication,
 )
 from .reference_utils import host_is_local_loopback
 from .evcs_discovery import (
@@ -877,6 +878,33 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         action = metadata.get("action")
         log_key = metadata.get("log_key") or self.store_key
         payload_data = payload if isinstance(payload, dict) else {}
+        if action == "SetChargingProfile":
+            status_value = str(payload_data.get("status") or "").strip()
+            status_info = payload_data.get("statusInfo")
+            info_text = ""
+            if status_info not in (None, ""):
+                try:
+                    info_text = json.dumps(status_info, ensure_ascii=False, sort_keys=True)
+                except (TypeError, ValueError):
+                    info_text = str(status_info)
+            message = "SetChargingProfile result"
+            if status_value:
+                message += f": status={status_value}"
+            if info_text:
+                message += f", info={info_text}"
+            store.add_log(log_key, message, log_type="charger")
+            await self._apply_set_charging_profile_result(
+                metadata,
+                status_value,
+                status_info,
+                message_id,
+            )
+            store.record_pending_call_result(
+                message_id,
+                metadata=metadata,
+                payload=payload_data,
+            )
+            return
         if action == "DataTransfer":
             message_pk = metadata.get("message_pk")
             if not message_pk:
@@ -1233,6 +1261,33 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 )
 
             await database_sync_to_async(_apply)()
+            store.record_pending_call_result(
+                message_id,
+                metadata=metadata,
+                success=False,
+                error_code=error_code,
+                error_description=description,
+                error_details=details,
+            )
+            return
+        if action == "SetChargingProfile":
+            parts: list[str] = ["SetChargingProfile error"]
+            code_text = (error_code or "").strip()
+            if code_text:
+                parts.append(f"code={code_text}")
+            description_text = (description or "").strip()
+            if description_text:
+                parts.append(f"description={description_text}")
+            if details not in (None, ""):
+                try:
+                    details_text = json.dumps(details, ensure_ascii=False, sort_keys=True)
+                except (TypeError, ValueError):
+                    details_text = str(details)
+                parts.append(f"details={details_text}")
+            store.add_log(log_key, ", ".join(parts), log_type="charger")
+            await self._apply_set_charging_profile_error(
+                metadata, error_code, description, details
+            )
             store.record_pending_call_result(
                 message_id,
                 metadata=metadata,
@@ -1692,6 +1747,150 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 if status_value == "Accepted" and requested_type:
                     updates["availability_state"] = requested_type
                     updates["availability_state_updated_at"] = now
+                Charger.objects.filter(pk=target.pk).update(**updates)
+                for field, value in updates.items():
+                    setattr(target, field, value)
+                if self.charger and self.charger.pk == target.pk:
+                    for field, value in updates.items():
+                        setattr(self.charger, field, value)
+                if self.aggregate_charger and self.aggregate_charger.pk == target.pk:
+                    for field, value in updates.items():
+                        setattr(self.aggregate_charger, field, value)
+
+        await database_sync_to_async(_apply)()
+
+    async def _apply_set_charging_profile_result(
+        self,
+        metadata: dict[str, object],
+        status_value: str,
+        status_info: object,
+        message_id: str,
+    ) -> None:
+        status_text = status_value or ""
+        connector_value = metadata.get("connector_id")
+        requested_at = metadata.get("requested_at")
+        payload_connector = metadata.get("payload_connector_id")
+        profile_payload = metadata.get("profile")
+        details_text = ""
+        if status_info not in (None, ""):
+            try:
+                details_text = json.dumps(status_info, ensure_ascii=False, sort_keys=True)
+            except (TypeError, ValueError):
+                details_text = str(status_info)
+        now = timezone.now()
+
+        def _apply():
+            filters: dict[str, object] = {"charger_id": self.charger_id}
+            if connector_value is None:
+                filters["connector_id__isnull"] = True
+            else:
+                filters["connector_id"] = connector_value
+            chargers = list(Charger.objects.filter(**filters))
+            if not chargers:
+                return None
+            profile_data = profile_payload if isinstance(profile_payload, dict) else None
+            record = None
+            for target in chargers:
+                updates: dict[str, object] = {
+                    "charging_profile_request_status": status_text,
+                    "charging_profile_request_status_at": now,
+                    "charging_profile_request_details": details_text,
+                }
+                if status_text.casefold() == "accepted":
+                    updates["charging_profile_requested_at"] = requested_at or now
+                else:
+                    updates["charging_profile_pending_profile"] = None
+                Charger.objects.filter(pk=target.pk).update(**updates)
+                for field, value in updates.items():
+                    setattr(target, field, value)
+            if status_text.casefold() == "accepted" and profile_data:
+                target = chargers[0]
+                valid_from = _parse_ocpp_timestamp(profile_data.get("validFrom"))
+                valid_to = _parse_ocpp_timestamp(profile_data.get("validTo"))
+                transaction_id = str(profile_data.get("transactionId") or "").strip()
+                record = ChargingProfileApplication.objects.create(
+                    charger=target,
+                    connector_id=payload_connector,
+                    ocpp_message_id=message_id,
+                    profile_id=int(profile_data.get("chargingProfileId") or 0),
+                    stack_level=int(profile_data.get("stackLevel") or 0),
+                    purpose=str(profile_data.get("chargingProfilePurpose") or ""),
+                    kind=str(profile_data.get("chargingProfileKind") or ""),
+                    recurrency_kind=str(profile_data.get("recurrencyKind") or ""),
+                    valid_from=valid_from,
+                    valid_to=valid_to,
+                    transaction_id=transaction_id,
+                    charging_schedules=profile_data.get("chargingSchedules") or [],
+                    raw_profile=profile_data,
+                    applied_at=now,
+                )
+                Charger.objects.filter(pk=target.pk).update(
+                    charging_profile_pending_profile=None,
+                )
+                target.charging_profile_pending_profile = None
+            else:
+                for target in chargers:
+                    target.charging_profile_pending_profile = None
+
+            for target in chargers:
+                if self.charger and self.charger.pk == target.pk:
+                    for field in (
+                        "charging_profile_request_status",
+                        "charging_profile_request_status_at",
+                        "charging_profile_request_details",
+                        "charging_profile_pending_profile",
+                        "charging_profile_requested_at",
+                    ):
+                        setattr(self.charger, field, getattr(target, field))
+                if self.aggregate_charger and self.aggregate_charger.pk == target.pk:
+                    for field in (
+                        "charging_profile_request_status",
+                        "charging_profile_request_status_at",
+                        "charging_profile_request_details",
+                        "charging_profile_pending_profile",
+                        "charging_profile_requested_at",
+                    ):
+                        setattr(self.aggregate_charger, field, getattr(target, field))
+            return record
+
+        await database_sync_to_async(_apply)()
+
+    async def _apply_set_charging_profile_error(
+        self,
+        metadata: dict[str, object],
+        error_code: str | None,
+        description: str | None,
+        details: object,
+    ) -> None:
+        status_text = str(error_code or "Error").strip() or "Error"
+        parts: list[str] = []
+        if description:
+            parts.append(str(description).strip())
+        if details not in (None, ""):
+            try:
+                parts.append(json.dumps(details, ensure_ascii=False, sort_keys=True))
+            except (TypeError, ValueError):
+                parts.append(str(details))
+        detail_text = "; ".join(part for part in parts if part)
+        connector_value = metadata.get("connector_id")
+        now = timezone.now()
+
+        def _apply():
+            filters: dict[str, object] = {"charger_id": self.charger_id}
+            if connector_value is None:
+                filters["connector_id__isnull"] = True
+            else:
+                filters["connector_id"] = connector_value
+            chargers = list(Charger.objects.filter(**filters))
+            if not chargers:
+                return
+            updates = {
+                "charging_profile_request_status": status_text,
+                "charging_profile_request_status_at": now,
+                "charging_profile_request_details": detail_text,
+                "charging_profile_pending_profile": None,
+            }
+            for target in chargers:
                 Charger.objects.filter(pk=target.pk).update(**updates)
                 for field, value in updates.items():
                     setattr(target, field, value)

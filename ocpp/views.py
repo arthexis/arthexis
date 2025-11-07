@@ -3,6 +3,7 @@ import uuid
 from datetime import datetime, time, timedelta, timezone as dt_timezone
 from types import SimpleNamespace
 
+from django.forms.forms import NON_FIELD_ERRORS
 from django.http import Http404, HttpResponse, JsonResponse
 from django.http.request import split_domain_port
 from django.views.decorators.csrf import csrf_exempt
@@ -30,6 +31,7 @@ from core.liveupdate import live_update
 from django.utils.dateparse import parse_datetime
 
 from . import store
+from .charging_profiles import normalize_cs_charging_profile
 from .models import (
     Transaction,
     Charger,
@@ -54,6 +56,7 @@ CALL_ACTION_LABELS = {
     "Reset": _("Reset"),
     "TriggerMessage": _("Trigger message"),
     "ReserveNow": _("Reserve connector"),
+    "SetChargingProfile": _("Set charging profile"),
 }
 
 CALL_EXPECTED_STATUSES: dict[str, set[str]] = {
@@ -64,6 +67,7 @@ CALL_EXPECTED_STATUSES: dict[str, set[str]] = {
     "Reset": {"Accepted"},
     "TriggerMessage": {"Accepted"},
     "ReserveNow": {"Accepted"},
+    "SetChargingProfile": {"Accepted", "Rejected", "NotSupported"},
 }
 
 
@@ -109,12 +113,29 @@ def _format_details(value: object) -> str:
         return str(value)
 
 
+def _validation_error_message(error: ValidationError) -> str:
+    """Convert a :class:`~django.core.exceptions.ValidationError` to text."""
+
+    if getattr(error, "message_dict", None):
+        parts: list[str] = []
+        for field, messages in error.message_dict.items():
+            for message in messages:
+                if field == NON_FIELD_ERRORS or field == "__all__":
+                    parts.append(str(message))
+                else:
+                    parts.append(f"{field}: {message}")
+        return "; ".join(parts)
+    if getattr(error, "messages", None):
+        return "; ".join(str(message) for message in error.messages)
+    return str(error)
+
+
 def _evaluate_pending_call_result(
     message_id: str,
     ocpp_action: str,
     *,
     expected_statuses: set[str] | None = None,
-) -> tuple[bool, str | None, int | None]:
+) -> tuple[bool, str | None, int | None, dict | None]:
     """Wait for a pending call result and translate failures into messages."""
 
     action_label = CALL_ACTION_LABELS.get(ocpp_action, ocpp_action)
@@ -123,7 +144,7 @@ def _evaluate_pending_call_result(
         detail = _("%(action)s did not receive a response from the charger.") % {
             "action": action_label,
         }
-        return False, detail, 504
+        return False, detail, 504, None
     if not result.get("success", True):
         parts: list[str] = []
         error_code = str(result.get("error_code") or "").strip()
@@ -145,7 +166,7 @@ def _evaluate_pending_call_result(
             }
         else:
             detail = _("%(action)s failed.") % {"action": action_label}
-        return False, detail, 400
+        return False, detail, 400, result
     payload = result.get("payload")
     payload_dict = payload if isinstance(payload, dict) else {}
     if expected_statuses is not None:
@@ -155,7 +176,7 @@ def _evaluate_pending_call_result(
             detail = _("%(action)s response did not include a status.") % {
                 "action": action_label,
             }
-            return False, detail, 400
+            return False, detail, 400, result
         if normalized_expected and status_value.casefold() not in normalized_expected:
             detail = _("%(action)s rejected with status %(status)s.") % {
                 "action": action_label,
@@ -165,8 +186,8 @@ def _evaluate_pending_call_result(
             extra = _format_details(remaining)
             if extra:
                 detail += " " + _("Details: %(details)s") % {"details": extra}
-            return False, detail, 400
-    return True, None, None
+            return False, detail, 400, result
+    return True, None, None, result
 
 
 def _normalize_connector_slug(slug: str | None) -> tuple[int | None, str]:
@@ -1530,6 +1551,7 @@ def charger_status(request, cid, connector=None):
         and not has_active_session
         and not past_session
     )
+    can_set_charging_profile = is_connected
     remote_start_messages = None
     if can_remote_start:
         remote_start_messages = {
@@ -1538,6 +1560,32 @@ def charger_status(request, cid, connector=None):
             "success": str(_("Remote start command queued.")),
             "error": str(_("Unable to send remote start request.")),
         }
+    charging_profile_messages = {
+        "connectorRequired": str(_("Connector ID is required.")),
+        "invalidProfile": str(_("Provide a valid charging profile JSON document.")),
+        "sending": str(_("Sending charging profile request...")),
+        "success": str(_("Charging profile request queued.")),
+        "error": str(_("Unable to send charging profile request.")),
+        "rejected": str(_("Charging profile was rejected by the charger.")),
+    }
+    charging_profile_status = None
+    if (
+        charger.charging_profile_request_status
+        or charger.charging_profile_request_status_at
+        or charger.charging_profile_request_details
+    ):
+        charging_profile_status = {
+            "status": charger.charging_profile_request_status,
+            "timestamp": charger.charging_profile_request_status_at,
+            "details": charger.charging_profile_request_details,
+        }
+    charging_profile_default_connector = (
+        charger.connector_id if charger.connector_id is not None else 0
+    )
+    charging_profile_pending = charger.charging_profile_pending_profile
+    recent_profiles = list(
+        charger.applied_charging_profiles.order_by("-applied_at", "-pk")[:5]
+    )
     action_url = _reverse_connector_url("charger-action", cid, connector_slug)
     chart_should_animate = bool(has_active_session and not past_session)
 
@@ -1565,7 +1613,13 @@ def charger_status(request, cid, connector=None):
             "is_connected": is_connected,
             "is_idle": is_connected and not has_active_session,
             "can_remote_start": can_remote_start,
+            "can_set_charging_profile": can_set_charging_profile,
             "remote_start_messages": remote_start_messages,
+            "charging_profile_messages": charging_profile_messages,
+            "charging_profile_status": charging_profile_status,
+            "charging_profile_default_connector": charging_profile_default_connector,
+            "charging_profile_pending": charging_profile_pending,
+            "charging_profile_recent_profiles": recent_profiles,
             "action_url": action_url,
             "show_chart": bool(
                 chart_data["datasets"]
@@ -1833,6 +1887,7 @@ def dispatch_action(request, cid, connector=None):
             message_id,
             {
                 "action": "RemoteStopTransaction",
+                "message_id": message_id,
                 "charger_id": cid,
                 "connector_id": connector_value,
                 "log_key": log_key,
@@ -1874,6 +1929,7 @@ def dispatch_action(request, cid, connector=None):
             message_id,
             {
                 "action": "RemoteStartTransaction",
+                "message_id": message_id,
                 "charger_id": cid,
                 "connector_id": connector_value,
                 "log_key": log_key,
@@ -1881,6 +1937,67 @@ def dispatch_action(request, cid, connector=None):
                 "requested_at": timezone.now(),
             },
         )
+    elif action == "set_charging_profile":
+        connector_field = data.get("connectorId")
+        if connector_field in (None, ""):
+            if connector_value is None:
+                candidate_default = getattr(charger_obj, "connector_id", None)
+                connector_field = candidate_default if candidate_default is not None else 0
+            else:
+                connector_field = connector_value
+        try:
+            connector_payload = int(connector_field)
+        except (TypeError, ValueError):
+            return JsonResponse({"detail": "connectorId must be an integer"}, status=400)
+        if connector_payload < 0:
+            return JsonResponse({"detail": "connectorId must be zero or positive"}, status=400)
+        profile_payload = data.get("csChargingProfiles")
+        try:
+            sanitized_profile, profile_summary = normalize_cs_charging_profile(
+                profile_payload
+            )
+        except ValidationError as exc:
+            return JsonResponse(
+                {"detail": _validation_error_message(exc)}, status=400
+            )
+        message_id = uuid.uuid4().hex
+        ocpp_action = "SetChargingProfile"
+        expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
+        payload = {
+            "connectorId": connector_payload,
+            "csChargingProfiles": sanitized_profile,
+        }
+        msg = json.dumps([2, message_id, "SetChargingProfile", payload])
+        async_to_sync(ws.send)(msg)
+        requested_at = timezone.now()
+        metadata = {
+            "action": "SetChargingProfile",
+            "message_id": message_id,
+            "charger_id": cid,
+            "connector_id": connector_value,
+            "payload_connector_id": connector_payload,
+            "log_key": log_key,
+            "profile": sanitized_profile,
+            "profile_summary": profile_summary,
+            "requested_at": requested_at,
+        }
+        store.register_pending_call(message_id, metadata)
+        store.schedule_call_timeout(
+            message_id,
+            action="SetChargingProfile",
+            log_key=log_key,
+        )
+        if charger_obj:
+            updates = {
+                "charging_profile_pending_profile": sanitized_profile,
+                "charging_profile_requested_at": requested_at,
+                "charging_profile_request_status": "",
+                "charging_profile_request_status_at": None,
+                "charging_profile_request_details": "",
+            }
+            Charger.objects.filter(pk=charger_obj.pk).update(**updates)
+            for field, value in updates.items():
+                setattr(charger_obj, field, value)
     elif action == "change_availability":
         availability_type = data.get("type")
         if availability_type not in {"Operative", "Inoperative"}:
@@ -1904,6 +2021,7 @@ def dispatch_action(request, cid, connector=None):
             message_id,
             {
                 "action": "ChangeAvailability",
+                "message_id": message_id,
                 "charger_id": cid,
                 "connector_id": connector_value,
                 "availability_type": availability_type,
@@ -1956,6 +2074,7 @@ def dispatch_action(request, cid, connector=None):
             message_id,
             {
                 "action": "DataTransfer",
+                "message_id": message_id,
                 "charger_id": cid,
                 "connector_id": connector_value,
                 "message_pk": record.pk,
@@ -1979,6 +2098,7 @@ def dispatch_action(request, cid, connector=None):
             message_id,
             {
                 "action": "Reset",
+                "message_id": message_id,
                 "charger_id": cid,
                 "connector_id": connector_value,
                 "log_key": log_key,
@@ -2024,6 +2144,7 @@ def dispatch_action(request, cid, connector=None):
             message_id,
             {
                 "action": "TriggerMessage",
+                "message_id": message_id,
                 "charger_id": cid,
                 "connector_id": connector_value,
                 "log_key": log_key,
@@ -2039,11 +2160,38 @@ def dispatch_action(request, cid, connector=None):
         return JsonResponse({"detail": "unknown action"}, status=400)
     store.add_log(log_key, f"< {msg}", log_type="charger")
     expected_statuses = expected_statuses or CALL_EXPECTED_STATUSES.get(ocpp_action)
-    success, detail, status_code = _evaluate_pending_call_result(
+    success, detail, status_code, result_data = _evaluate_pending_call_result(
         message_id,
         ocpp_action,
         expected_statuses=expected_statuses,
     )
     if not success:
         return JsonResponse({"detail": detail}, status=status_code or 400)
-    return JsonResponse({"sent": msg})
+    response_payload: dict[str, object] = {"sent": msg}
+    if ocpp_action == "SetChargingProfile" and isinstance(result_data, dict):
+        payload_data = result_data.get("payload")
+        if isinstance(payload_data, dict):
+            status_value = str(payload_data.get("status") or "").strip()
+            if status_value:
+                response_payload["status"] = status_value
+            status_info = payload_data.get("statusInfo")
+            if status_info is not None:
+                response_payload["statusInfo"] = status_info
+            if status_value and status_value.casefold() in {"rejected", "notsupported"}:
+                info_text = _format_details(status_info)
+                if info_text:
+                    detail_text = _(
+                        "Charging profile rejected with status %(status)s. Details: %(details)s"
+                    ) % {"status": status_value, "details": info_text}
+                else:
+                    detail_text = _(
+                        "Charging profile rejected with status %(status)s."
+                    ) % {"status": status_value}
+                response_payload["detail"] = detail_text
+                return JsonResponse(response_payload, status=409)
+            if status_value and status_value.casefold() == "accepted":
+                response_payload.setdefault(
+                    "detail",
+                    str(_("Charging profile accepted by the charger.")),
+                )
+    return JsonResponse(response_payload)

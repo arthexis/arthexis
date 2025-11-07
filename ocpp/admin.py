@@ -42,6 +42,7 @@ from .models import (
     CPReservation,
     CPFirmware,
     CPFirmwareDeployment,
+    ChargingProfileApplication,
 )
 from .simulator import ChargePointSimulator
 from . import store
@@ -51,6 +52,7 @@ from .transactions_io import (
 )
 from .status_display import STATUS_BADGE_MAP, ERROR_OK_VALUES
 from .views import _charger_state, _live_sessions
+from .charging_profiles import normalize_cs_charging_profile
 from core.admin import SaveBeforeChangeAction
 from core.models import RFID as CoreRFID
 from core.user_data import EntityModelAdmin
@@ -85,6 +87,56 @@ class TransactionExportForm(forms.Form):
 
 class TransactionImportForm(forms.Form):
     file = forms.FileField()
+
+
+class ChargingProfileUploadForm(forms.Form):
+    connector_id = forms.IntegerField(
+        required=False,
+        min_value=0,
+        label=_("Connector ID"),
+        help_text=_("Use 0 to target the entire charge point."),
+    )
+    profile_file = forms.FileField(
+        required=False,
+        label=_("Profile file"),
+        help_text=_("Upload a JSON document containing csChargingProfiles."),
+    )
+    profile_text = forms.CharField(
+        required=False,
+        label=_("Profile JSON"),
+        widget=forms.Textarea(attrs={"rows": 12, "class": "vLargeTextField"}),
+    )
+
+    def clean(self):
+        cleaned = super().clean()
+        text_value = cleaned.get("profile_text") or ""
+        upload = cleaned.get("profile_file")
+        if upload:
+            try:
+                payload = upload.read().decode("utf-8")
+            except UnicodeDecodeError as exc:
+                raise forms.ValidationError(
+                    _("Upload a UTF-8 encoded JSON file."), code="invalid_encoding"
+                ) from exc
+            cleaned["profile_text"] = payload
+            text_value = payload
+        if not text_value or not text_value.strip():
+            raise forms.ValidationError(
+                _("Provide a charging profile JSON document."), code="missing_profile"
+            )
+        try:
+            sanitized, summary = normalize_cs_charging_profile(text_value)
+        except ValidationError as exc:
+            if exc.message_dict:
+                raise forms.ValidationError(exc.message_dict)
+            if exc.messages:
+                raise forms.ValidationError(exc.messages)
+            raise forms.ValidationError(str(exc))
+        cleaned["sanitized_profile"] = sanitized
+        cleaned["profile_summary"] = summary
+        if cleaned.get("connector_id") in ("", None):
+            cleaned["connector_id"] = None
+        return cleaned
 
 
 class CPReservationForm(forms.ModelForm):
@@ -749,6 +801,53 @@ class CPFirmwareAdmin(EntityModelAdmin):
         )
 
 
+@admin.register(ChargingProfileApplication)
+class ChargingProfileApplicationAdmin(admin.ModelAdmin):
+    list_display = (
+        "charger",
+        "connector_id",
+        "profile_id",
+        "stack_level",
+        "purpose",
+        "kind",
+        "applied_at",
+    )
+    list_filter = ("purpose", "kind")
+    search_fields = (
+        "charger__charger_id",
+        "profile_id",
+        "stack_level",
+        "transaction_id",
+        "ocpp_message_id",
+    )
+    readonly_fields = (
+        "charger",
+        "connector_id",
+        "ocpp_message_id",
+        "profile_id",
+        "stack_level",
+        "purpose",
+        "kind",
+        "recurrency_kind",
+        "valid_from",
+        "valid_to",
+        "transaction_id",
+        "charging_schedules",
+        "raw_profile",
+        "applied_at",
+        "created_at",
+        "updated_at",
+    )
+    ordering = ("-applied_at", "-created_at")
+    date_hierarchy = "applied_at"
+
+    def has_add_permission(self, request):  # pragma: no cover - read only admin
+        return False
+
+    def has_change_permission(self, request, obj=None):  # pragma: no cover - read only admin
+        return False
+
+
 @admin.register(CPFirmwareDeployment)
 class CPFirmwareDeploymentAdmin(EntityModelAdmin):
     list_display = (
@@ -1015,6 +1114,18 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
             },
         ),
         (
+            "Charging profiles",
+            {
+                "fields": (
+                    "charging_profile_requested_at",
+                    "charging_profile_request_status",
+                    "charging_profile_request_status_at",
+                    "charging_profile_request_details",
+                    "charging_profile_pending_profile",
+                )
+            },
+        ),
+        (
             "Configuration",
             {"fields": ("public_display", "require_rfid", "configuration")},
         ),
@@ -1068,6 +1179,11 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         "availability_request_status",
         "availability_request_status_at",
         "availability_request_details",
+        "charging_profile_requested_at",
+        "charging_profile_request_status",
+        "charging_profile_request_status_at",
+        "charging_profile_request_details",
+        "charging_profile_pending_profile",
         "configuration",
         "local_auth_list_version",
         "local_auth_list_updated_at",
@@ -1104,6 +1220,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         "set_availability_state_operative",
         "set_availability_state_inoperative",
         "remote_stop_transaction",
+        "set_charging_profile_action",
         "reset_chargers",
         "delete_selected",
     ]
@@ -2096,6 +2213,150 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
     @admin.action(description="Mark availability as Inoperative")
     def set_availability_state_inoperative(self, request, queryset):
         self._set_availability_state(request, queryset, "Inoperative")
+
+    def _dispatch_set_charging_profile_local(
+        self,
+        request,
+        charger: Charger,
+        connector_override: int | None,
+        profile: dict,
+        summary: dict,
+    ) -> bool:
+        connector_value = connector_override
+        if connector_value is None:
+            connector_value = charger.connector_id if charger.connector_id is not None else 0
+        target_connector = charger.connector_id if charger.connector_id is not None else connector_value
+        ws = store.get_connection(charger.charger_id, target_connector)
+        if ws is None:
+            self.message_user(
+                request,
+                f"{charger}: no active connection",
+                level=messages.ERROR,
+            )
+            return False
+        message_id = uuid.uuid4().hex
+        payload = {"connectorId": connector_value, "csChargingProfiles": profile}
+        msg = json.dumps([2, message_id, "SetChargingProfile", payload])
+        try:
+            async_to_sync(ws.send)(msg)
+        except Exception as exc:  # pragma: no cover - network error
+            self.message_user(
+                request,
+                f"{charger}: failed to send SetChargingProfile ({exc})",
+                level=messages.ERROR,
+            )
+            return False
+        log_key = store.identity_key(charger.charger_id, target_connector)
+        store.add_log(log_key, f"< {msg}", log_type="charger")
+        requested_at = timezone.now()
+        metadata = {
+            "action": "SetChargingProfile",
+            "message_id": message_id,
+            "charger_id": charger.charger_id,
+            "connector_id": charger.connector_id,
+            "payload_connector_id": connector_value,
+            "log_key": log_key,
+            "profile": profile,
+            "profile_summary": summary,
+            "requested_at": requested_at,
+        }
+        store.register_pending_call(message_id, metadata)
+        store.schedule_call_timeout(
+            message_id,
+            action="SetChargingProfile",
+            log_key=log_key,
+        )
+        updates = {
+            "charging_profile_pending_profile": profile,
+            "charging_profile_requested_at": requested_at,
+            "charging_profile_request_status": "",
+            "charging_profile_request_status_at": None,
+            "charging_profile_request_details": "",
+        }
+        Charger.objects.filter(pk=charger.pk).update(**updates)
+        for field, value in updates.items():
+            setattr(charger, field, value)
+        return True
+
+    @admin.action(description=_("Send charging profile"))
+    def set_charging_profile_action(self, request, queryset):
+        if not queryset:
+            self.message_user(
+                request,
+                _("Select at least one charger."),
+                level=messages.WARNING,
+            )
+            return None
+        initial = {}
+        if queryset.count() == 1:
+            first = queryset.first()
+            if first and first.connector_id is not None:
+                initial["connector_id"] = first.connector_id
+        if request.method == "POST" and request.POST.get("apply"):
+            form = ChargingProfileUploadForm(request.POST, request.FILES)
+            if form.is_valid():
+                profile = form.cleaned_data["sanitized_profile"]
+                summary = form.cleaned_data.get("profile_summary") or {}
+                connector_override = form.cleaned_data.get("connector_id")
+                dispatched = 0
+                for charger in queryset:
+                    if not charger.is_local:
+                        self.message_user(
+                            request,
+                            f"{charger}: remote administration is not supported for charging profiles.",
+                            level=messages.ERROR,
+                        )
+                        continue
+                    if self._dispatch_set_charging_profile_local(
+                        request, charger, connector_override, profile, summary
+                    ):
+                        dispatched += 1
+                if dispatched:
+                    self.message_user(
+                        request,
+                        ngettext(
+                            "Queued %(count)d charging profile request.",
+                            "Queued %(count)d charging profile requests.",
+                            dispatched,
+                        )
+                        % {"count": dispatched},
+                        level=messages.SUCCESS,
+                    )
+                return None
+        else:
+            form = ChargingProfileUploadForm(initial=initial)
+
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "title": _("Send charging profile"),
+            "selected_ids": request.POST.getlist(helpers.ACTION_CHECKBOX_NAME),
+            "action_name": request.POST.get("action", "set_charging_profile_action"),
+            "select_across": request.POST.get("select_across", "0"),
+            "action_checkbox_name": helpers.ACTION_CHECKBOX_NAME,
+            "form": form,
+            "media": self.media + form.media,
+            "selected_chargers": list(queryset),
+            "adminform": helpers.AdminForm(
+                form,
+                [
+                    (
+                        None,
+                        {
+                            "fields": (
+                                "connector_id",
+                                "profile_file",
+                                "profile_text",
+                            )
+                        },
+                    )
+                ],
+                {},
+            ),
+        }
+        return TemplateResponse(
+            request, "admin/ocpp/charger/set_charging_profile.html", context
+        )
 
     @admin.action(description="Remote stop active transaction")
     def remote_stop_transaction(self, request, queryset):

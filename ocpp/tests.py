@@ -74,10 +74,12 @@ from .models import (
     CPReservation,
     CPFirmware,
     CPFirmwareDeployment,
+    ChargingProfileApplication,
 )
 from .admin import ChargerConfigurationAdmin, ConfigurationKeyAdmin, ConfigurationKeyInline
 from .consumers import CSMSConsumer
 from .views import dispatch_action, _transaction_rfid_details, _usage_timeline
+from .charging_profiles import normalize_cs_charging_profile
 from .status_display import STATUS_BADGE_MAP
 from core.models import EnergyAccount, EnergyCredit, Reference, RFID, SecurityGroup
 from . import store
@@ -1395,6 +1397,190 @@ class CSMSConsumerTests(TransactionTestCase):
             charger_id="STATAVAIL", connector_id=1
         )
         self.assertEqual(charger.availability_state, "Operative")
+        await communicator.disconnect()
+
+    async def test_set_charging_profile_result_persists_record(self):
+        store.pending_calls.clear()
+        await database_sync_to_async(Charger.objects.get_or_create)(
+            charger_id="PROFILE1", connector_id=1
+        )
+        communicator = WebsocketCommunicator(application, "/PROFILE1/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+        await communicator.send_json_to(
+            [
+                2,
+                "boot",
+                "BootNotification",
+                {"chargePointVendor": "Test", "chargePointModel": "Model"},
+            ]
+        )
+        await communicator.receive_json_from()
+
+        profile = {
+            "chargingProfileId": 5,
+            "stackLevel": 0,
+            "chargingProfilePurpose": "TxDefaultProfile",
+            "chargingProfileKind": "Absolute",
+            "chargingSchedules": [
+                {
+                    "chargingRateUnit": "A",
+                    "chargingSchedulePeriod": [{"startPeriod": 0, "limit": 12}],
+                }
+            ],
+        }
+        sanitized, summary = normalize_cs_charging_profile(profile)
+        message_id = "scp-accept"
+        metadata = {
+            "action": "SetChargingProfile",
+            "message_id": message_id,
+            "charger_id": "PROFILE1",
+            "connector_id": 1,
+            "payload_connector_id": 1,
+            "log_key": store.identity_key("PROFILE1", 1),
+            "profile": sanitized,
+            "profile_summary": summary,
+            "requested_at": timezone.now(),
+        }
+        store.register_pending_call(message_id, metadata)
+        await communicator.send_json_to([3, message_id, {"status": "Accepted"}])
+        await asyncio.sleep(0.05)
+
+        charger = await database_sync_to_async(Charger.objects.get)(
+            charger_id="PROFILE1", connector_id=1
+        )
+        self.assertEqual(charger.charging_profile_request_status, "Accepted")
+        self.assertIsNone(charger.charging_profile_pending_profile)
+        record = await database_sync_to_async(
+            ChargingProfileApplication.objects.get
+        )(ocpp_message_id=message_id)
+        self.assertEqual(record.charger, charger)
+        self.assertEqual(record.connector_id, 1)
+        self.assertEqual(record.profile_id, sanitized["chargingProfileId"])
+        self.assertEqual(record.stack_level, sanitized["stackLevel"])
+        self.assertEqual(record.purpose, sanitized["chargingProfilePurpose"])
+        self.assertEqual(record.kind, sanitized["chargingProfileKind"])
+        await communicator.disconnect()
+
+    async def test_set_charging_profile_rejection_clears_pending(self):
+        store.pending_calls.clear()
+        await database_sync_to_async(Charger.objects.get_or_create)(
+            charger_id="PROFILE2", connector_id=1
+        )
+        communicator = WebsocketCommunicator(application, "/PROFILE2/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+        await communicator.send_json_to(
+            [
+                2,
+                "boot",
+                "BootNotification",
+                {"chargePointVendor": "Test", "chargePointModel": "Model"},
+            ]
+        )
+        await communicator.receive_json_from()
+
+        profile = {
+            "chargingProfileId": 11,
+            "stackLevel": 0,
+            "chargingProfilePurpose": "TxDefaultProfile",
+            "chargingProfileKind": "Absolute",
+            "chargingSchedules": [
+                {
+                    "chargingRateUnit": "A",
+                    "chargingSchedulePeriod": [{"startPeriod": 0, "limit": 8}],
+                }
+            ],
+        }
+        sanitized, summary = normalize_cs_charging_profile(profile)
+        message_id = "scp-reject"
+        metadata = {
+            "action": "SetChargingProfile",
+            "message_id": message_id,
+            "charger_id": "PROFILE2",
+            "connector_id": 1,
+            "payload_connector_id": 1,
+            "log_key": store.identity_key("PROFILE2", 1),
+            "profile": sanitized,
+            "profile_summary": summary,
+            "requested_at": timezone.now(),
+        }
+        store.register_pending_call(message_id, metadata)
+        await communicator.send_json_to([3, message_id, {"status": "Rejected"}])
+        await asyncio.sleep(0.05)
+
+        charger = await database_sync_to_async(Charger.objects.get)(
+            charger_id="PROFILE2", connector_id=1
+        )
+        self.assertEqual(charger.charging_profile_request_status, "Rejected")
+        self.assertIsNone(charger.charging_profile_pending_profile)
+        count = await database_sync_to_async(ChargingProfileApplication.objects.filter(charger=charger).count)()
+        self.assertEqual(count, 0)
+        await communicator.disconnect()
+
+    async def test_set_charging_profile_call_error_updates_status(self):
+        store.pending_calls.clear()
+        await database_sync_to_async(Charger.objects.get_or_create)(
+            charger_id="PROFILE3", connector_id=1
+        )
+        communicator = WebsocketCommunicator(application, "/PROFILE3/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+        await communicator.send_json_to(
+            [
+                2,
+                "boot",
+                "BootNotification",
+                {"chargePointVendor": "Test", "chargePointModel": "Model"},
+            ]
+        )
+        await communicator.receive_json_from()
+
+        profile = {
+            "chargingProfileId": 12,
+            "stackLevel": 0,
+            "chargingProfilePurpose": "TxDefaultProfile",
+            "chargingProfileKind": "Absolute",
+            "chargingSchedules": [
+                {
+                    "chargingRateUnit": "A",
+                    "chargingSchedulePeriod": [{"startPeriod": 0, "limit": 10}],
+                }
+            ],
+        }
+        sanitized, summary = normalize_cs_charging_profile(profile)
+        message_id = "scp-error"
+        metadata = {
+            "action": "SetChargingProfile",
+            "message_id": message_id,
+            "charger_id": "PROFILE3",
+            "connector_id": 1,
+            "payload_connector_id": 1,
+            "log_key": store.identity_key("PROFILE3", 1),
+            "profile": sanitized,
+            "profile_summary": summary,
+            "requested_at": timezone.now(),
+        }
+        store.register_pending_call(message_id, metadata)
+        await communicator.send_json_to(
+            [
+                4,
+                message_id,
+                "InternalError",
+                "processing failed",
+                {"info": "invalid"},
+            ]
+        )
+        await asyncio.sleep(0.05)
+
+        charger = await database_sync_to_async(Charger.objects.get)(
+            charger_id="PROFILE3", connector_id=1
+        )
+        self.assertEqual(charger.charging_profile_request_status, "InternalError")
+        self.assertIn("invalid", charger.charging_profile_request_details)
+        self.assertIsNone(charger.charging_profile_pending_profile)
+        count = await database_sync_to_async(ChargingProfileApplication.objects.filter(charger=charger).count)()
+        self.assertEqual(count, 0)
         await communicator.disconnect()
 
     async def test_consumption_message_final_update_on_disconnect(self):
@@ -5078,6 +5264,9 @@ class DispatchActionViewTests(TestCase):
         )
         self.mock_wait = self.wait_patch.start()
         self.addCleanup(self.wait_patch.stop)
+        self.schedule_patch = patch("ocpp.views.store.schedule_call_timeout")
+        self.mock_schedule = self.schedule_patch.start()
+        self.addCleanup(self.schedule_patch.stop)
 
     def _close_loop(self):
         try:
@@ -5098,6 +5287,22 @@ class DispatchActionViewTests(TestCase):
             "success": True,
             "payload": {"status": "Accepted"},
             "metadata": dict(metadata or {}),
+        }
+
+    def _valid_profile(self):
+        return {
+            "chargingProfileId": 7,
+            "stackLevel": 0,
+            "chargingProfilePurpose": "TxDefaultProfile",
+            "chargingProfileKind": "Absolute",
+            "chargingSchedules": [
+                {
+                    "chargingRateUnit": "A",
+                    "chargingSchedulePeriod": [
+                        {"startPeriod": 0, "limit": 16},
+                    ],
+                }
+            ],
         }
 
     def test_remote_start_requires_id_tag(self):
@@ -5222,6 +5427,131 @@ class DispatchActionViewTests(TestCase):
         self.loop.run_until_complete(asyncio.sleep(0))
         self.assertEqual(self.ws.sent, [])
         self.assertFalse(store.pending_calls)
+
+    def test_set_charging_profile_requires_payload(self):
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"action": "set_charging_profile"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.loop.run_until_complete(asyncio.sleep(0))
+        self.assertEqual(self.ws.sent, [])
+        self.assertFalse(store.pending_calls)
+        self.mock_schedule.assert_not_called()
+
+    def test_set_charging_profile_dispatches_frame(self):
+        profile = self._valid_profile()
+        response = self.client.post(
+            self.url,
+            data=json.dumps(
+                {
+                    "action": "set_charging_profile",
+                    "connectorId": 1,
+                    "csChargingProfiles": profile,
+                }
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data.get("status"), "Accepted")
+        self.loop.run_until_complete(asyncio.sleep(0))
+        self.assertEqual(len(self.ws.sent), 1)
+        frame = json.loads(self.ws.sent[0])
+        self.assertEqual(frame[0], 2)
+        self.assertEqual(frame[2], "SetChargingProfile")
+        self.assertEqual(frame[3]["connectorId"], 1)
+        sanitized, _ = normalize_cs_charging_profile(profile)
+        self.charger.refresh_from_db()
+        self.assertEqual(self.charger.charging_profile_pending_profile, sanitized)
+        self.assertIsNotNone(self.charger.charging_profile_requested_at)
+        self.mock_schedule.assert_called_once()
+
+    def test_set_charging_profile_rejected_returns_conflict(self):
+        def rejected(message_id, timeout=5.0):
+            metadata = store.pending_calls.pop(message_id, None)
+            store._pending_call_events.pop(message_id, None)
+            store._pending_call_results.pop(message_id, None)
+            return {
+                "success": True,
+                "payload": {"status": "Rejected"},
+                "metadata": dict(metadata or {}),
+            }
+
+        self.mock_wait.side_effect = rejected
+        profile = self._valid_profile()
+        response = self.client.post(
+            self.url,
+            data=json.dumps(
+                {
+                    "action": "set_charging_profile",
+                    "csChargingProfiles": profile,
+                }
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 409)
+        detail = response.json().get("detail", "")
+        self.assertIn("Rejected", detail)
+        self.mock_wait.side_effect = self._wait_success
+
+    def test_set_charging_profile_timeout(self):
+        self.mock_wait.side_effect = lambda *args, **kwargs: None
+        profile = self._valid_profile()
+        response = self.client.post(
+            self.url,
+            data=json.dumps(
+                {
+                    "action": "set_charging_profile",
+                    "connectorId": 1,
+                    "csChargingProfiles": profile,
+                }
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 504)
+        detail = response.json().get("detail", "")
+        self.assertIn("did not receive", detail)
+        self.mock_wait.side_effect = self._wait_success
+
+    def test_set_charging_profile_rejects_invalid_connector(self):
+        profile = self._valid_profile()
+        response = self.client.post(
+            self.url,
+            data=json.dumps(
+                {
+                    "action": "set_charging_profile",
+                    "connectorId": "invalid",
+                    "csChargingProfiles": profile,
+                }
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.loop.run_until_complete(asyncio.sleep(0))
+        self.assertFalse(self.ws.sent)
+        self.mock_schedule.assert_not_called()
+
+    def test_set_charging_profile_validates_payload(self):
+        response = self.client.post(
+            self.url,
+            data=json.dumps(
+                {
+                    "action": "set_charging_profile",
+                    "connectorId": 1,
+                    "csChargingProfiles": {"chargingProfileId": 1},
+                }
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+        detail = response.json().get("detail", "")
+        self.assertTrue(detail)
+        self.loop.run_until_complete(asyncio.sleep(0))
+        self.assertEqual(self.ws.sent, [])
+        self.assertFalse(store.pending_calls)
+        self.mock_schedule.assert_not_called()
 
 
 class SimulatorStateMappingTests(TestCase):
