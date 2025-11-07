@@ -1,0 +1,12 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate manual task notifications and reservation action",
+      "url": "/admin/teams/manualtask/",
+      "request_details": "Create a manual task with an assigned user and security group, ensure the celery.lck file is present, enable notifications, and confirm the assigned contacts and node email outbox owner receive the immediate reminder. Then select a task tied to a charge location and run the 'Make Reservation at CP' action to verify a CP Reservation is created and dispatched.",
+      "done_on": null,
+      "is_deleted": false
+    }
+  }
+]
