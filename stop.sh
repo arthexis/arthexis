@@ -12,6 +12,7 @@ exec > >(tee "$LOG_FILE") 2>&1
 cd "$BASE_DIR"
 LOCK_DIR="$BASE_DIR/locks"
 LCD_LOCK="$LOCK_DIR/lcd_screen.lck"
+CHARGING_LOCK="$LOCK_DIR/charging.lck"
 PYTHON="python3"
 if [ -d "$BASE_DIR/.venv" ]; then
   PYTHON="$BASE_DIR/.venv/bin/python"
@@ -82,8 +83,11 @@ PY
     exit 1
   fi
   if [ "$ACTIVE_SESSIONS" -gt 0 ]; then
-    echo "Active charging sessions detected; aborting stop. Resolve the sessions or pass --force during a maintenance window." >&2
-    exit 1
+    if [ -f "$CHARGING_LOCK" ]; then
+      echo "Active charging sessions detected; aborting stop. Resolve the sessions or pass --force during a maintenance window." >&2
+      exit 1
+    fi
+    echo "Recorded $ACTIVE_SESSIONS active session(s) but no charging lock detected; assuming the sessions are stale and continuing shutdown." >&2
   fi
 fi
 
