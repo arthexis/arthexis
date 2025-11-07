@@ -579,6 +579,11 @@ class User(Entity, AbstractUser):
         return self._direct_profile("GoogleCalendarProfile")
 
 
+    class Meta(AbstractUser.Meta):
+        verbose_name = _("User")
+        verbose_name_plural = _("Users")
+
+
 class UserPhoneNumber(Entity):
     """Store phone numbers associated with a user."""
 
@@ -2121,6 +2126,11 @@ class Reference(Entity):
 
     def natural_key(self):  # pragma: no cover - simple representation
         return (self.alt_text,)
+
+
+    class Meta:
+        verbose_name = _("Reference")
+        verbose_name_plural = _("References")
 
 
 class RFID(Entity):
@@ -4257,6 +4267,11 @@ class Product(Entity):
         return self.name
 
 
+    class Meta:
+        verbose_name = _("Product")
+        verbose_name_plural = _("Products")
+
+
 class AdminHistory(Entity):
     """Record of recently visited admin changelists for a user."""
 
@@ -5165,5 +5180,5 @@ class TOTPDeviceSettings(models.Model):
     is_user_data = models.BooleanField(default=False)
 
     class Meta:
-        verbose_name = _("Authenticator device settings")
-        verbose_name_plural = _("Authenticator device settings")
+        verbose_name = _("Authenticator Device Setting")
+        verbose_name_plural = _("Authenticator Device Settings")

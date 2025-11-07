@@ -1334,6 +1334,10 @@ class Node(Entity):
             **kwargs,
         )
 
+    class Meta:
+        verbose_name = "Node"
+        verbose_name_plural = "Nodes"
+
 
 node_information_updated = Signal()
 
@@ -1785,7 +1789,6 @@ class EmailOutbox(Profile):
         if owner:
             return owner
         return str(self.node) if self.node_id else ""
-
 
 class NetMessage(Entity):
     """Message propagated across nodes."""
@@ -2374,6 +2377,8 @@ class PendingNetMessage(models.Model):
     class Meta:
         unique_together = ("node", "message")
         ordering = ("queued_at",)
+        verbose_name = "Pending Net Message"
+        verbose_name_plural = "Pending Net Messages"
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return f"{self.message_id} → {self.node_id}"
