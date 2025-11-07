@@ -330,7 +330,7 @@
                         </td>
                         <td data-label="{% trans "Time" %}">{{ row.duration_minutes|default_if_none:"—" }}</td>
                         <td data-label="{% trans "Connector" %}">
-                          {% if row.connector is not None %}{{ row.connector }}{% else %}&mdash;{% endif %}
+                          {% if row.connector is not None or row.connector_label %}{{ row.connector_label|default:row.connector }}{% else %}&mdash;{% endif %}
                         </td>
                         <td data-label="{% trans "RFID label" %}">{{ row.rfid_label|default:"—" }}</td>
                         <td data-label="{% trans "Account" %}">{{ row.account_name|default:"—" }}</td>

@@ -77,7 +77,7 @@ class ChargerStatusCommandTests(TestCase):
         ]
         self.assertGreaterEqual(len(lines), 2)
         aggregate_fields = next(fields for fields in lines if fields[2] == "all")
-        connector_fields = next(fields for fields in lines if fields[2] == "1")
+        connector_fields = next(fields for fields in lines if fields[2] == "A")
         self.assertEqual(aggregate_fields[3], "off")
         self.assertEqual(connector_fields[3], "ABC123")
 
@@ -126,9 +126,9 @@ class ChargerStatusCommandTests(TestCase):
                 continue
 
         self.assertIn("all", totals)
-        self.assertIn("1", totals)
-        self.assertIn("2", totals)
-        self.assertAlmostEqual(totals["all"], totals["1"] + totals["2"], places=2)
+        self.assertIn("A", totals)
+        self.assertIn("B", totals)
+        self.assertAlmostEqual(totals["all"], totals["A"] + totals["B"], places=2)
 
     def test_aggregate_status_reflects_available_connectors(self):
         Charger.objects.create(
@@ -197,7 +197,7 @@ class ChargerStatusCommandTests(TestCase):
         Charger.objects.create(charger_id="CP-CONN-2", connector_id=2)
 
         output = StringIO()
-        call_command("charger_status", "--cp", "2", stdout=output)
+        call_command("charger_status", "--cp", "B", stdout=output)
 
         text = output.getvalue()
         self.assertIn("CP-CONN-2", text)
@@ -261,7 +261,7 @@ class ChargerStatusCommandTests(TestCase):
             "--sn",
             "TAIL-01",
             "--cp",
-            "2",
+            "B",
             "--tail",
             "1",
             stdout=output,
@@ -279,7 +279,7 @@ class ChargerStatusCommandTests(TestCase):
             CommandError,
             "--tail requires selecting exactly one charger",
         ):
-            call_command("charger_status", "--cp", "1", "--tail", "5")
+            call_command("charger_status", "--cp", "A", "--tail", "5")
 
     def test_tail_requires_positive_value(self):
         Charger.objects.create(charger_id="TAIL-C", connector_id=1)
@@ -289,5 +289,5 @@ class ChargerStatusCommandTests(TestCase):
             "--tail requires a positive number of log entries.",
         ):
             call_command(
-                "charger_status", "--sn", "TAIL-C", "--cp", "1", "--tail", "0"
+                "charger_status", "--sn", "TAIL-C", "--cp", "A", "--tail", "0"
             )

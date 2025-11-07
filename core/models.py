@@ -3606,6 +3606,16 @@ class ClientReport(Entity):
                     if getattr(tx, "connector_id", None) is not None
                     else getattr(getattr(tx, "charger", None), "connector_id", None)
                 )
+                connector_letter = (
+                    Charger.connector_letter_from_value(connector_number)
+                    if connector_number not in {None, ""}
+                    else None
+                )
+                connector_order = (
+                    connector_number
+                    if isinstance(connector_number, int)
+                    else None
+                )
 
                 rfid_value = (tx.rfid or "").strip()
                 tag = tag_map.get(rfid_value)
@@ -3627,6 +3637,8 @@ class ClientReport(Entity):
                 session_rows.append(
                     {
                         "connector": connector_number,
+                        "connector_label": connector_letter,
+                        "connector_order": connector_order,
                         "rfid_label": label,
                         "account_name": account_name,
                         "start_kwh": start_kwh,
@@ -3762,14 +3774,16 @@ class ClientReport(Entity):
                         if end_dt and timezone.is_naive(end_dt):
                             end_dt = timezone.make_aware(end_dt, timezone.utc)
 
-                    normalized_rows.append(
-                        {
-                            "connector": row.get("connector"),
-                            "rfid_label": row.get("rfid_label"),
-                            "account_name": row.get("account_name"),
-                            "start_kwh": row.get("start_kwh"),
-                            "end_kwh": row.get("end_kwh"),
-                            "session_kwh": row.get("session_kwh"),
+                normalized_rows.append(
+                    {
+                        "connector": row.get("connector"),
+                        "connector_label": row.get("connector_label"),
+                        "connector_order": row.get("connector_order"),
+                        "rfid_label": row.get("rfid_label"),
+                        "account_name": row.get("account_name"),
+                        "start_kwh": row.get("start_kwh"),
+                        "end_kwh": row.get("end_kwh"),
+                        "session_kwh": row.get("session_kwh"),
                             "start": start_dt,
                             "end": end_dt,
                             "start_display": ClientReport._format_session_datetime(
@@ -3784,12 +3798,24 @@ class ClientReport(Entity):
                         }
                     )
 
+                def _connector_sort_value(item):
+                    order_value = item.get("connector_order")
+                    if isinstance(order_value, int):
+                        return order_value
+                    connector_value = item.get("connector")
+                    if isinstance(connector_value, int):
+                        return connector_value
+                    try:
+                        return int(connector_value)
+                    except (TypeError, ValueError):
+                        return 0
+
                 normalized_rows.sort(
                     key=lambda item: (
                         item["start"]
                         if item["start"] is not None
                         else datetime.min.replace(tzinfo=timezone.utc),
-                        item.get("connector") or 0,
+                        _connector_sort_value(item),
                     )
                 )
 
@@ -4121,8 +4147,12 @@ class ClientReport(Entity):
                                     format_datetime(start_dt),
                                     format_datetime(end_dt),
                                     format_duration(duration_value),
-                                    row.get("connector")
+                                    (
+                                        row.get("connector_label")
+                                        or row.get("connector")
+                                    )
                                     if row.get("connector") is not None
+                                    or row.get("connector_label")
                                     else "—",
                                     row.get("rfid_label") or "—",
                                     row.get("account_name") or "—",

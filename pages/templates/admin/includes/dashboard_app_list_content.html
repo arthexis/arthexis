@@ -45,7 +45,7 @@
                     {% if charger_stats %}
                       {% if charger_stats.available_missing_cp_number %}
                         {% blocktranslate with available=charger_stats.available_with_cp_number total=charger_stats.available_total missing=charger_stats.available_missing_cp_number asvar charger_badge_label trimmed %}
-                          {{ available }} chargers reporting Available status with a CP number, out of {{ total }} total Available chargers. {{ missing }} Available chargers are missing a connector number.
+                          {{ available }} chargers reporting Available status with a CP number, out of {{ total }} total Available chargers. {{ missing }} Available chargers are missing a connector letter.
                         {% endblocktranslate %}
                       {% else %}
                         {% blocktranslate with available=charger_stats.available_with_cp_number total=charger_stats.available_total asvar charger_badge_label trimmed %}
@@ -155,7 +155,7 @@
                     {% if charger_stats %}
                       {% if charger_stats.available_missing_cp_number %}
                         {% blocktranslate with available=charger_stats.available_with_cp_number total=charger_stats.available_total missing=charger_stats.available_missing_cp_number asvar charger_badge_label trimmed %}
-                          {{ available }} chargers reporting Available status with a CP number, out of {{ total }} total Available chargers. {{ missing }} Available chargers are missing a connector number.
+                          {{ available }} chargers reporting Available status with a CP number, out of {{ total }} total Available chargers. {{ missing }} Available chargers are missing a connector letter.
                         {% endblocktranslate %}
                       {% else %}
                         {% blocktranslate with available=charger_stats.available_with_cp_number total=charger_stats.available_total asvar charger_badge_label trimmed %}

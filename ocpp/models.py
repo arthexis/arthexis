@@ -448,6 +448,49 @@ class Charger(Entity):
             raise ValueError(f"Invalid connector slug: {slug}") from exc
 
     @classmethod
+    def connector_letter_from_value(cls, connector: int | str | None) -> str | None:
+        """Return the alphabetical label associated with ``connector``."""
+
+        if connector in (None, "", cls.AGGREGATE_CONNECTOR_SLUG):
+            return None
+        try:
+            value = int(connector)
+        except (TypeError, ValueError):
+            text = str(connector).strip()
+            return text or None
+        if value <= 0:
+            return str(value)
+
+        letters: list[str] = []
+        while value > 0:
+            value -= 1
+            letters.append(chr(ord("A") + (value % 26)))
+            value //= 26
+        return "".join(reversed(letters))
+
+    @classmethod
+    def connector_letter_from_slug(cls, slug: int | str | None) -> str | None:
+        """Return the alphabetical label represented by ``slug``."""
+
+        value = cls.connector_value_from_slug(slug)
+        return cls.connector_letter_from_value(value)
+
+    @classmethod
+    def connector_value_from_letter(cls, label: str) -> int:
+        """Return the connector integer represented by an alphabetical label."""
+
+        normalized = (label or "").strip().upper()
+        if not normalized:
+            raise ValueError("Connector label is required")
+
+        total = 0
+        for char in normalized:
+            if not ("A" <= char <= "Z"):
+                raise ValueError(f"Invalid connector label: {label}")
+            total = total * 26 + (ord(char) - ord("A") + 1)
+        return total
+
+    @classmethod
     def availability_state_from_status(cls, status: str) -> str | None:
         """Return the availability state implied by a status notification."""
 
@@ -467,20 +510,33 @@ class Charger(Entity):
         return type(self).connector_slug_from_value(self.connector_id)
 
     @property
+    def connector_letter(self) -> str | None:
+        """Return the alphabetical identifier for this connector."""
+
+        return type(self).connector_letter_from_value(self.connector_id)
+
+    @property
     def connector_label(self) -> str:
         """Return a short human readable label for this connector."""
 
         if self.connector_id is None:
             return _("All Connectors")
 
-        special_labels = {
-            1: _("Connector 1 (Left)"),
-            2: _("Connector 2 (Right)"),
-        }
-        if self.connector_id in special_labels:
-            return special_labels[self.connector_id]
+        letter = self.connector_letter or str(self.connector_id)
+        if self.connector_id == 1:
+            side = _("Left")
+            return _("Connector %(letter)s (%(side)s)") % {
+                "letter": letter,
+                "side": side,
+            }
+        if self.connector_id == 2:
+            side = _("Right")
+            return _("Connector %(letter)s (%(side)s)") % {
+                "letter": letter,
+                "side": side,
+            }
 
-        return _("Connector %(number)s") % {"number": self.connector_id}
+        return _("Connector %(letter)s") % {"letter": letter}
 
     def identity_slug(self) -> str:
         """Return a unique slug for this charger identity."""

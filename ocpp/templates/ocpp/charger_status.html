@@ -331,7 +331,7 @@
       {% for tx in transactions %}
       <tr>
         {% if charger.connector_id is None %}
-        <td>{{ tx.charger.connector_label|default:tx.charger.connector_id }}</td>
+        <td>{{ tx.charger.connector_label|default:tx.charger.connector_letter|default:tx.charger.connector_id }}</td>
         {% endif %}
         <td><a href="?session={{ tx.id }}{% if session_query %}&{{ session_query }}{% endif %}">{{ tx.id }}</a></td>
         {% if date_view == "received" %}
@@ -387,6 +387,40 @@
     2: COLOR_PALETTE[1],
   };
 
+  function connectorLetterFromValue(value) {
+    if (value === null || value === undefined) {
+      return null;
+    }
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric) || numeric <= 0) {
+      const text = String(value).trim();
+      return text ? text : null;
+    }
+    let current = Math.floor(numeric);
+    let result = '';
+    while (current > 0) {
+      current -= 1;
+      result = String.fromCharCode(65 + (current % 26)) + result;
+      current = Math.floor(current / 26);
+    }
+    return result || null;
+  }
+
+  function connectorNumberFromLetterSequence(sequence) {
+    const text = (sequence || '').trim().toUpperCase();
+    if (!text) {
+      return null;
+    }
+    let total = 0;
+    for (const char of text) {
+      if (char < 'A' || char > 'Z') {
+        return null;
+      }
+      total = total * 26 + (char.charCodeAt(0) - 64);
+    }
+    return total;
+  }
+
   function parseConnectorId(dataset) {
     if (!dataset) {
       return null;
@@ -396,11 +430,23 @@
       if (!Number.isNaN(numericId)) {
         return numericId;
       }
+      const letter = connectorLetterFromValue(numericId);
+      if (letter) {
+        return numericId;
+      }
     }
     if (typeof dataset.label === 'string') {
-      const match = dataset.label.match(/connector\s*(\d+)/i) || dataset.label.match(/^(\d+)$/);
-      if (match) {
-        const numericId = Number(match[1]);
+      const trimmed = dataset.label.trim();
+      const letterMatch = trimmed.match(/connector\s*([A-Za-z]+)/i) || trimmed.match(/^([A-Za-z]+)$/);
+      if (letterMatch) {
+        const numericId = connectorNumberFromLetterSequence(letterMatch[1]);
+        if (numericId !== null) {
+          return numericId;
+        }
+      }
+      const numberMatch = trimmed.match(/connector\s*(\d+)/i) || trimmed.match(/^(\d+)$/);
+      if (numberMatch) {
+        const numericId = Number(numberMatch[1]);
         if (!Number.isNaN(numericId)) {
           return numericId;
         }
@@ -421,12 +467,14 @@
   }
 
   function datasetKey(dataset, index) {
-    if (
-      dataset &&
-      dataset.connector_id !== undefined &&
-      dataset.connector_id !== null
-    ) {
-      return `connector-${dataset.connector_id}`;
+    if (dataset) {
+      if (dataset.connector_id !== undefined && dataset.connector_id !== null) {
+        const letter = connectorLetterFromValue(dataset.connector_id);
+        if (letter) {
+          return `connector-${letter}`;
+        }
+        return `connector-${dataset.connector_id}`;
+      }
     }
     if (dataset && typeof dataset.label === 'string') {
       const trimmed = dataset.label.trim();
@@ -491,7 +539,12 @@
         dataset.connector_id !== undefined &&
         dataset.connector_id !== null
       ) {
-        label = `Connector ${dataset.connector_id}`;
+        const connectorLetter = connectorLetterFromValue(dataset.connector_id);
+        if (connectorLetter) {
+          label = `Connector ${connectorLetter}`;
+        } else {
+          label = `Connector ${dataset.connector_id}`;
+        }
       } else {
         label = `Dataset ${index + 1}`;
       }
