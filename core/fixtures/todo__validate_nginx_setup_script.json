@@ -1,0 +1,12 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Exercise nginx-setup.sh after installation",
+      "url": "",
+      "request_details": "After completing a role-based ./install.sh run (e.g., --control), execute ./nginx-setup.sh and verify it renders /etc/nginx/sites-enabled/arthexis.conf for the recorded role, copies maintenance assets, and that sudo nginx -t succeeds.",
+      "done_on": null,
+      "is_deleted": false
+    }
+  }
+]

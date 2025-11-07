@@ -5,8 +5,6 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PIP_INSTALL_HELPER="$SCRIPT_DIR/scripts/helpers/pip_install.py"
 # shellcheck source=scripts/helpers/logging.sh
 . "$SCRIPT_DIR/scripts/helpers/logging.sh"
-# shellcheck source=scripts/helpers/nginx_maintenance.sh
-. "$SCRIPT_DIR/scripts/helpers/nginx_maintenance.sh"
 # shellcheck source=scripts/helpers/desktop_shortcuts.sh
 . "$SCRIPT_DIR/scripts/helpers/desktop_shortcuts.sh"
 # shellcheck source=scripts/helpers/version_marker.sh
@@ -326,45 +324,9 @@ if [ ! -d .venv ]; then
     python3 -m venv .venv
 fi
 
-# Install nginx configuration and reload
+echo "$PORT" > "$LOCK_DIR/backend_port.lck"
 echo "$NGINX_MODE" > "$LOCK_DIR/nginx_mode.lck"
 echo "$NODE_ROLE" > "$LOCK_DIR/role.lck"
-NGINX_CONF="/etc/nginx/sites-enabled/arthexis.conf"
-
-# Ensure nginx config directory exists
-sudo mkdir -p /etc/nginx/sites-enabled
-
-# Remove existing nginx configs for arthexis* (run in root shell to expand wildcard)
-sudo sh -c 'rm -f /etc/nginx/sites-enabled/arthexis*.conf'
-# Clean up legacy locations when present
-sudo sh -c 'rm -f /etc/nginx/conf.d/arthexis-*.conf' || true
-
-FALLBACK_SRC_DIR="$BASE_DIR/config/data/nginx/maintenance"
-FALLBACK_DEST_DIR="/usr/share/arthexis-fallback"
-if [ -d "$FALLBACK_SRC_DIR" ]; then
-    sudo mkdir -p "$FALLBACK_DEST_DIR"
-    sudo cp -r "$FALLBACK_SRC_DIR"/. "$FALLBACK_DEST_DIR"/
-fi
-
-NGINX_RENDERER="$SCRIPT_DIR/scripts/helpers/render_nginx_default.py"
-if ! sudo python3 "$NGINX_RENDERER" \
-    --mode "$NGINX_MODE" \
-    --port "$PORT" \
-    --dest "$NGINX_CONF"; then
-    echo "Failed to render nginx configuration" >&2
-    exit 1
-fi
-
-if arthexis_can_manage_nginx; then
-    arthexis_refresh_nginx_maintenance "$SCRIPT_DIR" "$NGINX_CONF"
-fi
-
-if arthexis_ensure_nginx_in_path && command -v nginx >/dev/null 2>&1; then
-    sudo nginx -t
-    sudo systemctl reload nginx || echo "Warning: nginx reload failed"
-else
-    echo "nginx not installed; skipping nginx test and reload"
-fi
 
 source .venv/bin/activate
 pip install --upgrade pip

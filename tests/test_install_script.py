@@ -37,15 +37,6 @@ def test_install_script_excludes_particle_flag():
 
 
 
-
-
-def test_install_script_renders_nginx_config_with_helper():
-    script_path = Path(__file__).resolve().parent.parent / "install.sh"
-    content = script_path.read_text()
-    assert "render_nginx_default.py" in content
-    assert "PORT_PLACEHOLDER" not in content
-
-
 def test_install_script_runs_env_refresh():
     script_path = Path(__file__).resolve().parent.parent / "install.sh"
     content = script_path.read_text()
@@ -103,3 +94,17 @@ def test_install_script_checks_rfid_for_control_nodes():
     content = script_path.read_text()
     assert "python -m ocpp.rfid.detect" in content
     assert "rfid-scanner" in content
+
+
+def test_install_script_defers_nginx_configuration():
+    script_path = Path(__file__).resolve().parent.parent / "install.sh"
+    content = script_path.read_text()
+    assert "render_nginx_default.py" not in content
+
+
+def test_nginx_setup_script_renders_nginx_config_with_helper():
+    script_path = Path(__file__).resolve().parent.parent / "nginx-setup.sh"
+    content = script_path.read_text()
+    assert "render_nginx_default.py" in content
+    assert "backend_port.lck" in content
+    assert "nginx_mode.lck" in content
