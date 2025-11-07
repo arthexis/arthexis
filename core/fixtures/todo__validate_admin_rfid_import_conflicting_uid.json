@@ -1,0 +1,10 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate RFID import merges conflicting UID entries",
+      "url": "/admin/core/rfid/import/",
+      "request_details": "Import an RFID CSV that reuses an existing UID with a different label and confirm the import updates the existing record without raising a duplicate UID error."
+    }
+  }
+]

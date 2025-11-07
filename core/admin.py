@@ -2754,6 +2754,31 @@ class RFIDResource(resources.ModelResource):
         account_column = account_column_for_field(account_field)
         self.fields["energy_accounts"].column_name = account_column
 
+    def get_instance(self, instance_loader, row):
+        instance = super().get_instance(instance_loader, row)
+        if instance is not None:
+            return instance
+
+        rfid_field = self.fields.get("rfid")
+        if rfid_field is None:
+            return None
+
+        raw_value = row.get(rfid_field.column_name)
+        normalized = RFID.normalize_code(str(raw_value or ""))
+        if not normalized:
+            return None
+
+        existing = RFID.find_match(normalized)
+        if existing is None:
+            return None
+
+        label_field = self.fields.get("label_id")
+        if label_field is not None:
+            row[label_field.column_name] = str(existing.pk)
+
+        row[rfid_field.column_name] = normalized
+        return existing
+
     def get_queryset(self):
         manager = getattr(self._meta.model, "all_objects", None)
         if manager is not None:
