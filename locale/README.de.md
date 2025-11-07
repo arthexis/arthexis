@@ -108,7 +108,7 @@ Terminal-Knoten können direkt mit den untenstehenden Skripten ohne Installation
      - `--terminal` – Standard, wenn nicht angegeben, und empfohlen, wenn du unsicher bist. Terminal-Knoten können auch ohne Installation über die obigen Skripte gestartet/gestoppt werden.
      - `--control` – Bereitet das Einzelgerätetest-System vor.
      - `--satellite` – Konfiguriert den Edge-Knoten zur Datenerfassung.
-     - `--constellation` – Aktiviert den Multiuser-Orchestrierungsstack.
+     - `--watchtower` – Aktiviert den Multiuser-Orchestrierungsstack.
    - `./install.sh --help` zeigt alle verfügbaren Optionen, falls du die Konfiguration über die Rollenvorgaben hinaus anpassen möchtest.
    - Aktualisieren mit [`./upgrade.sh`](upgrade.sh).
    - Lies das [Manual zu Installations- & Lifecycle-Skripten](docs/development/install-lifecycle-scripts-manual.md) für vollständige Flag-Beschreibungen und Betriebsdetails.
