@@ -15,6 +15,9 @@
     {% with current_method=form.auth_method.value|default:'password' %}
     <form method="post" novalidate data-auth-form>
       {% csrf_token %}
+      {% if login_check_mode %}
+      <input type="hidden" name="check" value="1">
+      {% endif %}
       {% if form.non_field_errors %}
       <div class="alert alert-danger" role="alert">
         {% for error in form.non_field_errors %}{{ error }}{% if not forloop.last %}<br>{% endif %}{% endfor %}
@@ -31,6 +34,7 @@
           autocomplete="username"
           required
           autofocus
+          {% if username_readonly %}readonly aria-readonly="true"{% endif %}
         >
         {% for error in form.username.errors %}
         <div class="invalid-feedback">{{ error }}</div>

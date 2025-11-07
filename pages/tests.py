@@ -215,12 +215,29 @@ class LoginViewTests(TestCase):
         resp = self.client.get(reverse("pages:login"))
         self.assertRedirects(resp, reverse("admin:index"))
 
+    def test_login_check_allows_authenticated_user(self):
+        self.client.force_login(self.staff)
+        resp = self.client.get(reverse("pages:login") + "?check=1")
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, '<input type="hidden" name="check" value="1">', html=True)
+        self.assertContains(resp, 'value="staff"')
+        self.assertContains(resp, 'readonly aria-readonly="true"')
+
     def test_regular_user_redirects_next(self):
         resp = self.client.post(
             reverse("pages:login") + "?next=/nodes/list/",
             {"username": "user", "password": "pwd"},
         )
         self.assertRedirects(resp, "/nodes/list/")
+
+    def test_admin_password_change_includes_test_password_link(self):
+        self.client.force_login(self.staff)
+        resp = self.client.get(reverse("admin:password_change"))
+        test_url = f"{reverse('pages:login')}?check=1"
+
+        self.assertContains(resp, f'href="{test_url}"')
+        self.assertContains(resp, "Test my current password")
 
     def test_login_page_shows_rfid_link_when_feature_enabled(self):
         self._enable_rfid_scanner()
