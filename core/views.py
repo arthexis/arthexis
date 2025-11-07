@@ -470,8 +470,59 @@ def _resolve_release_log_dir(preferred: Path) -> tuple[Path, str | None]:
     return fallback, warning
 
 
+def _commit_todo_fixtures_if_needed(log_path: Path) -> None:
+    """Stage and commit modified TODO fixtures before syncing with origin/main."""
+
+    try:
+        status = subprocess.run(
+            ["git", "status", "--porcelain"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except subprocess.CalledProcessError:
+        return
+
+    todo_paths: set[Path] = set()
+    for line in (status.stdout or "").splitlines():
+        if not line:
+            continue
+        path_fragment = line[3:].strip()
+        if "->" in path_fragment:
+            path_fragment = path_fragment.split("->", 1)[1].strip()
+        path = Path(path_fragment)
+        if path.suffix == ".json" and path.parent == Path("core/fixtures"):
+            if path.name.startswith("todo__"):
+                todo_paths.add(path)
+
+    if not todo_paths:
+        return
+
+    sorted_paths = sorted(todo_paths)
+    subprocess.run(
+        ["git", "add", *[str(path) for path in sorted_paths]],
+        check=True,
+    )
+    formatted = ", ".join(_format_path(path) for path in sorted_paths)
+    _append_log(log_path, f"Staged TODO fixtures {formatted}")
+
+    diff = subprocess.run(
+        ["git", "diff", "--cached", "--name-only", "--", *[str(path) for path in sorted_paths]],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    if (diff.stdout or "").strip():
+        message = "chore: update TODO fixtures"
+        subprocess.run(["git", "commit", "-m", message], check=True)
+        _append_log(log_path, f"Committed TODO fixtures ({message})")
+
+
 def _sync_with_origin_main(log_path: Path) -> None:
     """Ensure the current branch is rebased onto ``origin/main``."""
+
+    _commit_todo_fixtures_if_needed(log_path)
 
     if not _has_remote("origin"):
         _append_log(log_path, "No git remote configured; skipping sync with origin/main")
