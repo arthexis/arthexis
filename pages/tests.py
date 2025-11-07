@@ -57,6 +57,7 @@ from core import mailer
 from core.admin import ProfileAdminMixin
 from core.models import (
     AdminHistory,
+    ClientReport,
     InviteLead,
     Package,
     Reference,
@@ -4042,8 +4043,30 @@ class ClientReportLiveUpdateTests(TestCase):
 
     def test_client_report_includes_interval(self):
         resp = self.client.get(reverse("pages:client-report"))
-        self.assertEqual(resp.context["request"].live_update_interval, 5)
+        self.assertEqual(resp.wsgi_request.live_update_interval, 5)
         self.assertContains(resp, "setInterval(() => location.reload()")
+
+    def test_client_report_download_disables_refresh(self):
+        User = get_user_model()
+        user = User.objects.create_user(username="download-user", password="pwd")
+        report = ClientReport.objects.create(
+            start_date=date(2024, 1, 1),
+            end_date=date(2024, 1, 2),
+            data={},
+            owner=user,
+            disable_emails=True,
+            language="en",
+            title="",
+        )
+
+        self.client.force_login(user)
+        resp = self.client.get(
+            reverse("pages:client-report"), {"download": report.pk}
+        )
+
+        self.assertIsNone(getattr(resp.wsgi_request, "live_update_interval", None))
+        self.assertContains(resp, "report-download-frame")
+        self.assertNotContains(resp, "setInterval(() => location.reload()")
 
 
 class ScreenshotSpecInfrastructureTests(TestCase):
