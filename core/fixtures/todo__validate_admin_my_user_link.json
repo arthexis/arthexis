@@ -4,7 +4,7 @@
     "fields": {
       "request": "Validate admin My User link fallback",
       "url": "/admin/",
-      "request_details": "Log into the Django admin with a staff account that lacks Teams permissions, click the My User link in the header, and confirm it opens the Core user profile instead of a 404 error.",
+      "request_details": "Log into the Django admin with a staff account that lacks Teams permissions and confirm the My User link is hidden to avoid 404s. Repeat with a superuser to ensure the link opens their profile without a 404.",
       "version": "0.1.28"
     }
   }

@@ -44,7 +44,7 @@ class AdminProfileLinkTests(TestCase):
         self.assertContains(response, expected_label)
         self.assertContains(response, f'href="{expected_url}"')
 
-    def test_profile_link_falls_back_to_core_admin_without_teams_permissions(self):
+    def test_profile_link_hidden_without_teams_permissions(self):
         User = get_user_model()
         staff_user = User.objects.create_user(
             username="coreonly",
@@ -62,6 +62,18 @@ class AdminProfileLinkTests(TestCase):
 
         response = self.client.get(reverse("admin:index"))
 
-        unexpected_url = reverse("admin:teams_user_change", args=[staff_user.pk])
-        self.assertNotContains(response, f'href="{unexpected_url}"')
+        self.assertNotContains(response, "My User")
+
+    def test_profile_link_hidden_without_user_permissions(self):
+        User = get_user_model()
+        staff_user = User.objects.create_user(
+            username="nouserperms",
+            email="nouserperms@example.com",
+            password="password",
+            is_staff=True,
+        )
+        self.client.force_login(staff_user)
+
+        response = self.client.get(reverse("admin:index"))
+
         self.assertNotContains(response, "My User")

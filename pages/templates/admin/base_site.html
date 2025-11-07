@@ -808,25 +808,9 @@ body.user-story-open {
       <a href="{{ docsroot }}">{% trans 'Documentation' %}</a> /
     {% endif %}
     {% if user.pk %}
-      {% if perms.core.change_user or perms.core.view_user or perms.teams.change_user or perms.teams.view_user or perms.auth.change_user or perms.auth.view_user %}
-        {% with profile_url='' %}
-          {% if perms.teams.change_user or perms.teams.view_user %}
-            {% safe_admin_url 'admin:teams_user_change' user.pk as profile_url %}
-          {% endif %}
-          {% if not profile_url %}
-            {% if perms.core.change_user or perms.core.view_user %}
-              {% safe_admin_url 'admin:core_user_change' user.pk as profile_url %}
-            {% endif %}
-          {% endif %}
-          {% if not profile_url %}
-            {% if perms.auth.change_user or perms.auth.view_user %}
-              {% safe_admin_url 'admin:auth_user_change' user.pk as profile_url %}
-            {% endif %}
-          {% endif %}
-          {% if profile_url %}
-            <a href="{{ profile_url }}">{% trans 'My User' %}</a> /
-          {% endif %}
-        {% endwith %}
+      {% admin_profile_url user as profile_url %}
+      {% if profile_url %}
+        <a href="{{ profile_url }}">{% trans 'My User' %}</a> /
       {% endif %}
     {% endif %}
   {% endif %}

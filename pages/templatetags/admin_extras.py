@@ -39,6 +39,78 @@ def safe_admin_url(view_name: str, *args, **kwargs) -> str:
         return ""
 
 
+def _admin_model_instance(model_admin, request, user):
+    model = model_admin.model
+    if isinstance(user, model):
+        return user
+    try:
+        queryset = model_admin.get_queryset(request)
+    except Exception:
+        queryset = model._default_manager.all()
+    try:
+        return queryset.get(pk=user.pk)
+    except model.DoesNotExist:
+        return None
+
+
+def _admin_has_access(model_admin, request, obj):
+    if hasattr(model_admin, "has_view_or_change_permission"):
+        if model_admin.has_view_or_change_permission(request, obj=obj):
+            return True
+    else:
+        has_change = getattr(model_admin, "has_change_permission", None)
+        if has_change and has_change(request, obj):
+            return True
+        has_view = getattr(model_admin, "has_view_permission", None)
+        if has_view and has_view(request, obj):
+            return True
+    return False
+
+
+def _admin_change_url(model, user):
+    opts = model._meta
+    return reverse(f"admin:{opts.app_label}_{opts.model_name}_change", args=[user.pk])
+
+
+@register.simple_tag(takes_context=True)
+def admin_profile_url(context, user) -> str:
+    """Return the first accessible admin change URL for the given user."""
+
+    request = context.get("request")
+    if request is None or user is None or not getattr(user, "pk", None):
+        return ""
+
+    candidate_models = (
+        ("teams", "User"),
+        ("core", "User"),
+        ("auth", "User"),
+    )
+
+    for app_label, model_name in candidate_models:
+        try:
+            model = apps.get_model(app_label, model_name)
+        except LookupError:
+            continue
+
+        model_admin = admin.site._registry.get(model)
+        if not model_admin:
+            continue
+
+        obj = _admin_model_instance(model_admin, request, user)
+        if obj is None:
+            continue
+
+        if not _admin_has_access(model_admin, request, obj):
+            continue
+
+        try:
+            return _admin_change_url(model_admin.model, user)
+        except NoReverseMatch:
+            continue
+
+    return ""
+
+
 USER_DATA_MODELS_CACHE_KEY = "pages:future_action_items:user_data_models"
 USER_DATA_MODELS_CACHE_TIMEOUT = getattr(settings, "USER_DATA_MODELS_CACHE_TIMEOUT", 300)
 
