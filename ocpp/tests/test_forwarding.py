@@ -20,7 +20,7 @@ from websocket import WebSocketException
 
 class ForwardingTaskTests(TestCase):
     def setUp(self):
-        self.role = NodeRole.objects.create(name="Terminal")
+        self.role, _ = NodeRole.objects.get_or_create(name="Terminal")
         self.local = Node.objects.create(
             hostname="local",
             address="127.0.0.1",
@@ -129,7 +129,7 @@ class ForwardingTaskTests(TestCase):
 
 class ForwardingViewTests(TestCase):
     def setUp(self):
-        self.role = NodeRole.objects.create(name="Hub")
+        self.role, _ = NodeRole.objects.get_or_create(name="Hub")
         self.remote = Node.objects.create(
             hostname="remote",
             address="203.0.113.5",

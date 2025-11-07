@@ -190,7 +190,7 @@ def purge_meter_values() -> int:
 purge_meter_readings = purge_meter_values
 
 
-@shared_task
+@shared_task(rate_limit="1/10m")
 def push_forwarded_charge_points() -> int:
     """Ensure websocket connections exist for forwarded charge points."""
 
