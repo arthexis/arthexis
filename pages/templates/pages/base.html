@@ -177,21 +177,83 @@
         width: 100%;
         border-collapse: collapse;
         margin-bottom: 1.5rem;
+        border-radius: 0.85rem;
+        overflow: hidden;
+        box-shadow: 0 1.25rem 2.5rem rgba(15, 23, 42, 0.12);
+        transition: box-shadow 0.2s ease;
+      }
+      .markdown-body table:hover,
+      .markdown-body table:focus-within {
+        box-shadow: 0 1.6rem 3.2rem rgba(15, 23, 42, 0.18);
       }
       .markdown-body th,
       .markdown-body td {
-        padding: 0.5rem 0.75rem;
-        border: 1px solid var(--bs-border-color-translucent, rgba(108, 117, 125, 0.3));
+        padding: 0.65rem 1rem;
+        border: 1px solid var(--bs-border-color-translucent, rgba(108, 117, 125, 0.25));
+      }
+      html[data-bs-theme='light'] .markdown-body table {
+        background: linear-gradient(180deg, rgba(248, 249, 250, 0.95), rgba(255, 255, 255, 0.98));
+      }
+      html[data-bs-theme='dark'] .markdown-body table {
+        background: linear-gradient(180deg, rgba(15, 23, 42, 0.66), rgba(15, 23, 42, 0.82));
       }
       html[data-bs-theme='light'] .markdown-body th {
-        background-color: rgba(0, 0, 0, 0.02);
+        background-color: rgba(0, 0, 0, 0.04);
       }
       html[data-bs-theme='dark'] .markdown-body th {
-        background-color: rgba(255, 255, 255, 0.04);
+        background-color: rgba(255, 255, 255, 0.08);
       }
       html[data-bs-theme='dark'] .markdown-body th,
       html[data-bs-theme='dark'] .markdown-body td {
-        border-color: rgba(255, 255, 255, 0.12);
+        border-color: rgba(255, 255, 255, 0.14);
+      }
+      html[data-bs-theme='light'] .markdown-body tbody tr:nth-of-type(odd) td {
+        background-color: rgba(0, 0, 0, 0.02);
+      }
+      html[data-bs-theme='dark'] .markdown-body tbody tr:nth-of-type(odd) td {
+        background-color: rgba(255, 255, 255, 0.04);
+      }
+      .markdown-body table caption {
+        caption-side: top;
+        padding: 1rem;
+        font-weight: 600;
+        text-align: left;
+        letter-spacing: 0.01em;
+      }
+      .markdown-body thead th {
+        font-weight: 600;
+        font-size: 0.85rem;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      .markdown-body tbody td:first-child {
+        font-weight: 500;
+      }
+      @media (max-width: 991.98px) {
+        .markdown-body table {
+          display: block;
+          overflow-x: auto;
+          white-space: nowrap;
+          -webkit-overflow-scrolling: touch;
+          border-radius: 1rem;
+          box-shadow: 0 1.5rem 3.25rem rgba(15, 23, 42, 0.2);
+        }
+        .markdown-body table::-webkit-scrollbar {
+          height: 0.45rem;
+        }
+        .markdown-body table::-webkit-scrollbar-thumb {
+          background-color: rgba(108, 117, 125, 0.5);
+          border-radius: 999px;
+        }
+        .markdown-body table:focus-visible {
+          outline: 0.2rem solid var(--bs-primary);
+          outline-offset: 0.35rem;
+        }
+        .markdown-body th,
+        .markdown-body td {
+          padding: 0.65rem 0.75rem;
+          min-width: 10.5rem;
+        }
       }
       .user-story-toggle {
         position: fixed;
