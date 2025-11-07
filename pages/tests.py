@@ -14,6 +14,7 @@ from django.shortcuts import resolve_url
 from django.templatetags.static import static
 from urllib.parse import quote
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Permission
 from django.contrib.sites.models import Site
 from django.contrib import admin, messages
 from django.contrib.messages.storage.fallback import FallbackStorage
@@ -29,6 +30,7 @@ from pages.models import (
     Module,
     RoleLanding,
     SiteBadge,
+    SiteProxy,
     Favorite,
     ViewHistory,
     LandingLead,
@@ -1627,6 +1629,57 @@ class SiteAdminRegisterCurrentTests(TestCase):
         self.assertRedirects(resp, reverse("admin:pages_siteproxy_changelist"))
         site = Site.objects.get(domain="127.0.0.1")
         self.assertEqual(site.name, "")
+
+
+class SiteAdminPermissionFallbackTests(TestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+        User = get_user_model()
+        self.staff = User.objects.create_user(
+            username="site-staff",
+            password="pwd",
+            email="staff@example.com",
+            is_staff=True,
+        )
+        self.site_admin = admin.site._registry[SiteProxy]
+        self.view_permission = Permission.objects.get(
+            codename="view_site",
+            content_type__app_label="sites",
+            content_type__model="site",
+        )
+        self.change_permission = Permission.objects.get(
+            codename="change_site",
+            content_type__app_label="sites",
+            content_type__model="site",
+        )
+
+    def _build_request(self):
+        request = self.factory.get("/admin/pages/siteproxy/")
+        request.user = self.staff
+        return request
+
+    def test_has_view_permission_allows_sites_permissions(self):
+        request = self._build_request()
+        self.assertFalse(self.site_admin.has_view_permission(request))
+
+        self.staff.user_permissions.add(self.view_permission)
+        User = get_user_model()
+        self.staff = User.objects.get(pk=self.staff.pk)
+        self.assertTrue(self.staff.has_perm("sites.view_site"))
+        request = self._build_request()
+        self.assertTrue(self.site_admin.has_view_permission(request))
+        self.assertTrue(self.site_admin.has_module_permission(request))
+
+    def test_has_change_permission_allows_sites_permissions(self):
+        request = self._build_request()
+        self.assertFalse(self.site_admin.has_change_permission(request))
+
+        self.staff.user_permissions.add(self.change_permission)
+        User = get_user_model()
+        self.staff = User.objects.get(pk=self.staff.pk)
+        self.assertTrue(self.staff.has_perm("sites.change_site"))
+        request = self._build_request()
+        self.assertTrue(self.site_admin.has_change_permission(request))
 
 
 @pytest.mark.feature("screenshot-poll")

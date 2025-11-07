@@ -150,6 +150,33 @@ class SiteAdmin(DjangoSiteAdmin):
                     messages.INFO,
                 )
 
+    def has_add_permission(self, request):
+        if super().has_add_permission(request):
+            return True
+        return request.user.has_perm("sites.add_site")
+
+    def has_change_permission(self, request, obj=None):
+        if super().has_change_permission(request, obj=obj):
+            return True
+        return request.user.has_perm("sites.change_site")
+
+    def has_delete_permission(self, request, obj=None):
+        if super().has_delete_permission(request, obj=obj):
+            return True
+        return request.user.has_perm("sites.delete_site")
+
+    def has_view_permission(self, request, obj=None):
+        if super().has_view_permission(request, obj=obj):
+            return True
+        return request.user.has_perm("sites.view_site") or request.user.has_perm(
+            "sites.change_site"
+        )
+
+    def has_module_permission(self, request):
+        if super().has_module_permission(request):
+            return True
+        return request.user.has_module_perms("sites")
+
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
         if {"managed", "require_https"} & set(form.changed_data or []):
