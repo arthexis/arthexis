@@ -94,9 +94,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if changed:
         print(f"Wrote nginx config to {args.dest}")
-        return 2
+    else:
+        print(f"nginx config at {args.dest} unchanged")
 
-    print(f"nginx config at {args.dest} unchanged")
     return 0
 
 
