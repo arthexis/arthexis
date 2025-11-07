@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from scripts.helpers.render_nginx_default import generate_config
@@ -41,3 +43,10 @@ def test_generate_config_can_include_ipv6():
     for listen in ("0.0.0.0:80", "0.0.0.0:8080", "[::]:80", "[::]:8080"):
         assert f"listen {listen};" in config
     assert "listen [::]:443 ssl;" in config
+
+
+def test_nginx_setup_script_removes_default_site():
+    script_path = Path(__file__).resolve().parent.parent / "nginx-setup.sh"
+    content = script_path.read_text()
+    assert "rm -f /etc/nginx/sites-enabled/default" in content
+    assert "rm -f /etc/nginx/sites-available/default" in content
