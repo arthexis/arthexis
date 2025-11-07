@@ -192,6 +192,65 @@ class ChargerStatusRFIDTests(TestCase):
         )
 
 
+class ChargerErrorDisplayTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.charger = Charger.objects.create(
+            charger_id="PUBLIC-ERR",
+            public_display=True,
+            language="en",
+        )
+        self.connector_ok = Charger.objects.create(
+            charger_id=self.charger.charger_id,
+            connector_id=1,
+            public_display=True,
+            language="en",
+            last_error_code="NoError",
+        )
+        self.connector_fault = Charger.objects.create(
+            charger_id=self.charger.charger_id,
+            connector_id=2,
+            public_display=True,
+            language="en",
+            last_error_code="GroundFault",
+        )
+
+    def test_landing_hides_placeholder_error_codes(self):
+        self.charger.last_error_code = "NoError"
+        self.charger.save(update_fields=["last_error_code"])
+
+        response = self.client.get(
+            reverse("charger-page", args=[self.charger.charger_id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        self.assertNotIn("NoError", content)
+        self.assertIn("GroundFault", content)
+
+    def test_status_view_hides_placeholder_error_codes(self):
+        user = get_user_model().objects.create_user(
+            username="public-error-owner",
+            email="owner@example.com",
+            password="test-password",
+        )
+        self.charger.owner_users.add(user)
+        self.connector_ok.owner_users.add(user)
+        self.connector_fault.owner_users.add(user)
+        self.charger.last_error_code = "NoError"
+        self.charger.save(update_fields=["last_error_code"])
+
+        self.client.force_login(user)
+        response = self.client.get(
+            reverse("charger-status", args=[self.charger.charger_id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        self.assertNotIn("NoError", content)
+        self.assertIn("GroundFault", content)
+
+
 class ChargerLogViewTests(TestCase):
     def setUp(self):
         self.client = Client()

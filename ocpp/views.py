@@ -233,6 +233,17 @@ def _connector_set(charger: Charger) -> list[Charger]:
     return siblings
 
 
+def _visible_error_code(value: str | None) -> str | None:
+    """Return ``value`` when it represents a real error code."""
+
+    normalized = str(value or "").strip()
+    if not normalized:
+        return None
+    if normalized.lower() in ERROR_OK_VALUES:
+        return None
+    return normalized
+
+
 def _visible_chargers(user):
     """Return chargers visible to ``user`` on public dashboards."""
 
@@ -371,7 +382,7 @@ def _connector_overview(
                 "status": state,
                 "color": color,
                 "last_status": sibling.last_status,
-                "last_error_code": sibling.last_error_code,
+                "last_error_code": _visible_error_code(sibling.last_error_code),
                 "last_status_timestamp": sibling.last_status_timestamp,
                 "last_status_vendor_info": sibling.last_status_vendor_info,
                 "tx": tx_obj,
@@ -1360,6 +1371,7 @@ def charger_page(request, cid, connector=None):
             "preferred_language": preferred_language,
             "state": state,
             "color": color,
+            "charger_error_code": _visible_error_code(charger.last_error_code),
         },
     )
 
@@ -1571,31 +1583,32 @@ def charger_status(request, cid, connector=None):
             "past_session": past_session,
             "connector_slug": connector_slug,
             "connector_links": connector_links,
-            "connector_overview": connector_overview,
-            "search_url": search_url,
-            "configuration_url": configuration_url,
-            "page_url": _reverse_connector_url("charger-page", cid, connector_slug),
-            "is_connected": is_connected,
-            "is_idle": is_connected and not has_active_session,
-            "can_remote_start": can_remote_start,
-            "remote_start_messages": remote_start_messages,
-            "action_url": action_url,
-            "show_chart": bool(
-                chart_data["datasets"]
-                and any(
-                    any(value is not None for value in dataset["values"])
-                    for dataset in chart_data["datasets"]
-                )
-            ),
-            "date_view": date_view,
-            "date_toggle_links": date_toggle_links,
-            "pagination_query": pagination_query,
-            "session_query": session_query,
-            "chart_should_animate": chart_should_animate,
-            "usage_timeline": usage_timeline,
-            "usage_timeline_window": usage_timeline_window,
-        },
-    )
+        "connector_overview": connector_overview,
+        "search_url": search_url,
+        "configuration_url": configuration_url,
+        "page_url": _reverse_connector_url("charger-page", cid, connector_slug),
+        "is_connected": is_connected,
+        "is_idle": is_connected and not has_active_session,
+        "can_remote_start": can_remote_start,
+        "remote_start_messages": remote_start_messages,
+        "action_url": action_url,
+        "show_chart": bool(
+            chart_data["datasets"]
+            and any(
+                any(value is not None for value in dataset["values"])
+                for dataset in chart_data["datasets"]
+            )
+        ),
+        "date_view": date_view,
+        "date_toggle_links": date_toggle_links,
+        "pagination_query": pagination_query,
+        "session_query": session_query,
+        "chart_should_animate": chart_should_animate,
+        "usage_timeline": usage_timeline,
+        "usage_timeline_window": usage_timeline_window,
+        "charger_error_code": _visible_error_code(charger.last_error_code),
+    },
+)
 
 
 @login_required
