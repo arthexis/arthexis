@@ -17,14 +17,21 @@ from scripts.helpers.nginx_config import (
     write_if_changed,
 )
 
-HTTP_LISTENS = (
+HTTP_IPV4_LISTENS = (
     "0.0.0.0:80",
-    "[::]:80",
     "0.0.0.0:8000",
-    "[::]:8000",
     "0.0.0.0:8080",
+)
+
+HTTP_IPV6_LISTENS = (
+    "[::]:80",
+    "[::]:8000",
     "[::]:8080",
 )
+
+HTTPS_IPV4_LISTENS = ("443 ssl",)
+
+HTTPS_IPV6_LISTENS = ("[::]:443 ssl",)
 
 
 def generate_config(
@@ -33,10 +40,19 @@ def generate_config(
     *,
     http_server_names: str | None = None,
     https_server_names: str | None = None,
+    include_ipv6: bool = False,
 ) -> str:
     mode = mode.lower()
     if mode not in {"internal", "public"}:
         raise ValueError(f"Unsupported mode: {mode}")
+
+    http_listens = list(HTTP_IPV4_LISTENS)
+    if include_ipv6:
+        http_listens.extend(HTTP_IPV6_LISTENS)
+
+    https_listens = list(HTTPS_IPV4_LISTENS)
+    if include_ipv6:
+        https_listens.extend(HTTPS_IPV6_LISTENS)
 
     if mode == "public":
         http_names = http_server_names or "arthexis.com *.arthexis.com _"
@@ -44,12 +60,13 @@ def generate_config(
         http_block = http_proxy_server(
             http_names,
             port,
-            HTTP_LISTENS,
+            http_listens,
             trailing_slash=False,
         )
         https_block = https_proxy_server(
             https_names,
             port,
+            listens=https_listens,
             trailing_slash=False,
         )
         return f"{http_block}\n\n{https_block}\n"
@@ -58,7 +75,7 @@ def generate_config(
     http_block = http_proxy_server(
         http_names,
         port,
-        HTTP_LISTENS,
+        http_listens,
         trailing_slash=False,
     )
     return f"{http_block}\n"
@@ -79,6 +96,11 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="Override server_name values for the HTTPS block",
     )
+    parser.add_argument(
+        "--ip6",
+        action="store_true",
+        help="Include IPv6 listeners in the rendered configuration",
+    )
 
     args = parser.parse_args(argv)
 
@@ -87,6 +109,7 @@ def main(argv: list[str] | None = None) -> int:
         args.port,
         http_server_names=args.http_server_names,
         https_server_names=args.https_server_names,
+        include_ipv6=args.ip6,
     )
 
     args.dest.parent.mkdir(parents=True, exist_ok=True)
