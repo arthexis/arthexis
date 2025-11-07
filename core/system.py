@@ -1245,6 +1245,7 @@ class PendingTodoForm(forms.ModelForm):
             "request",
             "request_details",
             "url",
+            "version",
             "generated_for_version",
             "generated_for_revision",
             "on_done_condition",
@@ -1259,6 +1260,7 @@ class PendingTodoForm(forms.ModelForm):
         for name in [
             "request",
             "url",
+            "version",
             "generated_for_version",
             "generated_for_revision",
         ]:

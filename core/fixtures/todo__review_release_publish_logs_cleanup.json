@@ -6,7 +6,8 @@
       "url": "",
       "request_details": "Run the clean_release_logs management command in production to confirm stale publish logs and lock files are cleared.",
       "done_on": null,
-      "is_deleted": false
+      "is_deleted": false,
+      "version": "0.1.28"
     }
   }
 ]

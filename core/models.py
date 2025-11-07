@@ -5016,6 +5016,7 @@ class Todo(Entity):
     """Tasks requested for the Release Manager."""
 
     request = models.CharField(max_length=255)
+    version = models.CharField(max_length=20, blank=True, default="")
     url = models.CharField(
         max_length=200, blank=True, default="", validators=[validate_relative_url]
     )
@@ -5097,6 +5098,10 @@ class Todo(Entity):
 
     def save(self, *args, **kwargs):
         created = self.pk is None
+        if created:
+            default_version = self._default_version()
+            if default_version and not (self.version or "").strip():
+                self.version = default_version
         tracked_fields = {
             "done_on",
             "done_node",
@@ -5202,6 +5207,40 @@ class Todo(Entity):
         self.done_revision = revision_value
         self.done_username = username_value
 
+    @staticmethod
+    def _default_version() -> str:
+        """Return the local version label used for TODO tracking."""
+
+        try:  # pragma: no cover - defensive import guard
+            from nodes.models import Node  # type: ignore
+        except Exception:  # pragma: no cover - nodes app unavailable
+            Node = None
+
+        version_value = ""
+        if Node is not None:
+            try:
+                node = Node.get_local()
+            except Exception:  # pragma: no cover - unable to resolve node
+                node = None
+            if node is not None:
+                version_value = (node.installed_version or "").strip()
+                if version_value:
+                    return version_value
+
+        version_path = Path(settings.BASE_DIR) / "VERSION"
+        try:
+            version_value = version_path.read_text(encoding="utf-8").strip()
+        except OSError:
+            version_value = ""
+
+        return version_value
+
+    @classmethod
+    def default_version(cls) -> str:
+        """Public helper returning the tracked version label."""
+
+        return cls._default_version()
+
     def _update_fixture_state(self) -> None:
         if not self.is_seed_data:
             return
@@ -5267,6 +5306,7 @@ class Todo(Entity):
         _assign("request", self.request or "")
         _assign("url", self.url or "")
         _assign("request_details", self.request_details or "")
+        _assign("version", self.version or "")
         _assign("done_version", self.done_version or "")
         _assign("done_revision", self.done_revision or "")
         _assign("done_username", self.done_username or "")

@@ -6,7 +6,8 @@
       "url": "/admin/django_celery_beat/periodictask/",
       "request_details": "Open the Celery periodic task admin and confirm there are no scheduled jobs for birthday greetings or similar notifications.",
       "done_on": null,
-      "is_deleted": false
+      "is_deleted": false,
+      "version": "0.1.28"
     }
   }
 ]

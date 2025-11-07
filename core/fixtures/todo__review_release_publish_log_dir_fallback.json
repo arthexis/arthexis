@@ -6,7 +6,8 @@
       "url": "",
       "request_details": "Attempt a publish in production after deploying the fallback fix to ensure release logs are written to the runtime log directory without triggering permission errors.",
       "done_on": null,
-      "is_deleted": false
+      "is_deleted": false,
+      "version": "0.1.28"
     }
   }
 ]

@@ -6,7 +6,8 @@
       "url": "/admin/ocpp/charger/",
       "request_details": "In the admin, create or locate a charger with transactions or meter values. Attempt to delete it and confirm the confirmation page redirects back with the message 'Purge charger data before deleting this charger.' instead of a 404 error. After purging the charger data via the admin action, verify the charger can be deleted successfully.",
       "done_on": null,
-      "is_deleted": false
+      "is_deleted": false,
+      "version": "0.1.28"
     }
   }
 ]

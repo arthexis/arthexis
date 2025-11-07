@@ -6,7 +6,8 @@
       "url": "/admin/ocpp/cpfirmwaredeployment/",
       "request_details": "Open the Django admin and confirm the CP Firmware Deployments changelist shows the updated Title Case name. Spot-check additional entries such as Nodes and Pending Net Messages to verify model names and their plurals remain Title Case throughout the admin navigation.",
       "done_on": null,
-      "is_deleted": false
+      "is_deleted": false,
+      "version": "0.1.28"
     }
   }
 ]

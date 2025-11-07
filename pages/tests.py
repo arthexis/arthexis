@@ -3240,6 +3240,20 @@ class FavoriteTests(TestCase):
         self.assertNotIn("Packages", labels)
         ContentType.objects.clear_cache()
 
+    def test_future_action_items_skip_outdated_todos(self):
+        from pages.templatetags.admin_extras import future_action_items
+
+        current = Todo.objects.create(request="Current task")
+        outdated = Todo.objects.create(request="Outdated task")
+        Todo.objects.filter(pk=outdated.pk).update(version="0.0.1")
+
+        response = self.client.get(reverse("admin:index"))
+        todos = future_action_items({"request": response.wsgi_request})["todos"]
+        labels = {item["label"] for item in todos}
+
+        self.assertIn(current.request, labels)
+        self.assertNotIn(outdated.request, labels)
+
     def test_future_action_items_limits_user_data_queries(self):
         from pages.templatetags import admin_extras
 
@@ -3322,6 +3336,30 @@ class FavoriteTests(TestCase):
         self.assertContains(
             resp, '<div class="todo-details">More info</div>', html=True
         )
+
+    def test_dashboard_hides_todos_for_previous_version(self):
+        todo = Todo.objects.create(request="Old task")
+        Todo.objects.filter(pk=todo.pk).update(version="0.1.0")
+
+        resp = self.client.get(reverse("admin:index"))
+
+        self.assertNotContains(resp, "Old task")
+
+    def test_dashboard_omits_todos_without_version(self):
+        todo = Todo.objects.create(request="No version task")
+        Todo.objects.filter(pk=todo.pk).update(version="")
+
+        resp = self.client.get(reverse("admin:index"))
+
+        self.assertNotContains(resp, "No version task")
+
+    def test_dashboard_shows_todos_for_future_version(self):
+        todo = Todo.objects.create(request="Future task")
+        Todo.objects.filter(pk=todo.pk).update(version="9.9.9")
+
+        resp = self.client.get(reverse("admin:index"))
+
+        self.assertContains(resp, "Future task")
 
     def test_dashboard_hides_completed_todos(self):
         todo = Todo.objects.create(request="Completed task")

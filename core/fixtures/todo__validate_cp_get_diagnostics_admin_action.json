@@ -6,7 +6,8 @@
       "url": "/admin/ocpp/charger/",
       "request_details": "Select a charger in the admin that reports a diagnostics location and run the Get diagnostics action. Confirm the action downloads the remote log into your work directory, presents a link to the stored file, and records the filesystem path. Repeat with a charger that lacks a diagnostics location to ensure a warning is shown without creating a file.",
       "done_on": null,
-      "is_deleted": false
+      "is_deleted": false,
+      "version": "0.1.28"
     }
   }
 ]

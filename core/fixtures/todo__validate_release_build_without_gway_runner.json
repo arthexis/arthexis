@@ -6,7 +6,8 @@
       "url": "",
       "request_details": "Run the package release flow on a staging node and confirm importing gway runner modules fails while the build and publish steps complete successfully.",
       "done_on": null,
-      "is_deleted": false
+      "is_deleted": false,
+      "version": "0.1.28"
     }
   }
 ]

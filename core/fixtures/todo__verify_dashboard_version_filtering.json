@@ -1,0 +1,13 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Verify release TODO version filtering",
+      "url": "/admin/",
+      "request_details": "Use the pending TODOs report to create a temporary task, set its version older than the current release, and confirm it is hidden from the dashboard while current-version tasks remain visible.",
+      "version": "0.1.28",
+      "done_on": null,
+      "is_deleted": false
+    }
+  }
+]

@@ -6,7 +6,8 @@
       "url": "",
       "request_details": "Run the publish flow on the Linux service after deploying the sanitized build staging fix to ensure the distribution step succeeds even when runtime directories under the repository tree are not readable.",
       "done_on": null,
-      "is_deleted": false
+      "is_deleted": false,
+      "version": "0.1.28"
     }
   }
 ]

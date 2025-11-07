@@ -101,6 +101,7 @@ class AdminSystemViewTests(TestCase):
             request="Review API docs",
             request_details="Check the OAuth section",
         )
+        existing_version = todo_two.version
         url = reverse("admin:system-pending-todos-report")
         self.client.force_login(self.superuser)
 
@@ -113,6 +114,7 @@ class AdminSystemViewTests(TestCase):
             "todos-0-request": "Sync translation updates",
             "todos-0-request_details": "Ensure locale files include new strings.",
             "todos-0-url": "",
+            "todos-0-version": "2.0.0",
             "todos-0-generated_for_version": "1.2.3",
             "todos-0-generated_for_revision": "",
             "todos-0-on_done_condition": "",
@@ -121,6 +123,7 @@ class AdminSystemViewTests(TestCase):
             "todos-1-request": "Review API docs",
             "todos-1-request_details": "Check the OAuth section and callbacks.",
             "todos-1-url": "/docs/api/",
+            "todos-1-version": existing_version,
             "todos-1-generated_for_version": "",
             "todos-1-generated_for_revision": "rev-2",
             "todos-1-on_done_condition": "",
@@ -138,5 +141,7 @@ class AdminSystemViewTests(TestCase):
             "Ensure locale files include new strings.",
         )
         self.assertEqual(todo_one.generated_for_version, "1.2.3")
+        self.assertEqual(todo_one.version, "2.0.0")
         self.assertEqual(todo_two.generated_for_revision, "rev-2")
+        self.assertEqual(todo_two.version, existing_version)
         self.assertIsNone(todo_two.done_on)

@@ -4,7 +4,8 @@
     "fields": {
       "request": "Validate Slack Net Message command",
       "url": "",
-      "request_details": "From a node configured with a Slack Chatbot profile, run the /art slash command `net <subject> | <body>` in Slack. Confirm the command returns a confirmation, a Net Message entry is created in the admin Net Message history, and the bot posts the announcement in every configured Slack channel."
+      "request_details": "From a node configured with a Slack Chatbot profile, run the /art slash command `net <subject> | <body>` in Slack. Confirm the command returns a confirmation, a Net Message entry is created in the admin Net Message history, and the bot posts the announcement in every configured Slack channel.",
+      "version": "0.1.28"
     }
   }
 ]

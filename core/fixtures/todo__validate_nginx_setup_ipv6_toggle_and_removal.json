@@ -6,7 +6,8 @@
       "url": "",
       "request_details": "From a freshly configured node, run ./nginx-setup.sh --ip6 and confirm the rendered nginx config includes IPv6 listen directives without duplicating IPv4 entries. Afterwards execute ./nginx-setup.sh --remove to ensure all Arthexis nginx site configs are deleted and nginx -t && systemctl reload nginx succeed when the binary is available.",
       "done_on": null,
-      "is_deleted": false
+      "is_deleted": false,
+      "version": "0.1.28"
     }
   }
 ]

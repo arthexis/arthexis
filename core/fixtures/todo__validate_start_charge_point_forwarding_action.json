@@ -6,7 +6,8 @@
       "url": "/admin/nodes/node/",
       "request_details": "Open the Nodes admin changelist, select a remote node, and run the \"Start Charge Point Forwarding\" action. Confirm the page reloads without a 404, shows a success message, and that eligible chargers now list the selected node as their forwarding target.",
       "done_on": null,
-      "is_deleted": false
+      "is_deleted": false,
+      "version": "0.1.28"
     }
   }
 ]

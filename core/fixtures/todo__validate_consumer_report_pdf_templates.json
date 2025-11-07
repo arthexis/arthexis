@@ -5,7 +5,8 @@
       "request": "Validate consumer report PDF download and translations",
       "url": "/client-report/",
       "request_details": "Generate a consumer report without email delivery and confirm the browser only opens a single download (no repeated tabs or refresh loop). Download the PDF in Spanish, English, Italian, and German and verify the headings and labels match each language template.",
-      "is_deleted": false
+      "is_deleted": false,
+      "version": "0.1.28"
     }
   }
 ]

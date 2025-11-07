@@ -6,7 +6,8 @@
       "url": "/admin/core/todo/",
       "request_details": "Complete a TODO in a release candidate, upgrade a node to that release, and confirm the task is automatically marked done and no longer appears in the pending list on the node dashboard.",
       "done_on": null,
-      "is_deleted": false
+      "is_deleted": false,
+      "version": "0.1.28"
     }
   }
 ]
