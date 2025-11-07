@@ -8,6 +8,7 @@ from django.contrib.auth import get_user_model
 from django.test import RequestFactory, TestCase
 from django.urls import reverse
 from django.http import QueryDict
+from django.utils import timezone
 
 from core.models import OdooProfile
 from core.admin import (
@@ -178,6 +179,19 @@ class OdooProfileAdminActionTests(TestCase):
         self.assertEqual(response.status_code, 302)
         expected = reverse("admin:core_odooprofile_change", args=[self.profile.pk])
         self.assertEqual(response.url, expected)
+
+    def test_list_filter_includes_crm(self):
+        request = self._get_request()
+        self.assertIn("crm", self.admin.get_list_filter(request))
+
+    def test_credentials_ok_column(self):
+        self.assertFalse(self.admin.credentials_ok(self.profile))
+
+        self.profile.verified_on = timezone.now()
+        self.assertTrue(self.admin.credentials_ok(self.profile))
+
+        self.profile.password = ""
+        self.assertFalse(self.admin.credentials_ok(self.profile))
 
     @patch("core.models.OdooProfile.verify")
     def test_verify_credentials_action(self, mock_verify):

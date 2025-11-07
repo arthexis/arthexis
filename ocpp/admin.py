@@ -1103,6 +1103,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         "change_availability_inoperative",
         "set_availability_state_operative",
         "set_availability_state_inoperative",
+        "clear_authorization_cache",
         "remote_stop_transaction",
         "reset_chargers",
         "delete_selected",
@@ -2096,6 +2097,85 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
     @admin.action(description="Mark availability as Inoperative")
     def set_availability_state_inoperative(self, request, queryset):
         self._set_availability_state(request, queryset, "Inoperative")
+
+    @admin.action(description="Clear charger authorization cache")
+    def clear_authorization_cache(self, request, queryset):
+        cleared = 0
+        local_node = None
+        private_key = None
+        remote_unavailable = False
+        for charger in queryset:
+            if charger.is_local:
+                connector_value = charger.connector_id
+                ws = store.get_connection(charger.charger_id, connector_value)
+                if ws is None:
+                    self.message_user(
+                        request,
+                        f"{charger}: no active connection",
+                        level=messages.ERROR,
+                    )
+                    continue
+                message_id = uuid.uuid4().hex
+                msg = json.dumps([2, message_id, "ClearCache", {}])
+                try:
+                    async_to_sync(ws.send)(msg)
+                except Exception as exc:  # pragma: no cover - network error
+                    self.message_user(
+                        request,
+                        f"{charger}: failed to send ClearCache ({exc})",
+                        level=messages.ERROR,
+                    )
+                    continue
+                log_key = store.identity_key(charger.charger_id, connector_value)
+                store.add_log(log_key, f"< {msg}", log_type="charger")
+                requested_at = timezone.now()
+                store.register_pending_call(
+                    message_id,
+                    {
+                        "action": "ClearCache",
+                        "charger_id": charger.charger_id,
+                        "connector_id": connector_value,
+                        "log_key": log_key,
+                        "requested_at": requested_at,
+                    },
+                )
+                store.schedule_call_timeout(
+                    message_id,
+                    action="ClearCache",
+                    log_key=log_key,
+                )
+                cleared += 1
+                continue
+
+            if not charger.allow_remote:
+                self.message_user(
+                    request,
+                    f"{charger}: remote administration is disabled.",
+                    level=messages.ERROR,
+                )
+                continue
+            if remote_unavailable:
+                continue
+            if local_node is None:
+                local_node, private_key = self._prepare_remote_credentials(request)
+                if not local_node or not private_key:
+                    remote_unavailable = True
+                    continue
+            success, _updates = self._call_remote_action(
+                request,
+                local_node,
+                private_key,
+                charger,
+                "clear-cache",
+            )
+            if success:
+                cleared += 1
+
+        if cleared:
+            self.message_user(
+                request,
+                f"Sent ClearCache to {cleared} charger(s)",
+            )
 
     @admin.action(description="Remote stop active transaction")
     def remote_stop_transaction(self, request, queryset):

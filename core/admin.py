@@ -1952,7 +1952,8 @@ class SocialProfileAdmin(
 class OdooProfileAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdmin):
     change_form_template = "django_object_actions/change_form.html"
     form = OdooProfileAdminForm
-    list_display = ("owner", "host", "database", "verified_on")
+    list_display = ("owner", "host", "database", "credentials_ok", "verified_on")
+    list_filter = ("crm",)
     readonly_fields = ("verified_on", "odoo_uid", "name", "email")
     actions = ["verify_credentials"]
     change_actions = ["verify_credentials_action", "my_profile_action"]
@@ -1971,6 +1972,10 @@ class OdooProfileAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdm
         return obj.owner_display()
 
     owner.short_description = "Owner"
+
+    @admin.display(description=_("Credentials OK"), boolean=True)
+    def credentials_ok(self, obj):
+        return bool(obj.password) and obj.is_verified
 
     def _verify_credentials(self, request, profile):
         try:

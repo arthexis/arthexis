@@ -1,0 +1,12 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate charger ClearCache admin action",
+      "url": "/admin/ocpp/charger/",
+      "request_details": "Select a charger with an active OCPP connection in the admin and run the Clear charger authorization cache action. Confirm the charger log records the ClearCache request, the pending call resolves with the expected status, and the local authorization version resets to 0. Repeat with a disconnected charger to ensure the admin surfaces a helpful error without crashing.",
+      "done_on": null,
+      "is_deleted": false
+    }
+  }
+]

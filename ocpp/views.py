@@ -55,6 +55,7 @@ CALL_ACTION_LABELS = {
     "Reset": _("Reset"),
     "TriggerMessage": _("Trigger message"),
     "ReserveNow": _("Reserve connector"),
+    "ClearCache": _("Clear cache"),
 }
 
 CALL_EXPECTED_STATUSES: dict[str, set[str]] = {
@@ -66,6 +67,7 @@ CALL_EXPECTED_STATUSES: dict[str, set[str]] = {
     "Reset": {"Accepted"},
     "TriggerMessage": {"Accepted"},
     "ReserveNow": {"Accepted"},
+    "ClearCache": {"Accepted", "Rejected"},
 }
 
 
@@ -1970,6 +1972,11 @@ def dispatch_action(request, cid, connector=None):
         ocpp_action = "ChangeConfiguration"
         expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
         msg = json.dumps([2, message_id, "ChangeConfiguration", payload])
+    elif action == "clear_cache":
+        message_id = uuid.uuid4().hex
+        ocpp_action = "ClearCache"
+        expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
+        msg = json.dumps([2, message_id, "ClearCache", {}])
         async_to_sync(ws.send)(msg)
         requested_at = timezone.now()
         store.register_pending_call(

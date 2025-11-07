@@ -14,6 +14,21 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 django.setup()
 
 
+def test_read_remote_version_handles_missing_git(monkeypatch, tmp_path):
+    """_read_remote_version should return ``None`` when git is unavailable."""
+
+    from core import tasks
+
+    def _missing_git(*args, **kwargs):
+        raise FileNotFoundError("git not installed")
+
+    monkeypatch.setattr(tasks.subprocess, "check_output", _missing_git)
+
+    result = tasks._read_remote_version(tmp_path, "main")
+
+    assert result is None
+
+
 def test_check_github_updates_handles_mode_read_error(monkeypatch, tmp_path):
     """The auto-upgrade task should ignore unreadable mode lock files."""
 

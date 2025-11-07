@@ -1090,6 +1090,20 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 payload=payload_data,
             )
             return
+        if action == "ClearCache":
+            status_value = str(payload_data.get("status") or "").strip()
+            message = "ClearCache result"
+            if status_value:
+                message += f": status={status_value}"
+            store.add_log(log_key, message, log_type="charger")
+            version_int = 0 if status_value == "Accepted" else None
+            await self._update_local_authorization_state(version_int)
+            store.record_pending_call_result(
+                message_id,
+                metadata=metadata,
+                payload=payload_data,
+            )
+            return
         if action == "UpdateFirmware":
             deployment_pk = metadata.get("deployment_pk")
 
@@ -1385,6 +1399,35 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 )
 
             await database_sync_to_async(_apply)()
+            store.record_pending_call_result(
+                message_id,
+                metadata=metadata,
+                success=False,
+                error_code=error_code,
+                error_description=description,
+                error_details=details,
+            )
+            return
+        if action == "ClearCache":
+            parts: list[str] = []
+            code_text = (error_code or "").strip()
+            if code_text:
+                parts.append(f"code={code_text}")
+            description_text = (description or "").strip()
+            if description_text:
+                parts.append(f"description={description_text}")
+            if details:
+                try:
+                    details_text = json.dumps(details, sort_keys=True, ensure_ascii=False)
+                except TypeError:
+                    details_text = str(details)
+                if details_text:
+                    parts.append(f"details={details_text}")
+            message = "ClearCache error"
+            if parts:
+                message += ": " + ", ".join(parts)
+            store.add_log(log_key, message, log_type="charger")
+            await self._update_local_authorization_state(None)
             store.record_pending_call_result(
                 message_id,
                 metadata=metadata,

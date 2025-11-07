@@ -130,7 +130,8 @@ auto_realign_branch_for_role() {
   fi
 }
 
-FORCE=0
+LATEST=0
+FORCE_STOP=0
 CLEAN=0
 NO_RESTART=0
 REVERT=0
@@ -140,7 +141,11 @@ STABLE=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --latest)
-      FORCE=1
+      LATEST=1
+      shift
+      ;;
+    --force)
+      FORCE_STOP=1
       shift
       ;;
     --clean)
@@ -170,7 +175,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-if [[ $FORCE -eq 1 && $STABLE -eq 1 ]]; then
+if [[ $LATEST -eq 1 && $STABLE -eq 1 ]]; then
   echo "--stable cannot be used together with --latest." >&2
   exit 1
 fi
@@ -438,7 +443,7 @@ if git cat-file -e "origin/$BRANCH:VERSION" 2>/dev/null; then
   REMOTE_VERSION=$(git show "origin/$BRANCH:VERSION" | tr -d '\r')
 fi
 
-if [[ $FORCE -ne 1 ]]; then
+if [[ $LATEST -ne 1 ]]; then
   if [[ "$LOCAL_VERSION" == "$REMOTE_VERSION" ]]; then
     echo "Already up-to-date (version $LOCAL_VERSION)"
     exit 0
@@ -464,8 +469,16 @@ VENV_PRESENT=1
 # Stop running instance only if the node is installed
 if [[ $NO_RESTART -eq 0 && $VENV_PRESENT -eq 1 ]]; then
   echo "Stopping running instance..."
-  if ! ./stop.sh --all; then
-    echo "Upgrade aborted because active charging sessions are in progress. Resolve them or run ./stop.sh --force during a maintenance window before retrying." >&2
+  STOP_ARGS=(--all)
+  if [[ $FORCE_STOP -eq 1 ]]; then
+    STOP_ARGS+=(--force)
+  fi
+  if ! ./stop.sh "${STOP_ARGS[@]}"; then
+    if [[ $FORCE_STOP -eq 1 ]]; then
+      echo "Upgrade aborted even after forcing stop. Resolve active charging sessions before retrying." >&2
+    else
+      echo "Upgrade aborted because active charging sessions are in progress. Resolve them or rerun with --force during a maintenance window to apply --force to stop.sh before retrying." >&2
+    fi
     exit 1
   fi
 fi
@@ -502,7 +515,7 @@ fi
 
 # Refresh environment and restart service
 ENV_ARGS=""
-if [[ $FORCE -eq 1 ]]; then
+if [[ $LATEST -eq 1 ]]; then
   ENV_ARGS="--latest"
 fi
 echo "Refreshing environment..."

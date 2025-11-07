@@ -147,7 +147,7 @@ def _read_remote_version(base_dir: Path, branch: str) -> str | None:
             )
             .strip()
         )
-    except subprocess.CalledProcessError:  # pragma: no cover - git failure
+    except (subprocess.CalledProcessError, FileNotFoundError):  # pragma: no cover - git failure
         return None
 
 
