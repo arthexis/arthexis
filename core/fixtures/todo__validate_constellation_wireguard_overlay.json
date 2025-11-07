@@ -1,0 +1,13 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate Constellation WireGuard overlay provisioning",
+      "url": "",
+      "request_details": "Run network-setup.sh with the new --constellation flag pointing to a watchtower hub and verify that a Constellation IP appears on the node detail admin page. Confirm that the node-info API includes the Constellation IP and that peers can reach each other using the assigned overlay address.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.28"
+    }
+  }
+]
