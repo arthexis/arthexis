@@ -2253,7 +2253,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
             "action": "SetChargingProfile",
             "message_id": message_id,
             "charger_id": charger.charger_id,
-            "connector_id": charger.connector_id,
+            "connector_id": connector_value,
             "payload_connector_id": connector_value,
             "log_key": log_key,
             "profile": profile,

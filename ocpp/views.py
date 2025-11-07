@@ -1974,7 +1974,7 @@ def dispatch_action(request, cid, connector=None):
             "action": "SetChargingProfile",
             "message_id": message_id,
             "charger_id": cid,
-            "connector_id": connector_value,
+            "connector_id": connector_payload,
             "payload_connector_id": connector_payload,
             "log_key": log_key,
             "profile": sanitized_profile,
