@@ -45,6 +45,7 @@ from .reports import (
     iter_report_periods,
     resolve_period,
 )
+from .consumers import AUDIO_CAPTURE_SOCKET_PATH
 
 from core.admin import EmailOutboxAdminForm
 from .models import (
@@ -2145,6 +2146,7 @@ class NodeFeatureAdmin(EntityModelAdmin):
             **self.admin_site.each_context(request),
             "title": _("Audio Capture Waveform"),
             "feature": feature,
+            "socket_path": AUDIO_CAPTURE_SOCKET_PATH,
         }
         return TemplateResponse(
             request,

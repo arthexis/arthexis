@@ -15,9 +15,10 @@ else:  # pragma: no cover - fallback when pytest fixtures are unavailable
     django.setup()
 
 from pathlib import Path
+from array import array
 from types import MethodType, SimpleNamespace
 import unittest.mock as mock
-from unittest.mock import patch, call, MagicMock
+from unittest.mock import patch, call, MagicMock, AsyncMock
 from django.core import mail
 from django.core.cache import cache
 from django.core.mail import EmailMessage
@@ -62,8 +63,11 @@ from .classifiers import run_default_classifiers
 from .utils import capture_rpi_snapshot, capture_screenshot, save_screenshot
 from .feature_checks import feature_checks
 from django.db.utils import DatabaseError
+from channels.testing import WebsocketCommunicator
+from config.asgi import application
 
 from .admin import NodeAdmin
+from .consumers import AUDIO_CAPTURE_SOCKET_PATH, AudioCaptureConsumer
 from .models import (
     Node,
     EmailOutbox,
@@ -2452,7 +2456,15 @@ class NodeAdminTests(TestCase):
         response.render()
         self.assertEqual(response.context_data["feature"], feature)
         self.assertEqual(response.context_data["title"], "Audio Capture Waveform")
+        self.assertEqual(
+            response.context_data["socket_path"], AUDIO_CAPTURE_SOCKET_PATH
+        )
         self.assertContains(response, "audio-capture__canvas")
+        self.assertContains(
+            response,
+            f'data-socket-path="{AUDIO_CAPTURE_SOCKET_PATH}"',
+            html=False,
+        )
 
     @patch("nodes.admin.requests.post")
     def test_import_rfids_action_fetches_and_imports(self, mock_post):
@@ -4806,6 +4818,120 @@ class AudioCaptureFeatureCheckTests(TestCase):
         self.assertTrue(result.success)
         self.assertIn("recording device is available", result.message)
         self.assertEqual(result.level, messages.SUCCESS)
+
+
+class AudioCaptureConsumerTests(TransactionTestCase):
+    def _create_local_node(self):
+        return Node.objects.create(
+            hostname="localnode",
+            address="127.0.0.1",
+            port=8888,
+            mac_address=Node.get_current_mac(),
+        )
+
+    def _enable_feature(self):
+        node = self._create_local_node()
+        feature, _ = NodeFeature.objects.get_or_create(
+            slug="audio-capture", defaults={"display": "Audio Capture"}
+        )
+        NodeFeatureAssignment.objects.get_or_create(node=node, feature=feature)
+        return node, feature
+
+    @pytest.mark.feature("audio-capture")
+    async def test_consumer_requires_enabled_feature(self):
+        self._create_local_node()
+        NodeFeature.objects.get_or_create(
+            slug="audio-capture", defaults={"display": "Audio Capture"}
+        )
+        communicator = WebsocketCommunicator(application, AUDIO_CAPTURE_SOCKET_PATH)
+        connected, code = await communicator.connect()
+        self.assertFalse(connected)
+        self.assertEqual(code, 4403)
+
+    @pytest.mark.feature("audio-capture")
+    async def test_consumer_requires_device(self):
+        self._enable_feature()
+        with patch("nodes.consumers.Node._has_audio_capture_device", return_value=False):
+            communicator = WebsocketCommunicator(
+                application, AUDIO_CAPTURE_SOCKET_PATH
+            )
+            connected, code = await communicator.connect()
+        self.assertFalse(connected)
+        self.assertEqual(code, 4404)
+
+    @pytest.mark.feature("audio-capture")
+    async def test_consumer_requires_arecord_binary(self):
+        self._enable_feature()
+        with patch("nodes.consumers.Node._has_audio_capture_device", return_value=True):
+            with patch("nodes.consumers.shutil.which", return_value=None):
+                communicator = WebsocketCommunicator(
+                    application, AUDIO_CAPTURE_SOCKET_PATH
+                )
+                connected, code = await communicator.connect()
+        self.assertFalse(connected)
+        self.assertEqual(code, 4405)
+
+    @pytest.mark.feature("audio-capture")
+    async def test_consumer_streams_waveform_data(self):
+        self._enable_feature()
+
+        pattern = [0, 8192, -8192, 16384, -16384]
+        samples = array("h", pattern)
+        while len(samples) < AudioCaptureConsumer.CHUNK_SAMPLES:
+            samples.extend(pattern)
+        chunk = samples[: AudioCaptureConsumer.CHUNK_SAMPLES].tobytes()
+
+        class FakeStream:
+            def __init__(self, chunks):
+                self._chunks = list(chunks)
+
+            async def read(self, size):
+                if self._chunks:
+                    return self._chunks.pop(0)
+                return b""
+
+        class FakeProcess:
+            def __init__(self, chunks):
+                self.stdout = FakeStream(chunks)
+                self.stderr = FakeStream([])
+                self.returncode = None
+
+            async def wait(self):
+                self.returncode = 0
+
+            def terminate(self):
+                self.returncode = 0
+
+            def kill(self):
+                self.returncode = 0
+
+        fake_process = FakeProcess([chunk, b""])
+
+        with patch("nodes.consumers.Node._has_audio_capture_device", return_value=True), patch(
+            "nodes.consumers.shutil.which", return_value="/usr/bin/arecord"
+        ), patch(
+            "nodes.consumers.asyncio.create_subprocess_exec", AsyncMock(return_value=fake_process)
+        ):
+            communicator = WebsocketCommunicator(
+                application, AUDIO_CAPTURE_SOCKET_PATH
+            )
+            connected, _ = await communicator.connect()
+            self.assertTrue(connected)
+
+            status = await communicator.receive_json_from()
+            self.assertEqual(status.get("type"), "status")
+
+            waveform = await communicator.receive_json_from()
+            self.assertEqual(waveform.get("type"), "waveform")
+            self.assertEqual(
+                len(waveform.get("points", [])),
+                AudioCaptureConsumer.POINTS_PER_MESSAGE,
+            )
+
+            final = await communicator.receive_json_from()
+            self.assertEqual(final.get("type"), "status")
+
+            await communicator.disconnect()
 
 
 class CeleryReportAdminViewTests(TestCase):

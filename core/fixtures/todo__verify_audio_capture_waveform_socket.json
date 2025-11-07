@@ -1,0 +1,10 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Verify audio capture waveform stream",
+      "url": "/admin/nodes/nodefeature/view-waveform/",
+      "request_details": "On a node with Audio Capture enabled and a connected microphone, open the 'View Waveform' action in the admin. Confirm the waveform displays live samples delivered over the WebSocket connection and shows an error if the stream stops unexpectedly."
+    }
+  }
+]
