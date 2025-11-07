@@ -1,5 +1,5 @@
 {% extends "admin/base.html" %}
-{% load i18n static %}
+{% load i18n static admin_extras %}
 {% block dark-mode-vars %}
   <link rel="stylesheet" href="{% static "admin/css/dark_mode.css" %}">
   <script>
@@ -808,11 +808,21 @@ body.user-story-open {
       <a href="{{ docsroot }}">{% trans 'Documentation' %}</a> /
     {% endif %}
     {% if user.pk %}
-      {% if perms.core.change_user or perms.core.view_user or perms.teams.change_user or perms.teams.view_user %}
-        {% url 'admin:teams_user_change' user.pk as teams_profile_url %}
-        {% url 'admin:core_user_change' user.pk as core_profile_url %}
-        {% url 'admin:auth_user_change' user.pk as auth_profile_url %}
-        {% with profile_url=teams_profile_url|default:core_profile_url|default:auth_profile_url %}
+      {% if perms.core.change_user or perms.core.view_user or perms.teams.change_user or perms.teams.view_user or perms.auth.change_user or perms.auth.view_user %}
+        {% with profile_url='' %}
+          {% if perms.teams.change_user or perms.teams.view_user %}
+            {% safe_admin_url 'admin:teams_user_change' user.pk as profile_url %}
+          {% endif %}
+          {% if not profile_url %}
+            {% if perms.core.change_user or perms.core.view_user %}
+              {% safe_admin_url 'admin:core_user_change' user.pk as profile_url %}
+            {% endif %}
+          {% endif %}
+          {% if not profile_url %}
+            {% if perms.auth.change_user or perms.auth.view_user %}
+              {% safe_admin_url 'admin:auth_user_change' user.pk as profile_url %}
+            {% endif %}
+          {% endif %}
           {% if profile_url %}
             <a href="{{ profile_url }}">{% trans 'My User' %}</a> /
           {% endif %}

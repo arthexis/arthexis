@@ -1,0 +1,11 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate admin My User link fallback",
+      "url": "/admin/",
+      "request_details": "Log into the Django admin with a staff account that lacks Teams permissions, click the My User link in the header, and confirm it opens the Core user profile instead of a 404 error.",
+      "version": "0.1.28"
+    }
+  }
+]

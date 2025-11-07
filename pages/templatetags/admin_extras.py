@@ -29,6 +29,16 @@ from core.entity import Entity, user_data_flag_updated
 register = template.Library()
 
 
+@register.simple_tag
+def safe_admin_url(view_name: str, *args, **kwargs) -> str:
+    """Reverse an admin URL and gracefully handle missing patterns."""
+
+    try:
+        return reverse(view_name, args=args, kwargs=kwargs)
+    except NoReverseMatch:
+        return ""
+
+
 USER_DATA_MODELS_CACHE_KEY = "pages:future_action_items:user_data_models"
 USER_DATA_MODELS_CACHE_TIMEOUT = getattr(settings, "USER_DATA_MODELS_CACHE_TIMEOUT", 300)
 
