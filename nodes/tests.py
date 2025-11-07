@@ -91,6 +91,7 @@ from .tasks import (
     poll_unreachable_upstream,
     sample_clipboard,
 )
+from . import tasks as node_tasks
 from ocpp.models import Charger
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import serialization, hashes
@@ -4079,6 +4080,10 @@ class ConstellationUdpKickstartTests(TestCase):
             self.settings(CONSTELLATION_WG_PORT=53123),
             patch.object(Node, "get_local", return_value=local),
             patch(
+                "nodes.tasks._synchronize_constellation_udp_window",
+                return_value=1_700_000_000.0,
+            ) as sync_mock,
+            patch(
                 "nodes.tasks._iter_constellation_probe_addresses",
                 side_effect=fake_iter,
             ) as iter_mock,
@@ -4086,6 +4091,7 @@ class ConstellationUdpKickstartTests(TestCase):
         ):
             result = kickstart_constellation_udp()
 
+        self.assertGreaterEqual(sync_mock.call_count, 1)
         self.assertGreaterEqual(iter_mock.call_count, 1)
         self.assertGreaterEqual(probe_mock.call_count, 1)
         self.assertGreaterEqual(result, 1)
@@ -4093,6 +4099,38 @@ class ConstellationUdpKickstartTests(TestCase):
         targets = set(send_calls)
         self.assertIn((remote.constellation_ip, 53123), targets)
         self.assertNotIn((local.constellation_ip, 53123), targets)
+
+
+    def test_udp_probe_window_waits_for_next_interval(self):
+        time_values = iter([12.3, 15.0])
+        sleep_calls: list[float] = []
+
+        def fake_time() -> float:
+            return next(time_values)
+
+        def fake_sleep(duration: float) -> None:
+            sleep_calls.append(duration)
+
+        result = node_tasks._synchronize_constellation_udp_window(
+            5, now_func=fake_time, sleep_func=fake_sleep
+        )
+
+        self.assertEqual(len(sleep_calls), 1)
+        self.assertAlmostEqual(sleep_calls[0], 2.7, places=2)
+        self.assertEqual(result, 15.0)
+
+    def test_udp_probe_window_returns_immediately_when_aligned(self):
+        def fake_time() -> float:
+            return 60.0
+
+        def fake_sleep(_duration: float) -> None:
+            raise AssertionError("sleep should not be called when already aligned")
+
+        result = node_tasks._synchronize_constellation_udp_window(
+            30, now_func=fake_time, sleep_func=fake_sleep
+        )
+
+        self.assertEqual(result, 60.0)
 
 
 class NetMessageSignatureTests(TestCase):

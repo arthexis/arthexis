@@ -3,6 +3,9 @@ import ipaddress
 import json
 import logging
 import socket
+import time
+from collections.abc import Callable
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pyperclip
@@ -66,6 +69,32 @@ def _send_udp_probe(address: str, port: int) -> bool:
     return True
 
 
+def _synchronize_constellation_udp_window(
+    interval_seconds: int,
+    *,
+    now_func: Callable[[], float] = time.time,
+    sleep_func: Callable[[float], None] = time.sleep,
+) -> float:
+    """Wait until the next shared probe window and return the epoch timestamp."""
+
+    try:
+        interval = int(interval_seconds)
+    except (TypeError, ValueError):
+        interval = 30
+    if interval <= 0:
+        return now_func()
+
+    start = now_func()
+    remainder = start % interval
+    if remainder:
+        wait_seconds = interval - remainder
+        if wait_seconds > 0:
+            sleep_func(wait_seconds)
+            start = now_func()
+
+    return start
+
+
 @shared_task
 def kickstart_constellation_udp() -> int:
     """Probe constellation peers to encourage WireGuard synchronization."""
@@ -85,6 +114,13 @@ def kickstart_constellation_udp() -> int:
     local_pk = getattr(local, "pk", None)
     local_mac = (local.mac_address or "").strip().lower()
     local_ip = (local.constellation_ip or "").strip()
+
+    interval = getattr(
+        settings, "CONSTELLATION_UDP_PROBE_INTERVAL_SECONDS", 30
+    )
+    window_epoch = _synchronize_constellation_udp_window(interval)
+    window_label = datetime.fromtimestamp(window_epoch, tz=timezone.utc).isoformat()
+    logger.debug("Constellation UDP probe window reached at %s", window_label)
 
     queryset = Node.objects.filter(constellation_ip__isnull=False).order_by("pk")
     if local_pk is not None:
