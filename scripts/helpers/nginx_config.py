@@ -68,6 +68,19 @@ def _format_server_block(lines: Iterable[str]) -> str:
     return "\n".join(lines)
 
 
+def _unique_preserve_order(values: Iterable[str]) -> list[str]:
+    """Return *values* with duplicates removed while preserving order."""
+
+    seen: set[str] = set()
+    unique: list[str] = []
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        unique.append(value)
+    return unique
+
+
 def http_proxy_server(
     server_names: str,
     port: int,
@@ -80,7 +93,7 @@ def http_proxy_server(
         listens = ("80",)
 
     lines: list[str] = ["server {"]
-    for listen in listens:
+    for listen in _unique_preserve_order(listens):
         lines.append(f"    listen {listen};")
     lines.append(f"    server_name {server_names};")
     lines.append("")
@@ -97,7 +110,7 @@ def http_redirect_server(server_names: str, listens: Iterable[str] | None = None
         listens = ("80",)
 
     lines: list[str] = ["server {"]
-    for listen in listens:
+    for listen in _unique_preserve_order(listens):
         lines.append(f"    listen {listen};")
     lines.append(f"    server_name {server_names};")
     lines.append("    return 301 https://$host$request_uri;")
@@ -117,7 +130,7 @@ def https_proxy_server(
         listens = ("443 ssl",)
 
     lines: list[str] = ["server {"]
-    for listen in listens:
+    for listen in _unique_preserve_order(listens):
         lines.append(f"    listen {listen};")
     lines.append(f"    server_name {server_names};")
     lines.append("")

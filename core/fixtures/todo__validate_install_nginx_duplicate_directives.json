@@ -1,0 +1,12 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate install nginx.conf avoids duplicate directives",
+      "url": "",
+      "request_details": "Run ./install.sh --satellite on a clean system and confirm render_nginx_default.py completes without errors, nginx.conf contains each listen directive only once, and nginx -t succeeds without duplicate server warnings.",
+      "done_on": null,
+      "is_deleted": false
+    }
+  }
+]
