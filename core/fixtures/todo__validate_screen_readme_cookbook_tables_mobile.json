@@ -1,0 +1,13 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate screen README cookbook tables on mobile",
+      "url": "/read/docs/cookbooks/install-start-stop-upgrade-uninstall",
+      "request_details": "View the README cookbook page on a device or emulator at 768px width or smaller. Ensure markdown tables show the new striping, header styling, and horizontal scrolling without clipping content, and verify the desktop viewport remains unchanged when resizing back to a wide layout.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.28"
+    }
+  }
+]
