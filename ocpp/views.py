@@ -54,6 +54,7 @@ CALL_ACTION_LABELS = {
     "Reset": _("Reset"),
     "TriggerMessage": _("Trigger message"),
     "ReserveNow": _("Reserve connector"),
+    "ClearCache": _("Clear cache"),
 }
 
 CALL_EXPECTED_STATUSES: dict[str, set[str]] = {
@@ -64,6 +65,7 @@ CALL_EXPECTED_STATUSES: dict[str, set[str]] = {
     "Reset": {"Accepted"},
     "TriggerMessage": {"Accepted"},
     "ReserveNow": {"Accepted"},
+    "ClearCache": {"Accepted", "Rejected"},
 }
 
 
@@ -1921,6 +1923,28 @@ def dispatch_action(request, cid, connector=None):
             Charger.objects.filter(pk=charger_obj.pk).update(**updates)
             for field, value in updates.items():
                 setattr(charger_obj, field, value)
+    elif action == "clear_cache":
+        message_id = uuid.uuid4().hex
+        ocpp_action = "ClearCache"
+        expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
+        msg = json.dumps([2, message_id, "ClearCache", {}])
+        async_to_sync(ws.send)(msg)
+        requested_at = timezone.now()
+        store.register_pending_call(
+            message_id,
+            {
+                "action": "ClearCache",
+                "charger_id": cid,
+                "connector_id": connector_value,
+                "log_key": log_key,
+                "requested_at": requested_at,
+            },
+        )
+        store.schedule_call_timeout(
+            message_id,
+            action="ClearCache",
+            log_key=log_key,
+        )
     elif action == "data_transfer":
         vendor_id = data.get("vendorId")
         if not isinstance(vendor_id, str) or not vendor_id.strip():
