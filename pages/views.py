@@ -913,9 +913,29 @@ class CustomLoginView(LoginView):
     form_class = AuthenticatorLoginForm
 
     def dispatch(self, request, *args, **kwargs):
-        if request.user.is_authenticated:
+        allow_check = request.user.is_authenticated and (
+            "check" in request.GET or "check" in request.POST
+        )
+        self._login_check_mode = allow_check
+        if request.user.is_authenticated and not allow_check:
             return redirect(self.get_success_url())
         return super().dispatch(request, *args, **kwargs)
+
+    def get_form(self, form_class=None):
+        form = super().get_form(form_class)
+        if getattr(self, "_login_check_mode", False):
+            username = self.request.user.get_username()
+            if username:
+                form.fields["username"].initial = username
+            form.fields["username"].widget.attrs.setdefault("readonly", "readonly")
+            form.fields["username"].widget.attrs.setdefault("aria-readonly", "true")
+        return form
+
+    def get_initial(self):
+        initial = super().get_initial()
+        if getattr(self, "_login_check_mode", False):
+            initial.setdefault("username", self.request.user.get_username())
+        return initial
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -942,16 +962,20 @@ class CustomLoginView(LoginView):
                 "site_name": getattr(current_site, "name", ""),
                 "can_request_invite": mailer.can_send_email(),
                 "restricted_notice": restricted_notice,
+                "login_check_mode": getattr(self, "_login_check_mode", False),
+                "username_readonly": getattr(self, "_login_check_mode", False),
             }
         )
         node = Node.get_local()
         has_rfid_scanner = False
+        had_rfid_feature = False
         if node:
+            had_rfid_feature = node.has_feature("rfid-scanner")
             try:
                 node.refresh_features()
             except Exception:
                 logger.exception("Unable to refresh node features for login page")
-            has_rfid_scanner = node.has_feature("rfid-scanner")
+            has_rfid_scanner = node.has_feature("rfid-scanner") or had_rfid_feature
         context["show_rfid_login"] = has_rfid_scanner
         if has_rfid_scanner:
             context["rfid_login_url"] = reverse("pages:rfid-login")
