@@ -1,0 +1,12 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Confirm charger status page hides change configuration card",
+      "url": "/ocpp/c/<charger-id>/status/",
+      "request_details": "Open the public charger status page for a connected device and verify the Change configuration card no longer appears for staff or anonymous visitors. Confirm the Remote start card still renders when the charger is connected and idle.",
+      "done_on": null,
+      "is_deleted": false
+    }
+  }
+]

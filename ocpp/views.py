@@ -1543,7 +1543,6 @@ def charger_status(request, cid, connector=None):
         and not has_active_session
         and not past_session
     )
-    can_change_configuration = bool(is_connected and request.user.is_staff)
     remote_start_messages = None
     if can_remote_start:
         remote_start_messages = {
@@ -1551,14 +1550,6 @@ def charger_status(request, cid, connector=None):
             "sending": str(_("Sending remote start request...")),
             "success": str(_("Remote start command queued.")),
             "error": str(_("Unable to send remote start request.")),
-        }
-    change_configuration_messages = None
-    if can_change_configuration:
-        change_configuration_messages = {
-            "key_required": str(_("Configuration key is required.")),
-            "sending": str(_("Sending configuration update...")),
-            "success": str(_("Configuration change accepted.")),
-            "error": str(_("Unable to update configuration.")),
         }
     action_url = _reverse_connector_url("charger-action", cid, connector_slug)
     chart_should_animate = bool(has_active_session and not past_session)
@@ -1587,9 +1578,7 @@ def charger_status(request, cid, connector=None):
             "is_connected": is_connected,
             "is_idle": is_connected and not has_active_session,
             "can_remote_start": can_remote_start,
-            "can_change_configuration": can_change_configuration,
             "remote_start_messages": remote_start_messages,
-            "change_configuration_messages": change_configuration_messages,
             "action_url": action_url,
             "show_chart": bool(
                 chart_data["datasets"]
