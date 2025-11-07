@@ -1141,6 +1141,151 @@ class CSMSConsumerTests(TransactionTestCase):
         self.assertEqual(charger.availability_requested_state, "Inoperative")
         await communicator.disconnect()
 
+    async def test_clear_cache_result_updates_local_auth_version(self):
+        store.pending_calls.clear()
+        log_key = store.identity_key("CLEARCACHE", None)
+        store.clear_log(log_key, log_type="charger")
+        communicator = WebsocketCommunicator(application, "/CLEARCACHE/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        await communicator.send_json_to(
+            [
+                2,
+                "boot",
+                "BootNotification",
+                {"chargePointVendor": "Test", "chargePointModel": "Model"},
+            ]
+        )
+        await communicator.receive_json_from()
+
+        message_id = "cc-accepted"
+        requested_at = timezone.now()
+        store.register_pending_call(
+            message_id,
+            {
+                "action": "ClearCache",
+                "charger_id": "CLEARCACHE",
+                "connector_id": None,
+                "log_key": log_key,
+                "requested_at": requested_at,
+            },
+        )
+
+        mock_update = AsyncMock()
+        with patch.object(CSMSConsumer, "_update_local_authorization_state", new=mock_update):
+            await communicator.send_json_to([3, message_id, {"status": "Accepted"}])
+            await asyncio.sleep(0.05)
+
+        mock_update.assert_awaited_with(0)
+        result = store.wait_for_pending_call(message_id, timeout=0.1)
+        self.assertIsNotNone(result)
+        payload = result.get("payload") or {}
+        self.assertEqual(payload.get("status"), "Accepted")
+        log_entries = store.logs["charger"].get(log_key, [])
+        self.assertTrue(any("ClearCache result" in entry for entry in log_entries))
+
+        store.clear_log(log_key, log_type="charger")
+        await communicator.disconnect()
+
+    async def test_clear_cache_rejection_updates_timestamp(self):
+        store.pending_calls.clear()
+        log_key = store.identity_key("CLEARCACHE-REJ", None)
+        store.clear_log(log_key, log_type="charger")
+        communicator = WebsocketCommunicator(application, "/CLEARCACHE-REJ/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        await communicator.send_json_to(
+            [
+                2,
+                "boot",
+                "BootNotification",
+                {"chargePointVendor": "Test", "chargePointModel": "Model"},
+            ]
+        )
+        await communicator.receive_json_from()
+
+        message_id = "cc-rejected"
+        store.register_pending_call(
+            message_id,
+            {
+                "action": "ClearCache",
+                "charger_id": "CLEARCACHE-REJ",
+                "connector_id": None,
+                "log_key": log_key,
+            },
+        )
+
+        mock_update = AsyncMock()
+        with patch.object(CSMSConsumer, "_update_local_authorization_state", new=mock_update):
+            await communicator.send_json_to([3, message_id, {"status": "Rejected"}])
+            await asyncio.sleep(0.05)
+
+        mock_update.assert_awaited_with(None)
+        result = store.wait_for_pending_call(message_id, timeout=0.1)
+        self.assertIsNotNone(result)
+        payload = result.get("payload") or {}
+        self.assertEqual(payload.get("status"), "Rejected")
+        log_entries = store.logs["charger"].get(log_key, [])
+        self.assertTrue(any("ClearCache result" in entry for entry in log_entries))
+
+        store.clear_log(log_key, log_type="charger")
+        await communicator.disconnect()
+
+    async def test_clear_cache_error_records_failure(self):
+        store.pending_calls.clear()
+        log_key = store.identity_key("CLEARCACHE-ERR", None)
+        store.clear_log(log_key, log_type="charger")
+        communicator = WebsocketCommunicator(application, "/CLEARCACHE-ERR/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        await communicator.send_json_to(
+            [
+                2,
+                "boot",
+                "BootNotification",
+                {"chargePointVendor": "Test", "chargePointModel": "Model"},
+            ]
+        )
+        await communicator.receive_json_from()
+
+        message_id = "cc-error"
+        store.register_pending_call(
+            message_id,
+            {
+                "action": "ClearCache",
+                "charger_id": "CLEARCACHE-ERR",
+                "connector_id": None,
+                "log_key": log_key,
+            },
+        )
+
+        mock_update = AsyncMock()
+        with patch.object(CSMSConsumer, "_update_local_authorization_state", new=mock_update):
+            await communicator.send_json_to(
+                [
+                    4,
+                    message_id,
+                    "InternalError",
+                    "Failed",
+                    {"detail": "boom"},
+                ]
+            )
+            await asyncio.sleep(0.05)
+
+        mock_update.assert_awaited_with(None)
+        result = store.wait_for_pending_call(message_id, timeout=0.1)
+        self.assertIsNotNone(result)
+        self.assertFalse(result.get("success"))
+        self.assertEqual(result.get("error_code"), "InternalError")
+        log_entries = store.logs["charger"].get(log_key, [])
+        self.assertTrue(any("ClearCache error" in entry for entry in log_entries))
+
+        store.clear_log(log_key, log_type="charger")
+        await communicator.disconnect()
+
     async def test_get_configuration_result_logged(self):
         store.pending_calls.clear()
         pending_key = store.pending_key("CFGRES")
@@ -5149,6 +5294,75 @@ class DispatchActionViewTests(TestCase):
         self.assertIsNotNone(self.charger.availability_requested_at)
         self.assertEqual(self.charger.availability_request_status, "")
         self.assertNotIn(frame[1], store.pending_calls)
+
+    def test_clear_cache_dispatches_frame_and_schedules_timeout(self):
+        with patch("ocpp.views.store.schedule_call_timeout") as mock_timeout:
+            response = self.client.post(
+                self.url,
+                data=json.dumps({"action": "clear_cache"}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 200)
+        self.loop.run_until_complete(asyncio.sleep(0))
+        self.assertEqual(len(self.ws.sent), 1)
+        frame = json.loads(self.ws.sent[0])
+        self.assertEqual(frame[0], 2)
+        self.assertEqual(frame[2], "ClearCache")
+        self.assertEqual(frame[3], {})
+        mock_timeout.assert_called_once()
+        timeout_call = mock_timeout.call_args
+        self.assertIsNotNone(timeout_call)
+        self.assertEqual(timeout_call.args[0], frame[1])
+        self.assertEqual(timeout_call.kwargs.get("action"), "ClearCache")
+        log_entries = store.logs["charger"].get(self.log_key, [])
+        self.assertTrue(any("ClearCache" in entry for entry in log_entries))
+
+    def test_clear_cache_allows_rejected_status(self):
+        def wait_rejected(message_id, timeout=5.0):
+            metadata = store.pending_calls.pop(message_id, None)
+            store._pending_call_events.pop(message_id, None)
+            store._pending_call_results.pop(message_id, None)
+            return {
+                "success": True,
+                "payload": {"status": "Rejected"},
+                "metadata": dict(metadata or {}),
+            }
+
+        self.mock_wait.side_effect = wait_rejected
+        with patch("ocpp.views.store.schedule_call_timeout") as mock_timeout:
+            response = self.client.post(
+                self.url,
+                data=json.dumps({"action": "clear_cache"}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("sent", payload)
+        self.loop.run_until_complete(asyncio.sleep(0))
+        self.assertEqual(len(self.ws.sent), 1)
+        frame = json.loads(self.ws.sent[0])
+        self.assertEqual(frame[2], "ClearCache")
+        mock_timeout.assert_called_once()
+        self.mock_wait.side_effect = self._wait_success
+
+    def test_clear_cache_reports_timeout(self):
+        def no_response(message_id, timeout=5.0):
+            return None
+
+        self.mock_wait.side_effect = no_response
+        with patch("ocpp.views.store.schedule_call_timeout") as mock_timeout:
+            response = self.client.post(
+                self.url,
+                data=json.dumps({"action": "clear_cache"}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 504)
+        detail = response.json().get("detail", "")
+        self.assertIn("did not receive", detail)
+        self.loop.run_until_complete(asyncio.sleep(0))
+        self.assertEqual(len(self.ws.sent), 1)
+        mock_timeout.assert_called_once()
+        self.mock_wait.side_effect = self._wait_success
 
     def test_remote_start_reports_rejection(self):
         def rejected(message_id, timeout=5.0):
