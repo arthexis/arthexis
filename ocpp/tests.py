@@ -880,6 +880,132 @@ class CSMSConsumerTests(TransactionTestCase):
             store.log_names["charger"].clear()
             store.log_names["charger"].update(original_log_names)
 
+    async def test_existing_charger_requests_metadata_when_missing(self):
+        charger_id = "AUTOFETCH"
+        await database_sync_to_async(Charger.objects.create)(charger_id=charger_id)
+        pending_key = store.pending_key(charger_id)
+        store.clear_log(pending_key, log_type="charger")
+        initial_pending = set(store.pending_calls.keys())
+
+        communicator = WebsocketCommunicator(application, f"/{charger_id}/")
+
+        try:
+            connected, _ = await communicator.connect()
+            self.assertTrue(connected)
+
+            async def _wait_for_requests():
+                for _ in range(40):
+                    metadata_values = list(store.pending_calls.values())
+                    has_configuration = any(
+                        entry.get("action") == "GetConfiguration"
+                        and entry.get("charger_id") == charger_id
+                        for entry in metadata_values
+                    )
+                    has_firmware = any(
+                        entry.get("action") == "DataTransfer"
+                        and entry.get("charger_id") == charger_id
+                        and entry.get("message_pk")
+                        for entry in metadata_values
+                    )
+                    if has_configuration and has_firmware:
+                        return
+                    await asyncio.sleep(0.05)
+                self.fail("Timed out waiting for automatic metadata requests")
+
+            await _wait_for_requests()
+
+            logs = store.get_logs(pending_key, log_type="charger")
+            config_index = next(
+                (
+                    idx
+                    for idx, entry in enumerate(logs)
+                    if "< [2" in entry and "\"GetConfiguration\"" in entry
+                ),
+                None,
+            )
+            firmware_index = next(
+                (
+                    idx
+                    for idx, entry in enumerate(logs)
+                    if "Requested firmware download via DataTransfer." in entry
+                ),
+                None,
+            )
+            self.assertIsNotNone(config_index, logs)
+            self.assertIsNotNone(firmware_index, logs)
+            self.assertLess(config_index, firmware_index)
+
+            has_message = await database_sync_to_async(
+                DataTransferMessage.objects.filter(
+                    charger__charger_id=charger_id,
+                    message_id="DownloadFirmware",
+                    direction=DataTransferMessage.DIRECTION_CSMS_TO_CP,
+                ).exists
+            )()
+            self.assertTrue(has_message)
+        finally:
+            with suppress(Exception):
+                await communicator.disconnect()
+            new_pending = set(store.pending_calls.keys()) - initial_pending
+            for message_id in list(new_pending):
+                store.pop_pending_call(message_id)
+            store.clear_log(pending_key, log_type="charger")
+
+    async def test_existing_charger_with_metadata_skips_requests(self):
+        charger_id = "AUTOSKIP"
+        charger = await database_sync_to_async(Charger.objects.create)(
+            charger_id=charger_id
+        )
+        await database_sync_to_async(ChargerConfiguration.objects.create)(
+            charger_identifier=charger_id,
+            raw_payload={},
+        )
+        await database_sync_to_async(CPFirmware.objects.create)(
+            name="Existing firmware",
+            source=CPFirmware.Source.DOWNLOAD,
+            source_charger=charger,
+            payload_binary=b"",
+        )
+        pending_key = store.pending_key(charger_id)
+        store.clear_log(pending_key, log_type="charger")
+        initial_pending = set(store.pending_calls.keys())
+
+        communicator = WebsocketCommunicator(application, f"/{charger_id}/")
+
+        try:
+            connected, _ = await communicator.connect()
+            self.assertTrue(connected)
+
+            await asyncio.sleep(0.1)
+            metadata_values = list(store.pending_calls.values())
+            self.assertFalse(
+                any(
+                    entry.get("charger_id") == charger_id
+                    and entry.get("action") in {"GetConfiguration", "DataTransfer"}
+                    for entry in metadata_values
+                ),
+                metadata_values,
+            )
+            logs = store.get_logs(pending_key, log_type="charger")
+            self.assertFalse(
+                any(
+                    "< [2" in entry and "\"GetConfiguration\"" in entry
+                    for entry in logs
+                ),
+                logs,
+            )
+            self.assertFalse(
+                any("Requested firmware download via DataTransfer." in entry for entry in logs),
+                logs,
+            )
+        finally:
+            with suppress(Exception):
+                await communicator.disconnect()
+            new_pending = set(store.pending_calls.keys()) - initial_pending
+            for message_id in list(new_pending):
+                store.pop_pending_call(message_id)
+            store.clear_log(pending_key, log_type="charger")
+
     async def test_rfid_recorded(self):
         await database_sync_to_async(Charger.objects.create)(charger_id="RFIDREC")
         communicator = WebsocketCommunicator(application, "/RFIDREC/?cid=RFIDREC")
