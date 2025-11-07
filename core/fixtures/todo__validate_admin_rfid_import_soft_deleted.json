@@ -1,0 +1,10 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate RFID import restores soft-deleted labels",
+      "url": "/admin/core/rfid/import/",
+      "request_details": "Import an RFID export containing a label that was previously soft-deleted and confirm the record is restored without triggering a duplicate label error."
+    }
+  }
+]

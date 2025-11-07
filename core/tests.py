@@ -1158,6 +1158,38 @@ class RFIDImportExportCommandTests(TestCase):
         result = resource.import_data(dataset, dry_run=False)
         self.assertFalse(result.has_errors())
 
+    def test_admin_import_restores_soft_deleted_label(self):
+        tag = RFID.objects.create(rfid="DELETEME01")
+        label = tag.label_id
+        tag.delete()
+        self.assertFalse(RFID.objects.filter(label_id=label).exists())
+        self.assertTrue(
+            RFID.all_objects.filter(label_id=label, is_deleted=True).exists()
+        )
+
+        resource = RFIDResource()
+        headers = resource.get_export_headers()
+        dataset = Dataset()
+        dataset.headers = headers
+        row = {header: "" for header in headers}
+        row.update(
+            {
+                "label_id": str(label),
+                "rfid": "DELETEME02",
+                "allowed": "true",
+                "color": RFID.BLACK,
+                "kind": RFID.CLASSIC,
+            }
+        )
+        dataset.append([row[h] for h in headers])
+
+        result = resource.import_data(dataset, dry_run=False)
+
+        self.assertFalse(result.has_errors())
+        restored = RFID.all_objects.get(label_id=label)
+        self.assertEqual(restored.rfid, "DELETEME02")
+        self.assertFalse(restored.is_deleted)
+
         account = EnergyAccount.objects.get(name="IMPORTED ADMIN ACCOUNT")
         tag = RFID.objects.get(rfid="NAMETAG002")
         self.assertTrue(tag.energy_accounts.filter(pk=account.pk).exists())
