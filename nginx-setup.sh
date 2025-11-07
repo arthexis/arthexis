@@ -13,7 +13,7 @@ BASE_DIR="$SCRIPT_DIR"
 
 usage() {
     cat <<'USAGE'
-Usage: ./nginx-setup.sh [--mode MODE] [--port PORT] [--role ROLE] [--no-reload]
+Usage: ./nginx-setup.sh [--mode MODE] [--port PORT] [--role ROLE] [--ip6] [--remove] [--no-reload]
 
 Configures the nginx site definition for the current Arthexis installation.
 By default the script reads the desired settings from lock files written by
@@ -26,6 +26,8 @@ MODE_OVERRIDE=""
 PORT_OVERRIDE=""
 ROLE_OVERRIDE=""
 RELOAD=true
+INCLUDE_IPV6=false
+REMOVE_SITE=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -46,6 +48,14 @@ while [[ $# -gt 0 ]]; do
             ;;
         --no-reload)
             RELOAD=false
+            shift
+            ;;
+        --ip6)
+            INCLUDE_IPV6=true
+            shift
+            ;;
+        --remove)
+            REMOVE_SITE=true
             shift
             ;;
         -h|--help)
@@ -73,6 +83,36 @@ exec > >(tee "$LOG_FILE") 2>&1
 
 LOCK_DIR="$BASE_DIR/locks"
 mkdir -p "$LOCK_DIR"
+
+if ! arthexis_can_manage_nginx; then
+    echo "nginx configuration requires sudo privileges and nginx assets." >&2
+    exit 1
+fi
+
+if [ "$REMOVE_SITE" = true ]; then
+    if [[ -n "$MODE_OVERRIDE" || -n "$ROLE_OVERRIDE" || -n "$PORT_OVERRIDE" || "$INCLUDE_IPV6" == true ]]; then
+        echo "--remove cannot be combined with configuration overrides." >&2
+        exit 1
+    fi
+
+    echo "Removing nginx configuration for Arthexis."
+    sudo sh -c 'rm -f /etc/nginx/sites-enabled/arthexis*.conf'
+    sudo sh -c 'rm -f /etc/nginx/sites-available/arthexis*.conf' || true
+    sudo sh -c 'rm -f /etc/nginx/conf.d/arthexis-*.conf' || true
+
+    if [ "$RELOAD" = true ]; then
+        if arthexis_ensure_nginx_in_path && command -v nginx >/dev/null 2>&1; then
+            sudo nginx -t
+            sudo systemctl reload nginx || echo "Warning: nginx reload failed"
+        else
+            echo "nginx not installed; skipping nginx test and reload"
+        fi
+    else
+        echo "Skipping nginx reload per --no-reload flag."
+    fi
+
+    exit 0
+fi
 
 MODE="internal"
 if [ -f "$LOCK_DIR/nginx_mode.lck" ]; then
@@ -119,11 +159,6 @@ echo "$MODE" > "$LOCK_DIR/nginx_mode.lck"
 echo "$ROLE" > "$LOCK_DIR/role.lck"
 echo "$PORT" > "$LOCK_DIR/backend_port.lck"
 
-if ! arthexis_can_manage_nginx; then
-    echo "nginx configuration requires sudo privileges and nginx assets." >&2
-    exit 1
-fi
-
 echo "Configuring nginx for role '$ROLE' on port $PORT using $MODE mode."
 
 NGINX_CONF="/etc/nginx/sites-enabled/arthexis.conf"
@@ -140,10 +175,11 @@ if [ -d "$FALLBACK_SRC_DIR" ]; then
 fi
 
 NGINX_RENDERER="$BASE_DIR/scripts/helpers/render_nginx_default.py"
-if ! sudo python3 "$NGINX_RENDERER" \
-    --mode "$MODE" \
-    --port "$PORT" \
-    --dest "$NGINX_CONF"; then
+RENDER_CMD=(sudo python3 "$NGINX_RENDERER" --mode "$MODE" --port "$PORT" --dest "$NGINX_CONF")
+if [ "$INCLUDE_IPV6" = true ]; then
+    RENDER_CMD+=(--ip6)
+fi
+if ! "${RENDER_CMD[@]}"; then
     echo "Failed to render nginx configuration" >&2
     exit 1
 fi

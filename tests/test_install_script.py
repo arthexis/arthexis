@@ -108,3 +108,5 @@ def test_nginx_setup_script_renders_nginx_config_with_helper():
     assert "render_nginx_default.py" in content
     assert "backend_port.lck" in content
     assert "nginx_mode.lck" in content
+    assert "--remove" in content
+    assert "--ip6" in content
