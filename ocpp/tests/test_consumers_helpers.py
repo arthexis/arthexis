@@ -11,13 +11,15 @@ import tests.conftest  # noqa: F401
 
 import pytest
 
+from django.utils import timezone
+
 from ocpp.consumers import (
     CSMSConsumer,
     SERIAL_QUERY_PARAM_NAMES,
     _resolve_client_ip,
 )
 from ocpp import store
-from ocpp.models import Charger
+from ocpp.models import Charger, ChargerConfiguration
 from core.models import RFID
 from asgiref.sync import async_to_sync
 
@@ -25,8 +27,12 @@ from asgiref.sync import async_to_sync
 @pytest.fixture(autouse=True)
 def _clear_store_state():
     store.pending_calls.clear()
+    store._pending_call_events.clear()
+    store._pending_call_results.clear()
     yield
     store.pending_calls.clear()
+    store._pending_call_events.clear()
+    store._pending_call_results.clear()
 
 
 @pytest.mark.parametrize(
@@ -205,3 +211,95 @@ def test_handle_get_local_list_version_applies_entries():
     assert accepted.released is True
     assert blocked.allowed is False
     assert blocked.released is False
+
+
+def test_handle_change_configuration_result_updates_snapshot():
+    charger = Charger.objects.create(charger_id="CP003", connector_id=1)
+    configuration = ChargerConfiguration.objects.create(
+        charger_identifier="CP003",
+        connector_id=1,
+        evcs_snapshot_at=timezone.now(),
+        raw_payload={"configurationKey": [{"key": "HeartbeatInterval", "value": "60"}]},
+    )
+    configuration.replace_configuration_keys(
+        [{"key": "HeartbeatInterval", "readonly": False, "value": "60"}]
+    )
+    charger.configuration = configuration
+    charger.save(update_fields=["configuration"])
+
+    consumer = CSMSConsumer()
+    consumer.charger_id = "CP003"
+    consumer.connector_value = 1
+    consumer.store_key = store.identity_key("CP003", 1)
+    consumer.charger = charger
+    consumer.aggregate_charger = charger
+
+    store.clear_log(consumer.store_key, "charger")
+    store.register_pending_call(
+        "msg-change",
+        {
+            "action": "ChangeConfiguration",
+            "charger_id": "CP003",
+            "log_key": consumer.store_key,
+            "connector_id": 1,
+            "key": "HeartbeatInterval",
+            "value": "120",
+        },
+    )
+
+    async_to_sync(consumer._handle_call_result)(
+        "msg-change", {"status": "RebootRequired"}
+    )
+
+    configuration.refresh_from_db()
+    entries = configuration.configuration_keys
+    assert any(
+        entry.get("key") == "HeartbeatInterval" and entry.get("value") == "120"
+        for entry in entries
+    )
+    payload_entries = configuration.raw_payload.get("configurationKey", [])
+    assert any(
+        isinstance(item, dict)
+        and item.get("key") == "HeartbeatInterval"
+        and item.get("value") == "120"
+        for item in payload_entries
+    )
+    logs = store.logs["charger"].get(consumer.store_key, [])
+    assert any("ChangeConfiguration result" in entry for entry in logs)
+    result = store._pending_call_results.get("msg-change")
+    assert result and result.get("success") is True
+
+
+def test_handle_change_configuration_error_logs_result():
+    charger = Charger.objects.create(charger_id="CP004")
+    consumer = CSMSConsumer()
+    consumer.charger_id = "CP004"
+    consumer.connector_value = None
+    consumer.store_key = store.identity_key("CP004", None)
+    consumer.charger = charger
+    consumer.aggregate_charger = charger
+
+    store.clear_log(consumer.store_key, "charger")
+    store.register_pending_call(
+        "msg-change-error",
+        {
+            "action": "ChangeConfiguration",
+            "charger_id": "CP004",
+            "log_key": consumer.store_key,
+            "key": "AllowOfflineTxForUnknownId",
+        },
+    )
+
+    async_to_sync(consumer._handle_call_error)(
+        "msg-change-error",
+        "InternalError",
+        "failure",
+        {"reason": "denied"},
+    )
+
+    logs = store.logs["charger"].get(consumer.store_key, [])
+    assert any("ChangeConfiguration error" in entry for entry in logs)
+    result = store._pending_call_results.get("msg-change-error")
+    assert result and result.get("success") is False
+    charger.refresh_from_db()
+    assert charger.configuration is None

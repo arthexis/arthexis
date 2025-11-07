@@ -220,6 +220,29 @@
       </div>
       {{ remote_start_messages|json_script:"remote-start-i18n" }}
       {% endif %}
+      {% if can_change_configuration %}
+      <div class="card border-info mt-3">
+        <div class="card-body">
+          <h2 class="h5 mb-2">{% trans "Change configuration" %}</h2>
+          <p class="text-muted small mb-3">{% trans "Send a configuration key update to the charge point without waiting for a full configuration refresh." %}</p>
+          <form id="change-configuration-form" class="row gy-2 align-items-end" action="{{ action_url }}" method="post">
+            <div class="col-sm-5">
+              <label class="form-label" for="change-configuration-key">{% trans "Configuration key" %}</label>
+              <input type="text" id="change-configuration-key" class="form-control" required autocomplete="off" />
+            </div>
+            <div class="col-sm-5">
+              <label class="form-label" for="change-configuration-value">{% trans "Value" %}</label>
+              <input type="text" id="change-configuration-value" class="form-control" autocomplete="off" />
+            </div>
+            <div class="col-sm-auto">
+              <button type="submit" class="btn btn-outline-primary mt-2 mt-sm-0">{% trans "Apply" %}</button>
+            </div>
+          </form>
+          <div id="change-configuration-feedback" class="mt-2 small text-muted" aria-live="polite"></div>
+        </div>
+      </div>
+      {{ change_configuration_messages|json_script:"change-configuration-i18n" }}
+      {% endif %}
     </div>
     <div class="col-md-8">
       {% if show_chart %}
@@ -608,6 +631,9 @@
           if (typeof window.setupRemoteStartForm === 'function') {
             window.setupRemoteStartForm(current);
           }
+          if (typeof window.setupChangeConfigurationForm === 'function') {
+            window.setupChangeConfigurationForm(current);
+          }
           if (oldCanvas) {
             const placeholder = current.querySelector('#kw-chart');
             if (placeholder) {
@@ -667,6 +693,9 @@
           if (typeof window.setupRemoteStartForm === 'function') {
             window.setupRemoteStartForm(current);
           }
+          if (typeof window.setupChangeConfigurationForm === 'function') {
+            window.setupChangeConfigurationForm(current);
+          }
           changedIds.forEach(id => {
             const el = current.querySelector(`#${id}`);
             if (el) {
@@ -679,6 +708,122 @@
 
   document.addEventListener('DOMContentLoaded', reloadStatus);
   setInterval(reloadStatus, 5000);
+</script>
+{% endif %}
+{% if can_change_configuration %}
+<script>
+  (function () {
+    function setupChangeConfigurationForm(root = document) {
+      if (!root || !root.querySelector) {
+        return;
+      }
+      const form = root.querySelector('#change-configuration-form');
+      if (!form || form.dataset.changeConfigurationBound === 'true') {
+        return;
+      }
+
+      const keyInput =
+        form.querySelector('#change-configuration-key') ||
+        root.querySelector('#change-configuration-key');
+      const valueInput =
+        form.querySelector('#change-configuration-value') ||
+        root.querySelector('#change-configuration-value');
+      const feedback =
+        root.querySelector('#change-configuration-feedback') ||
+        document.getElementById('change-configuration-feedback');
+      const submit = form.querySelector('button[type="submit"]');
+      if (!keyInput || !feedback || !submit) {
+        return;
+      }
+
+      const actionUrl = form.getAttribute('action');
+      const messagesEl =
+        root.querySelector('#change-configuration-i18n') ||
+        document.getElementById('change-configuration-i18n');
+      let messages = { key_required: '', sending: '', success: '', error: '' };
+      if (messagesEl) {
+        try {
+          messages = JSON.parse(messagesEl.textContent);
+        } catch (err) {
+          // Ignore malformed JSON and keep defaults.
+        }
+      }
+
+      form.dataset.changeConfigurationBound = 'true';
+
+      keyInput.addEventListener('input', () => {
+        if (keyInput.classList.contains('is-invalid') && keyInput.value.trim()) {
+          keyInput.classList.remove('is-invalid');
+          feedback.textContent = '';
+          feedback.className = 'mt-2 small text-muted';
+        }
+      });
+
+      form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        const key = keyInput.value.trim();
+        if (!key) {
+          keyInput.focus();
+          keyInput.classList.add('is-invalid');
+          feedback.textContent = messages.key_required || '';
+          feedback.className = 'mt-2 small text-danger';
+          return;
+        }
+
+        submit.disabled = true;
+        feedback.textContent = messages.sending || '';
+        feedback.className = 'mt-2 small text-muted';
+
+        const payload = { action: 'change_configuration', key };
+        if (valueInput) {
+          const rawValue = valueInput.value;
+          if (typeof rawValue === 'string' && rawValue.length) {
+            payload.value = rawValue;
+          }
+        }
+
+        fetch(actionUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
+          .then((response) =>
+            response
+              .json()
+              .catch(() => ({}))
+              .then((data) => ({ ok: response.ok, data }))
+          )
+          .then(({ ok, data }) => {
+            if (ok) {
+              feedback.textContent = messages.success || '';
+              feedback.className = 'mt-2 small text-success';
+            } else {
+              const detail =
+                data && typeof data.detail === 'string' ? data.detail : '';
+              feedback.textContent = detail || messages.error || '';
+              feedback.className = 'mt-2 small text-danger';
+            }
+          })
+          .catch(() => {
+            feedback.textContent = messages.error || '';
+            feedback.className = 'mt-2 small text-danger';
+          })
+          .finally(() => {
+            submit.disabled = false;
+          });
+      });
+    }
+
+    window.setupChangeConfigurationForm = setupChangeConfigurationForm;
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', () =>
+        setupChangeConfigurationForm(document)
+      );
+    } else {
+      setupChangeConfigurationForm(document);
+    }
+  })();
 </script>
 {% endif %}
 {% if can_remote_start %}

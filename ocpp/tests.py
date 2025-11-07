@@ -5223,6 +5223,9 @@ class DispatchActionViewTests(TestCase):
         )
         self.mock_wait = self.wait_patch.start()
         self.addCleanup(self.wait_patch.stop)
+        self.schedule_patch = patch("ocpp.views.store.schedule_call_timeout")
+        self.mock_schedule = self.schedule_patch.start()
+        self.addCleanup(self.schedule_patch.stop)
 
     def _close_loop(self):
         try:
@@ -5426,6 +5429,118 @@ class DispatchActionViewTests(TestCase):
         self.assertIn("did not receive", detail)
         self.mock_wait.side_effect = self._wait_success
 
+    def test_change_configuration_requires_key(self):
+        self.mock_schedule.reset_mock()
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"action": "change_configuration"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json().get("detail"), "key required")
+        self.loop.run_until_complete(asyncio.sleep(0))
+        self.assertEqual(self.ws.sent, [])
+        self.mock_schedule.assert_not_called()
+
+    def test_change_configuration_rejects_invalid_value_type(self):
+        self.mock_schedule.reset_mock()
+        response = self.client.post(
+            self.url,
+            data=json.dumps(
+                {
+                    "action": "change_configuration",
+                    "key": "HeartbeatInterval",
+                    "value": {"unexpected": "object"},
+                }
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("value must", response.json().get("detail", ""))
+        self.loop.run_until_complete(asyncio.sleep(0))
+        self.assertEqual(self.ws.sent, [])
+        self.mock_schedule.assert_not_called()
+
+    def test_change_configuration_dispatches_frame(self):
+        self.mock_schedule.reset_mock()
+        response = self.client.post(
+            self.url,
+            data=json.dumps(
+                {
+                    "action": "change_configuration",
+                    "key": "HeartbeatInterval",
+                    "value": "120",
+                }
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.loop.run_until_complete(asyncio.sleep(0))
+        self.assertEqual(len(self.ws.sent), 1)
+        frame = json.loads(self.ws.sent[0])
+        self.assertEqual(frame[0], 2)
+        self.assertEqual(frame[2], "ChangeConfiguration")
+        self.assertEqual(frame[3]["key"], "HeartbeatInterval")
+        self.assertEqual(frame[3]["value"], "120")
+        self.mock_schedule.assert_called_once()
+        log_entries = store.logs["charger"].get(self.log_key, [])
+        self.assertTrue(
+            any("Requested configuration change" in entry for entry in log_entries)
+        )
+
+    def test_change_configuration_reports_rejection(self):
+        self.mock_schedule.reset_mock()
+
+        def rejected(message_id, timeout=5.0):
+            metadata = store.pending_calls.pop(message_id, None)
+            store._pending_call_events.pop(message_id, None)
+            store._pending_call_results.pop(message_id, None)
+            return {
+                "success": True,
+                "payload": {"status": "Rejected"},
+                "metadata": dict(metadata or {}),
+            }
+
+        self.mock_wait.side_effect = rejected
+        response = self.client.post(
+            self.url,
+            data=json.dumps(
+                {
+                    "action": "change_configuration",
+                    "key": "HeartbeatInterval",
+                    "value": "120",
+                }
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+        detail = response.json().get("detail", "")
+        self.assertIn("Rejected", detail)
+        self.mock_wait.side_effect = self._wait_success
+
+    def test_change_configuration_reports_timeout(self):
+        self.mock_schedule.reset_mock()
+
+        def no_response(message_id, timeout=5.0):
+            return None
+
+        self.mock_wait.side_effect = no_response
+        response = self.client.post(
+            self.url,
+            data=json.dumps(
+                {
+                    "action": "change_configuration",
+                    "key": "HeartbeatInterval",
+                    "value": "120",
+                }
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 504)
+        detail = response.json().get("detail", "")
+        self.assertIn("did not receive", detail)
+        self.mock_wait.side_effect = self._wait_success
+
     def test_change_availability_requires_valid_type(self):
         response = self.client.post(
             self.url,
@@ -5433,6 +5548,9 @@ class DispatchActionViewTests(TestCase):
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.json().get("detail"), "invalid availability type"
+        )
         self.loop.run_until_complete(asyncio.sleep(0))
         self.assertEqual(self.ws.sent, [])
         self.assertFalse(store.pending_calls)

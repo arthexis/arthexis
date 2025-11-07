@@ -1,0 +1,12 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate change configuration command on charger status page",
+      "url": "/ocpp/c/<charger-id>/status/",
+      "request_details": "Open a connected charge point status page in the operator dashboard and locate the Change configuration card. Submit a known key/value pair (for example HeartbeatInterval=120), confirm the UI reports success, and verify the charger log records the ChangeConfiguration request and response. Finally, confirm a configuration snapshot reflects the updated value or that a rejection is surfaced if the device declines the change.",
+      "done_on": null,
+      "is_deleted": false
+    }
+  }
+]
