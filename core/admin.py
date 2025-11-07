@@ -2749,6 +2749,12 @@ class RFIDResource(resources.ModelResource):
         account_column = account_column_for_field(account_field)
         self.fields["energy_accounts"].column_name = account_column
 
+    def get_queryset(self):
+        manager = getattr(self._meta.model, "all_objects", None)
+        if manager is not None:
+            return manager.all()
+        return super().get_queryset()
+
     def dehydrate_energy_accounts(self, obj):
         return serialize_accounts(obj, self.account_field)
 
@@ -2761,6 +2767,11 @@ class RFIDResource(resources.ModelResource):
             instance.energy_accounts.set(accounts)
         else:
             instance.energy_accounts.clear()
+
+    def before_save_instance(self, instance, row, **kwargs):
+        if getattr(instance, "is_deleted", False):
+            instance.is_deleted = False
+        super().before_save_instance(instance, row, **kwargs)
 
     class Meta:
         model = RFID
