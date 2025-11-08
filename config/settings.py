@@ -344,6 +344,7 @@ LOCAL_APPS = [
     "api",
     "nodes",
     "core",
+    "protocols",
     "ocpp",
     "awg",
     "pages",

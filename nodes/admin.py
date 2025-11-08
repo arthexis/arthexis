@@ -8,7 +8,7 @@ from django.contrib.admin import helpers
 from django.contrib.admin.widgets import FilteredSelectMultiple
 from django.core.exceptions import PermissionDenied
 from django.db.models import Count, Q
-from django.http import Http404, HttpResponse, JsonResponse
+from django.http import Http404, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import redirect, render
 from django.template.response import TemplateResponse
 from django.test import signals
@@ -19,21 +19,19 @@ from django.utils.html import format_html, format_html_join
 from django.utils.translation import gettext_lazy as _, ngettext
 from pathlib import Path
 from types import SimpleNamespace
-from urllib.parse import urlsplit, urlunsplit, quote
+from urllib.parse import urlsplit, urlunsplit
 import base64
 import binascii
 import json
 import subprocess
 import uuid
 
-import asyncio
 import pyperclip
 import requests
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from pyperclip import PyperclipException
 from requests import RequestException
-import websockets
 from asgiref.sync import async_to_sync
 
 from .classifiers import run_default_classifiers, suppress_default_classifiers
@@ -48,6 +46,7 @@ from .reports import (
 from .consumers import AUDIO_CAPTURE_SOCKET_PATH
 
 from core.admin import EmailOutboxAdminForm
+from protocols.models import CPForwarder
 from .models import (
     Node,
     EmailOutbox,
@@ -71,8 +70,6 @@ from ocpp.models import (
     CPFirmwareDeployment,
     DataTransferMessage,
 )
-from ocpp.network import serialize_charger_for_network
-from ocpp.tasks import push_forwarded_charge_points
 from core.user_data import EntityModelAdmin
 
 
@@ -312,8 +309,7 @@ class NodeAdmin(EntityModelAdmin):
         "run_task",
         "take_screenshots",
         "download_evcs_firmware",
-        "start_charge_point_forwarding",
-        "stop_charge_point_forwarding",
+        "create_charge_point_forwarder",
         "import_rfids_from_selected",
         "export_rfids_to_selected",
         "send_net_message",
@@ -1514,115 +1510,8 @@ class NodeAdmin(EntityModelAdmin):
 
         return self._render_rfid_sync(request, "export", results)
 
-    async def _probe_websocket(self, url: str) -> bool:
-        try:
-            async with websockets.connect(url, open_timeout=3, close_timeout=1):
-                return True
-        except Exception:
-            return False
-
-    def _attempt_forwarding_probe(self, node, charger_id: str) -> bool:
-        if not charger_id:
-            return False
-        safe_id = quote(str(charger_id))
-        candidates: list[str] = []
-        for base in node.iter_remote_urls("/"):
-            parsed = urlsplit(base)
-            if parsed.scheme not in {"http", "https"}:
-                continue
-            scheme = "wss" if parsed.scheme == "https" else "ws"
-            base_path = parsed.path.rstrip("/")
-            for prefix in ("", "/ws"):
-                path = f"{base_path}{prefix}/{safe_id}".replace("//", "/")
-                if not path.startswith("/"):
-                    path = f"/{path}"
-                candidates.append(urlunsplit((scheme, parsed.netloc, path, "", "")))
-
-        for url in candidates:
-            loop = asyncio.new_event_loop()
-            try:
-                result = loop.run_until_complete(self._probe_websocket(url))
-            except Exception:
-                result = False
-            finally:
-                loop.close()
-            if result:
-                return True
-        return False
-
-    def _send_forwarding_metadata(
-        self,
-        request,
-        node: Node,
-        chargers: list[Charger],
-        local_node: Node,
-        private_key,
-    ) -> bool:
-        if not chargers:
-            return True
-        payload = {
-            "requester": str(local_node.uuid),
-            "requester_mac": local_node.mac_address,
-            "requester_public_key": local_node.public_key,
-            "chargers": [serialize_charger_for_network(charger) for charger in chargers],
-            "transactions": {"chargers": [], "transactions": []},
-        }
-        payload_json = json.dumps(payload, separators=(",", ":"), sort_keys=True)
-        signature = self._sign_payload(private_key, payload_json)
-        headers = {"Content-Type": "application/json"}
-        if signature:
-            headers["X-Signature"] = signature
-
-        errors: list[str] = []
-        for url in node.iter_remote_urls("/nodes/network/chargers/forward/"):
-            if not url:
-                continue
-            try:
-                response = requests.post(
-                    url, data=payload_json, headers=headers, timeout=5
-                )
-            except RequestException as exc:
-                errors.append(
-                    _(
-                        "Failed to send forwarding metadata to %(node)s via %(url)s (%(error)s)."
-                    )
-                    % {"node": node, "url": url, "error": exc}
-                )
-                continue
-
-            try:
-                data = response.json()
-            except ValueError:
-                data = {}
-
-            if response.ok and isinstance(data, Mapping) and data.get("status") == "ok":
-                return True
-
-            detail = ""
-            if isinstance(data, Mapping):
-                detail = data.get("detail") or ""
-            errors.append(
-                _("Forwarding metadata to %(node)s via %(url)s failed: %(status)s %(detail)s")
-                % {
-                    "node": node,
-                    "url": url,
-                    "status": response.status_code,
-                    "detail": detail,
-                }
-            )
-
-        if not errors:
-            self.message_user(
-                request,
-                _("No reachable host found for %(node)s.") % {"node": node},
-                level=messages.WARNING,
-            )
-        else:
-            self.message_user(request, errors[-1].strip(), level=messages.WARNING)
-        return False
-
-    @admin.action(description=_("Start Charge Point Forwarding"))
-    def start_charge_point_forwarding(self, request, queryset):
+    @admin.action(description=_("Create Charge Point Forwarder"))
+    def create_charge_point_forwarder(self, request, queryset):
         if queryset.count() != 1:
             self.message_user(
                 request,
@@ -1632,150 +1521,43 @@ class NodeAdmin(EntityModelAdmin):
             return
 
         target = queryset.first()
-        local_node, private_key, error = self._load_local_node_credentials()
-        if error:
-            self.message_user(request, error, level=messages.ERROR)
-            return
-
-        if local_node.pk and target.pk == local_node.pk:
+        local_node = Node.get_local()
+        if local_node and target.pk == local_node.pk:
             self.message_user(
                 request,
-                _("Cannot forward charge points to the local node."),
+                _("Cannot create a forwarder targeting the local node."),
                 level=messages.ERROR,
             )
             return
 
-        eligible = Charger.objects.filter(export_transactions=True)
-        if local_node.pk:
-            eligible = eligible.filter(
-                Q(node_origin=local_node) | Q(node_origin__isnull=True)
-            )
+        defaults = {
+            "name": target.hostname or str(target),
+            "enabled": False,
+        }
+        if local_node and local_node.pk:
+            defaults["source_node"] = local_node
 
-        chargers = list(eligible.select_related("forwarded_to"))
-        if not chargers:
-            self.message_user(
-                request,
-                _("No eligible charge points available for forwarding."),
-                level=messages.WARNING,
-            )
-            return
-
-        conflicts = [
-            charger
-            for charger in chargers
-            if charger.forwarded_to_id
-            and charger.forwarded_to_id not in {None, target.pk}
-        ]
-        if conflicts:
-            self.message_user(
-                request,
-                ngettext(
-                    "Skipped %(count)s charge point already forwarded to another node.",
-                    "Skipped %(count)s charge points already forwarded to another node.",
-                    len(conflicts),
-                )
-                % {"count": len(conflicts)},
-                level=messages.WARNING,
-            )
-
-        chargers_to_update = [
-            charger
-            for charger in chargers
-            if charger.forwarded_to_id in (None, target.pk)
-        ]
-        if not chargers_to_update:
-            self.message_user(
-                request,
-                _("No charge points were updated."),
-                level=messages.WARNING,
-            )
-            return
-
-        charger_pks = [c.pk for c in chargers_to_update]
-        Charger.objects.filter(pk__in=charger_pks).update(forwarded_to=target)
-
-        for charger in chargers_to_update:
-            charger.forwarded_to = target
-
-        sample = next((charger for charger in chargers_to_update if charger.charger_id), None)
-        if sample and not self._attempt_forwarding_probe(target, sample.charger_id):
-            self.message_user(
-                request,
-                _(
-                    "Unable to establish a websocket connection to %(node)s for charge point %(charger)s."
-                )
-                % {"node": target, "charger": sample.charger_id},
-                level=messages.WARNING,
-            )
-
-        success = self._send_forwarding_metadata(
-            request, target, chargers_to_update, local_node, private_key
+        forwarder, created = CPForwarder.objects.get_or_create(
+            target_node=target, defaults=defaults
         )
 
-        if success:
-            now = timezone.now()
-            Charger.objects.filter(pk__in=charger_pks).update(
-                forwarding_watermark=now
-            )
+        if created:
             self.message_user(
                 request,
-                ngettext(
-                    "Forwarding enabled for %(count)s charge point.",
-                    "Forwarding enabled for %(count)s charge points.",
-                    len(chargers_to_update),
-                )
-                % {"count": len(chargers_to_update)},
+                _("Created charge point forwarder for %(node)s.")
+                % {"node": target},
                 level=messages.SUCCESS,
             )
         else:
             self.message_user(
                 request,
-                ngettext(
-                    "Marked %(count)s charge point for forwarding; awaiting remote acknowledgment.",
-                    "Marked %(count)s charge points for forwarding; awaiting remote acknowledgment.",
-                    len(chargers_to_update),
-                )
-                % {"count": len(chargers_to_update)},
+                _("Forwarder for %(node)s already exists; opening configuration.")
+                % {"node": target},
                 level=messages.INFO,
             )
 
-        try:
-            push_forwarded_charge_points.delay()
-        except Exception:
-            pass
-
-    @admin.action(description=_("Stop Charge Point Forwarding"))
-    def stop_charge_point_forwarding(self, request, queryset):
-        node_ids = [node.pk for node in queryset if node.pk]
-        if not node_ids:
-            self.message_user(
-                request,
-                _("No remote nodes selected."),
-                level=messages.WARNING,
-            )
-            return
-
-        cleared = Charger.objects.filter(forwarded_to_id__in=node_ids).update(
-            forwarded_to=None, forwarding_watermark=None
-        )
-
-        if cleared:
-            self.message_user(
-                request,
-                ngettext(
-                    "Stopped forwarding for %(count)s charge point.",
-                    "Stopped forwarding for %(count)s charge points.",
-                    cleared,
-                )
-                % {"count": cleared},
-                level=messages.SUCCESS,
-            )
-        else:
-            self.message_user(
-                request,
-                _("No forwarded charge points were updated."),
-                level=messages.WARNING,
-            )
+        url = reverse("admin:protocols_cpforwarder_change", args=[forwarder.pk])
+        return HttpResponseRedirect(url)
 
     def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
         extra_context = extra_context or {}
