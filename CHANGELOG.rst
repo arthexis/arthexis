@@ -4,6 +4,7 @@ Changelog
 Unreleased
 ----------
 
+- 70ae2ff6 chore: update TODO fixtures
 - 813709b6 chore: update version and changelog
 - 67c029fc Assign constellation gateway devices (#2726)
 - b522ea03 Add periodic constellation UDP probe task (#2725)
