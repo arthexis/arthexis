@@ -5,9 +5,12 @@
       "request": "Validate TODO completion sync on upgrade",
       "url": "/admin/core/todo/",
       "request_details": "Complete a TODO in a release candidate, upgrade a node to that release, and confirm the task is automatically marked done and no longer appears in the pending list on the node dashboard.",
-      "done_on": null,
-      "is_deleted": false,
-      "version": "0.1.28"
+      "done_on": "2025-11-07T11:16:13.962801-06:00",
+      "is_deleted": true,
+      "version": "",
+      "done_version": "0.1.28+",
+      "done_revision": "2378f03186d4e909fb964bf40c1b512209576811",
+      "done_username": "admin"
     }
   }
 ]
