@@ -55,7 +55,7 @@ from core.celery_utils import (
 )
 from django.conf import settings
 from django.utils import timezone
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 from dns import resolver as dns_resolver
 from . import dns as dns_utils
 from selenium.common.exceptions import WebDriverException
@@ -2025,6 +2025,41 @@ class NodeAdminTests(TestCase):
             port=8888,
             mac_address=Node.get_current_mac(),
         )
+
+    def test_register_visitor_defaults_to_loopback_urls(self):
+        response = self.client.get(reverse("admin:nodes_node_register_visitor"))
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        self.assertIn(
+            "const visitorInfoUrl = \"http://localhost:8888/nodes/info/\";",
+            content,
+        )
+        self.assertIn(
+            "const visitorRegisterUrl = \"http://localhost:8888/nodes/register/\";",
+            content,
+        )
+
+    def test_register_visitor_accepts_custom_base_parameter(self):
+        url = reverse("admin:nodes_node_register_visitor")
+        cases = [
+            ("example.com:9443", "http://example.com:9443"),
+            ("https://visitor.example", "https://visitor.example"),
+            ("[::1]:9000", "http://[::1]:9000"),
+        ]
+        for raw, expected_base in cases:
+            with self.subTest(raw=raw):
+                encoded = quote(raw, safe=":/[]")
+                response = self.client.get(f"{url}?visitor={encoded}")
+                self.assertEqual(response.status_code, 200)
+                content = response.content.decode()
+                self.assertIn(
+                    f"const visitorInfoUrl = \"{expected_base}/nodes/info/\";",
+                    content,
+                )
+                self.assertIn(
+                    f"const visitorRegisterUrl = \"{expected_base}/nodes/register/\";",
+                    content,
+                )
 
     def test_node_feature_list_shows_default_action_when_enabled(self):
         node = self._create_local_node()

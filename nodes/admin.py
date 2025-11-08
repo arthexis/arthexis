@@ -1117,6 +1117,35 @@ class NodeAdmin(EntityModelAdmin):
         temp.ipv6_address = getattr(node, "ipv6_address", "")
         yield from temp.iter_remote_urls(path)
 
+    def _resolve_visitor_base(self, request):
+        default = "http://localhost:8888"
+        raw = (request.GET.get("visitor") or "").strip()
+        if not raw:
+            return default
+
+        candidate = raw
+        if "://" not in candidate:
+            candidate = f"//{candidate.lstrip('/')}"
+
+        parsed = urlsplit(candidate)
+        hostname = parsed.hostname or ""
+        if not hostname:
+            return default
+
+        scheme = (parsed.scheme or "http").lower()
+        if scheme not in {"http", "https"}:
+            scheme = "http"
+
+        port = parsed.port
+        if ":" in hostname and not hostname.startswith("["):
+            host_part = f"[{hostname}]"
+        else:
+            host_part = hostname
+        if port:
+            host_part = f"{host_part}:{port}"
+
+        return urlunsplit((scheme, host_part, "", "", ""))
+
     def register_visitor_view(self, request):
         """Exchange registration data with the visiting node."""
 
@@ -1127,6 +1156,8 @@ class NodeAdmin(EntityModelAdmin):
             )
 
         token = uuid.uuid4().hex
+        visitor_base = self._resolve_visitor_base(request).rstrip("/")
+
         context = {
             **self.admin_site.each_context(request),
             "opts": self.model._meta,
@@ -1134,8 +1165,8 @@ class NodeAdmin(EntityModelAdmin):
             "token": token,
             "info_url": reverse("node-info"),
             "register_url": reverse("register-node"),
-            "visitor_info_url": "http://localhost:8888/nodes/info/",
-            "visitor_register_url": "http://localhost:8888/nodes/register/",
+            "visitor_info_url": f"{visitor_base}/nodes/info/",
+            "visitor_register_url": f"{visitor_base}/nodes/register/",
         }
         return render(request, "admin/nodes/node/register_visitor.html", context)
 
