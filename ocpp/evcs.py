@@ -48,6 +48,7 @@ from typing import Dict, Optional
 
 import websockets
 from . import store
+from .websocket_headers import connect_headers_kwargs
 
 # ---------------------------------------------------------------------------
 # Helper utilities
@@ -202,11 +203,13 @@ async def simulate_cp(
         uri = f"ws://{host}:{ws_port}/{cp_path}"
     else:
         uri = f"ws://{host}/{cp_path}"
-    headers = {}
+    headers: dict[str, str] = {}
     if username and password:
         userpass = f"{username}:{password}"
         b64 = base64.b64encode(userpass.encode("utf-8")).decode("ascii")
         headers["Authorization"] = f"Basic {b64}"
+
+    connect_kwargs = connect_headers_kwargs(headers)
 
     state = sim_state or _simulators.get(cp_idx + 1, _simulators[1])
 
@@ -217,7 +220,7 @@ async def simulate_cp(
         try:
             try:
                 ws = await websockets.connect(
-                    uri, subprotocols=["ocpp1.6"], extra_headers=headers
+                    uri, subprotocols=["ocpp1.6"], **connect_kwargs
                 )
             except Exception as exc:
                 store.add_log(
@@ -225,7 +228,7 @@ async def simulate_cp(
                     f"Connection with subprotocol failed: {exc}",
                     log_type="simulator",
                 )
-                ws = await websockets.connect(uri, extra_headers=headers)
+                ws = await websockets.connect(uri, **connect_kwargs)
 
             state.phase = "Connected"
             state.last_message = ""

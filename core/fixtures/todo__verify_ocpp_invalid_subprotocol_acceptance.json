@@ -1,0 +1,13 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Verify OCPP connections succeed without a valid subprotocol",
+      "url": "/admin/ocpp/charger/",
+      "request_details": "Using a charger or websocket client that omits Sec-WebSocket-Protocol or advertises an unexpected value (for example `ocpp2.0`), connect it to the CSMS and confirm the session is accepted. Validate that the charger list and logs record `Connected (subprotocol=none)` rather than rejecting the handshake.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.29"
+    }
+  }
+]

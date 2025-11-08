@@ -1,3 +1,4 @@
+import inspect
 import os
 import sys
 import time
@@ -93,6 +94,7 @@ import websockets
 import asyncio
 from .simulator import SimulatorConfig, ChargePointSimulator
 from .evcs import simulate, SimulatorState, _simulators
+from .websocket_headers import connect_headers_kwargs
 import re
 from datetime import datetime, timedelta, timezone as dt_timezone
 from .tasks import (
@@ -147,6 +149,20 @@ class DummyWebSocket:
 
     async def send(self, message):
         self.sent.append(message)
+
+
+class WebsocketHeaderUtilsTests(TestCase):
+    def test_empty_headers_produce_no_kwargs(self):
+        self.assertEqual(connect_headers_kwargs(None), {})
+        self.assertEqual(connect_headers_kwargs({}), {})
+
+    def test_headers_use_supported_keyword(self):
+        headers = {"Authorization": "Basic token"}
+        kwargs = connect_headers_kwargs(headers)
+        self.assertTrue(kwargs)
+        param, value = next(iter(kwargs.items()))
+        self.assertIn(param, inspect.signature(websockets.connect).parameters)
+        self.assertEqual(value, headers)
 
 
 class DispatchActionTests(TestCase):
@@ -841,6 +857,12 @@ class CSMSConsumerTests(TransactionTestCase):
         communicator_with_protocol.scope["path"] = (
             communicator_with_protocol.scope.get("path", "").rstrip("/")
         )
+        communicator_with_invalid_protocol = ClientWebsocketCommunicator(
+            application, "/PROT1/", subprotocols=["ocpp2.0"]
+        )
+        communicator_with_invalid_protocol.scope["path"] = (
+            communicator_with_invalid_protocol.scope.get("path", "").rstrip("/")
+        )
         communicator_without_protocol = ClientWebsocketCommunicator(
             application, "/PROT1/"
         )
@@ -849,6 +871,13 @@ class CSMSConsumerTests(TransactionTestCase):
         )
 
         try:
+            def _count_none_logs() -> int:
+                return sum(
+                    1
+                    for entry in store.get_logs(pending_key, log_type="charger")
+                    if "Connected (subprotocol=none)" in entry
+                )
+
             accepted, negotiated = await communicator_with_protocol.connect()
             logs = store.get_logs(pending_key, log_type="charger")
             self.assertTrue(accepted, negotiated)
@@ -858,12 +887,30 @@ class CSMSConsumerTests(TransactionTestCase):
                 logs,
             )
 
-            accepted_without, negotiated_without = await communicator_without_protocol.connect()
+            none_count_before_invalid = _count_none_logs()
+            (
+                accepted_invalid,
+                negotiated_invalid,
+            ) = await communicator_with_invalid_protocol.connect()
+            logs = store.get_logs(pending_key, log_type="charger")
+            self.assertTrue(accepted_invalid, logs)
+            self.assertIsNone(negotiated_invalid)
+            self.assertGreater(
+                _count_none_logs(),
+                none_count_before_invalid,
+                logs,
+            )
+
+            none_count_before_without = _count_none_logs()
+            accepted_without, negotiated_without = (
+                await communicator_without_protocol.connect()
+            )
             logs = store.get_logs(pending_key, log_type="charger")
             self.assertTrue(accepted_without, logs)
             self.assertIsNone(negotiated_without)
-            self.assertTrue(
-                any("Connected (subprotocol=none)" in entry for entry in logs),
+            self.assertGreater(
+                _count_none_logs(),
+                none_count_before_without,
                 logs,
             )
         finally:
@@ -871,6 +918,8 @@ class CSMSConsumerTests(TransactionTestCase):
                 await communicator_without_protocol.disconnect()
             with suppress(Exception):
                 await communicator_with_protocol.disconnect()
+            with suppress(Exception):
+                await communicator_with_invalid_protocol.disconnect()
             store.connections.clear()
             store.connections.update(original_connections)
             store.ip_connections.clear()

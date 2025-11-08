@@ -274,6 +274,10 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         self._initial_metadata_task: asyncio.Task | None = None
         subprotocol = None
         offered = self.scope.get("subprotocols", [])
+        # Operational safeguard: never reject a charger solely because it omits
+        # or sends an unexpected subprotocol.  We negotiate ``ocpp1.6`` when the
+        # charger offers it, but otherwise continue without a subprotocol so we
+        # accept as many real-world stations as possible.
         if "ocpp1.6" in offered:
             subprotocol = "ocpp1.6"
         self.client_ip = _resolve_client_ip(self.scope)
