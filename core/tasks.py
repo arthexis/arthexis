@@ -359,7 +359,7 @@ def _shares_stable_series(local: str, remote: str) -> bool:
 
 
 @shared_task
-def check_github_updates() -> None:
+def check_github_updates(channel_override: str | None = None) -> None:
     """Check the GitHub repo for updates and upgrade if needed."""
     base_dir = Path(__file__).resolve().parent.parent
     mode_file = base_dir / "locks" / "auto_upgrade.lck"
@@ -377,6 +377,16 @@ def check_github_updates() -> None:
                 cleaned_mode = raw_mode.lower()
                 if cleaned_mode:
                     mode = cleaned_mode
+
+        override_mode = None
+        if channel_override:
+            requested = channel_override.strip().lower()
+            if requested in {"latest", "stable"}:
+                override_mode = requested
+            elif requested == "normal":
+                override_mode = None
+        if override_mode:
+            mode = override_mode
 
         branch = "main"
         try:
@@ -396,6 +406,12 @@ def check_github_updates() -> None:
         with log_file.open("a") as fh:
             fh.write(
                 f"{timezone.now().isoformat()} check_github_updates triggered\n"
+            )
+
+        if override_mode:
+            _append_auto_upgrade_log(
+                base_dir,
+                f"Using admin override channel: {override_mode}",
             )
 
         notify = None

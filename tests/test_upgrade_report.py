@@ -10,6 +10,7 @@ from django.contrib.messages.storage.fallback import FallbackStorage
 from django.test import SimpleTestCase, RequestFactory, override_settings
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.translation import gettext
 
 from core import system
 
@@ -135,6 +136,16 @@ class UpgradeReportTests(SimpleTestCase):
         mock_task.delay.assert_called_once_with()
         mock_task.assert_not_called()
 
+    def test_trigger_upgrade_check_uses_async_queue_with_override(self):
+        with mock.patch("core.system.check_github_updates") as mock_task:
+            mock_task.delay = mock.Mock()
+
+            queued = system._trigger_upgrade_check(channel_override="latest")
+
+        self.assertTrue(queued)
+        mock_task.delay.assert_called_once_with(channel_override="latest")
+        mock_task.assert_not_called()
+
     def test_trigger_upgrade_check_falls_back_to_sync(self):
         with mock.patch("core.system.check_github_updates") as mock_task:
             mock_task.delay = mock.Mock(side_effect=RuntimeError("broker down"))
@@ -152,7 +163,9 @@ class UpgradeReportTests(SimpleTestCase):
         setattr(request, "_messages", FallbackStorage(request))
         request.user = mock.Mock(is_staff=True, is_active=True)
 
-        with mock.patch("core.system._trigger_upgrade_check", return_value=True):
+        with mock.patch(
+            "core.system._trigger_upgrade_check", return_value=True
+        ) as mock_trigger:
             response = system._system_trigger_upgrade_check_view(request)
 
         self.assertEqual(response.status_code, 302)
@@ -160,6 +173,40 @@ class UpgradeReportTests(SimpleTestCase):
         stored = list(messages.get_messages(request))
         self.assertEqual(len(stored), 1)
         self.assertEqual(stored[0].level, messages.SUCCESS)
+        self.assertEqual(
+            stored[0].message,
+            gettext("Upgrade check requested. The task will run shortly."),
+        )
+        mock_trigger.assert_called_once_with(channel_override=None)
+
+    def test_trigger_upgrade_check_view_allows_channel_override(self):
+        request = self.factory.post(
+            reverse("admin:system-upgrade-run-check"),
+            data={"channel": "latest"},
+        )
+        SessionMiddleware(lambda req: None).process_request(request)
+        request.session.save()
+        setattr(request, "_messages", FallbackStorage(request))
+        request.user = mock.Mock(is_staff=True, is_active=True)
+
+        with mock.patch(
+            "core.system._trigger_upgrade_check", return_value=True
+        ) as mock_trigger:
+            response = system._system_trigger_upgrade_check_view(request)
+
+        self.assertEqual(response.status_code, 302)
+        stored = list(messages.get_messages(request))
+        self.assertEqual(len(stored), 1)
+        self.assertEqual(stored[0].level, messages.SUCCESS)
+        expected_message = "{} {}".format(
+            gettext("Upgrade check requested. The task will run shortly."),
+            gettext(
+                "It will run using the %(channel)s channel for this execution without changing the configured mode."
+            )
+            % {"channel": gettext("Latest")},
+        )
+        self.assertEqual(stored[0].message, expected_message)
+        mock_trigger.assert_called_once_with(channel_override="latest")
 
     def test_trigger_upgrade_check_view_reports_error(self):
         request = self.factory.post(reverse("admin:system-upgrade-run-check"))
