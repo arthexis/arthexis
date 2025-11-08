@@ -179,6 +179,7 @@ def _latest_release_changelog() -> dict[str, object]:
     state = "before"
     release_title = ""
     entries: list[dict[str, str]] = []
+    seen_unreleased_entry = False
 
     for raw_line in lines:
         stripped = raw_line.strip()
@@ -189,15 +190,27 @@ def _latest_release_changelog() -> dict[str, object]:
             continue
 
         if state == "unreleased-heading":
-            if set(stripped) == {"-"}:
-                state = "unreleased-body"
-            else:
-                state = "unreleased-body"
-            continue
+            # After encountering the heading underline we move into the
+            # unreleased body, allowing for optional blank lines before the
+            # first entry.
+            state = "unreleased-body"
+            if not stripped or set(stripped) == {"-"}:
+                continue
+            # Re-process the current line as part of the Unreleased body when
+            # the underline is missing.
 
         if state == "unreleased-body":
             if not stripped:
-                state = "after-unreleased"
+                if seen_unreleased_entry:
+                    state = "after-unreleased"
+                continue
+            if stripped.startswith("- "):
+                seen_unreleased_entry = True
+                continue
+            # No entries were recorded in the Unreleased section; treat the
+            # current line as the first release heading.
+            release_title = stripped
+            state = "release-heading"
             continue
 
         if state == "after-unreleased":
@@ -208,11 +221,11 @@ def _latest_release_changelog() -> dict[str, object]:
             continue
 
         if state == "release-heading":
-            if set(stripped) == {"-"}:
-                state = "release-body"
-            else:
-                state = "release-body"
-            continue
+            state = "release-body"
+            if not stripped or set(stripped) == {"-"}:
+                continue
+            # Allow the loop to treat the current line as the first body entry
+            # when the underline is missing.
 
         if state == "release-body":
             if not stripped:
