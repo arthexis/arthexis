@@ -12,6 +12,7 @@ import websockets
 from config.offline import requires_network
 
 from . import store
+from .websocket_headers import connect_headers_kwargs
 
 
 @dataclass
@@ -399,17 +400,19 @@ class ChargePointSimulator:
             uri = f"ws://{cfg.host}:{cfg.ws_port}/{cfg.cp_path}"
         else:
             uri = f"ws://{cfg.host}/{cfg.cp_path}"
-        headers = {}
+        headers: dict[str, str] = {}
         if cfg.username and cfg.password:
             userpass = f"{cfg.username}:{cfg.password}"
             b64 = base64.b64encode(userpass.encode()).decode()
             headers["Authorization"] = f"Basic {b64}"
 
+        connect_kwargs = connect_headers_kwargs(headers)
+
         ws = None
         try:
             try:
                 ws = await websockets.connect(
-                    uri, subprotocols=["ocpp1.6"], extra_headers=headers
+                    uri, subprotocols=["ocpp1.6"], **connect_kwargs
                 )
             except Exception as exc:
                 store.add_log(
@@ -417,7 +420,7 @@ class ChargePointSimulator:
                     f"Connection with subprotocol failed: {exc}",
                     log_type="simulator",
                 )
-                ws = await websockets.connect(uri, extra_headers=headers)
+                ws = await websockets.connect(uri, **connect_kwargs)
 
             store.add_log(
                 cfg.cp_path,
