@@ -3147,6 +3147,91 @@ class ChargerAdminTests(TestCase):
         self.assertTrue(charger_optional.require_rfid)
         self.assertContains(response, "Updated RFID authentication")
 
+    def test_create_simulator_for_cp_action_creates_simulator(self):
+        charger = Charger.objects.create(
+            charger_id="SIMCP-001",
+            display_name="Lobby Charger",
+            connector_id=2,
+            last_path="/OCPP/SIMCP-001/",
+        )
+        configuration = ChargerConfiguration.objects.create(
+            charger_identifier=charger.charger_id,
+            connector_id=charger.connector_id,
+            unknown_keys=["GhostKey"],
+        )
+        ConfigurationKey.objects.create(
+            configuration=configuration,
+            position=0,
+            key="HeartbeatInterval",
+            readonly=False,
+            has_value=True,
+            value=60,
+            extra_data={"custom": "value"},
+        )
+        charger.configuration = configuration
+        charger.save(update_fields=["configuration"])
+
+        url = reverse("admin:ocpp_charger_changelist")
+        response = self.client.post(
+            url,
+            {
+                "action": "create_simulator_for_cp",
+                "_selected_action": [charger.pk],
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        simulator = Simulator.objects.get()
+        self.assertEqual(simulator.serial_number, charger.charger_id)
+        self.assertEqual(simulator.connector_id, charger.connector_id)
+        self.assertEqual(simulator.cp_path, "OCPP/SIMCP-001-2")
+        self.assertEqual(
+            simulator.configuration_keys,
+            [
+                {
+                    "key": "HeartbeatInterval",
+                    "readonly": False,
+                    "value": 60,
+                    "custom": "value",
+                }
+            ],
+        )
+        self.assertEqual(simulator.configuration_unknown_keys, ["GhostKey"])
+        self.assertEqual(
+            response["Location"],
+            reverse("admin:ocpp_simulator_change", args=[simulator.pk]),
+        )
+
+    def test_create_simulator_for_cp_action_generates_unique_fields(self):
+        Simulator.objects.create(name="Lobby Charger Simulator", cp_path="SIMCP-001-2")
+        charger_one = Charger.objects.create(
+            charger_id="SIMCP-001",
+            display_name="Lobby Charger",
+            connector_id=None,
+        )
+        charger_two = Charger.objects.create(
+            charger_id="SIMCP-001",
+            connector_id=1,
+        )
+
+        url = reverse("admin:ocpp_charger_changelist")
+        response = self.client.post(
+            url,
+            {
+                "action": "create_simulator_for_cp",
+                "_selected_action": [charger_one.pk, charger_two.pk],
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        simulators = Simulator.objects.order_by("pk")
+        self.assertEqual(simulators.count(), 3)
+        created = [sim for sim in simulators if sim.name != "Lobby Charger Simulator"]
+        self.assertEqual(len(created), 2)
+        names = {sim.name for sim in created}
+        self.assertIn("Lobby Charger Simulator (2)", names)
+        self.assertTrue(any(name.startswith("SIMCP-001") for name in names))
+        created_paths = {sim.cp_path for sim in created}
+        self.assertEqual(len(created_paths), 2)
+
     def test_admin_lists_log_link(self):
         charger = Charger.objects.create(charger_id="LOG1")
         url = reverse("admin:ocpp_charger_changelist")
