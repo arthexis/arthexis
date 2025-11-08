@@ -120,7 +120,7 @@ Terminal nodes can start directly with the scripts below without installing; Con
    - Installation is not required to start in Terminal mode (the default).
 
 ### 4. Administration
-Visit [`http://localhost:8888/admin/`](http://localhost:8888/admin/) for the [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) and [`http://localhost:8888/admindocs/`](http://localhost:8888/admindocs/) for the [admindocs](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/). Use `--port` with the start scripts or installer when you need to expose a different port.
+Visit [`http://localhost:8888/admin/`](http://localhost:8888/admin/) for the [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) and [`http://localhost:8888/admindocs/`](http://localhost:8888/admindocs/) for the [admindocs](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/). Use `--port` with the start scripts or installer when you need to expose a different port. Review the [Install & Administration Guide](docs/cookbooks/install-start-stop-upgrade-uninstall.md) in the cookbooks directory for end-to-end deployment steps.
 
 ## Sigils
 
