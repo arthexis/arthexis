@@ -45,6 +45,13 @@ AUTO_UPGRADE_SKIP_LOCK_NAME = "auto_upgrade_skip_revisions.lck"
 AUTO_UPGRADE_LOG_NAME = "auto-upgrade.log"
 
 
+UPGRADE_CHANNEL_CHOICES: dict[str, dict[str, object]] = {
+    "normal": {"override": None, "label": _("Normal")},
+    "latest": {"override": "latest", "label": _("Latest")},
+    "stable": {"override": "stable", "label": _("Stable")},
+}
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -1377,14 +1384,20 @@ def _system_pending_todos_report_view(request):
     )
 
 
-def _trigger_upgrade_check() -> bool:
+def _trigger_upgrade_check(*, channel_override: str | None = None) -> bool:
     """Return ``True`` when the upgrade check was queued asynchronously."""
 
     try:
-        check_github_updates.delay()
+        if channel_override:
+            check_github_updates.delay(channel_override=channel_override)
+        else:
+            check_github_updates.delay()
     except Exception:
         logger.exception("Failed to enqueue upgrade check; running synchronously instead")
-        check_github_updates()
+        if channel_override:
+            check_github_updates(channel_override=channel_override)
+        else:
+            check_github_updates()
         return False
     return True
 
@@ -1393,8 +1406,18 @@ def _system_trigger_upgrade_check_view(request):
     if request.method != "POST":
         return HttpResponseRedirect(reverse("admin:system-upgrade-report"))
 
+    requested_channel = (request.POST.get("channel") or "normal").lower()
+    channel_choice = UPGRADE_CHANNEL_CHOICES.get(
+        requested_channel, UPGRADE_CHANNEL_CHOICES["normal"]
+    )
+    override_value = channel_choice.get("override")
+    channel_override = override_value if isinstance(override_value, str) else None
+    channel_label = None
+    if channel_override:
+        channel_label = str(channel_choice["label"])
+
     try:
-        queued = _trigger_upgrade_check()
+        queued = _trigger_upgrade_check(channel_override=channel_override)
     except Exception as exc:  # pragma: no cover - unexpected failure
         logger.exception("Unable to trigger upgrade check")
         messages.error(
@@ -1403,19 +1426,23 @@ def _system_trigger_upgrade_check_view(request):
             % {"error": str(exc)},
         )
     else:
+        detail_message = ""
+        if channel_label:
+            detail_message = _(
+                "It will run using the %(channel)s channel for this execution without changing the configured mode."
+            ) % {"channel": channel_label}
         if queued:
-            messages.success(
-                request,
-                _("Upgrade check requested. The task will run shortly."),
-            )
+            base_message = _("Upgrade check requested. The task will run shortly.")
         else:
-            messages.success(
-                request,
-                _(
-                    "Upgrade check started locally. Review the auto-upgrade log for"
-                    " progress."
-                ),
+            base_message = _(
+                "Upgrade check started locally. Review the auto-upgrade log for progress."
             )
+        final_message = (
+            format_html("{} {}", base_message, detail_message)
+            if detail_message
+            else base_message
+        )
+        messages.success(request, final_message)
 
     return HttpResponseRedirect(reverse("admin:system-upgrade-report"))
 

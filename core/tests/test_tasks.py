@@ -165,6 +165,90 @@ def test_check_github_updates_treats_latest_mode_case_insensitively(
     assert ["./upgrade.sh", "--latest", "--no-restart"] in run_commands
 
 
+def test_check_github_updates_respects_channel_override(monkeypatch, tmp_path):
+    """An explicit channel override should force the requested upgrade mode."""
+
+    from core import tasks
+
+    base_dir = Path(tasks.__file__).resolve().parent.parent
+    mode_path = base_dir / "locks" / "auto_upgrade.lck"
+    service_path = base_dir / "locks/service.lck"
+
+    original_exists = Path.exists
+    original_read_text = Path.read_text
+
+    def fake_exists(self: Path) -> bool:
+        if self == mode_path:
+            return True
+        if self == service_path:
+            return False
+        return original_exists(self)
+
+    def fake_read_text(self: Path, *args, **kwargs) -> str:
+        if self == mode_path:
+            return "version\n"
+        return original_read_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "exists", fake_exists, raising=False)
+    monkeypatch.setattr(Path, "read_text", fake_read_text, raising=False)
+
+    monkeypatch.setitem(
+        sys.modules,
+        "core.notifications",
+        SimpleNamespace(notify=lambda *args, **kwargs: None),
+    )
+
+    import nodes.apps as nodes_apps
+
+    monkeypatch.setattr(nodes_apps, "_startup_notification", lambda: None)
+
+    log_path = tmp_path / "auto-upgrade.log"
+
+    def fake_log_path(_base: Path) -> Path:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        return log_path
+
+    messages: list[str] = []
+    run_commands: list[list[str]] = []
+
+    monkeypatch.setattr(tasks, "_auto_upgrade_log_path", fake_log_path)
+    monkeypatch.setattr(
+        tasks,
+        "_append_auto_upgrade_log",
+        lambda _base, message: messages.append(message),
+    )
+    monkeypatch.setattr(tasks, "_schedule_health_check", lambda *args, **kwargs: None)
+    monkeypatch.setattr(tasks, "_load_skipped_revisions", lambda base: set())
+    monkeypatch.setattr(
+        tasks,
+        "_resolve_release_severity",
+        lambda version: tasks.SEVERITY_NORMAL,
+    )
+    monkeypatch.setattr(tasks, "_read_remote_version", lambda base, branch: "0.1.26")
+    monkeypatch.setattr(tasks, "_read_local_version", lambda base: "0.1.25")
+
+    monkeypatch.setattr(tasks.shutil, "which", lambda command: None)
+
+    def fake_run(command, *args, **kwargs):
+        run_commands.append(command)
+        return CompletedProcess(command, 0)
+
+    def fake_check_output(command, *args, **kwargs):
+        if "rev-parse" in command:
+            if command[-1].startswith("origin/"):
+                return "remote-sha"
+            return "local-sha"
+        return ""
+
+    monkeypatch.setattr(tasks.subprocess, "run", fake_run)
+    monkeypatch.setattr(tasks.subprocess, "check_output", fake_check_output)
+
+    tasks.check_github_updates(channel_override="latest")
+
+    assert ["./upgrade.sh", "--latest", "--no-restart"] in run_commands
+    assert any("Using admin override channel: latest" in message for message in messages)
+
+
 def test_check_github_updates_allows_stable_critical_patch(monkeypatch, tmp_path):
     """Stable mode should upgrade when a critical patch is available."""
 
