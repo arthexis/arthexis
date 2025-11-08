@@ -204,18 +204,57 @@
 
     function buildUrlVariants(url) {
         const variants = [];
+        const seen = new Set();
+
+        function push(value) {
+            if (value && !seen.has(value)) {
+                seen.add(value);
+                variants.push(value);
+            }
+        }
+
         try {
             const parsed = new URL(url, window.location.href);
+            const baseVariants = [];
             if (parsed.protocol === "http:") {
                 const secure = new URL(parsed.href);
                 secure.protocol = "https:";
-                variants.push(secure.href);
+                baseVariants.push(secure);
             }
-            variants.push(parsed.href);
+            baseVariants.push(parsed);
+
+            const normalizedHost = parsed.hostname || "";
+            const hostKey = normalizedHost.replace(/^[\[]|[\]]$/g, "");
+            const hostAlternatives = [normalizedHost];
+
+            if (hostKey === "localhost") {
+                hostAlternatives.push("127.0.0.1", "::1");
+            } else if (hostKey === "127.0.0.1") {
+                hostAlternatives.push("localhost", "::1");
+            } else if (hostKey === "::1") {
+                hostAlternatives.push("localhost", "127.0.0.1");
+            }
+
+            const uniqueHosts = hostAlternatives.filter(
+                (value, index, self) => value && self.indexOf(value) === index
+            );
+
+            for (const base of baseVariants) {
+                push(base.href);
+                for (const host of uniqueHosts) {
+                    if (host === base.hostname) {
+                        continue;
+                    }
+                    const candidate = new URL(base.href);
+                    candidate.hostname = host;
+                    push(candidate.href);
+                }
+            }
         } catch (err) {
-            variants.push(url);
+            push(url);
         }
-        return variants.filter((value, index, self) => self.indexOf(value) === index);
+
+        return variants;
     }
 
     async function requestWithFallback(urls, options) {
