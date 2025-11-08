@@ -1,0 +1,13 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Confirm CP Forwarder listed with Protocol admin group",
+      "url": "/admin/",
+      "request_details": "Log in as a staff user and open the admin dashboard. Verify the CP Forwarder link appears under the '3. Protocol' section alongside the other protocol models, and confirm the sidebar shows the link within the same group.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.29"
+    }
+  }
+]
