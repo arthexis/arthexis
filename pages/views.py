@@ -8,6 +8,7 @@ import calendar
 import io
 import shutil
 import re
+from typing import Any
 from html import escape
 from urllib.parse import urlparse
 
@@ -1325,6 +1326,10 @@ class ClientReportForm(forms.Form):
         ("month", _("Month")),
     ]
     RECURRENCE_CHOICES = ClientReportSchedule.PERIODICITY_CHOICES
+    VIEW_CHOICES = [
+        ("expanded", _("Expanded view")),
+        ("summary", _("Summarized view")),
+    ]
     period = forms.ChoiceField(
         choices=PERIOD_CHOICES,
         widget=forms.RadioSelect,
@@ -1355,6 +1360,15 @@ class ClientReportForm(forms.Form):
         widget=forms.DateInput(attrs={"type": "month"}),
         input_formats=["%Y-%m"],
         help_text=_("Generates the report for the calendar month that you select."),
+    )
+    view_mode = forms.ChoiceField(
+        label=_("Report layout"),
+        choices=VIEW_CHOICES,
+        initial="expanded",
+        widget=forms.RadioSelect,
+        help_text=_(
+            "Choose between detailed charge point sections or a combined summary table."
+        ),
     )
     language = forms.ChoiceField(
         label=_("Report language"),
@@ -1406,6 +1420,11 @@ class ClientReportForm(forms.Form):
         if request and getattr(request, "user", None) and request.user.is_authenticated:
             self.fields["owner"].initial = request.user.pk
         self.fields["chargers"].widget.attrs["class"] = "charger-options"
+        if not self.is_bound:
+            queryset = self.fields["chargers"].queryset
+            self.fields["chargers"].initial = list(
+                queryset.values_list("pk", flat=True)
+            )
         language_initial = ClientReport.default_language()
         if request:
             language_initial = ClientReport.normalize_language(
@@ -1471,6 +1490,8 @@ def client_report(request):
     form = ClientReportForm(request.POST or None, request=request)
     report = None
     schedule = None
+    report_rows = None
+    report_summary_rows: list[dict[str, Any]] = []
     if request.method == "POST":
         if not request.user.is_authenticated:
             form.is_valid()  # Run validation to surface field errors alongside auth error.
@@ -1576,6 +1597,8 @@ def client_report(request):
                     )
                     redirect_url = f"{reverse('pages:client-report')}?download={report.pk}"
                     return HttpResponseRedirect(redirect_url)
+                report_rows = report.rows_for_display
+                report_summary_rows = ClientReport.build_evcs_summary_rows(report_rows)
     download_url = None
     download_param = request.GET.get("download")
     if download_param:
@@ -1598,12 +1621,26 @@ def client_report(request):
         except NoReverseMatch:
             login_url = getattr(settings, "LOGIN_URL", None)
 
+    if report and report_rows is None:
+        report_rows = report.rows_for_display
+        report_summary_rows = ClientReport.build_evcs_summary_rows(report_rows)
+
+    selected_view_mode = form.fields["view_mode"].initial
+    if form.is_bound:
+        if form.is_valid():
+            selected_view_mode = form.cleaned_data.get("view_mode", selected_view_mode)
+        else:
+            selected_view_mode = form.data.get("view_mode", selected_view_mode)
+
     context = {
         "form": form,
         "report": report,
         "schedule": schedule,
         "login_url": login_url,
         "download_url": download_url,
+        "report_rows": report_rows,
+        "report_summary_rows": report_summary_rows,
+        "report_view_mode": selected_view_mode,
     }
     return render(request, "pages/client_report.html", context)
 

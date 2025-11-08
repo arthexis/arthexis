@@ -72,6 +72,7 @@ class ClientReportGenerationTests(TestCase):
                 "recurrence": ClientReportSchedule.PERIODICITY_NONE,
                 "chargers": [self.charger.pk],
                 "language": "en",
+                "view_mode": "expanded",
             },
         )
         self.assertEqual(resp.status_code, 200)
@@ -92,6 +93,7 @@ class ClientReportGenerationTests(TestCase):
                 "recurrence": ClientReportSchedule.PERIODICITY_NONE,
                 "chargers": [self.charger.pk],
                 "language": "en",
+                "view_mode": "expanded",
             },
         )
         self.assertEqual(resp.status_code, 302)
@@ -127,6 +129,16 @@ class ClientReportGenerationTests(TestCase):
         self.assertTrue(
             any(tx.get("rfid_label") == str(self.rfid2.label_id) for tx in transactions)
         )
+        summary_rows = ClientReport.build_evcs_summary_rows(report.rows_for_display)
+        self.assertTrue(summary_rows)
+        self.assertTrue(all("transaction" in item for item in summary_rows))
+        transaction_sessions = {
+            tx.get("session_kwh") for tx in transactions if tx.get("session_kwh") is not None
+        }
+        summary_sessions = {
+            item["transaction"].get("session_kwh") for item in summary_rows
+        }
+        self.assertTrue(summary_sessions.issubset(transaction_sessions))
         filters = report.data.get("filters", {})
         self.assertEqual(filters.get("chargers"), [self.charger.charger_id])
         pdf_response = self.client.get(
@@ -150,6 +162,7 @@ class ClientReportGenerationTests(TestCase):
             "recurrence": ClientReportSchedule.PERIODICITY_NONE,
             "chargers": [self.charger.pk],
             "language": "en",
+            "view_mode": "expanded",
         }
         self.client.force_login(self.user)
 
@@ -173,6 +186,12 @@ class ClientReportGenerationTests(TestCase):
             second, "Consumer reports can only be generated periodically.", status_code=200
         )
         self.assertEqual(ClientReport.objects.count(), 1)
+
+    def test_form_defaults_selects_all_chargers(self):
+        extra = Charger.objects.create(charger_id="C2")
+        form = ClientReportForm()
+        initial_ids = list(form.fields["chargers"].initial or [])
+        self.assertCountEqual(initial_ids, [self.charger.pk, extra.pk])
 
     def test_generate_rejects_control_characters_in_title(self):
         day = timezone.now().date()
@@ -206,6 +225,7 @@ class ClientReportGenerationTests(TestCase):
                     "third@example.com,\tfourth@example.com"
                 ),
                 "language": "en",
+                "view_mode": "expanded",
             }
         )
         self.assertTrue(bound_form.is_valid())

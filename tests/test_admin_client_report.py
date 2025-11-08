@@ -75,6 +75,7 @@ class AdminClientReportTests(TestCase):
                 "recurrence": ClientReportSchedule.PERIODICITY_NONE,
                 "chargers": [self.charger.pk],
                 "language": "en",
+                "view_mode": "expanded",
             },
         )
         self.assertEqual(resp.status_code, 302)
@@ -150,6 +151,7 @@ class AdminClientReportTests(TestCase):
                 "recurrence": ClientReportSchedule.PERIODICITY_NONE,
                 "chargers": [self.charger.pk],
                 "language": "en",
+                "view_mode": "expanded",
             },
         )
         self.assertEqual(resp.status_code, 302)
@@ -194,6 +196,7 @@ class AdminClientReportTests(TestCase):
                     "chargers": [self.charger.pk],
                     "language": "es",
                     "title": "Informe especial",
+                    "view_mode": "expanded",
                 },
             )
         mocked_send.assert_called_once()
