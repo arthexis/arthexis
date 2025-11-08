@@ -857,6 +857,12 @@ class CSMSConsumerTests(TransactionTestCase):
         communicator_with_protocol.scope["path"] = (
             communicator_with_protocol.scope.get("path", "").rstrip("/")
         )
+        communicator_with_invalid_protocol = ClientWebsocketCommunicator(
+            application, "/PROT1/", subprotocols=["ocpp2.0"]
+        )
+        communicator_with_invalid_protocol.scope["path"] = (
+            communicator_with_invalid_protocol.scope.get("path", "").rstrip("/")
+        )
         communicator_without_protocol = ClientWebsocketCommunicator(
             application, "/PROT1/"
         )
@@ -865,6 +871,13 @@ class CSMSConsumerTests(TransactionTestCase):
         )
 
         try:
+            def _count_none_logs() -> int:
+                return sum(
+                    1
+                    for entry in store.get_logs(pending_key, log_type="charger")
+                    if "Connected (subprotocol=none)" in entry
+                )
+
             accepted, negotiated = await communicator_with_protocol.connect()
             logs = store.get_logs(pending_key, log_type="charger")
             self.assertTrue(accepted, negotiated)
@@ -874,12 +887,30 @@ class CSMSConsumerTests(TransactionTestCase):
                 logs,
             )
 
-            accepted_without, negotiated_without = await communicator_without_protocol.connect()
+            none_count_before_invalid = _count_none_logs()
+            (
+                accepted_invalid,
+                negotiated_invalid,
+            ) = await communicator_with_invalid_protocol.connect()
+            logs = store.get_logs(pending_key, log_type="charger")
+            self.assertTrue(accepted_invalid, logs)
+            self.assertIsNone(negotiated_invalid)
+            self.assertGreater(
+                _count_none_logs(),
+                none_count_before_invalid,
+                logs,
+            )
+
+            none_count_before_without = _count_none_logs()
+            accepted_without, negotiated_without = (
+                await communicator_without_protocol.connect()
+            )
             logs = store.get_logs(pending_key, log_type="charger")
             self.assertTrue(accepted_without, logs)
             self.assertIsNone(negotiated_without)
-            self.assertTrue(
-                any("Connected (subprotocol=none)" in entry for entry in logs),
+            self.assertGreater(
+                _count_none_logs(),
+                none_count_before_without,
                 logs,
             )
         finally:
@@ -887,6 +918,8 @@ class CSMSConsumerTests(TransactionTestCase):
                 await communicator_without_protocol.disconnect()
             with suppress(Exception):
                 await communicator_with_protocol.disconnect()
+            with suppress(Exception):
+                await communicator_with_invalid_protocol.disconnect()
             store.connections.clear()
             store.connections.update(original_connections)
             store.ip_connections.clear()
