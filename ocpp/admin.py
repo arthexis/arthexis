@@ -44,6 +44,9 @@ from .models import (
     CPReservation,
     CPFirmware,
     CPFirmwareDeployment,
+    SecurityEvent,
+    ChargerLogRequest,
+    ChargerLogStatus,
 )
 from .simulator import ChargePointSimulator
 from . import store
@@ -2927,3 +2930,46 @@ class MeterValueAdmin(EntityModelAdmin):
     )
     date_hierarchy = "timestamp"
     list_filter = ("charger", MeterValueDateFilter)
+
+
+@admin.register(SecurityEvent)
+class SecurityEventAdmin(EntityModelAdmin):
+    list_display = (
+        "charger",
+        "event_type",
+        "event_timestamp",
+        "trigger",
+        "sequence_number",
+    )
+    list_filter = ("event_type",)
+    search_fields = ("charger__charger_id", "event_type", "tech_info")
+    date_hierarchy = "event_timestamp"
+
+
+@admin.register(ChargerLogRequest)
+class ChargerLogRequestAdmin(EntityModelAdmin):
+    list_display = (
+        "charger",
+        "request_id",
+        "log_type",
+        "status",
+        "requested_at",
+        "responded_at",
+    )
+    list_filter = ("log_type", "status")
+    search_fields = (
+        "charger__charger_id",
+        "log_type",
+        "status",
+        "filename",
+        "location",
+    )
+    date_hierarchy = "requested_at"
+
+
+@admin.register(ChargerLogStatus)
+class ChargerLogStatusAdmin(EntityModelAdmin):
+    list_display = ("request", "status", "occurred_at", "log_type")
+    list_filter = ("status", "log_type")
+    search_fields = ("request__charger__charger_id", "status")
+    date_hierarchy = "occurred_at"
