@@ -63,6 +63,20 @@ def favorite_from_map(favorites_map, ct_id):
 
 
 @register.simple_tag
+def model_app_label(model, default=None):
+    if isinstance(model, dict):
+        label = model.get("app_label")
+        model_class = model.get("model")
+    else:
+        label = getattr(model, "app_label", None)
+        model_class = getattr(model, "model", None)
+    if not label and model_class is not None:
+        meta = getattr(model_class, "_meta", None)
+        label = getattr(meta, "app_label", None)
+    return label or default
+
+
+@register.simple_tag
 def favorite_entries(app_list, favorites_map):
     if not app_list or not favorites_map:
         return []
@@ -84,18 +98,30 @@ def favorite_entries(app_list, favorites_map):
         for model in models:
             if isinstance(model, dict):
                 object_name = model.get("object_name")
+                model_app_label = model.get("app_label")
+                model_class = model.get("model")
             else:
                 object_name = getattr(model, "object_name", None)
+                model_app_label = getattr(model, "app_label", None)
+                model_class = getattr(model, "model", None)
             if not object_name:
                 continue
 
-            cache_key = (app_label, object_name)
+            resolved_app_label = (
+                model_app_label
+                or getattr(getattr(model_class, "_meta", None), "app_label", None)
+                or app_label
+            )
+            cache_key = (resolved_app_label, object_name)
             if cache_key in ct_cache:
                 ct_id = ct_cache[cache_key]
             else:
-                try:
-                    model_class = apps.get_model(app_label, object_name)
-                except LookupError:
+                if model_class is None:
+                    try:
+                        model_class = apps.get_model(resolved_app_label, object_name)
+                    except LookupError:
+                        model_class = None
+                if model_class is None:
                     ct_id = None
                 else:
                     ct_id = ContentType.objects.get_for_model(model_class).id
