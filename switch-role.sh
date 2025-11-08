@@ -24,6 +24,7 @@ CLEAN=false
 LATEST=false
 CHECK=false
 AUTO_UPGRADE_MODE=""
+DEBUG_MODE=""
 REFRESH_MAINTENANCE=false
 
 BASE_DIR="$SCRIPT_DIR"
@@ -31,7 +32,7 @@ LOCK_DIR="$BASE_DIR/locks"
 DB_FILE="$BASE_DIR/db.sqlite3"
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--update] [--latest] [--clean] [--check] [--auto-upgrade|--no-auto-upgrade] [--refresh-maintenance] [--satellite|--terminal|--control|--watchtower]" >&2
+    echo "Usage: $0 [--service NAME] [--update] [--latest] [--clean] [--check] [--auto-upgrade|--no-auto-upgrade] [--debug|--no-debug] [--refresh-maintenance] [--satellite|--terminal|--control|--watchtower]" >&2
     exit 1
 }
 
@@ -168,6 +169,22 @@ while [[ $# -gt 0 ]]; do
             AUTO_UPGRADE_MODE="disable"
             shift
             ;;
+        --debug)
+            if [ "$DEBUG_MODE" = "disable" ]; then
+                echo "Cannot combine --debug with --no-debug" >&2
+                usage
+            fi
+            DEBUG_MODE="enable"
+            shift
+            ;;
+        --no-debug)
+            if [ "$DEBUG_MODE" = "enable" ]; then
+                echo "Cannot combine --debug with --no-debug" >&2
+                usage
+            fi
+            DEBUG_MODE="disable"
+            shift
+            ;;
         --satellite)
             require_nginx "satellite"
             NODE_ROLE="Satellite"
@@ -210,7 +227,7 @@ done
 if [ "$REFRESH_MAINTENANCE" = true ]; then
     if [ -n "$NODE_ROLE" ] || [ -n "$SERVICE" ] || [ "$UPDATE" = true ] || \
        [ "$CLEAN" = true ] || [ "$LATEST" = true ] || [ "$CHECK" = true ] || \
-       [ -n "$AUTO_UPGRADE_MODE" ] || \
+       [ -n "$AUTO_UPGRADE_MODE" ] || [ -n "$DEBUG_MODE" ] || \
        [ "$ENABLE_CELERY" = true ] || [ "$ENABLE_LCD_SCREEN" = true ] || \
        [ "$ENABLE_CONTROL" = true ] || [ "$REQUIRES_REDIS" = true ]; then
         echo "--refresh-maintenance cannot be combined with other options" >&2
@@ -226,6 +243,13 @@ if [ "$REFRESH_MAINTENANCE" = true ]; then
 fi
 
 if [ "$CHECK" = true ]; then
+    if [ -n "$NODE_ROLE" ] || [ -n "$SERVICE" ] || [ "$UPDATE" = true ] || \
+       [ "$CLEAN" = true ] || [ "$LATEST" = true ] || [ -n "$AUTO_UPGRADE_MODE" ] || \
+       [ -n "$DEBUG_MODE" ]; then
+        echo "--check cannot be combined with other options" >&2
+        usage
+    fi
+
     if [ -f "$LOCK_DIR/role.lck" ]; then
         echo "Role: $(cat "$LOCK_DIR/role.lck")"
     else
@@ -248,10 +272,38 @@ if [ "$CHECK" = true ]; then
         echo "Auto-upgrade: disabled"
     fi
 
+    if [ -f "$BASE_DIR/debug.env" ]; then
+        debug_value=$(awk -F= '/^DEBUG=/{value=$2} END{print value}' "$BASE_DIR/debug.env")
+        if [ "$debug_value" = "1" ]; then
+            echo "Debug: enabled"
+        else
+            echo "Debug: disabled"
+        fi
+    else
+        echo "Debug: disabled"
+    fi
+
     exit 0
 fi
 
+ACTION_PERFORMED=false
+
+if [ -n "$DEBUG_MODE" ]; then
+    ACTION_PERFORMED=true
+    DEBUG_VALUE="0"
+    DEBUG_MESSAGE="Debug mode disabled by default."
+    if [ "$DEBUG_MODE" = "enable" ]; then
+        DEBUG_VALUE="1"
+        DEBUG_MESSAGE="Debug mode enabled by default."
+    fi
+    cat > "$BASE_DIR/debug.env" <<EOF
+DEBUG=$DEBUG_VALUE
+EOF
+    echo "$DEBUG_MESSAGE"
+fi
+
 if [ -n "$AUTO_UPGRADE_MODE" ] && [ -z "$NODE_ROLE" ]; then
+    ACTION_PERFORMED=true
     mkdir -p "$LOCK_DIR"
     if [ "$AUTO_UPGRADE_MODE" = "enable" ]; then
         if [ "$LATEST" = true ]; then
@@ -269,6 +321,15 @@ if [ -n "$AUTO_UPGRADE_MODE" ] && [ -z "$NODE_ROLE" ]; then
         rm -f "$LOCK_DIR/auto_upgrade.lck"
         run_auto_upgrade_management disable
         echo "Auto-upgrade disabled."
+    fi
+fi
+
+if [ "$ACTION_PERFORMED" = true ] && [ -z "$NODE_ROLE" ]; then
+    if [ -n "$DEBUG_MODE" ]; then
+        if [ -n "$SERVICE" ] || [ "$UPDATE" = true ] || [ "$CLEAN" = true ] || [ "$LATEST" = true ]; then
+            echo "--debug/--no-debug cannot be combined with service or update options without specifying a node role" >&2
+            usage
+        fi
     fi
     exit 0
 fi
