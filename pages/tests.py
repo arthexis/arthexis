@@ -851,6 +851,35 @@ class AdminDashboardAppListTests(TestCase):
 
         self.assertContains(resp, gettext("No net messages available"))
 
+
+class AdminProtocolGroupingTests(TestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+        User = get_user_model()
+        self.superuser = User.objects.create_superuser(
+            username="protocol_admin", password="pwd", email="admin@example.com"
+        )
+
+    def _build_request(self):
+        request = self.factory.get("/admin/")
+        request.user = self.superuser
+        return request
+
+    def test_cp_forwarder_lists_with_protocol_group(self):
+        app_list = admin.site.get_app_list(self._build_request())
+        ocpp_sections = [app for app in app_list if app["app_label"] == "ocpp"]
+        self.assertTrue(ocpp_sections)
+        ocpp_models = [model["object_name"] for model in ocpp_sections[0]["models"]]
+        self.assertIn("CPForwarder", ocpp_models)
+        self.assertFalse(any(app["app_label"] == "protocols" for app in app_list))
+
+    def test_cp_forwarder_visible_in_ocpp_app_index(self):
+        ocpp_list = admin.site.get_app_list(self._build_request(), app_label="ocpp")
+        self.assertTrue(ocpp_list)
+        ocpp_models = [model["object_name"] for model in ocpp_list[0]["models"]]
+        self.assertIn("CPForwarder", ocpp_models)
+
+
 class AdminSidebarTests(TestCase):
     def setUp(self):
         self.client = Client()

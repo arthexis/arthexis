@@ -161,6 +161,49 @@ def changelist_view_with_object_links(self, request, extra_context=None):
 admin.ModelAdmin.changelist_view = changelist_view_with_object_links
 
 
+_original_admin_get_app_list = admin.AdminSite.get_app_list
+
+
+def get_app_list_with_protocol_forwarder(self, request, app_label=None):
+    if app_label == "protocols":
+        return _original_admin_get_app_list(self, request, app_label=app_label)
+
+    full_list = list(_original_admin_get_app_list(self, request, app_label=None))
+    merged_list = []
+    ocpp_entry = None
+    protocols_entry = None
+
+    for entry in full_list:
+        label = entry.get("app_label")
+        if label == "ocpp":
+            ocpp_entry = entry
+            merged_list.append(entry)
+        elif label == "protocols":
+            protocols_entry = entry
+        else:
+            merged_list.append(entry)
+
+    result = merged_list
+    if ocpp_entry and protocols_entry and protocols_entry.get("models"):
+        cp_models = [model.copy() for model in protocols_entry["models"]]
+        existing = {model["object_name"] for model in ocpp_entry["models"]}
+        additional = [model for model in cp_models if model["object_name"] not in existing]
+        if additional:
+            ocpp_entry["models"].extend(additional)
+            ocpp_entry["models"].sort(key=lambda model: model["name"])
+        if protocols_entry.get("has_module_perms"):
+            ocpp_entry["has_module_perms"] = True
+    else:
+        result = full_list
+
+    if app_label:
+        return [entry for entry in result if entry.get("app_label") == app_label]
+    return result
+
+
+admin.AdminSite.get_app_list = get_app_list_with_protocol_forwarder
+
+
 class ExperienceReference(Reference):
     class Meta:
         proxy = True
