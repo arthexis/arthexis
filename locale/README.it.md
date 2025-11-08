@@ -119,7 +119,7 @@ I nodi Terminal possono avviarsi direttamente con gli script sottostanti senza i
    - Non è necessario installare per avviare in modalità Terminal (predefinita).
 
 ### 4. Amministrazione
-Visita [`http://localhost:8888/admin/`](http://localhost:8888/admin/) per il [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) e [`http://localhost:8888/admindocs/`](http://localhost:8888/admindocs/) per gli [admindocs](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/). Usa `--port` con gli script di avvio o l'installer quando devi esporre una porta diversa.
+Visita [`http://localhost:8888/admin/`](http://localhost:8888/admin/) per il [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) e [`http://localhost:8888/admindocs/`](http://localhost:8888/admindocs/) per gli [admindocs](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/). Usa `--port` con gli script di avvio o l'installer quando devi esporre una porta diversa. Per istruzioni dettagliate consulta la [Guida all'installazione e all'amministrazione](docs/cookbooks/install-start-stop-upgrade-uninstall.md) nella directory cookbooks.
 
 ## Sigilli
 

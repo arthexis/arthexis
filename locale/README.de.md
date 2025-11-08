@@ -119,7 +119,7 @@ Terminal-Knoten können direkt mit den untenstehenden Skripten ohne Installation
    - Für den Start im Terminalmodus (Standard) ist keine Installation erforderlich.
 
 ### 4. Administration
-[`http://localhost:8888/admin/`](http://localhost:8888/admin/) für den [Django-Admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) und [`http://localhost:8888/admindocs/`](http://localhost:8888/admindocs/) für die [admindocs](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/) aufrufen. Verwende `--port` mit den Startskripten oder dem Installer, wenn ein anderer Port benötigt wird.
+[`http://localhost:8888/admin/`](http://localhost:8888/admin/) für den [Django-Admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) und [`http://localhost:8888/admindocs/`](http://localhost:8888/admindocs/) für die [admindocs](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/) aufrufen. Verwende `--port` mit den Startskripten oder dem Installer, wenn ein anderer Port benötigt wird. Ausführliche Schritte findest du im [Installations- und Administrationshandbuch](docs/cookbooks/install-start-stop-upgrade-uninstall.md) im Cookbooks-Verzeichnis.
 
 ## Sigils
 
