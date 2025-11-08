@@ -14,6 +14,7 @@ from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from nodes.models import Node, NodeRole
 from ocpp import tasks as ocpp_tasks
 from ocpp.models import Charger, Transaction
+from protocols.models import CPForwarder
 from ocpp.tasks import push_forwarded_charge_points
 from websocket import WebSocketException
 
@@ -40,16 +41,20 @@ class ForwardingTaskTests(TestCase):
         ocpp_tasks._FORWARDING_SESSIONS.clear()
         self.addCleanup(ocpp_tasks._FORWARDING_SESSIONS.clear)
 
+    @patch("protocols.models.send_forwarding_metadata", return_value=(True, None))
+    @patch("protocols.models.load_local_node_credentials")
     @patch("ocpp.tasks.create_connection")
-    def test_push_forwarded_charge_points_establishes_websocket(self, mock_create):
+    def test_push_forwarded_charge_points_establishes_websocket(
+        self, mock_create, mock_credentials, _mock_metadata
+    ):
+        mock_credentials.return_value = (self.local, object(), None)
         charger = Charger.objects.create(
             charger_id="CP-1001",
             node_origin=self.local,
             manager_node=self.local,
             export_transactions=True,
-            forwarded_to=self.remote,
-            forwarding_watermark=None,
         )
+        forwarder = CPForwarder.objects.create(target_node=self.remote, enabled=True)
 
         connection = Mock()
         connection.connected = True
@@ -67,7 +72,11 @@ class ForwardingTaskTests(TestCase):
         session = ocpp_tasks._FORWARDING_SESSIONS.get(charger.pk)
         self.assertIsNotNone(session)
         updated = Charger.objects.get(pk=charger.pk)
+        self.assertEqual(updated.forwarded_to, self.remote)
         self.assertIsNotNone(updated.forwarding_watermark)
+        forwarder.refresh_from_db()
+        self.assertTrue(forwarder.is_running)
+        self.assertEqual(forwarder.last_forwarded_at, updated.forwarding_watermark)
 
     @patch("ocpp.tasks.create_connection")
     def test_push_forwarded_charge_points_skips_active_session(self, mock_create):
