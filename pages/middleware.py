@@ -10,10 +10,28 @@ from django.conf import settings
 from django.urls import Resolver404, resolve
 
 from .models import Landing, LandingLead, ViewHistory
-from .utils import cache_original_referer, get_original_referer, landing_leads_supported
+from .utils import (
+    cache_original_referer,
+    get_original_referer,
+    get_request_language_code,
+    landing_leads_supported,
+)
 
 
 logger = logging.getLogger(__name__)
+
+
+class LanguagePreferenceMiddleware:
+    """Attach the active interface language to the request."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        language_code = get_request_language_code(request)
+        request.selected_language_code = language_code
+        request.selected_language = language_code
+        return self.get_response(request)
 
 
 class ViewHistoryMiddleware:

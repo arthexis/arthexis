@@ -3883,6 +3883,41 @@ class ClientReport(Entity):
             "filters": dataset.get("filters", {}),
         }
 
+    @staticmethod
+    def build_evcs_summary_rows(dataset: dict[str, Any] | None):
+        """Flatten EVCS session data for summarized presentations."""
+
+        if not dataset or dataset.get("schema") != "evcs-session/v1":
+            return []
+
+        summary_rows: list[dict[str, Any]] = []
+        for entry in dataset.get("evcs", []):
+            if not isinstance(entry, dict):
+                continue
+
+            display_name = (
+                entry.get("display_name")
+                or entry.get("serial_number")
+                or gettext("Charge Point")
+            )
+            serial_number = entry.get("serial_number")
+            transactions = entry.get("transactions") or []
+            if not isinstance(transactions, list):
+                continue
+
+            for row in transactions:
+                if not isinstance(row, dict):
+                    continue
+                summary_rows.append(
+                    {
+                        "display_name": display_name,
+                        "serial_number": serial_number,
+                        "transaction": row,
+                    }
+                )
+
+        return summary_rows
+
     @property
     def rows_for_display(self):
         data = self.data or {}

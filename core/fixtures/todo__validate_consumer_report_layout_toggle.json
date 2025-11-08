@@ -1,0 +1,12 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate consumer report layout toggle",
+      "url": "/client-report/",
+      "request_details": "Open the consumer report form and confirm all charge points are selected by default. Use the Toggle selection button to invert the charger selection and ensure the state changes. Generate a report in both Expanded view and Summarized view and verify the summarized view combines all sessions into a single table with the charge point name in the first column while the expanded view shows per-charge point sections.",
+      "is_deleted": false,
+      "version": "0.1.29"
+    }
+  }
+]

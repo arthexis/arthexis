@@ -8,6 +8,7 @@ import calendar
 import io
 import shutil
 import re
+from typing import Any
 from html import escape
 from urllib.parse import urlparse
 
@@ -48,12 +49,7 @@ from django.utils.http import (
 )
 from core import mailer, public_wifi
 from core.backends import TOTP_DEVICE_NAME
-from django.utils.translation import get_language, gettext as _
-
-try:  # pragma: no cover - compatibility shim for Django versions without constant
-    from django.utils.translation import LANGUAGE_SESSION_KEY
-except ImportError:  # pragma: no cover - fallback when constant is unavailable
-    LANGUAGE_SESSION_KEY = "_language"
+from django.utils.translation import gettext as _
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 from django.core.cache import cache
@@ -71,7 +67,7 @@ from core.models import (
     Todo,
 )
 from ocpp.models import Charger
-from .utils import get_original_referer
+from .utils import get_original_referer, get_request_language_code
 
 
 class _GraphvizDeprecationFilter(logging.Filter):
@@ -1325,6 +1321,10 @@ class ClientReportForm(forms.Form):
         ("month", _("Month")),
     ]
     RECURRENCE_CHOICES = ClientReportSchedule.PERIODICITY_CHOICES
+    VIEW_CHOICES = [
+        ("expanded", _("Expanded view")),
+        ("summary", _("Summarized view")),
+    ]
     period = forms.ChoiceField(
         choices=PERIOD_CHOICES,
         widget=forms.RadioSelect,
@@ -1355,6 +1355,15 @@ class ClientReportForm(forms.Form):
         widget=forms.DateInput(attrs={"type": "month"}),
         input_formats=["%Y-%m"],
         help_text=_("Generates the report for the calendar month that you select."),
+    )
+    view_mode = forms.ChoiceField(
+        label=_("Report layout"),
+        choices=VIEW_CHOICES,
+        initial="expanded",
+        widget=forms.RadioSelect,
+        help_text=_(
+            "Choose between detailed charge point sections or a combined summary table."
+        ),
     )
     language = forms.ChoiceField(
         label=_("Report language"),
@@ -1406,6 +1415,11 @@ class ClientReportForm(forms.Form):
         if request and getattr(request, "user", None) and request.user.is_authenticated:
             self.fields["owner"].initial = request.user.pk
         self.fields["chargers"].widget.attrs["class"] = "charger-options"
+        if not self.is_bound:
+            queryset = self.fields["chargers"].queryset
+            self.fields["chargers"].initial = list(
+                queryset.values_list("pk", flat=True)
+            )
         language_initial = ClientReport.default_language()
         if request:
             language_initial = ClientReport.normalize_language(
@@ -1471,6 +1485,8 @@ def client_report(request):
     form = ClientReportForm(request.POST or None, request=request)
     report = None
     schedule = None
+    report_rows = None
+    report_summary_rows: list[dict[str, Any]] = []
     if request.method == "POST":
         if not request.user.is_authenticated:
             form.is_valid()  # Run validation to surface field errors alongside auth error.
@@ -1576,6 +1592,8 @@ def client_report(request):
                     )
                     redirect_url = f"{reverse('pages:client-report')}?download={report.pk}"
                     return HttpResponseRedirect(redirect_url)
+                report_rows = report.rows_for_display
+                report_summary_rows = ClientReport.build_evcs_summary_rows(report_rows)
     download_url = None
     download_param = request.GET.get("download")
     if download_param:
@@ -1598,12 +1616,26 @@ def client_report(request):
         except NoReverseMatch:
             login_url = getattr(settings, "LOGIN_URL", None)
 
+    if report and report_rows is None:
+        report_rows = report.rows_for_display
+        report_summary_rows = ClientReport.build_evcs_summary_rows(report_rows)
+
+    selected_view_mode = form.fields["view_mode"].initial
+    if form.is_bound:
+        if form.is_valid():
+            selected_view_mode = form.cleaned_data.get("view_mode", selected_view_mode)
+        else:
+            selected_view_mode = form.data.get("view_mode", selected_view_mode)
+
     context = {
         "form": form,
         "report": report,
         "schedule": schedule,
         "login_url": login_url,
         "download_url": download_url,
+        "report_rows": report_rows,
+        "report_summary_rows": report_summary_rows,
+        "report_view_mode": selected_view_mode,
     }
     return render(request, "pages/client_report.html", context)
 
@@ -1622,25 +1654,6 @@ def client_report_download(request, report_id: int):
     response = FileResponse(pdf_path.open("rb"), content_type="application/pdf")
     response["Content-Disposition"] = f'attachment; filename="{filename}"'
     return response
-def _get_request_language_code(request) -> str:
-    language_code = ""
-    if hasattr(request, "session"):
-        language_code = request.session.get(LANGUAGE_SESSION_KEY, "")
-    if not language_code:
-        cookie_name = getattr(settings, "LANGUAGE_COOKIE_NAME", "django_language")
-        language_code = request.COOKIES.get(cookie_name, "")
-    if not language_code:
-        language_code = getattr(request, "LANGUAGE_CODE", "") or ""
-    if not language_code:
-        language_code = get_language() or ""
-
-    language_code = language_code.strip()
-    if not language_code:
-        return ""
-
-    return language_code.replace("_", "-").lower()[:15]
-
-
 @require_POST
 def submit_user_story(request):
     throttle_seconds = getattr(settings, "USER_STORY_THROTTLE_SECONDS", 300)
@@ -1662,8 +1675,12 @@ def submit_user_story(request):
             )
 
     data = request.POST.copy()
+    anonymous_placeholder = ""
     if request.user.is_authenticated:
         data["name"] = request.user.get_username()[:40]
+    elif not data.get("name"):
+        anonymous_placeholder = "anonymous@example.invalid"
+        data["name"] = anonymous_placeholder
     if not data.get("path"):
         data["path"] = request.get_full_path()
 
@@ -1673,6 +1690,8 @@ def submit_user_story(request):
 
     if form.is_valid():
         story = form.save(commit=False)
+        if anonymous_placeholder and story.name == anonymous_placeholder:
+            story.name = ""
         if request.user.is_authenticated:
             story.user = request.user
             story.owner = request.user
@@ -1684,7 +1703,9 @@ def submit_user_story(request):
         story.user_agent = request.META.get("HTTP_USER_AGENT", "")
         story.ip_address = client_ip or None
         story.is_user_data = True
-        language_code = _get_request_language_code(request)
+        language_code = getattr(request, "selected_language_code", "")
+        if not language_code:
+            language_code = get_request_language_code(request)
         if language_code:
             story.language_code = language_code
         story.save()

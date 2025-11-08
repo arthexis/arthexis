@@ -1,0 +1,13 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate changelog report previous release entries",
+      "url": "/admin/system/changelog-report/",
+      "request_details": "Open the System → Changelog Report page and confirm the Last Release Changelog table lists the most recent tagged release entries with their commit messages and links.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.29"
+    }
+  }
+]

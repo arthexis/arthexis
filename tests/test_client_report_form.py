@@ -12,14 +12,14 @@ django.setup()
 
 from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
-from django.test import RequestFactory, SimpleTestCase
+from django.test import RequestFactory, TestCase
 
 from core.models import ClientReportSchedule
 
 from pages.views import ClientReportForm
 
 
-class ClientReportFormTests(SimpleTestCase):
+class ClientReportFormTests(TestCase):
     def setUp(self):
         super().setUp()
         self.factory = RequestFactory()
@@ -31,6 +31,7 @@ class ClientReportFormTests(SimpleTestCase):
                 "week": "invalid-week",
                 "recurrence": ClientReportSchedule.PERIODICITY_NONE,
                 "language": "en",
+                "view_mode": "expanded",
             }
         )
 
@@ -44,6 +45,7 @@ class ClientReportFormTests(SimpleTestCase):
                 "month": "2023-09",
                 "recurrence": ClientReportSchedule.PERIODICITY_NONE,
                 "language": "en",
+                "view_mode": "expanded",
             }
         )
 
@@ -60,6 +62,7 @@ class ClientReportFormTests(SimpleTestCase):
                 "recurrence": ClientReportSchedule.PERIODICITY_NONE,
                 "language": "en",
                 "title": "Malicious\nSubject",
+                "view_mode": "expanded",
             }
         )
 
@@ -82,3 +85,7 @@ class ClientReportFormTests(SimpleTestCase):
         form = ClientReportForm(request=request)
 
         self.assertEqual(form.fields["language"].initial, "de")
+
+    def test_view_mode_defaults_to_expanded(self):
+        form = ClientReportForm()
+        self.assertEqual(form.fields["view_mode"].initial, "expanded")

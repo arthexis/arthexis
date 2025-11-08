@@ -1,6 +1,7 @@
 from collections import defaultdict
 from io import BytesIO
 import os
+from typing import Any
 
 from django import forms
 from django.contrib import admin
@@ -3761,6 +3762,10 @@ class ClientReportAdmin(EntityModelAdmin):
             ("month", "Month"),
         ]
         RECURRENCE_CHOICES = ClientReportSchedule.PERIODICITY_CHOICES
+        VIEW_CHOICES = [
+            ("expanded", _("Expanded view")),
+            ("summary", _("Summarized view")),
+        ]
         period = forms.ChoiceField(
             choices=PERIOD_CHOICES,
             widget=forms.RadioSelect,
@@ -3791,6 +3796,15 @@ class ClientReportAdmin(EntityModelAdmin):
             widget=forms.DateInput(attrs={"type": "month"}),
             input_formats=["%Y-%m"],
             help_text="Generates the report for the calendar month that you select.",
+        )
+        view_mode = forms.ChoiceField(
+            label=_("Report layout"),
+            choices=VIEW_CHOICES,
+            initial="expanded",
+            widget=forms.RadioSelect,
+            help_text=_(
+                "Choose between detailed charge point sections or a combined summary table."
+            ),
         )
         language = forms.ChoiceField(
             label="Report language",
@@ -3844,6 +3858,11 @@ class ClientReportAdmin(EntityModelAdmin):
             ):
                 self.fields["owner"].initial = request.user.pk
             self.fields["chargers"].widget.attrs["class"] = "charger-options"
+            if not self.is_bound:
+                queryset = self.fields["chargers"].queryset
+                self.fields["chargers"].initial = list(
+                    queryset.values_list("pk", flat=True)
+                )
             language_initial = ClientReport.default_language()
             if request:
                 language_initial = ClientReport.normalize_language(
@@ -3924,6 +3943,8 @@ class ClientReportAdmin(EntityModelAdmin):
         report = None
         schedule = None
         download_url = None
+        report_rows = None
+        report_summary_rows: list[dict[str, Any]] = []
         if request.method == "POST" and form.is_valid():
             owner = form.cleaned_data.get("owner")
             if not owner and request.user.is_authenticated:
@@ -3990,6 +4011,8 @@ class ClientReportAdmin(EntityModelAdmin):
                 )
                 redirect_url = f"{reverse('admin:core_clientreport_generate')}?download={report.pk}"
                 return HttpResponseRedirect(redirect_url)
+            report_rows = report.rows_for_display
+            report_summary_rows = ClientReport.build_evcs_summary_rows(report_rows)
         download_param = request.GET.get("download")
         if download_param:
             try:
@@ -4000,6 +4023,17 @@ class ClientReportAdmin(EntityModelAdmin):
                 download_url = reverse(
                     "admin:core_clientreport_download", args=[download_report.pk]
                 )
+        if report and report_rows is None:
+            report_rows = report.rows_for_display
+            report_summary_rows = ClientReport.build_evcs_summary_rows(report_rows)
+        selected_view_mode = form.fields["view_mode"].initial
+        if form.is_bound:
+            if form.is_valid():
+                selected_view_mode = form.cleaned_data.get(
+                    "view_mode", selected_view_mode
+                )
+            else:
+                selected_view_mode = form.data.get("view_mode", selected_view_mode)
         context = self.admin_site.each_context(request)
         context.update(
             {
@@ -4008,6 +4042,9 @@ class ClientReportAdmin(EntityModelAdmin):
                 "schedule": schedule,
                 "download_url": download_url,
                 "opts": self.model._meta,
+                "report_rows": report_rows,
+                "report_summary_rows": report_summary_rows,
+                "report_view_mode": selected_view_mode,
             }
         )
         return TemplateResponse(

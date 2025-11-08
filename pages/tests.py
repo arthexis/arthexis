@@ -37,7 +37,7 @@ from pages.models import (
     UserManual,
     UserStory,
 )
-from django.http import FileResponse
+from django.http import FileResponse, HttpResponse
 
 from pages.admin import (
     ApplicationAdmin,
@@ -53,6 +53,7 @@ from pages.screenshot_specs import (
     registry,
 )
 from pages.context_processors import nav_links
+from pages.middleware import LanguagePreferenceMiddleware
 from django.apps import apps as django_apps
 from config.middleware import SiteHttpsRedirectMiddleware
 from core import mailer
@@ -3712,6 +3713,32 @@ class AdminModelGraphViewTests(TestCase):
         args, kwargs = graph.pipe.call_args
         self.assertEqual(kwargs.get("format"), "pdf")
 
+
+class LanguagePreferenceMiddlewareTests(TestCase):
+    def setUp(self):
+        self.factory = RequestFactory()
+        self.middleware = LanguagePreferenceMiddleware(lambda request: HttpResponse("ok"))
+
+    def test_selected_language_attached_to_request(self):
+        request = self.factory.get("/")
+        request.session = {}
+        with translation.override("it"):
+            response = self.middleware(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(request.selected_language_code, "it")
+        self.assertEqual(request.selected_language, "it")
+
+    def test_normalizes_request_language_code(self):
+        request = self.factory.get("/")
+        request.session = {}
+        request.LANGUAGE_CODE = "PT_BR"
+
+        response = self.middleware(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(request.selected_language_code, "pt-br")
+        self.assertEqual(request.selected_language, "pt-br")
 
 
 class UserStorySubmissionTests(TestCase):

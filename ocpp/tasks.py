@@ -17,6 +17,7 @@ from websocket import WebSocketException, create_connection
 
 from core import mailer
 from nodes.models import Node
+from protocols.models import CPForwarder
 
 from . import store
 from .models import Charger, MeterValue, Transaction
@@ -197,7 +198,14 @@ def push_forwarded_charge_points() -> int:
     local = Node.get_local()
     if not local:
         logger.debug("Forwarding skipped: local node not registered")
+        CPForwarder.objects.update_running_state(set())
         return 0
+
+    CPForwarder.objects.sync_forwarding_targets()
+    forwarders_by_target = {
+        forwarder.target_node_id: forwarder
+        for forwarder in CPForwarder.objects.filter(enabled=True)
+    }
 
     chargers_qs = (
         Charger.objects.filter(export_transactions=True, forwarded_to__isnull=False)
@@ -264,6 +272,9 @@ def push_forwarded_charge_points() -> int:
             Charger.objects.filter(pk=charger.pk).update(
                 forwarding_watermark=session.connected_at
             )
+            forwarder = forwarders_by_target.get(getattr(target, "pk", None))
+            if forwarder:
+                forwarder.mark_running(session.connected_at)
             connected += 1
             logger.info(
                 "Established forwarding websocket for charger %s to %s via %s",
@@ -277,6 +288,13 @@ def push_forwarded_charge_points() -> int:
                 "Unable to establish forwarding websocket for charger %s",
                 charger.charger_id or charger.pk,
             )
+
+    active_target_ids = {
+        session.node_id
+        for session in _FORWARDING_SESSIONS.values()
+        if session.node_id is not None
+    }
+    CPForwarder.objects.update_running_state(active_target_ids)
 
     return connected
 

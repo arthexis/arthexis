@@ -17,27 +17,16 @@
 {% if report %}
   <section class="report-results" id="client-report-results">
     <h2>{% blocktrans with start=report.start_date end=report.end_date %}Report from {{ start }} to {{ end }}{% endblocktrans %}</h2>
-    {% with data=report.rows_for_display %}
+    {% with data=report_rows|default:report.rows_for_display %}
       {% if data.schema == "evcs-session/v1" %}
         {% if data.evcs %}
-          {% for evcs in data.evcs %}
-            <article class="client-report-evcs">
-              <header class="client-report-evcs__header">
-                <h3 class="client-report-evcs__title">
-                  {{ evcs.display_name }}
-                  {% if evcs.serial_number %}
-                    <small class="client-report-evcs__serial">({% trans "Serial" %}: {{ evcs.serial_number }})</small>
-                  {% endif %}
-                </h3>
-                <p class="client-report-evcs__summary">
-                  {% trans "Total kW (all time)" %}: {{ evcs.total_kw|floatformat:2 }} ·
-                  {% trans "Total kW (period)" %}: {{ evcs.total_kw_period|floatformat:2 }}
-                </p>
-              </header>
-              {% if evcs.transactions %}
-                <table class="client-report-table">
+          {% if report_view_mode == "summary" %}
+            {% if report_summary_rows %}
+              <div class="client-report-summary">
+                <table class="client-report-table client-report-table--summary">
                   <thead>
                     <tr>
+                      <th scope="col">{% trans "Charge point" %}</th>
                       <th scope="col">{% trans "Session kW" %}</th>
                       <th scope="col">{% trans "Session start" %}</th>
                       <th scope="col">{% trans "Session end" %}</th>
@@ -48,34 +37,108 @@
                     </tr>
                   </thead>
                   <tbody>
-                    {% for row in evcs.transactions %}
-                      <tr>
-                        <td data-label="{% trans "Session kW" %}">{{ row.session_kwh|floatformat:2 }}</td>
-                        <td data-label="{% trans "Session start" %}">
-                          {% if row.start %}
-                            <time datetime="{{ row.start|date:'c' }}">{{ row.start_display|default:"—" }}</time>
-                          {% else %}&mdash;{% endif %}
-                        </td>
-                        <td data-label="{% trans "Session end" %}">
-                          {% if row.end %}
-                            <time datetime="{{ row.end|date:'c' }}">{{ row.end_display|default:"—" }}</time>
-                          {% else %}&mdash;{% endif %}
-                        </td>
-                        <td data-label="{% trans "Time" %}">{{ row.duration_minutes|default_if_none:"—" }}</td>
-                        <td data-label="{% trans "Connector" %}">
-                          {% if row.connector is not None or row.connector_label %}{{ row.connector_label|default:row.connector }}{% else %}&mdash;{% endif %}
-                        </td>
-                        <td data-label="{% trans "RFID label" %}">{{ row.rfid_label|default:"—" }}</td>
-                        <td data-label="{% trans "Account" %}">{{ row.account_name|default:"—" }}</td>
-                      </tr>
+                    {% for item in report_summary_rows %}
+                      {% with row=item.transaction %}
+                        <tr>
+                          <td data-label="{% trans "Charge point" %}">
+                            <div class="report-charger">
+                              <span class="report-charger__name">{{ item.display_name }}</span>
+                              {% if item.serial_number %}
+                                <span class="report-charger__serial">{% trans "Serial" %}: {{ item.serial_number }}</span>
+                              {% endif %}
+                            </div>
+                          </td>
+                          <td data-label="{% trans "Session kW" %}">{{ row.session_kwh|floatformat:2 }}</td>
+                          <td data-label="{% trans "Session start" %}">
+                            {% if row.start %}
+                              <time datetime="{{ row.start|date:'c' }}">{{ row.start_display|default:"—" }}</time>
+                            {% else %}&mdash;{% endif %}
+                          </td>
+                          <td data-label="{% trans "Session end" %}">
+                            {% if row.end %}
+                              <time datetime="{{ row.end|date:'c' }}">{{ row.end_display|default:"—" }}</time>
+                            {% else %}&mdash;{% endif %}
+                          </td>
+                          <td data-label="{% trans "Time" %}">{{ row.duration_minutes|default_if_none:"—" }}</td>
+                          <td data-label="{% trans "Connector" %}">
+                            {% if row.connector is not None or row.connector_label %}{{ row.connector_label|default:row.connector }}{% else %}&mdash;{% endif %}
+                          </td>
+                          <td data-label="{% trans "RFID label" %}">{{ row.rfid_label|default:"—" }}</td>
+                          <td data-label="{% trans "Account" %}">{{ row.account_name|default:"—" }}</td>
+                        </tr>
+                      {% endwith %}
                     {% endfor %}
                   </tbody>
                 </table>
-              {% else %}
-                <p class="empty-state">{% trans "No charging sessions recorded for this charge point." %}</p>
-              {% endif %}
-            </article>
-          {% endfor %}
+              </div>
+              {% for evcs in data.evcs %}
+                {% if not evcs.transactions %}
+                  <p class="empty-state">
+                    {% blocktrans with name=evcs.display_name %}No charging sessions recorded for {{ name }}.{% endblocktrans %}
+                  </p>
+                {% endif %}
+              {% endfor %}
+            {% else %}
+              <p class="empty-state">{% trans "No charging sessions were recorded for this period." %}</p>
+            {% endif %}
+          {% else %}
+            {% for evcs in data.evcs %}
+              <article class="client-report-evcs">
+                <header class="client-report-evcs__header">
+                  <h3 class="client-report-evcs__title">
+                    {{ evcs.display_name }}
+                    {% if evcs.serial_number %}
+                      <small class="client-report-evcs__serial">({% trans "Serial" %}: {{ evcs.serial_number }})</small>
+                    {% endif %}
+                  </h3>
+                  <p class="client-report-evcs__summary">
+                    {% trans "Total kW (all time)" %}: {{ evcs.total_kw|floatformat:2 }} ·
+                    {% trans "Total kW (period)" %}: {{ evcs.total_kw_period|floatformat:2 }}
+                  </p>
+                </header>
+                {% if evcs.transactions %}
+                  <table class="client-report-table">
+                    <thead>
+                      <tr>
+                        <th scope="col">{% trans "Session kW" %}</th>
+                        <th scope="col">{% trans "Session start" %}</th>
+                        <th scope="col">{% trans "Session end" %}</th>
+                        <th scope="col">{% trans "Time" %}</th>
+                        <th scope="col">{% trans "Connector" %}</th>
+                        <th scope="col">{% trans "RFID label" %}</th>
+                        <th scope="col">{% trans "Account" %}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for row in evcs.transactions %}
+                        <tr>
+                          <td data-label="{% trans "Session kW" %}">{{ row.session_kwh|floatformat:2 }}</td>
+                          <td data-label="{% trans "Session start" %}">
+                            {% if row.start %}
+                              <time datetime="{{ row.start|date:'c' }}">{{ row.start_display|default:"—" }}</time>
+                            {% else %}&mdash;{% endif %}
+                          </td>
+                          <td data-label="{% trans "Session end" %}">
+                            {% if row.end %}
+                              <time datetime="{{ row.end|date:'c' }}">{{ row.end_display|default:"—" }}</time>
+                            {% else %}&mdash;{% endif %}
+                          </td>
+                          <td data-label="{% trans "Time" %}">{{ row.duration_minutes|default_if_none:"—" }}</td>
+                          <td data-label="{% trans "Connector" %}">
+                            {% if row.connector is not None or row.connector_label %}{{ row.connector_label|default:row.connector }}{% else %}&mdash;{% endif %}
+                          </td>
+                          <td data-label="{% trans "RFID label" %}">{{ row.rfid_label|default:"—" }}</td>
+                          <td data-label="{% trans "Account" %}">{{ row.account_name|default:"—" }}</td>
+                        </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                {% else %}
+                  <p class="empty-state">{% trans "No charging sessions recorded for this charge point." %}</p>
+                {% endif %}
+              </article>
+            {% endfor %}
+          {% endif %}
           <div class="client-report-totals">
             <p><strong>{% trans "Report totals" %}</strong></p>
             <p>{% trans "Total kW (all time)" %}: {{ data.totals.total_kw|floatformat:2 }}</p>
@@ -260,6 +323,15 @@
       {% trans "Customize the language and heading used when generating the report." %}
     </p>
     <div class="form-group">
+      {{ form.view_mode.label_tag }}
+      <div class="option-list">
+        {{ form.view_mode }}
+      </div>
+      {% if form.view_mode.help_text %}
+        <p class="help-text" id="id_view_mode-help">{{ form.view_mode.help_text }}</p>
+      {% endif %}
+    </div>
+    <div class="form-group">
       {{ form.language.label_tag }}
       {{ form.language }}
       {% if form.language.help_text %}
@@ -284,7 +356,7 @@
           class="button button-secondary select-all"
           data-select-all-target="id_chargers"
         >
-          {% trans "Select all" %}
+          {% trans "Toggle selection" %}
         </button>
       </div>
       <div class="checkbox-grid" id="id_chargers-wrapper">
@@ -359,6 +431,7 @@
     id_end: 'id_end-help',
     id_week: 'id_week-help',
     id_month: 'id_month-help',
+    id_view_mode: 'id_view_mode-help',
     id_language: 'id_language-help',
     id_title: 'id_title-help',
     id_chargers: 'id_chargers-help',
@@ -462,7 +535,7 @@
     button.addEventListener('click', () => {
       container.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
         if (!checkbox.disabled) {
-          checkbox.checked = true;
+          checkbox.checked = !checkbox.checked;
           checkbox.dispatchEvent(new Event('change', { bubbles: true }));
         }
       });
@@ -658,6 +731,25 @@
     margin-top: 1.5rem;
     border-top: 1px solid rgba(148, 163, 184, 0.3);
     padding-top: 1rem;
+  }
+
+  .client-report-summary {
+    margin-bottom: 1.5rem;
+  }
+
+  .report-charger {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .report-charger__name {
+    font-weight: 600;
+  }
+
+  .report-charger__serial {
+    font-size: 0.85rem;
+    color: var(--body-quiet-color, #6b7280);
   }
 
   .client-report-form .help-text {
