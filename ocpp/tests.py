@@ -76,6 +76,9 @@ from .models import (
     CPReservation,
     CPFirmware,
     CPFirmwareDeployment,
+    SecurityEvent,
+    ChargerLogRequest,
+    ChargerLogStatus,
 )
 from .admin import (
     ChargerAdmin,
@@ -102,6 +105,8 @@ from .tasks import (
     send_daily_session_report,
     check_charge_point_configuration,
     schedule_daily_charge_point_configuration_checks,
+    request_charge_point_log,
+    schedule_connected_log_requests,
 )
 from django.db import close_old_connections, connection
 from django.test.utils import CaptureQueriesContext
@@ -2311,6 +2316,245 @@ class CSMSConsumerTests(TransactionTestCase):
 
         await communicator.disconnect()
 
+    async def test_security_event_notification_records_entry(self):
+        communicator = WebsocketCommunicator(application, "/SECEVT/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        reported_at = timezone.now().replace(microsecond=0)
+        payload = {
+            "type": "TamperDetected",
+            "timestamp": reported_at.isoformat(),
+            "techInfo": "panel opened",
+            "seqNo": 7,
+        }
+
+        await communicator.send_json_to([2, "1", "SecurityEventNotification", payload])
+        response = await communicator.receive_json_from()
+        self.assertEqual(response[0], 3)
+        self.assertEqual(response[2], {})
+
+        def _fetch_event():
+            event = SecurityEvent.objects.get(charger__charger_id="SECEVT")
+            return event.event_type, event.event_timestamp, event.tech_info, event.sequence_number
+
+        event_type, event_timestamp, tech_info, seq_no = await database_sync_to_async(
+            _fetch_event
+        )()
+        self.assertEqual(event_type, "TamperDetected")
+        self.assertEqual(event_timestamp, reported_at)
+        self.assertEqual(tech_info, "panel opened")
+        self.assertEqual(seq_no, 7)
+
+        log_entries = store.get_logs(store.identity_key("SECEVT", None), log_type="charger")
+        self.assertTrue(any("SecurityEventNotification" in line for line in log_entries))
+
+        await communicator.disconnect()
+
+    async def test_log_status_notification_tracks_state(self):
+        communicator = WebsocketCommunicator(application, "/LOGSTAT/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        def _prepare_request():
+            charger = Charger.objects.get(charger_id="LOGSTAT", connector_id=None)
+            request = ChargerLogRequest.objects.create(
+                charger=charger,
+                request_id=135,
+                log_type="Diagnostics",
+                status="Pending",
+            )
+            capture_key = store.start_log_capture(
+                charger.charger_id,
+                charger.connector_id,
+                request.request_id,
+            )
+            request.session_key = capture_key
+            request.save(update_fields=["session_key"])
+            return request.pk, capture_key
+
+        request_pk, capture_key = await database_sync_to_async(_prepare_request)()
+
+        first_payload = {
+            "status": "Uploading",
+            "requestId": 135,
+            "timestamp": timezone.now().isoformat(),
+        }
+        await communicator.send_json_to([2, "1", "LogStatusNotification", first_payload])
+        await communicator.receive_json_from()
+
+        second_payload = {
+            "status": "Uploaded",
+            "requestId": 135,
+            "timestamp": timezone.now().isoformat(),
+            "location": "https://example.com/log.tar",
+            "filename": "charger-log.tar",
+        }
+        await communicator.send_json_to([2, "2", "LogStatusNotification", second_payload])
+        await communicator.receive_json_from()
+
+        def _fetch_status():
+            request = ChargerLogRequest.objects.get(pk=request_pk)
+            statuses = list(
+                request.status_updates.order_by("occurred_at").values_list("status", flat=True)
+            )
+            return request.status, request.location, request.last_status_at, statuses
+
+        status, location, last_status_at, statuses = await database_sync_to_async(
+            _fetch_status
+        )()
+        self.assertEqual(status, "Uploaded")
+        self.assertEqual(location, "https://example.com/log.tar")
+        self.assertIsNotNone(last_status_at)
+        self.assertIn("Uploading", statuses)
+        self.assertIn("Uploaded", statuses)
+        self.assertNotIn(capture_key, store.history)
+
+        await communicator.disconnect()
+
+    async def test_get_log_call_result_streams_entries(self):
+        communicator = WebsocketCommunicator(application, "/LOGDATA/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        def _prepare_metadata():
+            charger = Charger.objects.get(charger_id="LOGDATA", connector_id=None)
+            request = ChargerLogRequest.objects.create(
+                charger=charger,
+                log_type="Diagnostics",
+                status="Requested",
+            )
+            capture_key = store.start_log_capture(
+                charger.charger_id,
+                charger.connector_id,
+                request.request_id,
+            )
+            request.session_key = capture_key
+            request.save(update_fields=["session_key"])
+            message_id = "getlog-1"
+            log_key = store.identity_key(charger.charger_id, charger.connector_id)
+            store.register_pending_call(
+                message_id,
+                {
+                    "action": "GetLog",
+                    "charger_id": charger.charger_id,
+                    "log_key": log_key,
+                    "log_request_pk": request.pk,
+                    "capture_key": capture_key,
+                    "message_id": message_id,
+                },
+            )
+            return request.pk, capture_key, message_id
+
+        request_pk, capture_key, message_id = await database_sync_to_async(
+            _prepare_metadata
+        )()
+
+        payload = {
+            "status": "Accepted",
+            "filename": "session.log",
+            "logData": ["line 1", "line 2"],
+        }
+        await communicator.send_json_to([3, message_id, payload])
+        await asyncio.sleep(0.1)
+
+        def _fetch_request():
+            request = ChargerLogRequest.objects.get(pk=request_pk)
+            return request.status, request.filename, request.responded_at
+
+        status, filename, responded_at = await database_sync_to_async(_fetch_request)()
+        self.assertEqual(status, "Accepted")
+        self.assertEqual(filename, "session.log")
+        self.assertIsNotNone(responded_at)
+
+        folder_name = store.log_names["charger"].get(capture_key, capture_key)
+        folder = store.SESSION_DIR / store._safe_name(folder_name)
+        files = list(folder.glob("*.json"))
+        self.assertTrue(files)
+        content = json.loads(files[0].read_text(encoding="utf-8"))
+        messages = [entry.get("message", "") for entry in content]
+        self.assertIn("line 1", messages)
+        self.assertIn("line 2", messages)
+
+        for file in files:
+            file.unlink()
+        folder.rmdir()
+
+        await communicator.disconnect()
+
+    async def test_get_log_call_error_updates_request(self):
+        communicator = WebsocketCommunicator(application, "/LOGERR/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        def _prepare_metadata():
+            charger = Charger.objects.get(charger_id="LOGERR", connector_id=None)
+            request = ChargerLogRequest.objects.create(
+                charger=charger,
+                log_type="Diagnostics",
+                status="Requested",
+            )
+            capture_key = store.start_log_capture(
+                charger.charger_id,
+                charger.connector_id,
+                request.request_id,
+            )
+            request.session_key = capture_key
+            request.save(update_fields=["session_key"])
+            message_id = "getlog-err-1"
+            log_key = store.identity_key(charger.charger_id, charger.connector_id)
+            store.clear_log(log_key, log_type="charger")
+            store.register_pending_call(
+                message_id,
+                {
+                    "action": "GetLog",
+                    "charger_id": charger.charger_id,
+                    "log_key": log_key,
+                    "log_request_pk": request.pk,
+                    "capture_key": capture_key,
+                    "message_id": message_id,
+                },
+            )
+            return request.pk, capture_key, log_key, message_id
+
+        request_pk, capture_key, log_key, message_id = await database_sync_to_async(
+            _prepare_metadata
+        )()
+
+        await communicator.send_json_to(
+            [4, message_id, "InternalError", "boom", {"details": "timeout"}]
+        )
+        await asyncio.sleep(0.1)
+
+        def _fetch_request():
+            request = ChargerLogRequest.objects.get(pk=request_pk)
+            return request.status, request.responded_at, request.raw_response
+
+        status, responded_at, raw = await database_sync_to_async(_fetch_request)()
+        self.assertEqual(status, "InternalError")
+        self.assertIsNotNone(responded_at)
+        self.assertEqual(raw.get("errorCode"), "InternalError")
+        self.assertEqual(raw.get("errorDescription"), "boom")
+        self.assertIn("details", raw)
+
+        self.assertNotIn(message_id, store.pending_calls)
+        self.assertNotIn(capture_key, store.history)
+
+        log_entries = store.get_logs(log_key, log_type="charger")
+        self.assertTrue(any("GetLog error" in entry for entry in log_entries))
+
+        folder_name = store.log_names["charger"].get(capture_key, capture_key)
+        folder = store.SESSION_DIR / store._safe_name(folder_name)
+        if folder.exists():
+            for file in folder.glob("*.json"):
+                file.unlink()
+            with suppress(OSError):
+                folder.rmdir()
+
+        store.clear_log(log_key, log_type="charger")
+
+        await communicator.disconnect()
+
     async def test_temperature_recorded(self):
         charger = await database_sync_to_async(Charger.objects.create)(
             charger_id="TEMP1"
@@ -3866,6 +4110,52 @@ class ConfigurationTaskTests(TestCase):
             scheduled = schedule_daily_charge_point_configuration_checks.run()
         self.assertEqual(scheduled, 0)
         mock_delay.assert_not_called()
+
+
+class LogRequestTaskTests(TestCase):
+    def tearDown(self):
+        store.pending_calls.clear()
+
+    def test_request_charge_point_log_dispatches_message(self):
+        charger = Charger.objects.create(charger_id="LOGTASK")
+        ws = DummyWebSocket()
+        log_key = store.identity_key(charger.charger_id, charger.connector_id)
+        pending_key = store.pending_key(charger.charger_id)
+        store.clear_log(log_key, log_type="charger")
+        store.clear_log(pending_key, log_type="charger")
+        store.set_connection(charger.charger_id, charger.connector_id, ws)
+        request = None
+        try:
+            request_pk = request_charge_point_log.run(charger.pk)
+            self.assertTrue(request_pk)
+            request = ChargerLogRequest.objects.get(pk=request_pk)
+            self.assertEqual(request.status, "Requested")
+            self.assertTrue(ws.sent)
+            frame = json.loads(ws.sent[0])
+            self.assertEqual(frame[0], 2)
+            self.assertEqual(frame[2], "GetLog")
+            metadata = store.pending_calls.get(frame[1])
+            self.assertIsNotNone(metadata)
+            self.assertEqual(metadata.get("log_request_pk"), request.pk)
+        finally:
+            store.pop_connection(charger.charger_id, charger.connector_id)
+            store.pending_calls.clear()
+            store.clear_log(log_key, log_type="charger")
+            store.clear_log(pending_key, log_type="charger")
+            if request and request.session_key:
+                store.finalize_log_capture(request.session_key)
+
+    def test_schedule_connected_log_requests_only_targets_active(self):
+        Charger.objects.create(charger_id="LOGIDLE")
+        active = Charger.objects.create(charger_id="LOGACTIVE")
+        store.set_connection(active.charger_id, active.connector_id, DummyWebSocket())
+        try:
+            with patch("ocpp.tasks.request_charge_point_log.delay") as mock_delay:
+                scheduled = schedule_connected_log_requests.run()
+        finally:
+            store.pop_connection(active.charger_id, active.connector_id)
+        self.assertEqual(scheduled, 1)
+        mock_delay.assert_called_once_with(active.pk, log_type="Diagnostics")
 
 
 class LocationAdminTests(TestCase):

@@ -39,6 +39,15 @@ from . import store
 from .reference_utils import url_targets_local_loopback
 
 
+def generate_log_request_id() -> int:
+    """Return a random positive identifier suitable for OCPP log requests."""
+
+    import secrets
+
+    # Limit to 31 bits to remain compatible with OCPP integer fields.
+    return secrets.randbits(31) or 1
+
+
 class Location(Entity):
     """Physical location shared by chargers."""
 
@@ -1129,6 +1138,85 @@ class RFIDSessionAttempt(Entity):
         status = self.get_status_display() or ""
         tag = self.rfid or "-"
         return f"{tag} ({status})"
+
+
+class SecurityEvent(Entity):
+    """Security-related events reported by a charge point."""
+
+    charger = models.ForeignKey(
+        "Charger",
+        on_delete=models.CASCADE,
+        related_name="security_events",
+    )
+    event_type = models.CharField(_("Event Type"), max_length=120)
+    event_timestamp = models.DateTimeField(_("Event Timestamp"))
+    trigger = models.CharField(max_length=120, blank=True, default="")
+    tech_info = models.TextField(blank=True, default="")
+    sequence_number = models.BigIntegerField(null=True, blank=True)
+    raw_payload = models.JSONField(default=dict, blank=True)
+    reported_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-event_timestamp", "-pk"]
+        verbose_name = _("Security Event")
+        verbose_name_plural = _("Security Events")
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return f"{self.charger}: {self.event_type}"
+
+
+class ChargerLogRequest(Entity):
+    """Track GetLog interactions initiated against a charge point."""
+
+    charger = models.ForeignKey(
+        "Charger",
+        on_delete=models.CASCADE,
+        related_name="log_requests",
+    )
+    request_id = models.BigIntegerField(
+        _("Request Id"), default=generate_log_request_id, unique=True
+    )
+    message_id = models.CharField(max_length=64, blank=True, default="")
+    log_type = models.CharField(max_length=64, blank=True, default="")
+    status = models.CharField(max_length=32, blank=True, default="")
+    filename = models.CharField(max_length=255, blank=True, default="")
+    location = models.CharField(max_length=500, blank=True, default="")
+    session_key = models.CharField(max_length=200, blank=True, default="")
+    requested_at = models.DateTimeField(auto_now_add=True)
+    responded_at = models.DateTimeField(null=True, blank=True)
+    last_status_at = models.DateTimeField(null=True, blank=True)
+    raw_response = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ["-requested_at", "-pk"]
+        verbose_name = _("Log Request")
+        verbose_name_plural = _("Log Requests")
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        label = self.log_type or "Log"
+        return f"{label} request {self.request_id}"
+
+
+class ChargerLogStatus(Entity):
+    """Individual status updates associated with a log request."""
+
+    request = models.ForeignKey(
+        ChargerLogRequest,
+        on_delete=models.CASCADE,
+        related_name="status_updates",
+    )
+    status = models.CharField(max_length=32)
+    log_type = models.CharField(max_length=64, blank=True, default="")
+    occurred_at = models.DateTimeField()
+    raw_payload = models.JSONField(default=dict, blank=True)
+
+    class Meta:
+        ordering = ["-occurred_at", "-pk"]
+        verbose_name = _("Log Status Event")
+        verbose_name_plural = _("Log Status Events")
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return f"{self.status} at {self.occurred_at.isoformat()}"
 
 
 class MeterValue(Entity):
