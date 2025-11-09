@@ -34,6 +34,9 @@ from .models import (
     CPFirmware,
     CPFirmwareDeployment,
     RFIDSessionAttempt,
+    SecurityEvent,
+    ChargerLogRequest,
+    ChargerLogStatus,
 )
 from .reference_utils import host_is_local_loopback
 from .evcs_discovery import (
@@ -1226,6 +1229,84 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 payload=payload_data,
             )
             return
+        if action == "GetLog":
+            request_pk = metadata.get("log_request_pk")
+            capture_key = metadata.get("capture_key")
+            status_value = str(payload_data.get("status") or "").strip()
+            filename_value = str(
+                payload_data.get("filename")
+                or payload_data.get("location")
+                or ""
+            ).strip()
+            location_value = str(payload_data.get("location") or "").strip()
+            fragments: list[str] = []
+            data_candidate = payload_data.get("logData") or payload_data.get("entries")
+            if isinstance(data_candidate, (list, tuple)):
+                for entry in data_candidate:
+                    if entry is None:
+                        continue
+                    if isinstance(entry, (bytes, bytearray)):
+                        try:
+                            fragments.append(entry.decode("utf-8"))
+                        except Exception:
+                            fragments.append(base64.b64encode(entry).decode("ascii"))
+                    else:
+                        fragments.append(str(entry))
+            elif data_candidate not in (None, ""):
+                fragments.append(str(data_candidate))
+
+            def _update_request() -> str:
+                request = None
+                if request_pk:
+                    request = ChargerLogRequest.objects.filter(pk=request_pk).first()
+                if request is None:
+                    return ""
+                updates: dict[str, object] = {
+                    "responded_at": timezone.now(),
+                    "raw_response": payload_data,
+                }
+                if status_value:
+                    updates["status"] = status_value
+                if filename_value:
+                    updates["filename"] = filename_value
+                if location_value:
+                    updates["location"] = location_value
+                if capture_key:
+                    updates["session_key"] = str(capture_key)
+                message_identifier = metadata.get("message_id")
+                if message_identifier:
+                    updates["message_id"] = str(message_identifier)
+                ChargerLogRequest.objects.filter(pk=request.pk).update(**updates)
+                for field, value in updates.items():
+                    setattr(request, field, value)
+                return request.session_key or ""
+
+            session_capture = await database_sync_to_async(_update_request)()
+            message = "GetLog result"
+            if status_value:
+                message += f": status={status_value}"
+            if filename_value:
+                message += f", filename={filename_value}"
+            if location_value:
+                message += f", location={location_value}"
+            store.add_log(log_key, message, log_type="charger")
+            if capture_key and fragments:
+                for fragment in fragments:
+                    store.append_log_capture(str(capture_key), fragment)
+                store.finalize_log_capture(str(capture_key))
+            elif session_capture and status_value.lower() in {
+                "uploaded",
+                "uploadfailure",
+                "rejected",
+                "idle",
+            }:
+                store.finalize_log_capture(session_capture)
+            store.record_pending_call_result(
+                message_id,
+                metadata=metadata,
+                payload=payload_data,
+            )
+            return
         if action == "SendLocalList":
             status_value = str(payload_data.get("status") or "").strip()
             version_candidate = (
@@ -1540,6 +1621,56 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             if parts:
                 message += ": " + ", ".join(parts)
             store.add_log(log_key, message, log_type="charger")
+            store.record_pending_call_result(
+                message_id,
+                metadata=metadata,
+                success=False,
+                error_code=error_code,
+                error_description=description,
+                error_details=details,
+            )
+            return
+        if action == "GetLog":
+            request_pk = metadata.get("log_request_pk")
+            capture_key = metadata.get("capture_key")
+
+            def _apply_error() -> None:
+                if not request_pk:
+                    return
+                request = ChargerLogRequest.objects.filter(pk=request_pk).first()
+                if not request:
+                    return
+                label = (error_code or "Error").strip() or "Error"
+                request.status = label
+                request.responded_at = timezone.now()
+                request.raw_response = {
+                    "errorCode": error_code,
+                    "errorDescription": description,
+                    "details": details,
+                }
+                if capture_key:
+                    request.session_key = str(capture_key)
+                request.save(
+                    update_fields=[
+                        "status",
+                        "responded_at",
+                        "raw_response",
+                        "session_key",
+                    ]
+                )
+
+            await database_sync_to_async(_apply_error)()
+            parts: list[str] = []
+            if error_code:
+                parts.append(f"code={error_code}")
+            if description:
+                parts.append(f"description={description}")
+            message = "GetLog error"
+            if parts:
+                message += ": " + ", ".join(parts)
+            store.add_log(log_key, message, log_type="charger")
+            if capture_key:
+                store.finalize_log_capture(str(capture_key))
             store.record_pending_call_result(
                 message_id,
                 metadata=metadata,
@@ -2384,6 +2515,70 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                     Charger.objects.filter(pk=self.charger.pk).update
                 )(last_meter_values=payload)
                 reply_payload = {}
+            elif action == "SecurityEventNotification":
+                event_type = str(
+                    payload.get("type")
+                    or payload.get("eventType")
+                    or ""
+                ).strip()
+                trigger_value = str(payload.get("trigger") or "").strip()
+                timestamp_value = _parse_ocpp_timestamp(payload.get("timestamp"))
+                if timestamp_value is None:
+                    timestamp_value = timezone.now()
+                tech_raw = (
+                    payload.get("techInfo")
+                    or payload.get("techinfo")
+                    or payload.get("tech_info")
+                )
+                if isinstance(tech_raw, (dict, list)):
+                    tech_info = json.dumps(tech_raw, ensure_ascii=False)
+                elif tech_raw is None:
+                    tech_info = ""
+                else:
+                    tech_info = str(tech_raw)
+
+                def _persist_security_event() -> None:
+                    connector_hint = payload.get("connectorId")
+                    target = None
+                    if connector_hint is not None:
+                        target = Charger.objects.filter(
+                            charger_id=self.charger_id,
+                            connector_id=connector_hint,
+                        ).first()
+                    if target is None:
+                        target = self.aggregate_charger or self.charger
+                    if target is None:
+                        return
+                    seq_raw = payload.get("seqNo") or payload.get("sequenceNumber")
+                    try:
+                        sequence_number = int(seq_raw) if seq_raw is not None else None
+                    except (TypeError, ValueError):
+                        sequence_number = None
+                    snapshot: dict[str, object]
+                    try:
+                        snapshot = json.loads(json.dumps(payload, ensure_ascii=False))
+                    except (TypeError, ValueError):
+                        snapshot = {
+                            str(key): (str(value) if value is not None else None)
+                            for key, value in payload.items()
+                        }
+                    SecurityEvent.objects.create(
+                        charger=target,
+                        event_type=event_type or "Unknown",
+                        event_timestamp=timestamp_value,
+                        trigger=trigger_value,
+                        tech_info=tech_info,
+                        sequence_number=sequence_number,
+                        raw_payload=snapshot,
+                    )
+
+                await database_sync_to_async(_persist_security_event)()
+                label = event_type or "unknown"
+                log_message = f"SecurityEventNotification: type={label}"
+                if trigger_value:
+                    log_message += f", trigger={trigger_value}"
+                store.add_log(self.store_key, log_message, log_type="charger")
+                reply_payload = {}
             elif action == "DiagnosticsStatusNotification":
                 status_value = payload.get("status")
                 location_value = (
@@ -2443,6 +2638,73 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                     aggregate_key = store.identity_key(self.charger_id, None)
                     if aggregate_key != self.store_key:
                         store.add_log(aggregate_key, log_message, log_type="charger")
+                reply_payload = {}
+            elif action == "LogStatusNotification":
+                status_value = str(payload.get("status") or "").strip()
+                log_type_value = str(payload.get("logType") or "").strip()
+                request_identifier = payload.get("requestId")
+                timestamp_value = _parse_ocpp_timestamp(payload.get("timestamp"))
+                if timestamp_value is None:
+                    timestamp_value = timezone.now()
+                location_value = str(
+                    payload.get("location")
+                    or payload.get("remoteLocation")
+                    or ""
+                ).strip()
+                filename_value = str(payload.get("filename") or "").strip()
+
+                def _persist_log_status() -> str:
+                    qs = ChargerLogRequest.objects.filter(
+                        charger__charger_id=self.charger_id
+                    )
+                    request = None
+                    if request_identifier is not None:
+                        request = qs.filter(request_id=request_identifier).first()
+                    if request is None:
+                        request = qs.order_by("-requested_at").first()
+                    if request is None:
+                        return ""
+                    ChargerLogStatus.objects.create(
+                        request=request,
+                        status=status_value or "",
+                        log_type=log_type_value or "",
+                        occurred_at=timestamp_value,
+                        raw_payload=payload,
+                    )
+                    updates: dict[str, object] = {
+                        "last_status_at": timestamp_value,
+                    }
+                    if status_value:
+                        updates["status"] = status_value
+                    if location_value:
+                        updates["location"] = location_value
+                    if filename_value:
+                        updates["filename"] = filename_value
+                    ChargerLogRequest.objects.filter(pk=request.pk).update(**updates)
+                    if updates.get("status"):
+                        request.status = str(updates["status"])
+                    if updates.get("location"):
+                        request.location = str(updates["location"])
+                    if updates.get("filename"):
+                        request.filename = str(updates["filename"])
+                    request.last_status_at = timestamp_value
+                    return request.session_key or ""
+
+                session_capture = await database_sync_to_async(_persist_log_status)()
+                status_label = status_value or "unknown"
+                message = f"LogStatusNotification: status={status_label}"
+                if request_identifier is not None:
+                    message += f", requestId={request_identifier}"
+                if log_type_value:
+                    message += f", logType={log_type_value}"
+                store.add_log(self.store_key, message, log_type="charger")
+                if session_capture and status_value.lower() in {
+                    "uploaded",
+                    "uploadfailure",
+                    "rejected",
+                    "idle",
+                }:
+                    store.finalize_log_capture(session_capture)
                 reply_payload = {}
             elif action == "StartTransaction":
                 id_tag = payload.get("idTag")

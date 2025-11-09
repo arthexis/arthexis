@@ -555,6 +555,32 @@ def add_log(cid: str, entry: str, log_type: str = "charger") -> None:
         handle.write(entry + "\n")
 
 
+def start_log_capture(
+    serial: str, connector: int | str | None, request_id: int, *, name: str | None = None
+) -> str:
+    """Begin recording a GetLog capture using the session log pipeline."""
+
+    base_key = identity_key(serial, connector)
+    capture_key = f"{base_key}-log-{request_id}"
+    base_name = log_names["charger"].get(base_key, base_key)
+    label = name or f"{base_name}-log-{request_id}"
+    register_log_name(capture_key, label, log_type="charger")
+    start_session_log(capture_key, request_id)
+    return capture_key
+
+
+def append_log_capture(capture_key: str, message: str) -> None:
+    """Append a message to an active GetLog capture."""
+
+    add_session_message(capture_key, message)
+
+
+def finalize_log_capture(capture_key: str) -> None:
+    """Finalize a GetLog capture created via :func:`start_log_capture`."""
+
+    end_session_log(capture_key)
+
+
 def _session_folder(cid: str) -> Path:
     """Return the folder path for session logs for the given charger."""
 

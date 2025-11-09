@@ -859,6 +859,17 @@ class AdminProtocolGroupingTests(TestCase):
         self.superuser = User.objects.create_superuser(
             username="protocol_admin", password="pwd", email="admin@example.com"
         )
+        self.client.force_login(self.superuser)
+        Site.objects.update_or_create(
+            id=1, defaults={"name": "test", "domain": "testserver"}
+        )
+        from nodes.models import Node
+
+        Node.objects.create(
+            hostname="testserver",
+            address="127.0.0.1",
+            public_endpoint="test-forwarder",
+        )
 
     def _build_request(self):
         request = self.factory.get("/admin/")
@@ -878,6 +889,13 @@ class AdminProtocolGroupingTests(TestCase):
         self.assertTrue(ocpp_list)
         ocpp_models = [model["object_name"] for model in ocpp_list[0]["models"]]
         self.assertIn("CPForwarder", ocpp_models)
+
+    def test_cp_forwarder_row_includes_favorite_toggle(self):
+        resp = self.client.get(reverse("admin:index"))
+        content = resp.content.decode()
+        match = re.search(r'id="protocols-cpforwarder">(?P<row>.*?)</th>', content, re.DOTALL)
+        self.assertIsNotNone(match)
+        self.assertIn("favorite-star", match.group("row"))
 
 
 class AdminSidebarTests(TestCase):
