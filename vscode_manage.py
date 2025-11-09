@@ -26,7 +26,17 @@ def main(argv=None):
     try:
         if celery_enabled:
             worker = subprocess.Popen(
-                [sys.executable, "-m", "celery", "-A", "config", "worker", "-l", "info"]
+                [
+                    sys.executable,
+                    "-m",
+                    "celery",
+                    "-A",
+                    "config",
+                    "worker",
+                    "-l",
+                    "info",
+                    "--concurrency=2",
+                ]
             )
             beat = subprocess.Popen(
                 [sys.executable, "-m", "celery", "-A", "config", "beat", "-l", "info"]

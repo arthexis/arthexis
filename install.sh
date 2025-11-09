@@ -398,7 +398,7 @@ Type=simple
 WorkingDirectory=$BASE_DIR
 EnvironmentFile=-$BASE_DIR/redis.env
 EnvironmentFile=-$BASE_DIR/debug.env
-ExecStart=$BASE_DIR/.venv/bin/celery -A config worker -l info
+ExecStart=$BASE_DIR/.venv/bin/celery -A config worker -l info --concurrency=2
 Restart=always
 User=$(id -un)
 
