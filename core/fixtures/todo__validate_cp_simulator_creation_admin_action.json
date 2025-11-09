@@ -2,9 +2,9 @@
   {
     "model": "core.todo",
     "fields": {
-      "request": "Validate Create Simulator for CP admin action",
+      "request": "Validate Create Simulator for CPs admin action",
       "url": "/admin/ocpp/charger/",
-      "request_details": "From the Charge Points changelist, select one or more chargers and use the \"Create Simulator for CP\" action. Confirm a simulator is created for each selected charger, the first simulator redirects to its edit page, and its Serial Number, Connector ID, and configuration fields are prefilled from the charger.",
+      "request_details": "From the Charge Points changelist, select one or more chargers and use the \"Create Simulator for CPs\" action. Confirm a simulator is created for each selected charger, the first simulator redirects to its edit page, and its Serial Number, Connector ID, and configuration fields are prefilled from the charger.",
       "done_on": null,
       "is_deleted": false,
       "version": "0.1.29"
