@@ -35,6 +35,7 @@ from django.core.files.base import ContentFile
 import qrcode
 from django.utils import timezone, formats
 from django.utils.dateparse import parse_datetime
+from packaging.version import InvalidVersion, Version
 import uuid
 from pathlib import Path
 from django.core import serializers
@@ -5052,6 +5053,7 @@ class Todo(Entity):
 
     request = models.CharField(max_length=255)
     version = models.CharField(max_length=20, blank=True, default="")
+    created_on = models.DateTimeField(auto_now_add=True)
     url = models.CharField(
         max_length=200, blank=True, default="", validators=[validate_relative_url]
     )
@@ -5071,6 +5073,7 @@ class Todo(Entity):
     done_revision = models.CharField(max_length=40, blank=True, default="")
     done_username = models.CharField(max_length=150, blank=True, default="")
     on_done_condition = ConditionTextField(blank=True, default="")
+    stale_on = models.DateTimeField(null=True, blank=True)
     origin_node = models.ForeignKey(
         "nodes.Node",
         null=True,
@@ -5123,6 +5126,139 @@ class Todo(Entity):
 
     natural_key.dependencies = []
 
+    @property
+    def is_stale(self) -> bool:
+        return self.stale_on is not None
+
+    @staticmethod
+    def _parse_version_label(label: str) -> Version | None:
+        trimmed = (label or "").strip()
+        if not trimmed:
+            return None
+        try:
+            return Version(trimmed)
+        except InvalidVersion:
+            return None
+
+    @classmethod
+    def version_context(cls) -> tuple[str, Version | None, list[dict[str, object]]]:
+        label = (cls.default_version() or "").strip()
+        parsed = cls._parse_version_label(label)
+        return label, parsed, cls.release_timeline()
+
+    @classmethod
+    def release_timeline(cls) -> list[dict[str, object]]:
+        try:
+            releases = (
+                PackageRelease.objects.filter(
+                    package__is_active=True, release_on__isnull=False
+                )
+                .order_by("release_on")
+                .values("release_on", "version")
+            )
+        except DatabaseError:  # pragma: no cover - database unavailable
+            return []
+
+        timeline: list[dict[str, object]] = []
+        for entry in releases:
+            label = (entry.get("version") or "").strip()
+            parsed = cls._parse_version_label(label)
+            if parsed is None:
+                continue
+            timeline.append(
+                {
+                    "release_on": entry.get("release_on"),
+                    "version": parsed,
+                    "label": label,
+                }
+            )
+        return timeline
+
+    @staticmethod
+    def _release_entry_for_created(
+        timeline: list[dict[str, object]], created: datetime_datetime | None
+    ) -> dict[str, object] | None:
+        if not timeline or created is None:
+            return None
+
+        candidates = [
+            entry
+            for entry in timeline
+            if entry.get("release_on") is not None
+            and entry["release_on"] <= created
+        ]
+        if candidates:
+            return candidates[-1]
+        return timeline[0]
+
+    def _resolve_origin_version(
+        self, timeline: list[dict[str, object]]
+    ) -> dict[str, object] | None:
+        label = (self.version or "").strip()
+        parsed = self._parse_version_label(label)
+        if parsed is not None:
+            return {"version": parsed, "label": label}
+
+        entry = self._release_entry_for_created(timeline, self.created_on)
+        if entry is None:
+            return None
+        return entry
+
+    def refresh_version_state(
+        self,
+        *,
+        current_label: str,
+        current_version: Version | None,
+        timeline: list[dict[str, object]],
+        now: datetime_datetime | None = None,
+    ) -> bool:
+        resolved = self._resolve_origin_version(timeline)
+        resolved_version = resolved.get("version") if resolved else None
+        resolved_label = resolved.get("label") if resolved else ""
+        normalized_current = (current_label or "").strip()
+
+        if not resolved_label and normalized_current and not (self.version or "").strip():
+            resolved_label = normalized_current
+            if resolved_version is None:
+                resolved_version = self._parse_version_label(resolved_label)
+
+        if resolved_label and (self.version or "").strip() != resolved_label:
+            type(self).all_objects.filter(pk=self.pk).update(version=resolved_label)
+            self.version = resolved_label
+
+        is_stale = False
+        if resolved_version is not None and current_version is not None:
+            is_stale = resolved_version < current_version
+
+        timestamp = now or timezone.now()
+        if is_stale:
+            if self.stale_on is None:
+                type(self).all_objects.filter(pk=self.pk).update(stale_on=timestamp)
+                self.stale_on = timestamp
+        elif self.stale_on is not None:
+            type(self).all_objects.filter(pk=self.pk).update(stale_on=None)
+            self.stale_on = None
+
+        return is_stale
+
+    @classmethod
+    def refresh_active(
+        cls, *, now: datetime_datetime | None = None
+    ) -> list["Todo"]:
+        current_label, current_version, timeline = cls.version_context()
+        moment = now or timezone.now()
+        todos = list(cls.objects.filter(is_deleted=False, done_on__isnull=True))
+        active: list["Todo"] = []
+        for todo in todos:
+            if not todo.refresh_version_state(
+                current_label=current_label,
+                current_version=current_version,
+                timeline=timeline,
+                now=moment,
+            ):
+                active.append(todo)
+        return active
+
     def check_on_done_condition(self) -> ConditionCheckResult:
         """Evaluate the ``on_done_condition`` field for this TODO."""
 
@@ -5145,12 +5281,14 @@ class Todo(Entity):
             "done_username",
             "done_version",
             "is_deleted",
+            "version",
         }
         update_fields = kwargs.get("update_fields")
         monitor_changes = not created and (
             update_fields is None or tracked_fields.intersection(update_fields)
         )
         previous_state = None
+        previous_version_value = None
         if monitor_changes:
             previous_state = (
                 type(self)
@@ -5162,10 +5300,28 @@ class Todo(Entity):
                     "done_username",
                     "done_version",
                     "is_deleted",
+                    "version",
                 )
                 .first()
             )
+            if previous_state is not None:
+                previous_version_value = previous_state.get("version")
+        needs_version_refresh = created
+        if not created and previous_state is not None:
+            if (previous_version_value or "").strip() != (self.version or "").strip():
+                needs_version_refresh = True
+        elif not created and update_fields and "version" in update_fields:
+            needs_version_refresh = True
+
         super().save(*args, **kwargs)
+
+        if needs_version_refresh:
+            current_label, current_version, timeline = type(self).version_context()
+            self.refresh_version_state(
+                current_label=current_label,
+                current_version=current_version,
+                timeline=timeline,
+            )
 
         if created:
             return
@@ -5345,6 +5501,14 @@ class Todo(Entity):
         _assign("done_version", self.done_version or "")
         _assign("done_revision", self.done_revision or "")
         _assign("done_username", self.done_username or "")
+
+        if self.stale_on:
+            stale_value = timezone.localtime(self.stale_on)
+            _assign("stale_on", stale_value.isoformat())
+        else:
+            if fields.get("stale_on") is not None:
+                fields["stale_on"] = None
+                changed = True
 
         if self.done_on:
             done_value = timezone.localtime(self.done_on)

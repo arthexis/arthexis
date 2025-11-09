@@ -19,8 +19,6 @@ from django.utils.text import capfirst
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from django.dispatch import receiver
-from packaging.version import InvalidVersion, Version
-
 from core.models import Lead, RFID, Todo, GoogleCalendarProfile
 from ocpp.models import Charger
 from nodes.models import NetMessage
@@ -613,36 +611,7 @@ def future_action_items(context):
         {"url": item["url"], "label": item["label"]} for item in sorted_models[:4]
     ]
 
-    active_todos = list(
-        Todo.objects.filter(is_deleted=False, done_on__isnull=True)
-    )
-
-    def _parse_version_label(label: str) -> Version | None:
-        trimmed = label.strip()
-        if not trimmed:
-            return None
-        try:
-            return Version(trimmed)
-        except InvalidVersion:
-            return None
-
-    current_label = (Todo.default_version() or "").strip()
-    current_version = _parse_version_label(current_label)
-
-    def _is_relevant(todo: Todo) -> bool:
-        label = (todo.version or "").strip()
-        if not label:
-            return False
-        parsed = _parse_version_label(label)
-        if parsed is None:
-            if current_version is None:
-                return label == current_label
-            return False
-        if current_version is None:
-            return True
-        return parsed >= current_version
-
-    active_todos = [todo for todo in active_todos if _is_relevant(todo)]
+    active_todos = Todo.refresh_active(now=timezone.now())
 
     def _serialize(todo: Todo, *, completed: bool):
         details = (todo.request_details or "").strip()

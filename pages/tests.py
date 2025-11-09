@@ -63,6 +63,7 @@ from core.models import (
     ClientReport,
     InviteLead,
     Package,
+    PackageRelease,
     Reference,
     RFID,
     ReleaseManager,
@@ -3384,6 +3385,11 @@ class FavoriteTests(TestCase):
         self.assertIn(current.request, labels)
         self.assertNotIn(outdated.request, labels)
 
+        current.refresh_from_db()
+        outdated.refresh_from_db()
+        self.assertFalse(current.is_stale)
+        self.assertTrue(outdated.is_stale)
+
     def test_future_action_items_limits_user_data_queries(self):
         from pages.templatetags import admin_extras
 
@@ -3474,14 +3480,52 @@ class FavoriteTests(TestCase):
         resp = self.client.get(reverse("admin:index"))
 
         self.assertNotContains(resp, "Old task")
+        todo.refresh_from_db()
+        self.assertTrue(todo.is_stale)
+        self.assertIsNotNone(todo.stale_on)
 
-    def test_dashboard_omits_todos_without_version(self):
-        todo = Todo.objects.create(request="No version task")
-        Todo.objects.filter(pk=todo.pk).update(version="")
+    def test_dashboard_estimates_release_for_blank_versions(self):
+        package, _ = Package.objects.get_or_create(name="DashboardPkg")
+        package.is_active = True
+        package.save()
+
+        now = timezone.now()
+        older_release, _ = PackageRelease.objects.update_or_create(
+            package=package,
+            version="0.1.10",
+            defaults={"release_on": now - timedelta(days=90), "revision": ""},
+        )
+        current_label = (Todo.default_version() or "0.0.0").strip() or "0.0.0"
+        current_release, _ = PackageRelease.objects.update_or_create(
+            package=package,
+            version=current_label,
+            defaults={"release_on": now - timedelta(days=1), "revision": ""},
+        )
+
+        legacy = Todo.objects.create(request="Legacy blank")
+        Todo.objects.filter(pk=legacy.pk).update(
+            version="",
+            created_on=older_release.release_on + timedelta(days=1),
+        )
+
+        recent = Todo.objects.create(request="Recent blank")
+        Todo.objects.filter(pk=recent.pk).update(
+            version="",
+            created_on=current_release.release_on + timedelta(minutes=5),
+        )
 
         resp = self.client.get(reverse("admin:index"))
 
-        self.assertNotContains(resp, "No version task")
+        self.assertNotContains(resp, legacy.request)
+        self.assertContains(resp, recent.request)
+
+        legacy.refresh_from_db()
+        recent.refresh_from_db()
+
+        self.assertTrue(legacy.is_stale)
+        self.assertEqual(legacy.version, older_release.version)
+        self.assertFalse(recent.is_stale)
+        self.assertEqual(recent.version, current_release.version)
 
     def test_dashboard_shows_todos_for_future_version(self):
         todo = Todo.objects.create(request="Future task")

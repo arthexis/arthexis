@@ -1,0 +1,13 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "QA: Confirm stale TODO filtering on dashboard",
+      "url": "",
+      "request_details": "Create a TODO whose version predates the current release (or clear its version and backdate its creation), load the admin dashboard, and confirm it disappears from the Release manager tasks once marked stale. Verify the TODO's detail view shows a stale timestamp afterwards.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.30"
+    }
+  }
+]
