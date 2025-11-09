@@ -21,6 +21,7 @@ from .models import ContentSample
 
 SCREENSHOT_DIR = settings.LOG_DIR / "screenshots"
 CAMERA_DIR = settings.LOG_DIR / "camera"
+AUDIO_DIR = settings.LOG_DIR / "audio"
 logger = logging.getLogger(__name__)
 
 _FIREFOX_BINARY_CANDIDATES = ("firefox", "firefox-esr", "firefox-bin")
@@ -123,6 +124,51 @@ def capture_rpi_snapshot(timeout: int = 10) -> Path:
     return filename
 
 
+def record_microphone_sample(
+    duration_seconds: int = 6, *, sample_rate: int = 16_000, channels: int = 1
+) -> Path:
+    """Record audio from the default microphone and return the saved path."""
+
+    tool_path = shutil.which("arecord")
+    if not tool_path:
+        raise RuntimeError("arecord is not available")
+    AUDIO_DIR.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.utcnow()
+    unique_suffix = uuid.uuid4().hex
+    filename = AUDIO_DIR / f"{timestamp:%Y%m%d%H%M%S}-{unique_suffix}.wav"
+    try:
+        result = subprocess.run(
+            [
+                tool_path,
+                "-q",
+                "-f",
+                "S16_LE",
+                "-r",
+                str(sample_rate),
+                "-c",
+                str(channels),
+                "-d",
+                str(duration_seconds),
+                str(filename),
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=duration_seconds + 5,
+        )
+    except Exception as exc:  # pragma: no cover - depends on audio stack
+        logger.error("Failed to invoke %s: %s", tool_path, exc)
+        raise RuntimeError(f"Audio capture failed: {exc}") from exc
+    if result.returncode != 0:
+        error = (result.stderr or result.stdout or "Audio capture failed").strip()
+        logger.error("%s exited with %s: %s", tool_path, result.returncode, error)
+        raise RuntimeError(error)
+    if not filename.exists():
+        logger.error("Audio sample file %s was not created", filename)
+        raise RuntimeError("Audio capture failed")
+    return filename
+
+
 def save_screenshot(
     path: Path,
     node=None,
@@ -164,6 +210,47 @@ def save_screenshot(
         data["transaction_uuid"] = transaction_uuid
     if content is not None:
         data["content"] = content
+    if user is not None:
+        data["user"] = user
+    with suppress_default_classifiers():
+        sample = ContentSample.objects.create(**data)
+    run_default_classifiers(sample)
+    return sample
+
+
+def save_audio_sample(
+    path: Path,
+    *,
+    node=None,
+    method: str = "",
+    transaction_uuid=None,
+    user=None,
+    link_duplicates: bool = False,
+):
+    """Save audio file info if not already recorded."""
+
+    original = path
+    if not path.is_absolute():
+        path = settings.LOG_DIR / path
+    with path.open("rb") as fh:
+        digest = hashlib.sha256(fh.read()).hexdigest()
+    existing = ContentSample.objects.filter(hash=digest).first()
+    if existing:
+        if link_duplicates:
+            logger.info("Duplicate audio sample; reusing existing sample")
+            return existing
+        logger.info("Duplicate audio sample; record not created")
+        return None
+    stored_path = (original if not original.is_absolute() else path).as_posix()
+    data = {
+        "node": node,
+        "path": stored_path,
+        "method": method,
+        "hash": digest,
+        "kind": ContentSample.AUDIO,
+    }
+    if transaction_uuid is not None:
+        data["transaction_uuid"] = transaction_uuid
     if user is not None:
         data["user"] = user
     with suppress_default_classifiers():

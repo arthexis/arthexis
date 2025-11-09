@@ -36,15 +36,19 @@ from asgiref.sync import async_to_sync
 
 from .classifiers import run_default_classifiers, suppress_default_classifiers
 from .rfid_sync import apply_rfid_payload, serialize_rfid
-from .utils import capture_rpi_snapshot, capture_screenshot, save_screenshot
+from .utils import (
+    capture_rpi_snapshot,
+    capture_screenshot,
+    record_microphone_sample,
+    save_audio_sample,
+    save_screenshot,
+)
 from .reports import (
     collect_celery_log_entries,
     collect_scheduled_tasks,
     iter_report_periods,
     resolve_period,
 )
-from .consumers import AUDIO_CAPTURE_SOCKET_PATH
-
 from core.admin import EmailOutboxAdminForm
 from protocols.models import CPForwarder
 from .models import (
@@ -1884,9 +1888,9 @@ class NodeFeatureAdmin(EntityModelAdmin):
                 name="nodes_nodefeature_celery_report",
             ),
             path(
-                "view-waveform/",
-                self.admin_site.admin_view(self.view_waveform),
-                name="nodes_nodefeature_view_waveform",
+                "test-microphone/",
+                self.admin_site.admin_view(self.test_microphone),
+                name="nodes_nodefeature_test_microphone",
             ),
             path(
                 "take-screenshot/",
@@ -1962,24 +1966,50 @@ class NodeFeatureAdmin(EntityModelAdmin):
             return None
         return feature
 
-    def view_waveform(self, request):
+    def test_microphone(self, request):
         feature = self._ensure_feature_enabled(
-            request, "audio-capture", "View Waveform"
+            request, "audio-capture", "Test Microphone"
         )
         if not feature:
             return redirect("..")
 
-        context = {
-            **self.admin_site.each_context(request),
-            "title": _("Audio Capture Waveform"),
-            "feature": feature,
-            "socket_path": AUDIO_CAPTURE_SOCKET_PATH,
-        }
-        return TemplateResponse(
-            request,
-            "admin/nodes/nodefeature/view_waveform.html",
-            context,
+        if not Node._has_audio_capture_device():
+            self.message_user(
+                request,
+                "Audio Capture feature is enabled but no recording device was detected.",
+                level=messages.ERROR,
+            )
+            return redirect("..")
+
+        try:
+            path = record_microphone_sample(duration_seconds=6)
+        except Exception as exc:  # pragma: no cover - depends on system audio
+            self.message_user(request, str(exc), level=messages.ERROR)
+            return redirect("..")
+
+        node = Node.get_local()
+        sample = save_audio_sample(path, node=node, method="DEFAULT_ACTION")
+        if not sample:
+            self.message_user(
+                request, "Duplicate audio sample; not saved", level=messages.INFO
+            )
+            return redirect("..")
+
+        self.message_user(
+            request, f"Audio sample saved to {sample.path}", level=messages.SUCCESS
         )
+        try:
+            change_url = reverse(
+                "admin:nodes_contentsample_change", args=[sample.pk]
+            )
+        except NoReverseMatch:  # pragma: no cover - admin URL always registered
+            self.message_user(
+                request,
+                "Audio sample saved but the admin page could not be resolved.",
+                level=messages.WARNING,
+            )
+            return redirect("..")
+        return redirect(change_url)
 
     def take_screenshot(self, request):
         feature = self._ensure_feature_enabled(
