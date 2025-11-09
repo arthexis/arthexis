@@ -34,17 +34,13 @@ class Command(BaseCommand):
         existing_nodes = Node.objects.filter(hostname=hostname).order_by("pk")
         existing_node = existing_nodes.first()
         if existing_node:
-            has_duplicates = existing_nodes.exclude(pk=existing_node.pk).exists()
-            if has_duplicates:
-                updates = {
-                    field: value
-                    for field, value in node_defaults.items()
-                    if getattr(existing_node, field) != value
-                }
-                if updates:
-                    for field, value in updates.items():
-                        setattr(existing_node, field, value)
-                    existing_node.save(update_fields=list(updates.keys()))
+            updates = {
+                field: value
+                for field, value in node_defaults.items()
+                if getattr(existing_node, field) != value
+            }
+            if updates:
+                Node.objects.filter(pk=existing_node.pk).update(**updates)
         else:
             Node.objects.create(hostname=hostname, **node_defaults)
 
