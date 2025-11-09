@@ -31,17 +31,20 @@ class Command(BaseCommand):
             "role": role,
         }
 
-        existing_node = Node.objects.filter(hostname=hostname).order_by("pk").first()
+        existing_nodes = Node.objects.filter(hostname=hostname).order_by("pk")
+        existing_node = existing_nodes.first()
         if existing_node:
-            updates = {
-                field: value
-                for field, value in node_defaults.items()
-                if getattr(existing_node, field) != value
-            }
-            if updates:
-                for field, value in updates.items():
-                    setattr(existing_node, field, value)
-                existing_node.save(update_fields=list(updates.keys()))
+            has_duplicates = existing_nodes.exclude(pk=existing_node.pk).exists()
+            if has_duplicates:
+                updates = {
+                    field: value
+                    for field, value in node_defaults.items()
+                    if getattr(existing_node, field) != value
+                }
+                if updates:
+                    for field, value in updates.items():
+                        setattr(existing_node, field, value)
+                    existing_node.save(update_fields=list(updates.keys()))
         else:
             Node.objects.create(hostname=hostname, **node_defaults)
 
