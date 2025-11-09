@@ -17,9 +17,11 @@
         </thead>
         <tbody>
         {% for entry in favorite_entries %}
-          {% with app=entry.app model=entry.model fav=entry.favorite ct_id=entry.ct_id model_name=model.object_name|lower %}
+          {% with app=entry.app model=entry.model fav=entry.favorite ct_id=entry.ct_id %}
+            {% model_app_label model app.app_label as model_app_label %}
+            {% with model_name=model.object_name|lower %}
             <tr class="model-{{ model_name }}{% if model.admin_url in request.path|urlencode %} current-model{% endif %}">
-              <th scope="row" id="favorites-{{ app.app_label }}-{{ model_name }}">
+              <th scope="row" id="favorites-{{ model_app_label }}-{{ model_name }}">
                 {% if ct_id %}
                   <a href="{% url 'admin:favorite_toggle' ct_id %}?next={{ request.get_full_path|urlencode }}" class="favorite-star favorited" title="Toggle favorite">&#9733;</a>
                 {% endif %}
@@ -98,6 +100,7 @@
                 <td></td>
               {% endif %}
             </tr>
+            {% endwith %}
           {% endwith %}
         {% endfor %}
         </tbody>
@@ -124,12 +127,13 @@
         </thead>
         <tbody id="app-{{ app.app_label }}-models">
         {% for model in app.models %}
+          {% model_app_label model app.app_label as model_app_label %}
           {% with model_name=model.object_name|lower %}
-            {% favorite_ct_id app.app_label model.object_name as ct_id %}
+            {% favorite_ct_id model_app_label model.object_name as ct_id %}
             {% favorite_from_map favorites_map ct_id as fav %}
             {% if not fav %}
             <tr class="model-{{ model_name }}{% if model.admin_url in request.path|urlencode %} current-model{% endif %}">
-              <th scope="row" id="{{ app.app_label }}-{{ model_name }}">
+              <th scope="row" id="{{ model_app_label }}-{{ model_name }}">
                 {% if ct_id %}
                   <a href="{% url 'admin:favorite_toggle' ct_id %}?next={{ request.get_full_path|urlencode }}" class="favorite-star{% if fav %} favorited{% endif %}" title="Toggle favorite">&#9733;</a>
                 {% endif %}
