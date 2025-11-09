@@ -25,6 +25,7 @@ LATEST=false
 CHECK=false
 AUTO_UPGRADE_MODE=""
 DEBUG_MODE=""
+DEBUG_OVERRIDDEN=false
 REFRESH_MAINTENANCE=false
 
 BASE_DIR="$SCRIPT_DIR"
@@ -34,6 +35,12 @@ DB_FILE="$BASE_DIR/db.sqlite3"
 usage() {
     echo "Usage: $0 [--service NAME] [--update] [--latest] [--clean] [--check] [--auto-upgrade|--no-auto-upgrade] [--debug|--no-debug] [--refresh-maintenance] [--satellite|--terminal|--control|--watchtower]" >&2
     exit 1
+}
+
+write_debug_env() {
+    cat > "$BASE_DIR/debug.env" <<EOF
+DEBUG=$1
+EOF
 }
 
 
@@ -290,15 +297,14 @@ ACTION_PERFORMED=false
 
 if [ -n "$DEBUG_MODE" ]; then
     ACTION_PERFORMED=true
+    DEBUG_OVERRIDDEN=true
     DEBUG_VALUE="0"
     DEBUG_MESSAGE="Debug mode disabled by default."
     if [ "$DEBUG_MODE" = "enable" ]; then
         DEBUG_VALUE="1"
         DEBUG_MESSAGE="Debug mode enabled by default."
     fi
-    cat > "$BASE_DIR/debug.env" <<EOF
-DEBUG=$DEBUG_VALUE
-EOF
+    write_debug_env "$DEBUG_VALUE"
     echo "$DEBUG_MESSAGE"
 fi
 
@@ -336,6 +342,15 @@ fi
 
 if [ -z "$NODE_ROLE" ]; then
     usage
+fi
+
+if [ "$DEBUG_OVERRIDDEN" = false ]; then
+    if [ "$NODE_ROLE" = "Terminal" ]; then
+        write_debug_env "1"
+        echo "Terminal role defaults to debug mode."
+    else
+        write_debug_env "0"
+    fi
 fi
 
 mkdir -p "$LOCK_DIR"
