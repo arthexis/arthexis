@@ -2503,7 +2503,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
                 level=messages.ERROR,
             )
 
-    @admin.action(description=_("Create Simulator for CP"))
+    @admin.action(description=_("Create Simulator for CPs"))
     def create_simulator_for_cp(self, request, queryset):
         created: list[tuple[Charger, Simulator]] = []
         for charger in queryset:

@@ -20,13 +20,26 @@ def main(argv=None):
     is_runserver = bool(argv) and argv[0] == "runserver"
     is_debug_session = "DEBUGPY_LAUNCHER_PORT" in os.environ
     if is_runserver:
-        os.environ["DEBUG"] = "1" if is_debug_session else "0"
+        if is_debug_session:
+            os.environ["DEBUG"] = "1"
+        else:
+            os.environ.pop("DEBUG", None)
         if "--noreload" not in argv:
             argv.insert(1, "--noreload")
     try:
         if celery_enabled:
             worker = subprocess.Popen(
-                [sys.executable, "-m", "celery", "-A", "config", "worker", "-l", "info"]
+                [
+                    sys.executable,
+                    "-m",
+                    "celery",
+                    "-A",
+                    "config",
+                    "worker",
+                    "-l",
+                    "info",
+                    "--concurrency=2",
+                ]
             )
             beat = subprocess.Popen(
                 [sys.executable, "-m", "celery", "-A", "config", "beat", "-l", "info"]

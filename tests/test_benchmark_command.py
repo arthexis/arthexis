@@ -109,7 +109,7 @@ def _build_processes():
     process_b = FakeProcess(
         pid=202,
         name="celery",
-        cmdline=["celery", "-A", "config", "worker"],
+        cmdline=["celery", "-A", "config", "worker", "--concurrency=2"],
         cpu_values=[0.0, 5.0, 0.0, 7.0],
         rss_values=[150 * 1024**2, 160 * 1024**2],
         read_values=[500, 700],

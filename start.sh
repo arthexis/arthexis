@@ -125,7 +125,7 @@ done
 
 # Start Celery components to handle queued email if enabled
 if [ "$CELERY" = true ]; then
-  celery -A config worker -l info &
+  celery -A config worker -l info --concurrency=2 &
   CELERY_WORKER_PID=$!
   celery -A config beat -l info &
   CELERY_BEAT_PID=$!

@@ -1,0 +1,13 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate Terminal role enables debug mode by default",
+      "url": "",
+      "request_details": "From the deployment host, run ./switch-role.sh --terminal and confirm debug.env records DEBUG=1 without needing --debug. Repeat with ./switch-role.sh --terminal --no-debug to ensure the default can be disabled and the file stores DEBUG=0.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.30"
+    }
+  }
+]
