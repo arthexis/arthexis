@@ -28,10 +28,12 @@ class CPForwarderTests(TestCase):
             role=self.role,
         )
 
+    @patch("protocols.models.is_target_active", return_value=True)
+    @patch("protocols.models.sync_forwarded_charge_points")
     @patch("protocols.models.send_forwarding_metadata", return_value=(True, None))
     @patch("protocols.models.load_local_node_credentials")
     def test_enabling_forwarder_updates_chargers(
-        self, mock_credentials, mock_metadata
+        self, mock_credentials, _mock_metadata, mock_sync, _mock_target
     ):
         mock_credentials.return_value = (self.local, object(), None)
         charger = Charger.objects.create(
@@ -47,12 +49,13 @@ class CPForwarderTests(TestCase):
         self.assertEqual(charger.forwarded_to, self.remote)
         self.assertIn("Forwarding", forwarder.last_status)
         self.assertEqual(forwarder.last_error, "")
-        mock_metadata.assert_called_once()
+        mock_sync.assert_called()
 
+    @patch("protocols.models.sync_forwarded_charge_points")
     @patch("protocols.models.send_forwarding_metadata", return_value=(True, None))
     @patch("protocols.models.load_local_node_credentials")
     def test_disabling_forwarder_clears_forwarding(
-        self, mock_credentials, mock_metadata
+        self, mock_credentials, _mock_metadata, mock_sync
     ):
         mock_credentials.return_value = (self.local, object(), None)
         charger = Charger.objects.create(
@@ -69,9 +72,14 @@ class CPForwarderTests(TestCase):
         forwarder.refresh_from_db()
         self.assertIsNone(charger.forwarded_to)
         self.assertFalse(forwarder.is_running)
+        mock_sync.assert_called()
 
+    @patch("protocols.models.is_target_active", return_value=False)
+    @patch("protocols.models.sync_forwarded_charge_points")
     @patch("protocols.models.load_local_node_credentials")
-    def test_sync_chargers_records_credential_error(self, mock_credentials):
+    def test_sync_chargers_records_credential_error(
+        self, mock_credentials, mock_sync, _mock_target
+    ):
         mock_credentials.return_value = (self.local, None, "missing key")
         Charger.objects.create(
             charger_id="CP-FWD-3",
@@ -83,6 +91,7 @@ class CPForwarderTests(TestCase):
         forwarder.refresh_from_db()
         self.assertIn("Forwarding", forwarder.last_status)
         self.assertEqual(forwarder.last_error, "missing key")
+        mock_sync.assert_called()
 
     def test_running_state_helpers(self):
         forwarder = CPForwarder.objects.create(target_node=self.remote, enabled=False)
