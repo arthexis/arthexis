@@ -2353,6 +2353,18 @@ class ControlNavTests(TestCase):
         resp = self.client.get("/read/../../SECRET.md")
         self.assertEqual(resp.status_code, 404)
 
+    def test_docs_route_redirects_to_reader(self):
+        resp = self.client.get("/docs/cookbooks/sigils.md")
+        expected = reverse(
+            "pages:readme-document", args=["docs/cookbooks/sigils.md"]
+        )
+        self.assertRedirects(resp, expected, fetch_redirect_response=False)
+
+    def test_docs_root_redirects_to_readme(self):
+        resp = self.client.get("/docs/")
+        expected = reverse("pages:readme")
+        self.assertRedirects(resp, expected, fetch_redirect_response=False)
+
 
 class SatelliteNavTests(TestCase):
     def setUp(self):
