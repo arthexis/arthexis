@@ -31,7 +31,8 @@ class Command(BaseCommand):
             "role": role,
         }
 
-        existing_node = Node.objects.filter(hostname=hostname).order_by("pk").first()
+        existing_nodes = Node.objects.filter(hostname=hostname).order_by("pk")
+        existing_node = existing_nodes.first()
         if existing_node:
             updates = {
                 field: value
