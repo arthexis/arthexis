@@ -4,29 +4,23 @@ Changelog
 Unreleased
 ----------
 
-- 70ae2ff6 chore: update TODO fixtures
-- 813709b6 chore: update version and changelog
-- 67c029fc Assign constellation gateway devices (#2726)
-- b522ea03 Add periodic constellation UDP probe task (#2725)
-- 1b069c1d Add WireGuard constellation overlay support (#2724)
-- 6a71729b Show MAC address in node admin list (#2721)
-- cd0c2d0d Fix charge point admin log link 404 (#2723)
-- 328c4d96 Allow authenticated login check mode and link from admin (#2722)
-- 390d6eea Fix My User admin link for staff without Teams access (#2718)
-- 4518d773 Allow legacy sites permissions to access site proxy admin (#2719)
-- 9f5cd57d Add automatic metadata fetch for returning chargers (#2717)
-- 4a1ead1e Hide no-error codes on OCPP public pages (#2720)
-- 230fd3d7 Add coverage tests for OCPP, RFID, and public site logging (#2709)
-- adc0107d Refine README markdown table styling for mobile (#2716)
-- 1dfafc79 Add version targeting to release manager TODOs (#2715)
-- e830dcad Replace constellation role flag references with watchtower (#2714)
-- 2378f031 Stream audio capture waveform from node microphone (#2713)
-- 65852075 Handle charger deletion failures after purge warning (#2712)
-- ea03ceb3 Handle RFID UID conflicts during admin import (#2711)
-- a22c2453 Use alphabetic connector labels across UI and commands (#2710)
-- 720f1b68 Fix start charge point forwarding admin action (#2708)
-- 6de3352f Fix env refresh sync for completed TODOs (#2707)
-- decefa06 chore: record publish metadata for v0.1.28
+- 1510d1b4 chore: update TODO fixtures
+- 6e010da6 Refactor CP forwarding sessions to synchronous service (#2741)
+- 16a2e1dc Add test for GetLog call error handling (#2739)
+- 1d67a32c Ensure CP Forwarder supports favorites in admin (#2740)
+- 3debb607 Add channel overrides to upgrade report (#2738)
+- 9fe57b83 Align CP forwarder admin with protocol group (#2737)
+- 68f26939 Add admin action for creating charge point simulators (#2736)
+- 90e4d524 Document subprotocol fallback and extend coverage (#2735)
+- 8a116957 Fix OCPP simulators for websockets 15 header rename (#2734)
+- daf5dd2c Improve visitor registration loopback handling (#2733)
+- 89fab2f8 Add debug toggle support to switch-role services (#2732)
+- ea7f20e7 docs: link admin section to install guide (#2727)
+- 04e16709 Expose request language on context (#2731)
+- f47eeb2b Fix last release changelog parsing (#2729)
+- c23010b9 Add CP forwarder model and admin flow (#2730)
+- 7c6cb41c Add consumer report view mode toggle and defaults (#2728)
+- e18c7665 chore: record publish metadata for v0.1.29
 
 v0.1.22 (2025-10-28)
 --------------------
