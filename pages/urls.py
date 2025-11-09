@@ -6,6 +6,8 @@ app_name = "pages"
 
 urlpatterns = [
     path("", views.index, name="index"),
+    path("docs/", views.readme_docs_redirect, name="docs-redirect"),
+    path("docs/<path:doc>", views.readme_docs_redirect, name="docs-document-redirect"),
     path(
         "read/assets/<str:source>/<path:asset>",
         views.readme_asset,

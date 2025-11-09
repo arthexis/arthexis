@@ -704,6 +704,24 @@ def _render_readme(request, role, doc: str | None = None):
     return response
 
 
+def readme_docs_redirect(request, doc: str | None = None):
+    """Redirect ``/docs`` requests to the canonical reader endpoints."""
+
+    if doc:
+        normalized_doc = doc
+        if not normalized_doc.startswith("docs/"):
+            normalized_doc = f"docs/{normalized_doc}"
+        target = reverse("pages:readme-document", kwargs={"doc": normalized_doc})
+    else:
+        target = reverse("pages:readme")
+
+    query_string = request.META.get("QUERY_STRING")
+    if query_string:
+        target = f"{target}?{query_string}"
+
+    return HttpResponseRedirect(target)
+
+
 def readme_asset(request, source: str, asset: str):
     source_normalized = (source or "").lower()
     if source_normalized == "static":
