@@ -2,11 +2,17 @@
 
 from __future__ import annotations
 
+import contextlib
+import json
 import logging
+import os
+import socket
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Iterable, Iterator, MutableMapping
 
+from django.conf import settings
 from django.db.models import Q
 from django.utils import timezone
 from websocket import WebSocketException, create_connection
@@ -30,6 +36,124 @@ class ForwardingSession:
 
 
 _FORWARDING_SESSIONS: MutableMapping[int, ForwardingSession] = {}
+
+
+_REGISTRY_OWNER_PATH = Path(settings.BASE_DIR) / "locks" / "ocpp_forwarding_owner.json"
+_REGISTRY_OWNER_TTL = timedelta(minutes=5)
+
+
+def _registry_owner_id() -> str:
+    return f"{socket.gethostname()}:{os.getpid()}"
+
+
+def _write_registry_owner(owner_id: str) -> bool:
+    """Persist ``owner_id`` as the active registry owner.
+
+    Returns ``True`` when the owner file was written successfully.
+    """
+
+    heartbeat = timezone.now().isoformat()
+    payload = {
+        "owner_id": owner_id,
+        "pid": os.getpid(),
+        "heartbeat": heartbeat,
+    }
+    tmp_path = _REGISTRY_OWNER_PATH.with_suffix(".tmp")
+    try:
+        _REGISTRY_OWNER_PATH.parent.mkdir(parents=True, exist_ok=True)
+        tmp_path.write_text(json.dumps(payload))
+        os.replace(tmp_path, _REGISTRY_OWNER_PATH)
+        return True
+    except OSError:
+        logger.exception("Failed to persist forwarding registry owner state")
+        with contextlib.suppress(OSError):  # pragma: no cover - cleanup best effort
+            tmp_path.unlink()
+        return False
+
+
+def _read_registry_owner() -> tuple[str | None, datetime | None, int | None]:
+    try:
+        data = json.loads(_REGISTRY_OWNER_PATH.read_text())
+    except FileNotFoundError:
+        return None, None, None
+    except (OSError, json.JSONDecodeError):
+        logger.warning(
+            "Forwarding registry owner file is unreadable; resetting ownership"
+        )
+        return None, None, None
+
+    owner_id = data.get("owner_id")
+
+    heartbeat_value = data.get("heartbeat")
+    heartbeat: datetime | None = None
+    if isinstance(heartbeat_value, str):
+        try:
+            heartbeat = datetime.fromisoformat(heartbeat_value)
+        except ValueError:
+            heartbeat = None
+        else:
+            if timezone.is_naive(heartbeat):
+                heartbeat = timezone.make_aware(
+                    heartbeat, timezone.get_current_timezone()
+                )
+
+    pid_value = data.get("pid")
+    try:
+        pid = int(pid_value)
+    except (TypeError, ValueError):
+        pid = None
+
+    return owner_id, heartbeat, pid
+
+
+def _is_process_alive(pid: int | None) -> bool:
+    if not pid or pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
+def _heartbeat_is_recent(heartbeat: datetime | None) -> bool:
+    if heartbeat is None:
+        return False
+    return timezone.now() - heartbeat <= _REGISTRY_OWNER_TTL
+
+
+def _claim_registry_ownership() -> bool:
+    """Return ``True`` when the current process should manage sessions."""
+
+    current_owner = _registry_owner_id()
+    owner_id, heartbeat, pid = _read_registry_owner()
+
+    if owner_id == current_owner:
+        return _write_registry_owner(current_owner)
+
+    if owner_id and _is_process_alive(pid) and _heartbeat_is_recent(heartbeat):
+        logger.debug(
+            "Skipping forwarding sync; registry owned by %s (pid=%s)",
+            owner_id,
+            pid,
+        )
+        return False
+
+    logger.info(
+        "Claiming forwarding registry ownership (previous owner: %s)", owner_id
+    )
+    return _write_registry_owner(current_owner)
+
+
+def _refresh_registry_heartbeat() -> None:
+    owner_id, _, _ = _read_registry_owner()
+    current_owner = _registry_owner_id()
+    if owner_id == current_owner:
+        _write_registry_owner(current_owner)
 
 
 def _candidate_forwarding_urls(node, charger) -> Iterator[str]:
@@ -178,6 +302,9 @@ def is_target_active(target_id: int | None) -> bool:
 def sync_forwarded_charge_points(*, refresh_forwarders: bool = True) -> int:
     """Ensure websocket connections exist for forwarded charge points."""
 
+    if not _claim_registry_ownership():
+        return 0
+
     from nodes.models import Node
     from protocols.models import CPForwarder
     from .models import Charger
@@ -186,6 +313,7 @@ def sync_forwarded_charge_points(*, refresh_forwarders: bool = True) -> int:
     if not local:
         prune_inactive_sessions(set())
         CPForwarder.objects.update_running_state(set())
+        _refresh_registry_heartbeat()
         return 0
 
     if refresh_forwarders:
@@ -212,6 +340,7 @@ def sync_forwarded_charge_points(*, refresh_forwarders: bool = True) -> int:
 
     if not chargers:
         CPForwarder.objects.update_running_state(set())
+        _refresh_registry_heartbeat()
         return 0
 
     connected = 0
@@ -246,6 +375,8 @@ def sync_forwarded_charge_points(*, refresh_forwarders: bool = True) -> int:
         connected += 1
 
     CPForwarder.objects.update_running_state(active_target_ids())
+
+    _refresh_registry_heartbeat()
 
     return connected
 

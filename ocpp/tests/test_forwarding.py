@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import base64
 import json
+import os
+from datetime import timedelta
 from unittest.mock import AsyncMock, Mock, patch
 
 from asgiref.sync import async_to_sync
@@ -19,6 +21,7 @@ from ocpp import store
 from ocpp.models import Charger, Transaction
 from protocols.models import CPForwarder
 from ocpp.tasks import push_forwarded_charge_points
+from ocpp.forwarding_service import _REGISTRY_OWNER_PATH, _REGISTRY_OWNER_TTL
 from websocket import WebSocketException
 
 
@@ -43,6 +46,9 @@ class ForwardingTaskTests(TestCase):
         )
         forwarding_service.clear_sessions()
         self.addCleanup(forwarding_service.clear_sessions)
+        if _REGISTRY_OWNER_PATH.exists():
+            _REGISTRY_OWNER_PATH.unlink()
+        self.addCleanup(lambda: _REGISTRY_OWNER_PATH.exists() and _REGISTRY_OWNER_PATH.unlink())
 
     @patch("protocols.models.send_forwarding_metadata", return_value=(True, None))
     @patch("protocols.models.load_local_node_credentials")
@@ -80,6 +86,81 @@ class ForwardingTaskTests(TestCase):
         forwarder.refresh_from_db()
         self.assertTrue(forwarder.is_running)
         self.assertEqual(forwarder.last_forwarded_at, updated.forwarding_watermark)
+
+    @patch("protocols.models.send_forwarding_metadata", return_value=(True, None))
+    @patch("protocols.models.load_local_node_credentials")
+    @patch("ocpp.forwarding_service.create_connection")
+    def test_push_forwarded_charge_points_skips_when_owned_elsewhere(
+        self, mock_create, mock_credentials, _mock_metadata
+    ):
+        mock_credentials.return_value = (self.local, object(), None)
+        charger = Charger.objects.create(
+            charger_id="CP-LOCKED",
+            node_origin=self.local,
+            manager_node=self.local,
+            export_transactions=True,
+        )
+        CPForwarder.objects.create(target_node=self.remote, enabled=True)
+
+        payload = {
+            "owner_id": "other-process",
+            "pid": os.getpid(),
+            "heartbeat": timezone.now().isoformat(),
+        }
+        _REGISTRY_OWNER_PATH.parent.mkdir(parents=True, exist_ok=True)
+        _REGISTRY_OWNER_PATH.write_text(json.dumps(payload))
+
+        with patch.object(Node, "get_local", return_value=self.local), patch.object(
+            Node,
+            "iter_remote_urls",
+            lambda self, path: iter(["https://remote.example" + path]),
+        ):
+            connected = push_forwarded_charge_points()
+
+        self.assertEqual(connected, 0)
+        mock_create.assert_not_called()
+        self.assertIsNone(forwarding_service.get_session(charger.pk))
+
+    @patch("protocols.models.send_forwarding_metadata", return_value=(True, None))
+    @patch("protocols.models.load_local_node_credentials")
+    @patch("ocpp.forwarding_service.create_connection")
+    def test_push_forwarded_charge_points_claims_stale_owner(
+        self, mock_create, mock_credentials, _mock_metadata
+    ):
+        mock_credentials.return_value = (self.local, object(), None)
+        connection = Mock()
+        connection.connected = True
+        mock_create.return_value = connection
+
+        charger = Charger.objects.create(
+            charger_id="CP-TAKEOVER",
+            node_origin=self.local,
+            manager_node=self.local,
+            export_transactions=True,
+        )
+        forwarder = CPForwarder.objects.create(target_node=self.remote, enabled=True)
+
+        stale = timezone.now() - (_REGISTRY_OWNER_TTL + timedelta(minutes=1))
+        payload = {
+            "owner_id": "stale-process",
+            "pid": 999999,
+            "heartbeat": stale.isoformat(),
+        }
+        _REGISTRY_OWNER_PATH.parent.mkdir(parents=True, exist_ok=True)
+        _REGISTRY_OWNER_PATH.write_text(json.dumps(payload))
+
+        with patch.object(Node, "get_local", return_value=self.local), patch.object(
+            Node,
+            "iter_remote_urls",
+            lambda self, path: iter(["https://remote.example" + path]),
+        ):
+            connected = push_forwarded_charge_points()
+
+        self.assertEqual(connected, 1)
+        mock_create.assert_called_once()
+        self.assertIsNotNone(forwarding_service.get_session(charger.pk))
+        forwarder.refresh_from_db()
+        self.assertTrue(forwarder.is_running)
 
     @patch("ocpp.forwarding_service.create_connection")
     def test_push_forwarded_charge_points_skips_active_session(self, mock_create):
