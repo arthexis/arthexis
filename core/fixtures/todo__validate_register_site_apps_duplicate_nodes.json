@@ -1,0 +1,13 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate register_site_apps handles duplicate nodes",
+      "url": "admin:nodes_node_changelist",
+      "request_details": "From the Nodes admin, create a second node record sharing the controller hostname so two entries exist. Then run `python manage.py register_site_apps` from the backend shell and confirm the command completes without errors while the original node updates to the Terminal role on 127.0.0.1:8888.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.31"
+    }
+  }
+]

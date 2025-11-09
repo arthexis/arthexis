@@ -54,3 +54,34 @@ class RegisterSiteAppsCommandTests(TestCase):
             self.assertTrue(
                 Module.objects.filter(node_role=role, application=app).exists()
             )
+
+    def test_register_site_apps_updates_existing_duplicate_nodes(self):
+        hostname = socket.gethostname()
+        role, _ = NodeRole.objects.get_or_create(name="Terminal")
+
+        first_node = Node.objects.create(
+            hostname=hostname,
+            address="10.10.10.10",
+            port=9999,
+            enable_public_api=True,
+            role=None,
+        )
+        Node.objects.create(
+            hostname=hostname,
+            address="192.168.0.1",
+            port=7777,
+            enable_public_api=True,
+            role=None,
+        )
+
+        call_command("register_site_apps")
+
+        first_node.refresh_from_db()
+        self.assertEqual(first_node.address, "127.0.0.1")
+        self.assertEqual(first_node.port, 8888)
+        self.assertFalse(first_node.enable_public_api)
+        self.assertEqual(first_node.role, role)
+        self.assertEqual(
+            Node.objects.filter(hostname=hostname).count(),
+            2,
+        )

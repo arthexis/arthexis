@@ -24,15 +24,26 @@ class Command(BaseCommand):
         role, _ = NodeRole.objects.get_or_create(name="Terminal")
 
         hostname = socket.gethostname()
-        Node.objects.get_or_create(
-            hostname=hostname,
-            defaults={
-                "address": "127.0.0.1",
-                "port": 8888,
-                "enable_public_api": False,
-                "role": role,
-            },
-        )
+        node_defaults = {
+            "address": "127.0.0.1",
+            "port": 8888,
+            "enable_public_api": False,
+            "role": role,
+        }
+
+        existing_node = Node.objects.filter(hostname=hostname).order_by("pk").first()
+        if existing_node:
+            updates = {
+                field: value
+                for field, value in node_defaults.items()
+                if getattr(existing_node, field) != value
+            }
+            if updates:
+                for field, value in updates.items():
+                    setattr(existing_node, field, value)
+                existing_node.save(update_fields=list(updates.keys()))
+        else:
+            Node.objects.create(hostname=hostname, **node_defaults)
 
         for app_label in getattr(settings, "LOCAL_APPS", []):
             try:
