@@ -1301,9 +1301,11 @@ PendingTodoFormSet = modelformset_factory(Todo, form=PendingTodoForm, extra=0)
 
 
 def _system_pending_todos_report_view(request):
+    Todo.refresh_active()
     queryset = (
-        Todo.objects.filter(is_deleted=False, done_on__isnull=True)
-        .order_by("request")
+        Todo.objects.filter(
+            is_deleted=False, done_on__isnull=True, stale_on__isnull=True
+        ).order_by("request")
     )
     formset = PendingTodoFormSet(
         request.POST or None,

@@ -7,7 +7,8 @@
       "request_details": "Trigger a release publish where the automatic rebase fails and confirm the log now includes the manual git fetch/rebase/push instructions so release managers know how to finish the sync.",
       "done_on": null,
       "is_deleted": false,
-      "version": "0.1.28"
+      "version": "0.1.28",
+      "created_on": "2025-11-07T03:43:27.026Z"
     }
   }
 ]

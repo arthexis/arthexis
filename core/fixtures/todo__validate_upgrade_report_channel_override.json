@@ -4,10 +4,11 @@
     "fields": {
       "request": "Validate upgrade report channel overrides",
       "url": "/admin/system/upgrade-report/",
-      "request_details": "Open the System → Upgrade Report admin screen and trigger each Upgrade as Normal, Upgrade as Latest, and Upgrade as Stable button. Confirm the success toast references the selected channel for Latest and Stable, that Normal keeps the configured mode, and review logs/auto-upgrade.log to ensure an override entry is written only when a non-default channel is requested.",
+      "request_details": "Open the System \u2192 Upgrade Report admin screen and trigger each Upgrade as Normal, Upgrade as Latest, and Upgrade as Stable button. Confirm the success toast references the selected channel for Latest and Stable, that Normal keeps the configured mode, and review logs/auto-upgrade.log to ensure an override entry is written only when a non-default channel is requested.",
       "done_on": null,
       "is_deleted": false,
-      "version": "0.1.30"
+      "version": "0.1.30",
+      "created_on": "2025-11-09T00:28:58.143Z"
     }
   }
 ]

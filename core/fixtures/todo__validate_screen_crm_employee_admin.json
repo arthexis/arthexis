@@ -6,7 +6,8 @@
       "url": "/admin/core/odooprofile/",
       "request_details": "Open the CRM Employee changelist and confirm the CRM selector appears in the configuration section, defaults to Odoo, and saves the choice without regressions. Verify the inline and detail views use the renamed CRM Employee labels and that credential verification still works after choosing a CRM option.",
       "is_deleted": false,
-      "version": "0.1.28"
+      "version": "0.1.28",
+      "created_on": "2025-11-07T03:43:27.026Z"
     }
   }
 ]

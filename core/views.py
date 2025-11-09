@@ -775,6 +775,9 @@ def _generate_changelog_with_python(log_path: Path) -> None:
 def _todo_blocks_publish(todo: Todo, release: PackageRelease) -> bool:
     """Return ``True`` when ``todo`` should block the release workflow."""
 
+    if getattr(todo, "is_stale", False):
+        return False
+
     request = (todo.request or "").strip()
     release_name = (release.package.name or "").strip()
     if not request or not release_name:
@@ -989,10 +992,16 @@ def _refresh_changelog_once(ctx, log_path: Path) -> None:
 def _step_check_todos(release, ctx, log_path: Path, *, user=None) -> None:
     _refresh_changelog_once(ctx, log_path)
 
-    pending_qs = Todo.objects.filter(is_deleted=False, done_on__isnull=True)
-    pending_values = list(
-        pending_qs.values("id", "request", "url", "request_details")
-    )
+    pending_items = Todo.refresh_active()
+    pending_values = [
+        {
+            "id": todo.pk,
+            "request": todo.request,
+            "url": todo.url,
+            "request_details": todo.request_details,
+        }
+        for todo in pending_items
+    ]
     if not pending_values:
         ctx["todos_ack"] = True
 
@@ -1931,8 +1940,7 @@ def release_progress(request, pk: int, action: str):
     if resume_requested and step_param is None:
         step_param = str(step_count)
 
-    pending_qs = Todo.objects.filter(is_deleted=False, done_on__isnull=True)
-    pending_items = list(pending_qs)
+    pending_items = Todo.refresh_active()
     blocking_todos = [
         todo for todo in pending_items if _todo_blocks_publish(todo, release)
     ]

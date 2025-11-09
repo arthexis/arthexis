@@ -7,7 +7,8 @@
       "request_details": "Open a CP Configuration entry in the admin and verify the Configuration Keys inline lists each key with its readonly flag, value, and any extra payload details. Confirm the raw payload and unknown key sections still render correctly.",
       "done_on": null,
       "is_deleted": false,
-      "version": "0.1.28"
+      "version": "0.1.28",
+      "created_on": "2025-11-07T03:43:27.026Z"
     }
   }
 ]
