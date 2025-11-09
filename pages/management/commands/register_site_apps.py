@@ -39,9 +39,7 @@ class Command(BaseCommand):
                 if getattr(existing_node, field) != value
             }
             if updates:
-                for field, value in updates.items():
-                    setattr(existing_node, field, value)
-                existing_node.save(update_fields=list(updates.keys()))
+                Node.objects.filter(pk=existing_node.pk).update(**updates)
         else:
             Node.objects.create(hostname=hostname, **node_defaults)
 
