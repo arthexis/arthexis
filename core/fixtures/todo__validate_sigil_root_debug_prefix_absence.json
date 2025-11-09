@@ -7,7 +7,8 @@
       "request_details": "Confirm the Sigil Root changelist no longer includes the DEBUG prefix and that resolving [DEBUG.*] sigils displays an Unknown sigil root warning instead of resolving to entity data.",
       "done_on": null,
       "is_deleted": false,
-      "version": "0.1.28"
+      "version": "0.1.28",
+      "created_on": "2025-11-07T03:43:27.026Z"
     }
   }
 ]

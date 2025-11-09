@@ -7,7 +7,8 @@
       "request_details": "Browse to /docs/cookbooks/sigils.md and confirm the page redirects into the READ viewer while rendering the Sigils cookbook. Follow a second link within the document to ensure subsequent navigation stays inside /read/.",
       "done_on": null,
       "is_deleted": false,
-      "version": "0.1.30"
+      "version": "0.1.30",
+      "created_on": "2025-11-09T00:28:58.143Z"
     }
   }
 ]
