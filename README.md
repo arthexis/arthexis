@@ -120,29 +120,7 @@ Terminal nodes can start directly with the scripts below without installing; Con
    - Installation is not required to start in Terminal mode (the default).
 
 ### 4. Administration
-Visit [`http://localhost:8888/admin/`](http://localhost:8888/admin/) for the [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) and [`http://localhost:8888/admindocs/`](http://localhost:8888/admindocs/) for the [admindocs](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/). Use `--port` with the start scripts or installer when you need to expose a different port. Review the [Install & Administration Guide](docs/cookbooks/install-start-stop-upgrade-uninstall.md) in the cookbooks directory for end-to-end deployment steps.
-
-## Sigils
-
-Sigils are bracketed tokens such as `[ENV.SMTP_PASSWORD]` that Arthexis expands at runtime. They make it possible to reference configuration secrets, system metadata, or records stored in other apps without duplicating values across the project.
-
-### Syntax at a glance
-
-- `[PREFIX.KEY]` &mdash; returns a field or attribute. Hyphens and casing are normalized automatically.
-- `[PREFIX=IDENTIFIER.FIELD]` &mdash; selects a specific record by primary key or any unique field.
-- `[PREFIX:FIELD=VALUE.ATTRIBUTE]` &mdash; filters by a custom field instead of the primary key.
-- `[PREFIX.FIELD=[OTHER.SIGIL]]` &mdash; nests sigils so the value after `=` resolves before the outer token.
-- `[PREFIX]` &mdash; for entity prefixes, returns the serialized object in JSON; for configuration prefixes, resolves to an empty string when the key is missing.
-
-The platform ships with three configuration prefixes:
-
-- `ENV` reads environment variables.
-- `CONF` reads Django settings.
-- `SYS` exposes computed system information such as build metadata.
-
-Additional prefixes are defined through **Sigil Roots**, which map a short code (for example `ROLE`, `ODOO`, or `USER`) to a Django model. You can review them from **Admin &rarr; Sigil Builder** (`/admin/sigil-builder/`), where a test console is also available.
-
-Unknown prefixes remain in place (e.g. `[UNKNOWN.VALUE]`) and are logged.
+Visit [`http://localhost:8888/admin/`](http://localhost:8888/admin/) for the [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) and [`http://localhost:8888/admindocs/`](http://localhost:8888/admindocs/) for the [admindocs](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/). Use `--port` with the start scripts or installer when you need to expose a different port. Review the [Install & Administration Guide](docs/cookbooks/install-start-stop-upgrade-uninstall.md) in the cookbooks directory for end-to-end deployment steps and the [Sigils Cookbook](docs/cookbooks/sigils.md) for configuration token usage.
 
 ## Support
 

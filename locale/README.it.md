@@ -119,29 +119,7 @@ I nodi Terminal possono avviarsi direttamente con gli script sottostanti senza i
    - Non è necessario installare per avviare in modalità Terminal (predefinita).
 
 ### 4. Amministrazione
-Visita [`http://localhost:8888/admin/`](http://localhost:8888/admin/) per il [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) e [`http://localhost:8888/admindocs/`](http://localhost:8888/admindocs/) per gli [admindocs](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/). Usa `--port` con gli script di avvio o l'installer quando devi esporre una porta diversa. Per istruzioni dettagliate consulta la [Guida all'installazione e all'amministrazione](docs/cookbooks/install-start-stop-upgrade-uninstall.md) nella directory cookbooks.
-
-## Sigilli
-
-I sigilli sono token tra parentesi quadre come `[ENV.SMTP_PASSWORD]` che Arthexis espande in fase di esecuzione. Consentono di fare riferimento a segreti di configurazione, metadati di sistema o record memorizzati in altre app senza duplicare i valori nel progetto.
-
-### Sintassi in breve
-
-- `[PREFIX.KEY]` &mdash; restituisce un campo o attributo. Trattini e maiuscole/minuscole vengono normalizzati automaticamente.
-- `[PREFIX=IDENTIFICATIVO.CAMPO]` &mdash; seleziona un record specifico tramite chiave primaria o qualsiasi campo univoco.
-- `[PREFIX:CAMPO=VALORE.ATTRIBUTO]` &mdash; filtra usando un campo personalizzato invece della chiave primaria.
-- `[PREFIX.CAMPO=[ALTRO.SIGILLO]]` &mdash; permette di annidare i sigilli; il valore dopo `=` viene risolto prima del token esterno.
-- `[PREFIX]` &mdash; con prefissi di entità restituisce l'oggetto serializzato in JSON; con prefissi di configurazione produce una stringa vuota se la chiave è assente.
-
-La piattaforma include tre prefissi di configurazione:
-
-- `ENV` legge le variabili d'ambiente.
-- `CONF` legge le impostazioni di Django.
-- `SYS` espone informazioni di sistema calcolate, come metadati di build.
-
-Prefissi aggiuntivi vengono definiti tramite **Sigil Roots**, che associano un codice breve (ad esempio `ROLE`, `ODOO` o `USER`) a un modello Django. Puoi consultarli in **Admin &rarr; Sigil Builder** (`/admin/sigil-builder/`), che offre anche una console di test.
-
-I prefissi sconosciuti restano invariati (ad esempio `[UNKNOWN.VALUE]`) e vengono registrati nei log.
+Visita [`http://localhost:8888/admin/`](http://localhost:8888/admin/) per il [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) e [`http://localhost:8888/admindocs/`](http://localhost:8888/admindocs/) per gli [admindocs](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/). Usa `--port` con gli script di avvio o l'installer quando devi esporre una porta diversa. Per istruzioni dettagliate consulta la [Guida all'installazione e all'amministrazione](docs/cookbooks/install-start-stop-upgrade-uninstall.md) nella directory cookbooks e il [Cookbook dei sigilli](docs/cookbooks/sigils.md) per imparare a usare i token di configurazione.
 
 ## Supporto
 
