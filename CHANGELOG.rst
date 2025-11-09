@@ -4,6 +4,7 @@ Changelog
 Unreleased
 ----------
 
+- 6a93257f chore: update TODO fixtures
 - 1510d1b4 chore: update TODO fixtures
 - 6e010da6 Refactor CP forwarding sessions to synchronous service (#2741)
 - 16a2e1dc Add test for GetLog call error handling (#2739)
