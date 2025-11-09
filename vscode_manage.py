@@ -20,7 +20,10 @@ def main(argv=None):
     is_runserver = bool(argv) and argv[0] == "runserver"
     is_debug_session = "DEBUGPY_LAUNCHER_PORT" in os.environ
     if is_runserver:
-        os.environ["DEBUG"] = "1" if is_debug_session else "0"
+        if is_debug_session:
+            os.environ["DEBUG"] = "1"
+        else:
+            os.environ.pop("DEBUG", None)
         if "--noreload" not in argv:
             argv.insert(1, "--noreload")
     try:
