@@ -76,7 +76,19 @@ def detect_scanner() -> Dict[str, Any]:
             return _assume_detected(result.get("error"), lock_path)
         return {"detected": False, "reason": result["error"]}
 
-    response: Dict[str, Any] = {"detected": True, "irq_pin": result.get("irq_pin")}
+    response: Dict[str, Any] = {"detected": True}
+    if "irq_pin" in result:
+        response["irq_pin"] = result.get("irq_pin")
+
+    if result.get("busy"):
+        response["assumed"] = True
+        response["busy"] = True
+        reason = result.get("reason") or "RFID scanner busy"
+        if reason:
+            response["reason"] = reason
+        if "errno" in result and result["errno"] is not None:
+            response["errno"] = result["errno"]
+
     if has_lock and lock_path is not None:
         response["lockfile"] = str(lock_path)
     return response

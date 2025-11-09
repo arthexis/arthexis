@@ -1,3 +1,4 @@
+import errno
 import io
 import json
 import os
@@ -752,6 +753,28 @@ class RFIDDetectionScriptTests(SimpleTestCase):
         self.assertEqual(result["lockfile"], "/locks/rfid.lck")
         mock_check.assert_called_once()
 
+    @patch("ocpp.rfid.detect._ensure_django")
+    @patch("ocpp.rfid.detect._lockfile_status", return_value=(False, None))
+    def test_detect_scanner_busy_assumed(self, _mock_lock, _mock_setup):
+        with (
+            patch("ocpp.rfid.irq_wiring_check._setup_hardware", return_value=False),
+            patch(
+                "ocpp.rfid.irq_wiring_check.read_rfid",
+                return_value={
+                    "error": "Device or resource busy",
+                    "errno": errno.EBUSY,
+                },
+            ),
+        ):
+            result = detect_scanner()
+
+        self.assertTrue(result["detected"])
+        self.assertTrue(result["assumed"])
+        self.assertTrue(result["busy"])
+        self.assertEqual(result["reason"], "Device or resource busy")
+        self.assertIsNone(result.get("irq_pin"))
+        self.assertEqual(result.get("errno"), errno.EBUSY)
+
     @patch(
         "ocpp.rfid.detect.detect_scanner",
         return_value={"detected": True, "irq_pin": DEFAULT_IRQ_PIN},
@@ -792,6 +815,25 @@ class RFIDDetectionScriptTests(SimpleTestCase):
         self.assertEqual(exit_code, 0)
         self.assertIn("assumed active", buffer.getvalue())
         self.assertIn("/locks/rfid.lck", buffer.getvalue())
+        mock_detect.assert_called_once()
+
+    @patch(
+        "ocpp.rfid.detect.detect_scanner",
+        return_value={
+            "detected": True,
+            "assumed": True,
+            "busy": True,
+            "reason": "Device or resource busy",
+        },
+    )
+    def test_detect_main_busy_output(self, mock_detect):
+        buffer = io.StringIO()
+        with patch("sys.stdout", new=buffer):
+            exit_code = detect_main([])
+        self.assertEqual(exit_code, 0)
+        output = buffer.getvalue()
+        self.assertIn("assumed active", output)
+        self.assertIn("Device or resource busy", output)
         mock_detect.assert_called_once()
 
 

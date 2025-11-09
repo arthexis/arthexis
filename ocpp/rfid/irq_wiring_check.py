@@ -1,3 +1,4 @@
+import errno
 from unittest import TestCase
 from unittest.mock import patch, MagicMock, ANY
 
@@ -23,6 +24,27 @@ class IRQPinSetupManualTest(TestCase):
             )
 
 
+def _is_resource_busy(message: str | None, err_no: int | None) -> bool:
+    """Return ``True`` when ``message``/``err_no`` indicates a busy device."""
+
+    if err_no in {errno.EBUSY, errno.EAGAIN}:
+        return True
+
+    if not message:
+        return False
+
+    normalized = message.lower()
+    return any(
+        phrase in normalized
+        for phrase in (
+            "device or resource busy",
+            "resource busy",
+            "device busy",
+            "resource temporarily unavailable",
+        )
+    )
+
+
 def check_irq_pin():
     """Return the IRQ pin used by the reader or report if none is detected."""
     if _setup_hardware():
@@ -35,6 +57,16 @@ def check_irq_pin():
         return {"irq_pin": IRQ_PIN}
 
     result = read_rfid(timeout=0.1)
-    if result.get("error"):
+    error_message = result.get("error")
+    errno_value = result.get("errno")
+    if error_message:
+        if _is_resource_busy(error_message, errno_value):
+            response = {"irq_pin": None, "busy": True}
+            reason = error_message.strip() if isinstance(error_message, str) else error_message
+            if reason:
+                response["reason"] = reason
+            if errno_value is not None:
+                response["errno"] = errno_value
+            return response
         return {"error": "no scanner detected"}
     return {"irq_pin": None}

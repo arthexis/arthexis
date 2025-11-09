@@ -260,7 +260,11 @@ def read_rfid(
                 pin_rst=DEFAULT_RST_PIN,
             )
     except Exception as exc:  # pragma: no cover - hardware dependent
-        return {"error": str(exc)}
+        payload = {"error": str(exc)}
+        errno_value = getattr(exc, "errno", None)
+        if errno_value is not None:
+            payload["errno"] = errno_value
+        return payload
 
     try:
         import RPi.GPIO as GPIO  # pragma: no cover - hardware dependent
@@ -409,7 +413,11 @@ def read_rfid(
     except Exception as exc:  # pragma: no cover - hardware dependent
         if "rfid" in locals():
             notify_async(f"RFID {rfid}", "Read failed")
-        return {"error": str(exc)}
+        payload = {"error": str(exc)}
+        errno_value = getattr(exc, "errno", None)
+        if errno_value is not None:
+            payload["errno"] = errno_value
+        return payload
     finally:  # pragma: no cover - cleanup hardware
         if "mfrc" in locals() and mfrc is not None and selected:
             try:
