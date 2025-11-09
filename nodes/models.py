@@ -559,8 +559,17 @@ class Node(Entity):
             return None
 
     @classmethod
-    def register_current(cls):
-        """Create or update the :class:`Node` entry for this host."""
+    def register_current(cls, notify_peers: bool = True):
+        """Create or update the :class:`Node` entry for this host.
+
+        Parameters
+        ----------
+        notify_peers:
+            When ``True`` (the default) the node will broadcast an update to
+            known peers after registration.  Callers that run in maintenance
+            contexts where network communication should be avoided can disable
+            the broadcast by passing ``False``.
+        """
         hostname_override = (
             os.environ.get("NODE_HOSTNAME")
             or os.environ.get("HOSTNAME")
@@ -702,7 +711,8 @@ class Node(Entity):
                 node.role = terminal
                 node.save(update_fields=["role"])
         node.ensure_keys()
-        node.notify_peers_of_update()
+        if notify_peers:
+            node.notify_peers_of_update()
         return node, created
 
     def notify_peers_of_update(self):

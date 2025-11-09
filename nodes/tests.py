@@ -1299,6 +1299,27 @@ class NodeRegisterCurrentTests(TestCase):
                     Node.register_current()
         mock_notify.assert_called_once()
 
+    def test_register_current_can_skip_peer_notifications(self):
+        with TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            with override_settings(BASE_DIR=base):
+                with (
+                    patch(
+                        "nodes.models.Node.get_current_mac",
+                        return_value="00:ff:ee:dd:cc:bb",
+                    ),
+                    patch("nodes.models.socket.gethostname", return_value="testhost"),
+                    patch(
+                        "nodes.models.socket.gethostbyname", return_value="127.0.0.1"
+                    ),
+                    patch.object(Node, "_resolve_ip_addresses", return_value=([], [])),
+                    patch("nodes.models.revision.get_revision", return_value="rev"),
+                    patch.object(Node, "ensure_keys"),
+                    patch.object(Node, "notify_peers_of_update") as mock_notify,
+                ):
+                    Node.register_current(notify_peers=False)
+        mock_notify.assert_not_called()
+
     def test_register_current_refreshes_lcd_feature(self):
         NodeFeature.objects.get_or_create(
             slug="lcd-screen", defaults={"display": "LCD Screen"}
