@@ -15,10 +15,9 @@ else:  # pragma: no cover - fallback when pytest fixtures are unavailable
     django.setup()
 
 from pathlib import Path
-from array import array
-from types import MethodType, SimpleNamespace
+from types import SimpleNamespace
 import unittest.mock as mock
-from unittest.mock import patch, call, MagicMock, AsyncMock
+from unittest.mock import patch, call, MagicMock
 from django.core import mail
 from django.core.cache import cache
 from django.core.mail import EmailMessage
@@ -63,12 +62,7 @@ from .classifiers import run_default_classifiers
 from .utils import capture_rpi_snapshot, capture_screenshot, save_screenshot
 from .feature_checks import feature_checks
 from django.db.utils import DatabaseError
-from channels.testing import WebsocketCommunicator
-from channels.db import database_sync_to_async
-from config.asgi import application
-
 from .admin import NodeAdmin
-from .consumers import AUDIO_CAPTURE_SOCKET_PATH, AudioCaptureConsumer
 from .models import (
     Node,
     EmailOutbox,
@@ -2106,14 +2100,14 @@ class NodeAdminTests(TestCase):
         self.assertContains(response, f'href="{stream_url}"')
 
     @pytest.mark.feature("audio-capture")
-    def test_node_feature_list_shows_waveform_action_when_enabled(self):
+    def test_node_feature_list_shows_microphone_action_when_enabled(self):
         node = self._create_local_node()
         feature, _ = NodeFeature.objects.get_or_create(
             slug="audio-capture", defaults={"display": "Audio Capture"}
         )
         NodeFeatureAssignment.objects.get_or_create(node=node, feature=feature)
         response = self.client.get(reverse("admin:nodes_nodefeature_changelist"))
-        action_url = reverse("admin:nodes_nodefeature_view_waveform")
+        action_url = reverse("admin:nodes_nodefeature_test_microphone")
         self.assertContains(response, f'href="{action_url}"')
 
     @pytest.mark.feature("screenshot-poll")
@@ -2727,13 +2721,13 @@ class NodeAdminTests(TestCase):
         self.assertContains(response, "camera-stream__unsupported")
 
     @pytest.mark.feature("audio-capture")
-    def test_view_waveform_requires_enabled_feature(self):
+    def test_test_microphone_requires_enabled_feature(self):
         self._create_local_node()
         NodeFeature.objects.get_or_create(
             slug="audio-capture", defaults={"display": "Audio Capture"}
         )
         response = self.client.get(
-            reverse("admin:nodes_nodefeature_view_waveform"), follow=True
+            reverse("admin:nodes_nodefeature_test_microphone"), follow=True
         )
         self.assertEqual(response.status_code, 200)
         changelist_url = reverse("admin:nodes_nodefeature_changelist")
@@ -2743,27 +2737,104 @@ class NodeAdminTests(TestCase):
         )
 
     @pytest.mark.feature("audio-capture")
-    def test_view_waveform_renders_when_feature_enabled(self):
+    @patch("nodes.admin.Node._has_audio_capture_device", return_value=False)
+    def test_test_microphone_requires_audio_device(
+        self, mock_has_device
+    ):
         node = self._create_local_node()
         feature, _ = NodeFeature.objects.get_or_create(
             slug="audio-capture", defaults={"display": "Audio Capture"}
         )
         NodeFeatureAssignment.objects.get_or_create(node=node, feature=feature)
-        response = self.client.get(reverse("admin:nodes_nodefeature_view_waveform"))
-        self.assertEqual(response.status_code, 200)
-        response.render()
-        self.assertEqual(response.context_data["feature"], feature)
-        self.assertEqual(response.context_data["title"], "Audio Capture Waveform")
-        self.assertEqual(
-            response.context_data["socket_path"], AUDIO_CAPTURE_SOCKET_PATH
+        response = self.client.get(
+            reverse("admin:nodes_nodefeature_test_microphone"), follow=True
         )
-        self.assertContains(response, "audio-capture__canvas")
+        self.assertEqual(response.status_code, 200)
+        changelist_url = reverse("admin:nodes_nodefeature_changelist")
+        self.assertEqual(response.wsgi_request.path, changelist_url)
         self.assertContains(
             response,
-            f'data-socket-path="{AUDIO_CAPTURE_SOCKET_PATH}"',
-            html=False,
+            "Audio Capture feature is enabled but no recording device was detected.",
+        )
+        mock_has_device.assert_called_once()
+
+    @pytest.mark.feature("audio-capture")
+    @patch("nodes.admin.save_audio_sample")
+    @patch("nodes.admin.record_microphone_sample")
+    @patch("nodes.admin.Node._has_audio_capture_device", return_value=True)
+    def test_test_microphone_handles_capture_failure(
+        self, mock_has_device, mock_record, mock_save
+    ):
+        node = self._create_local_node()
+        feature, _ = NodeFeature.objects.get_or_create(
+            slug="audio-capture", defaults={"display": "Audio Capture"}
+        )
+        NodeFeatureAssignment.objects.get_or_create(node=node, feature=feature)
+        mock_record.side_effect = RuntimeError("Audio capture failed")
+
+        response = self.client.get(
+            reverse("admin:nodes_nodefeature_test_microphone"), follow=True
         )
 
+        self.assertEqual(response.status_code, 200)
+        changelist_url = reverse("admin:nodes_nodefeature_changelist")
+        self.assertEqual(response.wsgi_request.path, changelist_url)
+        self.assertContains(response, "Audio capture failed")
+        mock_has_device.assert_called_once()
+        mock_record.assert_called_once_with(duration_seconds=6)
+        mock_save.assert_not_called()
+
+    @pytest.mark.feature("audio-capture")
+    @patch("nodes.admin.save_audio_sample", return_value=None)
+    @patch("nodes.admin.record_microphone_sample", return_value=Path("/tmp/audio.wav"))
+    @patch("nodes.admin.Node._has_audio_capture_device", return_value=True)
+    def test_test_microphone_handles_duplicate_sample(
+        self, mock_has_device, mock_record, mock_save
+    ):
+        node = self._create_local_node()
+        feature, _ = NodeFeature.objects.get_or_create(
+            slug="audio-capture", defaults={"display": "Audio Capture"}
+        )
+        NodeFeatureAssignment.objects.get_or_create(node=node, feature=feature)
+
+        response = self.client.get(
+            reverse("admin:nodes_nodefeature_test_microphone"), follow=True
+        )
+
+        self.assertEqual(response.status_code, 200)
+        changelist_url = reverse("admin:nodes_nodefeature_changelist")
+        self.assertEqual(response.wsgi_request.path, changelist_url)
+        self.assertContains(response, "Duplicate audio sample; not saved")
+        mock_has_device.assert_called_once()
+        mock_record.assert_called_once_with(duration_seconds=6)
+        mock_save.assert_called_once()
+
+    @pytest.mark.feature("audio-capture")
+    @patch("nodes.admin.save_audio_sample")
+    @patch("nodes.admin.record_microphone_sample", return_value=Path("/tmp/audio.wav"))
+    @patch("nodes.admin.Node._has_audio_capture_device", return_value=True)
+    def test_test_microphone_redirects_to_sample(
+        self, mock_has_device, mock_record, mock_save
+    ):
+        node = self._create_local_node()
+        feature, _ = NodeFeature.objects.get_or_create(
+            slug="audio-capture", defaults={"display": "Audio Capture"}
+        )
+        NodeFeatureAssignment.objects.get_or_create(node=node, feature=feature)
+        sample = ContentSample.objects.create(
+            path="audio/sample.wav", kind=ContentSample.AUDIO
+        )
+        mock_save.return_value = sample
+
+        response = self.client.get(
+            reverse("admin:nodes_nodefeature_test_microphone"), follow=False
+        )
+
+        change_url = reverse("admin:nodes_contentsample_change", args=[sample.pk])
+        self.assertRedirects(response, change_url)
+        mock_has_device.assert_called_once()
+        mock_record.assert_called_once_with(duration_seconds=6)
+        mock_save.assert_called_once()
     @patch("nodes.admin.requests.post")
     def test_import_rfids_action_fetches_and_imports(self, mock_post):
         local = self._create_local_node()
@@ -4948,16 +5019,16 @@ class NodeFeatureTests(TestCase):
         self.assertIn("View stream", labels)
 
     @pytest.mark.feature("audio-capture")
-    def test_audio_capture_feature_has_view_waveform_action(self):
+    def test_audio_capture_feature_has_test_microphone_action(self):
         feature = NodeFeature.objects.create(
             slug="audio-capture", display="Audio Capture"
         )
         actions = feature.get_default_actions()
         self.assertEqual(len(actions), 1)
         action = actions[0]
-        self.assertEqual(action.label, "View Waveform")
+        self.assertEqual(action.label, "Test Microphone")
         self.assertEqual(
-            action.url_name, "admin:nodes_nodefeature_view_waveform"
+            action.url_name, "admin:nodes_nodefeature_test_microphone"
         )
 
     def test_default_action_missing_when_unconfigured(self):
@@ -5207,127 +5278,6 @@ class AudioCaptureFeatureCheckTests(TestCase):
         self.assertIn("recording device is available", result.message)
         self.assertEqual(result.level, messages.SUCCESS)
 
-
-class AudioCaptureConsumerTests(TransactionTestCase):
-    async def _create_local_node(self):
-        return await database_sync_to_async(Node.objects.create)(
-            hostname="localnode",
-            address="127.0.0.1",
-            port=8888,
-            mac_address=Node.get_current_mac(),
-        )
-
-    async def _enable_feature(self):
-        node = await self._create_local_node()
-
-        feature, _ = await database_sync_to_async(NodeFeature.objects.get_or_create)(
-            slug="audio-capture", defaults={"display": "Audio Capture"}
-        )
-        await database_sync_to_async(NodeFeatureAssignment.objects.get_or_create)(
-            node=node, feature=feature
-        )
-        return node, feature
-
-    @pytest.mark.feature("audio-capture")
-    async def test_consumer_requires_enabled_feature(self):
-        await self._create_local_node()
-        await database_sync_to_async(NodeFeature.objects.get_or_create)(
-            slug="audio-capture", defaults={"display": "Audio Capture"}
-        )
-        communicator = WebsocketCommunicator(application, AUDIO_CAPTURE_SOCKET_PATH)
-        connected, code = await communicator.connect()
-        self.assertFalse(connected)
-        self.assertEqual(code, 4403)
-
-    @pytest.mark.feature("audio-capture")
-    async def test_consumer_requires_device(self):
-        await self._enable_feature()
-        with patch("nodes.consumers.Node._has_audio_capture_device", return_value=False):
-            communicator = WebsocketCommunicator(
-                application, AUDIO_CAPTURE_SOCKET_PATH
-            )
-            connected, code = await communicator.connect()
-        self.assertFalse(connected)
-        self.assertEqual(code, 4404)
-
-    @pytest.mark.feature("audio-capture")
-    async def test_consumer_requires_arecord_binary(self):
-        await self._enable_feature()
-        with patch("nodes.consumers.Node._has_audio_capture_device", return_value=True):
-            with patch("nodes.consumers.shutil.which", return_value=None):
-                communicator = WebsocketCommunicator(
-                    application, AUDIO_CAPTURE_SOCKET_PATH
-                )
-                connected, code = await communicator.connect()
-        self.assertFalse(connected)
-        self.assertEqual(code, 4405)
-
-    @pytest.mark.feature("audio-capture")
-    async def test_consumer_streams_waveform_data(self):
-        await self._enable_feature()
-
-        pattern = [0, 8192, -8192, 16384, -16384]
-        samples = array("h", pattern)
-        while len(samples) < AudioCaptureConsumer.CHUNK_SAMPLES:
-            samples.extend(pattern)
-        chunk = samples[: AudioCaptureConsumer.CHUNK_SAMPLES].tobytes()
-
-        class FakeStream:
-            def __init__(self, chunks):
-                self._chunks = list(chunks)
-
-            async def read(self, size):
-                if self._chunks:
-                    return self._chunks.pop(0)
-                return b""
-
-        class FakeProcess:
-            def __init__(self, chunks):
-                self.stdout = FakeStream(chunks)
-                self.stderr = FakeStream([])
-                self.returncode = None
-
-            async def wait(self):
-                self.returncode = 0
-
-            def terminate(self):
-                self.returncode = 0
-
-            def kill(self):
-                self.returncode = 0
-
-        fake_process = FakeProcess([chunk, b""])
-
-        with patch("nodes.consumers.Node._has_audio_capture_device", return_value=True), patch(
-            "nodes.consumers.shutil.which", return_value="/usr/bin/arecord"
-        ), patch(
-            "nodes.consumers.asyncio.create_subprocess_exec", AsyncMock(return_value=fake_process)
-        ):
-            communicator = WebsocketCommunicator(
-                application, AUDIO_CAPTURE_SOCKET_PATH
-            )
-            connected, _ = await communicator.connect()
-            self.assertTrue(connected)
-
-            messages = []
-            waveform = None
-            for _ in range(4):
-                message = await communicator.receive_json_from()
-                messages.append(message)
-                if message.get("type") == "waveform":
-                    waveform = message
-                    break
-
-            self.assertTrue(messages, "Expected at least one status message")
-            self.assertEqual(messages[0].get("type"), "status")
-            self.assertIsNotNone(waveform, "Expected waveform payload from audio stream")
-            self.assertIn("points", waveform)
-            self.assertTrue(waveform["points"])
-
-            final = await communicator.receive_json_from()
-            self.assertEqual(final.get("type"), "status")
-
-            await communicator.disconnect()
 
 
 class CeleryReportAdminViewTests(TestCase):

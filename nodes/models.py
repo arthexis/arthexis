@@ -111,8 +111,8 @@ class NodeFeature(Entity):
         ),
         "audio-capture": (
             NodeFeatureDefaultAction(
-                label="View Waveform",
-                url_name="admin:nodes_nodefeature_view_waveform",
+                label="Test Microphone",
+                url_name="admin:nodes_nodefeature_test_microphone",
             ),
         ),
         "screenshot-poll": (
@@ -2437,7 +2437,8 @@ class ContentSample(Entity):
 
     TEXT = "TEXT"
     IMAGE = "IMAGE"
-    KIND_CHOICES = [(TEXT, "Text"), (IMAGE, "Image")]
+    AUDIO = "AUDIO"
+    KIND_CHOICES = [(TEXT, "Text"), (IMAGE, "Image"), (AUDIO, "Audio")]
 
     name = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
     kind = models.CharField(max_length=10, choices=KIND_CHOICES)
