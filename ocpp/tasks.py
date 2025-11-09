@@ -1,10 +1,8 @@
 import json
 import logging
 import uuid
-from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
-from typing import Iterable
 
 from asgiref.sync import async_to_sync
 from celery import shared_task
@@ -12,68 +10,14 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db.models import Q, Prefetch
 from django.utils import timezone
-from urllib.parse import quote, urlsplit, urlunsplit
-from websocket import WebSocketException, create_connection
 
 from core import mailer
 from nodes.models import Node
-from protocols.models import CPForwarder
 
 from . import store
+from .forwarding_service import sync_forwarded_charge_points
 from .models import Charger, MeterValue, Transaction
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class ForwardingSession:
-    """Active websocket forwarding session for a charge point."""
-
-    charger_pk: int
-    node_id: int | None
-    url: str
-    connection: object
-    connected_at: datetime
-
-    @property
-    def is_connected(self) -> bool:
-        return bool(getattr(self.connection, "connected", False))
-
-
-_FORWARDING_SESSIONS: dict[int, ForwardingSession] = {}
-
-def _candidate_forwarding_urls(node: Node, charger: Charger) -> Iterable[str]:
-    """Yield websocket URLs suitable for forwarding ``charger`` via ``node``."""
-
-    charger_id = (charger.charger_id or "").strip()
-    if not charger_id:
-        return []
-
-    encoded_id = quote(charger_id, safe="")
-    for base in node.iter_remote_urls("/"):
-        if not base:
-            continue
-        parsed = urlsplit(base)
-        if parsed.scheme not in {"http", "https"}:
-            continue
-        scheme = "wss" if parsed.scheme == "https" else "ws"
-        base_path = parsed.path.rstrip("/")
-        for prefix in ("", "/ws"):
-            path = f"{base_path}{prefix}/{encoded_id}".replace("//", "/")
-            if not path.startswith("/"):
-                path = f"/{path}"
-            yield urlunsplit((scheme, parsed.netloc, path, "", ""))
-
-
-def _close_forwarding_session(session: ForwardingSession) -> None:
-    """Close the websocket connection associated with ``session`` if open."""
-
-    connection = session.connection
-    if connection is None:
-        return
-    try:
-        connection.close()
-    except Exception:  # pragma: no cover - best effort close
-        pass
 
 
 @shared_task
@@ -195,107 +139,9 @@ purge_meter_readings = purge_meter_values
 def push_forwarded_charge_points() -> int:
     """Ensure websocket connections exist for forwarded charge points."""
 
-    local = Node.get_local()
-    if not local:
-        logger.debug("Forwarding skipped: local node not registered")
-        CPForwarder.objects.update_running_state(set())
-        return 0
-
-    CPForwarder.objects.sync_forwarding_targets()
-    forwarders_by_target = {
-        forwarder.target_node_id: forwarder
-        for forwarder in CPForwarder.objects.filter(enabled=True)
-    }
-
-    chargers_qs = (
-        Charger.objects.filter(export_transactions=True, forwarded_to__isnull=False)
-        .select_related("forwarded_to", "node_origin")
-        .order_by("pk")
-    )
-
-    node_filter = Q(node_origin__isnull=True)
-    if local.pk:
-        node_filter |= Q(node_origin=local)
-
-    chargers = list(chargers_qs.filter(node_filter))
-    active_ids = {charger.pk for charger in chargers}
-
-    # Close sessions that no longer map to active forwarded chargers.
-    for pk in list(_FORWARDING_SESSIONS.keys()):
-        if pk not in active_ids:
-            session = _FORWARDING_SESSIONS.pop(pk)
-            _close_forwarding_session(session)
-
-    if not chargers:
-        return 0
-
-    connected = 0
-
-    for charger in chargers:
-        target = charger.forwarded_to
-        if not target:
-            continue
-        if local.pk and target.pk == local.pk:
-            continue
-
-        existing = _FORWARDING_SESSIONS.get(charger.pk)
-        if existing and existing.node_id == getattr(target, "pk", None):
-            if existing.is_connected:
-                continue
-            _close_forwarding_session(existing)
-            _FORWARDING_SESSIONS.pop(charger.pk, None)
-
-        for url in _candidate_forwarding_urls(target, charger):
-            try:
-                connection = create_connection(
-                    url,
-                    timeout=5,
-                    subprotocols=["ocpp1.6"],
-                )
-            except (WebSocketException, OSError) as exc:
-                logger.warning(
-                    "Websocket forwarding connection to %s via %s failed: %s",
-                    target,
-                    url,
-                    exc,
-                )
-                continue
-
-            session = ForwardingSession(
-                charger_pk=charger.pk,
-                node_id=getattr(target, "pk", None),
-                url=url,
-                connection=connection,
-                connected_at=timezone.now(),
-            )
-            _FORWARDING_SESSIONS[charger.pk] = session
-            Charger.objects.filter(pk=charger.pk).update(
-                forwarding_watermark=session.connected_at
-            )
-            forwarder = forwarders_by_target.get(getattr(target, "pk", None))
-            if forwarder:
-                forwarder.mark_running(session.connected_at)
-            connected += 1
-            logger.info(
-                "Established forwarding websocket for charger %s to %s via %s",
-                charger.charger_id,
-                target,
-                url,
-            )
-            break
-        else:
-            logger.warning(
-                "Unable to establish forwarding websocket for charger %s",
-                charger.charger_id or charger.pk,
-            )
-
-    active_target_ids = {
-        session.node_id
-        for session in _FORWARDING_SESSIONS.values()
-        if session.node_id is not None
-    }
-    CPForwarder.objects.update_running_state(active_target_ids)
-
+    connected = sync_forwarded_charge_points()
+    if not connected:
+        logger.debug("Forwarding synchronization completed with no new sessions")
     return connected
 
 

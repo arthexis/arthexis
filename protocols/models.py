@@ -9,6 +9,10 @@ from django.utils.translation import gettext_lazy as _
 
 from core.entity import Entity, EntityManager
 from nodes.models import Node
+from ocpp.forwarding_service import (
+    is_target_active,
+    sync_forwarded_charge_points,
+)
 
 from .forwarding import (
     attempt_forwarding_probe,
@@ -22,7 +26,7 @@ class CPForwarderManager(EntityManager):
 
     def sync_forwarding_targets(self) -> None:
         for forwarder in self.all():
-            forwarder.sync_chargers()
+            forwarder.sync_chargers(apply_sessions=False)
 
     def update_running_state(self, active_target_ids: Iterable[int]) -> None:
         active = set(active_target_ids)
@@ -122,7 +126,15 @@ class CPForwarder(Entity):
         if sync_chargers:
             self.sync_chargers()
 
-    def sync_chargers(self) -> None:
+    def delete(self, *args, **kwargs):
+        was_enabled = self.enabled
+        if was_enabled:
+            self.enabled = False
+        self.sync_chargers()
+        super().delete(*args, **kwargs)
+        sync_forwarded_charge_points()
+
+    def sync_chargers(self, *, apply_sessions: bool = True) -> None:
         """Apply the forwarder configuration to eligible charge points."""
 
         now = timezone.now()
@@ -130,6 +142,7 @@ class CPForwarder(Entity):
         eligible = self._eligible_chargers(local_node)
         status_parts: list[str] = []
         error_message: str | None = None
+        session_active: bool | None = None
 
         if not self.target_node_id:
             error_message = _("Target node is not configured.")
@@ -142,6 +155,8 @@ class CPForwarder(Entity):
                 last_synced_at=now,
                 is_running=False,
             )
+            if apply_sessions:
+                sync_forwarded_charge_points(refresh_forwarders=False)
             return
 
         if not self.enabled:
@@ -164,6 +179,8 @@ class CPForwarder(Entity):
             if self.is_running:
                 updates["is_running"] = False
             self._update_fields(**updates)
+            if apply_sessions:
+                sync_forwarded_charge_points(refresh_forwarders=False)
             return
 
         conflicts = eligible.exclude(
@@ -225,14 +242,19 @@ class CPForwarder(Entity):
                         "Failed to send forwarding metadata to the remote node."
                     )
 
-            try:
-                from ocpp.tasks import push_forwarded_charge_points
-
-                push_forwarded_charge_points.delay()
-            except Exception:  # pragma: no cover - celery not configured
-                pass
         elif credential_error and not error_message:
             error_message = credential_error
+
+        if apply_sessions:
+            sync_forwarded_charge_points(refresh_forwarders=False)
+            session_active = is_target_active(self.target_node_id)
+            targeted_exists = eligible.filter(forwarded_to=self.target_node).exists()
+            if session_active:
+                status_parts.append(_("Forwarding websocket is connected."))
+            elif targeted_exists:
+                status_parts.append(_("Forwarding websocket is not connected."))
+                if not error_message:
+                    error_message = _("Forwarding websocket inactive.")
 
         status_text = " ".join(str(part) for part in status_parts if str(part).strip()).strip()
         error_text = str(error_message) if error_message else ""
@@ -241,6 +263,10 @@ class CPForwarder(Entity):
             "last_error": error_text,
             "last_synced_at": now,
         }
+        if apply_sessions:
+            desired_running = bool(self.enabled and session_active)
+            if self.is_running != desired_running:
+                updates["is_running"] = desired_running
         self._update_fields(**updates)
 
     def mark_running(self, timestamp) -> None:

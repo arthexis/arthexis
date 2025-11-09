@@ -21,6 +21,7 @@ from asgiref.sync import sync_to_async
 from config.offline import requires_network
 
 from . import store
+from .forwarding_service import sync_forwarded_charge_points
 from decimal import Decimal
 from django.utils.dateparse import parse_datetime
 from .models import (
@@ -363,6 +364,10 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 lambda _: setattr(self, "_initial_metadata_task", None)
             )
             self._initial_metadata_task = task
+        if not created:
+            await database_sync_to_async(sync_forwarded_charge_points)(
+                refresh_forwarders=False
+            )
 
     async def _get_account(self, id_tag: str) -> EnergyAccount | None:
         """Return the energy account for the provided RFID if valid."""
