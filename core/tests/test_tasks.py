@@ -592,6 +592,81 @@ def test_check_github_updates_resets_network_failures_after_success(
     assert any("Auto-upgrade network failure 1" in message for message in messages)
 
 
+def test_check_github_updates_reverts_when_service_restart_fails(
+    monkeypatch, tmp_path
+):
+    """Auto-upgrade should revert when the service never reports active."""
+
+    from core import tasks
+
+    base_dir = tmp_path / "node"
+    base_dir.mkdir()
+    (base_dir / "VERSION").write_text("0.0.0")
+    locks = base_dir / "locks"
+    locks.mkdir()
+    (locks / "service.lck").write_text("arthexis")
+    (locks / "auto_upgrade.lck").write_text("latest")
+    (base_dir / "logs").mkdir()
+
+    fake_module = base_dir / "core" / "tasks.py"
+    fake_module.parent.mkdir()
+    fake_module.write_text("")
+    monkeypatch.setattr(tasks, "__file__", str(fake_module))
+
+    monkeypatch.setitem(
+        sys.modules,
+        "core.notifications",
+        SimpleNamespace(notify=lambda *args, **kwargs: None),
+    )
+
+    import nodes.apps as nodes_apps
+
+    monkeypatch.setattr(nodes_apps, "_startup_notification", lambda: None)
+
+    monkeypatch.setattr(tasks, "_load_skipped_revisions", lambda base: set())
+    monkeypatch.setattr(tasks, "_resolve_release_severity", lambda version: tasks.SEVERITY_NORMAL)
+    monkeypatch.setattr(tasks, "_read_remote_version", lambda base, branch: "0.0.1")
+    monkeypatch.setattr(tasks, "_read_local_version", lambda base: "0.0.0")
+
+    schedule_calls: list[bool] = []
+    monkeypatch.setattr(
+        tasks,
+        "_schedule_health_check",
+        lambda *args, **kwargs: schedule_calls.append(True),
+    )
+
+    def fake_run(command, *args, **kwargs):
+        return subprocess.CompletedProcess(command, 0)
+
+    def fake_check_output(command, *args, **kwargs):
+        if command[:3] == ["git", "rev-parse", "origin/main"]:
+            return "remote"
+        if command[:3] == ["git", "rev-parse", "main"]:
+            return "local"
+        return ""
+
+    monkeypatch.setattr(tasks.subprocess, "run", fake_run)
+    monkeypatch.setattr(tasks.subprocess, "check_output", fake_check_output)
+
+    monkeypatch.setattr(
+        tasks,
+        "_wait_for_service_restart",
+        lambda base, service, timeout=30: False,
+    )
+
+    revert_calls: list[tuple[Path, str]] = []
+
+    def record_revert(base: Path, service: str) -> None:
+        revert_calls.append((base, service))
+
+    monkeypatch.setattr(tasks, "_revert_after_restart_failure", record_revert)
+
+    tasks.check_github_updates()
+
+    assert revert_calls == [(base_dir, "arthexis")]
+    assert schedule_calls == []
+
+
 def test_resolve_service_url_handles_case_insensitive_mode(tmp_path):
     """Public mode should be detected regardless of the file's casing."""
 
