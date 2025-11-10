@@ -88,6 +88,12 @@ def _env_bool(name: str, default: bool) -> bool:
 
 DEBUG = _env_bool("DEBUG", False)
 
+# Disable NetMessage propagation when running maintenance commands that should
+# avoid contacting remote peers.
+NET_MESSAGE_DISABLE_PROPAGATION = _env_bool(
+    "NET_MESSAGE_DISABLE_PROPAGATION", False
+)
+
 ALLOWED_HOSTS = [
     "localhost",
     "127.0.0.1",
