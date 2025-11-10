@@ -630,6 +630,50 @@ class ReleaseProgressViewTests(TestCase):
         ]
         self.assertEqual(len(commit_calls), 1)
 
+    def test_refresh_changelog_detects_missing_latest_release(self):
+        original = Path("CHANGELOG.rst").read_text(encoding="utf-8")
+        latest_version = core_views.changelog_utils.latest_release_version_from_history()
+        stale_text = "\n".join(
+            [
+                "Changelog",
+                "=========",
+                "",
+                "Unreleased",
+                "----------",
+                "",
+                "- placeholder entry",
+                "",
+                "v0.1.22 (2025-10-28)",
+                "--------------------",
+                "",
+                "- previous release entry",
+                "",
+            ]
+        )
+        Path("CHANGELOG.rst").write_text(stale_text, encoding="utf-8")
+        self.addCleanup(
+            lambda: Path("CHANGELOG.rst").write_text(original, encoding="utf-8")
+        )
+
+        ctx: dict[str, object] = {}
+        log_path = self.log_dir / "missing-release.log"
+
+        def fake_run(cmd, capture_output=False, text=False, check=False, **kwargs):
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+        with mock.patch("core.views.subprocess.run", side_effect=fake_run):
+            with self.assertRaises(RuntimeError) as exc:
+                core_views._refresh_changelog_once(ctx, log_path)
+
+        self.assertFalse(ctx.get("changelog_refreshed"))
+        self.assertIn("latest release", str(exc.exception))
+        self.assertTrue(log_path.exists())
+        log_content = log_path.read_text(encoding="utf-8")
+        if latest_version:
+            self.assertIn(
+                f"Changelog missing latest release v{latest_version}", log_content
+            )
+
     @mock.patch("core.views._refresh_changelog_once")
     def test_acknowledged_todos_not_rendered(self, refresh_changelog):
         refresh_changelog.side_effect = (

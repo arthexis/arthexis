@@ -1001,8 +1001,24 @@ def _refresh_changelog_once(ctx, log_path: Path) -> None:
             "Regenerated CHANGELOG.rst using scripts/generate-changelog.sh",
         )
 
-    staged_paths: list[str] = []
     changelog_path = Path("CHANGELOG.rst")
+    if changelog_path.exists():
+        latest_version = changelog_utils.latest_release_version_from_history()
+        if latest_version:
+            text = changelog_path.read_text(encoding="utf-8")
+            if not changelog_utils.changelog_has_release_section(text, latest_version):
+                _append_log(
+                    log_path,
+                    f"Changelog missing latest release v{latest_version}",
+                )
+                raise RuntimeError(
+                    _(
+                        "The changelog is missing notes for the latest release (v%(version)s)."
+                    )
+                    % {"version": latest_version}
+                )
+
+    staged_paths: list[str] = []
     if changelog_path.exists():
         staged_paths.append(str(changelog_path))
 
