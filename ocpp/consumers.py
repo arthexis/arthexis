@@ -37,6 +37,7 @@ from .models import (
     CPReservation,
     CPFirmware,
     CPFirmwareDeployment,
+    CPFirmwareRequest,
     RFIDSessionAttempt,
     SecurityEvent,
     ChargerLogRequest,
@@ -774,6 +775,16 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         if not charger or not getattr(charger, "pk", None):
             return False
 
+        def _has_pending_request() -> bool:
+            return CPFirmwareRequest.objects.filter(
+                charger=charger,
+                responded_at__isnull=True,
+            ).exists()
+
+        pending = await database_sync_to_async(_has_pending_request)()
+        if pending:
+            return False
+
         vendor_setting = getattr(
             settings, "OCPP_AUTOMATIC_FIRMWARE_VENDOR_ID", DEFAULT_FIRMWARE_VENDOR_ID
         )
@@ -792,7 +803,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             return False
 
         def _create_message():
-            return DataTransferMessage.objects.create(
+            message = DataTransferMessage.objects.create(
                 charger=charger,
                 connector_id=connector_value,
                 direction=DataTransferMessage.DIRECTION_CSMS_TO_CP,
@@ -802,6 +813,13 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 payload=payload,
                 status="Pending",
             )
+            CPFirmwareRequest.objects.create(
+                charger=charger,
+                connector_id=connector_value,
+                vendor_id=vendor_id,
+                message=message,
+            )
+            return message
 
         message = await database_sync_to_async(_create_message)()
         if not message:
@@ -1313,16 +1331,23 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 return
 
             def _apply():
-                message = DataTransferMessage.objects.filter(pk=message_pk).first()
+                message = (
+                    DataTransferMessage.objects.select_related("firmware_request")
+                    .filter(pk=message_pk)
+                    .first()
+                )
                 if not message:
                     return
-                status_value = str((payload or {}).get("status") or "").strip()
+                status_value = (
+                    str((payload or {}).get("status") or "").strip() or "Accepted"
+                )
+                timestamp = timezone.now()
                 message.status = status_value
                 message.response_data = (payload or {}).get("data")
                 message.error_code = ""
                 message.error_description = ""
                 message.error_details = None
-                message.responded_at = timezone.now()
+                message.responded_at = timestamp
                 message.save(
                     update_fields=[
                         "status",
@@ -1334,6 +1359,19 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                         "updated_at",
                     ]
                 )
+                request = getattr(message, "firmware_request", None)
+                if request:
+                    request.status = status_value
+                    request.responded_at = timestamp
+                    request.response_payload = payload
+                    request.save(
+                        update_fields=[
+                            "status",
+                            "responded_at",
+                            "response_payload",
+                            "updated_at",
+                        ]
+                    )
 
             await database_sync_to_async(_apply)()
             store.record_pending_call_result(
@@ -1807,16 +1845,21 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 return
 
             def _apply():
-                message = DataTransferMessage.objects.filter(pk=message_pk).first()
+                message = (
+                    DataTransferMessage.objects.select_related("firmware_request")
+                    .filter(pk=message_pk)
+                    .first()
+                )
                 if not message:
                     return
                 status_value = (error_code or "Error").strip() or "Error"
+                timestamp = timezone.now()
                 message.status = status_value
                 message.response_data = None
                 message.error_code = (error_code or "").strip()
                 message.error_description = (description or "").strip()
                 message.error_details = details
-                message.responded_at = timezone.now()
+                message.responded_at = timestamp
                 message.save(
                     update_fields=[
                         "status",
@@ -1828,6 +1871,23 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                         "updated_at",
                     ]
                 )
+                request = getattr(message, "firmware_request", None)
+                if request:
+                    request.status = status_value
+                    request.responded_at = timestamp
+                    request.response_payload = {
+                        "errorCode": error_code,
+                        "errorDescription": description,
+                        "details": details,
+                    }
+                    request.save(
+                        update_fields=[
+                            "status",
+                            "responded_at",
+                            "response_payload",
+                            "updated_at",
+                        ]
+                    )
 
             await database_sync_to_async(_apply)()
             store.record_pending_call_result(

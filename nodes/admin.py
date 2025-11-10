@@ -72,6 +72,7 @@ from ocpp.models import (
     Charger,
     CPFirmware,
     CPFirmwareDeployment,
+    CPFirmwareRequest,
     DataTransferMessage,
 )
 from core.user_data import EntityModelAdmin
@@ -701,6 +702,22 @@ class NodeAdmin(EntityModelAdmin):
     def _process_firmware_download(self, request, node: Node, cleaned_data) -> bool:
         charger: Charger = cleaned_data["charger"]
         vendor_id = cleaned_data.get("vendor_id", "")
+        pending_request = CPFirmwareRequest.objects.filter(
+            charger=charger,
+            responded_at__isnull=True,
+        ).order_by("-requested_at").first()
+        if pending_request:
+            self.message_user(
+                request,
+                _(
+                    "A firmware request for %(charger)s is still pending. "
+                    "Wait for the existing request to finish before issuing "
+                    "another."
+                )
+                % {"charger": charger},
+                level=messages.ERROR,
+            )
+            return False
         connection = store.get_connection(charger.charger_id, charger.connector_id)
         if connection is None:
             self.message_user(
@@ -727,6 +744,12 @@ class NodeAdmin(EntityModelAdmin):
             payload=payload,
             status="Pending",
         )
+        CPFirmwareRequest.objects.create(
+            charger=charger,
+            connector_id=charger.connector_id,
+            vendor_id=vendor_id,
+            message=message_record,
+        )
 
         frame = json.dumps([2, message_id, "DataTransfer", payload])
         async_to_sync(connection.send)(frame)
@@ -751,6 +774,12 @@ class NodeAdmin(EntityModelAdmin):
 
         result = store.wait_for_pending_call(message_id, timeout=15.0)
         if result is None:
+            DataTransferMessage.objects.filter(pk=message_record.pk).update(
+                status="Timeout"
+            )
+            CPFirmwareRequest.objects.filter(message=message_record).update(
+                status="Timeout"
+            )
             self.message_user(
                 request,
                 _("The charge point did not respond to the firmware request."),
@@ -759,6 +788,9 @@ class NodeAdmin(EntityModelAdmin):
             return False
         if not result.get("success", True):
             detail = self._format_pending_failure("DataTransfer", result)
+            CPFirmwareRequest.objects.filter(message=message_record).update(
+                status="Error"
+            )
             self.message_user(request, detail, level=messages.ERROR)
             return False
 
