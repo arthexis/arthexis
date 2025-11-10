@@ -1202,6 +1202,7 @@ class Node(Entity):
         self._sync_landing_lead_task(celery_enabled)
         self._sync_ocpp_session_report_task(celery_enabled)
         self._sync_upstream_poll_task(celery_enabled)
+        self._sync_net_message_purge_task(celery_enabled)
 
     def _sync_clipboard_task(self, enabled: bool):
         from django_celery_beat.models import IntervalSchedule, PeriodicTask
@@ -1346,6 +1347,34 @@ class Node(Entity):
                 defaults={
                     "interval": schedule,
                     "task": "nodes.tasks.poll_unreachable_upstream",
+                    "enabled": True,
+                },
+            )
+        else:
+            PeriodicTask.objects.filter(
+                name__in=periodic_task_name_variants(raw_task_name)
+            ).delete()
+
+    def _sync_net_message_purge_task(self, celery_enabled: bool):
+        if not self.is_local:
+            return
+
+        from django_celery_beat.models import IntervalSchedule, PeriodicTask
+
+        raw_task_name = "nodes_purge_net_messages"
+        task_name = normalize_periodic_task_name(
+            PeriodicTask.objects, raw_task_name
+        )
+
+        if celery_enabled:
+            schedule, _ = IntervalSchedule.objects.get_or_create(
+                every=1, period=IntervalSchedule.HOURS
+            )
+            PeriodicTask.objects.update_or_create(
+                name=task_name,
+                defaults={
+                    "interval": schedule,
+                    "task": "nodes.tasks.purge_stale_net_messages",
                     "enabled": True,
                 },
             )
@@ -2226,7 +2255,7 @@ class NetMessage(Entity):
         displayed = notify(self.subject, self.body)
         local = Node.get_local()
         if displayed:
-            cutoff = timezone.now() - timedelta(days=7)
+            cutoff = timezone.now() - timedelta(hours=24)
             prune_qs = type(self).objects.filter(created__lt=cutoff)
             if local:
                 prune_qs = prune_qs.filter(
