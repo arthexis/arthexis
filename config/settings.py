@@ -30,6 +30,7 @@ from django.contrib.sites.requests import RequestSite
 from urllib.parse import urlsplit
 import django.utils.encoding as encoding
 
+from config.logging import configure_library_loggers
 from config.settings_helpers import (
     discover_local_ip_addresses,
     extract_ip_from_host,
@@ -668,6 +669,8 @@ LOGGING = {
         "level": "DEBUG",
     },
 }
+
+configure_library_loggers(DEBUG, LOGGING)
 
 
 # Celery configuration
