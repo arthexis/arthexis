@@ -375,6 +375,26 @@ def render_changelog(sections: Iterable[ChangelogSection]) -> str:
     return "\n".join(lines)
 
 
+def latest_release_version_from_history(range_spec: str = "HEAD") -> Optional[str]:
+    """Return the most recent release version present in git history."""
+
+    sections = collect_sections(range_spec=range_spec)
+    for section in sections:
+        if section.version:
+            return section.version.lstrip("v")
+    return None
+
+
+def changelog_has_release_section(text: str, version: str) -> bool:
+    """Return ``True`` when the changelog text contains a section for *version*."""
+
+    normalized = version.lstrip("v")
+    for section in _parse_sections(text):
+        if section.version and section.version.lstrip("v") == normalized:
+            return True
+    return False
+
+
 def extract_release_notes(text: str, version: str) -> str:
     """Return the changelog entries matching *version*.
 
@@ -398,6 +418,8 @@ __all__ = [
     "Commit",
     "determine_range_spec",
     "collect_sections",
+    "changelog_has_release_section",
+    "latest_release_version_from_history",
     "extract_release_notes",
     "render_changelog",
 ]

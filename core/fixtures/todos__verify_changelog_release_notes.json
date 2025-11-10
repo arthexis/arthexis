@@ -1,0 +1,15 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "is_seed_data": false,
+      "is_deleted": false,
+      "request": "Confirm changelog includes the latest release section",
+      "created_on": "2025-11-08T00:00:00Z",
+      "url": "/admin/system/changelog-report/",
+      "request_details": "Open the Changelog Report in the admin and ensure the 'Last Release Changelog' shows the most recent version after regenerating CHANGELOG.rst during publishing.",
+      "generated_for_version": "",
+      "generated_for_revision": ""
+    }
+  }
+]
