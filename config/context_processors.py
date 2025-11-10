@@ -1,4 +1,5 @@
 import socket
+from pathlib import Path
 
 from django.contrib.sites.models import Site
 from django.http import HttpRequest
