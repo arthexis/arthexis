@@ -680,3 +680,100 @@ def test_resolve_service_url_handles_case_insensitive_mode(tmp_path):
     url = tasks._resolve_service_url(base_dir)
 
     assert url == "http://127.0.0.1:8888/"
+
+
+def test_handle_failed_health_check_records_failover_lock(monkeypatch, tmp_path):
+    """Reverting after a failed health check should create the failover lock."""
+
+    from core import tasks
+
+    recorded: dict[str, object] = {}
+
+    monkeypatch.setattr(tasks, "_add_skipped_revision", lambda *args, **kwargs: None)
+    monkeypatch.setattr(tasks, "_append_auto_upgrade_log", lambda *args, **kwargs: None)
+    monkeypatch.setattr(tasks, "_current_revision", lambda _base: "rev123456")
+    monkeypatch.setattr(
+        tasks.subprocess,
+        "run",
+        lambda *args, **kwargs: CompletedProcess(args[0], 0),
+    )
+
+    def capture_write(base_dir, *, reason, detail=None, revision=None):
+        recorded["base_dir"] = base_dir
+        recorded["reason"] = reason
+        recorded["detail"] = detail
+        recorded["revision"] = revision
+
+    monkeypatch.setattr(tasks, "write_failover_lock", capture_write)
+
+    tasks._handle_failed_health_check(tmp_path, "failed with timeout")
+
+    assert recorded["base_dir"] == tmp_path
+    assert recorded["reason"] == "Auto-upgrade health check failed"
+    assert recorded["detail"] == "failed with timeout"
+    assert recorded["revision"] == "rev123456"
+
+
+def test_revert_after_restart_failure_sets_failover_lock(monkeypatch, tmp_path):
+    """Restart failures should schedule the failover alert after reverting."""
+
+    from core import tasks
+
+    log_messages: list[str] = []
+    monkeypatch.setattr(tasks, "_append_auto_upgrade_log", lambda _base, message: log_messages.append(message))
+    monkeypatch.setattr(tasks, "_systemctl_command", lambda: [])
+    monkeypatch.setattr(tasks, "_current_revision", lambda _base: "cafebabe")
+    monkeypatch.setattr(
+        tasks.subprocess,
+        "run",
+        lambda *args, **kwargs: CompletedProcess(args[0], 0),
+    )
+
+    recorded: dict[str, object] = {}
+
+    def capture_write(base_dir, *, reason, detail=None, revision=None):
+        recorded["base_dir"] = base_dir
+        recorded["reason"] = reason
+        recorded["detail"] = detail
+        recorded["revision"] = revision
+
+    monkeypatch.setattr(tasks, "write_failover_lock", capture_write)
+
+    tasks._revert_after_restart_failure(tmp_path, "django")
+
+    assert recorded["base_dir"] == tmp_path
+    assert "django" in str(recorded["reason"])
+    assert "failover" in str(recorded["detail"])
+    assert recorded["revision"] == "cafebabe"
+
+
+def test_verify_auto_upgrade_health_clears_failover_lock(monkeypatch):
+    """Successful health checks should remove the failover alert."""
+
+    from core import tasks
+
+    class DummyResponse:
+        status = 200
+
+        def getcode(self):
+            return self.status
+
+    class ContextManager:
+        def __enter__(self):
+            return DummyResponse()
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setattr(tasks.urllib.request, "urlopen", lambda *args, **kwargs: ContextManager())
+    monkeypatch.setattr(tasks, "_record_health_check_result", lambda *args, **kwargs: None)
+
+    cleared: list[Path] = []
+
+    def capture_clear(base_dir):
+        cleared.append(base_dir)
+
+    monkeypatch.setattr(tasks, "clear_failover_lock", capture_clear)
+
+    assert tasks.verify_auto_upgrade_health(attempt=1) is True
+    assert cleared, "Failover lock was not cleared after success"

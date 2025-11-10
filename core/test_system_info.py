@@ -15,6 +15,7 @@ django.setup()
 
 from django.conf import settings
 from django.test import SimpleTestCase, override_settings
+from django.utils import timezone
 from nodes.models import Node, NodeFeature, NodeRole
 from core.system import (
     _gather_info,
@@ -22,6 +23,7 @@ from core.system import (
     _read_auto_upgrade_mode,
     get_system_sigil_values,
 )
+from core.auto_upgrade_failover import failover_lock_path, read_failover_status
 
 
 class SystemInfoRoleTests(SimpleTestCase):
@@ -153,6 +155,35 @@ class AutoUpgradeLogParsingTests(SimpleTestCase):
         self.assertEqual(parsed_dt.month, 1)
         self.assertEqual(parsed_dt.day, 1)
         self.assertEqual(parsed_dt.utcoffset(), timedelta(0))
+
+
+class AutoUpgradeFailoverStatusTests(SimpleTestCase):
+    def test_read_failover_status_returns_none_when_missing(self):
+        with TemporaryDirectory() as tmpdir:
+            status = read_failover_status(Path(tmpdir))
+
+        self.assertIsNone(status)
+
+    def test_read_failover_status_parses_payload(self):
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            lock_path = failover_lock_path(base_dir)
+            lock_path.parent.mkdir(parents=True, exist_ok=True)
+            payload = {
+                "reason": "Health check failed",
+                "detail": "failed with timeout",
+                "revision": "abcdef0",
+                "created": timezone.now().isoformat(),
+            }
+            lock_path.write_text(json.dumps(payload), encoding="utf-8")
+            status = read_failover_status(base_dir)
+
+        self.assertIsNotNone(status)
+        assert status is not None  # help mypy
+        self.assertEqual(status.reason, "Health check failed")
+        self.assertEqual(status.detail, "failed with timeout")
+        self.assertEqual(status.revision, "abcdef0")
+        self.assertIsNotNone(status.created)
 
 
 class SystemInfoRunserverDetectionTests(SimpleTestCase):

@@ -225,3 +225,50 @@ class UpgradeReportTests(SimpleTestCase):
         stored = list(messages.get_messages(request))
         self.assertEqual(len(stored), 1)
         self.assertEqual(stored[0].level, messages.ERROR)
+        self.assertEqual(
+            stored[0].message,
+            gettext("Unable to trigger an upgrade check: %(error)s") % {"error": "oops"},
+        )
+
+    def test_trigger_upgrade_check_view_respects_next_parameter(self):
+        request = self.factory.post(
+            reverse("admin:system-upgrade-run-check"),
+            data={"next": "/admin/"},
+        )
+        SessionMiddleware(lambda req: None).process_request(request)
+        request.session.save()
+        setattr(request, "_messages", FallbackStorage(request))
+        request.user = mock.Mock(is_staff=True, is_active=True)
+
+        with mock.patch(
+            "core.system._trigger_upgrade_check", return_value=True
+        ) as mock_trigger:
+            response = system._system_trigger_upgrade_check_view(request)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, "/admin/")
+        mock_trigger.assert_called_once_with(channel_override=None)
+
+    def test_clear_failover_lock_view_clears_and_redirects(self):
+        request = self.factory.post(
+            reverse("admin:system-upgrade-dismiss-failover"),
+            data={"next": "/admin/"},
+        )
+        SessionMiddleware(lambda req: None).process_request(request)
+        request.session.save()
+        setattr(request, "_messages", FallbackStorage(request))
+        request.user = mock.Mock(is_staff=True, is_active=True)
+
+        with mock.patch("core.system.clear_failover_lock") as mock_clear:
+            response = system._system_clear_failover_lock_view(request)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, "/admin/")
+        mock_clear.assert_called_once()
+        stored = list(messages.get_messages(request))
+        self.assertEqual(len(stored), 1)
+        self.assertEqual(stored[0].level, messages.SUCCESS)
+        self.assertEqual(
+            stored[0].message,
+            gettext("Failover alert dismissed. Auto-upgrade retries remain available."),
+        )

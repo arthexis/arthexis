@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Confirm failover alert banner and actions",
+      "created_on": "2024-01-01T00:00:00Z",
+      "url": "/admin/",
+      "request_details": "Force the node into failover mode by writing a JSON payload to locks/auto_upgrade_failover.lck (reason/detail text is sufficient). Log into the Django admin and confirm the persistent banner appears above other messages with the failure detail and a working link to the upgrade report. Use the Dismiss button to remove the banner and verify the lockfile is deleted. Recreate the lock and click Retry upgrade; ensure you are redirected back to the same page, the upgrade check success message is shown, and the lockfile remains for the next health check.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.31"
+    }
+  }
+]
