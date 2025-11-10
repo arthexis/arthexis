@@ -21,7 +21,11 @@ from asgiref.sync import sync_to_async
 from config.offline import requires_network
 
 from . import store
-from .forwarding_service import sync_forwarded_charge_points
+from .forwarding_service import (
+    get_session as get_forwarding_session,
+    remove_session as remove_forwarding_session,
+    sync_forwarded_charge_points,
+)
 from decimal import Decimal
 from django.utils.dateparse import parse_datetime
 from .models import (
@@ -582,6 +586,115 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         )
         self.store_key = new_key
         self.connector_value = connector_value
+
+    async def _ensure_forwarding_context(
+        self, charger,
+    ) -> tuple[tuple[str, ...], int | None] | None:
+        """Return forwarding configuration for ``charger`` when available."""
+
+        if not charger or not getattr(charger, "forwarded_to_id", None):
+            return None
+
+        def _resolve():
+            from protocols.models import CPForwarder
+
+            target_id = getattr(charger, "forwarded_to_id", None)
+            if not target_id:
+                return None
+            qs = CPForwarder.objects.filter(target_node_id=target_id, enabled=True)
+            source_id = getattr(charger, "node_origin_id", None)
+            forwarder = None
+            if source_id:
+                forwarder = qs.filter(source_node_id=source_id).first()
+            if forwarder is None:
+                forwarder = qs.filter(source_node__isnull=True).first()
+            if forwarder is None:
+                forwarder = qs.first()
+            if forwarder is None:
+                return None
+            messages = tuple(forwarder.get_forwarded_messages())
+            return messages, forwarder.pk
+
+        return await database_sync_to_async(_resolve)()
+
+    async def _record_forwarding_activity(
+        self,
+        *,
+        charger_pk: int | None,
+        forwarder_pk: int | None,
+        timestamp: datetime,
+    ) -> None:
+        """Persist forwarding activity metadata for the provided charger."""
+
+        if charger_pk is None and forwarder_pk is None:
+            return
+
+        def _update():
+            if charger_pk:
+                Charger.objects.filter(pk=charger_pk).update(
+                    forwarding_watermark=timestamp
+                )
+            if forwarder_pk:
+                from protocols.models import CPForwarder
+
+                CPForwarder.objects.filter(pk=forwarder_pk).update(
+                    last_forwarded_at=timestamp,
+                    is_running=True,
+                )
+
+        await database_sync_to_async(_update)()
+
+    async def _forward_charge_point_message(self, action: str, raw: str) -> None:
+        """Forward an OCPP message to the configured remote node when permitted."""
+
+        if not action or not raw:
+            return
+
+        charger = self.aggregate_charger or self.charger
+        if charger is None or not getattr(charger, "pk", None):
+            return
+        session = get_forwarding_session(charger.pk)
+        if session is None or not session.is_connected:
+            return
+
+        allowed = getattr(session, "forwarded_messages", None)
+        forwarder_pk = getattr(session, "forwarder_id", None)
+        if allowed is None or (forwarder_pk is None and charger.forwarded_to_id):
+            context = await self._ensure_forwarding_context(charger)
+            if context is None:
+                return
+            allowed, forwarder_pk = context
+            session.forwarded_messages = allowed
+            session.forwarder_id = forwarder_pk
+
+        if allowed is not None and action not in allowed:
+            return
+
+        try:
+            await sync_to_async(session.connection.send)(raw)
+        except Exception as exc:  # pragma: no cover - network errors
+            logger.warning(
+                "Failed to forward %s from charger %s: %s",
+                action,
+                getattr(charger, "charger_id", charger.pk),
+                exc,
+            )
+            remove_forwarding_session(charger.pk)
+            return
+
+        timestamp = timezone.now()
+        await self._record_forwarding_activity(
+            charger_pk=charger.pk,
+            forwarder_pk=forwarder_pk,
+            timestamp=timestamp,
+        )
+        charger.forwarding_watermark = timestamp
+        aggregate = self.aggregate_charger
+        if aggregate and aggregate.pk == charger.pk:
+            aggregate.forwarding_watermark = timestamp
+        current = self.charger
+        if current and current.pk == charger.pk and current is not aggregate:
+            current.forwarding_watermark = timestamp
 
     async def _fetch_initial_metadata(
         self,
@@ -2394,6 +2507,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                     log_type="charger",
                 )
             await self._assign_connector(payload.get("connectorId"))
+            await self._forward_charge_point_message(action, raw)
             if action == "BootNotification":
                 reply_payload = {
                     "currentTime": datetime.utcnow().isoformat() + "Z",

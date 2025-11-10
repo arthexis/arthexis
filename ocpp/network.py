@@ -34,7 +34,11 @@ def _to_decimal(value) -> Decimal | None:
         return None
 
 
-def serialize_charger_for_network(charger: Charger) -> dict[str, object]:
+def serialize_charger_for_network(
+    charger: Charger,
+    *,
+    forwarded_messages: Iterable[str] | None = None,
+) -> dict[str, object]:
     simple_fields = [
         "display_name",
         "language",
@@ -90,6 +94,10 @@ def serialize_charger_for_network(charger: Charger) -> dict[str, object]:
             "zone": location.zone,
             "contract_type": location.contract_type,
         }
+
+    if forwarded_messages is not None:
+        cleaned = [str(value) for value in forwarded_messages if value]
+        data["forwarded_messages"] = cleaned
 
     return data
 

@@ -110,6 +110,8 @@ def send_forwarding_metadata(
     chargers: Iterable,
     local_node: Node,
     private_key,
+    *,
+    forwarded_messages: Iterable[str] | None = None,
 ) -> tuple[bool, str | None]:
     """Send metadata for forwarded chargers to the target node."""
 
@@ -117,11 +119,23 @@ def send_forwarding_metadata(
     if not chargers:
         return True, None
 
+    forwarded_list: list[str] | None
+    if forwarded_messages is None:
+        forwarded_list = None
+    else:
+        forwarded_list = [str(value) for value in forwarded_messages if value]
+
     payload = {
         "requester": str(local_node.uuid),
         "requester_mac": local_node.mac_address,
         "requester_public_key": local_node.public_key,
-        "chargers": [serialize_charger_for_network(charger) for charger in chargers],
+        "chargers": [
+            serialize_charger_for_network(
+                charger,
+                forwarded_messages=forwarded_list,
+            )
+            for charger in chargers
+        ],
         "transactions": {"chargers": [], "transactions": []},
     }
     payload_json = json.dumps(payload, separators=(",", ":"), sort_keys=True)

@@ -23,6 +23,8 @@ class ForwardingSession:
     url: str
     connection: object
     connected_at: datetime
+    forwarder_id: int | None = None
+    forwarded_messages: tuple[str, ...] | None = None
 
     @property
     def is_connected(self) -> bool:
@@ -218,6 +220,7 @@ def sync_forwarded_charge_points(*, refresh_forwarders: bool = True) -> int:
 
     for charger in chargers:
         target = charger.forwarded_to
+        forwarder = forwarders_by_target.get(getattr(target, "pk", None))
         if not target:
             continue
         if local.pk and getattr(target, "pk", None) == local.pk:
@@ -225,6 +228,14 @@ def sync_forwarded_charge_points(*, refresh_forwarders: bool = True) -> int:
 
         existing = get_session(charger.pk)
         if existing and existing.node_id == getattr(target, "pk", None):
+            if forwarder:
+                existing.forwarder_id = getattr(forwarder, "pk", None)
+                existing.forwarded_messages = tuple(
+                    forwarder.get_forwarded_messages()
+                )
+            else:
+                existing.forwarder_id = None
+                existing.forwarded_messages = None
             if existing.is_connected:
                 continue
             remove_session(charger.pk)
@@ -240,8 +251,11 @@ def sync_forwarded_charge_points(*, refresh_forwarders: bool = True) -> int:
         Charger.objects.filter(pk=charger.pk).update(
             forwarding_watermark=session.connected_at
         )
-        forwarder = forwarders_by_target.get(getattr(target, "pk", None))
         if forwarder:
+            session.forwarder_id = getattr(forwarder, "pk", None)
+            session.forwarded_messages = tuple(
+                forwarder.get_forwarded_messages()
+            )
             forwarder.mark_running(session.connected_at)
         connected += 1
 
