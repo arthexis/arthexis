@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate env refresh loads celery concurrency TODO",
+      "url": "/admin/core/todo/",
+      "request_details": "Run env-refresh.sh --latest on a clean database and confirm the celery worker concurrency TODO loads without integrity errors, then verify the task appears in the admin TODO list.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.30",
+      "created_on": "2025-11-08T00:15:00Z"
+    }
+  }
+]

@@ -5,7 +5,10 @@
       "request": "Verify audio capture microphone test",
       "url": "/admin/nodes/nodefeature/test-microphone/",
       "request_details": "On a node with Audio Capture enabled and a connected microphone, run the 'Test Microphone' action from the Node Features admin list. Confirm that the admin records a six-second clip, saves it as a Content Sample, and redirects to the saved sample detail page.",
-      "version": "0.1.30"
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.30",
+      "created_on": "2025-11-08T00:10:00Z"
     }
   }
 ]
