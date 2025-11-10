@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Confirm Satellite CPMS dashboard renders",
+      "created_on": "2025-01-01T00:00:00Z",
+      "url": "/ocpp/cpms/dashboard/",
+      "request_details": "Switch a node into the Satellite role with DEBUG disabled. Visit the CPMS dashboard at /ocpp/cpms/dashboard/ without logging in and confirm the page loads successfully without a server error. Capture the badge header to confirm the node information renders and verify that the charger table refreshes without errors.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.31"
+    }
+  }
+]
