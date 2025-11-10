@@ -119,7 +119,13 @@ I nodi Terminal possono avviarsi direttamente con gli script sottostanti senza i
    - Non è necessario installare per avviare in modalità Terminal (predefinita).
 
 ### 4. Amministrazione
-Visita [`http://localhost:8888/admin/`](http://localhost:8888/admin/) per il [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) e [`http://localhost:8888/admindocs/`](http://localhost:8888/admindocs/) per gli [admindocs](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/). Usa `--port` con gli script di avvio o l'installer quando devi esporre una porta diversa. Per istruzioni dettagliate consulta la [Guida all'installazione e all'amministrazione](docs/cookbooks/install-start-stop-upgrade-uninstall.md) nella directory cookbooks e il [Cookbook dei sigilli](docs/cookbooks/sigils.md) per imparare a usare i token di configurazione.
+- Accedi al [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) su [`http://localhost:8888/admin/`](http://localhost:8888/admin/) per verificare e gestire i dati in tempo reale. Usa `--port` con gli script di avvio o l'installer quando devi esporre una porta diversa.
+- Consulta gli [admindocs](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/) su [`http://localhost:8888/admindocs/`](http://localhost:8888/admindocs/) per leggere la documentazione API generata automaticamente dai tuoi modelli.
+- Segui la [Guida all'installazione e all'amministrazione](docs/cookbooks/install-start-stop-upgrade-uninstall.md) per attività di deployment, ciclo di vita e runbook operativi.
+- Fai riferimento al [Cookbook dei sigilli](docs/cookbooks/sigils.md) quando configuri impostazioni basate su token tra gli ambienti.
+- Gestisci esportazioni, importazioni e tracciamenti con il [Cookbook sui dati utente](docs/cookbooks/user-data.md).
+- Pianifica le strategie di rilascio delle funzionalità con il [Cookbook sulle funzionalità dei nodi](docs/cookbooks/node-features.md).
+- Cura scorciatoie per gli utenti esperti tramite il [Cookbook dei preferiti](docs/cookbooks/favorites.md).
 
 ## Supporto
 

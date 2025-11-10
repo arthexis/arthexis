@@ -120,7 +120,13 @@ Terminal nodes can start directly with the scripts below without installing; Con
    - Installation is not required to start in Terminal mode (the default).
 
 ### 4. Administration
-Visit [`http://localhost:8888/admin/`](http://localhost:8888/admin/) for the [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) and [`http://localhost:8888/admindocs/`](http://localhost:8888/admindocs/) for the [admindocs](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/). Use `--port` with the start scripts or installer when you need to expose a different port. Review the [Install & Administration Guide](docs/cookbooks/install-start-stop-upgrade-uninstall.md) in the cookbooks directory for end-to-end deployment steps and the [Sigils Cookbook](docs/cookbooks/sigils.md) for configuration token usage.
+- Access the [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) at [`http://localhost:8888/admin/`](http://localhost:8888/admin/) to review and manage live data. Use `--port` with the start scripts or installer when you need to expose a different port.
+- Browse the [admindocs](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/) at [`http://localhost:8888/admindocs/`](http://localhost:8888/admindocs/) for API documentation that is generated from your models.
+- Follow the [Install & Administration Guide](docs/cookbooks/install-start-stop-upgrade-uninstall.md) for deployment, lifecycle tasks, and operational runbooks.
+- Reference the [Sigils Cookbook](docs/cookbooks/sigils.md) when configuring tokenized settings across environments.
+- Manage exports, imports, and audit trails with the [User Data Cookbook](docs/cookbooks/user-data.md).
+- Plan feature rollout strategies using the [Node Features Cookbook](docs/cookbooks/node-features.md).
+- Curate shortcuts for power users through the [Favorites Cookbook](docs/cookbooks/favorites.md).
 
 ## Support
 
