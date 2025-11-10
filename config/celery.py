@@ -10,6 +10,7 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 # When running on production-oriented nodes, avoid Celery debug mode.
 NODE_ROLE = os.environ.get("NODE_ROLE", "")
 PRODUCTION_ROLES = {
+    "watchtower",
     "constellation",
     "satellite",
     "control",
