@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "is_seed_data": false,
+      "is_deleted": false,
+      "request": "Validate publish action conflict messaging",
+      "url": "/admin/core/packagerelease/",
+      "request_details": "Open the Package Releases admin, choose an already published release, and press 'Publish selected Release'. Confirm the conflict message appears instead of a 404 and review the debug details when DEBUG is enabled.",
+      "generated_for_version": "",
+      "generated_for_revision": ""
+    }
+  }
+]
