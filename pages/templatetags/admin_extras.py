@@ -1,28 +1,22 @@
 import ast
 import inspect
 import textwrap
-from datetime import timedelta
 from pathlib import Path
 
 from django import template
 from django.apps import apps
 from django.contrib import admin
 from django.contrib.contenttypes.models import ContentType
-from django.core.cache import cache
 from django.db import DatabaseError
 from django.db.models import Count, Exists, OuterRef, Q
 from django.db.models import Model
-from django.db.models.signals import post_delete, post_save
 from django.conf import settings
 from django.urls import NoReverseMatch, reverse
 from django.utils.text import capfirst
-from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
-from django.dispatch import receiver
-from core.models import Lead, RFID, Todo, GoogleCalendarProfile
+from core.models import Lead, RFID, GoogleCalendarProfile
 from ocpp.models import Charger
 from nodes.models import NetMessage
-from core.entity import Entity, user_data_flag_updated
 
 register = template.Library()
 
@@ -109,41 +103,6 @@ def admin_profile_url(context, user) -> str:
     return ""
 
 
-USER_DATA_MODELS_CACHE_KEY = "pages:future_action_items:user_data_models"
-USER_DATA_MODELS_CACHE_TIMEOUT = getattr(settings, "USER_DATA_MODELS_CACHE_TIMEOUT", 300)
-
-
-def _get_user_data_model_labels() -> set[str]:
-    """Return cached model labels with ``is_user_data`` rows."""
-
-    timeout = getattr(settings, "USER_DATA_MODELS_CACHE_TIMEOUT", USER_DATA_MODELS_CACHE_TIMEOUT)
-    cache_entry: dict[str, object] | None = cache.get(USER_DATA_MODELS_CACHE_KEY)
-    now = timezone.now()
-    if cache_entry:
-        labels = cache_entry.get("labels")
-        timestamp = cache_entry.get("timestamp")
-        if isinstance(labels, (list, tuple, set)) and timestamp is not None:
-            if timeout:
-                if now - timestamp < timedelta(seconds=timeout):
-                    return set(labels)
-            else:
-                return set(labels)
-
-    labels: set[str] = set()
-    for model, _ in admin.site._registry.items():
-        if model is Todo or not issubclass(model, Entity):
-            continue
-        if model.objects.filter(is_user_data=True).exists():
-            labels.add(model._meta.label_lower)
-
-    cache.set(
-        USER_DATA_MODELS_CACHE_KEY,
-        {"labels": list(labels), "timestamp": now},
-        timeout=timeout,
-    )
-    return labels
-
-
 @register.simple_tag
 def last_net_message() -> dict[str, object]:
     """Return the most recent NetMessage for the admin dashboard."""
@@ -165,38 +124,6 @@ def last_net_message() -> dict[str, object]:
     parts = [part for part in (subject, body) if part]
     text = " — ".join(parts) if parts else ""
     return {"text": text, "has_content": bool(parts)}
-
-
-def _invalidate_user_data_model_cache() -> None:
-    cache.delete(USER_DATA_MODELS_CACHE_KEY)
-
-
-@receiver(post_save)
-def _invalidate_user_data_models_on_save(sender, instance, created, update_fields, **kwargs):
-    if not isinstance(instance, Entity):
-        return
-    if created and not instance.is_user_data:
-        return
-    if update_fields and "is_user_data" not in update_fields:
-        return
-    _invalidate_user_data_model_cache()
-
-
-@receiver(post_delete)
-def _invalidate_user_data_models_on_delete(sender, instance, **kwargs):
-    if not isinstance(instance, Entity):
-        return
-    if not instance.is_user_data:
-        return
-    _invalidate_user_data_model_cache()
-
-
-@receiver(user_data_flag_updated)
-def _invalidate_user_data_models_on_update(sender, **kwargs):
-    if not issubclass(sender, Entity):
-        return
-    _invalidate_user_data_model_cache()
-
 
 @register.simple_tag(takes_context=True)
 def model_admin_actions(context, app_label, model_name):
@@ -525,113 +452,6 @@ def charger_availability_stats(context):
         }
         context[cache_key] = stats
     return stats
-
-
-@register.simple_tag(takes_context=True)
-def future_action_items(context):
-    """Return dashboard links and TODOs for the current user.
-
-    Returns a dict with ``models`` and ``todos`` lists. The ``models`` list
-    includes recent admin history entries, favorites and models with user
-    data. The ``todos`` list contains Release Manager tasks from fixtures.
-    """
-
-    request = context.get("request")
-    user = getattr(request, "user", None)
-    if not user or not user.is_authenticated:
-        return {"models": [], "todos": []}
-
-    model_data = {}
-    first_seen = 0
-    todo_ct = ContentType.objects.get_for_model(Todo)
-
-    def register_model(ct: ContentType, label: str, url: str, priority: int) -> None:
-        nonlocal first_seen
-        if not ct or ct.id == todo_ct.id or not url:
-            return
-        entry = model_data.get(ct.id)
-        if entry is None:
-            entry = {
-                "url": url,
-                "label": label,
-                "count": 0,
-                "priority": priority,
-                "first_seen": first_seen,
-            }
-            model_data[ct.id] = entry
-            first_seen += 1
-        else:
-            if priority < entry["priority"]:
-                entry.update({"url": url, "label": label, "priority": priority})
-        entry["count"] += 1
-
-    # Recently visited changelists (history)
-    history = user.admin_history.select_related("content_type").all()[:10]
-    for entry in history:
-        ct = entry.content_type
-        if not ct or not entry.url:
-            continue
-        register_model(ct, entry.admin_label, entry.url, priority=0)
-
-    # Favorites
-    favorites = user.favorites.select_related("content_type")
-    for fav in favorites:
-        ct = fav.content_type
-        model = ct.model_class()
-        label = fav.custom_label or (
-            model._meta.verbose_name_plural if model else ct.name
-        )
-        url = admin_changelist_url(ct)
-        if url:
-            register_model(ct, label, url, priority=1)
-
-    # Models with user data
-    user_data_labels = _get_user_data_model_labels()
-    for model, model_admin in admin.site._registry.items():
-        if model is Todo or not issubclass(model, Entity):
-            continue
-        if model._meta.label_lower not in user_data_labels:
-            continue
-        ct = ContentType.objects.get_for_model(model)
-        label = model._meta.verbose_name_plural
-        url = admin_changelist_url(ct)
-        if url:
-            register_model(ct, label, url, priority=2)
-
-    sorted_models = sorted(
-        model_data.values(),
-        key=lambda item: (
-            -item["count"],
-            item["priority"],
-            item["first_seen"],
-            item["label"],
-        ),
-    )
-    model_items = [
-        {"url": item["url"], "label": item["label"]} for item in sorted_models[:4]
-    ]
-
-    active_todos = Todo.refresh_active(now=timezone.now())
-
-    def _serialize(todo: Todo, *, completed: bool):
-        details = (todo.request_details or "").strip()
-        condition = (todo.on_done_condition or "").strip()
-        data = {
-            "url": reverse("todo-focus", args=[todo.pk]),
-            "label": todo.request,
-            "details": details,
-            "condition": condition,
-            "completed": completed,
-        }
-        if completed:
-            data["done_on"] = todo.done_on
-        else:
-            data["done_url"] = reverse("todo-done", args=[todo.pk])
-        return data
-
-    todos: list[dict[str, object]] = [_serialize(todo, completed=False) for todo in active_todos]
-
-    return {"models": model_items, "todos": todos}
 
 
 @register.simple_tag(takes_context=True)
