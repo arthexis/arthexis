@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate CP forwarder message filters",
+      "created_on": "2024-01-01T00:00:00Z",
+      "url": "/admin/protocols/cpforwarder/",
+      "request_details": "Open a CP Forwarder in the admin and review the Forwarding section. Toggle a few OCPP message checkboxes, save, and confirm the selection persists after reloading the form. Re-enable all messages before completing the check.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.31"
+    }
+  }
+]
