@@ -2029,7 +2029,7 @@ class ReleaseProgressSyncTests(TestCase):
         self.assertEqual(release.revision, "abc123")
         dump_fixture.assert_called_once()
 
-    def test_published_release_not_current_returns_404(self):
+    def test_published_release_not_current_shows_conflict_message(self):
         release = PackageRelease.objects.create(
             package=self.package,
             version="1.2.4",
@@ -2039,7 +2039,23 @@ class ReleaseProgressSyncTests(TestCase):
         url = reverse("release-progress", args=[release.pk, "publish"])
         response = self.client.get(url)
 
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, 409)
+        self.assertContains(response, "already published")
+
+    @override_settings(DEBUG=True)
+    def test_published_release_not_current_includes_debug_details(self):
+        release = PackageRelease.objects.create(
+            package=self.package,
+            version="1.2.4",
+            pypi_url="https://example.com",
+        )
+
+        url = reverse("release-progress", args=[release.pk, "publish"])
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 409)
+        self.assertContains(response, "Debug details")
+        self.assertContains(response, "release_version")
 
 
 class ReleaseProgressFixtureVisibilityTests(TestCase):

@@ -1,0 +1,43 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Release publishing" %} | {{ block.super }}{% endblock %}
+
+{% block nav-breadcrumbs %}
+<nav aria-label="{% translate 'Breadcrumbs' %}">
+  <div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a> ›
+    <a href="{% url 'admin:app_list' 'core' %}">{% trans '2. Business' %}</a> ›
+    <a href="{% url 'admin:core_packagerelease_changelist' %}">{% trans 'Package Releases' %}</a>
+    {% if release %}
+      › <a href="{% url 'admin:core_packagerelease_change' release.pk %}">{{ release }}</a>
+    {% endif %}
+    › {% trans "Publish" %}
+  </div>
+</nav>
+{% endblock %}
+
+{% block content %}
+<div class="module errornote">
+  <h1>{% trans "Unable to continue with publishing" %}</h1>
+  <p>{{ message }}</p>
+  {% if release_url %}
+  <p>
+    <a href="{{ release_url }}">{% trans "Return to the release details" %}</a>
+  </p>
+  {% endif %}
+</div>
+
+{% if show_debug %}
+<div class="module">
+  <h2>{% trans "Debug details" %}</h2>
+  <p>{% trans "The following data is only visible because DEBUG is enabled." %}</p>
+  <dl>
+    {% for item in debug_items %}
+    <dt>{{ item.name }}</dt>
+    <dd><code>{{ item.value }}</code></dd>
+    {% endfor %}
+  </dl>
+</div>
+{% endif %}
+{% endblock %}

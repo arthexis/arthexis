@@ -15,7 +15,7 @@ from django.contrib.auth import REDIRECT_FIELD_NAME, authenticate, login
 from django.contrib import messages
 from django.contrib.sites.models import Site
 from django.http import Http404, JsonResponse, HttpResponse
-from django.shortcuts import get_object_or_404, redirect, render, resolve_url
+from django.shortcuts import redirect, render, resolve_url
 from django.template.response import TemplateResponse
 from django.utils import timezone
 from django.utils.html import strip_tags
@@ -801,6 +801,54 @@ def _todo_blocks_publish(todo: Todo, release: PackageRelease) -> bool:
         return True
 
     return False
+
+
+def _render_release_progress_error(
+    request,
+    release: "PackageRelease | None",
+    action: str,
+    message: str,
+    *,
+    status: int = 200,
+    debug_info: dict[str, object] | None = None,
+):
+    """Render a lightweight error response for the release progress view."""
+
+    if settings.DEBUG and debug_info:
+        debug_items = [
+            {"name": str(name), "value": str(value)}
+            for name, value in debug_info.items()
+        ]
+    else:
+        debug_items = []
+
+    release_url = ""
+    if release is not None:
+        try:
+            release_url = reverse("admin:core_packagerelease_change", args=[release.pk])
+        except NoReverseMatch:  # pragma: no cover - defensive fallback
+            release_url = ""
+
+    template = get_template("core/release_progress_error.html")
+    context = {
+        "release": release,
+        "action": action,
+        "message": message,
+        "debug_items": debug_items,
+        "show_debug": bool(debug_items),
+        "release_url": release_url,
+    }
+    content = template.render(context, request)
+    signals.template_rendered.send(
+        sender=template.__class__,
+        template=template,
+        context=context,
+        using=getattr(getattr(template, "engine", None), "name", None),
+    )
+    response = HttpResponse(content, status=status)
+    response.context = context
+    response.templates = [template]
+    return response
 
 
 def _sync_release_with_revision(release: PackageRelease) -> tuple[bool, str]:
@@ -1876,9 +1924,27 @@ def rfid_batch(request):
 
 @staff_member_required
 def release_progress(request, pk: int, action: str):
-    release = get_object_or_404(PackageRelease, pk=pk)
+    try:
+        release = PackageRelease.objects.get(pk=pk)
+    except PackageRelease.DoesNotExist:
+        return _render_release_progress_error(
+            request,
+            None,
+            action,
+            _("The requested release could not be found."),
+            status=404,
+            debug_info={"pk": pk, "action": action},
+        )
+
     if action != "publish":
-        raise Http404("Unknown action")
+        return _render_release_progress_error(
+            request,
+            release,
+            action,
+            _("Unknown release action."),
+            status=404,
+            debug_info={"action": action},
+        )
     session_key = f"release_publish_{pk}"
     lock_path = Path("locks") / f"release_publish_{pk}.json"
     restart_path = Path("locks") / f"release_publish_{pk}.restarts"
@@ -1893,7 +1959,18 @@ def release_progress(request, pk: int, action: str):
 
     if not release.is_current:
         if release.is_published:
-            raise Http404("Release is not current")
+            return _render_release_progress_error(
+                request,
+                release,
+                action,
+                _("This release was already published and no longer matches the repository version."),
+                status=409,
+                debug_info={
+                    "release_version": release.version,
+                    "repository_version": repo_version_before_sync,
+                    "pypi_url": release.pypi_url,
+                },
+            )
         updated, previous_version = _sync_release_with_revision(release)
         if updated:
             request.session.pop(session_key, None)
@@ -1905,7 +1982,17 @@ def release_progress(request, pk: int, action: str):
             for log_file in log_dir.glob(pattern):
                 log_file.unlink()
         if not release.is_current:
-            raise Http404("Release is not current")
+            return _render_release_progress_error(
+                request,
+                release,
+                action,
+                _("The repository VERSION file does not match this release."),
+                status=409,
+                debug_info={
+                    "release_version": release.version,
+                    "repository_version": repo_version_before_sync,
+                },
+            )
 
     if request.GET.get("restart"):
         count = 0
