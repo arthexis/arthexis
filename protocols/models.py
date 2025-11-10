@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Iterable
+from typing import Iterable, Sequence
 
 from django.db import models
 from django.db.models import Q
@@ -19,6 +19,43 @@ from .forwarding import (
     load_local_node_credentials,
     send_forwarding_metadata,
 )
+
+
+OCPP_FORWARDING_MESSAGES: Sequence[str] = (
+    "Authorize",
+    "BootNotification",
+    "DataTransfer",
+    "DiagnosticsStatusNotification",
+    "FirmwareStatusNotification",
+    "Heartbeat",
+    "MeterValues",
+    "StartTransaction",
+    "StatusNotification",
+    "StopTransaction",
+    "ClearedChargingLimit",
+    "CostUpdated",
+    "Get15118EVCertificate",
+    "GetCertificateStatus",
+    "LogStatusNotification",
+    "NotifyChargingLimit",
+    "NotifyCustomerInformation",
+    "NotifyDisplayMessages",
+    "NotifyEVChargingNeeds",
+    "NotifyEVChargingSchedule",
+    "NotifyEvent",
+    "NotifyMonitoringReport",
+    "NotifyReport",
+    "PublishFirmwareStatusNotification",
+    "ReportChargingProfiles",
+    "ReservationStatusUpdate",
+    "SecurityEventNotification",
+    "SignCertificate",
+    "TransactionEvent",
+)
+
+
+def default_forwarded_messages() -> list[str]:
+    return list(OCPP_FORWARDING_MESSAGES)
 
 
 class CPForwarderManager(EntityManager):
@@ -61,6 +98,13 @@ class CPForwarder(Entity):
     enabled = models.BooleanField(
         default=False,
         help_text=_("Enable to forward eligible charge points to the remote node."),
+    )
+    forwarded_messages = models.JSONField(
+        default=default_forwarded_messages,
+        blank=True,
+        help_text=_(
+            "Select the OCPP messages that should be forwarded to the remote node."
+        ),
     )
     is_running = models.BooleanField(
         default=False,
@@ -118,6 +162,9 @@ class CPForwarder(Entity):
 
     def save(self, *args, **kwargs):
         sync_chargers = kwargs.pop("sync_chargers", True)
+        self.forwarded_messages = self.sanitize_forwarded_messages(
+            self.forwarded_messages
+        )
         if self.source_node_id is None:
             local = Node.get_local()
             if local:
@@ -300,3 +347,33 @@ class CPForwarder(Entity):
         type(self).objects.filter(pk=self.pk).update(**changes)
         for key, value in changes.items():
             setattr(self, key, value)
+
+    @classmethod
+    def available_forwarded_messages(cls) -> Sequence[str]:
+        return tuple(OCPP_FORWARDING_MESSAGES)
+
+    @classmethod
+    def sanitize_forwarded_messages(cls, values: Iterable[str] | None) -> list[str]:
+        if values is None:
+            return list(OCPP_FORWARDING_MESSAGES)
+        if isinstance(values, str):
+            return list(OCPP_FORWARDING_MESSAGES)
+        cleaned: list[str] = []
+        order_map = {msg: idx for idx, msg in enumerate(OCPP_FORWARDING_MESSAGES)}
+        for item in values:
+            if item in order_map and item not in cleaned:
+                cleaned.append(item)
+        if cleaned:
+            cleaned.sort(key=lambda msg: order_map[msg])
+            return cleaned
+        if isinstance(values, list) and not values:
+            return []
+        return list(OCPP_FORWARDING_MESSAGES)
+
+    def get_forwarded_messages(self) -> list[str]:
+        return self.sanitize_forwarded_messages(self.forwarded_messages)
+
+    def forwards_action(self, action: str) -> bool:
+        if not action:
+            return False
+        return action in self.get_forwarded_messages()

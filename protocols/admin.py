@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from django import forms
 from django.contrib import admin, messages
 from django.utils.translation import gettext_lazy as _
 
@@ -8,8 +9,37 @@ from core.admin import EntityModelAdmin
 from .models import CPForwarder
 
 
+class CPForwarderForm(forms.ModelForm):
+    forwarded_messages = forms.MultipleChoiceField(
+        label=_("Forwarded messages"),
+        choices=[
+            (message, message)
+            for message in CPForwarder.available_forwarded_messages()
+        ],
+        widget=forms.CheckboxSelectMultiple,
+        required=False,
+        help_text=_("Choose which OCPP messages should be forwarded."),
+    )
+
+    class Meta:
+        model = CPForwarder
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        initial = CPForwarder.available_forwarded_messages()
+        if self.instance and self.instance.pk:
+            initial = self.instance.get_forwarded_messages()
+        self.fields["forwarded_messages"].initial = initial
+
+    def clean_forwarded_messages(self):
+        selected = self.cleaned_data.get("forwarded_messages") or []
+        return CPForwarder.sanitize_forwarded_messages(selected)
+
+
 @admin.register(CPForwarder)
 class CPForwarderAdmin(EntityModelAdmin):
+    form = CPForwarderForm
     list_display = (
         "display_name",
         "target_node",
@@ -55,6 +85,13 @@ class CPForwarderAdmin(EntityModelAdmin):
                     "created_at",
                     "updated_at",
                 )
+            },
+        ),
+        (
+            _("Forwarding"),
+            {
+                "classes": ("collapse",),
+                "fields": ("forwarded_messages",),
             },
         ),
     )

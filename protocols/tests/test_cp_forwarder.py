@@ -7,6 +7,7 @@ from django.utils import timezone
 
 from nodes.models import Node, NodeRole
 from ocpp.models import Charger
+from protocols.admin import CPForwarderForm
 from protocols.models import CPForwarder
 
 
@@ -105,3 +106,37 @@ class CPForwarderTests(TestCase):
         forwarder.set_running_state(False)
         forwarder.refresh_from_db()
         self.assertFalse(forwarder.is_running)
+
+    def test_forwarded_messages_default(self):
+        forwarder = CPForwarder.objects.create(target_node=self.remote, enabled=True)
+        self.assertEqual(
+            forwarder.get_forwarded_messages(),
+            list(CPForwarder.available_forwarded_messages()),
+        )
+
+    def test_forwarded_messages_respects_selection(self):
+        forwarder = CPForwarder.objects.create(
+            target_node=self.remote,
+            forwarded_messages=["Authorize", "BootNotification"],
+        )
+        self.assertEqual(
+            forwarder.forwarded_messages,
+            ["Authorize", "BootNotification"],
+        )
+        self.assertTrue(forwarder.forwards_action("Authorize"))
+        self.assertFalse(forwarder.forwards_action("Heartbeat"))
+
+
+class CPForwarderAdminFormTests(TestCase):
+    def test_form_defaults_to_all_messages(self):
+        form = CPForwarderForm()
+        self.assertCountEqual(
+            form.fields["forwarded_messages"].initial,
+            CPForwarder.available_forwarded_messages(),
+        )
+
+    def test_form_clean_sanitizes_selection(self):
+        form = CPForwarderForm()
+        form.cleaned_data = {"forwarded_messages": ["Authorize", "Unknown"]}
+        cleaned = form.clean_forwarded_messages()
+        self.assertEqual(cleaned, ["Authorize"])
