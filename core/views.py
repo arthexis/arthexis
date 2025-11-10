@@ -989,6 +989,44 @@ def _refresh_changelog_once(ctx, log_path: Path) -> None:
     ctx["changelog_refreshed"] = True
 
 
+def _purge_release_todos(log_path: Path, *, reason: str | None = None) -> int:
+    """Delete active TODOs and remove generated fixture files."""
+
+    removed = list(Todo.objects.filter(is_deleted=False))
+    removed_count = len(removed)
+    for todo in removed:
+        todo.delete()
+
+    if removed_count:
+        summary = f"Removed {removed_count} TODO"
+        if removed_count != 1:
+            summary += "s"
+        if reason:
+            summary += f" ({reason})"
+        _append_log(log_path, summary)
+    elif reason:
+        _append_log(log_path, f"No TODOs required removal ({reason})")
+
+    removed_fixtures: list[Path] = []
+    for path in TODO_FIXTURE_DIR.glob("todos__*.json"):
+        removed_fixtures.append(path)
+        path.unlink()
+
+    if removed_fixtures:
+        formatted = ", ".join(_format_path(path) for path in removed_fixtures)
+        subprocess.run(
+            ["git", "add", *[str(path) for path in removed_fixtures]],
+            check=False,
+        )
+        subprocess.run(
+            ["git", "commit", "-m", "chore: remove TODO fixtures"],
+            check=False,
+        )
+        _append_log(log_path, f"Removed TODO fixtures {formatted}")
+
+    return removed_count
+
+
 def _step_check_todos(release, ctx, log_path: Path, *, user=None) -> None:
     _refresh_changelog_once(ctx, log_path)
 
@@ -1017,22 +1055,32 @@ def _step_check_todos(release, ctx, log_path: Path, *, user=None) -> None:
         ctx["todos"] = pending_values
         ctx["todos_required"] = True
         raise PendingTodos()
-    todos = list(Todo.objects.filter(is_deleted=False))
-    for todo in todos:
-        todo.delete()
-    removed = []
-    for path in TODO_FIXTURE_DIR.glob("todos__*.json"):
-        removed.append(str(path))
-        path.unlink()
-    if removed:
-        subprocess.run(["git", "add", *removed], check=False)
-        subprocess.run(
-            ["git", "commit", "-m", "chore: remove TODO fixtures"],
-            check=False,
-        )
+    _purge_release_todos(log_path, reason="release checklist acknowledged")
     ctx.pop("todos", None)
     ctx.pop("todos_required", None)
     ctx["todos_ack"] = True
+
+
+def _major_minor_version_changed(previous: str, current: str) -> bool:
+    """Return ``True`` when the version bump changes major or minor."""
+
+    previous_clean = (previous or "").strip().rstrip("+")
+    current_clean = (current or "").strip().rstrip("+")
+    if not previous_clean or not current_clean:
+        return False
+
+    from packaging.version import InvalidVersion, Version
+
+    try:
+        prev_version = Version(previous_clean)
+        curr_version = Version(current_clean)
+    except InvalidVersion:
+        return False
+
+    return (
+        prev_version.major != curr_version.major
+        or prev_version.minor != curr_version.minor
+    )
 
 
 def _step_check_version(release, ctx, log_path: Path, *, user=None) -> None:
@@ -1164,8 +1212,27 @@ def _step_check_version(release, ctx, log_path: Path, *, user=None) -> None:
         else:
             sync_error = None
 
+    previous_repo_version = getattr(release, "_repo_version_before_sync", "")
+
     if sync_error is not None:
         raise sync_error
+
+    dropped_versions: list[str] = ctx.setdefault("todo_purged_versions", [])
+    if (
+        release.version not in dropped_versions
+        and _major_minor_version_changed(previous_repo_version, release.version)
+    ):
+        _purge_release_todos(
+            log_path,
+            reason=(
+                f"version change from {previous_repo_version or 'unknown'} "
+                f"to {release.version}"
+            ),
+        )
+        dropped_versions.append(release.version)
+        ctx.pop("todos", None)
+        ctx.pop("todos_required", None)
+        ctx.setdefault("todos_ack", True)
 
     version_path = Path("VERSION")
     if version_path.exists():

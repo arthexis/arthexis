@@ -59,16 +59,10 @@ class TodoFixtureDateTests(TestCase):
     def test_core_todo_fixtures_define_created_on(self):
         base_dir = Path(settings.BASE_DIR) / "core" / "fixtures"
         fixtures = sorted(base_dir.glob("todo__*.json"))
-        self.assertTrue(fixtures)
-
-        for path in fixtures:
-            data = json.loads(path.read_text())
-            self.assertTrue(data, msg=f"{path.name} contains no fixture data")
-
-            for obj in data:
-                fields = obj.get("fields", {})
-                self.assertIn("created_on", fields, msg=f"{path.name} missing created_on field")
-                self.assertTrue(fields["created_on"], msg=f"{path.name} has blank created_on value")
+        self.assertFalse(
+            fixtures,
+            "Legacy TODO fixtures should not ship with the project",
+        )
 
 
 class SiteFixtureTests(TestCase):

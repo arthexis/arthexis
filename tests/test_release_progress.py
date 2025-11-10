@@ -168,6 +168,35 @@ class ReleaseProgressViewTests(TestCase):
         self.assertIn(["git", "add", "VERSION"], commands)
         self.assertIn(["git", "commit", "-m", "chore: update version"], commands)
 
+    @mock.patch("core.views.release_utils._git_clean", return_value=True)
+    @mock.patch("core.views.release_utils.network_available", return_value=False)
+    def test_major_minor_version_change_purges_todos(self, net, git_clean):
+        todo = Todo.objects.create(request="Legacy task", is_seed_data=True)
+        self.release.version = "1.0.0"
+        setattr(self.release, "_repo_version_before_sync", "0.9.9")
+        self.version_path.write_text("0.9.9", encoding="utf-8")
+
+        log_path = self.log_dir / self.log_name
+        ctx: dict[str, object] = {}
+
+        with mock.patch("core.views._sync_with_origin_main") as sync_main:
+            sync_main.return_value = None
+            with mock.patch("core.views.subprocess.run") as run:
+                run.return_value = subprocess.CompletedProcess(["git"], 0)
+                core_views._step_check_version(self.release, ctx, log_path)
+
+        self.assertFalse(Todo.objects.filter(pk=todo.pk).exists())
+        self.assertIn(
+            self.release.version,
+            ctx.get("todo_purged_versions", []),
+        )
+        self.assertTrue(log_path.exists())
+        log_content = log_path.read_text(encoding="utf-8")
+        self.assertIn(
+            "Removed 1 TODO (version change from 0.9.9 to 1.0.0)",
+            log_content,
+        )
+
     @mock.patch("core.views.PackageRelease.dump_fixture")
     def test_publish_step_records_warning_and_completes(self, dump_fixture):
         session = self.client.session
