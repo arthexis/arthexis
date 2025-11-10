@@ -502,11 +502,13 @@ class EnvRefreshTodoFixtureTests(TestCase):
         todo.save(update_fields=["done_on"])
         todo.delete()
         fixture_path = self.fixture_root / "todos__validate_screen_example.json"
+        created_on_value = timezone.now().replace(microsecond=0).isoformat()
         fixture_data = [
             {
                 "model": "core.todo",
                 "fields": {
                     "request": request_text,
+                    "created_on": created_on_value,
                     "url": "/admin/",
                     "request_details": "",
                 },
@@ -528,11 +530,13 @@ class EnvRefreshTodoFixtureTests(TestCase):
         todo = Todo.objects.create(request="Task", is_seed_data=True)
         done_on_value = timezone.now().replace(microsecond=0)
         fixture_path = self.fixture_root / "todo__task_env_refresh_completion.json"
+        created_on_value = timezone.now().replace(microsecond=0).isoformat()
         fixture_data = [
             {
                 "model": "core.todo",
                 "fields": {
                     "request": "Task",
+                    "created_on": created_on_value,
                     "url": "",
                     "request_details": "",
                     "done_on": done_on_value.isoformat(),

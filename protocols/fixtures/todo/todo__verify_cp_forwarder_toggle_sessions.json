@@ -3,6 +3,7 @@
     "model": "core.todo",
     "fields": {
       "request": "Verify CP forwarder websocket toggling",
+      "created_on": "2024-01-01T00:00:00Z",
       "url": "/admin/protocols/cpforwarder/",
       "request_details": "In the admin CP Forwarder list, enable forwarding for a charger with export enabled and confirm the websocket session establishes immediately. Disable and delete the forwarder to ensure sessions close and status fields update without Celery.",
       "done_on": null,
