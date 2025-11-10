@@ -504,6 +504,10 @@ class Node(Entity):
 
             for scheme, scheme_default_port in (("https", 443), ("http", 80)):
                 base = f"{scheme}://{formatted_host}"
+                include_default_port = (
+                    port_override is None and effective_port == scheme_default_port
+                )
+
                 if effective_port and (
                     port_override is not None or effective_port != scheme_default_port
                 ):
@@ -511,10 +515,12 @@ class Node(Entity):
                     if explicit not in seen:
                         seen.add(explicit)
                         yield explicit
-                candidate = f"{base}{combined_path}"
-                if candidate not in seen:
-                    seen.add(candidate)
-                    yield candidate
+
+                if include_default_port:
+                    candidate = f"{base}{combined_path}"
+                    if candidate not in seen:
+                        seen.add(candidate)
+                        yield candidate
 
     @staticmethod
     def get_current_mac() -> str:

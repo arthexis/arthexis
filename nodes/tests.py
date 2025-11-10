@@ -2416,6 +2416,32 @@ class NodeAdminTests(TestCase):
         combined = "".join(urls)
         self.assertNotIn("interface:8443", combined)
 
+    def test_iter_remote_urls_avoid_default_ports_when_non_standard(self):
+        node = Node(
+            hostname="remote.example.com",
+            port=8888,
+            public_endpoint="",
+        )
+
+        urls = list(node.iter_remote_urls("/nodes/net-message/"))
+
+        self.assertIn(
+            "https://remote.example.com:8888/nodes/net-message/",
+            urls,
+        )
+        self.assertIn(
+            "http://remote.example.com:8888/nodes/net-message/",
+            urls,
+        )
+        self.assertNotIn(
+            "https://remote.example.com/nodes/net-message/",
+            urls,
+        )
+        self.assertNotIn(
+            "http://remote.example.com/nodes/net-message/",
+            urls,
+        )
+
 
     @pytest.mark.feature("screenshot-poll")
     @override_settings(SCREENSHOT_SOURCES=["/one", "/two"])

@@ -1,0 +1,15 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "is_seed_data": false,
+      "is_deleted": false,
+      "request": "Verify admin dashboard loads without NetMessage timeout spam",
+      "created_on": "2024-01-01T00:00:00Z",
+      "url": "/admin/",
+      "request_details": "Log in as a suite admin and load the Django admin index. Confirm the page renders successfully without a 404 and review the server logs to ensure the visit does not emit repeated 'Failed to propagate NetMessage' timeout errors.",
+      "generated_for_version": "",
+      "generated_for_revision": ""
+    }
+  }
+]
