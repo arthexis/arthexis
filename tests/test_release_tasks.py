@@ -38,7 +38,7 @@ def test_no_upgrade_triggers_startup(monkeypatch, tmp_path):
 
     run_recorder = CommandRecorder()
     monkeypatch.setattr(tasks.subprocess, "run", run_recorder)
-    monkeypatch.setattr(tasks.subprocess, "check_output", lambda *a, **k: b"1.0")
+    monkeypatch.setattr(tasks.subprocess, "check_output", lambda *a, **k: "1.0")
 
     scheduled = []
 
@@ -77,7 +77,7 @@ def test_upgrade_shows_message(monkeypatch, tmp_path):
 
     run_recorder = CommandRecorder()
     monkeypatch.setattr(tasks.subprocess, "run", run_recorder)
-    monkeypatch.setattr(tasks.subprocess, "check_output", lambda *a, **k: b"2.0")
+    monkeypatch.setattr(tasks.subprocess, "check_output", lambda *a, **k: "2.0")
 
     notify_calls = []
     import core.notifications as notifications
@@ -133,9 +133,9 @@ def test_stable_mode_skips_patch_upgrade(monkeypatch, tmp_path):
 
     def fake_check_output(args, cwd=None, **kwargs):
         if args[:3] == ["git", "rev-parse", "origin/main"]:
-            return b"remote"
+            return "remote"
         if args[:3] == ["git", "show", "origin/main:VERSION"]:
-            return b"1.2.4"
+            return "1.2.4"
         raise AssertionError(f"Unexpected command: {args}")
 
     monkeypatch.setattr(tasks.subprocess, "check_output", fake_check_output)
@@ -183,9 +183,9 @@ def test_stable_mode_triggers_minor_upgrade(monkeypatch, tmp_path):
 
     def fake_check_output(args, cwd=None, **kwargs):
         if args[:3] == ["git", "rev-parse", "origin/main"]:
-            return b"remote"
+            return "remote"
         if args[:3] == ["git", "show", "origin/main:VERSION"]:
-            return b"1.3.0"
+            return "1.3.0"
         raise AssertionError(f"Unexpected command: {args}")
 
     monkeypatch.setattr(tasks.subprocess, "check_output", fake_check_output)
@@ -272,7 +272,7 @@ def test_verify_auto_upgrade_health_reverts_and_records_revision(
     monkeypatch.setattr(
         tasks.subprocess,
         "check_output",
-        lambda *a, **k: b"deadbeef",
+        lambda *a, **k: "deadbeef",
     )
 
     result = tasks.verify_auto_upgrade_health.run(attempt=1)
@@ -299,11 +299,11 @@ def test_check_github_updates_skips_blocked_revision(monkeypatch, tmp_path):
 
     def fake_check_output(args, cwd=None, **kwargs):
         if args[:3] == ["git", "rev-parse", "main"]:
-            return b"local"
+            return "local"
         if args[:3] == ["git", "rev-parse", "origin/main"]:
-            return b"blocked"
+            return "blocked"
         if args[:3] == ["git", "show", "origin/main:VERSION"]:
-            return b"2.0"
+            return "2.0"
         raise AssertionError(f"Unexpected command: {args}")
 
     monkeypatch.setattr(tasks.subprocess, "check_output", fake_check_output)

@@ -4,6 +4,7 @@ import logging
 import shutil
 import re
 import subprocess
+import time
 from pathlib import Path
 import urllib.error
 import urllib.request
@@ -89,6 +90,99 @@ def _append_auto_upgrade_log(base_dir: Path, message: str) -> None:
             fh.write(f"{timestamp} {message}\n")
     except Exception:  # pragma: no cover - best effort logging only
         logger.warning("Failed to append auto-upgrade log entry: %s", message)
+
+
+def _systemctl_command() -> list[str]:
+    """Return the base systemctl command, preferring sudo when available."""
+
+    if shutil.which("systemctl") is None:
+        return []
+    if shutil.which("sudo") is not None:
+        return ["sudo", "systemctl"]
+    return ["systemctl"]
+
+
+def _wait_for_service_restart(
+    base_dir: Path, service: str, timeout: int = 30
+) -> bool:
+    """Return ``True`` when ``service`` reports active within ``timeout`` seconds."""
+
+    if not service:
+        return True
+
+    command = _systemctl_command()
+    if not command:
+        return True
+
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        result = subprocess.run(
+            [*command, "is-active", "--quiet", service],
+            cwd=base_dir,
+            check=False,
+        )
+        if result.returncode == 0:
+            return True
+        time.sleep(2)
+
+    subprocess.run(
+        [*command, "status", service, "--no-pager"],
+        cwd=base_dir,
+        check=False,
+    )
+    return False
+
+
+def _revert_after_restart_failure(base_dir: Path, service: str) -> None:
+    """Revert the latest upgrade when ``service`` fails to restart."""
+
+    _append_auto_upgrade_log(
+        base_dir,
+        (
+            f"Service {service or 'unknown'} failed to restart after upgrade; "
+            "reverting to failover branch"
+        ),
+    )
+    try:
+        subprocess.run(["./upgrade.sh", "--revert"], cwd=base_dir, check=True)
+    except subprocess.CalledProcessError:
+        logger.exception("Automatic revert failed after restart failure")
+        _append_auto_upgrade_log(
+            base_dir,
+            "Automatic revert after restart failure was unsuccessful; manual intervention required",
+        )
+        return
+
+    command = _systemctl_command()
+    if not command or not service:
+        return
+
+    try:
+        subprocess.run([*command, "restart", service], cwd=base_dir, check=True)
+    except subprocess.CalledProcessError:
+        logger.exception("Failed to restart %s after reverting to failover branch", service)
+        _append_auto_upgrade_log(
+            base_dir,
+            (
+                f"Restart after reverting to failover branch failed for {service}; "
+                "manual intervention required"
+            ),
+        )
+        return
+
+    if _wait_for_service_restart(base_dir, service):
+        _append_auto_upgrade_log(
+            base_dir,
+            f"Service {service} restarted successfully from failover branch",
+        )
+    else:
+        _append_auto_upgrade_log(
+            base_dir,
+            (
+                f"Service {service} is still inactive after reverting; "
+                "manual intervention required"
+            ),
+        )
 
 
 def _resolve_release_severity(version: str | None) -> str:
@@ -537,6 +631,23 @@ def check_github_updates(channel_override: str | None = None) -> None:
                     service,
                 ]
             )
+            if service:
+                _append_auto_upgrade_log(
+                    base_dir,
+                    f"Waiting for {service} to restart after upgrade",
+                )
+                if not _wait_for_service_restart(base_dir, service):
+                    _revert_after_restart_failure(base_dir, service)
+                    return
+                _append_auto_upgrade_log(
+                    base_dir,
+                    f"Service {service} restarted successfully after upgrade",
+                )
+            else:
+                _append_auto_upgrade_log(
+                    base_dir,
+                    "Service restart requested but service lock was empty; skipping automatic verification",
+                )
         else:
             subprocess.run(["pkill", "-f", "manage.py runserver"])
 
@@ -612,11 +723,11 @@ def _schedule_health_check(next_attempt: int) -> None:
 def _handle_failed_health_check(base_dir: Path, detail: str) -> None:
     revision = ""
     try:
-        revision = (
-            subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=base_dir)
-            .decode()
-            .strip()
-        )
+        output = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=base_dir)
+        if isinstance(output, bytes):
+            revision = output.decode().strip()
+        else:
+            revision = str(output).strip()
     except Exception:  # pragma: no cover - best effort capture
         logger.warning("Failed to determine revision during auto-upgrade revert")
 

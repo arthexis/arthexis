@@ -279,6 +279,100 @@ cleanup_failover_branches() {
   done
 }
 
+wait_for_service_active() {
+  local service="$1"
+  if [ -z "$service" ]; then
+    return 0
+  fi
+  if ! command -v systemctl >/dev/null 2>&1; then
+    return 0
+  fi
+
+  local -a systemctl_cmd=(systemctl)
+  if command -v sudo >/dev/null 2>&1; then
+    systemctl_cmd=(sudo systemctl)
+  fi
+
+  local deadline=$((SECONDS + 60))
+  echo "Waiting for service $service to report active..."
+  while (( SECONDS < deadline )); do
+    if "${systemctl_cmd[@]}" is-active --quiet "$service"; then
+      echo "Service $service is active."
+      return 0
+    fi
+    sleep 2
+  done
+
+  "${systemctl_cmd[@]}" status "$service" --no-pager || true
+  return 1
+}
+
+restart_services() {
+  echo "Restarting services..."
+  if [ -f "$LOCK_DIR/service.lck" ]; then
+    local service_name
+    service_name="$(cat "$LOCK_DIR/service.lck")"
+    if command -v systemctl >/dev/null 2>&1; then
+      local -a systemctl_cmd=(systemctl)
+      if command -v sudo >/dev/null 2>&1; then
+        systemctl_cmd=(sudo systemctl)
+      fi
+      echo "Existing services before restart:"
+      "${systemctl_cmd[@]}" status "$service_name" --no-pager || true
+      if [ -f "$LOCK_DIR/celery.lck" ]; then
+        "${systemctl_cmd[@]}" status "celery-$service_name" --no-pager || true
+        "${systemctl_cmd[@]}" status "celery-beat-$service_name" --no-pager || true
+      fi
+    fi
+    if ! ./start.sh; then
+      echo "Service restart command failed." >&2
+      return 1
+    fi
+    if ! wait_for_service_active "$service_name"; then
+      echo "Service $service_name did not become active after restart." >&2
+      return 1
+    fi
+    return 0
+  fi
+
+  nohup ./start.sh >/dev/null 2>&1 &
+  echo "Services restart triggered"
+  return 0
+}
+
+revert_after_failed_restart() {
+  local branch="$LAST_FAILOVER_BRANCH"
+
+  if [ -z "$branch" ]; then
+    echo "No failover branch recorded; cannot revert automatically." >&2
+    return 1
+  fi
+
+  echo "Reverting to failover branch $branch after failed restart..."
+  if ! git reset --hard "$branch"; then
+    echo "Failed to reset repository to $branch." >&2
+    return 1
+  fi
+  arthexis_update_version_marker "$BASE_DIR"
+
+  local backup_path="$BACKUP_DIR/${branch}.sqlite3"
+  if [ -f "$backup_path" ]; then
+    if cp "$backup_path" db.sqlite3; then
+      echo "Restored database from backups/${branch}.sqlite3"
+    else
+      echo "Failed to restore database from $backup_path" >&2
+    fi
+  fi
+
+  if ! restart_services; then
+    echo "Restart after reverting to failover branch failed; manual intervention required." >&2
+    return 1
+  fi
+
+  echo "Services restarted from failover branch $branch"
+  return 0
+}
+
 versions_share_minor() {
   local first="$1"
   local second="$2"
@@ -598,18 +692,15 @@ BEATSERVICEEOF
 fi
 
 if [[ $NO_RESTART -eq 0 ]]; then
-  echo "Restarting services..."
-  if [ -f "$LOCK_DIR/service.lck" ]; then
-    SERVICE_NAME="$(cat "$LOCK_DIR/service.lck")"
-    echo "Existing services before restart:"
-    systemctl status "$SERVICE_NAME" --no-pager || true
-    if [ -f "$LOCK_DIR/celery.lck" ]; then
-      systemctl status "celery-$SERVICE_NAME" --no-pager || true
-      systemctl status "celery-beat-$SERVICE_NAME" --no-pager || true
+  if ! restart_services; then
+    echo "Detected failed restart after upgrade." >&2
+    if revert_after_failed_restart; then
+      echo "Upgrade reverted after restart failure. Manual verification recommended." >&2
+    else
+      echo "Automatic revert after restart failure was unsuccessful; manual intervention required." >&2
     fi
+    exit 1
   fi
-  nohup ./start.sh >/dev/null 2>&1 &
-  echo "Services restart triggered"
 fi
 
 arthexis_refresh_desktop_shortcuts "$BASE_DIR"
