@@ -60,7 +60,7 @@ psycopg==3.2.9
 psycopg-binary==3.2.12
 pyasn1==0.6.1
 pyasn1_modules==0.4.2
-pycparser==2.22
+pycparser==2.23
 pydantic==2.12.3
 pydantic_core==2.41.4
 pyOpenSSL==25.1.0
