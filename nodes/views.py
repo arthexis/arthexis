@@ -818,18 +818,13 @@ def _node_display_name(node: Node) -> str:
 
 
 def _announce_visitor_join(new_node: Node, relation: Node.Relation | None) -> None:
-    """Emit a network message when the visitor node links to a host."""
+    """Retained for compatibility; Net Message broadcasts are no longer emitted."""
 
-    if relation != Node.Relation.UPSTREAM:
-        return
-
-    local_node = Node.get_local()
-    if not local_node:
-        return
-
-    visitor_name = _node_display_name(local_node)
-    host_name = _node_display_name(new_node)
-    NetMessage.broadcast(subject=f"NODE {visitor_name}", body=f"JOINS {host_name}")
+    # Historical behavior broadcasted a Net Message whenever a visitor node
+    # linked to an upstream host. This side effect has been removed to keep the
+    # network chatter focused on actionable events, but the helper is preserved
+    # so callers remain stable.
+    return None
 
 
 @csrf_exempt
