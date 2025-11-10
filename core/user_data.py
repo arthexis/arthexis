@@ -452,12 +452,9 @@ def _on_login(sender, request, user, **kwargs):
     ):
         return
 
-    username = _username_for(user) or "unknown"
-    ip_address = _get_request_ip(request) or "unknown"
-
-    from nodes.models import NetMessage
-
-    NetMessage.broadcast(subject=f"login {username}", body=f"@ {ip_address}")
+    # Login Net Messages were previously sent for staff authentication events.
+    # They have been retired in favor of less noisy auditing, so no additional
+    # side effects occur here beyond loading fixtures.
 
 
 @receiver(post_save, sender=settings.AUTH_USER_MODEL)

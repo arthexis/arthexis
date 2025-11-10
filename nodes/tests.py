@@ -1221,7 +1221,7 @@ class RegisterVisitorNodeMessageTests(TestCase):
             role=self.role,
         )
 
-    def test_register_node_emits_join_message_when_upstream_added(self):
+    def test_register_node_does_not_emit_join_message_when_upstream_added(self):
         payload = {
             "hostname": "host-node",
             "address": "10.0.0.10",
@@ -1239,9 +1239,7 @@ class RegisterVisitorNodeMessageTests(TestCase):
             )
 
         self.assertEqual(response.status_code, 200)
-        mock_broadcast.assert_called_once_with(
-            subject="NODE visitor-node", body="JOINS host-node"
-        )
+        mock_broadcast.assert_not_called()
 
     def test_register_node_skips_message_when_not_upstream(self):
         payload = {

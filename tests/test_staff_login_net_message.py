@@ -15,7 +15,7 @@ class StaffLoginNetMessageTests(TestCase):
     def tearDown(self):
         user_data._shared_fixtures_loaded = self._original_shared_loaded
 
-    def test_staff_login_sends_net_message(self):
+    def test_staff_login_does_not_send_net_message(self):
         user = self.User.objects.create_user(
             username="staffer", password="pwd", is_staff=True
         )
@@ -23,11 +23,11 @@ class StaffLoginNetMessageTests(TestCase):
 
         user_data._on_login(sender=self.User, request=request, user=user)
 
-        message = NetMessage.objects.filter(subject="login staffer").order_by("-created").first()
-        self.assertIsNotNone(message)
-        self.assertEqual(message.body, "@ 198.51.100.10")
+        self.assertFalse(
+            NetMessage.objects.filter(subject__startswith="login ").exists()
+        )
 
-    def test_forwarded_for_ip_precedence(self):
+    def test_forwarded_for_ip_does_not_send_net_message(self):
         user = self.User.objects.create_user(
             username="forwarded", password="pwd", is_staff=True
         )
@@ -39,9 +39,9 @@ class StaffLoginNetMessageTests(TestCase):
 
         user_data._on_login(sender=self.User, request=request, user=user)
 
-        message = NetMessage.objects.filter(subject="login forwarded").order_by("-created").first()
-        self.assertIsNotNone(message)
-        self.assertEqual(message.body, "@ 198.51.100.1")
+        self.assertFalse(
+            NetMessage.objects.filter(subject__startswith="login ").exists()
+        )
 
     def test_non_staff_login_does_not_send_net_message(self):
         user = self.User.objects.create_user(username="member", password="pwd")
