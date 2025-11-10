@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Verify Watchtower and Control navigation landings",
+      "created_on": "2024-01-01T00:00:00Z",
+      "url": "/",
+      "request_details": "Switch the node role to Watchtower and Control to reproduce the automated navigation crawl. From the index page, visit each landing below and confirm the content loads without 404s or server errors. Capture any redirects or permission warnings encountered.\n- /ocpp/cpms/dashboard/\n- /ocpp/simulator/\n- /ocpp/evcs/simulator/\n- /ocpp/rfid/\n- /read/docs/cookbooks/install-start-stop-upgrade-uninstall",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.31"
+    }
+  }
+]
