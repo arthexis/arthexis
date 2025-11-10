@@ -2258,6 +2258,13 @@ class NetMessage(Entity):
             if node and (not local or node.pk != local.pk):
                 self.propagated_to.add(node)
 
+        if getattr(settings, "NET_MESSAGE_DISABLE_PROPAGATION", False):
+            if not self.complete:
+                self.complete = True
+                if self.pk:
+                    self.save(update_fields=["complete"])
+            return
+
         filtered_nodes = Node.objects.all()
         if self.filter_node_id:
             filtered_nodes = filtered_nodes.filter(pk=self.filter_node_id)

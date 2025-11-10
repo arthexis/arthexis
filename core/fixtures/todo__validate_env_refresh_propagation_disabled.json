@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Verify env refresh disables Net Message propagation",
+      "url": "admin:nodes_netmessage_changelist",
+      "request_details": "Execute ./env-refresh.sh on a development controller and watch the terminal output. Confirm that no Net Message propagation attempts are logged and that no HTTPS requests are issued to downstream nodes during the refresh.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.30",
+      "created_on": "2025-11-10T00:45:00Z"
+    }
+  }
+]

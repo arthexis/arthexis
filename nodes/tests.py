@@ -3813,6 +3813,21 @@ class NetMessagePropagationTests(TestCase):
         self.assertEqual(msg.reach, self.role)
 
     @patch("requests.post")
+    @override_settings(NET_MESSAGE_DISABLE_PROPAGATION=True)
+    @patch("core.notifications.notify", return_value=False)
+    def test_propagate_skips_remote_when_disabled(
+        self, mock_notify, mock_post
+    ):
+        msg = NetMessage.objects.create(subject="s", body="b", reach=self.role)
+        with patch.object(Node, "get_local", return_value=self.local):
+            msg.propagate()
+
+        mock_notify.assert_called_once_with("s", "b")
+        mock_post.assert_not_called()
+        self.assertTrue(msg.complete)
+        self.assertEqual(msg.propagated_to.count(), 0)
+
+    @patch("requests.post")
     @patch("core.notifications.notify")
     def test_propagate_forwards_to_three_and_notifies_local(
         self, mock_notify, mock_post

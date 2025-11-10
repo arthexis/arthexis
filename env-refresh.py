@@ -36,6 +36,7 @@ from django.db.migrations.loader import MigrationLoader
 from django.core.serializers.base import DeserializationError
 
 
+os.environ.setdefault("NET_MESSAGE_DISABLE_PROPAGATION", "1")
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 django.setup()
 
