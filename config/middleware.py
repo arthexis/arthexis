@@ -1,10 +1,34 @@
 import socket
+import sys
+
+from django.conf import settings
 from django.core.exceptions import DisallowedHost
-from django.http import HttpResponsePermanentRedirect
+from django.http import Http404, HttpResponsePermanentRedirect
+from django.utils.deprecation import MiddlewareMixin
+from django.views.debug import technical_404_response, technical_500_response
+
 from nodes.models import Node
 from utils.sites import get_site
 
 from .active_app import set_active_app
+
+
+class DebugFriendlyErrorMiddleware(MiddlewareMixin):
+    """Render Django's technical error pages when debugging is enabled."""
+
+    def process_exception(self, request, exception):
+        if not settings.DEBUG:
+            return None
+
+        if isinstance(exception, Http404):
+            return technical_404_response(request, exception)
+
+        exc_type, exc_value, exc_tb = sys.exc_info()
+        if exc_type is None:
+            exc_type = type(exception)
+            exc_value = exception
+            exc_tb = exception.__traceback__
+        return technical_500_response(request, exc_type, exc_value, exc_tb)
 
 
 class ActiveAppMiddleware:

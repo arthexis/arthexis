@@ -1,0 +1,13 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Verify debug error pages show detailed context",
+      "url": "",
+      "request_details": "Start the app with DEBUG=True and visit a missing path such as /definitely-missing/ plus trigger a server error (for example, by temporarily raising RuntimeError in a view) to confirm the technical Django debug pages appear instead of plain text responses.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.31"
+    }
+  }
+]
