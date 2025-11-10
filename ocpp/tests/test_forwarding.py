@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import base64
 import json
+
+import tests.conftest  # noqa: F401
 from unittest.mock import AsyncMock, Mock, patch
 
 from asgiref.sync import async_to_sync
@@ -74,6 +76,11 @@ class ForwardingTaskTests(TestCase):
         mock_create.assert_called_once()
         session = forwarding_service.get_session(charger.pk)
         self.assertIsNotNone(session)
+        self.assertEqual(session.forwarder_id, forwarder.pk)
+        self.assertEqual(
+            session.forwarded_messages,
+            tuple(forwarder.get_forwarded_messages()),
+        )
         updated = Charger.objects.get(pk=charger.pk)
         self.assertEqual(updated.forwarded_to, self.remote)
         self.assertIsNotNone(updated.forwarding_watermark)
@@ -116,6 +123,52 @@ class ForwardingTaskTests(TestCase):
 
         self.assertEqual(second, 0)
         mock_create.assert_not_called()
+
+    @patch("protocols.models.send_forwarding_metadata", return_value=(True, None))
+    @patch("protocols.models.load_local_node_credentials")
+    @patch("ocpp.forwarding_service.create_connection")
+    def test_sync_updates_existing_session_messages(
+        self, mock_create, mock_credentials, _mock_metadata
+    ):
+        mock_credentials.return_value = (self.local, object(), None)
+        charger = Charger.objects.create(
+            charger_id="CP-UPDATE",
+            node_origin=self.local,
+            manager_node=self.local,
+            export_transactions=True,
+        )
+        forwarder = CPForwarder.objects.create(target_node=self.remote, enabled=True)
+
+        connection = Mock()
+        connection.connected = True
+        mock_create.return_value = connection
+
+        with patch.object(Node, "get_local", return_value=self.local), patch.object(
+            Node,
+            "iter_remote_urls",
+            lambda self, path: iter(["https://remote.example" + path]),
+        ):
+            push_forwarded_charge_points()
+
+        session = forwarding_service.get_session(charger.pk)
+        self.assertEqual(
+            session.forwarded_messages,
+            tuple(forwarder.get_forwarded_messages()),
+        )
+
+        forwarder.forwarded_messages = ["Authorize"]
+        forwarder.save(update_fields=["forwarded_messages"], sync_chargers=False)
+
+        with patch.object(Node, "get_local", return_value=self.local), patch.object(
+            Node,
+            "iter_remote_urls",
+            lambda self, path: iter(["https://remote.example" + path]),
+        ):
+            push_forwarded_charge_points()
+
+        session = forwarding_service.get_session(charger.pk)
+        self.assertEqual(session.forwarder_id, forwarder.pk)
+        self.assertEqual(session.forwarded_messages, ("Authorize",))
 
     @patch("ocpp.forwarding_service.create_connection", side_effect=WebSocketException("boom"))
     def test_push_forwarded_charge_points_reports_failures(self, mock_create):
@@ -314,6 +367,110 @@ class ForwardingConsumerSyncTests(TestCase):
 
         mock_sync.assert_called_once_with(refresh_forwarders=False)
 
+
+class ForwardingMessageFilterTests(TestCase):
+    def setUp(self):
+        self.role, _ = NodeRole.objects.get_or_create(name="Terminal")
+        self.local = Node.objects.create(
+            hostname="local-filter",
+            address="127.0.0.1",
+            port=9010,
+            mac_address="00:11:22:33:44:99",
+            role=self.role,
+            public_endpoint="local-filter",
+        )
+        self.remote = Node.objects.create(
+            hostname="remote-filter",
+            address="198.51.100.50",
+            port=8443,
+            mac_address="00:11:22:33:44:aa",
+            role=self.role,
+            public_endpoint="remote-filter",
+        )
+        store.connections.clear()
+        store.logs["charger"].clear()
+        store.pending_calls.clear()
+        forwarding_service.clear_sessions()
+        self.addCleanup(forwarding_service.clear_sessions)
+
+    @patch(
+        "ocpp.consumers.CSMSConsumer._get_account",
+        new_callable=AsyncMock,
+        return_value=None,
+    )
+    @patch("ocpp.consumers.CSMSConsumer._record_forwarding_activity", new_callable=AsyncMock)
+    @patch("ocpp.consumers.store.add_session_message")
+    @patch("ocpp.consumers.store.add_log")
+    @patch("ocpp.consumers.store.consume_triggered_followup", return_value=None)
+    def test_forwarding_respects_message_selection(
+        self,
+        _mock_followup,
+        _mock_log,
+        _mock_session,
+        mock_record,
+        _mock_get_account,
+    ):
+        forwarder = CPForwarder.objects.create(
+            target_node=self.remote,
+            forwarded_messages=["BootNotification"],
+            enabled=True,
+        )
+        charger = Charger.objects.create(
+            charger_id="CP-FILTER",
+            node_origin=self.local,
+            manager_node=self.local,
+            export_transactions=True,
+            forwarded_to=self.remote,
+        )
+
+        connection = Mock()
+        connection.connected = True
+        session = forwarding_service.ForwardingSession(
+            charger_pk=charger.pk,
+            node_id=self.remote.pk,
+            url="wss://remote-filter",
+            connection=connection,
+            connected_at=timezone.now(),
+            forwarder_id=forwarder.pk,
+            forwarded_messages=tuple(forwarder.get_forwarded_messages()),
+        )
+        forwarding_service._FORWARDING_SESSIONS[charger.pk] = session
+
+        consumer = CSMSConsumer()
+        consumer.scope = {"headers": [], "client": ("198.51.100.10", 1234)}
+        consumer.channel_name = "test-channel"
+        consumer.channel_layer = Mock()
+        consumer.charger_id = charger.charger_id
+        consumer.store_key = store.identity_key(charger.charger_id, None)
+        consumer.connector_value = None
+        consumer.charger = charger
+        consumer.aggregate_charger = charger
+        consumer.client_ip = "198.51.100.10"
+        consumer._header_reference_created = True
+        consumer.send = AsyncMock()
+        consumer.close = AsyncMock()
+
+        allowed_message = json.dumps(
+            [
+                2,
+                "boot-1",
+                "BootNotification",
+                {"chargePointModel": "X", "chargePointVendor": "Y"},
+            ]
+        )
+        async_to_sync(consumer.receive)(text_data=allowed_message)
+        mock_record.assert_awaited()
+        connection.send.assert_called_once_with(allowed_message)
+
+        args, kwargs = mock_record.await_args
+        self.assertEqual(kwargs.get("charger_pk"), charger.pk)
+        self.assertEqual(kwargs.get("forwarder_pk"), forwarder.pk)
+        self.assertIsNotNone(consumer.aggregate_charger.forwarding_watermark)
+
+        connection.send.reset_mock()
+        blocked_message = json.dumps([2, "custom-1", "CustomAction", {}])
+        async_to_sync(consumer.receive)(text_data=blocked_message)
+        connection.send.assert_not_called()
 
 class ForwardingViewTests(TestCase):
     def setUp(self):

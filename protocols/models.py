@@ -277,7 +277,11 @@ class CPForwarder(Entity):
                 )
             else:
                 success, metadata_error = send_forwarding_metadata(
-                    self.target_node, chargers_to_update, local_node, private_key
+                    self.target_node,
+                    chargers_to_update,
+                    local_node,
+                    private_key,
+                    forwarded_messages=self.get_forwarded_messages(),
                 )
                 if success:
                     status_parts.append(
