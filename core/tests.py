@@ -2484,6 +2484,7 @@ class TodoDoneTests(TestCase):
             fixture_dir = base / "core" / "fixtures"
             fixture_dir.mkdir(parents=True)
             fixture_path = fixture_dir / "todo__task.json"
+            created_on_value = timezone.now().replace(microsecond=0).isoformat()
             fixture_path.write_text(
                 json.dumps(
                     [
@@ -2491,6 +2492,7 @@ class TodoDoneTests(TestCase):
                             "model": "core.todo",
                             "fields": {
                                 "request": "Task",
+                                "created_on": created_on_value,
                                 "url": "",
                                 "request_details": "",
                             },
@@ -2526,6 +2528,7 @@ class TodoDoneTests(TestCase):
             fixture_dir = base / "core" / "fixtures"
             fixture_dir.mkdir(parents=True)
             fixture_path = fixture_dir / "todo__task.json"
+            created_on_value = timezone.now().replace(microsecond=0).isoformat()
             fixture_path.write_text(
                 json.dumps(
                     [
@@ -2533,6 +2536,7 @@ class TodoDoneTests(TestCase):
                             "model": "core.todo",
                             "fields": {
                                 "request": "Task",
+                                "created_on": created_on_value,
                                 "url": "",
                                 "request_details": "",
                             },
@@ -2677,6 +2681,7 @@ class TodoDeleteTests(TestCase):
             fixture_dir = base / "core" / "fixtures"
             fixture_dir.mkdir(parents=True)
             fixture_path = fixture_dir / "todo__task.json"
+            created_on_value = timezone.now().replace(microsecond=0).isoformat()
             fixture_path.write_text(
                 json.dumps(
                     [
@@ -2684,6 +2689,7 @@ class TodoDeleteTests(TestCase):
                             "model": "core.todo",
                             "fields": {
                                 "request": "Task",
+                                "created_on": created_on_value,
                                 "url": "",
                                 "request_details": "",
                             },

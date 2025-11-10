@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -21,11 +22,15 @@ def build_fixture(
 ) -> list[dict[str, object]]:
     label = title or guess_title(slug)
     request = f"Validate screen {label}"
+    created_on = (
+        datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    )
     return [
         {
             "model": "core.todo",
             "fields": {
                 "request": request,
+                "created_on": created_on,
                 "url": url,
                 "request_details": details,
             },
