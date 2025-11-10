@@ -1957,6 +1957,33 @@ class NodeRegisterCurrentTests(TestCase):
             PeriodicTask.objects.filter(name=task_name).exists()
         )
 
+    def test_net_message_purge_task_syncs_with_feature(self):
+        feature, _ = NodeFeature.objects.get_or_create(
+            slug="celery-queue", defaults={"display": "Celery Queue"}
+        )
+        node, _ = Node.objects.update_or_create(
+            mac_address=Node.get_current_mac(),
+            defaults={
+                "hostname": socket.gethostname(),
+                "address": "127.0.0.1",
+                "port": 9320,
+                "base_path": settings.BASE_DIR,
+            },
+        )
+        raw_name = "nodes_purge_net_messages"
+        task_name = slugify_task_name(raw_name)
+        PeriodicTask.objects.filter(
+            name__in=periodic_task_name_variants(raw_name)
+        ).delete()
+        NodeFeatureAssignment.objects.get_or_create(node=node, feature=feature)
+        self.assertTrue(
+            PeriodicTask.objects.filter(name=task_name).exists()
+        )
+        NodeFeatureAssignment.objects.filter(node=node, feature=feature).delete()
+        self.assertFalse(
+            PeriodicTask.objects.filter(name=task_name).exists()
+        )
+
     def test_ocpp_session_report_task_syncs_with_feature(self):
         feature, _ = NodeFeature.objects.get_or_create(
             slug="celery-queue", defaults={"display": "Celery Queue"}
@@ -3926,7 +3953,7 @@ class NetMessagePropagationTests(TestCase):
             node_origin=self.local,
         )
         NetMessage.objects.filter(pk=old_local.pk).update(
-            created=timezone.now() - timedelta(days=8)
+            created=timezone.now() - timedelta(hours=25)
         )
         old_remote = NetMessage.objects.create(
             subject="old remote",
@@ -3935,7 +3962,7 @@ class NetMessagePropagationTests(TestCase):
             node_origin=self.remotes[0],
         )
         NetMessage.objects.filter(pk=old_remote.pk).update(
-            created=timezone.now() - timedelta(days=8)
+            created=timezone.now() - timedelta(hours=25)
         )
         msg = NetMessage.objects.create(
             subject="fresh",
@@ -4195,6 +4222,53 @@ class NetMessageQueueTests(TestCase):
         self.assertEqual(created.node_origin, upstream)
         mock_post.assert_called_once()
         mock_propagate.assert_called_once()
+
+
+class NetMessageMaintenanceTests(TestCase):
+    def setUp(self):
+        self.role, _ = NodeRole.objects.get_or_create(name="Terminal")
+
+    def test_purge_task_removes_old_messages_and_pending_entries(self):
+        local = Node.objects.create(
+            hostname="maintenance",
+            address="10.0.0.20",
+            port=8100,
+            mac_address="00:11:22:33:44:30",
+            role=self.role,
+        )
+        old_message = NetMessage.objects.create(subject="old", body="body", reach=self.role)
+        recent_message = NetMessage.objects.create(subject="recent", body="body", reach=self.role)
+        NetMessage.objects.filter(pk=old_message.pk).update(
+            created=timezone.now() - timedelta(hours=30)
+        )
+        stale_entry = PendingNetMessage.objects.create(
+            node=local,
+            message=recent_message,
+            seen=["stale"],
+            stale_at=timezone.now() + timedelta(hours=1),
+        )
+        PendingNetMessage.objects.filter(pk=stale_entry.pk).update(
+            queued_at=timezone.now() - timedelta(hours=30)
+        )
+
+        fresh_message = NetMessage.objects.create(
+            subject="fresh pending", body="body", reach=self.role
+        )
+        remaining_entry = PendingNetMessage.objects.create(
+            node=local,
+            message=fresh_message,
+            seen=["fresh"],
+            stale_at=timezone.now() + timedelta(hours=2),
+        )
+
+        deleted = node_tasks.purge_stale_net_messages(24)
+
+        self.assertFalse(NetMessage.objects.filter(pk=old_message.pk).exists())
+        self.assertTrue(NetMessage.objects.filter(pk=recent_message.pk).exists())
+        self.assertTrue(NetMessage.objects.filter(pk=fresh_message.pk).exists())
+        self.assertFalse(PendingNetMessage.objects.filter(pk=stale_entry.pk).exists())
+        self.assertTrue(PendingNetMessage.objects.filter(pk=remaining_entry.pk).exists())
+        self.assertGreaterEqual(deleted, 1)
 
 
 class ConstellationUdpKickstartTests(TestCase):

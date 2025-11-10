@@ -5,7 +5,7 @@ import logging
 import socket
 import time
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 import pyperclip
@@ -16,8 +16,9 @@ from cryptography.hazmat.primitives.asymmetric import padding
 from pyperclip import PyperclipException
 
 from django.conf import settings
+from django.utils import timezone as django_timezone
 
-from .models import ContentSample, NetMessage, Node
+from .models import ContentSample, NetMessage, Node, PendingNetMessage
 from .utils import capture_screenshot, save_screenshot
 
 logger = logging.getLogger(__name__)
@@ -272,3 +273,29 @@ def poll_unreachable_upstream() -> None:
                 logger.warning(
                     "Discarded upstream message from node %s: %s", upstream.pk, exc
                 )
+
+
+@shared_task
+def purge_stale_net_messages(retention_hours: int = 24) -> int:
+    """Remove NetMessages (and pending queue entries) older than ``retention_hours``."""
+
+    try:
+        hours = int(retention_hours)
+    except (TypeError, ValueError):
+        hours = 24
+    if hours < 0:
+        hours = 0
+
+    cutoff = django_timezone.now() - timedelta(hours=hours)
+    message_delete_result = NetMessage.objects.filter(created__lt=cutoff).delete()
+    message_count = message_delete_result[1].get(NetMessage._meta.label, 0)
+
+    pending_delete_result = PendingNetMessage.objects.filter(
+        queued_at__lt=cutoff
+    ).delete()
+    pending_count = pending_delete_result[1].get(
+        PendingNetMessage._meta.label,
+        0,
+    )
+
+    return message_count + pending_count
