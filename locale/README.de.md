@@ -119,7 +119,13 @@ Terminal-Knoten können direkt mit den untenstehenden Skripten ohne Installation
    - Für den Start im Terminalmodus (Standard) ist keine Installation erforderlich.
 
 ### 4. Administration
-[`http://localhost:8888/admin/`](http://localhost:8888/admin/) für den [Django-Admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) und [`http://localhost:8888/admindocs/`](http://localhost:8888/admindocs/) für die [admindocs](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/) aufrufen. Verwende `--port` mit den Startskripten oder dem Installer, wenn ein anderer Port benötigt wird. Ausführliche Schritte findest du im [Installations- und Administrationshandbuch](docs/cookbooks/install-start-stop-upgrade-uninstall.md) im Cookbooks-Verzeichnis und im [Sigil-Cookbook](docs/cookbooks/sigils.md) für den Umgang mit Konfigurationstokens.
+- Greife über [`http://localhost:8888/admin/`](http://localhost:8888/admin/) auf den [Django-Admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) zu, um Live-Daten zu prüfen und zu pflegen. Verwende `--port` mit den Startskripten oder dem Installer, wenn du einen anderen Port freigeben musst.
+- Durchstöbere die [admindocs](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/) unter [`http://localhost:8888/admindocs/`](http://localhost:8888/admindocs/), um automatisch generierte API-Dokumentation deiner Modelle zu lesen.
+- Folge dem [Installations- und Administrationshandbuch](docs/cookbooks/install-start-stop-upgrade-uninstall.md) für Deployment, Lifecycle-Aufgaben und operative Runbooks.
+- Nutze das [Sigil-Cookbook](docs/cookbooks/sigils.md), wenn du tokenbasierte Einstellungen über Umgebungen hinweg konfigurierst.
+- Verwalte Exporte, Importe und Prüfprotokolle mit dem [User-Data-Cookbook](docs/cookbooks/user-data.md).
+- Plane Feature-Rollouts mit dem [Node-Features-Cookbook](docs/cookbooks/node-features.md).
+- Kuratiere Abkürzungen für Power-User über das [Favorites-Cookbook](docs/cookbooks/favorites.md).
 
 ## Support
 
