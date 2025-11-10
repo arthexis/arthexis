@@ -11,6 +11,7 @@ import urllib.request
 
 from celery import shared_task
 from core import github_issues
+from core.auto_upgrade_failover import clear_failover_lock, write_failover_lock
 from django.db import DatabaseError
 from django.utils import timezone
 
@@ -152,6 +153,17 @@ def _revert_after_restart_failure(base_dir: Path, service: str) -> None:
             "Automatic revert after restart failure was unsuccessful; manual intervention required",
         )
         return
+
+    revision = _current_revision(base_dir)
+    write_failover_lock(
+        base_dir,
+        reason=f"Service {service or 'unknown'} failed to restart after upgrade",
+        detail=(
+            "Restart verification did not succeed; the node was returned to the "
+            "failover snapshot."
+        ),
+        revision=revision or None,
+    )
 
     command = _systemctl_command()
     if not command or not service:
@@ -720,20 +732,37 @@ def _schedule_health_check(next_attempt: int) -> None:
     )
 
 
-def _handle_failed_health_check(base_dir: Path, detail: str) -> None:
-    revision = ""
+def _current_revision(base_dir: Path) -> str:
+    """Return the current git revision when available."""
+
     try:
         output = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=base_dir)
-        if isinstance(output, bytes):
-            revision = output.decode().strip()
-        else:
-            revision = str(output).strip()
     except Exception:  # pragma: no cover - best effort capture
+        return ""
+
+    if isinstance(output, bytes):
+        try:
+            return output.decode().strip()
+        except Exception:  # pragma: no cover - defensive decoding
+            return output.decode(errors="ignore").strip()
+
+    return str(output).strip()
+
+
+def _handle_failed_health_check(base_dir: Path, detail: str) -> None:
+    revision = _current_revision(base_dir)
+    if not revision:
         logger.warning("Failed to determine revision during auto-upgrade revert")
 
     _add_skipped_revision(base_dir, revision)
     _append_auto_upgrade_log(base_dir, "Health check failed; reverting upgrade")
     subprocess.run(["./upgrade.sh", "--revert"], cwd=base_dir, check=True)
+    write_failover_lock(
+        base_dir,
+        reason="Auto-upgrade health check failed",
+        detail=detail,
+        revision=revision or None,
+    )
 
 
 @shared_task
@@ -779,6 +808,7 @@ def verify_auto_upgrade_health(attempt: int = 1) -> bool | None:
 
     if status == 200:
         _record_health_check_result(base_dir, attempt, status, "succeeded")
+        clear_failover_lock(base_dir)
         logger.info(
             "Auto-upgrade health check succeeded on attempt %s with HTTP %s",
             attempt,

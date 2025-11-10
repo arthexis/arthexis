@@ -4,6 +4,8 @@ from django.contrib.sites.models import Site
 from django.http import HttpRequest
 from django.conf import settings
 
+from core.auto_upgrade_failover import read_failover_status
+
 
 DEFAULT_BADGE_COLOR = "#28a745"
 UNKNOWN_BADGE_COLOR = "#6c757d"
@@ -53,6 +55,7 @@ def site_and_node(request: HttpRequest):
 
     site_name = site.name if site else ""
     node_role_name = node.role.name if node and node.role else ""
+    failover_status = read_failover_status(Path(settings.BASE_DIR))
     return {
         "badge_site": site,
         "badge_node": node,
@@ -64,4 +67,5 @@ def site_and_node(request: HttpRequest):
         "badge_node_color": node_color,
         "current_site_domain": site.domain if site else host,
         "TIME_ZONE": settings.TIME_ZONE,
+        "auto_upgrade_failover": failover_status,
     }

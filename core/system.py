@@ -23,11 +23,13 @@ from django.template.response import TemplateResponse
 from django.http import HttpResponseRedirect
 from django.urls import path, reverse
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.formats import date_format
 from django.utils.html import format_html, format_html_join
 from django.utils.translation import gettext_lazy as _, ngettext
 
 from core.auto_upgrade import AUTO_UPGRADE_TASK_NAME, AUTO_UPGRADE_TASK_PATH
+from core.auto_upgrade_failover import clear_failover_lock, read_failover_status
 from core import changelog as changelog_utils
 from core.release import (
     _git_authentication_missing,
@@ -1251,6 +1253,7 @@ def _system_upgrade_report_view(request):
         {
             "title": _("Upgrade Report"),
             "auto_upgrade_report": _build_auto_upgrade_report(),
+            "failover_status": read_failover_status(Path(settings.BASE_DIR)),
         }
     )
     return TemplateResponse(request, "admin/system_upgrade_report.html", context)
@@ -1404,6 +1407,19 @@ def _trigger_upgrade_check(*, channel_override: str | None = None) -> bool:
     return True
 
 
+def _upgrade_redirect(request, fallback: str) -> HttpResponseRedirect:
+    """Return a safe redirect response for upgrade-related form submissions."""
+
+    candidate = (request.POST.get("next") or "").strip()
+    if candidate and url_has_allowed_host_and_scheme(
+        candidate,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        return HttpResponseRedirect(candidate)
+    return HttpResponseRedirect(fallback)
+
+
 def _system_trigger_upgrade_check_view(request):
     if request.method != "POST":
         return HttpResponseRedirect(reverse("admin:system-upgrade-report"))
@@ -1439,14 +1455,28 @@ def _system_trigger_upgrade_check_view(request):
             base_message = _(
                 "Upgrade check started locally. Review the auto-upgrade log for progress."
             )
-        final_message = (
-            format_html("{} {}", base_message, detail_message)
-            if detail_message
-            else base_message
-        )
-        messages.success(request, final_message)
+        if detail_message:
+            messages.success(
+                request,
+                format_html("{} {}", base_message, detail_message),
+            )
+        else:
+            messages.success(request, base_message)
 
-    return HttpResponseRedirect(reverse("admin:system-upgrade-report"))
+    return _upgrade_redirect(request, reverse("admin:system-upgrade-report"))
+
+
+def _system_clear_failover_lock_view(request):
+    if request.method != "POST":
+        return HttpResponseRedirect(reverse("admin:index"))
+
+    base_dir = Path(settings.BASE_DIR)
+    clear_failover_lock(base_dir)
+    messages.success(
+        request,
+        _("Failover alert dismissed. Auto-upgrade retries remain available."),
+    )
+    return _upgrade_redirect(request, reverse("admin:system-upgrade-report"))
 
 
 def patch_admin_system_view() -> None:
@@ -1476,6 +1506,11 @@ def patch_admin_system_view() -> None:
                 "system/upgrade-report/run-check/",
                 admin.site.admin_view(_system_trigger_upgrade_check_view),
                 name="system-upgrade-run-check",
+            ),
+            path(
+                "system/upgrade-report/dismiss-failover/",
+                admin.site.admin_view(_system_clear_failover_lock_view),
+                name="system-upgrade-dismiss-failover",
             ),
         ]
         return custom + urls
