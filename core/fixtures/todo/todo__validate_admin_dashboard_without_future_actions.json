@@ -1,0 +1,15 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "is_seed_data": false,
+      "is_deleted": false,
+      "request": "Validate admin dashboard without Future Actions module",
+      "created_on": "2024-01-01T00:00:00Z",
+      "url": "/admin/",
+      "request_details": "Log into the Django admin and open the index page. Confirm the Release manager tasks panel is no longer present and no empty Future Actions widget renders. Verify the remaining dashboard modules load without errors.",
+      "generated_for_version": "",
+      "generated_for_revision": ""
+    }
+  }
+]

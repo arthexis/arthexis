@@ -82,7 +82,6 @@ from datetime import timedelta
 from io import StringIO
 from django.conf import settings
 from django.utils import timezone
-from django.utils.html import escape
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, call, patch
 from types import SimpleNamespace
@@ -3194,26 +3193,6 @@ class FavoriteTests(TestCase):
         self.assertContains(resp, reverse("admin:pages_application_changelist"))
         self.assertContains(resp, reverse("admin:nodes_noderole_changelist"))
 
-    def test_dashboard_shows_empty_todo_state(self):
-        Todo.objects.all().delete()
-        resp = self.client.get(reverse("admin:index"))
-        self.assertContains(resp, "Release manager tasks")
-        self.assertContains(resp, "No pending TODOs")
-
-    def test_dashboard_merges_duplicate_future_actions(self):
-        ct = ContentType.objects.get_for_model(NodeRole)
-        Favorite.objects.create(user=self.user, content_type=ct)
-        NodeRole.objects.create(name="DataRole2", is_user_data=True)
-        AdminHistory.objects.create(
-            user=self.user,
-            content_type=ct,
-            url=reverse("admin:nodes_noderole_changelist"),
-        )
-        resp = self.client.get(reverse("admin:index"))
-        url = reverse("admin:nodes_noderole_changelist")
-        self.assertGreaterEqual(resp.content.decode().count(url), 1)
-        self.assertContains(resp, NodeRole._meta.verbose_name_plural)
-
     def test_dashboard_shows_open_lead_badge(self):
         InviteLead.objects.create(email="open1@example.com")
         InviteLead.objects.create(email="open2@example.com")
@@ -3297,132 +3276,32 @@ class FavoriteTests(TestCase):
         self.assertNotContains(resp, "lead-open-badge")
         self.assertNotContains(resp, "rfid-release-badge")
 
-    def test_dashboard_limits_future_actions_to_top_four(self):
-        from pages.templatetags.admin_extras import future_action_items
-
-        role_ct = ContentType.objects.get_for_model(NodeRole)
-        role_url = reverse("admin:nodes_noderole_changelist")
-        AdminHistory.objects.create(
-            user=self.user,
-            content_type=role_ct,
-            url=role_url,
-        )
-        AdminHistory.objects.create(
-            user=self.user,
-            content_type=role_ct,
-            url=f"{role_url}?page=2",
-        )
-        AdminHistory.objects.create(
-            user=self.user,
-            content_type=role_ct,
-            url=f"{role_url}?page=3",
-        )
-
-        app_ct = ContentType.objects.get_for_model(Application)
-        app_url = reverse("admin:pages_application_changelist")
-        AdminHistory.objects.create(
-            user=self.user,
-            content_type=app_ct,
-            url=app_url,
-        )
-        AdminHistory.objects.create(
-            user=self.user,
-            content_type=app_ct,
-            url=f"{app_url}?page=2",
-        )
-
-        module_ct = ContentType.objects.get_for_model(Module)
-        module_url = reverse("admin:pages_module_changelist")
-        AdminHistory.objects.create(
-            user=self.user,
-            content_type=module_ct,
-            url=module_url,
-        )
-        AdminHistory.objects.create(
-            user=self.user,
-            content_type=module_ct,
-            url=f"{module_url}?page=2",
-        )
-
-        package_ct = ContentType.objects.get_for_model(Package)
-        package_url = reverse("admin:core_package_changelist")
-        AdminHistory.objects.create(
-            user=self.user,
-            content_type=package_ct,
-            url=package_url,
-        )
-
-        view_history_ct = ContentType.objects.get_for_model(ViewHistory)
-        view_history_url = reverse("admin:pages_viewhistory_changelist")
-        AdminHistory.objects.create(
-            user=self.user,
-            content_type=view_history_ct,
-            url=view_history_url,
-        )
-
+    def test_dashboard_does_not_show_release_manager_tasks(self):
+        Todo.objects.all().delete()
         resp = self.client.get(reverse("admin:index"))
-        items = future_action_items({"request": resp.wsgi_request})["models"]
-        labels = {item["label"] for item in items}
-        self.assertEqual(len(items), 4)
-        self.assertIn("Node Roles", labels)
-        self.assertIn("Modules", labels)
-        self.assertIn("applications", labels)
-        self.assertIn("View Histories", labels)
-        self.assertNotIn("Packages", labels)
-        ContentType.objects.clear_cache()
+        self.assertNotContains(resp, "Release manager tasks")
 
-    def test_future_action_items_skip_outdated_todos(self):
-        from pages.templatetags.admin_extras import future_action_items
-
-        current = Todo.objects.create(request="Current task")
-        outdated = Todo.objects.create(request="Outdated task")
-        Todo.objects.filter(pk=outdated.pk).update(version="0.0.1")
-
-        response = self.client.get(reverse("admin:index"))
-        todos = future_action_items({"request": response.wsgi_request})["todos"]
-        labels = {item["label"] for item in todos}
-
-        self.assertIn(current.request, labels)
-        self.assertNotIn(outdated.request, labels)
-
-        current.refresh_from_db()
-        outdated.refresh_from_db()
-        self.assertFalse(current.is_stale)
-        self.assertTrue(outdated.is_stale)
-
-    def test_future_action_items_limits_user_data_queries(self):
-        from pages.templatetags import admin_extras
-
-        cache.delete(admin_extras.USER_DATA_MODELS_CACHE_KEY)
-        self.addCleanup(cache.delete, admin_extras.USER_DATA_MODELS_CACHE_KEY)
-
-        for index in range(3):
-            NodeRole.objects.create(name=f"CachedRole{index}", is_user_data=True)
-        for index in range(2):
-            NodeFeature.objects.create(
-                slug=f"cached-feature-{index}",
-                display=f"Feature {index}",
-                is_user_data=True,
-            )
-
-        Node.objects.create(
-            hostname="cached-node",
-            address="127.0.0.1",
-            mac_address="AA:BB:CC:DD:EE:FF",
-            port=8888,
-            is_user_data=True,
+    def test_dashboard_includes_google_calendar_module(self):
+        GoogleCalendarProfile.objects.create(
+            user=self.user,
+            calendar_id="calendar@example.com",
         )
-
-        response = self.client.get(reverse("admin:index"))
-        request = response.wsgi_request
-
-        admin_extras.future_action_items({"request": request})
-        with CaptureQueriesContext(connection) as ctx:
-            admin_extras.future_action_items({"request": request})
-
-        # History and favorites queries should remain bounded regardless of the
-        # number of Entity subclasses with user data.
-        self.assertLessEqual(len(ctx.captured_queries), 4)
+        with (
+            patch(
+                "pages.templatetags.admin_extras.GoogleCalendarProfile.fetch_events",
+                return_value=[],
+            ),
+            patch(
+                "pages.templatetags.admin_extras.GoogleCalendarProfile.get_display_name",
+                return_value="Calendar",
+            ),
+            patch(
+                "pages.templatetags.admin_extras.GoogleCalendarProfile.build_calendar_url",
+                return_value="",
+            ),
+        ):
+            resp = self.client.get(reverse("admin:index"))
+        self.assertContains(resp, "Calendar")
 
     def test_favorite_ct_id_recreates_missing_content_type(self):
         ct = ContentType.objects.get_by_natural_key("pages", "application")
@@ -3443,186 +3322,6 @@ class FavoriteTests(TestCase):
         resp = self.client.get(reverse("admin:index"))
         self.assertContains(resp, "Change Applications")
         self.assertContains(resp, 'target="_blank" rel="noopener noreferrer"')
-
-    def test_dashboard_links_to_focus_view(self):
-        todo = Todo.objects.create(request="Check docs", url="/docs/")
-        resp = self.client.get(reverse("admin:index"))
-        focus_url = reverse("todo-focus", args=[todo.pk])
-        expected_next = quote(reverse("admin:index"))
-        self.assertContains(
-            resp,
-            f'href="{focus_url}?next={expected_next}"',
-        )
-
-    def test_dashboard_shows_todo_with_done_button(self):
-        todo = Todo.objects.create(request="Do thing")
-        resp = self.client.get(reverse("admin:index"))
-        done_url = reverse("todo-done", args=[todo.pk])
-        tooltip = escape(todo.request)
-        self.assertContains(resp, f'title="{tooltip}"')
-        self.assertContains(resp, f'aria-label="{tooltip}"')
-        task_label = gettext("Task %(counter)s") % {"counter": 1}
-        self.assertContains(resp, task_label)
-        self.assertContains(resp, f'action="{done_url}"')
-        self.assertContains(resp, "DONE")
-
-    def test_dashboard_shows_request_details(self):
-        Todo.objects.create(request="Do thing", request_details="More info")
-        resp = self.client.get(reverse("admin:index"))
-        self.assertContains(
-            resp, '<div class="todo-details">More info</div>', html=True
-        )
-
-    def test_dashboard_hides_todos_for_previous_version(self):
-        todo = Todo.objects.create(request="Old task")
-        Todo.objects.filter(pk=todo.pk).update(version="0.1.0")
-
-        resp = self.client.get(reverse("admin:index"))
-
-        self.assertNotContains(resp, "Old task")
-        todo.refresh_from_db()
-        self.assertTrue(todo.is_stale)
-        self.assertIsNotNone(todo.stale_on)
-
-    def test_dashboard_estimates_release_for_blank_versions(self):
-        package, _ = Package.objects.get_or_create(name="DashboardPkg")
-        package.is_active = True
-        package.save()
-
-        now = timezone.now()
-        older_release, _ = PackageRelease.objects.update_or_create(
-            package=package,
-            version="0.1.10",
-            defaults={"release_on": now - timedelta(days=90), "revision": ""},
-        )
-        current_label = (Todo.default_version() or "0.0.0").strip() or "0.0.0"
-        current_release, _ = PackageRelease.objects.update_or_create(
-            package=package,
-            version=current_label,
-            defaults={"release_on": now - timedelta(days=1), "revision": ""},
-        )
-
-        legacy = Todo.objects.create(request="Legacy blank")
-        Todo.objects.filter(pk=legacy.pk).update(
-            version="",
-            created_on=older_release.release_on + timedelta(days=1),
-        )
-
-        recent = Todo.objects.create(request="Recent blank")
-        Todo.objects.filter(pk=recent.pk).update(
-            version="",
-            created_on=current_release.release_on + timedelta(minutes=5),
-        )
-
-        resp = self.client.get(reverse("admin:index"))
-
-        self.assertNotContains(resp, legacy.request)
-        self.assertContains(resp, recent.request)
-
-        legacy.refresh_from_db()
-        recent.refresh_from_db()
-
-        self.assertTrue(legacy.is_stale)
-        self.assertEqual(legacy.version, older_release.version)
-        self.assertFalse(recent.is_stale)
-        self.assertEqual(recent.version, current_release.version)
-
-    def test_dashboard_shows_todos_for_future_version(self):
-        todo = Todo.objects.create(request="Future task")
-        Todo.objects.filter(pk=todo.pk).update(version="9.9.9")
-
-        resp = self.client.get(reverse("admin:index"))
-
-        self.assertContains(resp, "Future task")
-
-    def test_dashboard_hides_completed_todos(self):
-        todo = Todo.objects.create(request="Completed task")
-        Todo.objects.filter(pk=todo.pk).update(done_on=timezone.now())
-
-        resp = self.client.get(reverse("admin:index"))
-
-        self.assertNotContains(resp, todo.request)
-        self.assertNotContains(resp, "Completed")
-
-    def test_dashboard_shows_todos_when_node_unknown(self):
-        Todo.objects.create(request="Check fallback")
-        from nodes.models import Node
-
-        Node.objects.all().delete()
-
-        resp = self.client.get(reverse("admin:index"))
-        self.assertContains(resp, "Release manager tasks")
-        tooltip = escape("Check fallback")
-        self.assertContains(resp, f'title="{tooltip}"')
-
-    def test_dashboard_shows_todos_without_release_manager_profile(self):
-        Todo.objects.create(request="Unrestricted task")
-        ReleaseManager.objects.filter(user=self.user).delete()
-
-        resp = self.client.get(reverse("admin:index"))
-        self.assertContains(resp, "Release manager tasks")
-        tooltip = escape("Unrestricted task")
-        self.assertContains(resp, f'title="{tooltip}"')
-
-    def test_dashboard_excludes_todo_changelist_link(self):
-        ct = ContentType.objects.get_for_model(Todo)
-        Favorite.objects.create(user=self.user, content_type=ct)
-        AdminHistory.objects.create(
-            user=self.user,
-            content_type=ct,
-            url=reverse("admin:core_todo_changelist"),
-        )
-        Todo.objects.create(request="Task", is_user_data=True)
-        resp = self.client.get(reverse("admin:index"))
-        changelist = reverse("admin:core_todo_changelist")
-        self.assertNotContains(resp, f'href="{changelist}"')
-
-    def test_dashboard_shows_todos_for_admin_without_release_manager(self):
-        todo = Todo.objects.create(request="Only Release Manager")
-        User = get_user_model()
-        other_user = User.objects.create_superuser(
-            username="norole", password="pwd", email="norole@example.com"
-        )
-        self.client.force_login(other_user)
-        resp = self.client.get(reverse("admin:index"))
-        self.assertContains(resp, "Release manager tasks")
-        tooltip = escape(todo.request)
-        self.assertContains(resp, f'title="{tooltip}"')
-
-    def test_dashboard_shows_todos_for_non_terminal_node(self):
-        todo = Todo.objects.create(request="Terminal Tasks")
-        from nodes.models import NodeRole
-
-        control_role, _ = NodeRole.objects.get_or_create(name="Control")
-        self.node.role = control_role
-        self.node.save(update_fields=["role"])
-        resp = self.client.get(reverse("admin:index"))
-        self.assertContains(resp, "Release manager tasks")
-        tooltip = escape(todo.request)
-        self.assertContains(resp, f'title="{tooltip}"')
-
-    def test_dashboard_shows_todos_for_delegate_release_manager(self):
-        todo = Todo.objects.create(request="Delegate Task")
-        User = get_user_model()
-        delegate = User.objects.create_superuser(
-            username="delegate",
-            password="pwd",
-            email="delegate@example.com",
-        )
-        ReleaseManager.objects.create(user=delegate)
-        operator = User.objects.create_superuser(
-            username="operator",
-            password="pwd",
-            email="operator@example.com",
-        )
-        operator.operate_as = delegate
-        operator.full_clean()
-        operator.save()
-        self.client.force_login(operator)
-        resp = self.client.get(reverse("admin:index"))
-        self.assertContains(resp, "Release manager tasks")
-        tooltip = escape(todo.request)
-        self.assertContains(resp, f'title="{tooltip}"')
 
 
 class AdminIndexQueryRegressionTests(TestCase):
