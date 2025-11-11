@@ -18,7 +18,7 @@ from django.utils.html import format_html, format_html_join
 from django.utils.text import slugify
 from django.contrib.admin.utils import quote
 from django.urls import path, reverse
-from django.http import HttpResponse, HttpResponseRedirect
+from django.http import Http404, HttpResponse, HttpResponseRedirect
 from django.template.response import TemplateResponse
 
 import uuid
@@ -297,7 +297,7 @@ class ChargerConfigurationAdmin(admin.ModelAdmin):
         "updated_at",
         "linked_chargers",
         "unknown_keys_display",
-        "raw_payload_display",
+        "raw_payload_download_link",
     )
     inlines = (ConfigurationKeyInline,)
     fieldsets = (
@@ -320,7 +320,7 @@ class ChargerConfigurationAdmin(admin.ModelAdmin):
             {
                 "fields": (
                     "unknown_keys_display",
-                    "raw_payload_display",
+                    "raw_payload_download_link",
                 )
             },
         ),
@@ -354,8 +354,43 @@ class ChargerConfigurationAdmin(admin.ModelAdmin):
         return self._render_json(obj.unknown_keys)
 
     @admin.display(description="Raw payload")
-    def raw_payload_display(self, obj):
-        return self._render_json(obj.raw_payload)
+    def raw_payload_download_link(self, obj):
+        if obj.pk is None:
+            return ""
+        if not obj.raw_payload:
+            return "-"
+        download_url = reverse(
+            "admin:ocpp_chargerconfiguration_download_raw",
+            args=[quote(obj.pk)],
+        )
+        return format_html(
+            '<a href="{}" class="button">{}</a>',
+            download_url,
+            _("Download raw JSON"),
+        )
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                "<path:object_id>/raw-payload/",
+                self.admin_site.admin_view(self.download_raw_payload),
+                name="ocpp_chargerconfiguration_download_raw",
+            ),
+        ]
+        return custom_urls + urls
+
+    def download_raw_payload(self, request, object_id, *args, **kwargs):
+        configuration = self.get_object(request, object_id)
+        if configuration is None or not configuration.raw_payload:
+            raise Http404("Raw payload not available.")
+
+        payload = json.dumps(configuration.raw_payload, indent=2, ensure_ascii=False)
+        filename = f"{slugify(configuration.charger_identifier) or 'cp-configuration'}-payload.json"
+
+        response = HttpResponse(payload, content_type="application/json")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
 
     @admin.display(description="Origin")
     def origin_display(self, obj):
