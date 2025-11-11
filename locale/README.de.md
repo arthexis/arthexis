@@ -32,6 +32,8 @@ Die Arthexis-Konstellation ist eine [narrativ orientierte](https://de.wikipedia.
   | --- | --- |
   | `CancelReservation` | Stornieren ausstehender Reservierungen und geben Anschlüsse direkt aus der Leitwarte frei. |
   | `ChangeAvailability` | Schalten Anschlüsse oder die gesamte Station zwischen betriebsbereit und außer Betrieb. |
+  | `ChangeConfiguration` | Aktualisieren unterstützte Ladeeinstellungen und übernehmen angewendete Werte in der Leitwarte. |
+  | `ClearCache` | Leeren lokale Autorisierungscaches, um erneute Abgleiche über das CSMS zu erzwingen. |
   | `DataTransfer` | Senden herstellerspezifische Befehle und protokollieren die Antwort des Ladepunkts. |
   | `GetConfiguration` | Fragen die aktuellen Werte der überwachten Konfigurationsschlüssel ab. |
   | `GetLocalListVersion` | Rufen die aktuelle RFID-Whitelist-Version ab und synchronisieren die vom Ladepunkt gemeldeten Einträge. |
@@ -43,7 +45,7 @@ Die Arthexis-Konstellation ist eine [narrativ orientierte](https://de.wikipedia.
   | `TriggerMessage` | Fordern sofortige Nachrichten an (z. B. Status oder Diagnose). |
   | `UpdateFirmware` | Liefern Firmwarepakete an Ladepunkte mit sicheren Download-Tokens und verfolgen Installationsrückmeldungen. |
 
-  **OCPP-1.6-Roadmap.** Folgende Katalog-Aktionen stehen auf unserer To-do-Liste: `ChangeConfiguration`, `ClearCache`, `ClearChargingProfile`, `GetCompositeSchedule`, `GetDiagnostics`, `SetChargingProfile`, `UnlockConnector`.
+  **OCPP-1.6-Roadmap.** Folgende Katalog-Aktionen stehen auf unserer To-do-Liste: `ClearChargingProfile`, `GetCompositeSchedule`, `GetDiagnostics`, `SetChargingProfile`, `UnlockConnector`.
 
 - Ladepunktreservierungen mit automatischer Anschlusswahl, Verknüpfung zu Energiekonten und RFID-Tags, EVCS-Bestätigung sowie Stornierung über die Leitwarte.
 
