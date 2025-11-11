@@ -4,6 +4,28 @@ Changelog
 Unreleased
 ----------
 
+- ae111d72 chore: update version and fixtures
+- ed687597 Sanitize admin favorite redirects (#2788)
+- 9d6a7b4d fix: backfill todo created on column (#2787)
+- 4d45efe1 chore(deps): bump bleach from 6.2.0 to 6.3.0 (#2758)
+- 375227e0 Move EV domain models into OCPP app (#2786)
+- a630082d chore(deps): bump graphene-django from 3.2.2 to 3.2.3 (#2759)
+- c8554ca2 chore(deps): bump python-dotenv from 1.1.1 to 1.2.1 (#2760)
+- bbb2cb7c chore(deps): bump django-import-export from 4.3.12 to 4.3.13 (#2761)
+- 0d5cecf3 chore(deps): bump tablib from 3.8.0 to 3.9.0 (#2762)
+- f65718dc chore(deps): bump black from 25.9.0 to 25.11.0 (#2763)
+- c92e9e02 feat: track cp firmware requests (#2783)
+- 791b8e6d Silence Celery and Graphviz debug logs outside DEBUG mode (#2785)
+- 337bd891 chore(deps): bump django-debug-toolbar from 6.0.0 to 6.1.0 (#2764)
+- b5caadbd chore(deps): bump pycparser from 2.22 to 2.23 (#2765)
+- 8a6e29e1 Remove admin Future Actions dashboard section (#2784)
+- 3e154bd3 Add regression coverage for admin login (#2782)
+- 4200aa3d Fix site context processor imports to restore CPMS dashboard (#2781)
+- cad197c8 Add failover upgrade alert banner and lock tracking (#2780)
+- 39e75e39 Stop broadcasting login Net Messages and purge history (#2779)
+- 540c1471 Add management command and scheduled purge for net messages (#2778)
+- 9dc7939d Avoid default port fallbacks for remote node URLs (#2777)
+- 760c1c9b Fix changelog history and guard release validation (#2776)
 - 9aa8b6ce Integrate CP forwarder message filters (#2775)
 - 45534833 Add navigation landing smoke tests and QA todo (#2774)
 - 11a8e8b3 feat: add OCPP message filters to CP forwarders (#2773)
