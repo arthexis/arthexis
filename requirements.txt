@@ -37,7 +37,7 @@ django-timezone-field==7.1
 dnspython==2.7.0
 docutils==0.22.2
 gpiozero==2.0.1; sys_platform == "linux"
-graphene-django==3.2.2
+graphene-django==3.2.3
 graphviz==0.21
 geckodriver-autoinstaller==0.1.0
 h11==0.16.0
