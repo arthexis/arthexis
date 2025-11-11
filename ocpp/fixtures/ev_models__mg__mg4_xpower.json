@@ -1,0 +1,10 @@
+[
+  {
+    "model": "ocpp.evmodel",
+    "fields": {
+      "brand": ["MG"],
+      "name": "MG4 XPower",
+      "est_battery_kwh": "64.00"
+    }
+  }
+]

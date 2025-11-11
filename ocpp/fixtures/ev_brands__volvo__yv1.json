@@ -1,0 +1,9 @@
+[
+  {
+    "model": "ocpp.wmicode",
+    "fields": {
+      "brand": ["Volvo"],
+      "code": "YV1"
+    }
+  }
+]

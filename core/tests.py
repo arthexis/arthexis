@@ -34,11 +34,8 @@ from .models import (
     User,
     UserPhoneNumber,
     EnergyAccount,
-    ElectricVehicle,
     EnergyCredit,
     Product,
-    Brand,
-    EVModel,
     RFID,
     SecurityGroup,
     Package,
@@ -56,7 +53,7 @@ from core.admin import (
     UserAdmin,
     USER_PROFILE_INLINES,
 )
-from ocpp.models import Transaction, Charger
+from ocpp.models import Brand, ElectricVehicle, EVModel, Transaction, Charger
 from nodes.models import ContentSample
 
 from django.core.exceptions import ValidationError
@@ -1022,8 +1019,8 @@ class EVBrandFixtureTests(TestCase):
     def test_ev_brand_fixture_loads(self):
         call_command(
             "loaddata",
-            *sorted(glob("core/fixtures/ev_brands__*.json")),
-            *sorted(glob("core/fixtures/ev_models__*.json")),
+            *sorted(glob("ocpp/fixtures/ev_brands__*.json")),
+            *sorted(glob("ocpp/fixtures/ev_models__*.json")),
             verbosity=0,
         )
         porsche = Brand.objects.get(name="Porsche")
@@ -1043,7 +1040,7 @@ class EVBrandFixtureTests(TestCase):
     def test_brand_from_vin(self):
         call_command(
             "loaddata",
-            *sorted(glob("core/fixtures/ev_brands__*.json")),
+            *sorted(glob("ocpp/fixtures/ev_brands__*.json")),
             verbosity=0,
         )
         self.assertEqual(Brand.from_vin("WP0ZZZ12345678901").name, "Porsche")

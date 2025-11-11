@@ -28,7 +28,8 @@ from django.contrib.auth.models import Group
 from django.core.management import call_command
 from django.utils import timezone
 import socket
-from core.models import Brand, Todo, WMICode
+from core.models import Todo
+from ocpp.models import Brand, WMICode
 from core import user_data
 from core.user_data import dump_user_fixture
 from pages.models import Application, Module, Landing
@@ -43,8 +44,8 @@ class SeedDataEntityTests(TestCase):
 class FixtureReloadTests(TestCase):
     def test_reloading_unique_fixture_updates_existing(self):
         fixtures = [
-            *sorted(glob("core/fixtures/ev_brands__*.json")),
-            *sorted(glob("core/fixtures/ev_models__*.json")),
+            *sorted(glob("ocpp/fixtures/ev_brands__*.json")),
+            *sorted(glob("ocpp/fixtures/ev_models__*.json")),
         ]
         call_command("loaddata", *fixtures, verbosity=0)
         code = WMICode.objects.get(code="TRU")

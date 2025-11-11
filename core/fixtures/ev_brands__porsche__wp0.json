@@ -1,9 +1,0 @@
-[
-  {
-    "model": "core.wmicode",
-    "fields": {
-      "brand": ["Porsche"],
-      "code": "WP0"
-    }
-  }
-]
