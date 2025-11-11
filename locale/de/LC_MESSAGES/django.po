@@ -3453,7 +3453,7 @@ msgstr ""
 #, python-format
 msgid ""
 "\n"
-"          Scanned log files: %(sources)s.\n"
+"          Scanned log sources: %(sources)s.\n"
 "        "
 msgstr ""
 
