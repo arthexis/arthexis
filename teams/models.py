@@ -1,6 +1,7 @@
 import json
 import logging
 from datetime import timedelta
+from decimal import Decimal
 from math import ceil
 from pathlib import Path
 from typing import Iterable, Iterator, Sequence
@@ -8,6 +9,7 @@ from typing import Iterable, Iterator, Sequence
 import requests
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
 from django.core.mail import get_connection
 from django.db import models
 from django.db.models import F, Q
@@ -918,12 +920,103 @@ class SlackBotProfile(CoreProfile):
         return self.profile_fields
 
 
+class TaskCategory(Entity):
+    """Standardized categories for manual work assignments."""
+
+    AVAILABILITY_NONE = "none"
+    AVAILABILITY_IMMEDIATE = "immediate"
+    AVAILABILITY_2_3_BUSINESS_DAYS = "2_3_business_days"
+    AVAILABILITY_2_3_WEEKS = "2_3_weeks"
+    AVAILABILITY_UNAVAILABLE = "unavailable"
+
+    AVAILABILITY_CHOICES = [
+        (AVAILABILITY_NONE, _("None")),
+        (AVAILABILITY_IMMEDIATE, _("Immediate")),
+        (AVAILABILITY_2_3_BUSINESS_DAYS, _("2-3 business days")),
+        (AVAILABILITY_2_3_WEEKS, _("2-3 weeks")),
+        (AVAILABILITY_UNAVAILABLE, _("Unavailable")),
+    ]
+
+    name = models.CharField(_("Name"), max_length=200)
+    description = models.TextField(
+        _("Description"),
+        blank=True,
+        help_text=_("Optional details supporting Markdown formatting."),
+    )
+    image = models.ImageField(
+        _("Image"), upload_to="workgroup/task_categories/", blank=True
+    )
+    cost = models.DecimalField(
+        _("Cost"),
+        max_digits=10,
+        decimal_places=2,
+        blank=True,
+        null=True,
+        validators=[MinValueValidator(Decimal("0"))],
+        help_text=_("Estimated fulfillment cost in local currency."),
+    )
+    odoo_product = models.JSONField(
+        _("Odoo product"),
+        blank=True,
+        null=True,
+        help_text=_("Selected product from Odoo (id and name)."),
+    )
+    availability = models.CharField(
+        _("Availability"),
+        max_length=32,
+        choices=AVAILABILITY_CHOICES,
+        default=AVAILABILITY_NONE,
+        help_text=_("Typical lead time for scheduling this work."),
+    )
+    requestor_group = models.ForeignKey(
+        "core.SecurityGroup",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="task_categories_as_requestor",
+        verbose_name=_("Requestor group"),
+        help_text=_("Security group authorized to request this work."),
+    )
+    assigned_group = models.ForeignKey(
+        "core.SecurityGroup",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="task_categories_as_assignee",
+        verbose_name=_("Assigned to group"),
+        help_text=_("Security group typically assigned to this work."),
+    )
+
+    class Meta:
+        verbose_name = _("Task Category")
+        verbose_name_plural = _("Task Categories")
+        ordering = ("name",)
+        db_table = "core_taskcategory"
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return self.name
+
+    def availability_label(self) -> str:  # pragma: no cover - admin helper
+        return self.get_availability_display()
+
+    availability_label.short_description = _("Availability")  # type: ignore[attr-defined]
+
+
 class ManualTask(Entity):
     """Manual work scheduled for nodes or charge locations."""
 
     title = models.CharField(_("Title"), max_length=200)
     description = models.TextField(
         _("Description"), help_text=_("Detailed summary of the work to perform."),
+    )
+    category = models.ForeignKey(
+        "teams.TaskCategory",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="manual_tasks",
+        verbose_name=_("Category"),
+        help_text=_("Optional workgroup category for this task."),
     )
     assigned_user = models.ForeignKey(
         "core.User",
