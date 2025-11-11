@@ -6,6 +6,9 @@ from urllib.parse import quote
 
 from django import forms
 from django.contrib import admin
+from django.contrib.messages.storage.fallback import FallbackStorage
+from django.contrib.auth.models import Permission
+from django.test import TransactionTestCase, RequestFactory
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.contrib.messages import get_messages
@@ -150,9 +153,8 @@ class UserDataAdminTests(TransactionTestCase):
             "admin:user_data_toggle",
             args=("teams", "odooprofile", self.profile.pk),
         )
-        content = response.content.decode()
-        self.assertIn(f'formaction="{toggle_url}?next=', content)
-        self.assertIn('formmethod="post"', content)
+        self.assertContains(response, f'formaction="{toggle_url}"')
+        self.assertContains(response, 'formmethod="post"')
 
     def test_toggle_user_data_star(self):
         toggle_url = reverse(
@@ -180,32 +182,29 @@ class UserDataAdminTests(TransactionTestCase):
         messages = [m.message for m in get_messages(response.wsgi_request)]
         self.assertTrue(any("User datum removed" in msg for msg in messages))
 
-    def test_toggle_requires_change_permission(self):
+    def test_toggle_user_data_requires_change_permission(self):
+        User = get_user_model()
+        viewer = User.objects.create_user(
+            "viewer", password="pw", is_staff=True, is_superuser=False
+        )
+        view_permission = Permission.objects.get(
+            codename="view_odooprofile", content_type__app_label="teams"
+        )
+        viewer.user_permissions.add(view_permission)
+
+        self.client.logout()
+        logged_in = self.client.login(username="viewer", password="pw")
+        self.assertTrue(logged_in)
+
         toggle_url = reverse(
             "admin:user_data_toggle",
             args=("teams", "odooprofile", self.profile.pk),
         )
         changelist_url = reverse("admin:teams_odooprofile_changelist")
 
-        viewer = get_user_model().objects.create_user(
-            "viewonly", password="pw", is_staff=True
-        )
-        viewer.user_permissions.add(
-            Permission.objects.get(
-                codename="view_odooprofile",
-                content_type__app_label="teams",
-                content_type__model="odooprofile",
-            )
-        )
-
-        self.client.logout()
-        self.client.login(username="viewonly", password="pw")
-
-        response = self.client.post(
-            f"{toggle_url}?next={quote(changelist_url, safe='')}",
-        )
-
+        response = self.client.post(toggle_url, {"next": changelist_url})
         self.assertEqual(response.status_code, 403)
+
         self.profile.refresh_from_db()
         self.assertFalse(self.profile.is_user_data)
 
