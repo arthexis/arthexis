@@ -21,14 +21,20 @@ from django.contrib import admin, messages
 from django.forms import modelformset_factory
 from django.template.response import TemplateResponse
 from django.http import HttpResponseRedirect
-from django.urls import path, reverse
+from django.urls import NoReverseMatch, path, reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.formats import date_format
 from django.utils.html import format_html, format_html_join
 from django.utils.translation import gettext_lazy as _, ngettext
 
-from core.auto_upgrade import AUTO_UPGRADE_TASK_NAME, AUTO_UPGRADE_TASK_PATH
+from django.db import DatabaseError
+
+from core.auto_upgrade import (
+    AUTO_UPGRADE_TASK_NAME,
+    AUTO_UPGRADE_TASK_PATH,
+    ensure_auto_upgrade_periodic_task,
+)
 from core.auto_upgrade_failover import clear_failover_lock, read_failover_status
 from core import changelog as changelog_utils
 from core.release import (
@@ -653,6 +659,15 @@ def _load_auto_upgrade_log_entries(
     return result
 
 
+def _reverse_admin_url(route: str, *args) -> str:
+    """Return ``reverse(route, args=args)`` while ignoring missing routes."""
+
+    try:
+        return reverse(route, args=args)
+    except NoReverseMatch:
+        return ""
+
+
 def _get_auto_upgrade_periodic_task():
     """Return the configured auto-upgrade periodic task, if available."""
 
@@ -661,10 +676,13 @@ def _get_auto_upgrade_periodic_task():
     except Exception:
         return None, False, str(_("django-celery-beat is not installed or configured."))
 
-    try:
-        task = (
+    def _query():
+        return (
             PeriodicTask.objects.select_related(
-                "interval", "crontab", "solar", "clocked"
+                "interval",
+                "crontab",
+                "solar",
+                "clocked",
             )
             .only(
                 "enabled",
@@ -677,15 +695,76 @@ def _get_auto_upgrade_periodic_task():
                 "task",
                 "name",
                 "description",
+                "id",
+                "interval_id",
+                "crontab_id",
+                "solar_id",
+                "clocked_id",
             )
             .get(name=AUTO_UPGRADE_TASK_NAME)
         )
-    except PeriodicTask.DoesNotExist:
-        return None, True, ""
-    except Exception:
-        return None, False, str(_("Auto-upgrade schedule could not be loaded."))
 
-    return task, True, ""
+    for attempt in range(2):
+        try:
+            task = _query()
+        except PeriodicTask.DoesNotExist:
+            if attempt:
+                return None, True, ""
+            try:
+                ensure_auto_upgrade_periodic_task()
+            except Exception:  # pragma: no cover - repair attempt failed
+                logger.exception("Unable to recreate auto-upgrade periodic task")
+                return None, False, str(_("Auto-upgrade schedule could not be loaded."))
+        except DatabaseError:
+            logger.exception("Error loading auto-upgrade periodic task")
+            if attempt:
+                return None, False, str(_("Auto-upgrade schedule could not be loaded."))
+            try:
+                ensure_auto_upgrade_periodic_task()
+            except Exception:  # pragma: no cover - repair attempt failed
+                logger.exception("Unable to recreate auto-upgrade periodic task")
+                return None, False, str(_("Auto-upgrade schedule could not be loaded."))
+        except Exception:
+            logger.exception("Unexpected failure while loading auto-upgrade task")
+            return None, False, str(_("Auto-upgrade schedule could not be loaded."))
+        else:
+            return task, True, ""
+
+    return None, True, ""
+
+
+def _resolve_auto_upgrade_schedule_links(task) -> dict[str, str]:
+    """Return admin URLs related to *task* when available."""
+
+    links = {
+        "task_admin_url": "",
+        "config_admin_url": "",
+        "config_type": "",
+    }
+
+    if not task:
+        return links
+
+    pk = getattr(task, "pk", None)
+    if pk:
+        links["task_admin_url"] = _reverse_admin_url(
+            "admin:django_celery_beat_periodictask_change", pk
+        )
+
+    schedule_routes = (
+        ("interval", "admin:django_celery_beat_intervalschedule_change"),
+        ("crontab", "admin:django_celery_beat_crontabschedule_change"),
+        ("solar", "admin:django_celery_beat_solarschedule_change"),
+        ("clocked", "admin:django_celery_beat_clockedschedule_change"),
+    )
+    for attr, route in schedule_routes:
+        related_id = getattr(task, f"{attr}_id", None)
+        if related_id:
+            links["config_admin_url"] = _reverse_admin_url(route, related_id)
+            links["config_type"] = attr
+            break
+
+    return links
 
 
 def _load_auto_upgrade_schedule() -> dict[str, object]:
@@ -708,10 +787,16 @@ def _load_auto_upgrade_schedule() -> dict[str, object]:
         "task": getattr(task, "task", "") or "",
         "name": getattr(task, "name", AUTO_UPGRADE_TASK_NAME) or AUTO_UPGRADE_TASK_NAME,
         "error": error,
+        "task_admin_url": "",
+        "config_admin_url": "",
+        "config_type": "",
     }
 
     if not task:
         return info
+
+    links = _resolve_auto_upgrade_schedule_links(task)
+    info.update(links)
 
     info["start_time"] = _format_timestamp(getattr(task, "start_time", None))
     info["last_run_at"] = _format_timestamp(getattr(task, "last_run_at", None))
