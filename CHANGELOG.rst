@@ -4,6 +4,7 @@ Changelog
 Unreleased
 ----------
 
+- 6666b5f6 chore: remove TODO fixtures
 - ae111d72 chore: update version and fixtures
 - ed687597 Sanitize admin favorite redirects (#2788)
 - 9d6a7b4d fix: backfill todo created on column (#2787)
