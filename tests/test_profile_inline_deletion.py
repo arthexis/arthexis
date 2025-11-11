@@ -8,6 +8,7 @@ from core.admin import PROFILE_INLINE_CONFIG, ProfileInlineFormSet
 from core.models import (
     EmailInbox,
     OdooProfile,
+    OpenPayProfile,
     ReleaseManager,
     SecurityGroup as CoreSecurityGroup,
 )
@@ -121,6 +122,19 @@ class ProfileInlineDeletionTests(TestCase):
         for field, value in blank_fields.items():
             data[f"{prefix}-0-{field}"] = value
         return data
+
+    def test_openpay_inline_includes_default_processor_field(self):
+        config = PROFILE_INLINE_CONFIG[OpenPayProfile]
+        fieldsets = config.get("fieldsets", ())
+        fields = [
+            field
+            for _, options in fieldsets
+            for field in options.get("fields", ())
+        ]
+        self.assertIn("default_processor", fields)
+
+        form = config["form"]()
+        self.assertIn("default_processor", form.fields)
 
     def test_blank_submission_marks_profiles_for_deletion(self):
         profiles = [OdooProfile, EmailInbox, EmailOutbox, ReleaseManager]

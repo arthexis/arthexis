@@ -1128,9 +1128,11 @@ class OpenPayProfileAdminForm(forms.ModelForm):
         self.fields["is_production"].help_text = _(
             "Enable to send requests to OpenPay's live environment."
         )
-        self.fields["default_processor"].help_text = _(
-            "Select which configured processor to try first when charging."
-        )
+        default_processor_field = self.fields.get("default_processor")
+        if default_processor_field is not None:
+            default_processor_field.help_text = _(
+                "Select which configured processor to try first when charging."
+            )
         self.fields["paypal_client_id"].help_text = _(
             "PayPal REST client ID for your application."
         )
@@ -1590,15 +1592,36 @@ PROFILE_INLINE_CONFIG = {
         "form": OpenPayProfileInlineForm,
         "fieldsets": (
             (
+                _("Default Processor"),
+                {
+                    "fields": ("default_processor",),
+                    "description": _(
+                        "Choose which configured processor to contact first when processing payments."
+                    ),
+                },
+            ),
+            (
                 None,
                 {
                     "fields": (
                         "merchant_id",
                         "public_key",
                         "private_key",
-                        "is_production",
                         "webhook_secret",
+                        "is_production",
                     )
+                },
+            ),
+            (
+                _("PayPal"),
+                {
+                    "fields": (
+                        "paypal_client_id",
+                        "paypal_client_secret",
+                        "paypal_webhook_id",
+                        "paypal_is_production",
+                    ),
+                    "description": _("Configure PayPal REST API access."),
                 },
             ),
             (
