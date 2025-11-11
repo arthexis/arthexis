@@ -3139,6 +3139,21 @@ class FavoriteTests(TestCase):
         resp = self.client.get(url)
         self.assertContains(resp, f'href="{next_url}"')
 
+    def test_rejects_external_next_url(self):
+        ct = ContentType.objects.get_by_natural_key("pages", "application")
+        next_url = "https://malicious.example.com/admin/"
+        url = (
+            reverse("admin:favorite_toggle", args=[ct.id]) + f"?next={quote(next_url)}"
+        )
+
+        admin_index = reverse("admin:index")
+
+        resp = self.client.post(url, {"custom_label": "Apps"})
+        self.assertRedirects(resp, admin_index)
+
+        resp = self.client.get(url)
+        self.assertContains(resp, f'href="{admin_index}"')
+
     def test_existing_favorite_shows_update_form(self):
         ct = ContentType.objects.get_by_natural_key("pages", "application")
         favorite = Favorite.objects.create(

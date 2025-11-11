@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Validate admin favorites redirect sanitizes next parameter",
+      "created_on": "2024-01-01T00:00:00Z",
+      "url": "/admin/",
+      "request_details": "From the Django admin dashboard, click a favorites star while appending a malicious next querystring such as ?next=https://example.com/. Confirm that saving or removing a favorite returns to the admin index rather than following the external URL, and that the Cancel link also points to the admin index.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.30"
+    }
+  }
+]

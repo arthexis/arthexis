@@ -22,6 +22,7 @@ from django.apps import apps as django_apps
 from django.conf import settings
 from django.utils.translation import gettext_lazy as _, ngettext
 from django.core.management import CommandError, call_command
+from django.utils.http import url_has_allowed_host_and_scheme
 
 from nodes.models import Node, NodeRole
 from nodes.utils import capture_screenshot, save_screenshot
@@ -50,6 +51,25 @@ from core.user_data import EntityModelAdmin
 
 
 logger = logging.getLogger(__name__)
+
+
+def _get_safe_next_url(request):
+    """Return a sanitized ``next`` parameter for redirect targets."""
+
+    candidate = request.POST.get("next") or request.GET.get("next")
+    if not candidate:
+        return None
+
+    allowed_hosts = {request.get_host()}
+    allowed_hosts.update(filter(None, settings.ALLOWED_HOSTS))
+
+    if url_has_allowed_host_and_scheme(
+        candidate,
+        allowed_hosts=allowed_hosts,
+        require_https=request.is_secure(),
+    ):
+        return candidate
+    return None
 
 
 def get_local_app_choices():
@@ -906,7 +926,7 @@ class UserStoryAdmin(EntityModelAdmin):
 def favorite_toggle(request, ct_id):
     ct = get_object_or_404(ContentType, pk=ct_id)
     fav = Favorite.objects.filter(user=request.user, content_type=ct).first()
-    next_url = request.GET.get("next")
+    next_url = _get_safe_next_url(request)
     if request.method == "POST":
         if fav and request.POST.get("remove"):
             fav.delete()
