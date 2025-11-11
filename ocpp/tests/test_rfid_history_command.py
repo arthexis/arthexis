@@ -5,14 +5,14 @@ from django.core.management import call_command, CommandError
 from django.test import TestCase
 from django.utils import timezone
 
-from core.models import EnergyAccount
+from core.models import CustomerAccount
 from ocpp.models import Charger, RFIDSessionAttempt
 
 
 class RFIDHistoryCommandTests(TestCase):
     def setUp(self):
         self.charger = Charger.objects.create(charger_id="CMDTEST")
-        self.account = EnergyAccount.objects.create(name="Primary")
+        self.account = CustomerAccount.objects.create(name="Primary")
 
     def test_no_attempts_reports_placeholder(self):
         out = io.StringIO()

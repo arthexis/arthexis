@@ -18,7 +18,7 @@ from teams.models import EmailOutbox
 from ocpp.models import CPReservation, Charger
 from core.models import Location
 from teams.admin import ManualTaskAdmin
-from teams.models import ManualTask, SecurityGroup
+from teams.models import ManualTask, SecurityGroup, TaskCategory
 
 
 class ManualTaskModelTests(TestCase):
@@ -71,6 +71,20 @@ class ManualTaskModelTests(TestCase):
         saved = ManualTask.objects.get()
         self.assertEqual(saved.node, self.node)
         self.assertEqual(saved.location, self.location)
+
+    def test_can_assign_category(self):
+        category = TaskCategory.objects.create(name="Maintenance")
+        task = ManualTask(
+            title="Inspect Charger",
+            description="Verify connectors are clean.",
+            node=self.node,
+            scheduled_start=self.start,
+            scheduled_end=self.end,
+            category=category,
+        )
+        task.full_clean()
+        task.save()
+        self.assertEqual(task.category, category)
 
 
 class ManualTaskNotificationTests(TestCase):
@@ -171,7 +185,7 @@ class ManualTaskNotificationTests(TestCase):
 
 class ManualTaskAdminActionTests(TestCase):
     def setUp(self):
-        EnergyAccount = apps.get_model("core", "EnergyAccount")
+        CustomerAccount = apps.get_model("core", "CustomerAccount")
         RFID = apps.get_model("core", "RFID")
 
         self.user = get_user_model().objects.create_user(
@@ -190,7 +204,7 @@ class ManualTaskAdminActionTests(TestCase):
         self.aggregate = Charger.objects.create(
             charger_id="SV123", location=self.location
         )
-        self.account = EnergyAccount.objects.create(name="Planner Account", user=self.user)
+        self.account = CustomerAccount.objects.create(name="Planner Account", user=self.user)
         self.rfid = RFID.objects.create(rfid="ABCDEF12")
         self.account.rfids.add(self.rfid)
         self.start = timezone.now() + timedelta(hours=2)

@@ -5,21 +5,26 @@ from __future__ import annotations
 from collections import OrderedDict
 from collections.abc import Iterable, Mapping
 
-from core.models import EnergyAccount, RFID
+from core.models import CustomerAccount, RFID
+
+ACCOUNT_ID_COLUMN = "customer_accounts"
+ACCOUNT_NAME_COLUMN = "customer_account_names"
+LEGACY_ACCOUNT_ID_COLUMN = "energy_accounts"
+LEGACY_ACCOUNT_NAME_COLUMN = "energy_account_names"
 
 
 def account_column_for_field(account_field: str) -> str:
     """Return the column name that should be used for the account field.
 
     Args:
-        account_field: Either ``"id"`` or ``"name"`` depending on how energy
+        account_field: Either ``"id"`` or ``"name"`` depending on how customer
             accounts should be represented.
 
     Returns:
         The CSV column header to use for the selected account field.
     """
 
-    return "energy_account_names" if account_field == "name" else "energy_accounts"
+    return ACCOUNT_NAME_COLUMN if account_field == "name" else ACCOUNT_ID_COLUMN
 
 
 def serialize_accounts(tag: RFID, account_field: str) -> str:
@@ -44,8 +49,8 @@ def _normalized_unique_names(values: Iterable[str]) -> list[str]:
     return list(seen.keys())
 
 
-def _accounts_from_ids(values: Iterable[str]) -> list[EnergyAccount]:
-    """Resolve a list of account ids into EnergyAccount instances."""
+def _accounts_from_ids(values: Iterable[str]) -> list[CustomerAccount]:
+    """Resolve a list of account ids into CustomerAccount instances."""
 
     identifiers: list[int] = []
     for value in values:
@@ -58,12 +63,12 @@ def _accounts_from_ids(values: Iterable[str]) -> list[EnergyAccount]:
             continue
     if not identifiers:
         return []
-    existing = EnergyAccount.objects.in_bulk(identifiers)
+    existing = CustomerAccount.objects.in_bulk(identifiers)
     return [existing[idx] for idx in identifiers if idx in existing]
 
 
-def parse_accounts(row: Mapping[str, object], account_field: str) -> list[EnergyAccount]:
-    """Resolve energy accounts for an RFID import row.
+def parse_accounts(row: Mapping[str, object], account_field: str) -> list[CustomerAccount]:
+    """Resolve customer accounts for an RFID import row.
 
     Args:
         row: Mapping of column names to raw values for the import row.
@@ -71,16 +76,21 @@ def parse_accounts(row: Mapping[str, object], account_field: str) -> list[Energy
             accounts are encoded.
 
     Returns:
-        A list of :class:`EnergyAccount` instances. The list will be empty when
+        A list of :class:`CustomerAccount` instances. The list will be empty when
         no accounts should be linked.
     """
 
     preferred_column = account_column_for_field(account_field)
     fallback_column = (
-        "energy_accounts"
-        if preferred_column == "energy_account_names"
-        else "energy_account_names"
+        ACCOUNT_ID_COLUMN
+        if preferred_column == ACCOUNT_NAME_COLUMN
+        else ACCOUNT_NAME_COLUMN
     )
+
+    legacy_columns = {
+        ACCOUNT_ID_COLUMN: LEGACY_ACCOUNT_ID_COLUMN,
+        ACCOUNT_NAME_COLUMN: LEGACY_ACCOUNT_NAME_COLUMN,
+    }
 
     def _value_for(column: str) -> str:
         raw = row.get(column, "")
@@ -88,14 +98,18 @@ def parse_accounts(row: Mapping[str, object], account_field: str) -> list[Energy
             return ""
         return str(raw).strip()
 
-    raw_value = _value_for(preferred_column)
+    raw_value = _value_for(preferred_column) or _value_for(
+        legacy_columns.get(preferred_column, "")
+    )
     effective_field = account_field
 
     if not raw_value:
-        raw_value = _value_for(fallback_column)
+        raw_value = _value_for(fallback_column) or _value_for(
+            legacy_columns.get(fallback_column, "")
+        )
         if raw_value:
             effective_field = (
-                "name" if fallback_column == "energy_account_names" else "id"
+                "name" if fallback_column == ACCOUNT_NAME_COLUMN else "id"
             )
 
     if not raw_value:
@@ -103,9 +117,9 @@ def parse_accounts(row: Mapping[str, object], account_field: str) -> list[Energy
 
     parts = raw_value.split(",")
     if effective_field == "name":
-        accounts: list[EnergyAccount] = []
+        accounts: list[CustomerAccount] = []
         for normalized_name in _normalized_unique_names(parts):
-            account, _ = EnergyAccount.objects.get_or_create(name=normalized_name)
+            account, _ = CustomerAccount.objects.get_or_create(name=normalized_name)
             accounts.append(account)
         return accounts
 

@@ -4775,7 +4775,7 @@ class SimulatorAdminTests(TransactionTestCase):
         user = await database_sync_to_async(User.objects.create_user)(
             username="authuser", password="pwd"
         )
-        account = await database_sync_to_async(EnergyAccount.objects.create)(
+        account = await database_sync_to_async(CustomerAccount.objects.create)(
             user=user, name="Authorized"
         )
         await database_sync_to_async(EnergyCredit.objects.create)(
@@ -4917,7 +4917,7 @@ class SimulatorAdminTests(TransactionTestCase):
         user = await database_sync_to_async(User.objects.create_user)(
             username="bob", password="pwd"
         )
-        acc = await database_sync_to_async(EnergyAccount.objects.create)(
+        acc = await database_sync_to_async(CustomerAccount.objects.create)(
             user=user, name="BOB"
         )
         await database_sync_to_async(EnergyCredit.objects.create)(
@@ -4947,7 +4947,7 @@ class SimulatorAdminTests(TransactionTestCase):
         tx = await database_sync_to_async(Transaction.objects.get)(
             pk=tx_id, charger__charger_id="RFIDOK"
         )
-        self.assertEqual(tx.account_id, user.energy_account.id)
+        self.assertEqual(tx.account_id, user.customer_account.id)
 
     async def test_start_transaction_allows_allowed_tag_without_account(self):
         charger_id = "STARTWARN"

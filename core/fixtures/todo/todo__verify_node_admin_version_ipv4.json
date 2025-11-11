@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Verify Node admin shows version info and preserves IPv4 priorities",
+      "created_on": "2025-11-11T00:00:00Z",
+      "url": "/admin/nodes/node/",
+      "request_details": "Log into the Django admin and open the Nodes changelist. Confirm the new Version column shows the installed version and short revision for each node. Edit a remote node and set the IPv4 address field to '198.51.100.10, 127.0.0.1, 203.0.113.20'. After saving, reopen the record to confirm the loopback address was removed and the remaining IPv4 addresses retain their preferred order as '198.51.100.10,203.0.113.20'. From the changelist, use the 'Update selected nodes' action on that node and verify the progress modal reports attempts against each IPv4 candidate in order until the request succeeds.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.31"
+    }
+  }
+]

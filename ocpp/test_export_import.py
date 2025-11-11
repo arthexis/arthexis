@@ -11,12 +11,12 @@ from django.urls import reverse
 from django.contrib.auth import get_user_model
 
 from ocpp.models import Charger, Transaction, MeterValue
-from core.models import EnergyAccount
+from core.models import CustomerAccount
 
 
 class TransactionExportImportTests(TestCase):
     def setUp(self):
-        self.account = EnergyAccount.objects.create(name="ACC")
+        self.account = CustomerAccount.objects.create(name="ACC")
         self.ch1 = Charger.objects.create(charger_id="C1")
         self.ch2 = Charger.objects.create(charger_id="C2")
         now = timezone.now()
@@ -69,7 +69,7 @@ class TransactionExportImportTests(TestCase):
 
 class TransactionAdminExportImportTests(TestCase):
     def setUp(self):
-        self.account = EnergyAccount.objects.create(name="ACC")
+        self.account = CustomerAccount.objects.create(name="ACC")
         self.ch1 = Charger.objects.create(charger_id="C1")
         self.ch2 = Charger.objects.create(charger_id="C2")
         now = timezone.now()

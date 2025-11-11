@@ -43,6 +43,7 @@ from .forms import (
     SlackBotProfileAdminForm,
     TOTPDeviceAdminForm,
     TOTPDeviceCalibrationActionForm,
+    TaskCategoryAdminForm,
 )
 from .models import (
     InviteLead,
@@ -58,6 +59,7 @@ from .models import (
     GoogleCalendarProfile,
     ManualTask,
     SlackBotProfile,
+    TaskCategory,
 )
 
 
@@ -164,10 +166,37 @@ class SlackBotProfileAdmin(EntityModelAdmin):
         return initial
 
 
+@admin.register(TaskCategory)
+class TaskCategoryAdmin(EntityModelAdmin):
+    form = TaskCategoryAdminForm
+    list_display = (
+        "name",
+        "availability_label",
+        "cost",
+        "requestor_group",
+        "assigned_group",
+    )
+    list_filter = ("availability", "requestor_group", "assigned_group")
+    search_fields = ("name", "description")
+    raw_id_fields = ("requestor_group", "assigned_group")
+    fieldsets = (
+        (None, {"fields": ("name", "description", "image")}),
+        (
+            _("Fulfillment"),
+            {"fields": ("availability", "cost", "odoo_product")},
+        ),
+        (
+            _("Routing"),
+            {"fields": ("requestor_group", "assigned_group")},
+        ),
+    )
+
+
 @admin.register(ManualTask)
 class ManualTaskAdmin(EntityModelAdmin):
     list_display = (
         "title",
+        "category",
         "assigned_user",
         "assigned_group",
         "node",
@@ -176,7 +205,7 @@ class ManualTaskAdmin(EntityModelAdmin):
         "scheduled_end",
         "enable_notifications",
     )
-    list_filter = ("node", "location", "enable_notifications")
+    list_filter = ("node", "location", "enable_notifications", "category")
     search_fields = (
         "title",
         "description",
@@ -185,8 +214,14 @@ class ManualTaskAdmin(EntityModelAdmin):
         "assigned_user__username",
         "assigned_user__email",
         "assigned_group__name",
+        "category__name",
     )
-    raw_id_fields = ("node", "location", "assigned_user", "assigned_group")
+    raw_id_fields = (
+        "node",
+        "location",
+        "assigned_user",
+        "assigned_group",
+    )
     date_hierarchy = "scheduled_start"
     actions = ("make_cp_reservations",)
     fieldsets = (
@@ -196,6 +231,7 @@ class ManualTaskAdmin(EntityModelAdmin):
                 "fields": (
                     "title",
                     "description",
+                    "category",
                     "assigned_user",
                     "assigned_group",
                     "enable_notifications",

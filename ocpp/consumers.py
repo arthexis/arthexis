@@ -11,7 +11,7 @@ import uuid
 from urllib.parse import parse_qs
 from django.conf import settings
 from django.utils import timezone
-from core.models import EnergyAccount, Reference, RFID as CoreRFID
+from core.models import CustomerAccount, Reference, RFID as CoreRFID
 from nodes.models import NetMessage
 from django.core.exceptions import ValidationError
 
@@ -376,17 +376,17 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 refresh_forwarders=False
             )
 
-    async def _get_account(self, id_tag: str) -> EnergyAccount | None:
-        """Return the energy account for the provided RFID if valid."""
+    async def _get_account(self, id_tag: str) -> CustomerAccount | None:
+        """Return the customer account for the provided RFID if valid."""
         if not id_tag:
             return None
 
-        def _resolve() -> EnergyAccount | None:
+        def _resolve() -> CustomerAccount | None:
             matches = CoreRFID.matching_queryset(id_tag).filter(allowed=True)
             if not matches.exists():
                 return None
             return (
-                EnergyAccount.objects.filter(rfids__in=matches)
+                CustomerAccount.objects.filter(rfids__in=matches)
                 .distinct()
                 .first()
             )
@@ -424,7 +424,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         """Record a warning when an RFID is authorized without an account."""
 
         message = (
-            f"Authorized RFID {rfid} on charger {self.charger_id} without linked energy account"
+            f"Authorized RFID {rfid} on charger {self.charger_id} without linked customer account"
         )
         logger.warning(message)
         store.add_log(
@@ -438,7 +438,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         *,
         rfid: str,
         status: RFIDSessionAttempt.Status,
-        account: EnergyAccount | None,
+        account: CustomerAccount | None,
         transaction: Transaction | None = None,
     ) -> None:
         """Persist RFID session attempt metadata for reporting."""

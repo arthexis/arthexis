@@ -26,7 +26,7 @@ from core.entity import Entity, EntityManager
 from nodes.models import Node
 
 from core.models import (
-    EnergyAccount,
+    CustomerAccount,
     EnergyTariff,
     Location,
     Reference,
@@ -912,7 +912,7 @@ class Transaction(Entity):
         Charger, on_delete=models.CASCADE, related_name="transactions", null=True
     )
     account = models.ForeignKey(
-        EnergyAccount, on_delete=models.PROTECT, related_name="transactions", null=True
+        CustomerAccount, on_delete=models.PROTECT, related_name="transactions", null=True
     )
     rfid = models.CharField(
         max_length=20,
@@ -1090,7 +1090,7 @@ class RFIDSessionAttempt(Entity):
     status = models.CharField(max_length=16, choices=Status.choices)
     attempted_at = models.DateTimeField(auto_now_add=True)
     account = models.ForeignKey(
-        EnergyAccount,
+        CustomerAccount,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -1692,7 +1692,7 @@ class CPReservation(Entity):
         verbose_name=_("Connector"),
     )
     account = models.ForeignKey(
-        EnergyAccount,
+        CustomerAccount,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -2089,10 +2089,10 @@ class EVModel(Entity):
 
 
 class ElectricVehicle(Entity):
-    """Electric vehicle associated with an Energy Account."""
+    """Electric vehicle associated with a Customer Account."""
 
     account = models.ForeignKey(
-        EnergyAccount, on_delete=models.CASCADE, related_name="vehicles"
+        CustomerAccount, on_delete=models.CASCADE, related_name="vehicles"
     )
     brand = models.ForeignKey(
         Brand,
