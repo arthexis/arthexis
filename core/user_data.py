@@ -11,7 +11,7 @@ from django.conf import settings
 from django.contrib import admin, messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.signals import user_logged_in
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.management import call_command
 from django.db.models.signals import post_save
 from django.dispatch import receiver
@@ -677,6 +677,9 @@ def toggle_user_datum(request, app_label, model_name, object_id):
         obj = queryset.get(pk=pk)
     except model.DoesNotExist as exc:
         raise Http404 from exc
+
+    if not model_admin.has_change_permission(request, obj):
+        raise PermissionDenied
 
     manager = getattr(model, "all_objects", model._default_manager)
     target_user = _resolve_fixture_user(obj, request.user)
