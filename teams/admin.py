@@ -24,8 +24,6 @@ from core.models import (
     InviteLead as CoreInviteLead,
     User as CoreUser,
     SecurityGroup as CoreSecurityGroup,
-    EmailInbox as CoreEmailInbox,
-    EmailCollector as CoreEmailCollector,
     ReleaseManager as CoreReleaseManager,
     OdooProfile as CoreOdooProfile,
 )
@@ -39,7 +37,7 @@ from core.user_data import (
     _user_allows_user_data,
 )
 from nodes.admin import EmailOutboxAdmin
-from nodes.models import EmailOutbox as CoreEmailOutbox, Node
+from nodes.models import Node
 
 from .forms import (
     SlackBotProfileAdminForm,

@@ -15,7 +15,7 @@ from django.contrib.messages import get_messages
 
 from teams.models import OdooProfile
 
-from nodes.models import EmailOutbox
+from teams.models import EmailOutbox
 
 from awg.models import CalculatorTemplate
 

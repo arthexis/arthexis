@@ -63,7 +63,7 @@ def send(
 def can_send_email() -> bool:
     """Return ``True`` when at least one outbound email path is configured."""
 
-    from nodes.models import EmailOutbox  # imported lazily to avoid circular deps
+    from teams.models import EmailOutbox  # imported lazily to avoid circular deps
 
     has_outbox = (
         EmailOutbox.objects.filter(is_enabled=True).exclude(host="").exists()

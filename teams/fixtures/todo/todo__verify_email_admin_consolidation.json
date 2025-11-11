@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Confirm email admin entries consolidated under Teams",
+      "created_on": "2024-01-01T00:00:00Z",
+      "version": "0.1.31",
+      "url": "/admin/teams/emailinbox/",
+      "request_details": "Log into the Django admin and open the Teams › Email Inbox section. Verify that Email Inbox, Email Collector, and Email Outbox only appear under the Teams group and no longer show duplicates in Business or Nodes. For each model, open the changelist and create view to ensure they load without errors and reflect existing records.",
+      "done_on": null,
+      "is_deleted": false
+    }
+  }
+]

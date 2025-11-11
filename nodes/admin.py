@@ -53,7 +53,6 @@ from core.admin import EmailOutboxAdminForm
 from protocols.models import CPForwarder
 from .models import (
     Node,
-    EmailOutbox,
     NodeRole,
     NodeFeature,
     NodeFeatureAssignment,
@@ -67,6 +66,7 @@ from .models import (
 )
 from . import dns as dns_utils
 from core.models import RFID
+from teams.models import EmailOutbox
 from ocpp import store
 from ocpp.models import (
     Charger,
@@ -1654,7 +1654,6 @@ class NodeAdmin(EntityModelAdmin):
         )
 
 
-@admin.register(EmailOutbox)
 class EmailOutboxAdmin(EntityModelAdmin):
     form = EmailOutboxAdminForm
     list_display = (

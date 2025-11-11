@@ -7,7 +7,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase, RequestFactory
 
 from nodes.admin import EmailOutboxAdmin, EmailOutbox as AdminEmailOutbox
-from nodes.models import EmailOutbox
+from teams.models import EmailOutbox
 from core.admin import EmailOutboxAdminForm, KeepExistingValue
 
 
