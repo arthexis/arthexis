@@ -73,8 +73,10 @@ from .github_helper import GitHubRepositoryError, create_repository_for_package
 from .models import (
     User,
     UserPhoneNumber,
-    EnergyAccount,
+    CustomerAccount,
     EnergyCredit,
+    EnergyTransaction,
+    EnergyTariff,
     ClientReport,
     ClientReportSchedule,
     Product,
@@ -896,25 +898,25 @@ class PublicWifiAccessAdmin(EntityModelAdmin):
     ordering = ("-created_on",)
 
 
-class EnergyAccountRFIDForm(forms.ModelForm):
-    """Form for assigning existing RFIDs to an energy account."""
+class CustomerAccountRFIDForm(forms.ModelForm):
+    """Form for assigning existing RFIDs to a customer account."""
 
     class Meta:
-        model = EnergyAccount.rfids.through
+        model = CustomerAccount.rfids.through
         fields = ["rfid"]
 
     def clean_rfid(self):
         rfid = self.cleaned_data["rfid"]
-        if rfid.energy_accounts.exclude(pk=self.instance.energyaccount_id).exists():
+        if rfid.energy_accounts.exclude(pk=self.instance.customeraccount_id).exists():
             raise forms.ValidationError(
-                "RFID is already assigned to another energy account"
+                "RFID is already assigned to another customer account"
             )
         return rfid
 
 
-class EnergyAccountRFIDInline(admin.TabularInline):
-    model = EnergyAccount.rfids.through
-    form = EnergyAccountRFIDForm
+class CustomerAccountRFIDInline(admin.TabularInline):
+    model = CustomerAccount.rfids.through
+    form = CustomerAccountRFIDForm
     autocomplete_fields = ["rfid"]
     extra = 0
     verbose_name = "RFID"
@@ -939,7 +941,7 @@ class UserChangeRFIDForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         user = self.instance
         field = self.fields["login_rfid"]
-        account = getattr(user, "energy_account", None)
+        account = getattr(user, "customer_account", None)
         if account is not None:
             queryset = RFID.objects.filter(
                 Q(energy_accounts__isnull=True) | Q(energy_accounts=account)
@@ -952,14 +954,14 @@ class UserChangeRFIDForm(forms.ModelForm):
         field.queryset = queryset.order_by("label_id")
         field.empty_label = _("Keep current assignment")
 
-    def _ensure_energy_account(self, user):
-        account = getattr(user, "energy_account", None)
+    def _ensure_customer_account(self, user):
+        account = getattr(user, "customer_account", None)
         if account is not None:
             if account.user_id != user.pk:
                 account.user = user
                 account.save(update_fields=["user"])
             return account
-        account = EnergyAccount.objects.filter(user=user).first()
+        account = CustomerAccount.objects.filter(user=user).first()
         if account is not None:
             if account.user_id != user.pk:
                 account.user = user
@@ -976,17 +978,17 @@ class UserChangeRFIDForm(forms.ModelForm):
         base_name = base_slug.upper()
         candidate = base_name
         suffix = 1
-        while EnergyAccount.objects.filter(name=candidate).exists():
+        while CustomerAccount.objects.filter(name=candidate).exists():
             suffix += 1
             candidate = f"{base_name}-{suffix}"
-        return EnergyAccount.objects.create(user=user, name=candidate)
+        return CustomerAccount.objects.create(user=user, name=candidate)
 
     def save(self, commit=True):
         user = super().save(commit)
         rfid = self.cleaned_data.get("login_rfid")
         if not rfid:
             return user
-        account = self._ensure_energy_account(user)
+        account = self._ensure_customer_account(user)
         if account.pk is None:
             account.save()
         other_accounts = list(rfid.energy_accounts.exclude(pk=account.pk))
@@ -2361,9 +2363,23 @@ class EnergyCreditInline(admin.TabularInline):
     extra = 0
 
 
-@admin.register(EnergyAccount)
-class EnergyAccountAdmin(EntityModelAdmin):
-    change_list_template = "admin/core/energyaccount/change_list.html"
+class EnergyTransactionInline(admin.TabularInline):
+    model = EnergyTransaction
+    fields = (
+        "tariff",
+        "purchased_kw",
+        "charged_amount_mxn",
+        "conversion_factor",
+        "created_on",
+    )
+    readonly_fields = ("created_on",)
+    extra = 0
+    autocomplete_fields = ["tariff"]
+
+
+@admin.register(CustomerAccount)
+class CustomerAccountAdmin(EntityModelAdmin):
+    change_list_template = "admin/core/customeraccount/change_list.html"
     change_form_template = "admin/user_datum_change_form.html"
     list_display = (
         "name",
@@ -2371,6 +2387,7 @@ class EnergyAccountAdmin(EntityModelAdmin):
         "credits_kw",
         "total_kw_spent",
         "balance_kw",
+        "balance_mxn",
         "service_account",
         "authorized",
     )
@@ -2387,20 +2404,10 @@ class EnergyAccountAdmin(EntityModelAdmin):
         "balance_kw",
         "authorized",
     )
-    inlines = [EnergyAccountRFIDInline, EnergyCreditInline]
+    inlines = [CustomerAccountRFIDInline, EnergyCreditInline, EnergyTransactionInline]
     actions = ["test_authorization"]
     fieldsets = (
-        (
-            None,
-            {
-                "fields": (
-                    "name",
-                    "user",
-                    ("service_account", "authorized"),
-                    ("credits_kw", "total_kw_spent", "balance_kw"),
-                )
-            },
-        ),
+        (None, {"fields": ("name", "user", ("service_account", "authorized"))}),
         (
             "Live Subscription",
             {
@@ -2408,6 +2415,29 @@ class EnergyAccountAdmin(EntityModelAdmin):
                     "live_subscription_product",
                     ("live_subscription_start_date", "live_subscription_next_renewal"),
                 )
+            },
+        ),
+        (
+            "Billing",
+            {
+                "fields": (
+                    "balance_mxn",
+                    "minimum_purchase_mxn",
+                    "energy_tariff",
+                    "credit_card_brand",
+                    ("credit_card_last4", "credit_card_exp_month", "credit_card_exp_year"),
+                )
+            },
+        ),
+        (
+            "Energy Summary",
+            {
+                "fields": (
+                    "credits_kw",
+                    "total_kw_spent",
+                    "balance_kw",
+                ),
+                "classes": ("collapse",),
             },
         ),
     )
@@ -2442,7 +2472,7 @@ class EnergyAccountAdmin(EntityModelAdmin):
             path(
                 "onboard/",
                 self.admin_site.admin_view(self.onboard_details),
-                name="core_energyaccount_onboard_details",
+                name="core_customeraccount_onboard_details",
             ),
         ]
         return custom + urls
@@ -2471,7 +2501,7 @@ class EnergyAccountAdmin(EntityModelAdmin):
                     last_name=last,
                     is_active=allow,
                 )
-                account = EnergyAccount.objects.create(user=user, name=username.upper())
+                account = CustomerAccount.objects.create(user=user, name=username.upper())
                 rfid_val = form.cleaned_data["rfid"].upper()
                 if rfid_val:
                     tag, _ = RFID.register_scan(rfid_val)
@@ -2480,7 +2510,7 @@ class EnergyAccountAdmin(EntityModelAdmin):
                 if vehicle_vin:
                     ElectricVehicle.objects.create(account=account, vin=vehicle_vin)
                 self.message_user(request, "Customer onboarded")
-                return redirect("admin:core_energyaccount_changelist")
+                return redirect("admin:core_customeraccount_changelist")
         else:
             form = OnboardForm()
 
@@ -2498,6 +2528,39 @@ class EnergyCreditAdmin(EntityModelAdmin):
         if not obj.created_by:
             obj.created_by = request.user
         super().save_model(request, obj, form, change)
+
+
+@admin.register(EnergyTransaction)
+class EnergyTransactionAdmin(EntityModelAdmin):
+    list_display = (
+        "account",
+        "tariff",
+        "purchased_kw",
+        "charged_amount_mxn",
+        "conversion_factor",
+        "created_on",
+    )
+    readonly_fields = ("created_on",)
+    autocomplete_fields = ["account", "tariff"]
+
+
+@admin.register(EnergyTariff)
+class EnergyTariffAdmin(EntityModelAdmin):
+    list_display = (
+        "contract_type",
+        "zone",
+        "period",
+        "unit",
+        "year",
+        "price_mxn",
+    )
+    list_filter = ("year", "zone", "contract_type", "period", "season", "unit")
+    search_fields = (
+        "contract_type",
+        "zone",
+        "period",
+        "season",
+    )
 
     def get_model_perms(self, request):
         return {}
@@ -3231,7 +3294,7 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
                         )
                     accounts = list(tag.energy_accounts.all())
                     if accounts:
-                        transferable: list[EnergyAccount] = []
+                        transferable: list[CustomerAccount] = []
                         for account in accounts:
                             if existing_account_ids and account.pk not in existing_account_ids:
                                 conflicting_accounts += 1
@@ -3297,8 +3360,8 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
             self.message_user(
                 request,
                 ngettext(
-                    "Skipped %(count)d energy account because the RFID was already linked to a different account.",
-                    "Skipped %(count)d energy accounts because the RFID was already linked to a different account.",
+                    "Skipped %(count)d customer account because the RFID was already linked to a different account.",
+                    "Skipped %(count)d customer accounts because the RFID was already linked to a different account.",
                     conflicting_accounts,
                 )
                 % {"count": conflicting_accounts},

@@ -28,7 +28,7 @@ class Command(BaseCommand):
             choices=["id", "name"],
             default="id",
             help=(
-                "Include energy accounts using the selected field (default: id). "
+                "Include customer accounts using the selected field (default: id). "
                 "Use 'name' to export the related account names."
             ),
         )

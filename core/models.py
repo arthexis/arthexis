@@ -24,6 +24,7 @@ from datetime import (
 )
 import logging
 import json
+from decimal import Decimal
 from django.contrib.contenttypes.models import ContentType
 import hashlib
 import hmac
@@ -407,7 +408,7 @@ class User(Entity, AbstractUser):
         _("active"),
         default=True,
         help_text=(
-            "Designates whether this user should be treated as active. Unselect this instead of deleting energy accounts."
+            "Designates whether this user should be treated as active. Unselect this instead of deleting customer accounts."
         ),
     )
 
@@ -2097,16 +2098,16 @@ class RFID(Entity):
 
     @classmethod
     def get_account_by_rfid(cls, value):
-        """Return the energy account associated with an RFID code if it exists."""
+        """Return the customer account associated with an RFID code if it exists."""
         try:
-            EnergyAccount = apps.get_model("core", "EnergyAccount")
-        except LookupError:  # pragma: no cover - energy accounts app optional
+            CustomerAccount = apps.get_model("core", "CustomerAccount")
+        except LookupError:  # pragma: no cover - customer accounts app optional
             return None
         matches = cls.matching_queryset(value).filter(allowed=True)
         if not matches.exists():
             return None
         return (
-            EnergyAccount.objects.filter(rfids__in=matches)
+            CustomerAccount.objects.filter(rfids__in=matches)
             .distinct()
             .first()
         )
@@ -2306,14 +2307,14 @@ class EnergyTariff(Entity):
 
     natural_key.dependencies = []  # type: ignore[attr-defined]
 
-class EnergyAccount(Entity):
-    """Track kW energy credits for a user."""
+class CustomerAccount(Entity):
+    """Track kW energy credits, balance, and billing for a user."""
 
     name = models.CharField(max_length=100, unique=True)
     user = models.OneToOneField(
         get_user_model(),
         on_delete=models.CASCADE,
-        related_name="energy_account",
+        related_name="customer_account",
         null=True,
         blank=True,
     )
@@ -2328,6 +2329,49 @@ class EnergyAccount(Entity):
         default=False,
         help_text="Allow transactions even when the balance is zero or negative",
     )
+    balance_mxn = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal("0"),
+        help_text="Available currency balance for auto top-ups.",
+    )
+    minimum_purchase_mxn = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        default=Decimal("0"),
+        help_text="Default amount to purchase when topping up via credit card.",
+    )
+    energy_tariff = models.ForeignKey(
+        "EnergyTariff",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="accounts",
+        help_text="Tariff used to convert currency balance to energy credits.",
+    )
+    credit_card_brand = models.CharField(
+        max_length=20,
+        blank=True,
+        default="",
+        help_text="Brand of the backup credit card.",
+    )
+    credit_card_last4 = models.CharField(
+        max_length=4,
+        blank=True,
+        default="",
+        help_text="Last four digits of the backup credit card.",
+    )
+    credit_card_exp_month = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(1), MaxValueValidator(12)],
+        help_text="Expiration month for the backup credit card.",
+    )
+    credit_card_exp_year = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text="Expiration year for the backup credit card.",
+    )
     live_subscription_product = models.ForeignKey(
         "Product",
         null=True,
@@ -2340,11 +2384,16 @@ class EnergyAccount(Entity):
 
     def can_authorize(self) -> bool:
         """Return True if this account should be authorized for charging."""
-        return self.service_account or self.balance_kw > 0
+        if self.service_account:
+            return True
+        if self.balance_kw > 0:
+            return True
+        potential = self.potential_purchase_kw
+        return potential > 0
 
     @property
     def credits_kw(self):
-        """Total kW energy credits added to the energy account."""
+        """Total kW energy credits added to the customer account."""
         from django.db.models import Sum
         from decimal import Decimal
 
@@ -2369,8 +2418,20 @@ class EnergyAccount(Entity):
 
     @property
     def balance_kw(self):
-        """Remaining kW available for the energy account."""
+        """Remaining kW available for the customer account."""
         return self.credits_kw - self.total_kw_spent
+
+    @property
+    def potential_purchase_kw(self):
+        """kW that could be purchased using the current balance and tariff."""
+        if not self.energy_tariff:
+            return Decimal("0")
+        price = self.energy_tariff.price_mxn
+        if price is None or price <= 0:
+            return Decimal("0")
+        if self.balance_mxn <= 0:
+            return Decimal("0")
+        return self.balance_mxn / price
 
     def save(self, *args, **kwargs):
         if self.name:
@@ -2392,16 +2453,16 @@ class EnergyAccount(Entity):
         return self.name
 
     class Meta:
-        verbose_name = "Energy Account"
-        verbose_name_plural = "Energy Accounts"
+        verbose_name = "Customer Account"
+        verbose_name_plural = "Customer Accounts"
         db_table = "core_account"
 
 
 class EnergyCredit(Entity):
-    """Energy credits added to an energy account."""
+    """Energy credits added to a customer account."""
 
     account = models.ForeignKey(
-        EnergyAccount, on_delete=models.CASCADE, related_name="credits"
+        CustomerAccount, on_delete=models.CASCADE, related_name="credits"
     )
     amount_kw = models.DecimalField(
         max_digits=10, decimal_places=2, verbose_name="Energy (kW)"
@@ -2419,7 +2480,7 @@ class EnergyCredit(Entity):
         user = (
             self.account.user
             if self.account.user
-            else f"Energy Account {self.account_id}"
+            else f"Customer Account {self.account_id}"
         )
         return f"{self.amount_kw} kW for {user}"
 
@@ -2427,6 +2488,46 @@ class EnergyCredit(Entity):
         verbose_name = "Energy Credit"
         verbose_name_plural = "Energy Credits"
         db_table = "core_credit"
+
+
+class EnergyTransaction(Entity):
+    """Record of currency-to-energy purchases for an account."""
+
+    account = models.ForeignKey(
+        CustomerAccount, on_delete=models.CASCADE, related_name="energy_transactions"
+    )
+    tariff = models.ForeignKey(
+        "EnergyTariff",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="energy_transactions",
+        help_text="Tariff in effect when the purchase occurred.",
+    )
+    purchased_kw = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        help_text="Number of kW purchased for the account.",
+    )
+    charged_amount_mxn = models.DecimalField(
+        max_digits=12,
+        decimal_places=2,
+        help_text="Currency amount used for the purchase.",
+    )
+    conversion_factor = models.DecimalField(
+        max_digits=12,
+        decimal_places=6,
+        help_text="Conversion factor (kW per MXN) applied at purchase time.",
+    )
+    created_on = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Energy Transaction"
+        verbose_name_plural = "Energy Transactions"
+        ordering = ("-created_on",)
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return f"{self.purchased_kw} kW on {self.created_on:%Y-%m-%d}"
 
 
 class ClientReportSchedule(Entity):
@@ -4428,25 +4529,25 @@ class PackageRelease(Entity):
         return self.revision[-6:] if self.revision else ""
 
 
-# Ensure each RFID can only be linked to one energy account
-@receiver(m2m_changed, sender=EnergyAccount.rfids.through)
-def _rfid_unique_energy_account(
+# Ensure each RFID can only be linked to one customer account
+@receiver(m2m_changed, sender=CustomerAccount.rfids.through)
+def _rfid_unique_customer_account(
     sender, instance, action, reverse, model, pk_set, **kwargs
 ):
-    """Prevent associating an RFID with more than one energy account."""
+    """Prevent associating an RFID with more than one customer account."""
     if action == "pre_add":
-        if reverse:  # adding energy accounts to an RFID
+        if reverse:  # adding customer accounts to an RFID
             if instance.energy_accounts.exclude(pk__in=pk_set).exists():
                 raise ValidationError(
-                    "RFID tags may only be assigned to one energy account."
+                    "RFID tags may only be assigned to one customer account."
                 )
-        else:  # adding RFIDs to an energy account
+        else:  # adding RFIDs to a customer account
             conflict = model.objects.filter(
                 pk__in=pk_set, energy_accounts__isnull=False
             ).exclude(energy_accounts=instance)
             if conflict.exists():
                 raise ValidationError(
-                    "RFID tags may only be assigned to one energy account."
+                    "RFID tags may only be assigned to one customer account."
                 )
 
 def validate_relative_url(value: str) -> None:

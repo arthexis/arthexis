@@ -43,7 +43,7 @@ PYPI_REQUEST_TIMEOUT = 10
 
 from . import changelog as changelog_utils
 from . import temp_passwords
-from .models import OdooProfile, Product, EnergyAccount, PackageRelease, Todo
+from .models import OdooProfile, Product, CustomerAccount, PackageRelease, Todo
 from .models import RFID
 
 
@@ -1777,7 +1777,7 @@ def product_list(request):
 @csrf_exempt
 @api_login_required
 def add_live_subscription(request):
-    """Create a live subscription for an energy account from POSTed JSON."""
+    """Create a live subscription for a customer account from POSTed JSON."""
 
     if request.method != "POST":
         return JsonResponse({"detail": "POST required"}, status=400)
@@ -1801,8 +1801,8 @@ def add_live_subscription(request):
         return JsonResponse({"detail": "invalid product"}, status=404)
 
     try:
-        account = EnergyAccount.objects.get(id=account_id)
-    except EnergyAccount.DoesNotExist:
+        account = CustomerAccount.objects.get(id=account_id)
+    except CustomerAccount.DoesNotExist:
         return JsonResponse({"detail": "invalid account"}, status=404)
 
     start_date = timezone.now().date()
@@ -1825,10 +1825,10 @@ def live_subscription_list(request):
         return JsonResponse({"detail": "account_id required"}, status=400)
 
     try:
-        account = EnergyAccount.objects.select_related("live_subscription_product").get(
+        account = CustomerAccount.objects.select_related("live_subscription_product").get(
             id=account_id
         )
-    except EnergyAccount.DoesNotExist:
+    except CustomerAccount.DoesNotExist:
         return JsonResponse({"detail": "invalid account"}, status=404)
 
     subs = []
@@ -1866,19 +1866,26 @@ def rfid_batch(request):
             qs = qs.filter(color=color)
         if released in ("true", "false"):
             qs = qs.filter(released=(released == "true"))
-        tags = [
-            {
+        tags = []
+        for t in qs.order_by("rfid"):
+            ids = list(t.energy_accounts.values_list("id", flat=True))
+            names = list(
+                t.energy_accounts.exclude(name="").values_list("name", flat=True)
+            )
+            payload = {
                 "rfid": t.rfid,
                 "custom_label": t.custom_label,
-                "energy_accounts": list(t.energy_accounts.values_list("id", flat=True)),
+                "customer_accounts": ids,
+                "customer_account_names": names,
                 "external_command": t.external_command,
                 "post_auth_command": t.post_auth_command,
                 "allowed": t.allowed,
                 "color": t.color,
                 "released": t.released,
             }
-            for t in qs.order_by("rfid")
-        ]
+            payload["energy_accounts"] = ids
+            payload["energy_account_names"] = names
+            tags.append(payload)
         return JsonResponse({"rfids": tags})
 
     if request.method == "POST":
@@ -1897,7 +1904,14 @@ def rfid_batch(request):
             if not rfid:
                 continue
             allowed = row.get("allowed", True)
-            energy_accounts = row.get("energy_accounts") or []
+            energy_accounts = (
+                row.get("customer_accounts")
+                or row.get("energy_accounts")
+                or []
+            )
+            account_names = row.get("customer_account_names") or row.get(
+                "energy_account_names"
+            )
             color = (row.get("color") or RFID.BLACK).strip().upper() or RFID.BLACK
             released = row.get("released", False)
             if isinstance(released, str):
@@ -1925,10 +1939,18 @@ def rfid_batch(request):
                     "post_auth_command": post_auth_command,
                 },
             )
+            accounts_qs = CustomerAccount.objects.none()
             if energy_accounts:
-                tag.energy_accounts.set(
-                    EnergyAccount.objects.filter(id__in=energy_accounts)
-                )
+                accounts_qs = CustomerAccount.objects.filter(id__in=energy_accounts)
+            elif account_names:
+                names = [
+                    value.strip()
+                    for value in str(account_names).split(",")
+                    if value.strip()
+                ]
+                accounts_qs = CustomerAccount.objects.filter(name__in=names)
+            if accounts_qs:
+                tag.energy_accounts.set(accounts_qs)
             else:
                 tag.energy_accounts.clear()
             count += 1

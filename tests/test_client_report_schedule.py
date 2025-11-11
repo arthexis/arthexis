@@ -19,7 +19,7 @@ from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 
-from core.models import ClientReport, ClientReportSchedule, EnergyAccount, RFID
+from core.models import ClientReport, ClientReportSchedule, CustomerAccount, RFID
 from nodes.models import NetMessage, NodeRole
 from ocpp.models import Charger, Transaction
 from core.tasks import ensure_recurring_client_reports
@@ -36,7 +36,7 @@ class ClientReportScheduleRunTests(TestCase):
         )
         self.charger = Charger.objects.create(charger_id="C1")
         self.rfid = RFID.objects.create(rfid="AA11BB22")
-        self.account = EnergyAccount.objects.create(name="ACCOUNT")
+        self.account = CustomerAccount.objects.create(name="ACCOUNT")
         self.account.rfids.add(self.rfid)
         start = timezone.now() - timedelta(days=2)
         Transaction.objects.create(

@@ -26,7 +26,7 @@ from pathlib import Path
 import subprocess
 import types
 from glob import glob
-from datetime import datetime, timedelta, timezone as datetime_timezone
+from datetime import datetime, timedelta, timezone as datetime_timezone, time
 import tempfile
 from io import StringIO
 from urllib.parse import quote
@@ -39,8 +39,9 @@ from tablib import Dataset
 from .models import (
     User,
     UserPhoneNumber,
-    EnergyAccount,
+    CustomerAccount,
     EnergyCredit,
+    EnergyTariff,
     Product,
     RFID,
     SecurityGroup,
@@ -329,7 +330,7 @@ class RFIDLoginTests(TestCase):
     def setUp(self):
         self.client = Client()
         self.user = User.objects.create_user(username="alice", password="secret")
-        self.account = EnergyAccount.objects.create(user=self.user, name="ALICE")
+        self.account = CustomerAccount.objects.create(user=self.user, name="ALICE")
         tag = RFID.objects.create(rfid="CARD123")
         self.account.rfids.add(tag)
 
@@ -453,7 +454,7 @@ class RFIDBatchApiTests(TestCase):
     def setUp(self):
         self.client = Client()
         self.user = User.objects.create_user(username="bob", password="secret")
-        self.account = EnergyAccount.objects.create(user=self.user, name="BOB")
+        self.account = CustomerAccount.objects.create(user=self.user, name="BOB")
         self.client.force_login(self.user)
 
     def test_export_rfids(self):
@@ -498,7 +499,7 @@ class UserAdminPasswordChangeTests(TestCase):
         self.assertNotContains(response, "Login RFID")
 
     def test_change_password_does_not_alter_existing_rfid_assignment(self):
-        account = EnergyAccount.objects.create(user=self.user, name="TARGET")
+        account = CustomerAccount.objects.create(user=self.user, name="TARGET")
         tag = RFID.objects.create(rfid="CARD778")
         account.rfids.add(tag)
         url = reverse("admin:core_user_password_change", args=[self.user.pk])
@@ -547,7 +548,7 @@ class UserAdminLoginRFIDTests(TestCase):
 
     def test_change_form_includes_login_rfid_field(self):
         tag = RFID.objects.create(rfid="CARD777")
-        EnergyAccount.objects.create(user=self.user, name="TARGET")
+        CustomerAccount.objects.create(user=self.user, name="TARGET")
         url = reverse("admin:core_user_change", args=[self.user.pk])
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
@@ -555,7 +556,7 @@ class UserAdminLoginRFIDTests(TestCase):
         self.assertContains(response, str(tag.pk))
 
     def test_change_form_assigns_login_rfid(self):
-        account = EnergyAccount.objects.create(user=self.user, name="TARGET")
+        account = CustomerAccount.objects.create(user=self.user, name="TARGET")
         tag = RFID.objects.create(rfid="CARD778")
         url = reverse("admin:core_user_change", args=[self.user.pk])
         response = self.client.get(url)
@@ -567,7 +568,7 @@ class UserAdminLoginRFIDTests(TestCase):
         account.refresh_from_db()
         self.assertTrue(account.rfids.filter(pk=tag.pk).exists())
 
-    def test_change_form_creates_energy_account_when_missing(self):
+    def test_change_form_creates_customer_account_when_missing(self):
         tag = RFID.objects.create(rfid="CARD779")
         url = reverse("admin:core_user_change", args=[self.user.pk])
         response = self.client.get(url)
@@ -576,7 +577,7 @@ class UserAdminLoginRFIDTests(TestCase):
         self.assertRedirects(
             post_response, reverse("admin:core_user_change", args=[self.user.pk])
         )
-        account = EnergyAccount.objects.get(user=self.user)
+        account = CustomerAccount.objects.get(user=self.user)
         self.assertTrue(account.rfids.filter(pk=tag.pk).exists())
 
 
@@ -595,7 +596,7 @@ class AdminSitePasswordChangeTests(TestCase):
         self.assertNotContains(response, "Login RFID")
 
     def test_admin_password_change_keeps_existing_rfid_assignment(self):
-        account = EnergyAccount.objects.create(user=self.admin, name="ADMIN")
+        account = CustomerAccount.objects.create(user=self.admin, name="ADMIN")
         tag = RFID.objects.create(rfid="CARD881")
         account.rfids.add(tag)
         response = self.client.post(
@@ -695,7 +696,7 @@ class AdminSitePasswordChangeTests(TestCase):
 class AllowedRFIDTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username="eve", password="secret")
-        self.account = EnergyAccount.objects.create(user=self.user, name="EVE")
+        self.account = CustomerAccount.objects.create(user=self.user, name="EVE")
         self.rfid = RFID.objects.create(rfid="BAD123")
         self.account.rfids.add(self.rfid)
 
@@ -734,7 +735,7 @@ class RFIDValidationTests(TestCase):
 
     def test_find_user_by_rfid(self):
         user = User.objects.create_user(username="finder", password="pwd")
-        acc = EnergyAccount.objects.create(user=user, name="FINDER")
+        acc = CustomerAccount.objects.create(user=user, name="FINDER")
         tag = RFID.objects.create(rfid="ABCD1234")
         acc.rfids.add(tag)
         found = RFID.get_account_by_rfid("abcd1234")
@@ -771,8 +772,8 @@ class RFIDAssignmentTests(TestCase):
     def setUp(self):
         self.user1 = User.objects.create_user(username="user1", password="x")
         self.user2 = User.objects.create_user(username="user2", password="x")
-        self.acc1 = EnergyAccount.objects.create(user=self.user1, name="USER1")
-        self.acc2 = EnergyAccount.objects.create(user=self.user2, name="USER2")
+        self.acc1 = CustomerAccount.objects.create(user=self.user1, name="USER1")
+        self.acc2 = CustomerAccount.objects.create(user=self.user2, name="USER2")
         self.tag = RFID.objects.create(rfid="ABCDEF12")
 
     def test_rfid_can_only_attach_to_one_account(self):
@@ -781,10 +782,10 @@ class RFIDAssignmentTests(TestCase):
             self.acc2.rfids.add(self.tag)
 
 
-class EnergyAccountTests(TestCase):
+class CustomerAccountTests(TestCase):
     def test_balance_calculation(self):
         user = User.objects.create_user(username="balance", password="x")
-        acc = EnergyAccount.objects.create(user=user, name="BALANCE")
+        acc = CustomerAccount.objects.create(user=user, name="BALANCE")
         EnergyCredit.objects.create(account=acc, amount_kw=50)
         charger = Charger.objects.create(charger_id="T1")
         Transaction.objects.create(
@@ -800,7 +801,7 @@ class EnergyAccountTests(TestCase):
 
     def test_authorization_requires_positive_balance(self):
         user = User.objects.create_user(username="auth", password="x")
-        acc = EnergyAccount.objects.create(user=user, name="AUTH")
+        acc = CustomerAccount.objects.create(user=user, name="AUTH")
         self.assertFalse(acc.can_authorize())
 
         EnergyCredit.objects.create(account=acc, amount_kw=5)
@@ -808,13 +809,37 @@ class EnergyAccountTests(TestCase):
 
     def test_service_account_ignores_balance(self):
         user = User.objects.create_user(username="service", password="x")
-        acc = EnergyAccount.objects.create(
+        acc = CustomerAccount.objects.create(
             user=user, service_account=True, name="SERVICE"
         )
         self.assertTrue(acc.can_authorize())
 
+    def test_potential_purchase_kw_from_balance(self):
+        user = User.objects.create_user(username="tariff", password="x")
+        tariff = EnergyTariff.objects.create(
+            year=2025,
+            season=EnergyTariff.Season.ANNUAL,
+            zone=EnergyTariff.Zone.ONE,
+            contract_type=EnergyTariff.ContractType.DOMESTIC,
+            period=EnergyTariff.Period.FLAT,
+            unit=EnergyTariff.Unit.KWH,
+            start_time=time(hour=0, minute=0),
+            end_time=time(hour=23, minute=59),
+            price_mxn=Decimal("2.5000"),
+            cost_mxn=Decimal("2.0000"),
+        )
+        acc = CustomerAccount.objects.create(
+            user=user,
+            name="TARIFF",
+            balance_mxn=Decimal("50"),
+            energy_tariff=tariff,
+        )
+        expected_kw = acc.balance_mxn / tariff.price_mxn
+        self.assertEqual(acc.potential_purchase_kw, expected_kw)
+        self.assertTrue(acc.can_authorize())
+
     def test_account_without_user(self):
-        acc = EnergyAccount.objects.create(name="NOUSER")
+        acc = CustomerAccount.objects.create(name="NOUSER")
         tag = RFID.objects.create(rfid="NOUSER1")
         acc.rfids.add(tag)
         self.assertIsNone(acc.user)
@@ -824,7 +849,7 @@ class EnergyAccountTests(TestCase):
 class ElectricVehicleTests(TestCase):
     def test_account_can_have_multiple_vehicles(self):
         user = User.objects.create_user(username="cars", password="x")
-        acc = EnergyAccount.objects.create(user=user, name="CARS")
+        acc = CustomerAccount.objects.create(user=user, name="CARS")
         tesla = Brand.objects.create(name="Tesla")
         nissan = Brand.objects.create(name="Nissan")
         model_s = EVModel.objects.create(brand=tesla, name="Model S")
@@ -948,7 +973,7 @@ class LiveSubscriptionTests(TestCase):
     def setUp(self):
         self.client = Client()
         self.user = User.objects.create_user(username="bob", password="pwd")
-        self.account = EnergyAccount.objects.create(user=self.user, name="SUBSCRIBER")
+        self.account = CustomerAccount.objects.create(user=self.user, name="SUBSCRIBER")
         self.product = Product.objects.create(name="Gold", renewal_period=30)
         self.client.force_login(self.user)
 
@@ -1003,7 +1028,7 @@ class OnboardingWizardTests(TestCase):
         self.client.force_login(User.objects.get(username="super"))
 
     def test_onboarding_flow_creates_account(self):
-        details_url = reverse("admin:core_energyaccount_onboard_details")
+        details_url = reverse("admin:core_customeraccount_onboard_details")
         response = self.client.get(details_url)
         self.assertEqual(response.status_code, 200)
         data = {
@@ -1014,10 +1039,10 @@ class OnboardingWizardTests(TestCase):
         }
         resp = self.client.post(details_url, data)
         self.assertEqual(resp.status_code, 302)
-        self.assertEqual(resp.url, reverse("admin:core_energyaccount_changelist"))
+        self.assertEqual(resp.url, reverse("admin:core_customeraccount_changelist"))
         user = User.objects.get(first_name="John", last_name="Doe")
         self.assertFalse(user.is_active)
-        account = EnergyAccount.objects.get(user=user)
+        account = CustomerAccount.objects.get(user=user)
         self.assertTrue(account.rfids.filter(rfid="ABCD1234").exists())
         self.assertTrue(account.vehicles.filter(vin="VIN12345678901234").exists())
 
@@ -1064,7 +1089,7 @@ class RFIDFixtureTests(TestCase):
             "core/fixtures/rfids__ffffffff.json",
             verbosity=0,
         )
-        account = EnergyAccount.objects.get(name="GELECTRIIC")
+        account = CustomerAccount.objects.get(name="GELECTRIIC")
         tag = RFID.objects.get(rfid="FFFFFFFF")
         self.assertIn(account, tag.energy_accounts.all())
         self.assertEqual(tag.energy_accounts.count(), 1)
@@ -1072,7 +1097,7 @@ class RFIDFixtureTests(TestCase):
 
 class RFIDImportExportCommandTests(TestCase):
     def test_export_supports_account_names(self):
-        account = EnergyAccount.objects.create(name="PRIMARY")
+        account = CustomerAccount.objects.create(name="PRIMARY")
         tag = RFID.objects.create(rfid="CARD500")
         tag.energy_accounts.add(account)
 
@@ -1088,7 +1113,7 @@ class RFIDImportExportCommandTests(TestCase):
             os.unlink(temp_file.name)
 
         self.assertEqual(len(rows), 1)
-        self.assertEqual(rows[0]["energy_account_names"], "PRIMARY")
+        self.assertEqual(rows[0]["customer_account_names"], "PRIMARY")
 
     def test_import_creates_missing_account_by_name(self):
         temp_file = tempfile.NamedTemporaryFile("w", newline="", delete=False)
@@ -1098,7 +1123,7 @@ class RFIDImportExportCommandTests(TestCase):
                 [
                     "rfid",
                     "custom_label",
-                    "energy_account_names",
+                    "customer_account_names",
                     "allowed",
                     "color",
                     "released",
@@ -1123,21 +1148,21 @@ class RFIDImportExportCommandTests(TestCase):
         finally:
             os.unlink(temp_file.name)
 
-        account = EnergyAccount.objects.get(name="IMPORTED ACCOUNT")
+        account = CustomerAccount.objects.get(name="IMPORTED ACCOUNT")
         tag = RFID.objects.get(rfid="NAMETAG001")
         self.assertIsNone(account.user)
         self.assertTrue(tag.energy_accounts.filter(pk=account.pk).exists())
 
     def test_admin_export_supports_account_names(self):
-        account = EnergyAccount.objects.create(name="PRIMARY")
+        account = CustomerAccount.objects.create(name="PRIMARY")
         tag = RFID.objects.create(rfid="CARD501")
         tag.energy_accounts.add(account)
 
         resource = RFIDResource(account_field="name")
         dataset = resource.export(queryset=RFID.objects.order_by("rfid"))
 
-        self.assertIn("energy_account_names", dataset.headers)
-        self.assertEqual(dataset.dict[0]["energy_account_names"], "PRIMARY")
+        self.assertIn("customer_account_names", dataset.headers)
+        self.assertEqual(dataset.dict[0]["customer_account_names"], "PRIMARY")
 
     def test_admin_import_creates_missing_account_by_name(self):
         resource = RFIDResource(account_field="name")
@@ -1150,7 +1175,7 @@ class RFIDImportExportCommandTests(TestCase):
                 "label_id": "200",
                 "rfid": "NAMETAG002",
                 "custom_label": "",
-                "energy_account_names": "Imported Admin Account",
+                "customer_account_names": "Imported Admin Account",
                 "allowed": "true",
                 "color": RFID.BLACK,
                 "kind": RFID.CLASSIC,
@@ -1194,7 +1219,7 @@ class RFIDImportExportCommandTests(TestCase):
         self.assertEqual(restored.rfid, "DELETEME02")
         self.assertFalse(restored.is_deleted)
 
-        account = EnergyAccount.objects.get(name="IMPORTED ADMIN ACCOUNT")
+        account = CustomerAccount.objects.get(name="IMPORTED ADMIN ACCOUNT")
         tag = RFID.objects.get(rfid="NAMETAG002")
         self.assertTrue(tag.energy_accounts.filter(pk=account.pk).exists())
 

@@ -16,7 +16,7 @@ from django.test import Client, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from core.models import RFID, EnergyAccount
+from core.models import RFID, CustomerAccount
 from ocpp.models import Charger, Transaction
 
 
@@ -34,7 +34,7 @@ class RFIDClientReportTests(TestCase):
         self.charger = Charger.objects.create(charger_id="C1")
         self.rfid1 = RFID.objects.create(rfid="AABBCCDD")
         self.rfid2 = RFID.objects.create(rfid="EEFF0011")
-        self.account = EnergyAccount.objects.create(name="ACC")
+        self.account = CustomerAccount.objects.create(name="ACC")
         self.account.rfids.add(self.rfid1)
         start = timezone.now()
         Transaction.objects.create(

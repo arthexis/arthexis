@@ -21,7 +21,7 @@ class AdminHistoryTests(TestCase):
             username="histadmin", email="histadmin@example.com", password="password"
         )
         self.client.force_login(user)
-        url = reverse("admin:core_energyaccount_changelist") + "?q=test"
+        url = reverse("admin:core_customeraccount_changelist") + "?q=test"
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
         history = AdminHistory.objects.get(user=user)

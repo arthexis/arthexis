@@ -14,7 +14,7 @@ from django.core.exceptions import DisallowedHost
 from django.http.request import split_domain_port
 from django_otp.plugins.otp_totp.models import TOTPDevice
 
-from .models import EnergyAccount, RFID
+from .models import CustomerAccount, RFID
 from . import temp_passwords
 
 
@@ -112,7 +112,7 @@ class RFIDBackend:
                 return None
 
         account = (
-            EnergyAccount.objects.filter(
+            CustomerAccount.objects.filter(
                 rfids__pk=tag.pk, rfids__allowed=True, user__isnull=False
             )
             .select_related("user")
