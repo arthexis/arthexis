@@ -1,9 +1,0 @@
-[
-  {
-    "model": "core.wmicode",
-    "fields": {
-      "brand": ["BMW"],
-      "code": "WBY"
-    }
-  }
-]

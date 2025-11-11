@@ -1,9 +1,0 @@
-[
-  {
-    "model": "core.evmodel",
-    "fields": {
-      "brand": ["Porsche"],
-      "name": "Taycan"
-    }
-  }
-]

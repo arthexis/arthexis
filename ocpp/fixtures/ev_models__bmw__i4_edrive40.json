@@ -1,0 +1,10 @@
+[
+  {
+    "model": "ocpp.evmodel",
+    "fields": {
+      "brand": ["BMW"],
+      "name": "i4 eDrive40",
+      "est_battery_kwh": "81.50"
+    }
+  }
+]

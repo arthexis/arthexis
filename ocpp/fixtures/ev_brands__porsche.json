@@ -1,0 +1,8 @@
+[
+  {
+    "model": "ocpp.brand",
+    "fields": {
+      "name": "Porsche"
+    }
+  }
+]

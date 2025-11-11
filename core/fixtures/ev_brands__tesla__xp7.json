@@ -1,9 +1,0 @@
-[
-  {
-    "model": "core.wmicode",
-    "fields": {
-      "brand": ["Tesla"],
-      "code": "XP7"
-    }
-  }
-]

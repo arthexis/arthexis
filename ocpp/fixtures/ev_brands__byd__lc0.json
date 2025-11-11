@@ -1,0 +1,9 @@
+[
+  {
+    "model": "ocpp.wmicode",
+    "fields": {
+      "brand": ["BYD"],
+      "code": "LC0"
+    }
+  }
+]

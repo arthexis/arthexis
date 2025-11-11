@@ -33,11 +33,14 @@ from django.core.exceptions import ValidationError
 from django.conf import settings
 
 from .models import (
+    Brand,
     Charger,
     ChargerConfiguration,
     ConfigurationKey,
+    ElectricVehicle,
     Simulator,
     MeterValue,
+    EVModel,
     Transaction,
     Location,
     DataTransferMessage,
@@ -47,6 +50,7 @@ from .models import (
     SecurityEvent,
     ChargerLogRequest,
     ChargerLogStatus,
+    WMICode,
 )
 from .simulator import ChargePointSimulator
 from . import store
@@ -963,6 +967,54 @@ class CPReservationAdmin(EntityModelAdmin):
                 % {"count": cancelled},
                 level=messages.SUCCESS,
             )
+
+
+@admin.register(ElectricVehicle)
+class ElectricVehicleAdmin(EntityModelAdmin):
+    list_display = ("vin", "license_plate", "brand", "model", "account")
+    search_fields = (
+        "vin",
+        "license_plate",
+        "brand__name",
+        "model__name",
+        "account__name",
+    )
+    fields = ("account", "vin", "license_plate", "brand", "model")
+
+
+class WMICodeInline(admin.TabularInline):
+    model = WMICode
+    extra = 0
+
+
+@admin.register(Brand)
+class BrandAdmin(EntityModelAdmin):
+    fields = ("name",)
+    list_display = ("name", "wmi_codes_display")
+    inlines = [WMICodeInline]
+
+    def wmi_codes_display(self, obj):
+        return ", ".join(obj.wmi_codes.values_list("code", flat=True))
+
+    wmi_codes_display.short_description = "WMI codes"
+
+
+@admin.register(EVModel)
+class EVModelAdmin(EntityModelAdmin):
+    fields = ("brand", "name")
+    list_display = ("name", "brand", "brand_wmi_codes")
+
+    def get_queryset(self, request):
+        queryset = super().get_queryset(request)
+        return queryset.select_related("brand").prefetch_related("brand__wmi_codes")
+
+    def brand_wmi_codes(self, obj):
+        if not obj.brand:
+            return ""
+        codes = [wmi.code for wmi in obj.brand.wmi_codes.all()]
+        return ", ".join(codes)
+
+    brand_wmi_codes.short_description = "WMI codes"
 
 
 @admin.register(Charger)

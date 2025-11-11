@@ -1,9 +1,0 @@
-[
-  {
-    "model": "core.wmicode",
-    "fields": {
-      "brand": ["Volkswagen"],
-      "code": "1V2"
-    }
-  }
-]

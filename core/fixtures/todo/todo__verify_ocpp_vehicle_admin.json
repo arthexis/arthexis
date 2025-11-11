@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Confirm OCPP EV admin screens work after model relocation",
+      "created_on": "2024-01-01T00:00:00Z",
+      "url": "/admin/ocpp/brand/",
+      "request_details": "Visit the OCPP EV admin sections and ensure the pages render without errors.\n1. Open /admin/ocpp/brand/ and verify existing brands display correctly.\n2. Create a temporary brand with a WMI code, then delete it after confirming the change history records the operation.\n3. Open /admin/ocpp/evmodel/ and /admin/ocpp/electricvehicle/ to confirm the inlines and search filters operate as before.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.30"
+    }
+  }
+]
