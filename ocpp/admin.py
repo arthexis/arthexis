@@ -1228,11 +1228,11 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
     list_display = (
         "display_name_with_fallback",
         "connector_number",
-        "charger_name_display",
         "local_indicator",
         "require_rfid_display",
         "public_display",
-        "last_heartbeat",
+        "forwarding_ready",
+        "last_heartbeat_display",
         "today_kw",
         "total_kw_display",
         "page_link",
@@ -1595,7 +1595,22 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         return obj.require_rfid
 
     require_rfid_display.boolean = True
-    require_rfid_display.short_description = "RFID Auth"
+    require_rfid_display.short_description = "RF Auth"
+
+    @admin.display(boolean=True, description="Fwd OK")
+    def forwarding_ready(self, obj):
+        return bool(obj.forwarded_to_id and obj.export_transactions)
+
+    @admin.display(description="Last heartbeat", ordering="last_heartbeat")
+    def last_heartbeat_display(self, obj):
+        value = obj.last_heartbeat
+        if not value:
+            return "-"
+        if timezone.is_naive(value):
+            value = timezone.make_aware(value, timezone.get_current_timezone())
+        localized = timezone.localtime(value)
+        iso_value = localized.isoformat(timespec="minutes")
+        return iso_value.replace("T", " ")
 
     def page_link(self, obj):
         from django.utils.html import format_html
@@ -1677,10 +1692,6 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
 
     @admin.display(description="Display Name", ordering="display_name")
     def display_name_with_fallback(self, obj):
-        return self._charger_display_name(obj)
-
-    @admin.display(description="Charger", ordering="display_name")
-    def charger_name_display(self, obj):
         return self._charger_display_name(obj)
 
     def _charger_display_name(self, obj):
