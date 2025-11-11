@@ -78,10 +78,30 @@ class UpgradeReportTests(SimpleTestCase):
         )
         self.assertEqual(
             [entry["message"] for entry in report["log_entries"]],
-            ["first run", "second run"],
+            ["second run", "first run"],
         )
         self.assertFalse(report["log_error"])
         self.assertTrue(report["settings"]["log_path"].endswith("auto-upgrade.log"))
+
+    def test_load_auto_upgrade_log_entries_limits_and_orders_entries(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            logs_dir = base / "logs"
+            logs_dir.mkdir()
+
+            log_path = logs_dir / "auto-upgrade.log"
+            lines = [
+                f"2024-01-01T00:{index:02d}:00+00:00 entry {index}"
+                for index in range(50)
+            ]
+            log_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+            info = system._load_auto_upgrade_log_entries(base)
+
+        entries = info["entries"]
+        self.assertEqual(len(entries), system.AUTO_UPGRADE_LOG_LIMIT)
+        self.assertEqual(entries[0]["message"], "entry 49")
+        self.assertEqual(entries[-1]["message"], "entry 20")
 
     def test_load_auto_upgrade_schedule_uses_task_metadata(self):
         class DummySchedule:

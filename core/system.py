@@ -51,6 +51,7 @@ from utils import revision
 AUTO_UPGRADE_LOCK_NAME = "auto_upgrade.lck"
 AUTO_UPGRADE_SKIP_LOCK_NAME = "auto_upgrade_skip_revisions.lck"
 AUTO_UPGRADE_LOG_NAME = "auto-upgrade.log"
+AUTO_UPGRADE_LOG_LIMIT = 30
 
 
 UPGRADE_CHANNEL_CHOICES: dict[str, dict[str, object]] = {
@@ -615,7 +616,7 @@ def _parse_log_timestamp(value: str) -> datetime | None:
 
 
 def _load_auto_upgrade_log_entries(
-    base_dir: Path, *, limit: int = 25
+    base_dir: Path, *, limit: int = AUTO_UPGRADE_LOG_LIMIT
 ) -> dict[str, object]:
     """Return the most recent auto-upgrade log entries."""
 
@@ -637,7 +638,7 @@ def _load_auto_upgrade_log_entries(
         return result
 
     entries: list[dict[str, str]] = []
-    for raw_line in lines:
+    for raw_line in reversed(lines):
         line = raw_line.strip()
         if not line:
             continue
@@ -822,7 +823,7 @@ def _load_auto_upgrade_schedule() -> dict[str, object]:
     return info
 
 
-def _build_auto_upgrade_report(*, limit: int = 25) -> dict[str, object]:
+def _build_auto_upgrade_report(*, limit: int = AUTO_UPGRADE_LOG_LIMIT) -> dict[str, object]:
     """Assemble the composite auto-upgrade report for the admin view."""
 
     base_dir = Path(settings.BASE_DIR)
