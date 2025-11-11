@@ -76,6 +76,7 @@ from .models import (
     CPReservation,
     CPFirmware,
     CPFirmwareDeployment,
+    CPFirmwareRequest,
     SecurityEvent,
     ChargerLogRequest,
     ChargerLogStatus,
@@ -730,6 +731,100 @@ class CSMSConsumerTests(TransactionTestCase):
         self.assertEqual(response, [3, "1", {}])
 
         await communicator.disconnect()
+
+    def test_request_firmware_snapshot_skips_when_pending_exists(self):
+        charger = Charger.objects.create(charger_id="REQPENDING", connector_id=None)
+        message = DataTransferMessage.objects.create(
+            charger=charger,
+            connector_id=charger.connector_id,
+            direction=DataTransferMessage.DIRECTION_CSMS_TO_CP,
+            ocpp_message_id="pending-msg",
+            vendor_id="Vendor",
+            message_id="DownloadFirmware",
+            payload={},
+            status="Pending",
+        )
+        CPFirmwareRequest.objects.create(
+            charger=charger,
+            connector_id=charger.connector_id,
+            vendor_id="Vendor",
+            message=message,
+        )
+
+        consumer = CSMSConsumer()
+        consumer.scope = {"headers": [], "client": ("127.0.0.1", 1234)}
+        consumer.charger_id = charger.charger_id
+        consumer.charger = charger
+        consumer.aggregate_charger = charger
+        consumer.connector_value = charger.connector_id
+        consumer.store_key = store.identity_key(charger.charger_id, charger.connector_id)
+        consumer._consumption_task = None
+        consumer._consumption_message_uuid = None
+        consumer.send = AsyncMock()
+
+        result = async_to_sync(consumer._request_firmware_snapshot)(
+            log_key=consumer.store_key,
+            connector_value=consumer.connector_value,
+        )
+
+        self.assertFalse(result)
+        consumer.send.assert_not_called()
+
+    def test_datatransfer_result_updates_firmware_request(self):
+        charger = Charger.objects.create(charger_id="REQRESULT", connector_id=None)
+        message_id = "firmware-result-1"
+        message = DataTransferMessage.objects.create(
+            charger=charger,
+            connector_id=charger.connector_id,
+            direction=DataTransferMessage.DIRECTION_CSMS_TO_CP,
+            ocpp_message_id=message_id,
+            vendor_id="Vendor",
+            message_id="DownloadFirmware",
+            payload={"vendorId": "Vendor"},
+            status="Pending",
+        )
+        request_record = CPFirmwareRequest.objects.create(
+            charger=charger,
+            connector_id=charger.connector_id,
+            vendor_id="Vendor",
+            message=message,
+        )
+
+        log_key = store.identity_key(charger.charger_id, charger.connector_id)
+        store.register_pending_call(
+            message_id,
+            {
+                "action": "DataTransfer",
+                "charger_id": charger.charger_id,
+                "connector_id": charger.connector_id,
+                "log_key": log_key,
+                "message_pk": message.pk,
+            },
+        )
+
+        consumer = CSMSConsumer()
+        consumer.scope = {"headers": [], "client": ("127.0.0.1", 1234)}
+        consumer.charger_id = charger.charger_id
+        consumer.charger = charger
+        consumer.aggregate_charger = charger
+        consumer.connector_value = charger.connector_id
+        consumer.store_key = log_key
+        consumer._consumption_task = None
+        consumer._consumption_message_uuid = None
+        consumer.send = AsyncMock()
+
+        payload = {"status": "Accepted", "data": {"info": "ok"}}
+
+        async_to_sync(consumer._handle_call_result)(message_id, payload)
+
+        request_record.refresh_from_db()
+        message.refresh_from_db()
+
+        self.assertEqual(request_record.status, "Accepted")
+        self.assertIsNotNone(request_record.responded_at)
+        self.assertEqual(request_record.response_payload, payload)
+        self.assertEqual(message.status, "Accepted")
+        self.assertIsNotNone(message.responded_at)
 
     async def test_rejected_connection_logs_query_string(self):
         raw_serial = "<charger_id>"
