@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Confirm auto-upgrade report links and recovery",
+      "created_on": "2025-11-11T00:00:00Z",
+      "url": "/admin/system/upgrade-report/",
+      "request_details": "1. Ensure the control node has auto-upgrade enabled (locks/auto_upgrade.lck present).\n2. Open the Upgrade Report in the Django admin and confirm the Schedule section loads without the 'Auto-upgrade schedule could not be loaded.' message.\n3. Use the new View link next to the Celery task to open the auto-upgrade periodic task in another tab; verify the task loads correctly and remains enabled.\n4. From that admin page, delete the periodic task and immediately reload the Upgrade Report; confirm the report recreates the task automatically (no schedule error is shown).\n5. Use the View link next to the schedule description to open the related interval configuration and confirm it resolves after the task is recreated.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.31"
+    }
+  }
+]

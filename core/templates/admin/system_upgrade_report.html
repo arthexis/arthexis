@@ -107,6 +107,9 @@
         <dt>{% trans "Task" %}</dt>
         <dd>
           <code>{{ report.settings.task_name }}</code>
+          {% if report.schedule.task_admin_url %}
+            [ <a href="{{ report.schedule.task_admin_url }}">{% trans "View" %}</a> ]
+          {% endif %}
           {% if report.settings.task_path %}
             — <code>{{ report.settings.task_path }}</code>
           {% endif %}
@@ -162,7 +165,12 @@
             </tr>
             <tr>
               <th scope="row">{% trans "Schedule" %}</th>
-              <td>{{ report.schedule.schedule|default:"" }}</td>
+              <td>
+                {{ report.schedule.schedule|default:"" }}
+                {% if report.schedule.config_admin_url %}
+                  [ <a href="{{ report.schedule.config_admin_url }}">{% trans "View" %}</a> ]
+                {% endif %}
+              </td>
             </tr>
             <tr>
               <th scope="row">{% trans "Next run" %}</th>

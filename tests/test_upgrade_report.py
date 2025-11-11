@@ -7,6 +7,7 @@ from unittest import mock
 from django.contrib import messages
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.contrib.messages.storage.fallback import FallbackStorage
+from django.db import DatabaseError
 from django.test import SimpleTestCase, RequestFactory, override_settings
 from django.urls import reverse
 from django.utils import timezone
@@ -56,6 +57,9 @@ class UpgradeReportTests(SimpleTestCase):
                 "task": "",
                 "name": system.AUTO_UPGRADE_TASK_NAME,
                 "error": "",
+                "task_admin_url": "",
+                "config_admin_url": "",
+                "config_type": "",
             }
 
             with override_settings(BASE_DIR=str(base)):
@@ -97,6 +101,11 @@ class UpgradeReportTests(SimpleTestCase):
                 self.last_run_at = timezone.now()
                 self.expires = None
                 self._schedule = DummySchedule()
+                self.pk = 42
+                self.interval_id = 24
+                self.crontab_id = None
+                self.solar_id = None
+                self.clocked_id = None
 
             @property
             def schedule(self):
@@ -112,7 +121,10 @@ class UpgradeReportTests(SimpleTestCase):
         ), mock.patch(
             "core.system._auto_upgrade_next_check",
             return_value="Soon",
-        ):
+        ), mock.patch(
+            "core.system._reverse_admin_url",
+            side_effect=["/admin/task/42/", "/admin/interval/24/"],
+        ) as mock_reverse:
             info = system._load_auto_upgrade_schedule()
 
         self.assertTrue(info["available"])
@@ -125,6 +137,71 @@ class UpgradeReportTests(SimpleTestCase):
         self.assertEqual(info["name"], dummy_task.name)
         self.assertEqual(info["start_time"], expected_start)
         self.assertEqual(info["last_run_at"], expected_last_run)
+        self.assertEqual(info["task_admin_url"], "/admin/task/42/")
+        self.assertEqual(info["config_admin_url"], "/admin/interval/24/")
+        self.assertEqual(info["config_type"], "interval")
+        mock_reverse.assert_has_calls(
+            [
+                mock.call("admin:django_celery_beat_periodictask_change", 42),
+                mock.call("admin:django_celery_beat_intervalschedule_change", 24),
+            ]
+        )
+
+    def test_get_auto_upgrade_periodic_task_recovers_after_error(self):
+        dummy_task = object()
+
+        class DummyDoesNotExist(Exception):
+            pass
+
+        query_mock = mock.Mock()
+        query_mock.only.return_value = query_mock
+        query_mock.get.side_effect = [DatabaseError("boom"), dummy_task]
+
+        objects_mock = mock.Mock()
+        objects_mock.select_related.return_value = query_mock
+
+        with mock.patch(
+            "django_celery_beat.models.PeriodicTask"
+        ) as periodic_mock, mock.patch(
+            "core.system.ensure_auto_upgrade_periodic_task"
+        ) as ensure_mock:
+            periodic_mock.DoesNotExist = DummyDoesNotExist
+            periodic_mock.objects = objects_mock
+
+            task, available, error = system._get_auto_upgrade_periodic_task()
+
+        self.assertIs(task, dummy_task)
+        self.assertTrue(available)
+        self.assertEqual(error, "")
+        ensure_mock.assert_called_once_with()
+        self.assertEqual(query_mock.get.call_count, 2)
+
+    def test_get_auto_upgrade_periodic_task_handles_missing_task_after_retry(self):
+        class DummyDoesNotExist(Exception):
+            pass
+
+        query_mock = mock.Mock()
+        query_mock.only.return_value = query_mock
+        query_mock.get.side_effect = [DummyDoesNotExist(), DummyDoesNotExist()]
+
+        objects_mock = mock.Mock()
+        objects_mock.select_related.return_value = query_mock
+
+        with mock.patch(
+            "django_celery_beat.models.PeriodicTask"
+        ) as periodic_mock, mock.patch(
+            "core.system.ensure_auto_upgrade_periodic_task"
+        ) as ensure_mock:
+            periodic_mock.DoesNotExist = DummyDoesNotExist
+            periodic_mock.objects = objects_mock
+
+            task, available, error = system._get_auto_upgrade_periodic_task()
+
+        self.assertIsNone(task)
+        self.assertTrue(available)
+        self.assertEqual(error, "")
+        ensure_mock.assert_called_once_with()
+        self.assertEqual(query_mock.get.call_count, 2)
 
     def test_trigger_upgrade_check_uses_async_queue(self):
         with mock.patch("core.system.check_github_updates") as mock_task:
