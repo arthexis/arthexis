@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Confirm CP admin filters are hidden",
+      "created_on": "2024-01-01T00:00:00Z",
+      "url": "/admin/ocpp/charger/",
+      "request_details": "1. Visit the Charge Points admin changelist.\n2. Verify the filter sidebar is no longer displayed for charge points.\n3. Use search or column sorting to confirm the page still behaves correctly without the filters panel.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.31"
+    }
+  }
+]
