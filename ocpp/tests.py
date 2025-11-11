@@ -72,7 +72,6 @@ from .models import (
     Simulator,
     MeterReading,
     MeterValue,
-    Location,
     DataTransferMessage,
     CPReservation,
     CPFirmware,
@@ -90,7 +89,7 @@ from .admin import (
 from .consumers import CSMSConsumer
 from .views import dispatch_action, _transaction_rfid_details, _usage_timeline
 from .status_display import STATUS_BADGE_MAP
-from core.models import EnergyAccount, EnergyCredit, Reference, RFID, SecurityGroup
+from core.models import EnergyAccount, EnergyCredit, Location, Reference, RFID, SecurityGroup
 from . import store
 from decimal import Decimal
 import json
@@ -4383,7 +4382,7 @@ class LocationAdminTests(TestCase):
             location=location,
         )
 
-        url = reverse("admin:ocpp_location_change", args=[location.pk])
+        url = reverse("admin:core_location_change", args=[location.pk])
         resp = self.client.get(url)
         self.assertEqual(resp.status_code, 200)
 

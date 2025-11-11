@@ -919,7 +919,7 @@ class SlackBotProfile(CoreProfile):
 
 
 class ManualTask(Entity):
-    """Manual work scheduled for nodes or charge locations."""
+    """Manual work scheduled for nodes or locations."""
 
     title = models.CharField(_("Title"), max_length=200)
     description = models.TextField(
@@ -953,13 +953,13 @@ class ManualTask(Entity):
         help_text=_("Node where this manual task should be completed."),
     )
     location = models.ForeignKey(
-        "ocpp.Location",
+        "core.Location",
         on_delete=models.SET_NULL,
         blank=True,
         null=True,
         related_name="manual_tasks",
-        verbose_name=_("Charge Location"),
-        help_text=_("Charge point location associated with this manual task."),
+        verbose_name=_("Location"),
+        help_text=_("Location associated with this manual task."),
     )
     scheduled_start = models.DateTimeField(
         _("Scheduled start"), help_text=_("Planned start time for this work."),
@@ -1104,7 +1104,7 @@ class ManualTask(Entity):
         if self.node_id:
             lines.append(_("Node: %(node)s") % {"node": self.node})
         if self.location_id:
-            lines.append(_("Charge location: %(location)s") % {"location": self.location})
+            lines.append(_("Location: %(location)s") % {"location": self.location})
         return "\n".join(line for line in lines if line)
 
     def send_notification_email(self, trigger: str) -> bool:

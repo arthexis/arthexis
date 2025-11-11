@@ -15,7 +15,8 @@ from django.apps import apps
 
 from nodes.models import Node
 from teams.models import EmailOutbox
-from ocpp.models import CPReservation, Charger, Location
+from ocpp.models import CPReservation, Charger
+from core.models import Location
 from teams.admin import ManualTaskAdmin
 from teams.models import ManualTask, SecurityGroup
 

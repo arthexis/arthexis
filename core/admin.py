@@ -75,6 +75,7 @@ from .models import (
     UserPhoneNumber,
     EnergyAccount,
     EnergyCredit,
+    Location,
     ClientReport,
     ClientReportSchedule,
     Product,
@@ -2359,6 +2360,31 @@ class EnergyCreditInline(admin.TabularInline):
     fields = ("amount_kw", "created_by", "created_on")
     readonly_fields = ("created_by", "created_on")
     extra = 0
+
+
+class LocationAdminForm(forms.ModelForm):
+    class Meta:
+        model = Location
+        fields = "__all__"
+        widgets = {
+            "latitude": forms.NumberInput(attrs={"step": "any"}),
+            "longitude": forms.NumberInput(attrs={"step": "any"}),
+        }
+
+    class Media:
+        css = {"all": ("https://unpkg.com/leaflet@1.9.4/dist/leaflet.css",)}
+        js = (
+            "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",
+            "ocpp/charger_map.js",
+        )
+
+
+@admin.register(Location)
+class LocationAdmin(EntityModelAdmin):
+    form = LocationAdminForm
+    list_display = ("name", "zone", "contract_type", "latitude", "longitude")
+    change_form_template = "admin/core/location/change_form.html"
+    search_fields = ("name",)
 
 
 @admin.register(EnergyAccount)

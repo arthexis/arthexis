@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Verify Location admin under Business",
+      "created_on": "2025-11-12T00:00:00Z",
+      "url": "/admin/core/location/",
+      "request_details": "1. Sign into the Django admin.\n2. Open the Business › Locations section and confirm existing locations are listed.\n3. Open a Location change form and verify related chargers and map links still render.\n4. Save a change to the record (for example, update latitude) and confirm the update succeeds without errors.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.31"
+    }
+  }
+]

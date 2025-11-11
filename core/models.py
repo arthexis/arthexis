@@ -2306,6 +2306,48 @@ class EnergyTariff(Entity):
 
     natural_key.dependencies = []  # type: ignore[attr-defined]
 
+
+class Location(Entity):
+    """Physical place where assets and manual work are coordinated."""
+
+    name = models.CharField(max_length=200)
+    latitude = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True,
+    )
+    longitude = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True,
+    )
+    zone = models.CharField(
+        max_length=3,
+        choices=EnergyTariff.Zone.choices,
+        blank=True,
+        null=True,
+        help_text=_("CFE climate zone used to select matching energy tariffs."),
+    )
+    contract_type = models.CharField(
+        max_length=16,
+        choices=EnergyTariff.ContractType.choices,
+        blank=True,
+        null=True,
+        help_text=_(
+            "CFE service contract type required to match energy tariff pricing."
+        ),
+    )
+
+    class Meta:
+        verbose_name = _("Location")
+        verbose_name_plural = _("Locations")
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return self.name
+
+
 class EnergyAccount(Entity):
     """Track kW energy credits for a user."""
 

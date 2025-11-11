@@ -17,13 +17,12 @@ from django.db.models.deletion import ProtectedError
 from django.test import TestCase
 from django.utils import timezone
 
-from core.models import EnergyTariff, Reference, SecurityGroup
+from core.models import EnergyTariff, Location, Reference, SecurityGroup
 
 from ocpp.models import (
     Charger,
     ChargerConfiguration,
     ConfigurationKey,
-    Location,
 )
 from nodes.models import Node
 

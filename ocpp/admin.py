@@ -17,7 +17,6 @@ import requests
 from asgiref.sync import async_to_sync
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.asymmetric import padding
-from django import forms
 from django.conf import settings
 from django.contrib.admin.utils import quote
 from django.db import transaction
@@ -44,7 +43,6 @@ from .models import (
     MeterValue,
     EVModel,
     Transaction,
-    Location,
     DataTransferMessage,
     CPReservation,
     CPFirmware,
@@ -65,24 +63,6 @@ from core.admin import SaveBeforeChangeAction
 from core.models import RFID as CoreRFID
 from core.user_data import EntityModelAdmin
 from nodes.models import Node
-
-
-class LocationAdminForm(forms.ModelForm):
-    class Meta:
-        model = Location
-        fields = "__all__"
-
-        widgets = {
-            "latitude": forms.NumberInput(attrs={"step": "any"}),
-            "longitude": forms.NumberInput(attrs={"step": "any"}),
-        }
-
-    class Media:
-        css = {"all": ("https://unpkg.com/leaflet@1.9.4/dist/leaflet.css",)}
-        js = (
-            "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js",
-            "ocpp/charger_map.js",
-        )
 
 
 class TransactionExportForm(forms.Form):
@@ -897,14 +877,6 @@ class ConfigurationKeyAdmin(admin.ModelAdmin):
 
     def get_model_perms(self, request):  # pragma: no cover - admin hook
         return {}
-
-
-@admin.register(Location)
-class LocationAdmin(EntityModelAdmin):
-    form = LocationAdminForm
-    list_display = ("name", "zone", "contract_type", "latitude", "longitude")
-    change_form_template = "admin/ocpp/location/change_form.html"
-    search_fields = ("name",)
 
 
 @admin.register(DataTransferMessage)
