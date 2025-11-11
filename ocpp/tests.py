@@ -3202,6 +3202,8 @@ class ChargerLandingTests(TestCase):
             self.assertContains(response, _("Advanced View"))
         status_url = reverse("charger-status-connector", args=["PAGE1", "all"])
         self.assertContains(response, status_url)
+        self.assertContains(response, "visibilityState !== 'visible'")
+        self.assertContains(response, "stopAutoReload()")
 
     def test_charger_page_respects_language_configuration(self):
         charger = Charger.objects.create(charger_id="PAGE-DE", language="de")

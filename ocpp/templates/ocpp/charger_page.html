@@ -243,8 +243,47 @@
       currentLang = nextLang;
     }, 30000);
   }());
-  setInterval(function () {
-    window.location.reload();
-  }, 5000);
+  (function () {
+    let reloadTimer = window.setInterval(() => {
+      if (document.visibilityState !== 'visible') {
+        return;
+      }
+      window.location.reload();
+    }, 5000);
+
+    function stopAutoReload() {
+      if (!reloadTimer) {
+        return;
+      }
+      window.clearInterval(reloadTimer);
+      reloadTimer = null;
+    }
+
+    window.addEventListener('beforeunload', stopAutoReload);
+    document.addEventListener(
+      'visibilitychange',
+      () => {
+        if (document.visibilityState !== 'visible') {
+          stopAutoReload();
+        }
+      },
+      { passive: true }
+    );
+    document.addEventListener(
+      'click',
+      (event) => {
+        const anchor = event.target.closest('a[href]');
+        if (!anchor) {
+          return;
+        }
+        const href = anchor.getAttribute('href') || '';
+        if (!href || href.trim().charAt(0) === '#') {
+          return;
+        }
+        stopAutoReload();
+      },
+      true
+    );
+  }());
 </script>
 {% endblock %}
