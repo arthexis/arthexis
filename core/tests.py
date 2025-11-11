@@ -6,7 +6,13 @@ import django
 django.setup()
 
 from django import forms
-from django.test import Client, TestCase, RequestFactory, override_settings
+from django.test import (
+    Client,
+    TestCase,
+    TransactionTestCase,
+    RequestFactory,
+    override_settings,
+)
 from django.urls import reverse
 from django.http import HttpRequest
 from django.contrib import messages
@@ -59,7 +65,8 @@ from nodes.models import ContentSample
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.db import IntegrityError
+from django.db import IntegrityError, connection
+from django.db.migrations.executor import MigrationExecutor
 from .backends import LocalhostAdminBackend
 from core.views import (
     _step_check_version,
@@ -2874,6 +2881,56 @@ class TodoUniqueTests(TestCase):
         Todo.objects.create(request="Task")
         with self.assertRaises(IntegrityError):
             Todo.objects.create(request="task")
+
+
+class TodoCreatedOnMigrationTests(TransactionTestCase):
+    reset_sequences = True
+
+    migrate_from = ("core", "0091_todo_version")
+    migrate_to = ("core", "0095_todo_created_on_backfill")
+
+    def setUp(self):
+        super().setUp()
+        self.executor = MigrationExecutor(connection)
+        self.executor.migrate([self.migrate_from])
+        self.apps = self.executor.loader.project_state(self.migrate_from).apps
+
+    def tearDown(self):
+        self.executor = MigrationExecutor(connection)
+        self.executor.migrate(self.executor.loader.graph.leaf_nodes())
+        super().tearDown()
+
+    def test_migration_adds_created_on_column(self):
+        TodoModel = self.apps.get_model("core", "Todo")
+        todo = TodoModel.objects.create(
+            request="Verify release publish TODO timeline timestamps"
+        )
+        todo_pk = todo.pk
+        table = TodoModel._meta.db_table
+        with connection.cursor() as cursor:
+            columns = {
+                column.name
+                for column in connection.introspection.get_table_description(
+                    cursor, table
+                )
+            }
+        self.assertNotIn("created_on", columns)
+
+        self.executor.migrate([self.migrate_to])
+        new_apps = self.executor.loader.project_state(self.migrate_to).apps
+        TodoNew = new_apps.get_model("core", "Todo")
+        table_new = TodoNew._meta.db_table
+        with connection.cursor() as cursor:
+            columns = {
+                column.name
+                for column in connection.introspection.get_table_description(
+                    cursor, table_new
+                )
+            }
+        self.assertIn("created_on", columns)
+        manager = getattr(TodoNew, "all_objects", TodoNew._base_manager)
+        refreshed = manager.get(pk=todo_pk)
+        self.assertIsNotNone(refreshed.created_on)
 
 
 class TodoAdminPermissionTests(TestCase):
