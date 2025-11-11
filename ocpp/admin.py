@@ -4,33 +4,35 @@ from django import forms
 
 import asyncio
 import base64
-from datetime import datetime, time, timedelta
-from pathlib import Path
-from urllib.parse import urlparse, unquote
 import contextlib
 import json
+import time as time_module
+import uuid
+from datetime import datetime, time, timedelta
+from pathlib import Path
 from typing import Any
+from urllib.parse import unquote, urlparse
+
+import requests
+from asgiref.sync import async_to_sync
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import padding
+from django import forms
+from django.conf import settings
+from django.contrib.admin.utils import quote
+from django.db import transaction
+from django.db.models import Q
+from django.db.models.deletion import ProtectedError
+from django.http import Http404, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import redirect
+from django.template.response import TemplateResponse
+from django.urls import path, reverse
 from django.utils import formats, timezone, translation
-from django.utils.translation import gettext_lazy as _, ngettext
 from django.utils.dateparse import parse_datetime
 from django.utils.html import format_html, format_html_join
 from django.utils.text import slugify
-from django.contrib.admin.utils import quote
-from django.urls import path, reverse
-from django.http import Http404, HttpResponse, HttpResponseRedirect
-from django.template.response import TemplateResponse
-
-import uuid
-from asgiref.sync import async_to_sync
-import requests
+from django.utils.translation import gettext_lazy as _, ngettext
 from requests import RequestException
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric import padding
-from django.db import transaction
-from django.db.models.deletion import ProtectedError
-from django.core.exceptions import ValidationError
-from django.conf import settings
 
 from .models import (
     Brand,
@@ -130,6 +132,98 @@ class CPReservationForm(forms.ModelForm):
             self.add_error("rfid", message)
             raise forms.ValidationError(message)
         return cleaned
+
+
+class ConfigurationKeyInlineForm(forms.ModelForm):
+    value_input = forms.CharField(
+        label=_("Value"),
+        required=False,
+        widget=forms.Textarea(
+            attrs={
+                "rows": 1,
+                "class": "vTextField config-value-input",
+                "spellcheck": "false",
+                "autocomplete": "off",
+            }
+        ),
+    )
+
+    class Meta:
+        model = ConfigurationKey
+        fields: list[str] = []
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        field = self.fields["value_input"]
+        field.widget.attrs["data-config-key"] = self.instance.key
+        if self.instance.has_value:
+            field.initial = self._format_initial_value(self.instance.value)
+        else:
+            field.disabled = True
+            field.widget.attrs["placeholder"] = "-"
+            field.widget.attrs["aria-disabled"] = "true"
+        self.extra_display = self._format_extra_data()
+
+    @staticmethod
+    def _format_initial_value(value: object) -> str:
+        if value in (None, ""):
+            return ""
+        if isinstance(value, (dict, list)):
+            return json.dumps(value, indent=2, ensure_ascii=False)
+        return str(value)
+
+    def clean_value_input(self) -> str:
+        raw_value = self.cleaned_data.get("value_input", "")
+        if not self.instance.has_value:
+            self._parsed_value = self.instance.value
+            self._has_value = False
+            return ""
+        text = raw_value.strip()
+        if not text:
+            self._parsed_value = None
+            self._has_value = False
+            return ""
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError:
+            parsed = raw_value
+        self._parsed_value = parsed
+        self._has_value = True
+        return raw_value
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        if self.instance.has_value:
+            has_value = getattr(self, "_has_value", self.instance.has_value)
+            parsed = getattr(self, "_parsed_value", instance.value)
+            instance.has_value = has_value
+            instance.value = parsed if has_value else None
+        if commit:
+            instance.save()
+        return instance
+
+    def _format_extra_data(self) -> str:
+        if not self.instance.extra_data:
+            return ""
+        formatted = json.dumps(
+            self.instance.extra_data, indent=2, ensure_ascii=False
+        )
+        return format_html("<pre>{}</pre>", formatted)
+
+
+class PushConfigurationForm(forms.Form):
+    chargers = forms.ModelMultipleChoiceField(
+        label=_("Charge points"),
+        required=True,
+        queryset=Charger.objects.none(),
+        widget=forms.CheckboxSelectMultiple,
+        help_text=_("Only EVCS entries are eligible for configuration updates."),
+    )
+
+    def __init__(self, *args, chargers_queryset=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        queryset = chargers_queryset or Charger.objects.none()
+        self.fields["chargers"].queryset = queryset
 
 
 class UploadFirmwareForm(forms.Form):
@@ -244,14 +338,10 @@ class ConfigurationKeyInline(admin.TabularInline):
     extra = 0
     can_delete = False
     ordering = ("position", "id")
-    readonly_fields = (
-        "position",
-        "key",
-        "readonly",
-        "value_display",
-        "extra_display",
-    )
-    fields = readonly_fields
+    form = ConfigurationKeyInlineForm
+    template = "admin/ocpp/chargerconfiguration/configuration_inline.html"
+    readonly_fields = ("position", "key", "readonly", "extra_display")
+    fields = ("position", "key", "readonly", "value_input", "extra_display")
     show_change_link = False
 
     def has_add_permission(self, request, obj=None):  # pragma: no cover - admin hook
@@ -279,6 +369,7 @@ class ConfigurationKeyInline(admin.TabularInline):
 
 @admin.register(ChargerConfiguration)
 class ChargerConfigurationAdmin(admin.ModelAdmin):
+    change_form_template = "admin/ocpp/chargerconfiguration/change_form.html"
     list_display = (
         "charger_identifier",
         "connector_display",
@@ -369,6 +460,339 @@ class ChargerConfigurationAdmin(admin.ModelAdmin):
             _("Download raw JSON"),
         )
 
+    def _available_push_chargers(self):
+        queryset = Charger.objects.filter(connector_id__isnull=True)
+        local = Node.get_local()
+        if local:
+            queryset = queryset.filter(
+                Q(node_origin__isnull=True) | Q(node_origin=local)
+            )
+        else:
+            queryset = queryset.filter(node_origin__isnull=True)
+        return queryset.order_by("display_name", "charger_id")
+
+    def _serialize_configuration_value(self, value: object) -> str:
+        if isinstance(value, bool):
+            return "true" if value else "false"
+        if isinstance(value, (int, float)):
+            return str(value)
+        if value in (None, ""):
+            return ""
+        if isinstance(value, str):
+            return value
+        return json.dumps(value, ensure_ascii=False)
+
+    def _send_change_configuration_call(
+        self,
+        charger: Charger,
+        key: str,
+        value_text: str,
+    ) -> tuple[bool, str | None, str]:
+        connector_value = charger.connector_id
+        ws = store.get_connection(charger.charger_id, connector_value)
+        if ws is None:
+            message = _("%(charger)s is not connected to the platform.") % {
+                "charger": charger,
+            }
+            return False, None, message
+
+        payload = {"key": key}
+        if value_text is not None:
+            payload["value"] = value_text
+        message_id = uuid.uuid4().hex
+        frame = json.dumps([2, message_id, "ChangeConfiguration", payload])
+        try:
+            async_to_sync(ws.send)(frame)
+        except Exception as exc:  # pragma: no cover - network failure
+            message = _("Failed to send ChangeConfiguration: %(error)s") % {
+                "error": exc,
+            }
+            return False, None, message
+
+        log_key = store.identity_key(charger.charger_id, connector_value)
+        store.add_log(log_key, f"< {frame}", log_type="charger")
+        store.add_log(
+            log_key,
+            _("Requested configuration change for %(key)s.") % {"key": key},
+            log_type="charger",
+        )
+        metadata = {
+            "action": "ChangeConfiguration",
+            "charger_id": charger.charger_id,
+            "connector_id": connector_value,
+            "key": key,
+            "log_key": log_key,
+            "requested_at": timezone.now(),
+        }
+        store.register_pending_call(message_id, metadata)
+        store.schedule_call_timeout(
+            message_id,
+            timeout=10.0,
+            action="ChangeConfiguration",
+            log_key=log_key,
+            message=_("ChangeConfiguration timed out: charger did not respond"),
+        )
+
+        result = store.wait_for_pending_call(message_id, timeout=10.0)
+        if result is None:
+            message = _(
+                "ChangeConfiguration did not receive a response from the charger."
+            )
+            return False, None, message
+
+        if not result.get("success", True):
+            description = str(result.get("error_description") or "").strip()
+            details = result.get("error_details")
+            if details and not description:
+                try:
+                    description = json.dumps(details, ensure_ascii=False)
+                except TypeError:
+                    description = str(details)
+            if not description:
+                description = _("Unknown error")
+            message = _(
+                "ChangeConfiguration failed: %(details)s"
+            ) % {"details": description}
+            return False, None, message
+
+        payload_result = result.get("payload")
+        status_value = ""
+        if isinstance(payload_result, dict):
+            status_value = str(payload_result.get("status") or "").strip()
+        normalized = status_value.casefold()
+        if not status_value:
+            message = _("ChangeConfiguration response did not include a status.")
+            return False, None, message
+        if normalized not in {"accepted", "rebootrequired"}:
+            message = _("ChangeConfiguration returned %(status)s.") % {
+                "status": status_value,
+            }
+            return False, status_value, message
+        success_message = _("Configuration updated.")
+        return True, status_value or "Accepted", success_message
+
+    def _apply_configuration_to_charger(
+        self,
+        configuration: ChargerConfiguration,
+        charger: Charger,
+    ) -> tuple[bool, str, bool]:
+        if not charger.is_local:
+            message = _(
+                "Only charge points managed by this node can receive configuration updates."
+            )
+            return False, message, False
+
+        entries = list(configuration.configuration_entries.order_by("position", "id"))
+        editable = [entry for entry in entries if entry.has_value and not entry.readonly]
+        if not editable:
+            message = _(
+                "This configuration does not include editable keys with values."
+            )
+            return False, message, False
+
+        applied = 0
+        needs_restart = False
+        for entry in editable:
+            value_text = self._serialize_configuration_value(entry.value)
+            ok, status, detail = self._send_change_configuration_call(
+                charger, entry.key, value_text
+            )
+            if not ok:
+                return False, detail, needs_restart
+            applied += 1
+            if (status or "").casefold() == "rebootrequired":
+                needs_restart = True
+
+        if applied:
+            Charger.objects.filter(pk=charger.pk).update(configuration=configuration)
+
+        message = ngettext(
+            "Applied %(count)d configuration key.",
+            "Applied %(count)d configuration keys.",
+            applied,
+        ) % {"count": applied}
+        if needs_restart:
+            message = _("%(message)s Charger restart required.") % {
+                "message": message,
+            }
+        return True, message, needs_restart
+
+    def _restart_charger(self, charger: Charger) -> tuple[bool, str]:
+        if not charger.is_local:
+            message = _(
+                "Only local charge points can be restarted from this server."
+            )
+            return False, message
+
+        connector_value = charger.connector_id
+        ws = store.get_connection(charger.charger_id, connector_value)
+        if ws is None:
+            message = _("%(charger)s is not connected to the platform.") % {
+                "charger": charger,
+            }
+            return False, message
+
+        message_id = uuid.uuid4().hex
+        frame = json.dumps([2, message_id, "Reset", {"type": "Soft"}])
+        try:
+            async_to_sync(ws.send)(frame)
+        except Exception as exc:  # pragma: no cover - network failure
+            message = _("Failed to send Reset: %(error)s") % {"error": exc}
+            return False, message
+
+        log_key = store.identity_key(charger.charger_id, connector_value)
+        store.add_log(log_key, f"< {frame}", log_type="charger")
+        metadata = {
+            "action": "Reset",
+            "charger_id": charger.charger_id,
+            "connector_id": connector_value,
+            "log_key": log_key,
+            "requested_at": timezone.now(),
+        }
+        store.register_pending_call(message_id, metadata)
+        store.schedule_call_timeout(
+            message_id,
+            timeout=10.0,
+            action="Reset",
+            log_key=log_key,
+            message=_("Reset timed out: charger did not respond"),
+        )
+
+        result = store.wait_for_pending_call(message_id, timeout=10.0)
+        if result is None:
+            return False, _(
+                "Reset did not receive a response from the charger."
+            )
+        if not result.get("success", True):
+            description = str(result.get("error_description") or "").strip()
+            if not description:
+                description = _("Unknown error")
+            return False, _("Reset failed: %(details)s") % {"details": description}
+
+        payload_result = result.get("payload")
+        status_value = ""
+        if isinstance(payload_result, dict):
+            status_value = str(payload_result.get("status") or "").strip()
+        if status_value.casefold() != "accepted":
+            return False, _("Reset returned %(status)s.") % {"status": status_value}
+
+        deadline = time_module.monotonic() + 60.0
+        time_module.sleep(2.0)
+        while time_module.monotonic() < deadline:
+            if store.is_connected(charger.charger_id, connector_value):
+                return True, _("Charger restarted successfully.")
+            time_module.sleep(2.0)
+        return False, _(
+            "Charger has not reconnected yet. Verify its status from the charger list."
+        )
+
+    def push_configuration_view(self, request, object_id, *args, **kwargs):
+        configuration = self.get_object(request, object_id)
+        if configuration is None:
+            raise Http404("Configuration not found")
+
+        available = self._available_push_chargers()
+        selected_chargers: list[Charger] = []
+        auto_start = False
+
+        if request.method == "POST":
+            form = PushConfigurationForm(request.POST, chargers_queryset=available)
+            if form.is_valid():
+                selected_chargers = list(form.cleaned_data["chargers"])
+                auto_start = True
+        else:
+            initial_chargers = list(
+                available.filter(
+                    pk__in=configuration.chargers.values_list("pk", flat=True)
+                )
+            )
+            initial_ids = [charger.pk for charger in initial_chargers]
+            form = PushConfigurationForm(
+                chargers_queryset=available,
+                initial={"chargers": initial_ids},
+            )
+            selected_chargers = initial_chargers
+
+        selected_payload = [
+            {
+                "id": charger.pk,
+                "label": charger.display_name or charger.charger_id,
+                "identifier": charger.identity_slug(),
+                "serial": charger.charger_id,
+            }
+            for charger in selected_chargers
+        ]
+
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "original": configuration,
+            "title": _("Push configuration to EVCS"),
+            "configuration": configuration,
+            "form": form,
+            "media": self.media + form.media,
+            "selected_chargers": selected_chargers,
+            "selected_payload": selected_payload,
+            "selected_payload_json": json.dumps(selected_payload, ensure_ascii=False),
+            "progress_url": reverse(
+                "admin:ocpp_chargerconfiguration_push_progress",
+                args=[quote(configuration.pk)],
+            ),
+            "restart_url": reverse(
+                "admin:ocpp_chargerconfiguration_push_restart",
+                args=[quote(configuration.pk)],
+            ),
+            "auto_start": auto_start,
+        }
+        return TemplateResponse(
+            request,
+            "admin/ocpp/chargerconfiguration/push_configuration.html",
+            context,
+        )
+
+    def push_configuration_progress(self, request, object_id, *args, **kwargs):
+        if request.method != "POST":
+            return JsonResponse({"detail": "POST required"}, status=405)
+        configuration = self.get_object(request, object_id)
+        if configuration is None:
+            return JsonResponse({"detail": "Not found"}, status=404)
+        charger_id = request.POST.get("charger")
+        if not charger_id:
+            return JsonResponse({"detail": "charger required"}, status=400)
+        try:
+            charger = self._available_push_chargers().get(pk=charger_id)
+        except Charger.DoesNotExist:
+            return JsonResponse({"detail": "invalid charger"}, status=404)
+
+        success, message, needs_restart = self._apply_configuration_to_charger(
+            configuration, charger
+        )
+        status = 200 if success else 400
+        payload = {
+            "ok": bool(success),
+            "message": message,
+            "needs_restart": bool(needs_restart),
+        }
+        return JsonResponse(payload, status=status)
+
+    def restart_configuration_targets(self, request, object_id, *args, **kwargs):
+        if request.method != "POST":
+            return JsonResponse({"detail": "POST required"}, status=405)
+        configuration = self.get_object(request, object_id)
+        if configuration is None:
+            return JsonResponse({"detail": "Not found"}, status=404)
+        charger_id = request.POST.get("charger")
+        if not charger_id:
+            return JsonResponse({"detail": "charger required"}, status=400)
+        try:
+            charger = self._available_push_chargers().get(pk=charger_id)
+        except Charger.DoesNotExist:
+            return JsonResponse({"detail": "invalid charger"}, status=404)
+
+        success, message = self._restart_charger(charger)
+        status = 200 if success else 400
+        return JsonResponse({"ok": bool(success), "message": message}, status=status)
+
     def get_urls(self):
         urls = super().get_urls()
         custom_urls = [
@@ -376,6 +800,21 @@ class ChargerConfigurationAdmin(admin.ModelAdmin):
                 "<path:object_id>/raw-payload/",
                 self.admin_site.admin_view(self.download_raw_payload),
                 name="ocpp_chargerconfiguration_download_raw",
+            ),
+            path(
+                "<path:object_id>/push/",
+                self.admin_site.admin_view(self.push_configuration_view),
+                name="ocpp_chargerconfiguration_push",
+            ),
+            path(
+                "<path:object_id>/push/progress/",
+                self.admin_site.admin_view(self.push_configuration_progress),
+                name="ocpp_chargerconfiguration_push_progress",
+            ),
+            path(
+                "<path:object_id>/push/restart/",
+                self.admin_site.admin_view(self.restart_configuration_targets),
+                name="ocpp_chargerconfiguration_push_restart",
             ),
         ]
         return custom_urls + urls
