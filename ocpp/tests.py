@@ -80,7 +80,6 @@ from .models import (
     CPFirmwareRequest,
     SecurityEvent,
     ChargerLogRequest,
-    ChargerLogStatus,
 )
 from .admin import (
     ChargerAdmin,
@@ -2491,20 +2490,74 @@ class CSMSConsumerTests(TransactionTestCase):
 
         def _fetch_status():
             request = ChargerLogRequest.objects.get(pk=request_pk)
-            statuses = list(
-                request.status_updates.order_by("occurred_at").values_list("status", flat=True)
+            return (
+                request.status,
+                request.location,
+                request.last_status_at,
+                request.filename,
+                request.last_status_payload,
             )
-            return request.status, request.location, request.last_status_at, statuses
 
-        status, location, last_status_at, statuses = await database_sync_to_async(
-            _fetch_status
-        )()
+        (
+            status,
+            location,
+            last_status_at,
+            filename,
+            last_status_payload,
+        ) = await database_sync_to_async(_fetch_status)()
         self.assertEqual(status, "Uploaded")
         self.assertEqual(location, "https://example.com/log.tar")
         self.assertIsNotNone(last_status_at)
-        self.assertIn("Uploading", statuses)
-        self.assertIn("Uploaded", statuses)
+        self.assertEqual(filename, "charger-log.tar")
+        expected_timestamp = parse_datetime(second_payload["timestamp"])
+        self.assertEqual(last_status_at, expected_timestamp)
+        self.assertEqual(last_status_payload, second_payload)
         self.assertNotIn(capture_key, store.history)
+
+        await communicator.disconnect()
+
+    async def test_log_status_notification_creates_request_when_missing(self):
+        communicator = WebsocketCommunicator(application, "/LOGNEW/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        timestamp = timezone.now().isoformat()
+        payload = {
+            "status": "Uploading",
+            "requestId": 246,
+            "timestamp": timestamp,
+            "logType": "Diagnostics",
+        }
+
+        await communicator.send_json_to([2, "1", "LogStatusNotification", payload])
+        await communicator.receive_json_from()
+
+        def _fetch_request():
+            request = ChargerLogRequest.objects.get(
+                charger__charger_id="LOGNEW",
+                request_id=246,
+            )
+            return (
+                request.status,
+                request.log_type,
+                request.last_status_payload,
+                request.requested_at,
+                request.last_status_at,
+            )
+
+        (
+            status,
+            log_type,
+            last_status_payload,
+            requested_at,
+            last_status_at,
+        ) = await database_sync_to_async(_fetch_request)()
+        expected_timestamp = parse_datetime(timestamp)
+        self.assertEqual(status, "Uploading")
+        self.assertEqual(log_type, "Diagnostics")
+        self.assertEqual(last_status_payload, payload)
+        self.assertEqual(last_status_at, expected_timestamp)
+        self.assertEqual(requested_at, expected_timestamp)
 
         await communicator.disconnect()
 

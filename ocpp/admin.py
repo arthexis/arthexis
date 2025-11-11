@@ -49,7 +49,6 @@ from .models import (
     CPFirmwareDeployment,
     SecurityEvent,
     ChargerLogRequest,
-    ChargerLogStatus,
     WMICode,
 )
 from .simulator import ChargePointSimulator
@@ -3060,6 +3059,7 @@ class ChargerLogRequestAdmin(EntityModelAdmin):
         "request_id",
         "log_type",
         "status",
+        "last_status_at",
         "requested_at",
         "responded_at",
     )
@@ -3072,11 +3072,3 @@ class ChargerLogRequestAdmin(EntityModelAdmin):
         "location",
     )
     date_hierarchy = "requested_at"
-
-
-@admin.register(ChargerLogStatus)
-class ChargerLogStatusAdmin(EntityModelAdmin):
-    list_display = ("request", "status", "occurred_at", "log_type")
-    list_filter = ("status", "log_type")
-    search_fields = ("request__charger__charger_id", "status")
-    date_hierarchy = "occurred_at"

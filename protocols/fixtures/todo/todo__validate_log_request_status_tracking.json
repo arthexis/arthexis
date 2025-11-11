@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate log request status tracking without events",
+      "created_on": "2025-01-01T00:00:00Z",
+      "url": "/admin/ocpp/chargerlogrequest/",
+      "request_details": "From Protocols → Log Requests, initiate a GetLog call for a connected charger. Refresh the admin entry and confirm the status, filename, and location fields update as the charger reports progress without creating separate Log Status rows. Verify the last status payload reflects the final notification.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.31"
+    }
+  }
+]

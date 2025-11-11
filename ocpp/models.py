@@ -1194,6 +1194,7 @@ class ChargerLogRequest(Entity):
     requested_at = models.DateTimeField(auto_now_add=True)
     responded_at = models.DateTimeField(null=True, blank=True)
     last_status_at = models.DateTimeField(null=True, blank=True)
+    last_status_payload = models.JSONField(default=dict, blank=True)
     raw_response = models.JSONField(default=dict, blank=True)
 
     class Meta:
@@ -1204,28 +1205,6 @@ class ChargerLogRequest(Entity):
     def __str__(self) -> str:  # pragma: no cover - simple representation
         label = self.log_type or "Log"
         return f"{label} request {self.request_id}"
-
-
-class ChargerLogStatus(Entity):
-    """Individual status updates associated with a log request."""
-
-    request = models.ForeignKey(
-        ChargerLogRequest,
-        on_delete=models.CASCADE,
-        related_name="status_updates",
-    )
-    status = models.CharField(max_length=32)
-    log_type = models.CharField(max_length=64, blank=True, default="")
-    occurred_at = models.DateTimeField()
-    raw_payload = models.JSONField(default=dict, blank=True)
-
-    class Meta:
-        ordering = ["-occurred_at", "-pk"]
-        verbose_name = _("Log Status Event")
-        verbose_name_plural = _("Log Status Events")
-
-    def __str__(self) -> str:  # pragma: no cover - simple representation
-        return f"{self.status} at {self.occurred_at.isoformat()}"
 
 
 class MeterValue(Entity):
