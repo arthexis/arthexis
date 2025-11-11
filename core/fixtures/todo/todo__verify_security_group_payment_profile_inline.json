@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: OpenPay inline loads on security group admin",
+      "created_on": "2024-01-01T00:00:00Z",
+      "url": "/admin/teams/securitygroup/",
+      "request_details": "In the Django admin, open an existing security group that has an OpenPay payment profile inline. Confirm the change view renders without a server error and that the \"Default processor\" selector appears above the OpenPay credentials. Toggle between OpenPay and PayPal processors, save the form, and ensure the page reloads successfully.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.30"
+    }
+  }
+]
