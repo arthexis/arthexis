@@ -18,7 +18,7 @@
       "changelog": "- 6a93257f chore: update TODO fixtures\n- 1510d1b4 chore: update TODO fixtures\n- 6e010da6 Refactor CP forwarding sessions to synchronous service (#2741)\n- 16a2e1dc Add test for GetLog call error handling (#2739)\n- 1d67a32c Ensure CP Forwarder supports favorites in admin (#2740)\n- 3debb607 Add channel overrides to upgrade report (#2738)\n- 9fe57b83 Align CP forwarder admin with protocol group (#2737)\n- 68f26939 Add admin action for creating charge point simulators (#2736)\n- 90e4d524 Document subprotocol fallback and extend coverage (#2735)\n- 8a116957 Fix OCPP simulators for websockets 15 header rename (#2734)\n- daf5dd2c Improve visitor registration loopback handling (#2733)\n- 89fab2f8 Add debug toggle support to switch-role services (#2732)\n- ea7f20e7 docs: link admin section to install guide (#2727)\n- 04e16709 Expose request language on context (#2731)\n- f47eeb2b Fix last release changelog parsing (#2729)\n- c23010b9 Add CP forwarder model and admin flow (#2730)\n- 7c6cb41c Add consumer report view mode toggle and defaults (#2728)\n- e18c7665 chore: record publish metadata for v0.1.29",
       "pypi_url": "https://pypi.org/project/arthexis/0.1.30/",
       "github_url": "",
-      "release_on": "2025-11-09T00:28:58.143Z"
+      "release_on": "2025-11-09T00:28:54.409Z"
     }
   }
 ]

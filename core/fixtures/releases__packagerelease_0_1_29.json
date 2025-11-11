@@ -18,7 +18,7 @@
       "changelog": "- 70ae2ff6 chore: update TODO fixtures\n- 813709b6 chore: update version and changelog\n- 67c029fc Assign constellation gateway devices (#2726)\n- b522ea03 Add periodic constellation UDP probe task (#2725)\n- 1b069c1d Add WireGuard constellation overlay support (#2724)\n- 6a71729b Show MAC address in node admin list (#2721)\n- cd0c2d0d Fix charge point admin log link 404 (#2723)\n- 328c4d96 Allow authenticated login check mode and link from admin (#2722)\n- 390d6eea Fix My User admin link for staff without Teams access (#2718)\n- 4518d773 Allow legacy sites permissions to access site proxy admin (#2719)\n- 9f5cd57d Add automatic metadata fetch for returning chargers (#2717)\n- 4a1ead1e Hide no-error codes on OCPP public pages (#2720)\n- 230fd3d7 Add coverage tests for OCPP, RFID, and public site logging (#2709)\n- adc0107d Refine README markdown table styling for mobile (#2716)\n- 1dfafc79 Add version targeting to release manager TODOs (#2715)\n- e830dcad Replace constellation role flag references with watchtower (#2714)\n- 2378f031 Stream audio capture waveform from node microphone (#2713)\n- 65852075 Handle charger deletion failures after purge warning (#2712)\n- ea03ceb3 Handle RFID UID conflicts during admin import (#2711)\n- a22c2453 Use alphabetic connector labels across UI and commands (#2710)\n- 720f1b68 Fix start charge point forwarding admin action (#2708)\n- 6de3352f Fix env refresh sync for completed TODOs (#2707)\n- decefa06 chore: record publish metadata for v0.1.28",
       "pypi_url": "https://pypi.org/project/arthexis/0.1.29/",
       "github_url": "",
-      "release_on": "2025-11-08T06:30:43.119Z"
+      "release_on": "2025-11-08T06:30:39.279Z"
     }
   }
 ]
