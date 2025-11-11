@@ -1,0 +1,15 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "is_seed_data": false,
+      "is_deleted": false,
+      "request": "Verify release publish page loads TODO timeline without database errors",
+      "created_on": "2024-01-01T00:00:00Z",
+      "url": "",
+      "request_details": "After deploying this release, run database migrations and open the Django admin release detail for the pending package. Use the Publish action and confirm the release progress page renders without an OperationalError about missing TODO timestamps. Verify the Future Actions section shows active TODO entries with a Created column before completing the publish flow.",
+      "generated_for_version": "",
+      "generated_for_revision": ""
+    }
+  }
+]
