@@ -18,6 +18,7 @@ from django.dispatch import receiver
 from django.http import (
     Http404,
     HttpResponse,
+    HttpResponseForbidden,
     HttpResponseNotAllowed,
     HttpResponseRedirect,
 )
@@ -677,6 +678,9 @@ def toggle_user_datum(request, app_label, model_name, object_id):
         obj = queryset.get(pk=pk)
     except model.DoesNotExist as exc:
         raise Http404 from exc
+
+    if not model_admin.has_change_permission(request, obj):
+        return HttpResponseForbidden()
 
     manager = getattr(model, "all_objects", model._default_manager)
     target_user = _resolve_fixture_user(obj, request.user)
