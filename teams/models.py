@@ -1270,15 +1270,15 @@ class ManualTask(Entity):
                 yield user
 
     def resolve_reservation_credentials(self):
-        from core.models import EnergyAccount, RFID
+        from core.models import CustomerAccount, RFID
 
-        account: EnergyAccount | None = None
+        account: CustomerAccount | None = None
         rfid: RFID | None = None
 
         for candidate in self._iter_reservation_users():
             try:
-                account = candidate.energy_account
-            except EnergyAccount.DoesNotExist:
+                account = candidate.customer_account
+            except CustomerAccount.DoesNotExist:
                 account = None
             if not account:
                 continue

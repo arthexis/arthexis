@@ -6,7 +6,7 @@ import pytest
 from django.contrib.auth import get_user_model
 
 from core.backends import RFIDBackend
-from core.models import EnergyAccount, RFID
+from core.models import CustomerAccount, RFID
 
 
 pytestmark = [pytest.mark.django_db, pytest.mark.feature("rfid-scanner")]
@@ -28,7 +28,7 @@ def user():
 
 
 def test_authenticate_returns_user_for_allowed_rfid(backend, user):
-    account = EnergyAccount.objects.create(name="Test Account", user=user)
+    account = CustomerAccount.objects.create(name="Test Account", user=user)
     rfid = RFID.objects.create(rfid="ABC123")
     account.rfids.add(rfid)
 
@@ -43,7 +43,7 @@ def test_authenticate_returns_none_when_rfid_missing(backend):
 
 
 def test_authenticate_returns_none_when_rfid_not_allowed(backend, user):
-    account = EnergyAccount.objects.create(name="Disallowed Account", user=user)
+    account = CustomerAccount.objects.create(name="Disallowed Account", user=user)
     rfid = RFID.objects.create(rfid="DEF456", allowed=False)
     account.rfids.add(rfid)
 
@@ -51,7 +51,7 @@ def test_authenticate_returns_none_when_rfid_not_allowed(backend, user):
 
 
 def test_authenticate_returns_none_when_account_has_no_user(backend):
-    account = EnergyAccount.objects.create(name="Unassigned Account")
+    account = CustomerAccount.objects.create(name="Unassigned Account")
     rfid = RFID.objects.create(rfid="FED654")
     account.rfids.add(rfid)
 
@@ -59,7 +59,7 @@ def test_authenticate_returns_none_when_account_has_no_user(backend):
 
 
 def test_authenticate_matches_by_prefix(backend, user):
-    account = EnergyAccount.objects.create(name="Prefix Account", user=user)
+    account = CustomerAccount.objects.create(name="Prefix Account", user=user)
     tag = RFID.objects.create(rfid="75075E74962580")
     account.rfids.add(tag)
 

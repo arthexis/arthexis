@@ -14,7 +14,7 @@ django.setup()
 from django.test import TestCase
 
 from core.admin import RFIDResource
-from core.models import EnergyAccount, RFID
+from core.models import CustomerAccount, RFID
 
 
 pytestmark = [pytest.mark.feature("rfid-scanner")]
@@ -23,7 +23,7 @@ pytestmark = [pytest.mark.feature("rfid-scanner")]
 class RFIDAdminImportTests(TestCase):
     def test_import_merges_conflicting_uid(self):
         existing = RFID.objects.create(rfid="AABBCCDD", custom_label="Existing")
-        account = EnergyAccount.objects.create(name="Office Access")
+        account = CustomerAccount.objects.create(name="Office Access")
         original_label = existing.label_id
 
         dataset = Dataset(

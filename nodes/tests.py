@@ -90,7 +90,7 @@ from ocpp.models import Charger
 from protocols.models import CPForwarder
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import serialization, hashes
-from core.models import Package, PackageRelease, SecurityGroup, RFID, EnergyAccount, Todo
+from core.models import Package, PackageRelease, SecurityGroup, RFID, CustomerAccount, Todo
 from requests.exceptions import SSLError
 
 
@@ -3024,7 +3024,7 @@ class NodeAdminTests(TestCase):
         local.public_key = public_bytes.decode()
         local.save(update_fields=["public_key"])
 
-        existing = EnergyAccount.objects.create(name="KNOWN")
+        existing = CustomerAccount.objects.create(name="KNOWN")
         remote = Node.objects.create(
             hostname="remote", address="127.0.0.3", port=8020
         )
@@ -3036,8 +3036,8 @@ class NodeAdminTests(TestCase):
             "rfids": [
                 {
                     "rfid": "deadbeef",
-                    "energy_accounts": [existing.pk, 9999],
-                    "energy_account_names": ["KNOWN", "missing"],
+                    "customer_accounts": [existing.pk, 9999],
+                    "customer_account_names": ["KNOWN", "missing"],
                 }
             ]
         }
@@ -3056,7 +3056,7 @@ class NodeAdminTests(TestCase):
 
         tag = RFID.objects.get(rfid="DEADBEEF")
         self.assertEqual(list(tag.energy_accounts.all()), [existing])
-        self.assertEqual(EnergyAccount.objects.filter(name__iexact="missing").count(), 0)
+        self.assertEqual(CustomerAccount.objects.filter(name__iexact="missing").count(), 0)
 
         result = response.context_data["results"][0]
         self.assertEqual(result["status"], "partial")
@@ -3084,7 +3084,7 @@ class NodeAdminTests(TestCase):
         local.public_key = public_bytes.decode()
         local.save(update_fields=["public_key"])
 
-        account = EnergyAccount.objects.create(name="LOCAL")
+        account = CustomerAccount.objects.create(name="LOCAL")
         tag = RFID.objects.create(rfid="1234ABCD", origin_node=local)
         tag.energy_accounts.add(account)
 
@@ -3131,7 +3131,9 @@ class NodeAdminTests(TestCase):
         payload_data = json.loads(payload)
         self.assertIn("rfids", payload_data)
         self.assertEqual(payload_data["rfids"][0]["rfid"], "1234ABCD")
-        self.assertEqual(payload_data["rfids"][0]["energy_accounts"], [account.pk])
+        payload_rfid = payload_data["rfids"][0]
+        self.assertEqual(payload_rfid["customer_accounts"], [account.pk])
+        self.assertEqual(payload_rfid["energy_accounts"], [account.pk])
 
         result = response.context_data["results"][0]
         self.assertEqual(result["status"], "partial")
@@ -3468,7 +3470,7 @@ class NodeRFIDAPITests(TestCase):
         ).decode()
         remote.save(update_fields=["public_key"])
 
-        existing = EnergyAccount.objects.create(name="KNOWN")
+        existing = CustomerAccount.objects.create(name="KNOWN")
 
         payload = {
             "requester": str(remote.uuid),
@@ -3476,8 +3478,8 @@ class NodeRFIDAPITests(TestCase):
                 {
                     "rfid": "deadface",
                     "custom_label": "Remote",
-                    "energy_accounts": [existing.pk, 777],
-                    "energy_account_names": ["known", "missing"],
+                    "customer_accounts": [existing.pk, 777],
+                    "customer_account_names": ["known", "missing"],
                 }
             ],
         }
@@ -3504,7 +3506,7 @@ class NodeRFIDAPITests(TestCase):
         self.assertEqual(tag.custom_label, "Remote")
         self.assertEqual(list(tag.energy_accounts.all()), [existing])
         self.assertEqual(
-            EnergyAccount.objects.filter(name__iexact="missing").count(), 0
+            CustomerAccount.objects.filter(name__iexact="missing").count(), 0
         )
 
 

@@ -26,7 +26,7 @@ class Command(BaseCommand):
             choices=["id", "name"],
             default="id",
             help=(
-                "Read energy accounts from the specified field (default: id). "
+                "Read customer accounts from the specified field (default: id). "
                 "Use 'name' to link accounts by their names, creating missing ones."
             ),
         )
@@ -67,6 +67,8 @@ class Command(BaseCommand):
                     )
                     row_context = {
                         accounts_column: energy_accounts,
+                        "customer_accounts": row.get("customer_accounts", ""),
+                        "customer_account_names": row.get("customer_account_names", ""),
                         "energy_accounts": row.get("energy_accounts", ""),
                         "energy_account_names": row.get("energy_account_names", ""),
                     }

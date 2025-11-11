@@ -23,7 +23,7 @@ from django.utils import timezone
 from core.models import (
     RFID,
     ClientReport,
-    EnergyAccount,
+    CustomerAccount,
     ClientReportSchedule,
 )
 from ocpp.models import Charger, Transaction
@@ -43,7 +43,7 @@ class AdminClientReportTests(TestCase):
         self.charger = Charger.objects.create(charger_id="C1")
         self.rfid1 = RFID.objects.create(rfid="A1B2C3")
         self.rfid2 = RFID.objects.create(rfid="D4E5F6")
-        self.account = EnergyAccount.objects.create(name="ACCOUNT")
+        self.account = CustomerAccount.objects.create(name="ACCOUNT")
         self.account.rfids.add(self.rfid1)
         start = timezone.now()
         Transaction.objects.create(

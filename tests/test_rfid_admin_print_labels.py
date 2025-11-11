@@ -17,7 +17,7 @@ from django.http import HttpResponse
 from django.test import Client, TestCase
 from django.urls import reverse
 
-from core.models import EnergyAccount, RFID
+from core.models import CustomerAccount, RFID
 
 
 pytestmark = [pytest.mark.feature("rfid-scanner")]
@@ -147,7 +147,7 @@ class RFIDAdminMergeTests(TestCase):
         self.url = reverse("admin:core_rfid_changelist")
 
     def test_merge_rfids_compacts_to_shortest_identifier(self):
-        account_b = EnergyAccount.objects.create(name="Account B")
+        account_b = CustomerAccount.objects.create(name="Account B")
         canonical = RFID.objects.create(rfid="75075E74", allowed=False, released=False)
         duplicate = RFID.objects.create(rfid="75075E74962580", allowed=True, released=True)
         duplicate.energy_accounts.add(account_b)
@@ -177,10 +177,10 @@ class RFIDAdminMergeTests(TestCase):
 
     def test_merge_rfids_skips_non_matching_selection(self):
         canonical = RFID.objects.create(rfid="A1B2C3D4")
-        account_a = EnergyAccount.objects.create(name="Account A")
+        account_a = CustomerAccount.objects.create(name="Account A")
         canonical.energy_accounts.add(account_a)
         duplicate = RFID.objects.create(rfid="A1B2C3D4FFEEDD")
-        account_b = EnergyAccount.objects.create(name="Account B")
+        account_b = CustomerAccount.objects.create(name="Account B")
         duplicate.energy_accounts.add(account_b)
         outsider = RFID.objects.create(rfid="DDCCBBAA")
 
@@ -204,7 +204,7 @@ class RFIDAdminMergeTests(TestCase):
         )
         self.assertContains(
             response,
-            "Skipped 1 energy account because the RFID was already linked to a different account.",
+            "Skipped 1 customer account because the RFID was already linked to a different account.",
         )
 
         self.assertTrue(RFID.objects.filter(pk=canonical.pk).exists())

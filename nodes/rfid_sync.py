@@ -9,7 +9,7 @@ from typing import Any, TYPE_CHECKING
 
 from django.utils.dateparse import parse_datetime
 
-from core.models import EnergyAccount, RFID
+from core.models import CustomerAccount, RFID
 
 if TYPE_CHECKING:  # pragma: no cover - imported only for type checking
     from nodes.models import Node
@@ -33,7 +33,9 @@ def serialize_rfid(tag: RFID) -> dict[str, Any]:
     """Return a dictionary representation suitable for the node API."""
 
     accounts = list(tag.energy_accounts.all())
-    return {
+    id_values = [account.id for account in accounts]
+    name_values = [account.name for account in accounts if account.name]
+    payload = {
         "rfid": tag.rfid,
         "custom_label": tag.custom_label,
         "key_a": tag.key_a,
@@ -48,11 +50,12 @@ def serialize_rfid(tag: RFID) -> dict[str, Any]:
         "external_command": tag.external_command,
         "post_auth_command": tag.post_auth_command,
         "last_seen_on": tag.last_seen_on.isoformat() if tag.last_seen_on else None,
-        "energy_accounts": [account.id for account in accounts],
-        "energy_account_names": [
-            account.name for account in accounts if account.name
-        ],
+        "customer_accounts": id_values,
+        "customer_account_names": name_values,
     }
+    payload["energy_accounts"] = id_values
+    payload["energy_account_names"] = name_values
+    return payload
 
 
 def apply_rfid_payload(
@@ -120,20 +123,25 @@ def apply_rfid_payload(
 
 def _resolve_accounts(
     entry: Mapping[str, Any]
-) -> tuple[list[EnergyAccount], list[str], bool]:
+) -> tuple[list[CustomerAccount], list[str], bool]:
     """Return matching accounts and missing identifiers from payload data."""
 
-    has_account_data = "energy_accounts" in entry or "energy_account_names" in entry
+    has_account_data = any(
+        key in entry
+        for key in ("customer_accounts", "energy_accounts", "customer_account_names", "energy_account_names")
+    )
     if not has_account_data:
         return [], [], False
 
-    accounts: list[EnergyAccount] = []
+    accounts: list[CustomerAccount] = []
     missing: list[str] = []
     seen_ids: set[int] = set()
     matched_names: "OrderedDict[str, None]" = OrderedDict()
 
     # Resolve by numeric identifiers first to preserve ordering.
-    id_values = _coerce_values(entry.get("energy_accounts"))
+    id_values = _coerce_values(
+        entry.get("customer_accounts") or entry.get("energy_accounts")
+    )
     parsed_ids: list[tuple[str, int]] = []
     invalid_ids: list[str] = []
     for raw in id_values:
@@ -143,7 +151,7 @@ def _resolve_accounts(
             invalid_ids.append(raw)
 
     existing_by_id = (
-        EnergyAccount.objects.in_bulk([pk for _, pk in parsed_ids])
+        CustomerAccount.objects.in_bulk([pk for _, pk in parsed_ids])
         if parsed_ids
         else {}
     )
@@ -161,7 +169,9 @@ def _resolve_accounts(
     missing.extend(invalid_ids)
 
     # Resolve remaining accounts by name.
-    name_values = _coerce_values(entry.get("energy_account_names"))
+    name_values = _coerce_values(
+        entry.get("customer_account_names") or entry.get("energy_account_names")
+    )
     processed_names: "OrderedDict[str, None]" = OrderedDict()
     for raw in name_values:
         normalized = raw.strip().upper()
@@ -171,7 +181,7 @@ def _resolve_accounts(
         if normalized in matched_names:
             continue
         account = (
-            EnergyAccount.objects.filter(name__iexact=raw.strip())
+            CustomerAccount.objects.filter(name__iexact=raw.strip())
             .order_by("pk")
             .first()
         )

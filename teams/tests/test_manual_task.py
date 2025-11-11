@@ -184,7 +184,7 @@ class ManualTaskNotificationTests(TestCase):
 
 class ManualTaskAdminActionTests(TestCase):
     def setUp(self):
-        EnergyAccount = apps.get_model("core", "EnergyAccount")
+        CustomerAccount = apps.get_model("core", "CustomerAccount")
         RFID = apps.get_model("core", "RFID")
 
         self.user = get_user_model().objects.create_user(
@@ -203,7 +203,7 @@ class ManualTaskAdminActionTests(TestCase):
         self.aggregate = Charger.objects.create(
             charger_id="SV123", location=self.location
         )
-        self.account = EnergyAccount.objects.create(name="Planner Account", user=self.user)
+        self.account = CustomerAccount.objects.create(name="Planner Account", user=self.user)
         self.rfid = RFID.objects.create(rfid="ABCDEF12")
         self.account.rfids.add(self.rfid)
         self.start = timezone.now() + timedelta(hours=2)

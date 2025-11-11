@@ -90,7 +90,7 @@ from .admin import (
 from .consumers import CSMSConsumer
 from .views import dispatch_action, _transaction_rfid_details, _usage_timeline
 from .status_display import STATUS_BADGE_MAP
-from core.models import EnergyAccount, EnergyCredit, Reference, RFID, SecurityGroup
+from core.models import CustomerAccount, EnergyCredit, Reference, RFID, SecurityGroup
 from . import store
 from decimal import Decimal
 import json
@@ -4776,7 +4776,7 @@ class SimulatorAdminTests(TransactionTestCase):
         user = await database_sync_to_async(User.objects.create_user)(
             username="authuser", password="pwd"
         )
-        account = await database_sync_to_async(EnergyAccount.objects.create)(
+        account = await database_sync_to_async(CustomerAccount.objects.create)(
             user=user, name="Authorized"
         )
         await database_sync_to_async(EnergyCredit.objects.create)(
@@ -4918,7 +4918,7 @@ class SimulatorAdminTests(TransactionTestCase):
         user = await database_sync_to_async(User.objects.create_user)(
             username="bob", password="pwd"
         )
-        acc = await database_sync_to_async(EnergyAccount.objects.create)(
+        acc = await database_sync_to_async(CustomerAccount.objects.create)(
             user=user, name="BOB"
         )
         await database_sync_to_async(EnergyCredit.objects.create)(
@@ -4948,7 +4948,7 @@ class SimulatorAdminTests(TransactionTestCase):
         tx = await database_sync_to_async(Transaction.objects.get)(
             pk=tx_id, charger__charger_id="RFIDOK"
         )
-        self.assertEqual(tx.account_id, user.energy_account.id)
+        self.assertEqual(tx.account_id, user.customer_account.id)
 
     async def test_start_transaction_allows_allowed_tag_without_account(self):
         charger_id = "STARTWARN"
