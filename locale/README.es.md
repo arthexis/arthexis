@@ -32,6 +32,8 @@ Constelación Arthexis es una [suite de software](https://es.wikipedia.org/wiki/
   | --- | --- |
   | `CancelReservation` | Cancelamos reservas pendientes y liberamos conectores directamente desde el centro de control. |
   | `ChangeAvailability` | Cambiamos conectores o estaciones completas entre estados operativos e inoperativos. |
+  | `ChangeConfiguration` | Actualizamos los ajustes compatibles del cargador y registramos los valores aplicados en el centro de control. |
+  | `ClearCache` | Limpiamos la caché de autorizaciones local para forzar consultas frescas al CSMS. |
   | `DataTransfer` | Enviamos comandos específicos del proveedor y registramos la respuesta. |
   | `GetConfiguration` | Consultamos al dispositivo por los valores actuales de las claves de configuración seguidas. |
   | `GetLocalListVersion` | Obtenemos la versión actual de la lista blanca de RFID y sincronizamos las entradas reportadas por el punto de carga. |
@@ -43,7 +45,7 @@ Constelación Arthexis es una [suite de software](https://es.wikipedia.org/wiki/
   | `TriggerMessage` | Pedimos al dispositivo un mensaje inmediato (por ejemplo estado o diagnósticos). |
   | `UpdateFirmware` | Entregamos paquetes de firmware a los cargadores con tokens de descarga seguros y seguimos las respuestas de instalación. |
 
-  **Hoja de ruta OCPP 1.6.** Las siguientes acciones del catálogo están en nuestra lista de tareas: `ChangeConfiguration`, `ClearCache`, `ClearChargingProfile`, `GetCompositeSchedule`, `GetDiagnostics`, `SetChargingProfile`, `UnlockConnector`.
+  **Hoja de ruta OCPP 1.6.** Las siguientes acciones del catálogo están en nuestra lista de tareas: `ClearChargingProfile`, `GetCompositeSchedule`, `GetDiagnostics`, `SetChargingProfile`, `UnlockConnector`.
 
 - Reservas de puntos de carga con asignación automática de conectores, vinculación a cuentas de energía y RFIDs, confirmación del EVCS y cancelación desde el centro de control.
 - Integración de [API](https://es.wikipedia.org/wiki/Interfaz_de_programaci%C3%B3n_de_aplicaciones) con [Odoo](https://www.odoo.com/) para:

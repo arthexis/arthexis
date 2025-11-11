@@ -32,6 +32,8 @@ Costellazione Arthexis è una [suite software](https://it.wikipedia.org/wiki/Sui
   | --- | --- |
   | `CancelReservation` | Annulliamo prenotazioni in sospeso e liberiamo i connettori direttamente dal centro di controllo. |
   | `ChangeAvailability` | Impostiamo connettori o stazione tra operativa e fuori servizio. |
+  | `ChangeConfiguration` | Aggiorniamo le impostazioni supportate del charger e registriamo i valori applicati nel centro di controllo. |
+  | `ClearCache` | Svuotiamo le cache di autorizzazione locali per forzare nuove verifiche dal CSMS. |
   | `DataTransfer` | Inviamo comandi specifici del fornitore e registriamo la risposta del punto di ricarica. |
   | `GetConfiguration` | Interroghiamo il dispositivo sui valori correnti delle chiavi di configurazione monitorate. |
   | `GetLocalListVersion` | Recuperiamo la versione corrente della whitelist RFID e sincronizziamo le voci segnalate dal punto di ricarica. |
@@ -43,7 +45,7 @@ Costellazione Arthexis è una [suite software](https://it.wikipedia.org/wiki/Sui
   | `TriggerMessage` | Chiediamo al dispositivo un aggiornamento immediato (ad esempio stato o diagnostica). |
   | `UpdateFirmware` | Distribuiamo pacchetti firmware ai charger con token di download sicuri e tracciamo le risposte di installazione. |
 
-  **Roadmap OCPP 1.6.** Le seguenti azioni del catalogo sono nel nostro backlog: `ChangeConfiguration`, `ClearCache`, `ClearChargingProfile`, `GetCompositeSchedule`, `GetDiagnostics`, `SetChargingProfile`, `UnlockConnector`.
+  **Roadmap OCPP 1.6.** Le seguenti azioni del catalogo sono nel nostro backlog: `ClearChargingProfile`, `GetCompositeSchedule`, `GetDiagnostics`, `SetChargingProfile`, `UnlockConnector`.
 
 - Prenotazioni dei punti di ricarica con assegnazione automatica del connettore, collegamento agli Energy Account e ai RFID, conferma EVCS e annullamento dal centro di controllo.
 

@@ -32,6 +32,8 @@ Arthexis Constellation is a [story-driven](https://en.wikipedia.org/wiki/Narrati
   | --- | --- |
   | `CancelReservation` | Withdraw pending reservations and release connectors directly from the control center. |
   | `ChangeAvailability` | Switch connectors or the whole station between operative and inoperative states. |
+  | `ChangeConfiguration` | Update supported charger settings and persist applied values in the control center. |
+  | `ClearCache` | Flush local authorization caches to force fresh lookups from the CSMS. |
   | `DataTransfer` | Send vendor-specific commands and log the charge point response. |
   | `GetConfiguration` | Poll the device for the current values of tracked configuration keys. |
   | `GetLocalListVersion` | Retrieve the current RFID whitelist version and synchronize entries reported by the charge point. |
@@ -43,7 +45,7 @@ Arthexis Constellation is a [story-driven](https://en.wikipedia.org/wiki/Narrati
   | `TriggerMessage` | Ask the device to send an immediate update (for example status or diagnostics). |
   | `UpdateFirmware` | Deliver firmware packages to chargers with secure download tokens and track installation responses. |
 
-  **OCPP 1.6 roadmap.** The following catalogue actions are in our backlog: `ChangeConfiguration`, `ClearCache`, `ClearChargingProfile`, `GetCompositeSchedule`, `GetDiagnostics`, `SetChargingProfile`, `UnlockConnector`.
+  **OCPP 1.6 roadmap.** The following catalogue actions are in our backlog: `ClearChargingProfile`, `GetCompositeSchedule`, `GetDiagnostics`, `SetChargingProfile`, `UnlockConnector`.
 
 - Charge point reservations with automated connector assignment, energy account and RFID linkage, EVCS confirmation tracking, and control-center cancellation support.
 - [API](https://en.wikipedia.org/wiki/API) integration with [Odoo](https://www.odoo.com/), syncing:
