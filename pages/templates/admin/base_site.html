@@ -409,6 +409,28 @@ body:not(.login) .badge-unknown {background-color:#6c757d;}
 .favorite-star.favorited {
     color: gold;
 }
+.favorite-star.user-data-star {
+    color: #0d6efd;
+    background: none;
+    border: none;
+    padding: 0;
+    line-height: 1;
+    cursor: pointer;
+}
+.favorite-star.user-data-star.has-user-data {
+    color: gold;
+}
+.favorite-star.user-data-star.disabled {
+    cursor: default;
+}
+.user-data-toggle-form {
+    margin: 0;
+    display: inline;
+}
+.user-data-column {
+    text-align: center;
+    width: 2.5rem;
+}
 
 /* Highlight the currently selected model row */
 .current-model > th,

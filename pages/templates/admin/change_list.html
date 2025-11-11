@@ -60,7 +60,8 @@
         </p>
         {{ cl.formset.non_form_errors }}
     {% endif %}
-    <div class="module{% if cl.has_filters and not (opts.app_label == "ocpp" and opts.model_name == "charger") %} filtered{% endif %}" id="changelist">
+    {% admin_show_filters cl as show_filters %}
+    <div class="module{% if show_filters %} filtered{% endif %}" id="changelist">
       <div class="changelist-form-container">
         {% block search %}{% search_form cl %}{% endblock %}
         {% block date_hierarchy %}{% if cl.date_hierarchy %}{% date_hierarchy cl %}{% endif %}{% endblock %}
@@ -79,7 +80,7 @@
         </form>
       </div>
       {% block filters %}
-        {% if cl.has_filters and not (opts.app_label == "ocpp" and opts.model_name == "charger") %}
+        {% if show_filters %}
           <nav id="changelist-filter" aria-labelledby="changelist-filter-header">
             <h2 id="changelist-filter-header">{% translate 'Filter' %}</h2>
             {% if cl.is_facets_optional or cl.has_active_filters %}<div id="changelist-filter-extra-actions">

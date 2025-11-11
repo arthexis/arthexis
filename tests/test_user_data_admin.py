@@ -88,6 +88,7 @@ class UserDataAdminTests(TransactionTestCase):
         url = reverse("admin:teams_odooprofile_change", args=[self.profile.pk])
         data = {
             "user": self.user.pk,
+            "crm": self.profile.crm,
             "host": "http://test",
             "database": "db",
             "username": "odoo",
@@ -126,6 +127,7 @@ class UserDataAdminTests(TransactionTestCase):
         url = reverse("admin:teams_odooprofile_change", args=[self.profile.pk])
         data = {
             "user": self.user.pk,
+            "crm": self.profile.crm,
             "host": "http://test",
             "database": "db",
             "username": "odoo",
@@ -136,6 +138,48 @@ class UserDataAdminTests(TransactionTestCase):
         self.profile.refresh_from_db()
         self.assertFalse(self.profile.is_user_data)
         self.assertFalse(self.fixture_path.exists())
+
+    def test_change_list_includes_user_data_star(self):
+        url = reverse("admin:teams_odooprofile_changelist")
+        response = self.client.get(url)
+        self.assertContains(response, 'class="column-user-data user-data-column"')
+        self.assertContains(response, 'favorite-star user-data-star')
+        toggle_url = reverse(
+            "admin:user_data_toggle",
+            args=("teams", "odooprofile", self.profile.pk),
+        )
+        self.assertIn(
+            f'action="{toggle_url}" class="user-data-toggle-form"',
+            response.content.decode(),
+        )
+
+    def test_toggle_user_data_star(self):
+        toggle_url = reverse(
+            "admin:user_data_toggle",
+            args=("teams", "odooprofile", self.profile.pk),
+        )
+        changelist_url = reverse("admin:teams_odooprofile_changelist")
+        response = self.client.post(
+            toggle_url,
+            {"next": changelist_url},
+            follow=True,
+        )
+        self.profile.refresh_from_db()
+        self.assertTrue(self.profile.is_user_data)
+        self.assertTrue(self.fixture_path.exists())
+        messages = [m.message for m in get_messages(response.wsgi_request)]
+        self.assertTrue(any("User datum saved" in msg for msg in messages))
+
+        response = self.client.post(
+            toggle_url,
+            {"next": changelist_url},
+            follow=True,
+        )
+        self.profile.refresh_from_db()
+        self.assertFalse(self.profile.is_user_data)
+        self.assertFalse(self.fixture_path.exists())
+        messages = [m.message for m in get_messages(response.wsgi_request)]
+        self.assertTrue(any("User datum removed" in msg for msg in messages))
 
     def test_user_user_data_fixture_includes_profiles(self):
         release_manager = CoreReleaseManager.objects.create(user=self.user)
