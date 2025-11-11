@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate screen Admin Login",
+      "created_on": "2024-01-01T00:00:00Z",
+      "url": "/admin/login/",
+      "request_details": "Open the Django admin login page. Confirm the new \"Login on Public Site\" link is visible beneath the password reset link. Click the link and verify it loads the public site login screen in a new request without HTTP errors. Navigate back to the admin login page and complete a login attempt to ensure the new link does not interfere with authentication.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.31"
+    }
+  }
+]
