@@ -18,7 +18,10 @@ class CPForwarderForm(forms.ModelForm):
         ],
         widget=forms.CheckboxSelectMultiple,
         required=False,
-        help_text=_("Choose which OCPP messages should be forwarded."),
+        help_text=_(
+            "Choose which OCPP messages should be forwarded. Only charge points "
+            "with Export transactions enabled are eligible."
+        ),
     )
 
     class Meta:
@@ -72,6 +75,10 @@ class CPForwarderAdmin(EntityModelAdmin):
         (
             None,
             {
+                "description": _(
+                    "Only charge points with Export transactions enabled will be "
+                    "forwarded by this configuration."
+                ),
                 "fields": (
                     "name",
                     "source_node",

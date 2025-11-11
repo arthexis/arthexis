@@ -2979,6 +2979,12 @@ class NodeAdminTests(TestCase):
             mac_address="aa:bb:cc:dd:ee:ff",
         )
 
+        charger = Charger.objects.create(
+            charger_id="FORWARD-CP-1",
+            export_transactions=False,
+            node_origin=local,
+        )
+
         response = self.client.post(
             reverse("admin:nodes_node_changelist"),
             {
@@ -2994,12 +3000,8 @@ class NodeAdminTests(TestCase):
         self.assertEqual(forwarder.source_node, local)
         self.assertEqual(forwarder.name, remote.hostname)
 
-        charger = Charger.objects.create(
-            charger_id="FORWARD-CP-1",
-            export_transactions=True,
-            node_origin=local,
-        )
         charger.refresh_from_db()
+        self.assertTrue(charger.export_transactions)
         self.assertIsNone(charger.forwarded_to)
 
     @patch("nodes.admin.requests.post")
