@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
+from urllib.parse import quote
 
 from django import forms
 from django.contrib import admin
@@ -9,14 +10,17 @@ from django.contrib.messages.storage.fallback import FallbackStorage
 from django.contrib.auth.models import Permission
 from django.test import TransactionTestCase, RequestFactory
 from django.contrib.auth import get_user_model
-from django.urls import reverse
+from django.contrib.auth.models import Permission
+from django.contrib.messages import get_messages
+from django.contrib.messages.storage.fallback import FallbackStorage
 from django.conf import settings
 from django.core.management import call_command
-from django.contrib.messages import get_messages
+from django.test import RequestFactory, TransactionTestCase
+from django.urls import reverse
 
 from teams.models import OdooProfile
 
-from nodes.models import EmailOutbox
+from teams.models import EmailOutbox
 
 from awg.models import CalculatorTemplate
 
@@ -159,8 +163,7 @@ class UserDataAdminTests(TransactionTestCase):
         )
         changelist_url = reverse("admin:teams_odooprofile_changelist")
         response = self.client.post(
-            toggle_url,
-            {"next": changelist_url},
+            f"{toggle_url}?next={quote(changelist_url, safe='')}",
             follow=True,
         )
         self.profile.refresh_from_db()
@@ -170,8 +173,7 @@ class UserDataAdminTests(TransactionTestCase):
         self.assertTrue(any("User datum saved" in msg for msg in messages))
 
         response = self.client.post(
-            toggle_url,
-            {"next": changelist_url},
+            f"{toggle_url}?next={quote(changelist_url, safe='')}",
             follow=True,
         )
         self.profile.refresh_from_db()

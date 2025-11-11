@@ -13,7 +13,8 @@ from django.utils import timezone
 
 from django.apps import apps
 
-from nodes.models import EmailOutbox, Node
+from nodes.models import Node
+from teams.models import EmailOutbox
 from ocpp.models import CPReservation, Charger, Location
 from teams.admin import ManualTaskAdmin
 from teams.models import ManualTask, SecurityGroup

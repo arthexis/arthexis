@@ -7,7 +7,8 @@ from django.test import TestCase
 
 from unittest.mock import patch
 
-from core.models import User, EmailInbox
+from core.models import User
+from teams.models import EmailInbox
 
 
 class DummyIMAP:

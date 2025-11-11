@@ -5,13 +5,8 @@ from django.template import Context, Template
 from django.test import TestCase, override_settings
 from django.contrib.contenttypes.models import ContentType
 
-from core.models import (
-    SigilRoot,
-    OdooProfile,
-    EmailInbox,
-    EmailCollector,
-    EmailArtifact,
-)
+from core.models import SigilRoot, OdooProfile, EmailArtifact
+from teams.models import EmailInbox, EmailCollector
 from nodes.models import NodeRole
 from core.sigil_builder import (
     generate_model_sigils,

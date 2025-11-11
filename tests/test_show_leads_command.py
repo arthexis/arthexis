@@ -13,7 +13,7 @@ django.setup()
 from django.core.management import call_command
 from django.utils import timezone
 from core.models import InviteLead
-from nodes.models import EmailOutbox
+from teams.models import EmailOutbox
 from awg.models import PowerLead
 
 

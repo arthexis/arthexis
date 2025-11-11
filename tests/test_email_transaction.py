@@ -4,14 +4,8 @@ import pytest
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 
-from core.models import (
-    EmailCollector,
-    EmailInbox,
-    EmailTransaction,
-    EmailTransactionAttachment,
-    User,
-)
-from nodes.models import EmailOutbox
+from core.models import EmailTransaction, EmailTransactionAttachment, User
+from teams.models import EmailCollector, EmailInbox, EmailOutbox
 
 
 @pytest.mark.role("Satellite")

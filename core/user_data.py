@@ -18,6 +18,7 @@ from django.dispatch import receiver
 from django.http import (
     Http404,
     HttpResponse,
+    HttpResponseForbidden,
     HttpResponseNotAllowed,
     HttpResponseRedirect,
 )

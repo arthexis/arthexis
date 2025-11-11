@@ -8,7 +8,6 @@ from django.contrib import admin
 from unittest.mock import patch
 
 from teams.models import EmailInbox, EmailCollector
-from core.models import EmailCollector as CoreEmailCollector
 from core.admin import (
     EmailInboxAdminForm,
     EmailInboxAdmin,
@@ -230,7 +229,7 @@ class EmailInboxAdminActionTests(TestCase):
         from django.contrib.messages.storage.fallback import FallbackStorage
 
         request._messages = FallbackStorage(request)
-        with patch.object(CoreEmailCollector, "collect") as mock_collect:
+        with patch.object(EmailCollector, "collect") as mock_collect:
             self.admin.test_collectors(
                 request, EmailInbox.objects.filter(pk=self.inbox.pk)
             )
@@ -242,7 +241,7 @@ class EmailInboxAdminActionTests(TestCase):
         request2.user = self.user
         request2.session = self.client.session
         request2._messages = FallbackStorage(request2)
-        with patch.object(CoreEmailCollector, "collect") as mock_collect2:
+        with patch.object(EmailCollector, "collect") as mock_collect2:
             self.admin.test_collectors_action(request2, self.inbox)
             mock_collect2.assert_called_once_with(limit=1)
         messages2 = list(request2._messages)
@@ -338,7 +337,7 @@ class EmailCollectorAdminTests(TestCase):
         request.user = self.user
         request.session = self.client.session
         with patch.object(
-            CoreEmailCollector,
+            EmailCollector,
             "search_messages",
             return_value=[
                 {

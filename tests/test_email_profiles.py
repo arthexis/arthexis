@@ -4,8 +4,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from core.admin import USER_PROFILE_INLINES
-from core.models import EmailInbox
-from nodes.models import EmailOutbox
+from teams.models import EmailInbox, EmailOutbox
 
 
 class EmailProfileIntegrationTests(TestCase):
