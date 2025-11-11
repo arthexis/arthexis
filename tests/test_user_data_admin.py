@@ -2,16 +2,18 @@ import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
+from urllib.parse import quote
 
 from django import forms
 from django.contrib import admin
-from django.contrib.messages.storage.fallback import FallbackStorage
-from django.test import TransactionTestCase, RequestFactory
 from django.contrib.auth import get_user_model
-from django.urls import reverse
+from django.contrib.auth.models import Permission
+from django.contrib.messages import get_messages
+from django.contrib.messages.storage.fallback import FallbackStorage
 from django.conf import settings
 from django.core.management import call_command
-from django.contrib.messages import get_messages
+from django.test import RequestFactory, TransactionTestCase
+from django.urls import reverse
 
 from teams.models import OdooProfile
 
@@ -148,10 +150,9 @@ class UserDataAdminTests(TransactionTestCase):
             "admin:user_data_toggle",
             args=("teams", "odooprofile", self.profile.pk),
         )
-        self.assertIn(
-            f'action="{toggle_url}" class="user-data-toggle-form"',
-            response.content.decode(),
-        )
+        content = response.content.decode()
+        self.assertIn(f'formaction="{toggle_url}?next=', content)
+        self.assertIn('formmethod="post"', content)
 
     def test_toggle_user_data_star(self):
         toggle_url = reverse(
@@ -160,8 +161,7 @@ class UserDataAdminTests(TransactionTestCase):
         )
         changelist_url = reverse("admin:teams_odooprofile_changelist")
         response = self.client.post(
-            toggle_url,
-            {"next": changelist_url},
+            f"{toggle_url}?next={quote(changelist_url, safe='')}",
             follow=True,
         )
         self.profile.refresh_from_db()
@@ -171,8 +171,7 @@ class UserDataAdminTests(TransactionTestCase):
         self.assertTrue(any("User datum saved" in msg for msg in messages))
 
         response = self.client.post(
-            toggle_url,
-            {"next": changelist_url},
+            f"{toggle_url}?next={quote(changelist_url, safe='')}",
             follow=True,
         )
         self.profile.refresh_from_db()
@@ -180,6 +179,35 @@ class UserDataAdminTests(TransactionTestCase):
         self.assertFalse(self.fixture_path.exists())
         messages = [m.message for m in get_messages(response.wsgi_request)]
         self.assertTrue(any("User datum removed" in msg for msg in messages))
+
+    def test_toggle_requires_change_permission(self):
+        toggle_url = reverse(
+            "admin:user_data_toggle",
+            args=("teams", "odooprofile", self.profile.pk),
+        )
+        changelist_url = reverse("admin:teams_odooprofile_changelist")
+
+        viewer = get_user_model().objects.create_user(
+            "viewonly", password="pw", is_staff=True
+        )
+        viewer.user_permissions.add(
+            Permission.objects.get(
+                codename="view_odooprofile",
+                content_type__app_label="teams",
+                content_type__model="odooprofile",
+            )
+        )
+
+        self.client.logout()
+        self.client.login(username="viewonly", password="pw")
+
+        response = self.client.post(
+            f"{toggle_url}?next={quote(changelist_url, safe='')}",
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.profile.refresh_from_db()
+        self.assertFalse(self.profile.is_user_data)
 
     def test_user_user_data_fixture_includes_profiles(self):
         release_manager = CoreReleaseManager.objects.create(user=self.user)
