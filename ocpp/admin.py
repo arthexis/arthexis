@@ -1092,6 +1092,11 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         (
             "Network",
             {
+                "description": _(
+                    "Only charge points with Export transactions enabled can be "
+                    "forwarded. Allow remote lets the manager or forwarder send "
+                    "commands to the device."
+                ),
                 "fields": (
                     "node_origin",
                     "manager_node",
@@ -1151,6 +1156,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         "log_link",
         "status_link",
     )
+    list_filter = ("export_transactions",)
     search_fields = ("charger_id", "connector_id", "location__name")
     filter_horizontal = ("owner_users", "owner_groups")
     actions = [

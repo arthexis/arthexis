@@ -290,8 +290,20 @@ class Charger(Entity):
         blank=True,
         help_text=_("Timestamp of the last forwarded transaction."),
     )
-    allow_remote = models.BooleanField(default=False)
-    export_transactions = models.BooleanField(default=False)
+    allow_remote = models.BooleanField(
+        default=False,
+        help_text=_(
+            "Permit this charge point to receive remote commands from its manager "
+            "or forwarding target."
+        ),
+    )
+    export_transactions = models.BooleanField(
+        default=False,
+        help_text=_(
+            "Enable to share this charge point's transactions with remote nodes "
+            "or export tools. Required for CP forwarders."
+        ),
+    )
     last_online_at = models.DateTimeField(null=True, blank=True)
     owner_users = models.ManyToManyField(
         settings.AUTH_USER_MODEL,

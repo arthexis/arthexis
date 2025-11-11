@@ -1604,11 +1604,28 @@ class NodeAdmin(EntityModelAdmin):
         if local_node and local_node.pk:
             defaults["source_node"] = local_node
 
+        eligible_qs = Charger.objects.filter(export_transactions=False)
+        if local_node and local_node.pk:
+            eligible_qs = eligible_qs.filter(
+                Q(node_origin=local_node) | Q(node_origin__isnull=True)
+            )
+
         forwarder, created = CPForwarder.objects.get_or_create(
             target_node=target, defaults=defaults
         )
 
         if created:
+            updated = eligible_qs.update(export_transactions=True)
+            if updated:
+                forwarder.sync_chargers()
+                self.message_user(
+                    request,
+                    _(
+                        "Enabled export transactions for %(count)s charge point(s)."
+                    )
+                    % {"count": updated},
+                    level=messages.INFO,
+                )
             self.message_user(
                 request,
                 _("Created charge point forwarder for %(node)s.")
