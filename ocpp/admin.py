@@ -288,6 +288,7 @@ class ChargerConfigurationAdmin(admin.ModelAdmin):
     )
     list_filter = ("connector_id",)
     search_fields = ("charger_identifier",)
+    actions = ("refetch_cp_configurations",)
     readonly_fields = (
         "charger_identifier",
         "connector_id",
@@ -366,6 +367,54 @@ class ChargerConfigurationAdmin(admin.ModelAdmin):
     def save_model(self, request, obj, form, change):
         obj.evcs_snapshot_at = None
         super().save_model(request, obj, form, change)
+
+    @admin.action(description=_("Re-fetch CP configurations"))
+    def refetch_cp_configurations(self, request, queryset):
+        charger_admin = self.admin_site._registry.get(Charger)
+        if charger_admin is None or not hasattr(
+            charger_admin, "fetch_cp_configuration"
+        ):
+            self.message_user(
+                request,
+                _("Unable to request configurations: charger admin is unavailable."),
+                level=messages.ERROR,
+            )
+            return
+
+        charger_pks: set[int] = set()
+        missing: list[ChargerConfiguration] = []
+        for configuration in queryset:
+            linked_ids = list(configuration.chargers.values_list("pk", flat=True))
+            if not linked_ids:
+                fallback = Charger.objects.filter(
+                    charger_id=configuration.charger_identifier
+                )
+                if configuration.connector_id is None:
+                    fallback = fallback.filter(connector_id__isnull=True)
+                else:
+                    fallback = fallback.filter(
+                        connector_id=configuration.connector_id
+                    )
+                linked_ids = list(fallback.values_list("pk", flat=True))
+            if not linked_ids:
+                missing.append(configuration)
+                continue
+            charger_pks.update(linked_ids)
+
+        if charger_pks:
+            charger_queryset = Charger.objects.filter(pk__in=charger_pks)
+            charger_admin.fetch_cp_configuration(request, charger_queryset)
+
+        if missing:
+            for configuration in missing:
+                self.message_user(
+                    request,
+                    _(
+                        "%(identifier)s has no associated charger to refresh."
+                    )
+                    % {"identifier": configuration.charger_identifier},
+                    level=messages.WARNING,
+                )
 
 
 @admin.register(ConfigurationKey)
