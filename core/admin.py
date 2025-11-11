@@ -2913,7 +2913,6 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
     list_display = (
         "label",
         "rfid",
-        "user_data_flag",
         "color",
         "kind",
         "endianness_short",
@@ -2976,10 +2975,6 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
 
     label.admin_order_field = "label_id"
     label.short_description = "Label"
-
-    @admin.display(boolean=True, description=_("UD"))
-    def user_data_flag(self, obj):
-        return getattr(obj, "is_user_data", False)
 
     @admin.display(description=_("End"), ordering="endianness")
     def endianness_short(self, obj):

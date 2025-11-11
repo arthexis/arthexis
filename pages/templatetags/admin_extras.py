@@ -15,6 +15,7 @@ from django.urls import NoReverseMatch, reverse
 from django.utils.text import capfirst
 from django.utils.translation import gettext_lazy as _
 from core.models import Lead, RFID, GoogleCalendarProfile
+from core.entity import Entity
 from ocpp.models import Charger
 from nodes.models import NetMessage
 
@@ -494,3 +495,61 @@ def celery_feature_enabled(context) -> bool:
 
     lock_path = Path(settings.BASE_DIR) / "locks" / "celery.lck"
     return lock_path.exists()
+
+
+@register.filter
+def supports_user_datum(admin_or_model) -> bool:
+    """Return ``True`` when the admin or model supports user datum fixtures."""
+
+    model = getattr(admin_or_model, "model", None) or admin_or_model
+    if not isinstance(model, type):
+        model = getattr(model, "__class__", None)
+    if not isinstance(model, type):
+        return False
+    if issubclass(model, Entity):
+        return True
+    return bool(getattr(model, "supports_user_datum", False))
+
+
+@register.filter
+def list_index(sequence, index):
+    """Return ``sequence[index]`` while guarding against lookup errors."""
+
+    try:
+        position = int(index)
+        return sequence[position]
+    except (TypeError, ValueError, IndexError):
+        return None
+
+
+@register.simple_tag
+def user_data_toggle_url(cl, obj) -> str:
+    """Return the admin URL that toggles user datum for ``obj``."""
+
+    if not obj:
+        return ""
+    try:
+        app_label = cl.opts.app_label
+        model_name = cl.opts.model_name
+    except AttributeError:
+        return ""
+    try:
+        return reverse(
+            "admin:user_data_toggle",
+            args=(app_label, model_name, obj.pk),
+        )
+    except NoReverseMatch:
+        return ""
+
+
+@register.simple_tag
+def admin_show_filters(cl) -> bool:
+    """Return ``True`` when change list filters should be displayed."""
+
+    has_filters = getattr(cl, "has_filters", False)
+    if not has_filters:
+        return False
+    opts = getattr(cl, "opts", None)
+    app_label = getattr(opts, "app_label", "") if opts else ""
+    model_name = getattr(opts, "model_name", "") if opts else ""
+    return not (app_label == "ocpp" and model_name == "charger")

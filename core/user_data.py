@@ -11,14 +11,21 @@ from django.conf import settings
 from django.contrib import admin, messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.signals import user_logged_in
+from django.core.exceptions import ValidationError
 from django.core.management import call_command
 from django.db.models.signals import post_save
 from django.dispatch import receiver
-from django.http import HttpResponse, HttpResponseRedirect
+from django.http import (
+    Http404,
+    HttpResponse,
+    HttpResponseNotAllowed,
+    HttpResponseRedirect,
+)
 from django.template.response import TemplateResponse
-from django.urls import path, reverse
+from django.urls import NoReverseMatch, path, reverse
 from django.utils.functional import LazyObject
 from django.utils.translation import gettext as _
+from django.utils.http import url_has_allowed_host_and_scheme
 
 from .entity import Entity
 
@@ -221,6 +228,22 @@ def dump_user_fixture(instance, user=None) -> None:
             return
     meta = model._meta
     path = _fixture_path(target_user, instance)
+    natural = getattr(model, "natural_key", None)
+    if callable(natural):
+        deps = getattr(natural, "dependencies", None)
+        if isinstance(deps, (list, tuple, set)):
+            normalized: list[str] = []
+            updated = False
+            for dep in deps:
+                if isinstance(dep, str):
+                    normalized.append(dep)
+                elif hasattr(dep, "_meta") and getattr(dep._meta, "label_lower", None):
+                    normalized.append(dep._meta.label_lower)
+                    updated = True
+                else:
+                    normalized.append(dep)
+            if updated:
+                natural.dependencies = normalized
     call_command(
         "dumpdata",
         f"{meta.app_label}.{meta.model_name}",
@@ -233,9 +256,8 @@ def dump_user_fixture(instance, user=None) -> None:
 
 def delete_user_fixture(instance, user=None) -> None:
     target_user = user or _resolve_fixture_user(instance)
-    filename = (
-        f"{instance._meta.app_label}_{instance._meta.model_name}_{instance.pk}.json"
-    )
+    meta = instance._meta.concrete_model._meta
+    filename = f"{meta.app_label}_{meta.model_name}_{instance.pk}.json"
 
     def _remove_for_user(candidate) -> None:
         if candidate is None:
@@ -608,6 +630,98 @@ def _iter_entity_admin_models():
         yield model, model_admin
 
 
+def _safe_next_url(request):
+    candidate = request.POST.get("next") or request.GET.get("next")
+    if not candidate:
+        return None
+
+    allowed_hosts = {request.get_host()}
+    allowed_hosts.update(filter(None, settings.ALLOWED_HOSTS))
+
+    if url_has_allowed_host_and_scheme(
+        candidate,
+        allowed_hosts=allowed_hosts,
+        require_https=request.is_secure(),
+    ):
+        return candidate
+    return None
+
+
+def _supports_user_datum(model) -> bool:
+    return issubclass(model, Entity) or getattr(model, "supports_user_datum", False)
+
+
+def toggle_user_datum(request, app_label, model_name, object_id):
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    try:
+        model = apps.get_model(app_label, model_name)
+    except LookupError as exc:  # pragma: no cover - defensive
+        raise Http404 from exc
+
+    if model is None or not _supports_user_datum(model):
+        raise Http404
+
+    model_admin = admin.site._registry.get(model)
+    if model_admin is None:
+        raise Http404
+
+    try:
+        pk = model._meta.pk.to_python(object_id)
+    except (TypeError, ValueError, ValidationError) as exc:
+        raise Http404 from exc
+
+    queryset = model_admin.get_queryset(request)
+    try:
+        obj = queryset.get(pk=pk)
+    except model.DoesNotExist as exc:
+        raise Http404 from exc
+
+    manager = getattr(model, "all_objects", model._default_manager)
+    target_user = _resolve_fixture_user(obj, request.user)
+    allow_user_data = _user_allows_user_data(target_user)
+    message = None
+
+    if obj.is_user_data:
+        manager.filter(pk=obj.pk).update(is_user_data=False)
+        obj.is_user_data = False
+        delete_user_fixture(obj, target_user)
+        handler = getattr(model_admin, "user_datum_deleted", None)
+        if callable(handler):
+            handler(request, obj)
+        message = _("User datum removed.")
+    elif allow_user_data:
+        manager.filter(pk=obj.pk).update(is_user_data=True)
+        obj.is_user_data = True
+        dump_user_fixture(obj, target_user)
+        handler = getattr(model_admin, "user_datum_saved", None)
+        if callable(handler):
+            handler(request, obj)
+        path = _fixture_path(target_user, obj)
+        message = _("User datum saved to %(path)s") % {"path": str(path)}
+    else:
+        messages.warning(
+            request,
+            _("User data is not available for this account."),
+        )
+
+    if message:
+        try:
+            model_admin.message_user(request, message)
+        except Exception:  # pragma: no cover - defensive
+            messages.success(request, message)
+
+    next_url = _safe_next_url(request)
+    if not next_url:
+        try:
+            next_url = reverse(f"admin:{app_label}_{model_name}_changelist")
+        except NoReverseMatch:
+            next_url = reverse("admin:index")
+
+    return HttpResponseRedirect(next_url)
+
+
 def _seed_data_view(request):
     sections = []
     fixture_index = _seed_fixture_index()
@@ -704,6 +818,11 @@ def patch_admin_user_data_views() -> None:
                 "user-data/import/",
                 admin.site.admin_view(_user_data_import),
                 name="user_data_import",
+            ),
+            path(
+                "user-data/toggle/<str:app_label>/<str:model_name>/<str:object_id>/",
+                admin.site.admin_view(toggle_user_datum),
+                name="user_data_toggle",
             ),
         ]
         return custom + urls
