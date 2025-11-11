@@ -41,7 +41,6 @@ from .models import (
     RFIDSessionAttempt,
     SecurityEvent,
     ChargerLogRequest,
-    ChargerLogStatus,
 )
 from .reference_utils import host_is_local_loopback
 from .evcs_discovery import (
@@ -2861,16 +2860,27 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                     if request is None:
                         request = qs.order_by("-requested_at").first()
                     if request is None:
-                        return ""
-                    ChargerLogStatus.objects.create(
-                        request=request,
-                        status=status_value or "",
-                        log_type=log_type_value or "",
-                        occurred_at=timestamp_value,
-                        raw_payload=payload,
-                    )
+                        charger = Charger.objects.filter(
+                            charger_id=self.charger_id,
+                            connector_id=None,
+                        ).first()
+                        if charger is None:
+                            return ""
+                        creation_kwargs: dict[str, object] = {
+                            "charger": charger,
+                            "status": status_value or "",
+                        }
+                        if log_type_value:
+                            creation_kwargs["log_type"] = log_type_value
+                        if request_identifier is not None:
+                            creation_kwargs["request_id"] = request_identifier
+                        request = ChargerLogRequest.objects.create(**creation_kwargs)
+                        if timestamp_value is not None:
+                            request.requested_at = timestamp_value
+                            request.save(update_fields=["requested_at"])
                     updates: dict[str, object] = {
                         "last_status_at": timestamp_value,
+                        "last_status_payload": payload,
                     }
                     if status_value:
                         updates["status"] = status_value
@@ -2878,6 +2888,8 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                         updates["location"] = location_value
                     if filename_value:
                         updates["filename"] = filename_value
+                    if log_type_value and not request.log_type:
+                        updates["log_type"] = log_type_value
                     ChargerLogRequest.objects.filter(pk=request.pk).update(**updates)
                     if updates.get("status"):
                         request.status = str(updates["status"])
@@ -2886,6 +2898,9 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                     if updates.get("filename"):
                         request.filename = str(updates["filename"])
                     request.last_status_at = timestamp_value
+                    request.last_status_payload = payload
+                    if updates.get("log_type"):
+                        request.log_type = str(updates["log_type"])
                     return request.session_key or ""
 
                 session_capture = await database_sync_to_async(_persist_log_status)()
