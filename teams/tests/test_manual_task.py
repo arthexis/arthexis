@@ -17,7 +17,7 @@ from nodes.models import Node
 from teams.models import EmailOutbox
 from ocpp.models import CPReservation, Charger, Location
 from teams.admin import ManualTaskAdmin
-from teams.models import ManualTask, SecurityGroup
+from teams.models import ManualTask, SecurityGroup, TaskCategory
 
 
 class ManualTaskModelTests(TestCase):
@@ -70,6 +70,20 @@ class ManualTaskModelTests(TestCase):
         saved = ManualTask.objects.get()
         self.assertEqual(saved.node, self.node)
         self.assertEqual(saved.location, self.location)
+
+    def test_can_assign_category(self):
+        category = TaskCategory.objects.create(name="Maintenance")
+        task = ManualTask(
+            title="Inspect Charger",
+            description="Verify connectors are clean.",
+            node=self.node,
+            scheduled_start=self.start,
+            scheduled_end=self.end,
+            category=category,
+        )
+        task.full_clean()
+        task.save()
+        self.assertEqual(task.category, category)
 
 
 class ManualTaskNotificationTests(TestCase):
