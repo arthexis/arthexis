@@ -30,6 +30,12 @@ class LoginViewNoSiteTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'name="username"')
 
+    def test_admin_login_page_has_public_login_link(self):
+        response = self.client.get(reverse("admin:login"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, reverse("pages:login"))
+        self.assertContains(response, "Login on Public Site")
+
 
 class LoginViewRedirectFieldTests(TestCase):
     def test_custom_redirect_field_name_preserved(self):
