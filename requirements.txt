@@ -9,7 +9,7 @@ attrs==25.3.0
 autobahn==24.4.2
 Automat==25.4.16
 billiard==4.2.2
-bleach==6.2.0
+bleach==6.3.0
 black==25.11.0
 celery==5.5.3
 certifi==2025.10.5
