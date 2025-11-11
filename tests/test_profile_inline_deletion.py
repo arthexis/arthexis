@@ -12,7 +12,7 @@ from core.models import (
     ReleaseManager,
     SecurityGroup as CoreSecurityGroup,
 )
-from nodes.models import EmailOutbox
+from teams.models import EmailOutbox
 from teams.models import SecurityGroup as TeamsSecurityGroup
 
 

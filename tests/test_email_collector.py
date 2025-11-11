@@ -1,7 +1,8 @@
 from django.test import TestCase
 from unittest.mock import patch
 
-from core.models import User, EmailInbox, EmailCollector, EmailArtifact
+from core.models import User, EmailArtifact
+from teams.models import EmailInbox, EmailCollector
 from core.tasks import poll_email_collectors
 
 

@@ -36,7 +36,8 @@ class SigilBuilderTests(TestCase):
 
     def test_builder_groups_multiple_roots(self):
         from django.contrib.contenttypes.models import ContentType
-        from core.models import EmailInbox, SigilRoot
+        from teams.models import EmailInbox
+        from core.models import SigilRoot
 
         ct = ContentType.objects.get_for_model(EmailInbox)
         SigilRoot.objects.get_or_create(
@@ -57,7 +58,8 @@ class SigilBuilderTests(TestCase):
 
     def test_auto_fields_include_roots(self):
         from django.contrib.contenttypes.models import ContentType
-        from core.models import EmailInbox, SigilRoot
+        from teams.models import EmailInbox
+        from core.models import SigilRoot
 
         ct = ContentType.objects.get_for_model(EmailInbox)
         SigilRoot.objects.get_or_create(
