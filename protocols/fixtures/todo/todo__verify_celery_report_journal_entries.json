@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Verify Celery report shows systemd journal activity",
+      "created_on": "2025-01-01T00:00:00Z",
+      "url": "/admin/nodes/nodefeature/celery-report/",
+      "request_details": "Open the Celery Report admin view and confirm the Recent log entries section lists output from the systemd journal when Celery services are running. Ensure the scanned sources summary includes the journal units and that the latest worker and beat runs appear without relying on on-disk log files.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.31"
+    }
+  }
+]

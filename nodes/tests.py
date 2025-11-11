@@ -61,6 +61,7 @@ from selenium.common.exceptions import WebDriverException
 from .classifiers import run_default_classifiers
 from .utils import capture_rpi_snapshot, capture_screenshot, save_screenshot
 from .feature_checks import feature_checks
+from nodes import reports
 from django.db.utils import DatabaseError
 from .admin import NodeAdmin
 from .models import (
@@ -5538,6 +5539,108 @@ class CeleryReportAdminViewTests(TestCase):
         self.assertTrue(
             any("Heartbeat task executed" in entry.message for entry in entries)
         )
+
+
+    def test_report_includes_journal_entries(self):
+        with patch("nodes.reports._collect_journal_entries") as mock_collect:
+            entry = reports.CeleryLogEntry(
+                timestamp=timezone.now(),
+                level="INFO",
+                logger="celery.worker",
+                message="Worker processed journal task",
+                source="systemd journal (celery-demo)",
+            )
+            mock_collect.return_value = ([entry], [entry.source])
+
+            response = self.client.get(
+                reverse("admin:nodes_nodefeature_celery_report")
+            )
+
+        self.assertEqual(response.status_code, 200)
+        entries = response.context_data["log_entries"]
+        self.assertTrue(
+            any(item.message == entry.message and item.source == entry.source for item in entries)
+        )
+        self.assertIn(entry.source, response.context_data["log_sources"])
+
+
+class CeleryJournalCollectionTests(SimpleTestCase):
+    def test_collect_journal_entries_returns_results(self):
+        start = timezone.now() - timedelta(minutes=5)
+        end = timezone.now()
+        sample_entry = reports.CeleryLogEntry(
+            timestamp=end - timedelta(minutes=1),
+            level="INFO",
+            logger="celery.worker",
+            message="Processed journal task",
+            source="systemd journal (celery-demo)",
+        )
+
+        with patch("nodes.reports._journalctl_available", return_value=True), patch(
+            "nodes.reports._candidate_journal_units", return_value=["celery-demo"]
+        ), patch(
+            "nodes.reports._read_journal_entries",
+            return_value=iter(
+                [
+                    reports.CeleryLogEntry(
+                        timestamp=sample_entry.timestamp,
+                        level=sample_entry.level,
+                        logger=sample_entry.logger,
+                        message=sample_entry.message,
+                        source="celery-demo",
+                    )
+                ]
+            ),
+        ) as mock_read:
+            entries, sources = reports._collect_journal_entries(
+                start, end, max_lines=100
+            )
+
+        mock_read.assert_called_once()
+        self.assertEqual(sources, [sample_entry.source])
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0].message, sample_entry.message)
+        self.assertEqual(entries[0].source, sample_entry.source)
+
+    def test_read_journal_entries_parses_json(self):
+        start = timezone.now() - timedelta(minutes=5)
+        end = timezone.now()
+        record = {
+            "__REALTIME_TIMESTAMP": str(int(end.timestamp() * 1_000_000)),
+            "MESSAGE": "[INFO/MainProcess] Task example executed",
+            "SYSLOG_IDENTIFIER": "celery",
+            "PRIORITY": "6",
+        }
+        with patch(
+            "nodes.reports.subprocess.run",
+            return_value=SimpleNamespace(
+                returncode=0,
+                stdout=json.dumps(record) + "\n",
+                stderr="",
+            ),
+        ) as mock_run:
+            entries = list(
+                reports._read_journal_entries(
+                    "celery-demo", start, end, max_lines=10
+                )
+            )
+
+        mock_run.assert_called_once()
+        self.assertEqual(len(entries), 1)
+        self.assertIn("Task example executed", entries[0].message)
+        self.assertEqual(entries[0].logger, "celery")
+
+    def test_collect_journal_entries_handles_unavailable_tool(self):
+        start = timezone.now() - timedelta(minutes=5)
+        end = timezone.now()
+
+        with patch("nodes.reports._journalctl_available", return_value=False):
+            entries, sources = reports._collect_journal_entries(
+                start, end, max_lines=50
+            )
+
+        self.assertEqual(entries, [])
+        self.assertEqual(sources, [])
 
 
 class NodeRpiCameraDetectionTests(TestCase):

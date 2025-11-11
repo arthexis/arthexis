@@ -5,8 +5,11 @@ from __future__ import annotations
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone as dt_timezone
+import json
 import numbers
 import re
+import shutil
+import subprocess
 from pathlib import Path
 from typing import Iterable, Iterator
 
@@ -126,6 +129,12 @@ def collect_celery_log_entries(
             if entry.timestamp < start or entry.timestamp > end:
                 continue
             entries.append(entry)
+
+    journal_entries, journal_sources = _collect_journal_entries(
+        start, end, max_lines=max_lines
+    )
+    entries.extend(journal_entries)
+    checked_sources.extend(journal_sources)
 
     entries.sort(key=lambda item: item.timestamp, reverse=True)
     return CeleryLogCollection(entries=entries, checked_sources=checked_sources)
@@ -408,4 +417,189 @@ def _is_celery_related(logger_name: str, message: str) -> bool:
     if any(keyword in logger_lower for keyword in ("celery", "task", "beat")):
         return True
     return "celery" in message_lower or "task" in message_lower
+
+
+def _collect_journal_entries(
+    start: datetime, end: datetime, *, max_lines: int
+) -> tuple[list[CeleryLogEntry], list[str]]:
+    if not _journalctl_available():
+        return [], []
+
+    entries: list[CeleryLogEntry] = []
+    sources: list[str] = []
+
+    for unit in _candidate_journal_units():
+        source_label = f"systemd journal ({unit})"
+        sources.append(source_label)
+        for entry in _read_journal_entries(
+            unit, start, end, max_lines=max_lines
+        ):
+            if entry.timestamp < start or entry.timestamp > end:
+                continue
+            entries.append(
+                CeleryLogEntry(
+                    timestamp=entry.timestamp,
+                    level=entry.level,
+                    logger=entry.logger,
+                    message=entry.message,
+                    source=source_label,
+                )
+            )
+
+    return entries, sources
+
+
+def _journalctl_available() -> bool:
+    return shutil.which("journalctl") is not None
+
+
+def _candidate_journal_units() -> Iterable[str]:
+    service_name = _read_service_name()
+    candidates = [
+        "celery",
+        "celery-beat",
+        "celery-worker",
+        "celeryd",
+    ]
+    if service_name:
+        candidates.extend(
+            [
+                f"celery-{service_name}",
+                f"celery-beat-{service_name}",
+            ]
+        )
+
+    seen: set[str] = set()
+    for unit in candidates:
+        normalized = unit.strip()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        yield normalized
+
+
+def _read_service_name() -> str | None:
+    lock_path = Path(settings.BASE_DIR) / "locks" / "service.lck"
+    try:
+        raw = lock_path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    return raw or None
+
+
+def _format_journal_timestamp(moment: datetime) -> str:
+    localized = timezone.localtime(moment)
+    return localized.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _read_journal_entries(
+    unit: str, start: datetime, end: datetime, *, max_lines: int
+) -> Iterator[CeleryLogEntry]:
+    command = [
+        "journalctl",
+        f"--unit={unit}",
+        "--output=json",
+        "--no-pager",
+        f"--since={_format_journal_timestamp(start)}",
+        f"--until={_format_journal_timestamp(end)}",
+        f"--lines={max_lines}",
+    ]
+
+    try:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=5,
+        )
+    except (FileNotFoundError, subprocess.SubprocessError, OSError):
+        return iter(())
+
+    if result.returncode not in (0, 1):
+        return iter(())
+
+    records: list[CeleryLogEntry] = []
+    for line in result.stdout.splitlines():
+        try:
+            data = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        entry = _parse_journal_record(data, unit)
+        if entry is not None:
+            records.append(entry)
+
+    return iter(records)
+
+
+_PRIORITY_LEVELS = {
+    0: "EMERG",
+    1: "ALERT",
+    2: "CRIT",
+    3: "ERROR",
+    4: "WARNING",
+    5: "NOTICE",
+    6: "INFO",
+    7: "DEBUG",
+}
+
+
+def _parse_journal_record(data: dict, unit: str) -> CeleryLogEntry | None:
+    timestamp = _parse_journal_timestamp(data)
+    if timestamp is None:
+        return None
+
+    message = str(data.get("MESSAGE", "")).strip()
+    if not message:
+        return None
+
+    logger_name = str(
+        data.get("SYSLOG_IDENTIFIER")
+        or data.get("_COMM")
+        or data.get("UNIT")
+        or unit
+    ).strip()
+    level = _priority_to_level(data.get("PRIORITY"))
+
+    if not _is_celery_related(logger_name, message):
+        return None
+
+    return CeleryLogEntry(
+        timestamp=timestamp,
+        level=level,
+        logger=logger_name,
+        message=message,
+        source=unit,
+    )
+
+
+def _priority_to_level(value) -> str:
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        return "INFO"
+    return _PRIORITY_LEVELS.get(number, "INFO")
+
+
+def _parse_journal_timestamp(data: dict) -> datetime | None:
+    for key in ("__REALTIME_TIMESTAMP", "_SOURCE_REALTIME_TIMESTAMP"):
+        raw = data.get(key)
+        if raw is None:
+            continue
+        try:
+            micros = int(raw)
+        except (TypeError, ValueError):
+            continue
+        seconds, microseconds = divmod(micros, 1_000_000)
+        return datetime.fromtimestamp(
+            seconds + microseconds / 1_000_000,
+            tz=dt_timezone.utc,
+        )
+
+    raw_timestamp = data.get("__REALTIME_TIMESTAMP_STR") or data.get("TIMESTAMP")
+    if isinstance(raw_timestamp, str):
+        parsed = _parse_timestamp(raw_timestamp)
+        if parsed is not None:
+            return parsed
+    return None
 
