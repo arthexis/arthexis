@@ -63,6 +63,7 @@ from .models import (
     NetMessage,
     NodeManager,
     DNSRecord,
+    _format_upgrade_body,
 )
 from . import dns as dns_utils
 from core.models import RFID
@@ -75,6 +76,7 @@ from ocpp.models import (
     CPFirmwareRequest,
     DataTransferMessage,
 )
+from ocpp.network import serialize_charger_for_network
 from core.user_data import EntityModelAdmin
 
 
@@ -92,6 +94,23 @@ class NodeAdminForm(forms.ModelForm):
                 "Expose the admin API through this node's public endpoint. "
                 "Only enable when trusted peers require administrative access."
             )
+        ipv4_field = self.fields.get("ipv4_address")
+        if ipv4_field:
+            ipv4_field.widget = forms.TextInput()
+            ipv4_field.help_text = _(
+                "Enter IPv4 addresses separated by commas in priority order."
+            )
+
+    def clean_ipv4_address(self):
+        value = self.cleaned_data.get("ipv4_address")
+        if value in (None, ""):
+            return None
+        serialized = Node.serialize_ipv4_addresses(value)
+        if serialized is None:
+            raise forms.ValidationError(
+                _("Enter at least one valid, non-loopback IPv4 address or leave blank."),
+            )
+        return serialized
 
 
 class NodeFeatureAssignmentInline(admin.TabularInline):
@@ -250,7 +269,7 @@ class NodeAdmin(EntityModelAdmin):
         "mac_address_display",
         "role",
         "relation",
-        "constellation_device",
+        "version_display",
         "last_seen",
         "visit_link",
     )
@@ -258,7 +277,6 @@ class NodeAdmin(EntityModelAdmin):
         "hostname",
         "network_hostname",
         "address",
-        "constellation_ip",
         "mac_address",
     )
     change_list_template = "admin/nodes/node/change_list.html"
@@ -273,8 +291,6 @@ class NodeAdmin(EntityModelAdmin):
                     "network_hostname",
                     "ipv4_address",
                     "ipv6_address",
-                    "constellation_ip",
-                    "constellation_device",
                     "address",
                     "mac_address",
                     "port",
@@ -373,6 +389,14 @@ class NodeAdmin(EntityModelAdmin):
     @admin.display(description=_("MAC address"), ordering="mac_address")
     def mac_address_display(self, obj):
         return obj.mac_address or "—"
+
+    @admin.display(description=_("Version"))
+    def version_display(self, obj):
+        display = _format_upgrade_body(
+            getattr(obj, "installed_version", ""),
+            getattr(obj, "installed_revision", ""),
+        )
+        return display or "—"
 
     @admin.display(description=_("IP Address"), ordering="address")
     def primary_ip(self, obj):
@@ -988,32 +1012,52 @@ class NodeAdmin(EntityModelAdmin):
         }
 
     def _apply_remote_node_info(self, node, payload):
-        changed = []
-        field_map = {
-            "hostname": payload.get("hostname"),
-            "network_hostname": payload.get("network_hostname"),
-            "address": payload.get("address"),
-            "ipv4_address": payload.get("ipv4_address"),
-            "ipv6_address": payload.get("ipv6_address"),
-            "public_key": payload.get("public_key"),
-        }
-        port_value = payload.get("port")
-        if port_value is not None:
-            try:
-                port_value = int(port_value)
-            except (TypeError, ValueError):
-                port_value = None
-        field_map["port"] = port_value
-        mac_address = payload.get("mac_address")
-        if mac_address:
-            field_map["mac_address"] = str(mac_address).lower()
+        changed: list[str] = []
+        sentinel = object()
 
-        for field, value in field_map.items():
-            if value is None:
-                continue
+        def payload_value(key):
+            return payload[key] if key in payload else sentinel
+
+        def apply_field(field: str, value):
+            if value is sentinel:
+                return
             if getattr(node, field) != value:
                 setattr(node, field, value)
                 changed.append(field)
+
+        apply_field("hostname", payload_value("hostname"))
+        apply_field("network_hostname", payload_value("network_hostname"))
+        apply_field("address", payload_value("address"))
+
+        ipv4_raw = payload_value("ipv4_address")
+        if ipv4_raw is not sentinel:
+            ipv4_value = Node.serialize_ipv4_addresses(ipv4_raw)
+            apply_field("ipv4_address", ipv4_value)
+
+        apply_field("ipv6_address", payload_value("ipv6_address"))
+        apply_field("public_key", payload_value("public_key"))
+
+        port_value = payload_value("port")
+        if port_value is not sentinel:
+            try:
+                port_value = int(port_value)
+            except (TypeError, ValueError):
+                port_value = sentinel
+        apply_field("port", port_value)
+
+        mac_address = payload_value("mac_address")
+        if mac_address is not sentinel and mac_address:
+            apply_field("mac_address", str(mac_address).lower())
+
+        version_value = payload_value("installed_version")
+        if version_value is not sentinel:
+            cleaned_version = "" if version_value is None else str(version_value)[:20]
+            apply_field("installed_version", cleaned_version)
+
+        revision_value = payload_value("installed_revision")
+        if revision_value is not sentinel:
+            cleaned_revision = "" if revision_value is None else str(revision_value)[:40]
+            apply_field("installed_revision", cleaned_revision)
 
         role_value = payload.get("role") or payload.get("role_name")
         if role_value is not None:
@@ -1344,6 +1388,104 @@ class NodeAdmin(EntityModelAdmin):
                 hashes.SHA256(),
             )
         ).decode()
+
+    def _send_forwarding_metadata(
+        self,
+        request,
+        target,
+        chargers,
+        local_node,
+        private_key,
+    ) -> bool:
+        chargers = list(chargers)
+
+        def _safe_message(level: int, text: str) -> None:
+            if hasattr(request, "_messages"):
+                self.message_user(request, text, level=level)
+
+        if not chargers:
+            _safe_message(messages.INFO, _("No chargers available to forward."))
+            return True
+
+        payload = {
+            "requester": str(local_node.uuid),
+            "requester_mac": local_node.mac_address,
+            "requester_public_key": local_node.public_key,
+            "chargers": [
+                serialize_charger_for_network(charger) for charger in chargers
+            ],
+            "transactions": {"chargers": [], "transactions": []},
+        }
+        payload_json = json.dumps(payload, separators=(",", ":"), sort_keys=True)
+        headers = {"Content-Type": "application/json"}
+        if private_key:
+            try:
+                headers["X-Signature"] = self._sign_payload(private_key, payload_json)
+            except Exception as exc:  # pragma: no cover - defensive
+                _safe_message(
+                    messages.ERROR,
+                    _("Failed to sign forwarding payload: %(error)s")
+                    % {"error": exc},
+                )
+                return False
+
+        errors: list[str] = []
+        for url in self._iter_remote_urls(target, "/nodes/network/chargers/forward/"):
+            if not url:
+                continue
+            try:
+                response = requests.post(
+                    url,
+                    data=payload_json,
+                    headers=headers,
+                    timeout=5,
+                )
+            except RequestException as exc:
+                errors.append(
+                    _(
+                        "Failed to send forwarding metadata to %(node)s via %(url)s (%(error)s)."
+                    )
+                    % {"node": target, "url": url, "error": exc}
+                )
+                continue
+
+            try:
+                data: Mapping = response.json()
+            except ValueError:
+                data = {}
+
+            if response.ok and isinstance(data, Mapping) and data.get("status") == "ok":
+                _safe_message(
+                    messages.SUCCESS,
+                    _("Forwarding metadata sent to %(node)s via %(url)s.")
+                    % {"node": target, "url": url},
+                )
+                return True
+
+            detail = ""
+            if isinstance(data, Mapping):
+                detail = data.get("detail") or ""
+            errors.append(
+                _(
+                    "Forwarding metadata to %(node)s via %(url)s failed: %(status)s %(detail)s"
+                )
+                % {
+                    "node": target,
+                    "url": url,
+                    "status": response.status_code,
+                    "detail": detail,
+                }
+            )
+
+        if errors:
+            for message in errors:
+                _safe_message(messages.ERROR, message)
+        else:
+            _safe_message(
+                messages.ERROR,
+                _("No reachable host found for %(node)s.") % {"node": target},
+            )
+        return False
 
     def _dedupe(self, values):
         if not values:

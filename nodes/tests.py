@@ -65,7 +65,6 @@ from django.db.utils import DatabaseError
 from .admin import NodeAdmin
 from .models import (
     Node,
-    EmailOutbox,
     ContentClassifier,
     ContentClassification,
     ContentSample,
@@ -92,6 +91,7 @@ from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import serialization, hashes
 from core.models import Package, PackageRelease, SecurityGroup, RFID, EnergyAccount, Todo
 from requests.exceptions import SSLError
+from teams.models import EmailOutbox
 
 
 class NodeBadgeColorTests(TestCase):
@@ -462,6 +462,27 @@ class NodeGetLocalTests(TestCase):
         self.assertEqual(node.ipv4_address, "203.0.113.10")
         self.assertIsNone(node.ipv6_address)
 
+    def test_register_node_stores_multiple_ipv4_addresses(self):
+        payload = {
+            "hostname": "multi-ip",
+            "address": "198.51.100.10",
+            "port": 8041,
+            "mac_address": "aa:bb:cc:dd:ee:99",
+            "ipv4_address": ["198.51.100.10", "127.0.0.1", "203.0.113.20"],
+        }
+        response = self.client.post(
+            reverse("register-node"),
+            data=json.dumps(payload),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        node = Node.objects.get(mac_address="aa:bb:cc:dd:ee:99")
+        self.assertEqual(node.ipv4_address, "198.51.100.10,203.0.113.20")
+        self.assertEqual(
+            node.get_ipv4_addresses(), ["198.51.100.10", "203.0.113.20"]
+        )
+        self.assertNotIn("127.0.0.1", node.ipv4_address)
+
     def test_get_best_ip_ignores_non_ip_values(self):
         node = Node.objects.create(
             hostname="best-ip",
@@ -494,6 +515,16 @@ class NodeGetLocalTests(TestCase):
         hosts = node.get_remote_host_candidates()
         self.assertEqual(hosts[0], "10.88.0.25")
         self.assertIn("192.0.2.9", hosts)
+
+    def test_get_remote_host_candidates_preserve_ipv4_order(self):
+        node = Node(
+            hostname="remote-order",
+            ipv4_address="198.51.100.10,203.0.113.20",
+            port=8888,
+        )
+        hosts = node.get_remote_host_candidates()
+        ipv4_hosts = Node.sanitize_ipv4_addresses(hosts)
+        self.assertEqual(ipv4_hosts, ["198.51.100.10", "203.0.113.20"])
 
     def test_register_node_requires_contact_information(self):
         response = self.client.post(
@@ -1019,6 +1050,17 @@ class NodeInfoViewTests(TestCase):
         self.assertEqual(payload.get("constellation_ip"), "10.88.0.60")
         self.assertIn("10.88.0.60", payload.get("contact_hosts", []))
 
+    def test_includes_version_information(self):
+        self.node.installed_version = "4.5.6"
+        self.node.installed_revision = "abcdef123456"
+        self.node.save(update_fields=["installed_version", "installed_revision"])
+
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload.get("installed_version"), "4.5.6")
+        self.assertEqual(payload.get("installed_revision"), "abcdef123456")
+
 
 class ConstellationSetupViewTests(TestCase):
     def setUp(self):
@@ -1435,7 +1477,9 @@ class NodeRegisterCurrentTests(TestCase):
         self.assertEqual(payload["installed_version"], "2.0.0")
         self.assertEqual(payload["installed_revision"], "newrev")
         self.assertEqual(payload.get("network_hostname"), "localnode.example.com")
-        self.assertEqual(payload.get("ipv4_address"), "93.184.216.34")
+        self.assertEqual(
+            payload.get("ipv4_address"), "93.184.216.34,192.168.1.5"
+        )
         self.assertEqual(payload.get("ipv6_address"), "2001:4860:4860::8888")
 
     def test_register_current_notifies_peers_without_version_change(self):
@@ -1491,7 +1535,9 @@ class NodeRegisterCurrentTests(TestCase):
         self.assertEqual(payload["installed_version"], "1.0.0")
         self.assertEqual(payload.get("installed_revision"), "rev1")
         self.assertEqual(payload.get("network_hostname"), "samever.example.com")
-        self.assertEqual(payload.get("ipv4_address"), "93.184.216.35")
+        self.assertEqual(
+            payload.get("ipv4_address"), "93.184.216.35,192.168.1.6"
+        )
         self.assertEqual(payload.get("ipv6_address"), "2001:4860:4860::8844")
 
     def test_register_current_populates_network_fields(self):
@@ -1525,7 +1571,7 @@ class NodeRegisterCurrentTests(TestCase):
                     node, created = Node.register_current()
         self.assertTrue(created)
         self.assertEqual(node.network_hostname, "nodehost.example.com")
-        self.assertEqual(node.ipv4_address, "93.184.216.36")
+        self.assertEqual(node.ipv4_address, "93.184.216.36,10.0.0.5")
         self.assertEqual(node.ipv6_address, "2001:4860:4860::1")
         self.assertEqual(node.address, "93.184.216.36")
 
@@ -1602,11 +1648,17 @@ class NodeRegisterCurrentTests(TestCase):
             enable_public_api=True,
             mac_address="00:11:22:33:44:77",
         )
+        node.installed_version = "1.2.3"
+        node.installed_revision = "rev123456"
+        node.save(update_fields=["installed_version", "installed_revision"])
         url = reverse("node-public-endpoint", args=[node.public_endpoint])
 
         get_resp = self.client.get(url)
         self.assertEqual(get_resp.status_code, 200)
-        self.assertEqual(get_resp.json()["hostname"], "public")
+        payload = get_resp.json()
+        self.assertEqual(payload["hostname"], "public")
+        self.assertEqual(payload.get("installed_version"), "1.2.3")
+        self.assertEqual(payload.get("installed_revision"), "rev123456")
 
         pre_count = NetMessage.objects.count()
         post_resp = self.client.post(url, data="hello", content_type="text/plain")
@@ -2296,6 +2348,35 @@ class NodeAdminTests(TestCase):
         self.assertEqual(node.role, control)
         self.assertTrue(control.node_set.filter(pk=node.pk).exists())
         self.assertFalse(terminal.node_set.filter(pk=node.pk).exists())
+
+    def test_apply_remote_node_info_updates_version_and_ipv4(self):
+        node = Node.objects.create(
+            hostname="remote-version",
+            address="203.0.113.50",
+            port=9000,
+            mac_address="00:11:22:33:44:cc",
+            installed_version="1.0.0",
+            installed_revision="rev-old",
+        )
+        admin_instance = NodeAdmin(Node, admin.site)
+
+        payload = {
+            "hostname": node.hostname,
+            "address": node.address,
+            "ipv4_address": "203.0.113.50,127.0.0.1,198.51.100.5",
+            "installed_version": "2.0.0",
+            "installed_revision": "deadbeef",
+        }
+
+        changed = admin_instance._apply_remote_node_info(node, payload)
+        node.refresh_from_db()
+
+        self.assertIn("installed_version", changed)
+        self.assertIn("installed_revision", changed)
+        self.assertIn("ipv4_address", changed)
+        self.assertEqual(node.installed_version, "2.0.0")
+        self.assertEqual(node.installed_revision, "deadbeef")
+        self.assertEqual(node.ipv4_address, "203.0.113.50,198.51.100.5")
 
     @patch("nodes.admin.requests.post")
     def test_send_forwarding_metadata_retries_until_success(self, mock_post):

@@ -113,6 +113,13 @@ def _ensure_constellation_device(node: Node) -> str | None:
     attempt = 1
     while True:
         candidate = f"gw{attempt}"
+        if (
+            Node.objects.filter(constellation_device=candidate)
+            .exclude(pk=node.pk)
+            .exists()
+        ):
+            attempt += 1
+            continue
         try:
             with transaction.atomic():
                 try:
@@ -525,6 +532,8 @@ def node_list(request):
             "port": node.port,
             "last_seen": node.last_seen,
             "features": list(node.features.values_list("slug", flat=True)),
+            "installed_version": node.installed_version,
+            "installed_revision": node.installed_revision,
         }
         for node in Node.objects.prefetch_related("features")
     ]
@@ -758,6 +767,8 @@ def node_info(request):
         "features": list(node.features.values_list("slug", flat=True)),
         "role": node.role.name if node.role_id else "",
         "contact_hosts": node.get_remote_host_candidates(),
+        "installed_version": node.installed_version,
+        "installed_revision": node.installed_revision,
     }
 
     if token:
@@ -858,7 +869,12 @@ def register_node(request):
     hostname = (data.get("hostname") or "").strip()
     address = (data.get("address") or "").strip()
     network_hostname = (data.get("network_hostname") or "").strip()
-    ipv4_address = (data.get("ipv4_address") or "").strip()
+    if hasattr(data, "getlist"):
+        ipv4_values = data.getlist("ipv4_address")
+        raw_ipv4 = ipv4_values if ipv4_values else data.get("ipv4_address")
+    else:
+        raw_ipv4 = data.get("ipv4_address")
+    ipv4_candidates = Node.sanitize_ipv4_addresses(raw_ipv4)
     ipv6_address = (data.get("ipv6_address") or "").strip()
     constellation_ip = (data.get("constellation_ip") or "").strip()
     port = data.get("port", 8888)
@@ -884,7 +900,13 @@ def register_node(request):
         )
         return _add_cors_headers(request, response)
 
-    if not any([address, network_hostname, ipv4_address, ipv6_address, constellation_ip]):
+    if not any([
+        address,
+        network_hostname,
+        bool(ipv4_candidates),
+        ipv6_address,
+        constellation_ip,
+    ]):
         response = JsonResponse(
             {
                 "detail": "at least one of address, network_hostname, "
@@ -920,9 +942,13 @@ def register_node(request):
 
     mac_address = mac_address.lower()
     address_value = address or None
-    ipv4_value = ipv4_address or None
     ipv6_value = ipv6_address or None
     constellation_value = constellation_ip or None
+
+    for candidate in Node.sanitize_ipv4_addresses([address, network_hostname, hostname]):
+        if candidate not in ipv4_candidates:
+            ipv4_candidates.append(candidate)
+    ipv4_value = Node.serialize_ipv4_addresses(ipv4_candidates)
 
     for candidate in (address, network_hostname, hostname):
         candidate = (candidate or "").strip()
@@ -932,9 +958,7 @@ def register_node(request):
             parsed_ip = ipaddress.ip_address(candidate)
         except ValueError:
             continue
-        if parsed_ip.version == 4 and not ipv4_value:
-            ipv4_value = str(parsed_ip)
-        elif parsed_ip.version == 6 and not ipv6_value:
+        if parsed_ip.version == 6 and not ipv6_value:
             ipv6_value = str(parsed_ip)
     if constellation_value:
         try:
@@ -2103,6 +2127,8 @@ def public_node_endpoint(request, endpoint):
             "badge_color": node.badge_color,
             "last_seen": node.last_seen,
             "features": list(node.features.values_list("slug", flat=True)),
+            "installed_version": node.installed_version,
+            "installed_revision": node.installed_revision,
         }
         return JsonResponse(data)
 

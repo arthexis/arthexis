@@ -211,9 +211,7 @@ class Node(Entity):
 
     hostname = models.CharField(max_length=100)
     network_hostname = models.CharField(max_length=253, blank=True)
-    ipv4_address = models.GenericIPAddressField(
-        protocol="IPv4", blank=True, null=True
-    )
+    ipv4_address = models.TextField(blank=True, null=True)
     ipv6_address = models.GenericIPAddressField(
         protocol="IPv6", blank=True, null=True
     )
@@ -321,6 +319,63 @@ class Node(Entity):
         return best[1] if best else None
 
     @classmethod
+    def _iter_ipv4_inputs(cls, values) -> Iterable[str]:
+        if values is None:
+            return []
+        if isinstance(values, str):
+            tokens = values.replace(";", ",").split(",")
+            return [token.strip() for token in tokens if token.strip()]
+        if isinstance(values, Iterable):
+            flattened: list[str] = []
+            for item in values:
+                flattened.extend(cls._iter_ipv4_inputs(item))
+            return flattened
+        return [str(values).strip()]
+
+    @classmethod
+    def sanitize_ipv4_addresses(cls, values) -> list[str]:
+        """Return a normalized list of IPv4 addresses without local entries."""
+
+        cleaned: list[str] = []
+        for token in cls._iter_ipv4_inputs(values):
+            if not token:
+                continue
+            try:
+                parsed = ipaddress.ip_address(token)
+            except ValueError:
+                continue
+            if parsed.version != 4:
+                continue
+            if parsed.is_loopback or parsed.is_unspecified:
+                continue
+            normalized = str(parsed)
+            if normalized not in cleaned:
+                cleaned.append(normalized)
+        return cleaned
+
+    @classmethod
+    def order_ipv4_addresses(cls, addresses: Iterable[str]) -> list[str]:
+        ordered: list[tuple[int, str]] = []
+        for index, value in enumerate(addresses):
+            score = cls._ip_preference(value)[0]
+            ordered.append((score, index, value))
+        ordered.sort()
+        return [value for _, _, value in ordered]
+
+    @classmethod
+    def serialize_ipv4_addresses(cls, values) -> str | None:
+        cleaned = cls.sanitize_ipv4_addresses(values)
+        if not cleaned:
+            return None
+        ordered = cls.order_ipv4_addresses(cleaned)
+        return ",".join(ordered)
+
+    def get_ipv4_addresses(self) -> list[str]:
+        stored = self.ipv4_address or ""
+        cleaned = self.sanitize_ipv4_addresses(stored)
+        return self.order_ipv4_addresses(cleaned)
+
+    @classmethod
     def _resolve_ip_addresses(
         cls, *hosts: str, include_ipv4: bool = True, include_ipv6: bool = True
     ) -> tuple[list[str], list[str]]:
@@ -367,6 +422,11 @@ class Node(Entity):
             "address",
             "public_endpoint",
         ):
+            if attr == "ipv4_address":
+                for candidate in self.get_ipv4_addresses():
+                    if candidate not in values:
+                        values.append(candidate)
+                continue
             value = getattr(self, attr, "") or ""
             value = value.strip()
             if value and value not in values:
@@ -406,9 +466,22 @@ class Node(Entity):
         for value in (
             getattr(self, "constellation_ip", "") or "",
             getattr(self, "address", "") or "",
-            getattr(self, "ipv4_address", "") or "",
-            getattr(self, "ipv6_address", "") or "",
         ):
+            value = value.strip()
+            if not value:
+                continue
+            try:
+                ipaddress.ip_address(value)
+            except ValueError:
+                continue
+            candidates.append(value)
+        for value in self.get_ipv4_addresses():
+            try:
+                ipaddress.ip_address(value)
+            except ValueError:
+                continue
+            candidates.append(value)
+        for value in (getattr(self, "ipv6_address", "") or "",):
             value = value.strip()
             if not value:
                 continue
@@ -632,7 +705,9 @@ class Node(Entity):
         if direct_address and direct_address not in ipv4_candidates:
             ipv4_candidates.append(direct_address)
 
-        ipv4_address = cls._select_preferred_ip(ipv4_candidates)
+        ordered_ipv4 = cls.order_ipv4_addresses(cls.sanitize_ipv4_addresses(ipv4_candidates))
+        ipv4_address = ordered_ipv4[0] if ordered_ipv4 else None
+        serialized_ipv4 = ",".join(ordered_ipv4) if ordered_ipv4 else None
         ipv6_address = cls._select_preferred_ip(ipv6_candidates)
 
         preferred_contact = ipv4_address or ipv6_address or direct_address or "127.0.0.1"
@@ -674,7 +749,7 @@ class Node(Entity):
         defaults = {
             "hostname": hostname,
             "network_hostname": network_hostname,
-            "ipv4_address": ipv4_address,
+            "ipv4_address": serialized_ipv4,
             "ipv6_address": ipv6_address,
             "address": preferred_contact,
             "port": port,
