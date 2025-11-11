@@ -4,6 +4,7 @@ import sys
 import time
 import tempfile
 from collections import deque
+from unittest import mock
 from importlib import util as importlib_util
 from pathlib import Path
 from types import ModuleType
@@ -4159,6 +4160,64 @@ class ChargerConfigurationAdminUnitTests(TestCase):
         key_admin = ConfigurationKeyAdmin(ConfigurationKey, AdminSite())
         perms = key_admin.get_model_perms(self.request_factory.get("/"))
         self.assertEqual(perms, {})
+
+    def test_refetch_action_requests_configuration_for_linked_chargers(self):
+        site = AdminSite()
+        site.register(Charger, ChargerAdmin)
+        config_admin = ChargerConfigurationAdmin(ChargerConfiguration, site)
+        request = self.request_factory.post("/admin/ocpp/chargerconfiguration/")
+        configuration = ChargerConfiguration.objects.create(
+            charger_identifier="CFG-ADMIN-ACTION",
+        )
+        charger = Charger.objects.create(charger_id="CFG-ACTION")
+        charger.configuration = configuration
+        charger.save(update_fields=["configuration"])
+        charger_admin = site._registry[Charger]
+        with mock.patch.object(charger_admin, "fetch_cp_configuration") as fetch_mock:
+            config_admin.refetch_cp_configurations(
+                request, ChargerConfiguration.objects.filter(pk=configuration.pk)
+            )
+
+        fetch_mock.assert_called_once()
+        called_request, called_queryset = fetch_mock.call_args[0]
+        self.assertIs(called_request, request)
+        self.assertEqual(
+            list(called_queryset.values_list("pk", flat=True)),
+            [charger.pk],
+        )
+
+
+class ChargerConfigurationPersistenceTests(TestCase):
+    def test_persist_configuration_skips_duplicate_payload(self):
+        consumer = CSMSConsumer.__new__(CSMSConsumer)
+        consumer.charger_id = "CFG-DUP"
+        payload = {
+            "configurationKey": [
+                {"key": "AuthorizeRemoteTxRequests", "readonly": True},
+                {"key": "HeartbeatInterval", "value": 300, "readonly": False},
+            ],
+            "unknownKey": ["MeterValuesSampledData"],
+        }
+        first_time = timezone.now()
+        second_time = first_time + timedelta(minutes=5)
+
+        with mock.patch("django.utils.timezone.now", return_value=first_time):
+            first_configuration = consumer._persist_configuration_result(
+                payload, None
+            )
+
+        self.assertEqual(ChargerConfiguration.objects.count(), 1)
+
+        with mock.patch("django.utils.timezone.now", return_value=second_time):
+            second_configuration = consumer._persist_configuration_result(
+                payload, None
+            )
+
+        self.assertEqual(first_configuration.pk, second_configuration.pk)
+        self.assertEqual(ChargerConfiguration.objects.count(), 1)
+        refreshed = ChargerConfiguration.objects.get(pk=first_configuration.pk)
+        self.assertEqual(refreshed.updated_at, second_time)
+        self.assertEqual(refreshed.evcs_snapshot_at, first_time)
 
 
 class ConfigurationTaskTests(TestCase):

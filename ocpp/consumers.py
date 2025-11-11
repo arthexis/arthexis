@@ -1176,6 +1176,30 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         except (TypeError, ValueError):
             raw_payload = payload
 
+        queryset = ChargerConfiguration.objects.filter(
+            charger_identifier=self.charger_id
+        )
+        if connector_value is None:
+            queryset = queryset.filter(connector_id__isnull=True)
+        else:
+            queryset = queryset.filter(connector_id=connector_value)
+
+        existing = queryset.order_by("-created_at").first()
+        if existing and existing.unknown_keys == unknown_values:
+            if (
+                existing.configuration_keys == normalized_entries
+                and existing.raw_payload == raw_payload
+            ):
+                now = timezone.now()
+                ChargerConfiguration.objects.filter(pk=existing.pk).update(
+                    updated_at=now
+                )
+                existing.updated_at = now
+                Charger.objects.filter(charger_id=self.charger_id).update(
+                    configuration=existing
+                )
+                return existing
+
         configuration = ChargerConfiguration.objects.create(
             charger_identifier=self.charger_id,
             connector_id=connector_value,
