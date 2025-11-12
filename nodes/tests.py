@@ -2641,6 +2641,26 @@ class NodeAdminTests(TestCase):
             urls,
         )
 
+    def test_iter_remote_urls_drop_https_default_port_for_http_fallback(self):
+        node = Node(
+            hostname="remote.example.com",
+            port=443,
+            public_endpoint="",
+        )
+
+        urls = list(node.iter_remote_urls("/nodes/net-message/"))
+
+        self.assertIn(
+            "https://remote.example.com/nodes/net-message/",
+            urls,
+        )
+        self.assertIn(
+            "http://remote.example.com/nodes/net-message/",
+            urls,
+        )
+        combined = "".join(urls)
+        self.assertNotIn(":443", combined)
+
 
     @pytest.mark.feature("screenshot-poll")
     @override_settings(SCREENSHOT_SOURCES=["/one", "/two"])

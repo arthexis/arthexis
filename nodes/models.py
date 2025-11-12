@@ -572,24 +572,31 @@ class Node(Entity):
                     if ip_obj.version == 6 and not formatted_host.startswith("["):
                         formatted_host = f"[{formatted_host}]"
 
-            effective_port = port_override if port_override is not None else default_port
             combined_path = f"{base_path}{normalized_path}" if base_path else normalized_path
 
             for scheme, scheme_default_port in (("https", 443), ("http", 80)):
                 base = f"{scheme}://{formatted_host}"
-                include_default_port = (
-                    port_override is None and effective_port == scheme_default_port
-                )
+                if port_override is not None:
+                    scheme_port: int | None = port_override
+                else:
+                    scheme_port = default_port
 
-                if effective_port and (
-                    port_override is not None or effective_port != scheme_default_port
+                if (
+                    scheme_port in (80, 443)
+                    and scheme_port != scheme_default_port
                 ):
-                    explicit = f"{base}:{effective_port}{combined_path}"
+                    scheme_port = None
+
+                if scheme_port and scheme_port != scheme_default_port:
+                    explicit = f"{base}:{scheme_port}{combined_path}"
                     if explicit not in seen:
                         seen.add(explicit)
                         yield explicit
 
-                if include_default_port:
+                candidate_without_port = (
+                    scheme_port is None or scheme_port == scheme_default_port
+                )
+                if candidate_without_port:
                     candidate = f"{base}{combined_path}"
                     if candidate not in seen:
                         seen.add(candidate)
