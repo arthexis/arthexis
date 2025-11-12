@@ -1,10 +1,50 @@
 Changelog
 =========
 
-Unreleased (0.1.32)
--------------------
+Unreleased
+----------
 
-- No changes yet.
+- 73b32ad8 docs: cut changelog for 0.1.31 (#2828)
+- c697ad08 chore: update version and fixtures
+- 5bf7c249 Ensure node update task uses UTC schedule (#2827)
+- d685a356 feat: move location model to core business domain (#2822)
+- 853c0f6b Add daily node update task and fixtures (#2826)
+- 6969f2b2 fix: register user admin for location autocomplete (#2825)
+- 0c769286 Fix manual changelog instructions logging (#2823)
+- ddf4f19c Ensure SSL renewal periodic task fixture updates existing entry (#2824)
+- 0dd7c0a1 fix: recover changelog before release (#2821)
+- 4ab2bbb0 Ensure SSL renewal periodic task fixture sets date_changed (#2820)
+- 9c7e2405 Clear skip revisions when manually triggering upgrades (#2819)
+- 455dd5d8 Add monthly SSL renewal task and guard helper (#2818)
+- c15bddff Handle TODO version labels with trailing plus suffix (#2817)
+- 8be6ba67 Adjust public charger usage timeline colors (#2816)
+- 58d31bb3 Ensure auto-upgrade tasks log in settings base dir (#2815)
+- 3aabfbba Center admin public login link (#2814)
+- 46c0cfc7 Paginate Celery report log entries (#2813)
+- 76eb4415 Extend Celery report to read systemd journal logs (#2812)
+- 5492f067 Fix charger landing refresh behavior and layout (#2810)
+- 1dff3bd0 Fix SigilRoot fixtures to use CustomerAccount content type (#2811)
+- 09043813 Order upgrade report log entries newest first (#2809)
+- 738583ea refactor: replace energy accounts with customer accounts (#2808)
+- a37b3a03 Handle multiple node IPv4 addresses and surface versions (#2807)
+- 2fae9810 Add task categories for manual tasks (#2805)
+- 06f35e07 docs: document ChangeConfiguration and ClearCache support (#2804)
+- c29d87bf Add public login link to admin login page (#2803)
+- 9788fc9b Enforce change access for user data toggle (#2801)
+- 8e120018 Fix admin user data toggle permissions and markup (#2800)
+- 9978bcd8 Fix teams email model wiring and add release todo (#2802)
+- 4bf8e457 Revise Horologia periodic task admin list (#2797)
+- 53dca45c Add admin user data star column with toggle support (#2799)
+- 0e29f109 Improve auto-upgrade schedule resilience and admin links (#2798)
+- ed32b7d7 Improve CP configuration admin editing and push workflow (#2795)
+- 197178ed Hide charge point filters in admin changelist (#2796)
+- e3417464 Adjust charger admin list columns (#2794)
+- a9ada141 Hide CP configuration raw payload behind download link (#2792)
+- b0cf35d7 Fix OpenPay inline default processor configuration (#2793)
+- e5f5577e Refactor log request status tracking (#2791)
+- 49b63195 Add admin refetch action and reuse identical CP configurations (#2790)
+- 50913cd6 Improve CP forwarder export guidance (#2789)
+- e25d9c48 chore: record publish metadata for v0.1.31
 
 v0.1.31 (2025-11-11)
 --------------------
