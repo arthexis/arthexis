@@ -9,6 +9,7 @@ from types import SimpleNamespace
 
 import django
 import pytest
+from django.test import override_settings
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 django.setup()
@@ -27,6 +28,66 @@ def test_read_remote_version_handles_missing_git(monkeypatch, tmp_path):
     result = tasks._read_remote_version(tmp_path, "main")
 
     assert result is None
+
+
+def test_project_base_dir_prefers_settings(tmp_path):
+    """_project_base_dir should return the configured ``BASE_DIR`` when set."""
+
+    from core import tasks
+
+    with override_settings(BASE_DIR=tmp_path):
+        assert tasks._project_base_dir() == tmp_path
+
+    with override_settings(BASE_DIR=str(tmp_path)):
+        assert tasks._project_base_dir() == tmp_path
+
+
+def test_check_github_updates_uses_project_base_dir(monkeypatch, tmp_path):
+    """The auto-upgrade task should honor ``settings.BASE_DIR`` for log writes."""
+
+    from core import tasks
+
+    class Sentinel(RuntimeError):
+        pass
+
+    log_path = tmp_path / "logs" / "auto-upgrade.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    recorded_dirs: list[Path] = []
+
+    def fake_log_path(base_dir: Path) -> Path:
+        recorded_dirs.append(base_dir)
+        return log_path
+
+    def fake_append(*args, **kwargs):
+        return None
+
+    def fake_load_skipped(base_dir: Path):
+        assert base_dir == tmp_path
+        raise Sentinel()
+
+    def fake_run(command, *args, **kwargs):
+        return CompletedProcess(command, 0)
+
+    def fake_check_output(command, *args, **kwargs):
+        if command[-1].startswith("origin/"):
+            return "remote-sha"
+        return "local-sha"
+
+    monkeypatch.setattr(tasks, "_auto_upgrade_log_path", fake_log_path)
+    monkeypatch.setattr(tasks, "_append_auto_upgrade_log", fake_append)
+    monkeypatch.setattr(tasks, "_load_skipped_revisions", fake_load_skipped)
+    monkeypatch.setattr(tasks, "_schedule_health_check", lambda *args, **kwargs: None)
+    monkeypatch.setattr(tasks, "_reset_network_failure_count", lambda base: None)
+    monkeypatch.setattr(tasks.shutil, "which", lambda command: None)
+    monkeypatch.setattr(tasks.subprocess, "run", fake_run)
+    monkeypatch.setattr(tasks.subprocess, "check_output", fake_check_output)
+
+    with override_settings(BASE_DIR=tmp_path):
+        with pytest.raises(Sentinel):
+            tasks.check_github_updates()
+
+    assert recorded_dirs == [tmp_path]
 
 
 def test_check_github_updates_handles_mode_read_error(monkeypatch, tmp_path):
@@ -661,7 +722,8 @@ def test_check_github_updates_reverts_when_service_restart_fails(
 
     monkeypatch.setattr(tasks, "_revert_after_restart_failure", record_revert)
 
-    tasks.check_github_updates()
+    with override_settings(BASE_DIR=base_dir):
+        tasks.check_github_updates()
 
     assert revert_calls == [(base_dir, "arthexis")]
     assert schedule_calls == []
