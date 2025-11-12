@@ -4843,6 +4843,9 @@ class Todo(Entity):
         if resolved_version is not None and current_version is not None:
             is_stale = resolved_version < current_version
 
+        if not getattr(self, "is_seed_data", False):
+            is_stale = False
+
         timestamp = now or timezone.now()
         if is_stale:
             if self.stale_on is None:

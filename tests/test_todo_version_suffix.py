@@ -60,3 +60,18 @@ class TodoRefreshActiveVersionSuffixTests(TestCase):
         self.assertIn(todo.pk, [item.pk for item in active])
         todo.refresh_from_db()
         self.assertIsNone(todo.stale_on)
+
+
+class TodoRefreshActiveManualTaskTests(TestCase):
+    @mock.patch.object(Todo, "release_timeline", return_value=[])
+    @mock.patch.object(Todo, "_default_version", return_value="0.1.32")
+    def test_manual_todo_remains_active_with_outdated_version(
+        self, _default_version, _release_timeline
+    ):
+        todo = Todo.objects.create(request="Manual task", version="0.1.16")
+
+        active = Todo.refresh_active()
+
+        self.assertIn(todo.pk, [item.pk for item in active])
+        todo.refresh_from_db()
+        self.assertIsNone(todo.stale_on)

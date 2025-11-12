@@ -1,0 +1,15 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "is_seed_data": false,
+      "is_deleted": false,
+      "request": "Verify release checklist displays manual TODO fixtures",
+      "created_on": "2024-12-01T00:00:00Z",
+      "url": "/admin/core/packagerelease/",
+      "request_details": "Log in as a release administrator and open the Package releases section. Launch the release progress view for the latest release and confirm the Release checklist card lists manual TODO fixtures instead of hiding them as stale entries. Acknowledge the checklist after verification to unblock publishing.",
+      "generated_for_version": "",
+      "generated_for_revision": ""
+    }
+  }
+]
