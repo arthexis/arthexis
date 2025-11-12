@@ -2756,6 +2756,96 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
                 f"Sent ClearCache to {cleared} charger(s)",
             )
 
+    @admin.action(description="Unlock connector")
+    def unlock_connector(self, request, queryset):
+        unlocked = 0
+        local_node = None
+        private_key = None
+        remote_unavailable = False
+        for charger in queryset:
+            connector_value = charger.connector_id
+            if connector_value in (None, 0):
+                self.message_user(
+                    request,
+                    f"{charger}: connector id is required to send UnlockConnector.",
+                    level=messages.ERROR,
+                )
+                continue
+
+            if charger.is_local:
+                ws = store.get_connection(charger.charger_id, connector_value)
+                if ws is None:
+                    self.message_user(
+                        request,
+                        f"{charger}: no active connection",
+                        level=messages.ERROR,
+                    )
+                    continue
+                message_id = uuid.uuid4().hex
+                payload = {"connectorId": connector_value}
+                msg = json.dumps([2, message_id, "UnlockConnector", payload])
+                try:
+                    async_to_sync(ws.send)(msg)
+                except Exception as exc:  # pragma: no cover - network error
+                    self.message_user(
+                        request,
+                        f"{charger}: failed to send UnlockConnector ({exc})",
+                        level=messages.ERROR,
+                    )
+                    continue
+                log_key = store.identity_key(charger.charger_id, connector_value)
+                store.add_log(log_key, f"< {msg}", log_type="charger")
+                requested_at = timezone.now()
+                store.register_pending_call(
+                    message_id,
+                    {
+                        "action": "UnlockConnector",
+                        "charger_id": charger.charger_id,
+                        "connector_id": connector_value,
+                        "log_key": log_key,
+                        "requested_at": requested_at,
+                    },
+                )
+                store.schedule_call_timeout(
+                    message_id,
+                    action="UnlockConnector",
+                    log_key=log_key,
+                    message="UnlockConnector request timed out",
+                )
+                unlocked += 1
+                continue
+
+            if not charger.allow_remote:
+                self.message_user(
+                    request,
+                    f"{charger}: remote administration is disabled.",
+                    level=messages.ERROR,
+                )
+                continue
+            if remote_unavailable:
+                continue
+            if local_node is None:
+                local_node, private_key = self._prepare_remote_credentials(request)
+                if not local_node or not private_key:
+                    remote_unavailable = True
+                    continue
+            success, updates = self._call_remote_action(
+                request,
+                local_node,
+                private_key,
+                charger,
+                "unlock-connector",
+            )
+            if success:
+                self._apply_remote_updates(charger, updates)
+                unlocked += 1
+
+        if unlocked:
+            self.message_user(
+                request,
+                f"Sent UnlockConnector to {unlocked} charger(s)",
+            )
+
     @admin.action(description="Remote stop active transaction")
     def remote_stop_transaction(self, request, queryset):
         stopped = 0

@@ -18,8 +18,8 @@
       "total": 10
     },
     "csms_to_cp": {
-      "count": 11,
-      "percent": 57.89,
+      "count": 12,
+      "percent": 63.16,
       "supported": [
         "ChangeAvailability",
         "DataTransfer",
@@ -31,13 +31,14 @@
         "Reset",
         "SendLocalList",
         "TriggerMessage",
+        "UnlockConnector",
         "UpdateFirmware"
       ],
       "total": 19
     },
     "overall": {
-      "count": 21,
-      "percent": 75.0,
+      "count": 22,
+      "percent": 78.57,
       "supported": [
         "Authorize",
         "BootNotification",
@@ -58,6 +59,7 @@
         "StatusNotification",
         "StopTransaction",
         "TriggerMessage",
+        "UnlockConnector",
         "UpdateFirmware"
       ],
       "total": 28
@@ -96,6 +98,7 @@
       "Reset",
       "SendLocalList",
       "TriggerMessage",
+      "UnlockConnector",
       "UpdateFirmware"
     ]
   },

@@ -43,9 +43,10 @@ Constelación Arthexis es una [suite de software](https://es.wikipedia.org/wiki/
   | `Reset` | Solicitamos un reinicio suave o completo para recuperarnos de fallos. |
   | `SendLocalList` | Publicamos los RFID liberados y aprobados como la lista de autorización local del punto de carga. |
   | `TriggerMessage` | Pedimos al dispositivo un mensaje inmediato (por ejemplo estado o diagnósticos). |
+  | `UnlockConnector` | Liberamos conectores bloqueados sin intervención en sitio. |
   | `UpdateFirmware` | Entregamos paquetes de firmware a los cargadores con tokens de descarga seguros y seguimos las respuestas de instalación. |
 
-  **Hoja de ruta OCPP 1.6.** Las siguientes acciones del catálogo están en nuestra lista de tareas: `ClearChargingProfile`, `GetCompositeSchedule`, `GetDiagnostics`, `SetChargingProfile`, `UnlockConnector`.
+  **Hoja de ruta OCPP 1.6.** Las siguientes acciones del catálogo están en nuestra lista de tareas: `ClearChargingProfile`, `GetCompositeSchedule`, `GetDiagnostics`, `SetChargingProfile`.
 
 - Reservas de puntos de carga con asignación automática de conectores, vinculación a cuentas de energía y RFIDs, confirmación del EVCS y cancelación desde el centro de control.
 - Integración de [API](https://es.wikipedia.org/wiki/Interfaz_de_programaci%C3%B3n_de_aplicaciones) con [Odoo](https://www.odoo.com/) para:

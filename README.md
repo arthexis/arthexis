@@ -43,9 +43,10 @@ Arthexis Constellation is a [story-driven](https://en.wikipedia.org/wiki/Narrati
   | `Reset` | Request a soft or hard reboot to recover from faults. |
   | `SendLocalList` | Publish released and approved RFIDs as the charge point's local authorization list. |
   | `TriggerMessage` | Ask the device to send an immediate update (for example status or diagnostics). |
+  | `UnlockConnector` | Release stuck connectors without on-site intervention. |
   | `UpdateFirmware` | Deliver firmware packages to chargers with secure download tokens and track installation responses. |
 
-  **OCPP 1.6 roadmap.** The following catalogue actions are in our backlog: `ClearChargingProfile`, `GetCompositeSchedule`, `GetDiagnostics`, `SetChargingProfile`, `UnlockConnector`.
+  **OCPP 1.6 roadmap.** The following catalogue actions are in our backlog: `ClearChargingProfile`, `GetCompositeSchedule`, `GetDiagnostics`, `SetChargingProfile`.
 
 - Charge point reservations with automated connector assignment, energy account and RFID linkage, EVCS confirmation tracking, and control-center cancellation support.
 - [API](https://en.wikipedia.org/wiki/API) integration with [Odoo](https://www.odoo.com/), syncing:

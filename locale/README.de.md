@@ -43,9 +43,10 @@ Die Arthexis-Konstellation ist eine [narrativ orientierte](https://de.wikipedia.
   | `Reset` | Fordern einen Soft- oder Hard-Reset zur Fehlerbehebung an. |
   | `SendLocalList` | Veröffentlichen freigegebene und genehmigte RFIDs als lokale Autorisierungsliste des Ladepunkts. |
   | `TriggerMessage` | Fordern sofortige Nachrichten an (z. B. Status oder Diagnose). |
+  | `UnlockConnector` | Entriegeln blockierte Anschlüsse ohne Vor-Ort-Einsatz. |
   | `UpdateFirmware` | Liefern Firmwarepakete an Ladepunkte mit sicheren Download-Tokens und verfolgen Installationsrückmeldungen. |
 
-  **OCPP-1.6-Roadmap.** Folgende Katalog-Aktionen stehen auf unserer To-do-Liste: `ClearChargingProfile`, `GetCompositeSchedule`, `GetDiagnostics`, `SetChargingProfile`, `UnlockConnector`.
+  **OCPP-1.6-Roadmap.** Folgende Katalog-Aktionen stehen auf unserer To-do-Liste: `ClearChargingProfile`, `GetCompositeSchedule`, `GetDiagnostics`, `SetChargingProfile`.
 
 - Ladepunktreservierungen mit automatischer Anschlusswahl, Verknüpfung zu Energiekonten und RFID-Tags, EVCS-Bestätigung sowie Stornierung über die Leitwarte.
 

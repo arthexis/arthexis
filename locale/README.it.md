@@ -43,9 +43,10 @@ Costellazione Arthexis è una [suite software](https://it.wikipedia.org/wiki/Sui
   | `Reset` | Richiediamo un riavvio soft o hard per ripristinare guasti. |
   | `SendLocalList` | Pubbliciamo gli RFID rilasciati e approvati come lista di autorizzazione locale del punto di ricarica. |
   | `TriggerMessage` | Chiediamo al dispositivo un aggiornamento immediato (ad esempio stato o diagnostica). |
+  | `UnlockConnector` | Sblocchiamo i connettori bloccati senza intervento in loco. |
   | `UpdateFirmware` | Distribuiamo pacchetti firmware ai charger con token di download sicuri e tracciamo le risposte di installazione. |
 
-  **Roadmap OCPP 1.6.** Le seguenti azioni del catalogo sono nel nostro backlog: `ClearChargingProfile`, `GetCompositeSchedule`, `GetDiagnostics`, `SetChargingProfile`, `UnlockConnector`.
+  **Roadmap OCPP 1.6.** Le seguenti azioni del catalogo sono nel nostro backlog: `ClearChargingProfile`, `GetCompositeSchedule`, `GetDiagnostics`, `SetChargingProfile`.
 
 - Prenotazioni dei punti di ricarica con assegnazione automatica del connettore, collegamento agli Energy Account e ai RFID, conferma EVCS e annullamento dal centro di controllo.
 
