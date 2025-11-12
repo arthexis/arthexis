@@ -457,6 +457,44 @@ def test_check_github_updates_skips_latest_low_severity_patch(monkeypatch, tmp_p
     assert startup_calls == [True]
 
 
+def test_check_github_updates_logs_fetch_failure_details(monkeypatch, tmp_path):
+    """Fetch failures should append detailed error messages to the log."""
+
+    from core import tasks
+
+    base_dir = tmp_path
+    (base_dir / "locks").mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(tasks, "_project_base_dir", lambda: base_dir)
+    monkeypatch.setattr(tasks, "_auto_upgrade_log_path", lambda _base: base_dir / "auto-upgrade.log")
+    monkeypatch.setattr(tasks, "_load_skipped_revisions", lambda _base: set())
+    monkeypatch.setattr(tasks, "_schedule_health_check", lambda *args, **kwargs: None)
+    monkeypatch.setattr(tasks, "_reset_network_failure_count", lambda _base: None)
+    monkeypatch.setattr(tasks, "_handle_network_failure_if_applicable", lambda _base, _exc: False)
+
+    messages: list[str] = []
+
+    def fake_append(_base: Path, message: str) -> None:
+        messages.append(message)
+
+    monkeypatch.setattr(tasks, "_append_auto_upgrade_log", fake_append)
+
+    def fake_run(command, *args, **kwargs):
+        raise subprocess.CalledProcessError(
+            128,
+            command,
+            "",  # stdout
+            "fatal: forbidden\n",  # stderr with newline to ensure trimming
+        )
+
+    monkeypatch.setattr(tasks.subprocess, "run", fake_run)
+
+    with pytest.raises(subprocess.CalledProcessError):
+        tasks.check_github_updates()
+
+    assert messages == ["Git fetch failed (exit code 128): fatal: forbidden"]
+
+
 def test_check_github_updates_network_failures_trigger_reboot(
     monkeypatch, tmp_path
 ):
@@ -464,6 +502,13 @@ def test_check_github_updates_network_failures_trigger_reboot(
 
     from core import tasks
 
+    messages: list[str] = []
+
+    monkeypatch.setattr(
+        tasks,
+        "_append_auto_upgrade_log",
+        lambda _base, message: messages.append(message),
+    )
     log_path = tmp_path / "auto-upgrade.log"
     network_lock = tmp_path / "auto_upgrade_network_failures.lck"
 
@@ -472,8 +517,6 @@ def test_check_github_updates_network_failures_trigger_reboot(
         return log_path
 
     monkeypatch.setattr(tasks, "_auto_upgrade_log_path", fake_log_path)
-    messages: list[str] = []
-    monkeypatch.setattr(tasks, "_append_auto_upgrade_log", lambda _base, message: messages.append(message))
     monkeypatch.setattr(tasks, "_schedule_health_check", lambda *args, **kwargs: None)
     monkeypatch.setattr(tasks, "_load_skipped_revisions", lambda base: set())
     monkeypatch.setattr(tasks, "_resolve_release_severity", lambda version: tasks.SEVERITY_NORMAL)
@@ -518,6 +561,10 @@ def test_check_github_updates_network_failures_trigger_reboot(
         tasks.AUTO_UPGRADE_NETWORK_FAILURE_THRESHOLD
     )
     assert reboot_calls == [True]
+    assert any(
+        message.startswith("Git fetch failed (exit code 1): fatal: unable to access")
+        for message in messages
+    )
     assert any("Rebooting due to repeated auto-upgrade network failures" in msg for msg in messages)
 
 

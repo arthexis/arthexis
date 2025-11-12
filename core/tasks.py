@@ -534,6 +534,11 @@ def check_github_updates(channel_override: str | None = None) -> None:
                 text=True,
             )
         except subprocess.CalledProcessError as exc:
+            fetch_error_output = (exc.stderr or exc.stdout or "").strip()
+            error_message = f"Git fetch failed (exit code {exc.returncode})"
+            if fetch_error_output:
+                error_message = f"{error_message}: {fetch_error_output}"
+            _append_auto_upgrade_log(base_dir, error_message)
             if _handle_network_failure_if_applicable(base_dir, exc):
                 reset_network_failures = False
             raise
