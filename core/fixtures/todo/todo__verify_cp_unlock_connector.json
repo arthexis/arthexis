@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Unlock connector admin action",
+      "created_on": "2024-01-01T00:00:00Z",
+      "url": "/admin/ocpp/charger/",
+      "request_details": "1. Open the Charge Points admin list and locate a connector-specific row for a charge point that is currently connected (simulators are OK).\n2. Select the connector row and run the \"Unlock connector\" action.\n3. Confirm Django admin reports \"Sent UnlockConnector to 1 charger(s)\" and that the charger log records an UnlockConnector frame.\n4. Repeat the action with an aggregate charge point entry (connector ID blank) and confirm the admin shows the validation error instead of sending a request.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.32"
+    }
+  }
+]
