@@ -206,65 +206,17 @@ class LocalhostAdminBackend(ModelBackend):
         return server_name.lower() == "testserver"
 
     def authenticate(self, request, username=None, password=None, **kwargs):
-        if username == "admin" and password == "admin" and request is not None:
-            try:
-                host = request.get_host()
-            except DisallowedHost:
-                return None
-            host, _port = split_domain_port(host)
-            if host.startswith("[") and host.endswith("]"):
-                host = host[1:-1]
-            try:
-                ipaddress.ip_address(host)
-            except ValueError:
-                if host.lower() == "localhost":
-                    host = "127.0.0.1"
-                elif not self._is_test_environment(request):
-                    return None
-            forwarded = request.META.get("HTTP_X_FORWARDED_FOR")
-            if forwarded:
-                remote = forwarded.split(",")[0].strip()
-            else:
-                remote = request.META.get("REMOTE_ADDR", "")
-            try:
-                ip = ipaddress.ip_address(remote)
-            except ValueError:
-                return None
-            allowed = any(ip in net for net in self._iter_allowed_networks())
-            if not allowed and ip in self._LOCAL_IPS:
-                allowed = True
-            if not allowed:
-                return None
-            User = get_user_model()
-            user, created = User.all_objects.get_or_create(
-                username="admin",
-                defaults={
-                    "is_staff": True,
-                    "is_superuser": True,
-                },
-            )
-            if not created and not user.is_active:
-                return None
-            arthexis_user = (
-                User.all_objects.filter(username="arthexis").exclude(pk=user.pk).first()
-            )
-            if created:
-                if arthexis_user and user.operate_as_id is None:
-                    user.operate_as = arthexis_user
-                user.set_password("admin")
-                user.save()
-            else:
-                if not user.check_password("admin"):
-                    if not user.password or not user.has_usable_password():
-                        user.set_password("admin")
-                        user.save(update_fields=["password"])
-                    else:
-                        return None
-                if arthexis_user and user.operate_as_id is None:
-                    user.operate_as = arthexis_user
-                    user.save(update_fields=["operate_as"])
-            return user
-        return super().authenticate(request, username, password, **kwargs)
+        if not self._is_admin_login_attempt(request, username, password):
+            return super().authenticate(request, username, password, **kwargs)
+
+        if not self._has_valid_host(request):
+            return None
+
+        remote_ip = self._get_remote_ip(request)
+        if remote_ip is None or not self._is_remote_allowed(remote_ip):
+            return None
+
+        return self._get_admin_user()
 
     def get_user(self, user_id):
         User = get_user_model()
@@ -272,6 +224,83 @@ class LocalhostAdminBackend(ModelBackend):
             return User.all_objects.get(pk=user_id)
         except User.DoesNotExist:
             return None
+
+    def _is_admin_login_attempt(self, request, username, password) -> bool:
+        return request is not None and username == "admin" and password == "admin"
+
+    def _has_valid_host(self, request) -> bool:
+        try:
+            host = request.get_host()
+        except DisallowedHost:
+            return False
+
+        host, _port = split_domain_port(host)
+        if host.startswith("[") and host.endswith("]"):
+            host = host[1:-1]
+        if host.lower() == "localhost":
+            host = "127.0.0.1"
+
+        try:
+            ipaddress.ip_address(host)
+            return True
+        except ValueError:
+            return self._is_test_environment(request)
+
+    def _get_remote_ip(self, request):
+        forwarded = request.META.get("HTTP_X_FORWARDED_FOR") if request else ""
+        if forwarded:
+            remote = forwarded.split(",")[0].strip()
+        else:
+            remote = request.META.get("REMOTE_ADDR", "") if request else ""
+
+        try:
+            return ipaddress.ip_address(remote)
+        except ValueError:
+            return None
+
+    def _is_remote_allowed(self, ip):
+        if any(ip in net for net in self._iter_allowed_networks()):
+            return True
+        if ip in self._LOCAL_IPS:
+            return True
+        return False
+
+    def _get_admin_user(self):
+        User = get_user_model()
+        user, created = User.all_objects.get_or_create(
+            username="admin",
+            defaults={
+                "is_staff": True,
+                "is_superuser": True,
+            },
+        )
+
+        if not created and not user.is_active:
+            return None
+
+        arthexis_user = (
+            User.all_objects.filter(username="arthexis").exclude(pk=user.pk).first()
+        )
+
+        if created:
+            if arthexis_user and user.operate_as_id is None:
+                user.operate_as = arthexis_user
+            user.set_password("admin")
+            user.save()
+            return user
+
+        if not user.check_password("admin"):
+            if not user.password or not user.has_usable_password():
+                user.set_password("admin")
+                user.save(update_fields=["password"])
+            else:
+                return None
+
+        if arthexis_user and user.operate_as_id is None:
+            user.operate_as = arthexis_user
+            user.save(update_fields=["operate_as"])
+
+        return user
 
 
 class TempPasswordBackend(ModelBackend):
