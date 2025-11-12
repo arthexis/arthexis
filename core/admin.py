@@ -160,6 +160,27 @@ admin.ModelAdmin.changelist_view = changelist_view_with_object_links
 
 _original_admin_get_app_list = admin.AdminSite.get_app_list
 
+TEST_CREDENTIALS_LABEL = _("Test credentials")
+
+
+def _build_credentials_actions(action_name, handler_name, description=TEST_CREDENTIALS_LABEL):
+    def bulk_action(self, request, queryset):
+        handler = getattr(self, handler_name)
+        for obj in queryset:
+            handler(request, obj)
+
+    bulk_action.__name__ = action_name
+    bulk_action = admin.action(description=description)(bulk_action)
+    bulk_action.__name__ = action_name
+
+    def change_action(self, request, obj):
+        getattr(self, handler_name)(request, obj)
+
+    change_action.__name__ = f"{action_name}_action"
+    change_action.label = description
+    change_action.short_description = description
+    return bulk_action, change_action
+
 
 def get_app_list_with_protocol_forwarder(self, request, app_label=None):
     if app_label == "protocols":
@@ -547,17 +568,6 @@ class ReleaseManagerAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModel
 
     owner.short_description = "Owner"
 
-    @admin.action(description="Test credentials")
-    def test_credentials(self, request, queryset):
-        for manager in queryset:
-            self._test_credentials(request, manager)
-
-    def test_credentials_action(self, request, obj):
-        self._test_credentials(request, obj)
-
-    test_credentials_action.label = "Test credentials"
-    test_credentials_action.short_description = "Test credentials"
-
     def _test_credentials(self, request, manager):
         creds = manager.to_credentials()
         if not creds:
@@ -602,6 +612,11 @@ class ReleaseManagerAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModel
             self.message_user(
                 request, f"{manager} credentials check failed: {exc}", messages.ERROR
             )
+
+    (
+        test_credentials,
+        test_credentials_action,
+    ) = _build_credentials_actions("test_credentials", "_test_credentials")
 
 
 class PackageRepositoryForm(forms.Form):
@@ -2051,22 +2066,16 @@ class OdooProfileAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdm
                 request, f"{profile.owner_display()}: {exc}", level=messages.ERROR
             )
 
-    @admin.action(description="Test credentials")
-    def verify_credentials(self, request, queryset):
-        for profile in queryset:
-            self._verify_credentials(request, profile)
-
-    def verify_credentials_action(self, request, obj):
-        self._verify_credentials(request, obj)
-
-    verify_credentials_action.label = "Test credentials"
-    verify_credentials_action.short_description = "Test credentials"
-
     def generate_quote_report(self, request, queryset=None):
         return HttpResponseRedirect(reverse("odoo-quote-report"))
 
     generate_quote_report.label = _("Quote Report")
     generate_quote_report.short_description = _("Quote Report")
+
+    (
+        verify_credentials,
+        verify_credentials_action,
+    ) = _build_credentials_actions("verify_credentials", "_verify_credentials")
 
 
 @admin.register(OpenPayProfile)
@@ -2163,17 +2172,10 @@ class OpenPayProfileAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModel
                 level=messages.SUCCESS,
             )
 
-    @admin.action(description=_("Test credentials"))
-    def verify_credentials(self, request, queryset):
-        for profile in queryset:
-            self._verify_credentials(request, profile)
-
-    def verify_credentials_action(self, request, obj):
-        self._verify_credentials(request, obj)
-
-    verify_credentials_action.label = _("Test credentials")
-    verify_credentials_action.short_description = _("Test credentials")
-
+    (
+        verify_credentials,
+        verify_credentials_action,
+    ) = _build_credentials_actions("verify_credentials", "_verify_credentials")
 
 class GoogleCalendarProfileAdmin(
     ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdmin
