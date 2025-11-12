@@ -5536,6 +5536,7 @@ class CeleryReportAdminViewTests(TestCase):
         self.assertContains(response, "test-task")
         self.assertContains(response, settings.LOG_FILE_NAME)
         entries = response.context_data["log_entries"]
+        self.assertFalse(response.context_data["is_paginated"])
         self.assertTrue(
             any("Heartbeat task executed" in entry.message for entry in entries)
         )
@@ -5563,6 +5564,40 @@ class CeleryReportAdminViewTests(TestCase):
         )
         self.assertIn(entry.source, response.context_data["log_sources"])
 
+
+    def test_report_paginates_log_entries(self):
+        now = timezone.now()
+        localized = timezone.localtime(now)
+        lines = []
+        for index in range(150):
+            timestamp = localized - timedelta(minutes=index)
+            lines.append(
+                f"{timestamp.strftime('%Y-%m-%d %H:%M:%S,%f')} "
+                f"[INFO] celery.worker: Processed task {index}\n"
+            )
+        lines.reverse()
+        self.log_file.write_text("".join(lines), encoding="utf-8")
+
+        response = self.client.get(
+            reverse("admin:nodes_nodefeature_celery_report")
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context_data["is_paginated"])
+        page = response.context_data["log_page"]
+        self.assertEqual(page.number, 1)
+        self.assertEqual(len(response.context_data["log_entries"]), 100)
+        self.assertTrue(page.has_next())
+
+        response_page_2 = self.client.get(
+            reverse("admin:nodes_nodefeature_celery_report"), {"page": 2}
+        )
+
+        self.assertEqual(response_page_2.status_code, 200)
+        page_two = response_page_2.context_data["log_page"]
+        self.assertEqual(page_two.number, 2)
+        self.assertEqual(len(response_page_2.context_data["log_entries"]), 50)
+        self.assertFalse(page_two.has_next())
 
 class CeleryJournalCollectionTests(SimpleTestCase):
     def test_collect_journal_entries_returns_results(self):
