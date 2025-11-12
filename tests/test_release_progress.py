@@ -630,9 +630,9 @@ class ReleaseProgressViewTests(TestCase):
         ]
         self.assertEqual(len(commit_calls), 1)
 
-    def test_refresh_changelog_detects_missing_latest_release(self):
+    def test_refresh_changelog_recovers_missing_latest_release(self):
         original = Path("CHANGELOG.rst").read_text(encoding="utf-8")
-        latest_version = core_views.changelog_utils.latest_release_version_from_history()
+        latest_version = "0.1.31"
         stale_text = "\n".join(
             [
                 "Changelog",
@@ -659,20 +659,109 @@ class ReleaseProgressViewTests(TestCase):
         log_path = self.log_dir / "missing-release.log"
 
         def fake_run(cmd, capture_output=False, text=False, check=False, **kwargs):
+            if cmd[:3] == ["git", "diff", "--cached"]:
+                return subprocess.CompletedProcess(cmd, 0, stdout="CHANGELOG.rst\n", stderr="")
             return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
 
-        with mock.patch("core.views.subprocess.run", side_effect=fake_run):
-            with self.assertRaises(RuntimeError) as exc:
-                core_views._refresh_changelog_once(ctx, log_path)
+        def successful_fallback(log_path):
+            core_views._append_log(log_path, "Falling back to Python changelog generator")
+            title = f"v{latest_version} (2025-01-01)"
+            underline = "-" * len(title)
+            content = "\n".join(
+                [
+                    "Changelog",
+                    "=========",
+                    "",
+                    "Unreleased",
+                    "----------",
+                    "",
+                    "- unreleased placeholder",
+                    "",
+                    title,
+                    underline,
+                    "",
+                    "- regenerated entry",
+                    "",
+                ]
+            )
+            Path("CHANGELOG.rst").write_text(f"{content}\n", encoding="utf-8")
+            core_views._append_log(
+                log_path, "Regenerated CHANGELOG.rst using Python fallback"
+            )
 
-        self.assertFalse(ctx.get("changelog_refreshed"))
-        self.assertIn("latest release", str(exc.exception))
+        with mock.patch(
+            "core.views.changelog_utils.latest_release_version_from_history",
+            return_value=latest_version,
+        ), mock.patch("core.views.subprocess.run", side_effect=fake_run), mock.patch(
+            "core.views._generate_changelog_with_python", side_effect=successful_fallback
+        ):
+            core_views._refresh_changelog_once(ctx, log_path)
+
+        self.assertTrue(ctx.get("changelog_refreshed"))
         self.assertTrue(log_path.exists())
         log_content = log_path.read_text(encoding="utf-8")
         if latest_version:
             self.assertIn(
                 f"Changelog missing latest release v{latest_version}", log_content
             )
+            self.assertIn("Python changelog generator", log_content)
+            self.assertIn(
+                f"Recovered changelog entry for v{latest_version} after fallback",
+                log_content,
+            )
+
+    def test_refresh_changelog_missing_latest_release_requires_manual_fix(self):
+        original = Path("CHANGELOG.rst").read_text(encoding="utf-8")
+        latest_version = "0.1.31"
+        stale_text = "\n".join(
+            [
+                "Changelog",
+                "=========",
+                "",
+                "Unreleased",
+                "----------",
+                "",
+                "- placeholder entry",
+                "",
+            ]
+        )
+        Path("CHANGELOG.rst").write_text(stale_text, encoding="utf-8")
+        self.addCleanup(
+            lambda: Path("CHANGELOG.rst").write_text(original, encoding="utf-8")
+        )
+
+        ctx: dict[str, object] = {}
+        log_path = self.log_dir / "missing-release-instructions.log"
+
+        def fake_run(cmd, capture_output=False, text=False, check=False, **kwargs):
+            if cmd[:3] == ["git", "diff", "--cached"]:
+                return subprocess.CompletedProcess(cmd, 0, stdout="CHANGELOG.rst\n", stderr="")
+            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+        def stubborn_fallback(log_path):
+            core_views._append_log(
+                log_path, "Simulated fallback unable to populate changelog"
+            )
+            Path("CHANGELOG.rst").write_text(stale_text, encoding="utf-8")
+
+        with mock.patch(
+            "core.views.changelog_utils.latest_release_version_from_history",
+            return_value=latest_version,
+        ), mock.patch("core.views.subprocess.run", side_effect=fake_run), mock.patch(
+            "core.views._generate_changelog_with_python", side_effect=stubborn_fallback
+        ):
+            with self.assertRaises(RuntimeError) as exc:
+                core_views._refresh_changelog_once(ctx, log_path)
+
+        self.assertFalse(ctx.get("changelog_refreshed"))
+        self.assertIn("Ensure the release commit", str(exc.exception))
+        self.assertTrue(log_path.exists())
+        log_content = log_path.read_text(encoding="utf-8")
+        if latest_version:
+            self.assertIn(
+                f"Changelog missing latest release v{latest_version}", log_content
+            )
+            self.assertIn("Manual changelog update required", log_content)
 
     @mock.patch("core.views._refresh_changelog_once")
     def test_acknowledged_todos_not_rendered(self, refresh_changelog):
