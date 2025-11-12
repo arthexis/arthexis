@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Validate Location contact details",
+      "created_on": "2024-01-01T00:00:00Z",
+      "url": "/admin/core/location/",
+      "request_details": "Create or edit a Location in the Business > Locations admin. Fill in the street address, city, state, postal code, country, phone number, and assign the location to a staff user. Save the record and confirm the values persist and that related chargers still appear on the change form tools list.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.31"
+    }
+  }
+]
