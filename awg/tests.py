@@ -23,7 +23,7 @@ from .models import (
     EnergyTariff,
     PowerLead,
 )
-from .views import find_conduit
+from .views import _error_code_from_message, find_conduit
 
 
 class AWGCalculatorTests(TestCase):
@@ -139,6 +139,9 @@ class AWGCalculatorTests(TestCase):
         self.assertEqual(lead.user_agent, "tester")
         self.assertEqual(lead.status, PowerLead.Status.OPEN)
         self.assertFalse(lead.malformed)
+        self.assertFalse(lead.error_code)
+        self.assertIsNotNone(lead.calculation_result)
+        self.assertEqual(lead.calculation_result.get("awg"), "8")
 
     def test_power_lead_uses_original_referer(self):
         url = reverse("awg:calculator")
@@ -207,6 +210,10 @@ class AWGCalculatorTests(TestCase):
         lead = PowerLead.objects.get()
         self.assertTrue(lead.malformed)
         self.assertEqual(lead.values["max_awg"], "ZAP")
+        self.assertEqual(
+            lead.error_code, _error_code_from_message("Max AWG must be a valid gauge value.")
+        )
+        self.assertIsNone(lead.calculation_result)
 
     def test_invalid_numeric_field_reports_error(self):
         url = reverse("awg:calculator")
@@ -226,6 +233,10 @@ class AWGCalculatorTests(TestCase):
         lead = PowerLead.objects.get()
         self.assertTrue(lead.malformed)
         self.assertEqual(lead.values["meters"], "oops")
+        self.assertEqual(
+            lead.error_code, _error_code_from_message("Meters must be a whole number.")
+        )
+        self.assertIsNone(lead.calculation_result)
 
     def test_invalid_ground_reports_error(self):
         url = reverse("awg:calculator")
@@ -245,6 +256,11 @@ class AWGCalculatorTests(TestCase):
         lead = PowerLead.objects.get()
         self.assertTrue(lead.malformed)
         self.assertEqual(lead.values["ground"], "ZAP")
+        self.assertEqual(
+            lead.error_code,
+            _error_code_from_message("Ground must be 0, 1, or [1]."),
+        )
+        self.assertIsNone(lead.calculation_result)
 
     def test_no_cable_found(self):
         url = reverse("awg:calculator")
@@ -262,6 +278,10 @@ class AWGCalculatorTests(TestCase):
         resp = self.client.post(url, data)
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "No Suitable Cable Found")
+        lead = PowerLead.objects.get()
+        self.assertFalse(lead.error_code)
+        self.assertEqual(lead.calculation_result.get("awg"), "n/a")
+        self.assertFalse(lead.malformed)
 
     def test_results_column_reordered_on_mobile(self):
         url = reverse("awg:calculator")

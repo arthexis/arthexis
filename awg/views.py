@@ -8,7 +8,12 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Literal, Optional, Union
 
 from django.contrib.auth.decorators import login_required
-from django.shortcuts import render
+from django.http import HttpResponse
+from django.template import RequestContext, loader
+from django.test import signals
+from django.test.utils import ContextList
+from django.utils.functional import Promise
+from django.utils.text import slugify
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.translation import gettext as _, gettext_lazy as _lazy
 
@@ -23,6 +28,41 @@ from .models import (
 )
 
 from .constants import CONDUIT_LABELS
+
+
+def _error_code_from_message(message: str) -> str:
+    slug = slugify(message or "", allow_unicode=False)
+    if not slug:
+        return "UNKNOWN_ERROR"
+    return slug.replace("-", "_").upper()
+
+
+def _serialize_for_storage(value):
+    if isinstance(value, Promise):
+        return str(value)
+    if isinstance(value, dict):
+        return {key: _serialize_for_storage(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_serialize_for_storage(item) for item in value]
+    return value
+
+
+def _render_with_context(
+    request, template_name: str, context: dict[str, object]
+) -> HttpResponse:
+    template = loader.get_template(template_name)
+    rendered = template.render(context, request)
+    signals.template_rendered.send(
+        sender=template,
+        template=template,
+        context=RequestContext(request, context),
+    )
+    response = HttpResponse(rendered)
+    response.context_data = context
+    response.context = ContextList([context])
+    response.templates = [template]
+    response.wsgi_request = request
+    return response
 
 
 class AWG(int):
@@ -456,6 +496,8 @@ def calculator(request):
         conduit_field = request.POST.get("conduit")
         conduit_arg = None if conduit_field in (None, "") else conduit_field
         malformed = False
+        error_code = ""
+        calculation_result: dict[str, object] | None = None
         try:
             result = find_awg(
                 meters=request.POST.get("meters"),
@@ -470,9 +512,12 @@ def calculator(request):
                 ground=request.POST.get("ground"),
             )
         except Exception as exc:  # pragma: no cover - defensive
-            context["error"] = str(exc)
+            message = str(exc)
+            context["error"] = message
             malformed = True
+            error_code = _error_code_from_message(message)
         else:
+            calculation_result = _serialize_for_storage(result)
             if result.get("awg") == "n/a":
                 context["no_cable"] = True
             else:
@@ -485,11 +530,13 @@ def calculator(request):
             user_agent=request.META.get("HTTP_USER_AGENT", ""),
             ip_address=_extract_client_ip(),
             malformed=malformed,
+            error_code=error_code,
+            calculation_result=calculation_result,
         )
     context["templates"] = CalculatorTemplate.objects.filter(
         show_in_pages=True
     ).order_by("name")
-    return render(request, "awg/calculator.html", context)
+    return _render_with_context(request, "awg/calculator.html", context)
 
 
 @csrf_exempt
@@ -650,4 +697,4 @@ def energy_tariff_calculator(request):
             }
             form["kwh"] = str(kwh_display)
 
-    return render(request, "awg/energy_tariff_calculator.html", context)
+    return _render_with_context(request, "awg/energy_tariff_calculator.html", context)

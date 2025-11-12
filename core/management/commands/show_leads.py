@@ -65,7 +65,16 @@ class Command(BaseCommand):
                     status = " [NOT SENT]"
             else:
                 detail = json.dumps(lead.values, sort_keys=True)
-                status = ""
+                if lead.error_code:
+                    status = f" [ERROR {lead.error_code}]"
+                elif lead.calculation_result:
+                    status = (
+                        " [RESULT "
+                        + json.dumps(lead.calculation_result, sort_keys=True)
+                        + "]"
+                    )
+                else:
+                    status = ""
             self.stdout.write(
                 f"{created_on:%Y-%m-%d %H:%M:%S} {lead.__class__.__name__}: {detail}{status}"
             )

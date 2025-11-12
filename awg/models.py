@@ -161,6 +161,8 @@ class PowerLead(Lead):
 
     values = models.JSONField()
     malformed = models.BooleanField(default=False)
+    error_code = models.CharField(max_length=128, blank=True, default="")
+    calculation_result = models.JSONField(null=True, blank=True)
 
     class Meta:
         verbose_name = _("Power Lead")

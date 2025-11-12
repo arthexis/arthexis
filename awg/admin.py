@@ -143,6 +143,8 @@ class PowerLeadAdmin(EntityModelAdmin):
         "user_agent",
         "ip_address",
         "values",
+        "calculation_result",
+        "error_code",
         "malformed",
     )
 
