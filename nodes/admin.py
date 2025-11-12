@@ -7,6 +7,7 @@ from django.contrib import admin, messages
 from django.contrib.admin import helpers
 from django.contrib.admin.widgets import FilteredSelectMultiple
 from django.core.exceptions import PermissionDenied
+from django.core.paginator import Paginator
 from django.db.models import Count, Q
 from django.http import Http404, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import redirect, render
@@ -2109,6 +2110,14 @@ class NodeFeatureAdmin(EntityModelAdmin):
         scheduled_tasks = collect_scheduled_tasks(now, window_end)
         log_collection = collect_celery_log_entries(log_window_start, now)
 
+        log_paginator = Paginator(log_collection.entries, 100)
+        log_page = log_paginator.get_page(request.GET.get("page"))
+        query_params = request.GET.copy()
+        if "page" in query_params:
+            query_params.pop("page")
+        base_query = query_params.urlencode()
+        log_page_base = f"?{base_query}&page=" if base_query else "?page="
+
         period_options = [
             {
                 "key": candidate.key,
@@ -2128,7 +2137,11 @@ class NodeFeatureAdmin(EntityModelAdmin):
             "window_end": window_end,
             "log_window_start": log_window_start,
             "scheduled_tasks": scheduled_tasks,
-            "log_entries": log_collection.entries,
+            "log_entries": list(log_page.object_list),
+            "log_page": log_page,
+            "log_paginator": log_paginator,
+            "is_paginated": log_page.has_other_pages(),
+            "log_page_base": log_page_base,
             "log_sources": log_collection.checked_sources,
         }
         return TemplateResponse(

@@ -119,6 +119,32 @@
           {% endfor %}
         </tbody>
       </table>
+      {% if is_paginated %}
+        <nav class="celery-report__pagination" aria-label="{% trans 'Celery log pagination' %}">
+          <p class="celery-report__pagination-summary">
+            {% blocktrans with start=log_page.start_index end=log_page.end_index total=log_paginator.count %}
+              Showing log entries {{ start }}–{{ end }} of {{ total }}.
+            {% endblocktrans %}
+          </p>
+          <p class="celery-report__pagination-controls">
+            {% if log_page.has_previous %}
+              <a class="button" href="{{ log_page_base }}{{ log_page.previous_page_number }}">{% trans "Previous" %}</a>
+            {% else %}
+              <span class="button disabled" aria-disabled="true">{% trans "Previous" %}</span>
+            {% endif %}
+            <span class="celery-report__pagination-status">
+              {% blocktrans with number=log_page.number num_pages=log_paginator.num_pages %}
+                Page {{ number }} of {{ num_pages }}
+              {% endblocktrans %}
+            </span>
+            {% if log_page.has_next %}
+              <a class="button" href="{{ log_page_base }}{{ log_page.next_page_number }}">{% trans "Next" %}</a>
+            {% else %}
+              <span class="button disabled" aria-disabled="true">{% trans "Next" %}</span>
+            {% endif %}
+          </p>
+        </nav>
+      {% endif %}
     {% else %}
       <p><em>{% trans "No log entries found for the selected period." %}</em></p>
     {% endif %}
