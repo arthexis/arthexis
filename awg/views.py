@@ -85,6 +85,133 @@ def _format_decimal(value: Decimal, places: str = "0.0000") -> Decimal:
     return value.quantize(quantizer, rounding=ROUND_HALF_UP)
 
 
+def _load_awg_data(
+    *,
+    material: str,
+    max_lines: int,
+    force_awg: Optional[Union[int, str]] = None,
+    limit_awg: Optional[Union[int, str]] = None,
+):
+    """Return ampacity data for each AWG/line combination respecting limits."""
+
+    target_force = int(AWG(force_awg)) if force_awg is not None else None
+    target_limit = int(AWG(limit_awg)) if limit_awg is not None else None
+
+    qs = CableSize.objects.filter(material=material, line_num__lte=max_lines)
+    awg_data: dict[int, dict[int, dict[str, float]]] = {}
+    for row in qs.values_list(
+        "awg_size", "line_num", "k_ohm_km", "amps_60c", "amps_75c", "amps_90c"
+    ):
+        awg_size, line_num, k_ohm, a60, a75, a90 = row
+        awg_int = int(AWG(awg_size))
+        if target_force is not None and awg_int != target_force:
+            continue
+        if target_limit is not None and awg_int > target_limit:
+            continue
+        awg_data.setdefault(awg_int, {})[int(line_num)] = {
+            "k": k_ohm,
+            "a60": a60,
+            "a75": a75,
+            "a90": a90,
+        }
+    return awg_data
+
+
+def _prepare_sizes(
+    awg_data: dict[int, dict[int, dict[str, float]]],
+    *,
+    force_awg: Optional[Union[int, str]] = None,
+    limit_awg: Optional[Union[int, str]] = None,
+):
+    """Return the ordered AWG sizes that should be evaluated."""
+
+    if force_awg is not None:
+        forced = int(AWG(force_awg))
+        return [forced] if forced in awg_data else []
+    if limit_awg is None:
+        return sorted(awg_data.keys(), reverse=True)
+    limit_value = int(AWG(limit_awg))
+    return sorted([size for size in awg_data if size <= limit_value], reverse=True)
+
+
+def _line_capacities(base: dict[str, float], info: Optional[dict[str, float]], lines: int):
+    """Return the ampacity values for the requested number of lines."""
+
+    if info:
+        return info["a60"], info["a75"], info["a90"]
+    return base["a60"] * lines, base["a75"] * lines, base["a90"] * lines
+
+
+def _is_ampacity_allowed(
+    *,
+    amps: int,
+    temperature: Optional[int],
+    a60: float,
+    a75: float,
+    a90: float,
+):
+    """Return ``True`` when the ampacity meets the requested load."""
+
+    if temperature is None:
+        return (amps > 100 and a75 >= amps) or (amps <= 100 and a60 >= amps)
+    return {60: a60, 75: a75, 90: a90}.get(temperature, 0) >= amps
+
+
+def _build_result(
+    *,
+    awg_size: int,
+    lines: int,
+    vdrop: float,
+    perc: float,
+    meters: int,
+    amps: int,
+    volts: int,
+    temperature: Optional[int],
+    phases: int,
+    ground_count: int,
+    ground_label: str,
+):
+    """Assemble the response payload for a candidate AWG size."""
+
+    ground_total = lines * ground_count
+    return {
+        "awg": str(AWG(awg_size)),
+        "awg_display": _display_awg(awg_size),
+        "meters": meters,
+        "amps": amps,
+        "volts": volts,
+        "temperature": temperature if temperature is not None else (60 if amps <= 100 else 75),
+        "lines": lines,
+        "vdrop": vdrop,
+        "vend": volts - vdrop,
+        "vdperc": perc * 100,
+        "cables": f"{lines * phases}+{_format_ground_output(ground_total, ground_label)}",
+        "total_meters": f"{lines * phases * meters}+{_format_ground_output(meters * ground_total, ground_label)}",
+    }
+
+
+def _attach_conduit(
+    result: dict[str, object],
+    *,
+    conduit: Optional[Union[str, bool]],
+    phases: int,
+    ground_count: int,
+):
+    """Add conduit information to ``result`` when requested."""
+
+    if not conduit or result.get("awg") == "n/a":
+        return
+
+    conduit_value = "emt" if conduit is True else conduit
+    cables = result["lines"] * (phases + ground_count)
+    fill = find_conduit(AWG(result["awg"]), cables, conduit=conduit_value)
+    result["conduit"] = conduit_value
+    result["conduit_label"] = CONDUIT_LABELS.get(
+        str(conduit_value).lower(), str(conduit_value).upper()
+    )
+    result["pipe_inch"] = fill["size_inch"]
+
+
 def find_conduit(awg: Union[str, int], cables: int, *, conduit: str = "emt"):
     """Return the conduit trade size capable of holding *cables* wires."""
 
@@ -187,23 +314,12 @@ def find_awg(
 
     def solve_for_ground(ground_count: int):
         def _calc(*, force_awg=None, limit_awg=None):
-            qs = CableSize.objects.filter(material=material, line_num__lte=max_lines)
-            awg_data: dict[int, dict[int, dict[str, float]]] = {}
-            for row in qs.values_list(
-                "awg_size", "line_num", "k_ohm_km", "amps_60c", "amps_75c", "amps_90c"
-            ):
-                awg_size, line_num, k_ohm, a60, a75, a90 = row
-                awg_int = int(AWG(awg_size))
-                if force_awg is not None and awg_int != int(AWG(force_awg)):
-                    continue
-                if limit_awg is not None and awg_int > int(AWG(limit_awg)):
-                    continue
-                awg_data.setdefault(awg_int, {})[int(line_num)] = {
-                    "k": k_ohm,
-                    "a60": a60,
-                    "a75": a75,
-                    "a90": a90,
-                }
+            awg_data = _load_awg_data(
+                material=material,
+                max_lines=max_lines,
+                force_awg=force_awg,
+                limit_awg=limit_awg,
+            )
 
             if phases in (2, 3):
                 base_vdrop = math.sqrt(3) * meters * amps / 1000
@@ -213,91 +329,51 @@ def find_awg(
             best = None
             best_perc = 1e9
 
-            if force_awg is not None:
-                sizes = [int(AWG(force_awg))] if int(AWG(force_awg)) in awg_data else []
-            elif limit_awg is None:
-                sizes = sorted(awg_data.keys(), reverse=True)
-            else:
-                sizes = sorted(
-                    [s for s in awg_data.keys() if s <= int(AWG(limit_awg))],
-                    reverse=True,
-                )
+            sizes = _prepare_sizes(
+                awg_data, force_awg=force_awg, limit_awg=limit_awg
+            )
 
             for awg_size in sizes:
                 base = awg_data[awg_size][1]
                 for n in range(1, max_lines + 1):
                     info = awg_data[awg_size].get(n)
-                    a60 = (info or base)["a60"] if info else base["a60"] * n
-                    a75 = (info or base)["a75"] if info else base["a75"] * n
-                    a90 = (info or base)["a90"] if info else base["a90"] * n
-                    if temperature is None:
-                        allowed = (a75 >= amps and amps > 100) or (
-                            a60 >= amps and amps <= 100
-                        )
-                    else:
-                        tmap = {60: a60, 75: a75, 90: a90}
-                        allowed = tmap.get(temperature, 0) >= amps
+                    a60, a75, a90 = _line_capacities(base, info, n)
+                    allowed = _is_ampacity_allowed(
+                        amps=amps,
+                        temperature=temperature,
+                        a60=a60,
+                        a75=a75,
+                        a90=a90,
+                    )
                     if not allowed and force_awg is None:
                         continue
 
                     vdrop = base_vdrop * base["k"] / n
                     perc = vdrop / volts
-                    awg_str = str(AWG(awg_size))
-                    ground_total = n * ground_count
-                    result = {
-                        "awg": awg_str,
-                        "awg_display": _display_awg(awg_size),
-                        "meters": meters,
-                        "amps": amps,
-                        "volts": volts,
-                        "temperature": (
-                            temperature
-                            if temperature is not None
-                            else (60 if amps <= 100 else 75)
-                        ),
-                        "lines": n,
-                        "vdrop": vdrop,
-                        "vend": volts - vdrop,
-                        "vdperc": perc * 100,
-                        "cables": f"{n * phases}+{_format_ground_output(ground_total, ground_label)}",
-                        "total_meters": f"{n * phases * meters}+{_format_ground_output(meters * ground_total, ground_label)}",
-                    }
-                    if force_awg is None:
-                        if allowed and perc <= 0.03:
-                            if conduit:
-                                c = "emt" if conduit is True else conduit
-                                fill = find_conduit(
-                                    AWG(awg_size),
-                                    n * (phases + ground_count),
-                                    conduit=c,
-                                )
-                                result["conduit"] = c
-                                result["conduit_label"] = CONDUIT_LABELS.get(
-                                    str(c).lower(), str(c).upper()
-                                )
-                                result["pipe_inch"] = fill["size_inch"]
-                            return result
-                        if perc < best_perc:
-                            best = result
-                            best_perc = perc
-                    else:
-                        if allowed and perc <= 0.03:
-                            if conduit:
-                                c = "emt" if conduit is True else conduit
-                                fill = find_conduit(
-                                    AWG(awg_size),
-                                    n * (phases + ground_count),
-                                    conduit=c,
-                                )
-                                result["conduit"] = c
-                                result["conduit_label"] = CONDUIT_LABELS.get(
-                                    str(c).lower(), str(c).upper()
-                                )
-                                result["pipe_inch"] = fill["size_inch"]
-                            return result
-                        if perc < best_perc:
-                            best = result
-                            best_perc = perc
+                    result = _build_result(
+                        awg_size=awg_size,
+                        lines=n,
+                        vdrop=vdrop,
+                        perc=perc,
+                        meters=meters,
+                        amps=amps,
+                        volts=volts,
+                        temperature=temperature,
+                        phases=phases,
+                        ground_count=ground_count,
+                        ground_label=ground_label,
+                    )
+                    if allowed and perc <= 0.03:
+                        _attach_conduit(
+                            result,
+                            conduit=conduit,
+                            phases=phases,
+                            ground_count=ground_count,
+                        )
+                        return result
+                    if perc < best_perc:
+                        best = result
+                        best_perc = perc
 
             if best and (force_awg is not None or limit_awg is not None):
                 if force_awg is not None:
@@ -306,18 +382,12 @@ def find_awg(
                     )
                 else:
                     best["warning"] = _("Voltage drop exceeds 3% with given max_awg")
-                if conduit:
-                    c = "emt" if conduit is True else conduit
-                    fill = find_conduit(
-                        AWG(best["awg"]),
-                        best["lines"] * (phases + ground_count),
-                        conduit=c,
-                    )
-                    best["conduit"] = c
-                    best["conduit_label"] = CONDUIT_LABELS.get(
-                        str(c).lower(), str(c).upper()
-                    )
-                    best["pipe_inch"] = fill["size_inch"]
+                _attach_conduit(
+                    best,
+                    conduit=conduit,
+                    phases=phases,
+                    ground_count=ground_count,
+                )
                 return best
 
             return {"awg": "n/a", "awg_display": "n/a"}
