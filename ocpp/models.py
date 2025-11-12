@@ -28,6 +28,7 @@ from nodes.models import Node
 from core.models import (
     CustomerAccount,
     EnergyTariff,
+    Location,
     Reference,
     RFID as CoreRFID,
     SecurityGroup,
@@ -43,41 +44,6 @@ def generate_log_request_id() -> int:
 
     # Limit to 31 bits to remain compatible with OCPP integer fields.
     return secrets.randbits(31) or 1
-
-
-class Location(Entity):
-    """Physical location shared by chargers."""
-
-    name = models.CharField(max_length=200)
-    latitude = models.DecimalField(
-        max_digits=9, decimal_places=6, null=True, blank=True
-    )
-    longitude = models.DecimalField(
-        max_digits=9, decimal_places=6, null=True, blank=True
-    )
-    zone = models.CharField(
-        max_length=3,
-        choices=EnergyTariff.Zone.choices,
-        blank=True,
-        null=True,
-        help_text=_("CFE climate zone used to select matching energy tariffs."),
-    )
-    contract_type = models.CharField(
-        max_length=16,
-        choices=EnergyTariff.ContractType.choices,
-        blank=True,
-        null=True,
-        help_text=_(
-            "CFE service contract type required to match energy tariff pricing."
-        ),
-    )
-
-    def __str__(self) -> str:  # pragma: no cover - simple representation
-        return self.name
-
-    class Meta:
-        verbose_name = _("Charge Location")
-        verbose_name_plural = _("Charge Locations")
 
 
 class Charger(Entity):

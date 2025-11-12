@@ -2307,6 +2307,100 @@ class EnergyTariff(Entity):
 
     natural_key.dependencies = []  # type: ignore[attr-defined]
 
+
+class Location(Entity):
+    """Physical location available for business operations."""
+
+    name = models.CharField(max_length=200)
+    latitude = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True,
+    )
+    longitude = models.DecimalField(
+        max_digits=9,
+        decimal_places=6,
+        null=True,
+        blank=True,
+    )
+    zone = models.CharField(
+        max_length=3,
+        choices=EnergyTariff.Zone.choices,
+        blank=True,
+        null=True,
+        help_text=_("CFE climate zone used to select matching energy tariffs."),
+    )
+    contract_type = models.CharField(
+        max_length=16,
+        choices=EnergyTariff.ContractType.choices,
+        blank=True,
+        null=True,
+        help_text=_("CFE service contract type required to match energy tariff pricing."),
+    )
+    address_line1 = models.CharField(
+        _("Street address"),
+        max_length=255,
+        blank=True,
+        default="",
+        help_text=_("Primary street address or location description."),
+    )
+    address_line2 = models.CharField(
+        _("Street address line 2"),
+        max_length=255,
+        blank=True,
+        default="",
+        help_text=_("Additional address information such as suite or building."),
+    )
+    city = models.CharField(
+        _("City"),
+        max_length=128,
+        blank=True,
+        default="",
+    )
+    state = models.CharField(
+        _("State / Province"),
+        max_length=128,
+        blank=True,
+        default="",
+    )
+    postal_code = models.CharField(
+        _("Postal code"),
+        max_length=32,
+        blank=True,
+        default="",
+    )
+    country = models.CharField(
+        _("Country"),
+        max_length=64,
+        blank=True,
+        default="",
+    )
+    phone_number = models.CharField(
+        _("Phone number"),
+        max_length=32,
+        blank=True,
+        default="",
+    )
+    assigned_to = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="assigned_locations",
+        verbose_name=_("Assigned to"),
+        help_text=_("Optional user responsible for this location."),
+    )
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return self.name
+
+    class Meta:
+        verbose_name = _("Location")
+        verbose_name_plural = _("Locations")
+        db_table = "core_location"
+
+
 class CustomerAccount(Entity):
     """Track kW energy credits, balance, and billing for a user."""
 

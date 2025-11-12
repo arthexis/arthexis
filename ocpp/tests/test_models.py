@@ -12,18 +12,18 @@ if str(ROOT) not in sys.path:
 
 import tests.conftest  # noqa: F401
 
+from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db.models.deletion import ProtectedError
 from django.test import TestCase
 from django.utils import timezone
 
-from core.models import EnergyTariff, Reference, SecurityGroup
+from core.models import EnergyTariff, Location, Reference, SecurityGroup
 
 from ocpp.models import (
     Charger,
     ChargerConfiguration,
     ConfigurationKey,
-    Location,
 )
 from nodes.models import Node
 
@@ -51,6 +51,37 @@ class LocationEnergyTariffFieldsTests(TestCase):
         self.assertEqual(
             location.contract_type, EnergyTariff.ContractType.DAC
         )
+
+    def test_location_tracks_contact_details(self):
+        user_model = get_user_model()
+        owner = user_model.objects.create_user(
+            username="loc-owner",
+            password="password",
+            email="owner@example.com",
+        )
+
+        location = Location.objects.create(
+            name="HQ",
+            address_line1="123 Main St",
+            address_line2="Suite 500",
+            city="Monterrey",
+            state="NL",
+            postal_code="64000",
+            country="MX",
+            phone_number="+52 818 555 0101",
+            assigned_to=owner,
+        )
+
+        location.refresh_from_db()
+
+        self.assertEqual(location.address_line1, "123 Main St")
+        self.assertEqual(location.address_line2, "Suite 500")
+        self.assertEqual(location.city, "Monterrey")
+        self.assertEqual(location.state, "NL")
+        self.assertEqual(location.postal_code, "64000")
+        self.assertEqual(location.country, "MX")
+        self.assertEqual(location.phone_number, "+52 818 555 0101")
+        self.assertEqual(location.assigned_to, owner)
 
 
 class ChargerAutoLocationNameTests(TestCase):
