@@ -773,12 +773,14 @@ def _generate_changelog_with_python(log_path: Path) -> None:
 
 
 def _log_missing_release_instructions(log_path: Path, version: str) -> None:
-    instructions = (
-        "Manual changelog update required for v"
-        f"{version}: ensure the release commit is merged into main, "
-        "then rerun `scripts/generate-changelog.sh v"
-        f"{version}`. If the commit is unavailable, add the release notes "
-        "to CHANGELOG.rst manually and commit the result."
+    instructions = "".join(
+        (
+            "Manual changelog update required for v",
+            f"{version}: ensure the release commit is merged into main, ",
+            "then rerun `scripts/generate-changelog.sh v",
+            f"{version}`. If the commit is unavailable, add the release notes ",
+            "to CHANGELOG.rst manually and commit the result.",
+        )
     )
     _append_log(log_path, instructions)
 
