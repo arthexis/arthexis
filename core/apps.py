@@ -22,9 +22,9 @@ class CoreConfig(AppConfig):
         from pathlib import Path
 
         from django.conf import settings
-        from django.core.exceptions import ObjectDoesNotExist
+        from django.core.exceptions import ObjectDoesNotExist, ValidationError
         from django.contrib.auth import get_user_model
-        from django.db.models.signals import post_migrate
+        from django.db.models.signals import post_migrate, pre_save
         from django.core.signals import got_request_exception
 
         from core.github_helper import report_exception_to_github
@@ -45,9 +45,10 @@ class CoreConfig(AppConfig):
         from django_otp.plugins.otp_totp.models import TOTPDevice as OTP_TOTPDevice
 
         try:
-            from django_celery_beat.models import CrontabSchedule
+            from django_celery_beat.models import CrontabSchedule, PeriodicTask
         except Exception:  # pragma: no cover - optional dependency
             CrontabSchedule = None
+            PeriodicTask = None
         else:
             if not hasattr(CrontabSchedule, "natural_key"):
                 def _core_crontab_natural_key(self):
@@ -84,9 +85,78 @@ class CoreConfig(AppConfig):
                         timezone=timezone,
                     )
 
-                CrontabSchedule.objects.get_by_natural_key = types.MethodType(
-                    _core_crontab_get_by_natural_key, CrontabSchedule.objects
+                manager = CrontabSchedule.objects
+                manager.get_by_natural_key = types.MethodType(
+                    _core_crontab_get_by_natural_key, manager
                 )
+                default_manager = CrontabSchedule._default_manager
+                if default_manager is not manager:
+                    default_manager.get_by_natural_key = types.MethodType(
+                        _core_crontab_get_by_natural_key, default_manager
+                    )
+                base_manager = getattr(CrontabSchedule, "_base_manager", None)
+                if base_manager and base_manager not in {manager, default_manager}:
+                    base_manager.get_by_natural_key = types.MethodType(
+                        _core_crontab_get_by_natural_key, base_manager
+                    )
+
+            if (
+                PeriodicTask is not None
+                and not getattr(PeriodicTask, "_core_fixture_upsert", False)
+            ):
+                def _core_periodic_task_pre_save(sender, instance, **kwargs):
+                    manager = sender.objects
+                    slug = normalize_periodic_task_name(manager, instance.name)
+                    instance.name = slug
+                    if instance.pk:
+                        return
+                    existing_pk = (
+                        manager.filter(name=slug)
+                        .values_list("pk", flat=True)
+                        .first()
+                    )
+                    if existing_pk:
+                        instance.pk = existing_pk
+                        instance._state.adding = False
+
+                pre_save.connect(
+                    _core_periodic_task_pre_save,
+                    sender=PeriodicTask,
+                    dispatch_uid="core_periodic_task_fixture_pre_save",
+                    weak=False,
+                )
+                PeriodicTask._core_fixture_upsert = True
+                PeriodicTask._core_fixture_pre_save_handler = (
+                    _core_periodic_task_pre_save
+                )
+
+                if not getattr(
+                    PeriodicTask, "_core_fixture_validate_patch", False
+                ):
+                    original_validate_unique = PeriodicTask.validate_unique
+
+                    def _core_periodic_task_validate_unique(self, *args, **kwargs):
+                        try:
+                            return original_validate_unique(self, *args, **kwargs)
+                        except ValidationError as exc:
+                            error_dict = getattr(exc, "error_dict", None) or {}
+                            if "name" not in error_dict or self.pk:
+                                raise
+                            manager = type(self).objects
+                            slug = normalize_periodic_task_name(manager, self.name)
+                            existing = manager.filter(name=slug).first()
+                            if not existing:
+                                raise
+                            self.pk = existing.pk
+                            self._state.adding = False
+                            self.name = slug
+                            return original_validate_unique(self, *args, **kwargs)
+
+                    PeriodicTask.validate_unique = _core_periodic_task_validate_unique
+                    PeriodicTask._core_fixture_validate_patch = True
+                    PeriodicTask._core_fixture_validate_unique = (
+                        original_validate_unique
+                    )
 
         if not hasattr(
             OTP_TOTPDevice._read_str_from_settings, "_core_totp_issuer_patch"
