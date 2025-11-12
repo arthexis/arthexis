@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import shutil
 import re
+import shlex
 import subprocess
 import time
 from pathlib import Path
@@ -72,6 +73,23 @@ logger = logging.getLogger(__name__)
 def heartbeat() -> None:
     """Log a simple heartbeat message."""
     logger.info("Heartbeat task executed")
+
+
+@shared_task
+def renew_ssl_certificate(force: bool = False) -> None:
+    """Execute the renew-certs helper script to refresh the node SSL cert."""
+
+    base_dir = _project_base_dir()
+    script = base_dir / "renew-certs.sh"
+    if not script.exists():
+        raise FileNotFoundError(f"Certificate renewal script not found at {script}")
+
+    args = [str(script)]
+    if force:
+        args.append("--force")
+
+    logger.info("Running %s", " ".join(shlex.quote(arg) for arg in args))
+    subprocess.run(args, cwd=base_dir, check=True)
 
 
 def _auto_upgrade_log_path(base_dir: Path) -> Path:

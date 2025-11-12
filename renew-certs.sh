@@ -14,9 +14,23 @@ LIVE_DIR="/etc/letsencrypt/live"
 CERT_DIR="$LIVE_DIR/$DOMAIN"
 
 CHECK_MODE=false
-if [[ "$1" == "--check" ]]; then
-    CHECK_MODE=true
-fi
+FORCE_MODE=false
+
+while (($# > 0)); do
+    case "$1" in
+        --check)
+            CHECK_MODE=true
+            ;;
+        --force)
+            FORCE_MODE=true
+            ;;
+        *)
+            echo "Usage: $0 [--check] [--force]" >&2
+            exit 1
+            ;;
+    esac
+    shift
+done
 
 if [ "$CHECK_MODE" = true ]; then
     echo "nginx certificate configuration:"
@@ -72,8 +86,9 @@ if [ -n "$EXISTING_DIR" ]; then
     DAYS_LEFT=$(( (EXP_EPOCH - NOW_EPOCH) / 86400 ))
     echo "Days until renewal: $DAYS_LEFT"
 
-    if [ "$DAYS_LEFT" -gt 30 ]; then
+    if [ "$DAYS_LEFT" -gt 15 ] && [ "$FORCE_MODE" = false ]; then
         echo "Renewal skipped: certificate for $DOMAIN valid until $EXPIRATION"
+        echo "Use --force to renew anyway."
         # The certificate may have been copied from a suffixed directory. Restart
         # nginx so it serves the latest certificate even when no renewal is
         # performed.
