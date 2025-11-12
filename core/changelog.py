@@ -31,6 +31,7 @@ _RE_RELEASE = re.compile(
     r"^(?:pre-release commit|Release)\s+v?(?P<version>[0-9A-Za-z][0-9A-Za-z.\-_]*)",
     re.IGNORECASE,
 )
+_RE_ENTRY_SHA = re.compile(r"^-\s+(?P<sha>[0-9a-fA-F]{7,40})\b")
 _RE_TITLE_VERSION = re.compile(r"^v(?P<version>[0-9A-Za-z][0-9A-Za-z.\-_]*)")
 _RE_TITLE_DATE = re.compile(r"\((?P<date>\d{4}-\d{2}-\d{2})\)")
 
@@ -114,6 +115,13 @@ def _sections_from_commits(commits: Iterable[Commit]) -> List[ChangelogSection]:
     ]
     sections.extend(releases)
     return sections
+
+
+def _entry_sha(entry: str) -> Optional[str]:
+    match = _RE_ENTRY_SHA.match(entry)
+    if match:
+        return match.group("sha")
+    return None
 
 
 def _parse_sections(text: str) -> List[ChangelogSection]:
@@ -207,11 +215,17 @@ def _merge_sections(
     version_to_section: dict[str, ChangelogSection] = {}
     unreleased_section: ChangelogSection | None = None
 
+    allocated_shas: set[str] = set()
+
     for section in merged:
         if section.version is None and unreleased_section is None:
             unreleased_section = section
         if section.version:
             version_to_section[section.version] = section
+        for entry in section.entries:
+            sha = _entry_sha(entry)
+            if sha:
+                allocated_shas.add(sha)
 
     first_release_version: str | None = None
     for old in old_sections_list:
@@ -252,11 +266,22 @@ def _merge_sections(
                 for entry in old.entries:
                     if entry not in unreleased_section.entries:
                         unreleased_section.entries.append(entry)
+                    sha = _entry_sha(entry)
+                    if sha:
+                        allocated_shas.add(sha)
                 reopened_latest_version = True
                 continue
+            filtered_entries: list[str] = []
+            for entry in old.entries:
+                sha = _entry_sha(entry)
+                if sha and sha in allocated_shas:
+                    continue
+                filtered_entries.append(entry)
+                if sha:
+                    allocated_shas.add(sha)
             copied = ChangelogSection(
                 title=old.title,
-                entries=list(old.entries),
+                entries=filtered_entries,
                 version=old.version,
                 date=old.date,
             )
@@ -268,8 +293,14 @@ def _merge_sections(
             existing.date = old.date
             existing.title = _format_title(old.version, old.date)
         for entry in old.entries:
-            if entry not in existing.entries:
-                existing.entries.append(entry)
+            if entry in existing.entries:
+                continue
+            sha = _entry_sha(entry)
+            if sha and sha in allocated_shas:
+                continue
+            existing.entries.append(entry)
+            if sha:
+                allocated_shas.add(sha)
 
     return merged
 

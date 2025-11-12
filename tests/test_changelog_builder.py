@@ -196,6 +196,54 @@ class ChangelogBuilderTests(SimpleTestCase):
             ],
         )
 
+    def test_previous_release_entries_are_removed_when_reassigned(self):
+        commits = [
+            changelog.Commit(sha="a" * 40, date="2025-10-07", subject="Release v1.3.0"),
+            changelog.Commit(
+                sha="b" * 40,
+                date="2025-10-06",
+                subject="Handle changelog duplicate merges (#601)",
+            ),
+            changelog.Commit(sha="c" * 40, date="2025-10-05", subject="Release v1.2.0"),
+            changelog.Commit(
+                sha="d" * 40,
+                date="2025-10-04",
+                subject="Improve release retry messaging (#600)",
+            ),
+        ]
+
+        previous_text = "\n".join(
+            [
+                "Changelog",
+                "=========",
+                "",
+                "v1.2.0 (2025-10-05)",
+                "-------------------",
+                "",
+                "- " + "b" * 8 + " Handle changelog duplicate merges (#601)",
+                "- " + "d" * 8 + " Improve release retry messaging (#600)",
+                "",
+            ]
+        )
+
+        with mock.patch("core.changelog._read_commits", return_value=commits):
+            sections = changelog.collect_sections(
+                range_spec="HEAD", previous_text=previous_text
+            )
+
+        self.assertEqual(len(sections), 3)
+        _, current_release, previous_release = sections
+        self.assertEqual(current_release.title, "v1.3.0 (2025-10-07)")
+        self.assertEqual(
+            current_release.entries,
+            ["- " + "b" * 8 + " Handle changelog duplicate merges (#601)"],
+        )
+        self.assertEqual(previous_release.title, "v1.2.0 (2025-10-05)")
+        self.assertEqual(
+            previous_release.entries,
+            ["- " + "d" * 8 + " Improve release retry messaging (#600)"],
+        )
+
     def test_regeneration_without_new_commits_preserves_latest_release(self):
         previous_text = "\n".join(
             [
