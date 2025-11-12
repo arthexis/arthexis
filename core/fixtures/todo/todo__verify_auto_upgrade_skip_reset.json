@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Confirm upgrade buttons clear blocked revisions",
+      "created_on": "2025-11-12T00:00:00Z",
+      "url": "/admin/system/upgrade-report/",
+      "request_details": "1. Add a fake SHA (for example `deadbeef`) to locks/auto_upgrade_skip_revisions.lck on the control node.\n2. Sign in to the Django admin and open System → Upgrade Report.\n3. Click \"Upgrade as Normal\" and wait for the confirmation message.\n4. Refresh the page and verify the Blocked revisions list is empty and the skip lockfile no longer contains the fake SHA.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.31"
+    }
+  }
+]

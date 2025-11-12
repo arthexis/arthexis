@@ -276,6 +276,30 @@ class UpgradeReportTests(SimpleTestCase):
         )
         mock_trigger.assert_called_once_with(channel_override=None)
 
+    def test_trigger_upgrade_check_view_clears_skip_revisions(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            locks_dir = base / "locks"
+            locks_dir.mkdir()
+            skip_file = locks_dir / "auto_upgrade_skip_revisions.lck"
+            skip_file.write_text("abc123\n", encoding="utf-8")
+
+            request = self.factory.post(reverse("admin:system-upgrade-run-check"))
+            SessionMiddleware(lambda req: None).process_request(request)
+            request.session.save()
+            setattr(request, "_messages", FallbackStorage(request))
+            request.user = mock.Mock(is_staff=True, is_active=True)
+
+            with override_settings(BASE_DIR=str(base)):
+                with mock.patch(
+                    "core.system._trigger_upgrade_check", return_value=True
+                ) as mock_trigger:
+                    response = system._system_trigger_upgrade_check_view(request)
+
+            self.assertEqual(response.status_code, 302)
+            self.assertFalse(skip_file.exists())
+            mock_trigger.assert_called_once_with(channel_override=None)
+
     def test_trigger_upgrade_check_view_allows_channel_override(self):
         request = self.factory.post(
             reverse("admin:system-upgrade-run-check"),
