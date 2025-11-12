@@ -1,11 +1,19 @@
+import json
+from pathlib import Path
+
 import pytest
 
 from django.contrib import admin
 from django.http import QueryDict
 from django.test import RequestFactory
 from django.utils import timezone
+from django.conf import settings
 
-from django_celery_beat.models import IntervalSchedule, PeriodicTask
+from django_celery_beat.models import (
+    CrontabSchedule,
+    IntervalSchedule,
+    PeriodicTask,
+)
 
 
 pytestmark = [pytest.mark.django_db, pytest.mark.feature("celery-queue")]
@@ -112,3 +120,31 @@ def test_interval_type_filter_querysets():
 
     filtered = list(interval_filter.queryset(request, base_queryset))
     assert filtered == [hourly_task]
+
+
+def test_ssl_renewal_fixture_loads_with_date_changed():
+    PeriodicTask.objects.filter(name="renew-ssl-certificate").delete()
+    schedule, _ = CrontabSchedule.objects.get_or_create(
+        minute="0",
+        hour="3",
+        day_of_week="*",
+        day_of_month="1",
+        month_of_year="*",
+        timezone="UTC",
+    )
+
+    fixture_path = (
+        Path(settings.BASE_DIR)
+        / "core"
+        / "fixtures"
+        / "celery_periodictask__renew_ssl_certificate.json"
+    )
+
+    payload = json.loads(fixture_path.read_text())
+    assert payload, "Fixture must define at least one periodic task"
+    record = payload[0]["fields"].copy()
+    assert record["date_changed"], "Fixture should populate date_changed"
+
+    record["crontab"] = schedule
+    task = PeriodicTask.objects.create(**record)
+    assert task.date_changed is not None
