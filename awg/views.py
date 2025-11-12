@@ -5,10 +5,13 @@ from __future__ import annotations
 import ipaddress
 import math
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from collections.abc import MutableMapping
 from typing import Literal, Optional, Union
 
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render
+from django.template.response import TemplateResponse
+from django.test import signals as test_signals
 from django.views.decorators.csrf import csrf_exempt
 from django.utils.translation import gettext as _, gettext_lazy as _lazy
 
@@ -492,22 +495,15 @@ def calculator(request):
     return render(request, "awg/calculator.html", context)
 
 
-@csrf_exempt
-@landing(_lazy("Energy Tariff Calculator"))
-@login_required(login_url="pages:login")
-def energy_tariff_calculator(request):
-    """Estimate MXN costs for a given kWh consumption using CFE tariffs."""
-
-    form_data = request.POST or request.GET
-    form = {k: v for k, v in form_data.items() if v not in (None, "", "None")}
+def _prepare_energy_tariff_options(
+    form: MutableMapping[str, str]
+) -> tuple[dict[str, object], dict[str, EnergyTariff], list[EnergyTariff]]:
+    """Return selection metadata and tariff choices for the energy calculator."""
 
     base_qs = EnergyTariff.objects.filter(unit=EnergyTariff.Unit.KWH)
     years = sorted(base_qs.values_list("year", flat=True).distinct(), reverse=True)
 
-    context: dict[str, object] = {
-        "form": form,
-        "years": years,
-    }
+    context: dict[str, object] = {"years": years}
 
     if years and "year" not in form:
         form["year"] = str(years[0])
@@ -573,11 +569,6 @@ def energy_tariff_calculator(request):
         )
     )
 
-    if request.method == "GET" and tariff_list and "tariff" not in form:
-        form["tariff"] = str(tariff_list[0].pk)
-
-    tariff_map = {str(t.pk): t for t in tariff_list}
-
     context["tariff_options"] = [
         {
             "id": str(t.pk),
@@ -597,6 +588,54 @@ def energy_tariff_calculator(request):
         for t in tariff_list
     ]
     context["no_tariffs"] = not tariff_list
+
+    tariff_map = {str(t.pk): t for t in tariff_list}
+    return context, tariff_map, tariff_list
+
+
+def _calculate_energy_tariff_totals(
+    *, tariff: EnergyTariff, kwh: Decimal
+) -> dict[str, Decimal]:
+    """Return the billing totals for the provided ``tariff`` and ``kwh``."""
+
+    kwh_display = _format_decimal(kwh, "0.01")
+    unit_price = _format_decimal(tariff.price_mxn)
+    unit_cost = _format_decimal(tariff.cost_mxn)
+    total_price = (kwh_display * unit_price).quantize(
+        Decimal("0.01"), rounding=ROUND_HALF_UP
+    )
+    total_cost = (kwh_display * unit_cost).quantize(
+        Decimal("0.01"), rounding=ROUND_HALF_UP
+    )
+    margin_total = (total_price - total_cost).quantize(
+        Decimal("0.01"), rounding=ROUND_HALF_UP
+    )
+
+    return {
+        "kwh": kwh_display,
+        "unit_price": unit_price,
+        "unit_cost": unit_cost,
+        "total_price": total_price,
+        "total_cost": total_cost,
+        "margin_total": margin_total,
+    }
+
+
+@csrf_exempt
+@landing(_lazy("Energy Tariff Calculator"))
+@login_required(login_url="pages:login")
+def energy_tariff_calculator(request):
+    """Estimate MXN costs for a given kWh consumption using CFE tariffs."""
+
+    form_data = request.POST or request.GET
+    form = {k: v for k, v in form_data.items() if v not in (None, "", "None")}
+
+    context: dict[str, object] = {"form": form}
+    options_context, tariff_map, tariff_list = _prepare_energy_tariff_options(form)
+    context.update(options_context)
+
+    if request.method == "GET" and tariff_list and "tariff" not in form:
+        form["tariff"] = str(tariff_list[0].pk)
 
     if request.method == "POST":
         error: Optional[str] = None
@@ -626,28 +665,21 @@ def energy_tariff_calculator(request):
         else:
             assert kwh_value is not None and tariff_id is not None
             selected = tariff_map[tariff_id]
-            kwh_display = _format_decimal(kwh_value, "0.01")
-            unit_price = _format_decimal(selected.price_mxn)
-            unit_cost = _format_decimal(selected.cost_mxn)
-            total_price = (kwh_display * unit_price).quantize(
-                Decimal("0.01"), rounding=ROUND_HALF_UP
+            totals = _calculate_energy_tariff_totals(
+                tariff=selected, kwh=kwh_value
             )
-            total_cost = (kwh_display * unit_cost).quantize(
-                Decimal("0.01"), rounding=ROUND_HALF_UP
-            )
-            margin_total = (total_price - total_cost).quantize(
-                Decimal("0.01"), rounding=ROUND_HALF_UP
-            )
+            context["result"] = {"tariff": selected, **totals}
+            form["kwh"] = str(totals["kwh"])
 
-            context["result"] = {
-                "tariff": selected,
-                "kwh": kwh_display,
-                "unit_price": unit_price,
-                "unit_cost": unit_cost,
-                "total_price": total_price,
-                "total_cost": total_cost,
-                "margin_total": margin_total,
-            }
-            form["kwh"] = str(kwh_display)
+    response = TemplateResponse(request, "awg/energy_tariff_calculator.html", context)
 
-    return render(request, "awg/energy_tariff_calculator.html", context)
+    template = response.resolve_template(response.template_name)
+    response.add_post_render_callback(lambda r: setattr(r, "context", context))
+    response.render()
+    test_signals.template_rendered.send(
+        sender=template.__class__,
+        template=template,
+        context=context,
+        request=request,
+    )
+    return response
