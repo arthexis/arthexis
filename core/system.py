@@ -139,6 +139,18 @@ def _auto_upgrade_log_file(base_dir: Path) -> Path:
     return base_dir / "logs" / AUTO_UPGRADE_LOG_NAME
 
 
+def _clear_auto_upgrade_skip_revisions(base_dir: Path) -> None:
+    """Remove recorded skip revisions so future upgrade attempts proceed."""
+
+    skip_file = _auto_upgrade_skip_file(base_dir)
+    try:
+        skip_file.unlink()
+    except FileNotFoundError:
+        return
+    except OSError as exc:  # pragma: no cover - defensive logging
+        logger.warning("Failed to remove auto-upgrade skip lockfile: %s", exc)
+
+
 def _open_changelog_entries() -> list[dict[str, str]]:
     """Return changelog entries that are not yet part of a tagged release."""
 
@@ -1519,6 +1531,9 @@ def _system_trigger_upgrade_check_view(request):
     channel_label = None
     if channel_override:
         channel_label = str(channel_choice["label"])
+
+    base_dir = Path(settings.BASE_DIR)
+    _clear_auto_upgrade_skip_revisions(base_dir)
 
     try:
         queued = _trigger_upgrade_check(channel_override=channel_override)
