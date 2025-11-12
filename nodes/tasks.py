@@ -16,6 +16,7 @@ from cryptography.hazmat.primitives.asymmetric import padding
 from pyperclip import PyperclipException
 
 from django.conf import settings
+from django.contrib import admin
 from django.utils import timezone as django_timezone
 
 from .models import ContentSample, NetMessage, Node, PendingNetMessage
@@ -273,6 +274,82 @@ def poll_unreachable_upstream() -> None:
                 logger.warning(
                     "Discarded upstream message from node %s: %s", upstream.pk, exc
                 )
+
+
+def _resolve_node_admin():
+    """Return the registered :class:`~django.contrib.admin.ModelAdmin` for nodes."""
+
+    node_admin = admin.site._registry.get(Node)
+    if node_admin is not None:
+        return node_admin
+
+    from .admin import NodeAdmin  # Avoid importing at module load time
+
+    return NodeAdmin(Node, admin.site)
+
+
+def _summarize_update_results(local_result: dict | None, remote_result: dict | None) -> str:
+    """Return ``success``, ``partial`` or ``error`` based on admin responses."""
+
+    local_ok = bool(local_result.get("ok")) if isinstance(local_result, dict) else False
+    remote_ok = bool(remote_result.get("ok")) if isinstance(remote_result, dict) else False
+    if local_ok and remote_ok:
+        return "success"
+    if local_ok or remote_ok:
+        return "partial"
+    return "error"
+
+
+@shared_task
+def update_all_nodes_information() -> dict:
+    """Invoke the admin "Update nodes" workflow for every node."""
+
+    summary = {
+        "total": 0,
+        "success": 0,
+        "partial": 0,
+        "error": 0,
+        "results": [],
+    }
+
+    local_node = Node.get_local()
+    if local_node is None or not local_node.has_feature("celery-queue"):
+        logger.info(
+            "Skipping daily node refresh; local node missing celery-queue feature"
+        )
+        summary["skipped"] = True
+        summary["reason"] = "Local node missing celery-queue feature"
+        return summary
+
+    node_admin = _resolve_node_admin()
+
+    for node in Node.objects.order_by("pk").iterator():
+        summary["total"] += 1
+        try:
+            local_result = node_admin._refresh_local_information(node)
+        except Exception as exc:  # pragma: no cover - unexpected admin failure
+            logger.exception("Local refresh failed for node %s", node.pk)
+            local_result = {"ok": False, "message": str(exc)}
+
+        try:
+            remote_result = node_admin._push_remote_information(node)
+        except Exception as exc:  # pragma: no cover - unexpected admin failure
+            logger.exception("Remote update failed for node %s", node.pk)
+            remote_result = {"ok": False, "message": str(exc)}
+
+        status = _summarize_update_results(local_result, remote_result)
+        summary[status] += 1
+        summary["results"].append(
+            {
+                "node_id": node.pk,
+                "node": str(node),
+                "status": status,
+                "local": local_result,
+                "remote": remote_result,
+            }
+        )
+
+    return summary
 
 
 @shared_task
