@@ -41,7 +41,6 @@ logger = logging.getLogger(__name__)
 
 PYPI_REQUEST_TIMEOUT = 10
 
-from . import changelog as changelog_utils
 from . import temp_passwords
 from .models import OdooProfile, Product, CustomerAccount, PackageRelease, Todo
 from .models import RFID
@@ -752,39 +751,6 @@ def _next_patch_version(version: str) -> str:
     return f"{parsed.major}.{parsed.minor}.{parsed.micro + 1}"
 
 
-def _should_use_python_changelog(exc: OSError) -> bool:
-    winerror = getattr(exc, "winerror", None)
-    if winerror in {193}:
-        return True
-    return exc.errno in {errno.ENOEXEC, errno.EACCES, errno.ENOENT}
-
-
-def _generate_changelog_with_python(log_path: Path) -> None:
-    _append_log(log_path, "Falling back to Python changelog generator")
-    changelog_path = Path("CHANGELOG.rst")
-    previous = changelog_path.read_text(encoding="utf-8") if changelog_path.exists() else None
-    range_spec = changelog_utils.determine_range_spec(previous_text=previous)
-    sections = changelog_utils.collect_sections(range_spec=range_spec, previous_text=previous)
-    content = changelog_utils.render_changelog(sections)
-    if not content.endswith("\n"):
-        content += "\n"
-    changelog_path.write_text(content, encoding="utf-8")
-    _append_log(log_path, "Regenerated CHANGELOG.rst using Python fallback")
-
-
-def _log_missing_release_instructions(log_path: Path, version: str) -> None:
-    instructions = "".join(
-        (
-            "Manual changelog update required for v",
-            f"{version}: ensure the release commit is merged into main, ",
-            "then rerun `scripts/generate-changelog.sh v",
-            f"{version}`. If the commit is unavailable, add the release notes ",
-            "to CHANGELOG.rst manually and commit the result.",
-        )
-    )
-    _append_log(log_path, instructions)
-
-
 def _todo_blocks_publish(todo: Todo, release: PackageRelease) -> bool:
     """Return ``True`` when ``todo`` should block the release workflow."""
 
@@ -927,17 +893,6 @@ def _sync_release_with_revision(release: PackageRelease) -> tuple[bool, str]:
 
     return bool(updated_fields or version_updated or package_updated), previous_version
 
-
-def _changelog_notes(version: str) -> str:
-    path = Path("CHANGELOG.rst")
-    if not path.exists():
-        return ""
-    notes = changelog_utils.extract_release_notes(
-        path.read_text(encoding="utf-8"), version
-    )
-    return notes.strip()
-
-
 class PendingTodos(Exception):
     """Raised when TODO items require acknowledgment before proceeding."""
 
@@ -990,110 +945,6 @@ def _get_return_url(request) -> str:
     return resolve_url("admin:index")
 
 
-def _refresh_changelog_once(ctx, log_path: Path) -> None:
-    """Regenerate the changelog a single time per release run."""
-
-    if ctx.get("changelog_refreshed"):
-        return
-
-    _append_log(log_path, "Refreshing changelog before TODO review")
-    try:
-        subprocess.run(["scripts/generate-changelog.sh"], check=True)
-    except OSError as exc:
-        if _should_use_python_changelog(exc):
-            _append_log(
-                log_path,
-                f"scripts/generate-changelog.sh failed: {exc}",
-            )
-            _generate_changelog_with_python(log_path)
-        else:  # pragma: no cover - unexpected OSError
-            raise
-    else:
-        _append_log(
-            log_path,
-            "Regenerated CHANGELOG.rst using scripts/generate-changelog.sh",
-        )
-
-    changelog_path = Path("CHANGELOG.rst")
-    if changelog_path.exists():
-        latest_version = changelog_utils.latest_release_version_from_history()
-        if latest_version:
-            text = changelog_path.read_text(encoding="utf-8")
-            if not changelog_utils.changelog_has_release_section(text, latest_version):
-                _append_log(
-                    log_path,
-                    f"Changelog missing latest release v{latest_version}",
-                )
-                if not ctx.get("changelog_python_retry"):
-                    ctx["changelog_python_retry"] = True
-                    _append_log(
-                        log_path,
-                        f"Retrying changelog generation for v{latest_version} using Python fallback",
-                    )
-                    _generate_changelog_with_python(log_path)
-                    text = changelog_path.read_text(encoding="utf-8")
-                    if changelog_utils.changelog_has_release_section(
-                        text, latest_version
-                    ):
-                        _append_log(
-                            log_path,
-                            f"Recovered changelog entry for v{latest_version} after fallback",
-                        )
-                        ctx.pop("changelog_python_retry", None)
-                    else:
-                        _log_missing_release_instructions(log_path, latest_version)
-                        raise RuntimeError(
-                            _(
-                                "The changelog is missing notes for the latest release (v%(version)s). "
-                                "Ensure the release commit has been merged and regenerate the changelog."
-                            )
-                            % {"version": latest_version}
-                        )
-                else:
-                    _log_missing_release_instructions(log_path, latest_version)
-                    raise RuntimeError(
-                        _(
-                            "The changelog is missing notes for the latest release (v%(version)s). "
-                            "Ensure the release commit has been merged and regenerate the changelog."
-                        )
-                        % {"version": latest_version}
-                    )
-
-    staged_paths: list[str] = []
-    if changelog_path.exists():
-        staged_paths.append(str(changelog_path))
-
-    release_fixtures = sorted(Path("core/fixtures").glob("releases__*.json"))
-    staged_paths.extend(str(path) for path in release_fixtures)
-
-    if staged_paths:
-        subprocess.run(["git", "add", *staged_paths], check=True)
-
-    diff = subprocess.run(
-        ["git", "diff", "--cached", "--name-only"],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    changed_paths = [line.strip() for line in diff.stdout.splitlines() if line.strip()]
-
-    if changed_paths:
-        changelog_dirty = "CHANGELOG.rst" in changed_paths
-        fixtures_dirty = any(path.startswith("core/fixtures/") for path in changed_paths)
-        if changelog_dirty and fixtures_dirty:
-            message = "chore: sync release fixtures and changelog"
-        elif changelog_dirty:
-            message = "docs: refresh changelog"
-        else:
-            message = "chore: update release fixtures"
-        subprocess.run(["git", "commit", "-m", message], check=True)
-        _append_log(log_path, f"Committed changelog refresh ({message})")
-    else:
-        _append_log(log_path, "Changelog already up to date")
-
-    ctx["changelog_refreshed"] = True
-
-
 def _purge_release_todos(log_path: Path, *, reason: str | None = None) -> int:
     """Delete active TODOs and remove generated fixture files."""
 
@@ -1133,8 +984,6 @@ def _purge_release_todos(log_path: Path, *, reason: str | None = None) -> int:
 
 
 def _step_check_todos(release, ctx, log_path: Path, *, user=None) -> None:
-    _refresh_changelog_once(ctx, log_path)
-
     pending_items = Todo.refresh_active()
     pending_values = [
         {
@@ -1207,11 +1056,8 @@ def _step_check_version(release, ctx, log_path: Path, *, user=None) -> None:
             for f in files
             if "fixtures" in Path(f).parts and Path(f).suffix == ".json"
         ]
-        changelog_dirty = "CHANGELOG.rst" in files
         version_dirty = "VERSION" in files
         allowed_dirty_files = set(fixture_files)
-        if changelog_dirty:
-            allowed_dirty_files.add("CHANGELOG.rst")
         if version_dirty:
             allowed_dirty_files.add("VERSION")
 
@@ -1244,8 +1090,6 @@ def _step_check_version(release, ctx, log_path: Path, *, user=None) -> None:
 
             ctx["fixtures"] = summary
             commit_paths = [*fixture_files]
-            if changelog_dirty:
-                commit_paths.append("CHANGELOG.rst")
             if version_dirty:
                 commit_paths.append("VERSION")
 
@@ -1254,8 +1098,6 @@ def _step_check_version(release, ctx, log_path: Path, *, user=None) -> None:
                 log_fragments.append(
                     "fixtures " + ", ".join(fixture_files)
                 )
-            if changelog_dirty:
-                log_fragments.append("CHANGELOG.rst")
             if version_dirty:
                 log_fragments.append("VERSION")
             details = ", ".join(log_fragments) if log_fragments else "changes"
@@ -1265,18 +1107,10 @@ def _step_check_version(release, ctx, log_path: Path, *, user=None) -> None:
             )
             subprocess.run(["git", "add", *commit_paths], check=True)
 
-            if changelog_dirty and version_dirty and fixture_files:
-                commit_message = "chore: sync release metadata"
-            elif changelog_dirty and version_dirty:
-                commit_message = "chore: update version and changelog"
-            elif version_dirty and fixture_files:
+            if version_dirty and fixture_files:
                 commit_message = "chore: update version and fixtures"
-            elif changelog_dirty and fixture_files:
-                commit_message = "chore: sync release fixtures and changelog"
             elif version_dirty:
                 commit_message = "chore: update version"
-            elif changelog_dirty:
-                commit_message = "docs: refresh changelog"
             else:
                 commit_message = "chore: update fixtures"
 
@@ -1401,56 +1235,23 @@ def _step_handle_migrations(release, ctx, log_path: Path, *, user=None) -> None:
     _append_log(log_path, "Freeze, squash and approve migrations")
     _append_log(log_path, "Migration review acknowledged (manual step)")
 
-
-def _step_changelog_docs(release, ctx, log_path: Path, *, user=None) -> None:
-    _append_log(log_path, "Compose CHANGELOG and documentation")
-    _append_log(log_path, "CHANGELOG and documentation review recorded")
-
-
 def _step_pre_release_actions(release, ctx, log_path: Path, *, user=None) -> None:
     _append_log(log_path, "Execute pre-release actions")
     if ctx.get("dry_run"):
         _append_log(log_path, "Dry run: skipping pre-release actions")
         return
     _sync_with_origin_main(log_path)
-    try:
-        subprocess.run(["scripts/generate-changelog.sh"], check=True)
-    except OSError as exc:
-        if _should_use_python_changelog(exc):
-            _append_log(
-                log_path,
-                f"scripts/generate-changelog.sh failed: {exc}",
-            )
-            _generate_changelog_with_python(log_path)
-        else:  # pragma: no cover - unexpected OSError
-            raise
-    else:
-        _append_log(
-            log_path, "Regenerated CHANGELOG.rst using scripts/generate-changelog.sh"
-        )
-    notes = _changelog_notes(release.version)
+    PackageRelease.dump_fixture()
     staged_release_fixtures: list[Path] = []
-    if notes != release.changelog:
-        release.changelog = notes
-        release.save(update_fields=["changelog"])
-        PackageRelease.dump_fixture()
-        _append_log(log_path, f"Recorded changelog notes for v{release.version}")
-        release_fixture_paths = sorted(
-            Path("core/fixtures").glob("releases__*.json")
+    release_fixture_paths = sorted(Path("core/fixtures").glob("releases__*.json"))
+    if release_fixture_paths:
+        subprocess.run(
+            ["git", "add", *[str(path) for path in release_fixture_paths]],
+            check=True,
         )
-        if release_fixture_paths:
-            subprocess.run(
-                ["git", "add", *[str(path) for path in release_fixture_paths]],
-                check=True,
-            )
-            staged_release_fixtures = release_fixture_paths
-            formatted = ", ".join(_format_path(path) for path in release_fixture_paths)
-            _append_log(
-                log_path,
-                "Staged release fixtures " + formatted,
-            )
-    subprocess.run(["git", "add", "CHANGELOG.rst"], check=True)
-    _append_log(log_path, "Staged CHANGELOG.rst for commit")
+        staged_release_fixtures = release_fixture_paths
+        formatted = ", ".join(_format_path(path) for path in release_fixture_paths)
+        _append_log(log_path, "Staged release fixtures " + formatted)
     version_path = Path("VERSION")
     previous_version_text = ""
     if version_path.exists():
@@ -1471,10 +1272,8 @@ def _step_pre_release_actions(release, ctx, log_path: Path, *, user=None) -> Non
         _append_log(log_path, f"Committed VERSION update for {release.version}")
     else:
         _append_log(
-            log_path, "No changes detected for VERSION or CHANGELOG; skipping commit"
+            log_path, "No changes detected for VERSION; skipping commit"
         )
-        subprocess.run(["git", "reset", "HEAD", "CHANGELOG.rst"], check=False)
-        _append_log(log_path, "Unstaged CHANGELOG.rst")
         subprocess.run(["git", "reset", "HEAD", "VERSION"], check=False)
         _append_log(log_path, "Unstaged VERSION file")
         for path in staged_release_fixtures:
@@ -1756,7 +1555,6 @@ PUBLISH_STEPS = [
     ("Check version number availability", _step_check_version),
     ("Confirm release TODO completion", _step_check_todos),
     (FIXTURE_REVIEW_STEP_NAME, _step_handle_migrations),
-    ("Compose CHANGELOG and documentation", _step_changelog_docs),
     ("Execute pre-release actions", _step_pre_release_actions),
     ("Build release artifacts", _step_promote_build),
     ("Complete test suite with --all flag", _step_run_tests),
@@ -2108,12 +1906,6 @@ def release_progress(request, pk: int, action: str):
     else:
         log_dir_warning_message = ctx.get("log_dir_warning_message")
 
-    if "changelog_report_url" not in ctx:
-        try:
-            ctx["changelog_report_url"] = reverse("admin:system-changelog-report")
-        except NoReverseMatch:
-            ctx["changelog_report_url"] = ""
-
     steps = PUBLISH_STEPS
     total_steps = len(steps)
     step_count = ctx.get("step", 0)
@@ -2464,7 +2256,6 @@ def release_progress(request, pk: int, action: str):
         "cert_log": ctx.get("cert_log"),
         "fixtures": fixtures_summary,
         "todos": todos_display,
-        "changelog_report_url": ctx.get("changelog_report_url", ""),
         "dirty_files": dirty_files,
         "dirty_commit_message": ctx.get("dirty_commit_message", DIRTY_COMMIT_DEFAULT_MESSAGE),
         "dirty_commit_error": ctx.get("dirty_commit_error"),

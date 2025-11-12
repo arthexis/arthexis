@@ -202,7 +202,7 @@ class ReleaseProgressViewTests(TestCase):
         session = self.client.session
         session_key = f"release_publish_{self.release.pk}"
         session[session_key] = {
-            "step": 8,
+            "step": 7,
             "log": self.log_name,
             "started": True,
             "todos_ack": True,
@@ -236,11 +236,11 @@ class ReleaseProgressViewTests(TestCase):
             ),
             mock.patch("core.views.release_utils.publish", side_effect=warning),
         ):
-            response = self.client.get(f"{url}?step=8")
+            response = self.client.get(f"{url}?step=7")
 
         self.assertEqual(response.status_code, 200)
         updated_session = self.client.session.get(session_key, {})
-        self.assertEqual(updated_session.get("step"), 9)
+        self.assertEqual(updated_session.get("step"), 8)
         self.assertNotIn("error", updated_session)
         stored_warnings = updated_session.get("warnings", [])
         self.assertEqual(len(stored_warnings), 1)
@@ -509,11 +509,7 @@ class ReleaseProgressViewTests(TestCase):
         self.assertFalse(response.context["dirty_files"])
         self.assertEqual(response.context["current_step"], 1)
 
-    @mock.patch("core.views._refresh_changelog_once")
-    def test_todos_must_be_acknowledged(self, refresh_changelog):
-        refresh_changelog.side_effect = (
-            lambda ctx, log_path: ctx.setdefault("changelog_refreshed", True)
-        )
+    def test_todos_must_be_acknowledged(self):
         todo = Todo.objects.create(request="Do something", url="/admin/")
         url = reverse("release-progress", args=[self.release.pk, "publish"])
         session = self.client.session
@@ -553,11 +549,7 @@ class ReleaseProgressViewTests(TestCase):
         self.assertIsNone(response.context.get("todos"))
         self.assertEqual(response.context["next_step"], 2)
 
-    @mock.patch("core.views._refresh_changelog_once")
-    def test_empty_todo_list_allows_progress(self, refresh_changelog):
-        refresh_changelog.side_effect = (
-            lambda ctx, log_path: ctx.setdefault("changelog_refreshed", True)
-        )
+    def test_empty_todo_list_allows_progress(self):
         url = reverse("release-progress", args=[self.release.pk, "publish"])
         session = self.client.session
         session_key = f"release_publish_{self.release.pk}"
@@ -571,7 +563,6 @@ class ReleaseProgressViewTests(TestCase):
         response = self.client.get(f"{url}?step=1")
         self.assertIsNone(response.context.get("todos"))
         self.assertFalse(response.context["has_pending_todos"])
-        self.assertFalse(response.context["changelog_report_url"] == "")
         self.assertEqual(response.context["current_step"], 2)
         self.assertEqual(response.context["next_step"], 2)
 
@@ -588,186 +579,7 @@ class ReleaseProgressViewTests(TestCase):
         self.assertIsNone(response.context["todos"])
         self.assertFalse(response.context["has_pending_todos"])
 
-    def test_step_check_todos_refreshes_changelog_once(self):
-        todo = Todo.objects.create(request="Review changelog", url="/admin/")
-        ctx: dict[str, object] = {}
-        log_path = self.log_dir / "refresh-once.log"
-        commands: list[list[str]] = []
-
-        def fake_run(cmd, capture_output=False, text=False, check=False, **kwargs):
-            commands.append(list(cmd))
-            if cmd == ["git", "diff", "--cached", "--name-only"]:
-                return subprocess.CompletedProcess(
-                    cmd, 0, stdout="CHANGELOG.rst\n", stderr=""
-                )
-            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
-
-        with mock.patch("core.views.subprocess.run", side_effect=fake_run):
-            with self.assertRaises(core_views.PendingTodos):
-                core_views._step_check_todos(self.release, ctx, log_path)
-            first_command_count = len(commands)
-            with self.assertRaises(core_views.PendingTodos):
-                core_views._step_check_todos(self.release, ctx, log_path)
-
-        self.assertTrue(ctx.get("changelog_refreshed"))
-        self.assertTrue(ctx.get("todos_required"))
-        self.assertEqual(
-            ctx.get("todos"),
-            [
-                {
-                    "id": todo.pk,
-                    "request": "Review changelog",
-                    "url": "/admin/",
-                    "request_details": "",
-                }
-            ],
-        )
-        self.assertEqual(len(commands), first_command_count)
-        script_calls = [cmd for cmd in commands if cmd == ["scripts/generate-changelog.sh"]]
-        self.assertEqual(len(script_calls), 1)
-        commit_calls = [
-            cmd for cmd in commands if cmd[:3] == ["git", "commit", "-m"]
-        ]
-        self.assertEqual(len(commit_calls), 1)
-
-    def test_refresh_changelog_recovers_missing_latest_release(self):
-        original = Path("CHANGELOG.rst").read_text(encoding="utf-8")
-        latest_version = "0.1.31"
-        stale_text = "\n".join(
-            [
-                "Changelog",
-                "=========",
-                "",
-                "Unreleased",
-                "----------",
-                "",
-                "- placeholder entry",
-                "",
-                "v0.1.22 (2025-10-28)",
-                "--------------------",
-                "",
-                "- previous release entry",
-                "",
-            ]
-        )
-        Path("CHANGELOG.rst").write_text(stale_text, encoding="utf-8")
-        self.addCleanup(
-            lambda: Path("CHANGELOG.rst").write_text(original, encoding="utf-8")
-        )
-
-        ctx: dict[str, object] = {}
-        log_path = self.log_dir / "missing-release.log"
-
-        def fake_run(cmd, capture_output=False, text=False, check=False, **kwargs):
-            if cmd[:3] == ["git", "diff", "--cached"]:
-                return subprocess.CompletedProcess(cmd, 0, stdout="CHANGELOG.rst\n", stderr="")
-            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
-
-        def successful_fallback(log_path):
-            core_views._append_log(log_path, "Falling back to Python changelog generator")
-            title = f"v{latest_version} (2025-01-01)"
-            underline = "-" * len(title)
-            content = "\n".join(
-                [
-                    "Changelog",
-                    "=========",
-                    "",
-                    "Unreleased",
-                    "----------",
-                    "",
-                    "- unreleased placeholder",
-                    "",
-                    title,
-                    underline,
-                    "",
-                    "- regenerated entry",
-                    "",
-                ]
-            )
-            Path("CHANGELOG.rst").write_text(f"{content}\n", encoding="utf-8")
-            core_views._append_log(
-                log_path, "Regenerated CHANGELOG.rst using Python fallback"
-            )
-
-        with mock.patch(
-            "core.views.changelog_utils.latest_release_version_from_history",
-            return_value=latest_version,
-        ), mock.patch("core.views.subprocess.run", side_effect=fake_run), mock.patch(
-            "core.views._generate_changelog_with_python", side_effect=successful_fallback
-        ):
-            core_views._refresh_changelog_once(ctx, log_path)
-
-        self.assertTrue(ctx.get("changelog_refreshed"))
-        self.assertTrue(log_path.exists())
-        log_content = log_path.read_text(encoding="utf-8")
-        if latest_version:
-            self.assertIn(
-                f"Changelog missing latest release v{latest_version}", log_content
-            )
-            self.assertIn("Python changelog generator", log_content)
-            self.assertIn(
-                f"Recovered changelog entry for v{latest_version} after fallback",
-                log_content,
-            )
-
-    def test_refresh_changelog_missing_latest_release_requires_manual_fix(self):
-        original = Path("CHANGELOG.rst").read_text(encoding="utf-8")
-        latest_version = "0.1.31"
-        stale_text = "\n".join(
-            [
-                "Changelog",
-                "=========",
-                "",
-                "Unreleased",
-                "----------",
-                "",
-                "- placeholder entry",
-                "",
-            ]
-        )
-        Path("CHANGELOG.rst").write_text(stale_text, encoding="utf-8")
-        self.addCleanup(
-            lambda: Path("CHANGELOG.rst").write_text(original, encoding="utf-8")
-        )
-
-        ctx: dict[str, object] = {}
-        log_path = self.log_dir / "missing-release-instructions.log"
-
-        def fake_run(cmd, capture_output=False, text=False, check=False, **kwargs):
-            if cmd[:3] == ["git", "diff", "--cached"]:
-                return subprocess.CompletedProcess(cmd, 0, stdout="CHANGELOG.rst\n", stderr="")
-            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
-
-        def stubborn_fallback(log_path):
-            core_views._append_log(
-                log_path, "Simulated fallback unable to populate changelog"
-            )
-            Path("CHANGELOG.rst").write_text(stale_text, encoding="utf-8")
-
-        with mock.patch(
-            "core.views.changelog_utils.latest_release_version_from_history",
-            return_value=latest_version,
-        ), mock.patch("core.views.subprocess.run", side_effect=fake_run), mock.patch(
-            "core.views._generate_changelog_with_python", side_effect=stubborn_fallback
-        ):
-            with self.assertRaises(RuntimeError) as exc:
-                core_views._refresh_changelog_once(ctx, log_path)
-
-        self.assertFalse(ctx.get("changelog_refreshed"))
-        self.assertIn("Ensure the release commit", str(exc.exception))
-        self.assertTrue(log_path.exists())
-        log_content = log_path.read_text(encoding="utf-8")
-        if latest_version:
-            self.assertIn(
-                f"Changelog missing latest release v{latest_version}", log_content
-            )
-            self.assertIn("Manual changelog update required", log_content)
-
-    @mock.patch("core.views._refresh_changelog_once")
-    def test_acknowledged_todos_not_rendered(self, refresh_changelog):
-        refresh_changelog.side_effect = (
-            lambda ctx, log_path: ctx.setdefault("changelog_refreshed", True)
-        )
+    def test_acknowledged_todos_not_rendered(self):
         todo = Todo.objects.create(request="Do something", url="/admin/")
         url = reverse("release-progress", args=[self.release.pk, "publish"])
         session = self.client.session
@@ -793,13 +605,7 @@ class ReleaseProgressViewTests(TestCase):
         self.assertIsNone(response.context["todos"])
         self.assertFalse(response.context["has_pending_todos"])
 
-    @mock.patch("core.views._refresh_changelog_once")
-    def test_todo_ack_condition_failure_blocks_acknowledgement(
-        self, refresh_changelog
-    ):
-        refresh_changelog.side_effect = (
-            lambda ctx, log_path: ctx.setdefault("changelog_refreshed", True)
-        )
+    def test_todo_ack_condition_failure_blocks_acknowledgement(self):
         todo = Todo.objects.create(
             request="Do something",
             on_done_condition="1 = 0",
@@ -838,14 +644,14 @@ class ReleaseProgressViewTests(TestCase):
         session = self.client.session
         session_key = f"release_publish_{self.release.pk}"
         session[session_key] = {
-            "step": 7,
+            "step": 6,
             "log": self.log_name,
             "started": True,
             "todos_ack": True,
         }
         session.save()
 
-        response = self.client.get(f"{url}?step=7")
+        response = self.client.get(f"{url}?step=6")
 
         self.assertTrue(response.context["awaiting_approval"])
         self.assertIsNone(response.context["next_step"])
@@ -887,14 +693,14 @@ class ReleaseProgressViewTests(TestCase):
         session = self.client.session
         session_key = f"release_publish_{self.release.pk}"
         session[session_key] = {
-            "step": 7,
+            "step": 6,
             "log": self.log_name,
             "started": True,
             "todos_ack": True,
         }
         session.save()
 
-        response = self.client.get(f"{url}?step=7")
+        response = self.client.get(f"{url}?step=6")
 
         self.assertTrue(response.context["approval_credentials_ready"])
         self.assertFalse(response.context["approval_credentials_missing"])
@@ -909,14 +715,14 @@ class ReleaseProgressViewTests(TestCase):
         session = self.client.session
         session_key = f"release_publish_{self.release.pk}"
         session[session_key] = {
-            "step": 7,
+            "step": 6,
             "log": self.log_name,
             "started": True,
             "todos_ack": True,
         }
         session.save()
 
-        response = self.client.get(f"{url}?step=7")
+        response = self.client.get(f"{url}?step=6")
 
         self.assertTrue(response.context["approval_credentials_ready"])
         self.assertFalse(response.context["approval_credentials_missing"])
@@ -938,7 +744,7 @@ class ReleaseProgressViewTests(TestCase):
         session = self.client.session
         session_key = f"release_publish_{self.release.pk}"
         session[session_key] = {
-            "step": 7,
+            "step": 6,
             "log": self.log_name,
             "started": True,
             "todos_ack": True,
@@ -946,7 +752,7 @@ class ReleaseProgressViewTests(TestCase):
         session.save()
 
         with mock.patch("config.context_processors.site_and_node", return_value={}):
-            response = self.client.get(f"{url}?step=7")
+            response = self.client.get(f"{url}?step=6")
 
         self.assertTrue(response.context["awaiting_approval"])
         self.assertTrue(response.context["approval_credentials_ready"])
@@ -960,20 +766,20 @@ class ReleaseProgressViewTests(TestCase):
         session = self.client.session
         session_key = f"release_publish_{self.release.pk}"
         session[session_key] = {
-            "step": 7,
+            "step": 6,
             "log": self.log_name,
             "started": True,
             "todos_ack": True,
         }
         session.save()
 
-        initial = self.client.get(f"{url}?step=7")
+        initial = self.client.get(f"{url}?step=6")
         self.assertTrue(initial.context["approval_credentials_ready"])
-        response = self.client.get(f"{url}?approve=1&step=7")
+        response = self.client.get(f"{url}?approve=1&step=6")
 
         self.assertFalse(response.context["awaiting_approval"])
-        self.assertEqual(response.context["current_step"], 8)
-        self.assertEqual(response.context["next_step"], 8)
+        self.assertEqual(response.context["current_step"], 7)
+        self.assertEqual(response.context["next_step"], 7)
         self.assertIn(
             "Release manager approved release", response.context["log_content"]
         )
@@ -984,16 +790,16 @@ class ReleaseProgressViewTests(TestCase):
         session = self.client.session
         session_key = f"release_publish_{self.release.pk}"
         session[session_key] = {
-            "step": 7,
+            "step": 6,
             "log": self.log_name,
             "started": True,
             "todos_ack": True,
         }
         session.save()
 
-        initial = self.client.get(f"{url}?step=7")
+        initial = self.client.get(f"{url}?step=6")
         self.assertTrue(initial.context["approval_credentials_ready"])
-        response = self.client.get(f"{url}?reject=1&step=7")
+        response = self.client.get(f"{url}?reject=1&step=6")
 
         self.assertEqual(
             response.context["error"],
@@ -1025,202 +831,11 @@ class ReleaseProgressViewTests(TestCase):
 
     @mock.patch("core.views.release_utils._git_clean", return_value=True)
     @mock.patch("core.views.release_utils.network_available", return_value=False)
-    def test_pre_release_defers_todo_fixture_until_build(self, net, git_clean):
-        original = Path("VERSION").read_text(encoding="utf-8")
-        self.addCleanup(lambda: Path("VERSION").write_text(original, encoding="utf-8"))
-
-        commands: list[list[str]] = []
-        fixture_filename = "todos__create_release_pkg_1_0_1.json"
-
-        def fake_run(cmd, capture_output=False, text=False, check=False, **kwargs):
-            commands.append(cmd)
-            if (
-                cmd[:4] == ["git", "diff", "--cached", "--quiet"]
-                and any(part.endswith(fixture_filename) for part in cmd)
-            ):
-                return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="")
-            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
-
-        tmp_dir = Path("tmp_todos_pre_release")
-        tmp_dir.mkdir(exist_ok=True)
-        self.addCleanup(lambda: shutil.rmtree(tmp_dir, ignore_errors=True))
-
-        session = self.client.session
-        session_key = f"release_publish_{self.release.pk}"
-        session[session_key] = {
-            "step": 4,
-            "log": self.log_name,
-            "started": True,
-            "todos_ack": True,
-        }
-        session.save()
-
-        with mock.patch("core.views.TODO_FIXTURE_DIR", tmp_dir):
-            with mock.patch(
-                "core.views.changelog_utils.extract_release_notes",
-                return_value="- pending change",
-            ):
-                with mock.patch("core.views.PackageRelease.dump_fixture"):
-                    with mock.patch(
-                        "core.views.subprocess.run", side_effect=fake_run
-                    ):
-                        url = reverse(
-                            "release-progress", args=[self.release.pk, "publish"]
-                        )
-                        response = self.client.get(f"{url}?step=4")
-
-        self.assertIn(["scripts/generate-changelog.sh"], commands)
-        self.assertEqual(response.status_code, 200)
-        expected_request = "Create release pkg 1.0.1"
-        fixture_path = tmp_dir / fixture_filename
-        self.assertFalse(Todo.objects.filter(request=expected_request).exists())
-        self.assertFalse(fixture_path.exists())
-
-        log_path = Path("logs") / self.log_name
-        self.addCleanup(lambda: log_path.unlink(missing_ok=True))
-        self.assertTrue(log_path.exists())
-        log_content = log_path.read_text(encoding="utf-8")
-        self.assertIn(
-            "Regenerated CHANGELOG.rst using scripts/generate-changelog.sh",
-            log_content,
-        )
-        self.assertIn("Staged CHANGELOG.rst for commit", log_content)
-        self.assertNotIn(f"Added TODO: {expected_request}", log_content)
-        self.assertIn("Recorded changelog notes for v1.0", log_content)
-        self.assertEqual(
-            Path("VERSION").read_text(encoding="utf-8").strip(),
-            self.release.version,
-        )
-        self.assertIn("Execute pre-release actions", log_content)
-        self.assertIn(
-            f"Updated VERSION file to {self.release.version}", log_content
-        )
-        self.assertIn("Staged VERSION for commit", log_content)
-        self.assertIn(
-            "No changes detected for VERSION or CHANGELOG; skipping commit",
-            log_content,
-        )
-        self.assertIn("Unstaged CHANGELOG.rst", log_content)
-        self.assertIn("Unstaged VERSION file", log_content)
-        self.assertNotIn(
-            ["git", "commit", "-m", "chore: add release TODO for pkg"], commands
-        )
-        self.release.refresh_from_db()
-        self.assertEqual(self.release.changelog, "- pending change")
-        session = self.client.session
-        ctx = session.get(session_key, {})
-        self.assertNotIn("release_todo_previous_version", ctx)
-
-    @mock.patch("core.views.release_utils._git_clean", return_value=True)
-    @mock.patch("core.views.release_utils.network_available", return_value=False)
-    def test_pre_release_python_fallback(self, net, git_clean):
-        original_version = Path("VERSION").read_text(encoding="utf-8")
-        original_changelog = Path("CHANGELOG.rst").read_text(encoding="utf-8")
-        self.addCleanup(
-            lambda: Path("VERSION").write_text(original_version, encoding="utf-8")
-        )
-        self.addCleanup(
-            lambda: Path("CHANGELOG.rst").write_text(
-                original_changelog, encoding="utf-8"
-            )
-        )
-
-        commands: list[list[str]] = []
-        changelog_entry = "- abcdef12 Fix fallback generation output (#42)"
-
-        def fake_run(cmd, capture_output=False, text=False, check=False, **kwargs):
-            commands.append(cmd)
-            if cmd == ["scripts/generate-changelog.sh"]:
-                err = OSError(193, "%1 is not a valid Win32 application")
-                err.winerror = 193  # type: ignore[attr-defined]
-                raise err
-            if cmd[:4] == ["git", "describe", "--tags", "--exact-match"]:
-                return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="")
-            if (
-                len(cmd) >= 4
-                and cmd[:4] == ["git", "describe", "--tags", "--abbrev=0"]
-            ):
-                return subprocess.CompletedProcess(cmd, 0, stdout="0.1.10\n", stderr="")
-            if (
-                len(cmd) >= 4
-                and cmd[0] == "git"
-                and cmd[1] == "log"
-                and cmd[2] == "0.1.10..HEAD"
-            ):
-                commit = "abcdef1234567890"
-                subject = "Fix fallback generation output (#42)"
-                date = "2025-10-03"
-                stdout = f"{commit}\x00{date}\x00{subject}\n"
-                return subprocess.CompletedProcess(cmd, 0, stdout=stdout, stderr="")
-            if (
-                cmd[:3] == ["git", "diff", "--cached"]
-                and any(part.endswith("CHANGELOG.rst") for part in cmd)
-            ):
-                return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="")
-            return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
-
-        tmp_dir = Path("tmp_todos_pre_release_fallback")
-        tmp_dir.mkdir(exist_ok=True)
-        self.addCleanup(lambda: shutil.rmtree(tmp_dir, ignore_errors=True))
-
-        session = self.client.session
-        session_key = f"release_publish_{self.release.pk}"
-        session[session_key] = {
-            "step": 4,
-            "log": self.log_name,
-            "started": True,
-            "todos_ack": True,
-        }
-        session.save()
-
-        with mock.patch("core.views.TODO_FIXTURE_DIR", tmp_dir):
-            with mock.patch(
-                "core.views.changelog_utils.extract_release_notes",
-                return_value=changelog_entry,
-            ):
-                with mock.patch("core.views.PackageRelease.dump_fixture"):
-                    with mock.patch(
-                        "core.views.subprocess.run", side_effect=fake_run
-                    ):
-                        url = reverse(
-                            "release-progress", args=[self.release.pk, "publish"]
-                        )
-                        response = self.client.get(f"{url}?step=4")
-
-        self.assertIn(["scripts/generate-changelog.sh"], commands)
-        self.assertEqual(response.status_code, 200)
-        log_path = Path("logs") / self.log_name
-        self.addCleanup(lambda: log_path.unlink(missing_ok=True))
-        self.assertTrue(log_path.exists())
-        log_content = log_path.read_text(encoding="utf-8")
-        self.assertIn(
-            "scripts/generate-changelog.sh failed: [Errno 193] %1 is not a valid Win32 application",
-            log_content,
-        )
-        self.assertIn("Regenerated CHANGELOG.rst using Python fallback", log_content)
-        self.assertIn("Staged CHANGELOG.rst for commit", log_content)
-        self.assertEqual(
-            Path("VERSION").read_text(encoding="utf-8").strip(),
-            self.release.version,
-        )
-        self.assertIn(changelog_entry, Path("CHANGELOG.rst").read_text(encoding="utf-8"))
-        self.assertFalse(
-            Todo.objects.filter(request__icontains="Create release pkg").exists()
-        )
-        self.assertFalse(list(tmp_dir.glob("todos__*.json")))
-        self.assertNotIn("Committed TODO fixture", log_content)
-        self.assertIn("Recorded changelog notes for v1.0", log_content)
-        self.release.refresh_from_db()
-        self.assertEqual(self.release.changelog, changelog_entry)
-        session = self.client.session
-        ctx = session.get(session_key, {})
-        self.assertNotIn("release_todo_previous_version", ctx)
-
     @mock.patch("core.views.release_utils.promote")
     @mock.patch("core.views.PackageRelease.dump_fixture")
     @mock.patch("core.views._ensure_origin_main_unchanged")
     def test_build_step_skips_todo_creation_on_success(
-        self, ensure_main, dump_fixture, promote
+        self, ensure_main, dump_fixture, promote, _network_available, _git_clean
     ):
         commands: list[list[str]] = []
 
@@ -1231,7 +846,7 @@ class ReleaseProgressViewTests(TestCase):
         session = self.client.session
         session_key = f"release_publish_{self.release.pk}"
         session[session_key] = {
-            "step": 5,
+            "step": 4,
             "log": self.log_name,
             "started": True,
             "todos_ack": True,
@@ -1241,11 +856,11 @@ class ReleaseProgressViewTests(TestCase):
         with mock.patch("core.views._has_remote", return_value=False):
             with mock.patch("core.views.subprocess.run", side_effect=fake_run):
                 url = reverse("release-progress", args=[self.release.pk, "publish"])
-                response = self.client.get(f"{url}?step=5")
+                response = self.client.get(f"{url}?step=4")
         self.assertEqual(response.status_code, 200)
         self.assertFalse(Todo.objects.exists())
         updated_session = self.client.session.get(session_key, {})
-        self.assertEqual(updated_session.get("step"), 6)
+        self.assertEqual(updated_session.get("step"), 5)
 
     @mock.patch("core.views.release_utils.promote", side_effect=Exception("build failed"))
     @mock.patch("core.views.PackageRelease.dump_fixture")
@@ -1262,7 +877,7 @@ class ReleaseProgressViewTests(TestCase):
         session = self.client.session
         session_key = f"release_publish_{self.release.pk}"
         session[session_key] = {
-            "step": 5,
+            "step": 4,
             "log": self.log_name,
             "started": True,
             "todos_ack": True,
@@ -1272,13 +887,13 @@ class ReleaseProgressViewTests(TestCase):
         with mock.patch("core.views._has_remote", return_value=False):
             with mock.patch("core.views.subprocess.run", side_effect=fake_run):
                 url = reverse("release-progress", args=[self.release.pk, "publish"])
-                response = self.client.get(f"{url}?step=5")
+                response = self.client.get(f"{url}?step=4")
         self.assertEqual(response.status_code, 200)
         self.assertFalse(Todo.objects.exists())
         updated_session = self.client.session.get(session_key, {})
         self.assertEqual(updated_session.get("error"), "build failed")
         self.assertNotIn("release_todo_previous_version", updated_session)
-        self.assertEqual(updated_session.get("step"), 5)
+        self.assertEqual(updated_session.get("step"), 4)
 
     def test_todo_done_marks_timestamp(self):
         todo = Todo.objects.create(request="Task")

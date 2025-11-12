@@ -4309,7 +4309,6 @@ class PackageRelease(Entity):
         default=Severity.NORMAL,
         help_text=_("Controls the expected urgency for auto-upgrades."),
     )
-    changelog = models.TextField(blank=True, default="")
     pypi_url = models.URLField("PyPI URL", blank=True, editable=False)
     github_url = models.URLField("GitHub URL", blank=True, editable=False)
     release_on = models.DateTimeField(blank=True, null=True, editable=False)
