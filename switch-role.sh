@@ -19,21 +19,17 @@ ENABLE_CELERY=false
 ENABLE_LCD_SCREEN=false
 ENABLE_CONTROL=false
 REQUIRES_REDIS=false
-UPDATE=false
-CLEAN=false
-LATEST=false
+UPGRADE_CHANNEL=""
 CHECK=false
 AUTO_UPGRADE_MODE=""
 DEBUG_MODE=""
 DEBUG_OVERRIDDEN=false
-REFRESH_MAINTENANCE=false
 
 BASE_DIR="$SCRIPT_DIR"
 LOCK_DIR="$BASE_DIR/locks"
-DB_FILE="$BASE_DIR/db.sqlite3"
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--update] [--latest] [--clean] [--check] [--auto-upgrade|--no-auto-upgrade] [--debug|--no-debug] [--refresh-maintenance] [--satellite|--terminal|--control|--watchtower]" >&2
+    echo "Usage: $0 [--service NAME] [--latest|--stable|--regular] [--check] [--auto-upgrade|--no-auto-upgrade] [--debug|--no-debug] [--satellite|--terminal|--control|--watchtower]" >&2
     exit 1
 }
 
@@ -133,6 +129,17 @@ PYCODE
     fi
 }
 
+set_upgrade_channel() {
+    local new_channel="$1"
+
+    if [ -n "$UPGRADE_CHANNEL" ] && [ "$UPGRADE_CHANNEL" != "$new_channel" ]; then
+        echo "Only one of --latest, --stable, or --regular may be specified" >&2
+        usage
+    fi
+
+    UPGRADE_CHANNEL="$new_channel"
+}
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --service)
@@ -140,24 +147,20 @@ while [[ $# -gt 0 ]]; do
             SERVICE="$2"
             shift 2
             ;;
-        --update)
-            UPDATE=true
-            shift
-            ;;
-        --clean)
-            CLEAN=true
-            shift
-            ;;
         --latest)
-            LATEST=true
+            set_upgrade_channel "latest"
+            shift
+            ;;
+        --stable)
+            set_upgrade_channel "stable"
+            shift
+            ;;
+        --regular)
+            set_upgrade_channel "version"
             shift
             ;;
         --check)
             CHECK=true
-            shift
-            ;;
-        --refresh-maintenance)
-            REFRESH_MAINTENANCE=true
             shift
             ;;
         --auto-upgrade)
@@ -231,28 +234,9 @@ while [[ $# -gt 0 ]]; do
 
 done
 
-if [ "$REFRESH_MAINTENANCE" = true ]; then
-    if [ -n "$NODE_ROLE" ] || [ -n "$SERVICE" ] || [ "$UPDATE" = true ] || \
-       [ "$CLEAN" = true ] || [ "$LATEST" = true ] || [ "$CHECK" = true ] || \
-       [ -n "$AUTO_UPGRADE_MODE" ] || [ -n "$DEBUG_MODE" ] || \
-       [ "$ENABLE_CELERY" = true ] || [ "$ENABLE_LCD_SCREEN" = true ] || \
-       [ "$ENABLE_CONTROL" = true ] || [ "$REQUIRES_REDIS" = true ]; then
-        echo "--refresh-maintenance cannot be combined with other options" >&2
-        usage
-    fi
-    if arthexis_can_manage_nginx; then
-        arthexis_refresh_nginx_maintenance "$BASE_DIR"
-    else
-        echo "nginx not detected; unable to refresh maintenance assets" >&2
-        exit 1
-    fi
-    exit 0
-fi
-
 if [ "$CHECK" = true ]; then
-    if [ -n "$NODE_ROLE" ] || [ -n "$SERVICE" ] || [ "$UPDATE" = true ] || \
-       [ "$CLEAN" = true ] || [ "$LATEST" = true ] || [ -n "$AUTO_UPGRADE_MODE" ] || \
-       [ -n "$DEBUG_MODE" ]; then
+    if [ -n "$NODE_ROLE" ] || [ -n "$SERVICE" ] || [ -n "$AUTO_UPGRADE_MODE" ] || \
+       [ -n "$DEBUG_MODE" ] || [ -n "$UPGRADE_CHANNEL" ]; then
         echo "--check cannot be combined with other options" >&2
         usage
     fi
@@ -268,8 +252,11 @@ if [ "$CHECK" = true ]; then
             latest)
                 echo "Auto-upgrade: enabled (latest channel)"
                 ;;
-            version)
+            stable)
                 echo "Auto-upgrade: enabled (stable channel)"
+                ;;
+            version)
+                echo "Auto-upgrade: enabled (regular channel)"
                 ;;
             *)
                 echo "Auto-upgrade: enabled (unknown channel)"
@@ -312,17 +299,20 @@ if [ -n "$AUTO_UPGRADE_MODE" ] && [ -z "$NODE_ROLE" ]; then
     ACTION_PERFORMED=true
     mkdir -p "$LOCK_DIR"
     if [ "$AUTO_UPGRADE_MODE" = "enable" ]; then
-        if [ "$LATEST" = true ]; then
-            echo "latest" > "$LOCK_DIR/auto_upgrade.lck"
-        else
-            echo "version" > "$LOCK_DIR/auto_upgrade.lck"
-        fi
+        channel="${UPGRADE_CHANNEL:-version}"
+        echo "$channel" > "$LOCK_DIR/auto_upgrade.lck"
         run_auto_upgrade_management enable
-        if [ "$LATEST" = true ]; then
-            echo "Auto-upgrade enabled on the latest channel."
-        else
-            echo "Auto-upgrade enabled on the stable channel."
-        fi
+        case "$channel" in
+            latest)
+                echo "Auto-upgrade enabled on the latest channel."
+                ;;
+            stable)
+                echo "Auto-upgrade enabled on the stable channel."
+                ;;
+            *)
+                echo "Auto-upgrade enabled on the regular channel."
+                ;;
+        esac
     else
         rm -f "$LOCK_DIR/auto_upgrade.lck"
         run_auto_upgrade_management disable
@@ -332,8 +322,8 @@ fi
 
 if [ "$ACTION_PERFORMED" = true ] && [ -z "$NODE_ROLE" ]; then
     if [ -n "$DEBUG_MODE" ]; then
-        if [ -n "$SERVICE" ] || [ "$UPDATE" = true ] || [ "$CLEAN" = true ] || [ "$LATEST" = true ]; then
-            echo "--debug/--no-debug cannot be combined with service or update options without specifying a node role" >&2
+        if [ -n "$SERVICE" ] || [ -n "$UPGRADE_CHANNEL" ]; then
+            echo "--debug/--no-debug cannot be combined with service or upgrade options without specifying a node role" >&2
             usage
         fi
     fi
@@ -362,17 +352,6 @@ fi
 if [ "$REQUIRES_REDIS" = true ]; then
     require_redis "$NODE_ROLE"
 fi
-if [ "$CLEAN" = true ] && [ -f "$DB_FILE" ]; then
-    BACKUP_DIR="$BASE_DIR/backups"
-    mkdir -p "$BACKUP_DIR"
-    VERSION="unknown"
-    [ -f "$BASE_DIR/VERSION" ] && VERSION="$(cat "$BASE_DIR/VERSION")"
-    REVISION="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
-    STAMP="$(date +%Y%m%d%H%M%S)"
-    cp "$DB_FILE" "$BACKUP_DIR/db.sqlite3.${VERSION}.${REVISION}.${STAMP}.bak"
-    rm "$DB_FILE"
-fi
-
 SERVICE_ACTIVE=false
 if [ -n "$SERVICE" ] && systemctl list-unit-files | grep -Fq "${SERVICE}.service"; then
     if systemctl is-active --quiet "$SERVICE"; then
@@ -406,17 +385,20 @@ if [ -n "$SERVICE" ]; then
 fi
 
 if [ "$AUTO_UPGRADE_MODE" = "enable" ]; then
-    if [ "$LATEST" = true ]; then
-        echo "latest" > "$LOCK_DIR/auto_upgrade.lck"
-    else
-        echo "version" > "$LOCK_DIR/auto_upgrade.lck"
-    fi
+    channel="${UPGRADE_CHANNEL:-version}"
+    echo "$channel" > "$LOCK_DIR/auto_upgrade.lck"
     run_auto_upgrade_management enable
-    if [ "$LATEST" = true ]; then
-        echo "Auto-upgrade enabled on the latest channel."
-    else
-        echo "Auto-upgrade enabled on the stable channel."
-    fi
+    case "$channel" in
+        latest)
+            echo "Auto-upgrade enabled on the latest channel."
+            ;;
+        stable)
+            echo "Auto-upgrade enabled on the stable channel."
+            ;;
+        *)
+            echo "Auto-upgrade enabled on the regular channel."
+            ;;
+    esac
 elif [ "$AUTO_UPGRADE_MODE" = "disable" ]; then
     rm -f "$LOCK_DIR/auto_upgrade.lck"
     run_auto_upgrade_management disable
@@ -425,14 +407,6 @@ fi
 
 if arthexis_can_manage_nginx; then
     arthexis_refresh_nginx_maintenance "$BASE_DIR" "/etc/nginx/sites-enabled/arthexis.conf"
-fi
-
-if [ "$UPDATE" = true ]; then
-    if [ "$LATEST" = true ]; then
-        "$BASE_DIR/upgrade.sh" --latest
-    else
-        "$BASE_DIR/upgrade.sh"
-    fi
 fi
 
 if [ "$SERVICE_ACTIVE" = true ]; then

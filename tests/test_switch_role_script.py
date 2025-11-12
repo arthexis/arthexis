@@ -1,4 +1,5 @@
 import os
+import shutil
 import tempfile
 from pathlib import Path
 import subprocess
@@ -23,6 +24,18 @@ def _cleanup_switch_role_state(repo_root: Path) -> None:
             child.unlink(missing_ok=True)
         lock_dir.rmdir()
     _cleanup_switch_role_artifacts(repo_root)
+
+
+def _ensure_fake_venv_python(repo_root: Path) -> tuple[Path, bool]:
+    venv_dir = repo_root / ".venv"
+    python_bin = venv_dir / "bin" / "python"
+    if python_bin.exists():
+        return venv_dir, False
+
+    python_bin.parent.mkdir(parents=True, exist_ok=True)
+    python_bin.write_text("#!/usr/bin/env bash\nexit 0\n")
+    python_bin.chmod(0o755)
+    return venv_dir, True
 
 
 def test_switch_role_script_includes_check_flag():
@@ -154,3 +167,43 @@ def test_switch_role_non_terminal_defaults_disable_debug(tmp_path):
         assert debug_env.read_text().strip() == "DEBUG=0"
     finally:
         _cleanup_switch_role_state(repo_root)
+
+
+def test_switch_role_auto_upgrade_supports_stable_channel():
+    repo_root = Path(__file__).resolve().parent.parent
+    script_path = repo_root / "switch-role.sh"
+    venv_dir, created_venv = _ensure_fake_venv_python(repo_root)
+    try:
+        result = subprocess.run(
+            ["bash", str(script_path), "--auto-upgrade", "--stable"],
+            capture_output=True,
+            text=True,
+            cwd=repo_root,
+        )
+        assert result.returncode == 0
+        mode_file = repo_root / "locks" / "auto_upgrade.lck"
+        assert mode_file.read_text().strip() == "stable"
+    finally:
+        _cleanup_switch_role_state(repo_root)
+        if created_venv:
+            shutil.rmtree(venv_dir, ignore_errors=True)
+
+
+def test_switch_role_auto_upgrade_supports_regular_channel():
+    repo_root = Path(__file__).resolve().parent.parent
+    script_path = repo_root / "switch-role.sh"
+    venv_dir, created_venv = _ensure_fake_venv_python(repo_root)
+    try:
+        result = subprocess.run(
+            ["bash", str(script_path), "--auto-upgrade", "--regular"],
+            capture_output=True,
+            text=True,
+            cwd=repo_root,
+        )
+        assert result.returncode == 0
+        mode_file = repo_root / "locks" / "auto_upgrade.lck"
+        assert mode_file.read_text().strip() == "version"
+    finally:
+        _cleanup_switch_role_state(repo_root)
+        if created_venv:
+            shutil.rmtree(venv_dir, ignore_errors=True)
