@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Regression QA: Verify forwarded charge point task rate limit",
+      "created_on": "2024-01-01T00:00:00Z",
+      "url": "",
+      "request_details": "Deploy the release candidate and restart the Celery worker service. Confirm the worker stays online without raising the KeyError about the '10m' rate limit. Trigger the Push forwarded charge points periodic task from the admin or via `python manage.py shell -c \"from ocpp.tasks import push_forwarded_charge_points; print(push_forwarded_charge_points.delay())\"` and observe the worker logs for a successful execution.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": ""
+    }
+  }
+]
