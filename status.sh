@@ -21,6 +21,11 @@ fi
 
 echo "Application installed: $INSTALLED"
 
+VERSION=""
+if [ -f "$BASE_DIR/VERSION" ]; then
+  VERSION="$(tr -d '\r\n' < "$BASE_DIR/VERSION")"
+fi
+
 REVISION=""
 if command -v python3 >/dev/null 2>&1; then
   REVISION="$(
@@ -50,7 +55,13 @@ if [ -z "$REVISION" ] && [ -f "$BASE_DIR/.revision" ]; then
   REVISION="$(cat "$BASE_DIR/.revision")"
 fi
 
+echo "Version: $VERSION"
 echo "Revision: $REVISION"
+SHORT_REVISION=""
+if [ -n "$REVISION" ]; then
+  SHORT_REVISION="${REVISION:0:7}"
+fi
+echo "Short Revision: $SHORT_REVISION"
 
 SERVICE=""
 if [ -f "$LOCK_DIR/service.lck" ]; then
