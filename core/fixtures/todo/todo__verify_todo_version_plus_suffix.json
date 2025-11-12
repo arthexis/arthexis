@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Confirm TODO visibility with plus suffix versions",
+      "created_on": "2024-01-01T00:00:00Z",
+      "url": "",
+      "request_details": "Simulate a local build that appends a trailing '+' to the installed version (for example, set the Node installed version to 0.1.31+). Open the Release Manager Future Actions view and confirm TODO entries created for both 0.1.31 and 0.1.31+ remain visible and are not marked stale. Verify the release checklist still blocks publishing until the tasks are completed.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.31+"
+    }
+  }
+]

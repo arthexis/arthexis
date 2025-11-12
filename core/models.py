@@ -4649,8 +4649,13 @@ class Todo(Entity):
         trimmed = (label or "").strip()
         if not trimmed:
             return None
+        candidate = trimmed
+        if candidate.endswith("+"):
+            candidate = candidate.rstrip("+").rstrip()
+            if not candidate:
+                return None
         try:
-            return Version(trimmed)
+            return Version(candidate)
         except InvalidVersion:
             return None
 
