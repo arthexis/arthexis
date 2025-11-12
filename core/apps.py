@@ -18,6 +18,7 @@ class CoreConfig(AppConfig):
         import hashlib
         import time
         import traceback
+        import types
         from pathlib import Path
 
         from django.conf import settings
@@ -42,6 +43,50 @@ class CoreConfig(AppConfig):
         from .admin_history import patch_admin_history
 
         from django_otp.plugins.otp_totp.models import TOTPDevice as OTP_TOTPDevice
+
+        try:
+            from django_celery_beat.models import CrontabSchedule
+        except Exception:  # pragma: no cover - optional dependency
+            CrontabSchedule = None
+        else:
+            if not hasattr(CrontabSchedule, "natural_key"):
+                def _core_crontab_natural_key(self):
+                    return (
+                        self.minute,
+                        self.hour,
+                        self.day_of_week,
+                        self.day_of_month,
+                        self.month_of_year,
+                        str(self.timezone),
+                    )
+
+                CrontabSchedule.natural_key = _core_crontab_natural_key
+
+            if (
+                CrontabSchedule is not None
+                and not hasattr(CrontabSchedule.objects, "get_by_natural_key")
+            ):
+                def _core_crontab_get_by_natural_key(
+                    manager,
+                    minute,
+                    hour,
+                    day_of_week,
+                    day_of_month,
+                    month_of_year,
+                    timezone,
+                ):
+                    return manager.get(
+                        minute=minute,
+                        hour=hour,
+                        day_of_week=day_of_week,
+                        day_of_month=day_of_month,
+                        month_of_year=month_of_year,
+                        timezone=timezone,
+                    )
+
+                CrontabSchedule.objects.get_by_natural_key = types.MethodType(
+                    _core_crontab_get_by_natural_key, CrontabSchedule.objects
+                )
 
         if not hasattr(
             OTP_TOTPDevice._read_str_from_settings, "_core_totp_issuer_patch"
