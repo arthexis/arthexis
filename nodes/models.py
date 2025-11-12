@@ -1284,6 +1284,7 @@ class Node(Entity):
         self._sync_ocpp_session_report_task(celery_enabled)
         self._sync_upstream_poll_task(celery_enabled)
         self._sync_net_message_purge_task(celery_enabled)
+        self._sync_node_update_task(celery_enabled)
 
     def _sync_clipboard_task(self, enabled: bool):
         from django_celery_beat.models import IntervalSchedule, PeriodicTask
@@ -1463,6 +1464,45 @@ class Node(Entity):
             PeriodicTask.objects.filter(
                 name__in=periodic_task_name_variants(raw_task_name)
             ).delete()
+
+    def _sync_node_update_task(self, celery_enabled: bool):
+        if not self.is_local:
+            return
+
+        from django_celery_beat.models import CrontabSchedule, PeriodicTask
+
+        raw_task_name = "nodes_update_all_information"
+        task_name = normalize_periodic_task_name(
+            PeriodicTask.objects, raw_task_name
+        )
+
+        if celery_enabled:
+            schedule, _ = CrontabSchedule.objects.get_or_create(
+                minute="0",
+                hour="5",
+                day_of_week="*",
+                day_of_month="*",
+                month_of_year="*",
+            )
+            PeriodicTask.objects.update_or_create(
+                name=task_name,
+                defaults={
+                    "crontab": schedule,
+                    "interval": None,
+                    "task": "nodes.tasks.update_all_nodes_information",
+                    "enabled": True,
+                    "one_off": False,
+                    "args": "[]",
+                    "kwargs": "{}",
+                    "description": (
+                        "Refreshes node details daily using the admin Update nodes action."
+                    ),
+                },
+            )
+        else:
+            PeriodicTask.objects.filter(
+                name__in=periodic_task_name_variants(raw_task_name)
+            ).update(enabled=False)
 
     def send_mail(
         self,

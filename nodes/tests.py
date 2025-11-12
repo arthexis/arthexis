@@ -58,6 +58,7 @@ from urllib.parse import quote, urlparse
 from dns import resolver as dns_resolver
 from . import dns as dns_utils
 from selenium.common.exceptions import WebDriverException
+from nodes.tasks import update_all_nodes_information
 from .classifiers import run_default_classifiers
 from .utils import capture_rpi_snapshot, capture_screenshot, save_screenshot
 from .feature_checks import feature_checks
@@ -2034,6 +2035,97 @@ class NodeRegisterCurrentTests(TestCase):
         self.assertFalse(
             PeriodicTask.objects.filter(name=task_name).exists()
         )
+
+    def test_node_update_task_syncs_with_feature(self):
+        feature, _ = NodeFeature.objects.get_or_create(
+            slug="celery-queue", defaults={"display": "Celery Queue"}
+        )
+        node, _ = Node.objects.update_or_create(
+            mac_address=Node.get_current_mac(),
+            defaults={
+                "hostname": socket.gethostname(),
+                "address": "127.0.0.1",
+                "port": 9330,
+                "base_path": settings.BASE_DIR,
+            },
+        )
+        raw_name = "nodes_update_all_information"
+        task_name = slugify_task_name(raw_name)
+        PeriodicTask.objects.filter(
+            name__in=periodic_task_name_variants(raw_name)
+        ).delete()
+
+        NodeFeatureAssignment.objects.get_or_create(node=node, feature=feature)
+        task = PeriodicTask.objects.get(name=task_name)
+        self.assertTrue(task.enabled)
+
+        NodeFeatureAssignment.objects.filter(node=node, feature=feature).delete()
+        task.refresh_from_db()
+        self.assertFalse(task.enabled)
+
+    def test_update_all_nodes_information_uses_admin_workflow(self):
+        feature, _ = NodeFeature.objects.get_or_create(
+            slug="celery-queue", defaults={"display": "Celery Queue"}
+        )
+        local, _ = Node.objects.update_or_create(
+            mac_address=Node.get_current_mac(),
+            defaults={
+                "hostname": socket.gethostname(),
+                "address": "127.0.0.1",
+                "port": 9340,
+                "base_path": settings.BASE_DIR,
+            },
+        )
+        remote = Node.objects.create(
+            hostname="remote",
+            address="10.0.0.2",
+            port=9341,
+            mac_address="00:11:22:33:44:bb",
+        )
+        NodeFeatureAssignment.objects.get_or_create(node=local, feature=feature)
+
+        admin_stub = MagicMock()
+        admin_stub._refresh_local_information.side_effect = [
+            {"ok": True, "message": "local refreshed"},
+            {"ok": False, "message": "remote unreachable"},
+        ]
+        admin_stub._push_remote_information.side_effect = [
+            {"ok": True, "message": "local skip"},
+            {"ok": True, "message": "remote updated"},
+        ]
+
+        with patch("nodes.tasks.Node.get_local", return_value=local), patch(
+            "nodes.tasks._resolve_node_admin", return_value=admin_stub
+        ):
+            summary = update_all_nodes_information()
+
+        self.assertEqual(admin_stub._refresh_local_information.call_count, 2)
+        self.assertEqual(admin_stub._push_remote_information.call_count, 2)
+        self.assertEqual(summary["total"], 2)
+        self.assertEqual(summary["success"], 1)
+        self.assertEqual(summary["partial"], 1)
+        self.assertEqual(summary["error"], 0)
+
+        statuses = {entry["node_id"]: entry["status"] for entry in summary["results"]}
+        self.assertEqual(statuses[local.pk], "success")
+        self.assertEqual(statuses[remote.pk], "partial")
+
+    def test_update_all_nodes_information_skips_without_feature(self):
+        local = Node.objects.create(
+            hostname="local",
+            address="127.0.0.1",
+            port=9350,
+            mac_address=Node.get_current_mac(),
+        )
+
+        with patch("nodes.tasks.Node.get_local", return_value=local), patch(
+            "nodes.tasks._resolve_node_admin"
+        ) as resolve_admin:
+            summary = update_all_nodes_information()
+
+        resolve_admin.assert_not_called()
+        self.assertTrue(summary.get("skipped"))
+        self.assertEqual(summary["total"], 0)
 
     def test_ocpp_session_report_task_syncs_with_feature(self):
         feature, _ = NodeFeature.objects.get_or_create(
