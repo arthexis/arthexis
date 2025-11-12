@@ -1483,6 +1483,7 @@ class Node(Entity):
                 day_of_week="*",
                 day_of_month="*",
                 month_of_year="*",
+                timezone="UTC",
             )
             PeriodicTask.objects.update_or_create(
                 name=task_name,
