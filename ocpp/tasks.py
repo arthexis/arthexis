@@ -235,7 +235,11 @@ def purge_meter_values() -> int:
 purge_meter_readings = purge_meter_values
 
 
-@shared_task(rate_limit="1/10m")
+# The forwarding task previously used a "1/10m" rate limit that Celery 5.4+ no
+# longer parses (it expects a modifier of "s", "m", or "h").  Using an hourly
+# equivalent keeps the intent of running once every ten minutes while remaining
+# compatible with Celery's parser.
+@shared_task(rate_limit="6/h")
 def push_forwarded_charge_points() -> int:
     """Ensure websocket connections exist for forwarded charge points."""
 

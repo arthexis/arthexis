@@ -6,6 +6,8 @@ import json
 import tests.conftest  # noqa: F401
 from unittest.mock import AsyncMock, Mock, patch
 
+from celery.utils.time import rate as parse_rate
+
 from asgiref.sync import async_to_sync
 from django.test import TestCase
 from django.urls import reverse
@@ -123,6 +125,13 @@ class ForwardingTaskTests(TestCase):
 
         self.assertEqual(second, 0)
         mock_create.assert_not_called()
+
+    def test_push_forwarded_charge_points_rate_limit_is_celery_compatible(self):
+        """The rate limit should parse under Celery's rate helper."""
+
+        limit = push_forwarded_charge_points.rate_limit
+        self.assertEqual(limit, "6/h")
+        self.assertAlmostEqual(parse_rate(limit), 6 / 3600, places=9)
 
     @patch("protocols.models.send_forwarding_metadata", return_value=(True, None))
     @patch("protocols.models.load_local_node_credentials")
