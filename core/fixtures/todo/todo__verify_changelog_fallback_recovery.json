@@ -1,0 +1,15 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "is_seed_data": false,
+      "is_deleted": false,
+      "request": "Verify changelog regeneration fallback recovers missing release notes",
+      "created_on": "2024-01-01T00:00:00Z",
+      "url": "",
+      "request_details": "Before publishing, intentionally remove the most recent release section from CHANGELOG.rst and start the release flow in the Django admin. Confirm the release log records the retry using the Python changelog generator and that the missing release notes are restored automatically. If the fallback cannot rebuild the section, ensure the log includes manual recovery instructions and follow them before completing the release.",
+      "generated_for_version": "",
+      "generated_for_revision": ""
+    }
+  }
+]
