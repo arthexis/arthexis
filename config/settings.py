@@ -235,43 +235,92 @@ def _normalized_request_origin(origin: str) -> tuple[str, str, str | None] | Non
     return scheme, host, port
 
 
-def _candidate_origin_tuples(request, allowed_hosts: list[str]) -> list[tuple[str, str, str | None]]:
-    default_scheme = _get_request_scheme(request)
-    candidates: list[tuple[str, str, str | None]] = []
-    seen: set[tuple[str, str, str | None]] = set()
-
-    def _append_candidate(scheme: str | None, host: str) -> None:
-        if not scheme or not host:
-            return
-        normalized = _normalize_origin_tuple(scheme, host)
-        if normalized is None:
-            return
-        if not _host_is_allowed(host, allowed_hosts):
-            return
-        if normalized in seen:
-            return
-        candidates.append(normalized)
-        seen.add(normalized)
+def _iter_candidate_hosts(request, default_scheme: str) -> list[tuple[str | None, str]]:
+    candidates: list[tuple[str | None, str]] = []
 
     forwarded_header = request.META.get("HTTP_FORWARDED", "")
     for forwarded_entry in _parse_forwarded_header(forwarded_header):
         host = forwarded_entry.get("host", "").strip()
         scheme = _get_request_scheme(request, forwarded_entry)
-        _append_candidate(scheme, host)
+        candidates.append((scheme, host))
 
     forwarded_host = request.META.get("HTTP_X_FORWARDED_HOST", "")
     if forwarded_host:
         host = forwarded_host.split(",")[0].strip()
-        _append_candidate(default_scheme, host)
+        candidates.append((default_scheme, host))
 
     try:
         good_host = request.get_host()
     except DisallowedHost:
         good_host = ""
     if good_host:
-        _append_candidate(default_scheme, good_host)
+        candidates.append((default_scheme, good_host))
 
     return candidates
+
+
+def _normalize_candidate(
+    scheme: str | None,
+    host: str,
+    allowed_hosts: list[str],
+    seen: set[tuple[str, str, str | None]],
+) -> tuple[str, str, str | None] | None:
+    if not scheme or not host:
+        return None
+    normalized = _normalize_origin_tuple(scheme, host)
+    if normalized is None:
+        return None
+    if not _host_is_allowed(host, allowed_hosts):
+        return None
+    if normalized in seen:
+        return None
+    seen.add(normalized)
+    return normalized
+
+
+def _candidate_origin_tuples(
+    request, allowed_hosts: list[str]
+) -> list[tuple[str, str, str | None]]:
+    default_scheme = _get_request_scheme(request)
+    seen: set[tuple[str, str, str | None]] = set()
+    candidates: list[tuple[str, str, str | None]] = []
+
+    for scheme, host in _iter_candidate_hosts(request, default_scheme):
+        normalized = _normalize_candidate(scheme, host, allowed_hosts, seen)
+        if normalized is not None:
+            candidates.append(normalized)
+
+    return candidates
+
+
+def _hosts_share_allowed_subnet(
+    first_host: str, second_host: str, allowed_hosts: list[str]
+) -> bool:
+    first_ip = extract_ip_from_host(first_host)
+    second_ip = extract_ip_from_host(second_host)
+    if not first_ip or not second_ip:
+        return False
+    for pattern in allowed_hosts:
+        try:
+            network = ipaddress.ip_network(pattern)
+        except ValueError:
+            continue
+        if first_ip in network and second_ip in network:
+            return True
+    return False
+
+
+def _origin_in_candidates(
+    origin: tuple[str, str, str | None],
+    request,
+    allowed_hosts: list[str],
+) -> bool:
+    for candidate in _candidate_origin_tuples(request, allowed_hosts):
+        if candidate == origin:
+            return True
+        if _hosts_share_allowed_subnet(candidate[1], origin[1], allowed_hosts):
+            return True
+    return False
 
 
 def _origin_verified_with_subnets(self, request):
@@ -281,21 +330,8 @@ def _origin_verified_with_subnets(self, request):
     if normalized_origin is None:
         return _original_origin_verified(self, request)
 
-    origin_ip = extract_ip_from_host(normalized_origin[1])
-
-    for candidate in _candidate_origin_tuples(request, allowed_hosts):
-        if candidate == normalized_origin:
-            return True
-
-        candidate_ip = extract_ip_from_host(candidate[1])
-        if origin_ip and candidate_ip:
-            for pattern in allowed_hosts:
-                try:
-                    network = ipaddress.ip_network(pattern)
-                except ValueError:
-                    continue
-                if origin_ip in network and candidate_ip in network:
-                    return True
+    if _origin_in_candidates(normalized_origin, request, allowed_hosts):
+        return True
     return _original_origin_verified(self, request)
 
 
@@ -323,21 +359,9 @@ def _check_referer_with_forwarded(self, request):
         return _original_check_referer(self, request)
 
     allowed_hosts = _get_allowed_hosts()
-    referer_ip = extract_ip_from_host(normalized_referer[1])
 
-    for candidate in _candidate_origin_tuples(request, allowed_hosts):
-        if candidate == normalized_referer:
-            return
-
-        candidate_ip = extract_ip_from_host(candidate[1])
-        if referer_ip and candidate_ip:
-            for pattern in allowed_hosts:
-                try:
-                    network = ipaddress.ip_network(pattern)
-                except ValueError:
-                    continue
-                if referer_ip in network and candidate_ip in network:
-                    return
+    if _origin_in_candidates(normalized_referer, request, allowed_hosts):
+        return
 
     return _original_check_referer(self, request)
 
