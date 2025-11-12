@@ -7,6 +7,7 @@
       "crontab": ["0", "3", "*", "1", "*", "UTC"],
       "args": "[]",
       "kwargs": "{}",
+      "date_changed": "2025-01-01T00:00:00Z",
       "enabled": true,
       "one_off": false,
       "description": "Runs renew-certs.sh monthly so the node renews certificates close to expiration."

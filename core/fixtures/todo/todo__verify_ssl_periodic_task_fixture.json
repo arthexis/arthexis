@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Confirm SSL renewal periodic task fixture loads",
+      "created_on": "2025-02-10T00:00:00Z",
+      "url": "/admin/django_celery_beat/periodictask/",
+      "request_details": "1. From the suite directory run 'python manage.py loaddata core/fixtures/celery_periodictask__renew_ssl_certificate.json' and confirm the command completes without errors.\n2. In Django admin, open Celery periodic tasks and verify the 'renew-ssl-certificate' entry exists, is enabled, and targets the monthly 03:00 UTC schedule.\n3. Inspect the task detail page and confirm the Description matches the fixture and the Last modified timestamp updated after reloading the fixture.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.31"
+    }
+  }
+]
