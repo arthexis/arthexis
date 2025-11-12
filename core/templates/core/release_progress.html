@@ -254,17 +254,6 @@
   .todo-ack-card li {
     margin-bottom: 0.5rem;
   }
-  .todo-ack-card .todo-changelog-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    font-weight: 600;
-    text-decoration: none;
-  }
-  .todo-ack-card .todo-changelog-link:hover,
-  .todo-ack-card .todo-changelog-link:focus {
-    text-decoration: underline;
-  }
   .todo-ack-card .todo-ack-empty {
     color: var(--body-quiet-color);
     font-style: italic;
@@ -423,14 +412,7 @@
     {% if has_pending_todos %}
     <div class="todo-ack-card">
       <h2>{% trans 'Release checklist' %}</h2>
-      <p>{% trans 'Confirm every checklist item after reviewing the changelog.' %}</p>
-      {% if changelog_report_url %}
-      <p>
-        <a href="{{ changelog_report_url }}" target="_blank" rel="noopener" class="todo-changelog-link">📄 {% trans 'Review the changelog' %}</a>
-      </p>
-      {% else %}
-      <p class="todo-ack-empty">{% trans 'Changelog report unavailable in this environment.' %}</p>
-      {% endif %}
+      <p>{% trans 'Confirm every checklist item before continuing.' %}</p>
       <form method="get" class="todo-ack-form">
         <input type="hidden" name="step" value="{{ current_step }}">
         {% if todos %}
@@ -452,7 +434,7 @@
         {% endfor %}
         </ul>
         {% else %}
-        <p class="todo-ack-empty">{% trans 'No open TODOs remain. Review the changelog, then continue.' %}</p>
+        <p class="todo-ack-empty">{% trans 'No open TODOs remain. Continue when ready.' %}</p>
         {% endif %}
         <button type="submit" name="ack_todos" value="1" id="continue-btn" disabled>{% trans 'Continue' %}</button>
       </form>

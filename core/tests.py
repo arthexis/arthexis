@@ -1341,8 +1341,7 @@ class ReleaseProcessTests(TestCase):
         ctx: dict[str, object] = {}
 
         try:
-            with mock.patch("core.views._refresh_changelog_once"):
-                core_views._step_check_todos(self.release, ctx, log_path)
+            core_views._step_check_todos(self.release, ctx, log_path)
         finally:
             log_path.unlink(missing_ok=True)
 
@@ -1436,7 +1435,7 @@ class ReleaseProcessTests(TestCase):
                 "status": "M",
                 "status_label": "Modified",
             },
-            {"path": "CHANGELOG.rst", "status": "M", "status_label": "Modified"},
+            {"path": "VERSION", "status": "M", "status_label": "Modified"},
         ]
         subprocess_run.return_value = mock.Mock(returncode=0, stdout="", stderr="")
 
@@ -1444,7 +1443,7 @@ class ReleaseProcessTests(TestCase):
         _step_check_version(self.release, ctx, Path("rel.log"))
 
         add_call = mock.call(
-            ["git", "add", str(fixture_path), "CHANGELOG.rst"],
+            ["git", "add", str(fixture_path), "VERSION"],
             check=True,
         )
         commit_call = mock.call(
@@ -1452,7 +1451,7 @@ class ReleaseProcessTests(TestCase):
                 "git",
                 "commit",
                 "-m",
-                "chore: sync release fixtures and changelog",
+                "chore: update version and fixtures",
             ],
             check=True,
         )
@@ -1465,7 +1464,7 @@ class ReleaseProcessTests(TestCase):
     @mock.patch("core.views._sync_with_origin_main")
     @mock.patch("core.views.subprocess.run")
     @mock.patch("core.views.release_utils._git_clean", return_value=False)
-    def test_step_check_commits_changelog_only(
+    def test_step_check_commits_version_only(
         self,
         git_clean,
         subprocess_run,
@@ -1474,7 +1473,7 @@ class ReleaseProcessTests(TestCase):
         network_available,
     ):
         collect_dirty.return_value = [
-            {"path": "CHANGELOG.rst", "status": "M", "status_label": "Modified"}
+            {"path": "VERSION", "status": "M", "status_label": "Modified"}
         ]
         subprocess_run.return_value = mock.Mock(returncode=0, stdout="", stderr="")
 
@@ -1482,10 +1481,10 @@ class ReleaseProcessTests(TestCase):
         _step_check_version(self.release, ctx, Path("rel.log"))
 
         subprocess_run.assert_any_call(
-            ["git", "add", "CHANGELOG.rst"], check=True
+            ["git", "add", "VERSION"], check=True
         )
         subprocess_run.assert_any_call(
-            ["git", "commit", "-m", "docs: refresh changelog"], check=True
+            ["git", "commit", "-m", "chore: update version"], check=True
         )
         self.assertNotIn("dirty_files", ctx)
 
@@ -1548,7 +1547,6 @@ class ReleaseProcessTests(TestCase):
         )
         if release_fixtures:
             run.assert_any_call(["git", "add", *release_fixtures], check=True)
-        run.assert_any_call(["git", "add", "CHANGELOG.rst"], check=True)
         run.assert_any_call(["git", "add", "VERSION"], check=True)
         run.assert_any_call(["git", "diff", "--cached", "--quiet"], check=False)
         ensure_todo.assert_called_once_with(self.release, previous_version=mock.ANY)
@@ -1994,8 +1992,8 @@ class PackageReleaseFixtureTests(TestCase):
         self.assertTrue(target_one.exists())
         self.assertTrue(target_two.exists())
 
-        self.release_two.changelog = "updated notes"
-        self.release_two.save(update_fields=["changelog"])
+        self.release_two.pypi_url = "https://example.com/pkg"
+        self.release_two.save(update_fields=["pypi_url"])
 
         original_write = Path.write_text
         written_paths: list[Path] = []
@@ -2010,7 +2008,7 @@ class PackageReleaseFixtureTests(TestCase):
         written_set = set(written_paths)
         self.assertNotIn(target_one, written_set)
         self.assertIn(target_two, written_set)
-        self.assertIn("updated notes", target_two.read_text(encoding="utf-8"))
+        self.assertIn("example.com/pkg", target_two.read_text(encoding="utf-8"))
 
     def test_dump_fixture_removes_missing_release_files(self):
         PackageRelease.dump_fixture()

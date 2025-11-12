@@ -4207,7 +4207,7 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
     list_display_links = ("version",)
     actions = ["publish_release", "validate_releases", "test_pypi_connection"]
     change_actions = ["publish_release_action", "test_pypi_connection_action"]
-    changelist_actions = ["edit_changelog", "refresh_from_pypi", "prepare_next_release"]
+    changelist_actions = ["refresh_from_pypi", "prepare_next_release"]
     readonly_fields = ("pypi_url", "github_url", "release_on", "is_current", "revision")
     fields = (
         "package",
@@ -4230,12 +4230,6 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         return obj.revision_short
 
     revision_short.short_description = "revision"
-
-    def edit_changelog(self, request, queryset=None):
-        return redirect("admin:system-changelog-report")
-
-    edit_changelog.label = "Edit Changelog"
-    edit_changelog.short_description = "Edit Changelog"
 
     def refresh_from_pypi(self, request, queryset):
         package = Package.objects.filter(is_active=True).first()
