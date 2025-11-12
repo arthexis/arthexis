@@ -60,7 +60,7 @@ class AdminDocsModelGroupsTests(TestCase):
 
         location_link = reverse(
             "django-admindocs-models-detail",
-            kwargs={"app_label": "ocpp", "model_name": "location"},
+            kwargs={"app_label": "core", "model_name": "location"},
         )
         rfid_link = reverse(
             "django-admindocs-models-detail",
