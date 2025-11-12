@@ -1,8 +1,13 @@
 Changelog
 =========
 
-Unreleased
-----------
+Unreleased (0.1.32)
+-------------------
+
+- No changes yet.
+
+v0.1.31 (2025-11-11)
+--------------------
 
 - c697ad08 chore: update version and fixtures
 - 5bf7c249 Ensure node update task uses UTC schedule (#2827)
