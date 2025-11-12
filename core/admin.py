@@ -1789,6 +1789,7 @@ class UserPhoneNumberInline(admin.TabularInline):
     fields = ("number", "priority")
 
 
+@admin.register(User)
 class UserAdmin(UserDatumAdminMixin, DjangoUserAdmin):
     form = UserChangeRFIDForm
     fieldsets = _append_operate_as(DjangoUserAdmin.fieldsets)

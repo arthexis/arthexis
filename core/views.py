@@ -772,6 +772,19 @@ def _generate_changelog_with_python(log_path: Path) -> None:
     _append_log(log_path, "Regenerated CHANGELOG.rst using Python fallback")
 
 
+def _log_missing_release_instructions(log_path: Path, version: str) -> None:
+    instructions = "".join(
+        (
+            "Manual changelog update required for v",
+            f"{version}: ensure the release commit is merged into main, ",
+            "then rerun `scripts/generate-changelog.sh v",
+            f"{version}`. If the commit is unavailable, add the release notes ",
+            "to CHANGELOG.rst manually and commit the result.",
+        )
+    )
+    _append_log(log_path, instructions)
+
+
 def _todo_blocks_publish(todo: Todo, release: PackageRelease) -> bool:
     """Return ``True`` when ``todo`` should block the release workflow."""
 
@@ -1011,12 +1024,40 @@ def _refresh_changelog_once(ctx, log_path: Path) -> None:
                     log_path,
                     f"Changelog missing latest release v{latest_version}",
                 )
-                raise RuntimeError(
-                    _(
-                        "The changelog is missing notes for the latest release (v%(version)s)."
+                if not ctx.get("changelog_python_retry"):
+                    ctx["changelog_python_retry"] = True
+                    _append_log(
+                        log_path,
+                        f"Retrying changelog generation for v{latest_version} using Python fallback",
                     )
-                    % {"version": latest_version}
-                )
+                    _generate_changelog_with_python(log_path)
+                    text = changelog_path.read_text(encoding="utf-8")
+                    if changelog_utils.changelog_has_release_section(
+                        text, latest_version
+                    ):
+                        _append_log(
+                            log_path,
+                            f"Recovered changelog entry for v{latest_version} after fallback",
+                        )
+                        ctx.pop("changelog_python_retry", None)
+                    else:
+                        _log_missing_release_instructions(log_path, latest_version)
+                        raise RuntimeError(
+                            _(
+                                "The changelog is missing notes for the latest release (v%(version)s). "
+                                "Ensure the release commit has been merged and regenerate the changelog."
+                            )
+                            % {"version": latest_version}
+                        )
+                else:
+                    _log_missing_release_instructions(log_path, latest_version)
+                    raise RuntimeError(
+                        _(
+                            "The changelog is missing notes for the latest release (v%(version)s). "
+                            "Ensure the release commit has been merged and regenerate the changelog."
+                        )
+                        % {"version": latest_version}
+                    )
 
     staged_paths: list[str] = []
     if changelog_path.exists():

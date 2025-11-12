@@ -148,3 +148,69 @@ def test_ssl_renewal_fixture_loads_with_date_changed():
     record["crontab"] = schedule
     task = PeriodicTask.objects.create(**record)
     assert task.date_changed is not None
+
+
+def test_periodic_task_fixture_signal_handles_legacy_names():
+    PeriodicTask.objects.filter(name__icontains="renew").delete()
+    schedule, _ = CrontabSchedule.objects.get_or_create(
+        minute="0",
+        hour="3",
+        day_of_week="*",
+        day_of_month="1",
+        month_of_year="*",
+        timezone="UTC",
+    )
+    legacy = PeriodicTask.objects.create(
+        name="renew_ssl_certificate",
+        task="core.tasks.renew_ssl_certificate",
+        crontab=schedule,
+    )
+
+    duplicate = PeriodicTask(
+        name="renew-ssl-certificate",
+        task="core.tasks.renew_ssl_certificate",
+        crontab=schedule,
+        description="fixture update",
+    )
+    duplicate.save()
+
+    legacy.refresh_from_db()
+    assert legacy.pk == duplicate.pk
+    assert legacy.name == "renew-ssl-certificate"
+    assert legacy.description == "fixture update"
+
+
+def test_periodic_task_fixture_loaddata_is_idempotent():
+    PeriodicTask.objects.filter(name__icontains="renew").delete()
+    fixture_path = (
+        Path(settings.BASE_DIR)
+        / "core"
+        / "fixtures"
+        / "celery_periodictask__renew_ssl_certificate.json"
+    )
+
+    schedule, _ = CrontabSchedule.objects.get_or_create(
+        minute="0",
+        hour="3",
+        day_of_week="*",
+        day_of_month="1",
+        month_of_year="*",
+        timezone="UTC",
+    )
+
+    payload = json.loads(fixture_path.read_text())
+    record = payload[0]["fields"].copy()
+    record["crontab"] = schedule
+
+    PeriodicTask.objects.create(**record)
+
+    PeriodicTask.objects.filter(name="renew-ssl-certificate").update(enabled=False)
+
+    reloaded = payload[0]["fields"].copy()
+    reloaded["crontab"] = schedule
+    PeriodicTask(**reloaded).save()
+
+    refreshed = PeriodicTask.objects.get(name="renew-ssl-certificate")
+    assert refreshed.enabled is True
+    assert refreshed.crontab == schedule
+    assert PeriodicTask.objects.filter(name="renew-ssl-certificate").count() == 1
