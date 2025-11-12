@@ -12,6 +12,7 @@ import urllib.request
 from celery import shared_task
 from core import github_issues
 from core.auto_upgrade_failover import clear_failover_lock, write_failover_lock
+from django.conf import settings
 from django.db import DatabaseError
 from django.utils import timezone
 
@@ -79,6 +80,17 @@ def _auto_upgrade_log_path(base_dir: Path) -> Path:
     log_dir = base_dir / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     return log_dir / "auto-upgrade.log"
+
+
+def _project_base_dir() -> Path:
+    """Return the filesystem base directory for runtime operations."""
+
+    base_dir = getattr(settings, "BASE_DIR", None)
+    if not base_dir:
+        return Path(__file__).resolve().parent.parent
+    if isinstance(base_dir, Path):
+        return base_dir
+    return Path(str(base_dir))
 
 
 def _append_auto_upgrade_log(base_dir: Path, message: str) -> None:
@@ -467,7 +479,7 @@ def _shares_stable_series(local: str, remote: str) -> bool:
 @shared_task
 def check_github_updates(channel_override: str | None = None) -> None:
     """Check the GitHub repo for updates and upgrade if needed."""
-    base_dir = Path(__file__).resolve().parent.parent
+    base_dir = _project_base_dir()
     mode_file = base_dir / "locks" / "auto_upgrade.lck"
     mode = "version"
     reset_network_failures = True
@@ -774,7 +786,7 @@ def verify_auto_upgrade_health(attempt: int = 1) -> bool | None:
     revision so future upgrade attempts skip it.
     """
 
-    base_dir = Path(__file__).resolve().parent.parent
+    base_dir = _project_base_dir()
     url = _resolve_service_url(base_dir)
     request = urllib.request.Request(
         url,
