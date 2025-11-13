@@ -4,8 +4,8 @@
     "fields": {
       "request": "Manual QA: Verify AWG zap response easter egg",
       "created_on": "2024-01-01T00:00:00Z",
-      "url": "/awg/zapped/",
-      "request_details": "Open the AWG calculator and submit any numeric field with the keyword 'zap' (variations with spaces or special characters should also work). Confirm the form redirects to the playful zap page, displays the message \"Ouch! I've been zapped!! Now it's my turn...\", and allows returning to the calculator.",
+      "url": "/awg/",
+      "request_details": "Open the AWG calculator from the Router module and confirm the navigation pills do not list the 'Zapped' easter egg. Submit any numeric field with the keyword 'zap' (variations with spaces or special characters should also work). Confirm the form redirects to the playful zap page, displays the message \"Ouch! I've been zapped!! Now it's my turn...\", and allows returning to the calculator. Attempt to visit /awg/zapped/ directly afterward and confirm the page redirects back to the calculator.",
       "done_on": null,
       "is_deleted": false,
       "version": "0.1.32"
