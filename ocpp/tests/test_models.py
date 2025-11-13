@@ -13,6 +13,7 @@ if str(ROOT) not in sys.path:
 import tests.conftest  # noqa: F401
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ValidationError
 from django.db.models.deletion import ProtectedError
 from django.test import TestCase
@@ -257,6 +258,91 @@ class ChargerConnectorLabelTests(TestCase):
 
     def test_letter_conversion_handles_multiple_cycles(self):
         self.assertEqual(Charger.connector_letter_from_value(27), "AA")
+
+
+class ChargerVisibilityTests(TestCase):
+    @classmethod
+    def setUpTestData(cls):
+        user_model = get_user_model()
+
+        cls.owner_user = user_model.objects.create_user(
+            username="owner",
+            password="secret-owner",
+            email="owner@example.com",
+        )
+        cls.staff_user = user_model.objects.create_user(
+            username="staff",
+            password="secret-staff",
+            email="staff@example.com",
+            is_staff=True,
+        )
+        cls.group_member = user_model.objects.create_user(
+            username="group-member",
+            password="secret-group",
+            email="group@example.com",
+        )
+        cls.superuser = user_model.objects.create_superuser(
+            username="supervisor",
+            password="secret-super",
+            email="super@example.com",
+        )
+
+        cls.security_group = SecurityGroup.objects.create(name="Maintenance")
+        cls.security_group.user_set.add(cls.group_member)
+
+        cls.public_charger = Charger.objects.create(
+            charger_id="PUB-1",
+            public_display=True,
+        )
+        cls.user_owned_charger = Charger.objects.create(
+            charger_id="USR-1",
+            public_display=True,
+        )
+        cls.user_owned_charger.owner_users.add(cls.owner_user)
+
+        cls.group_owned_charger = Charger.objects.create(
+            charger_id="GRP-1",
+            public_display=True,
+        )
+        cls.group_owned_charger.owner_groups.add(cls.security_group)
+
+    def test_has_owner_scope_tracks_ownership_assignments(self):
+        self.assertFalse(self.public_charger.has_owner_scope())
+        self.assertTrue(self.user_owned_charger.has_owner_scope())
+        self.assertTrue(self.group_owned_charger.has_owner_scope())
+
+    def test_is_visible_to_follows_query_rules(self):
+        anonymous = AnonymousUser()
+        test_cases = [
+            (anonymous, {"PUB-1"}),
+            (self.staff_user, {"PUB-1"}),
+            (self.owner_user, {"PUB-1", "USR-1"}),
+            (self.group_member, {"PUB-1", "GRP-1"}),
+            (self.superuser, {"PUB-1", "USR-1", "GRP-1"}),
+        ]
+
+        chargers = [
+            self.public_charger,
+            self.user_owned_charger,
+            self.group_owned_charger,
+        ]
+
+        for user, expected_visible in test_cases:
+            with self.subTest(user=getattr(user, "username", "anonymous")):
+                queryset_ids = set(
+                    Charger.visible_for_user(user).values_list(
+                        "charger_id", flat=True
+                    )
+                )
+                self.assertSetEqual(queryset_ids, expected_visible)
+
+                for charger in chargers:
+                    with self.subTest(charger=charger.charger_id):
+                        should_be_visible = charger.charger_id in expected_visible
+                        self.assertEqual(
+                            charger.is_visible_to(user),
+                            should_be_visible,
+                        )
 
 
 class ChargerSerialValidationTests(TestCase):
