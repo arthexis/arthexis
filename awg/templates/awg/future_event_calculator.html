@@ -1,0 +1,129 @@
+{% extends "pages/base.html" %}
+{% load i18n tz %}
+{% block title %}{% trans "Future Event Calculator" %}{% endblock %}
+{% block content %}
+<div class="container py-4">
+  <h1 class="text-center mb-4">{% trans "Future Event Calculator" %}</h1>
+  <style>
+    .countdown-wrapper {
+      max-width: 960px;
+      margin: 0 auto;
+      width: 100%;
+    }
+    .countdown-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 1.25rem;
+      width: 100%;
+    }
+    .countdown-segment {
+      background: var(--bs-body-bg);
+      border: 1px solid rgba(0, 0, 0, 0.1);
+      border-radius: 1rem;
+      box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.08);
+      padding: 1.5rem 1rem;
+      text-align: center;
+    }
+    .countdown-value {
+      font-size: clamp(3rem, 9vw, 5.5rem);
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      line-height: 1.1;
+    }
+    .countdown-label {
+      font-size: clamp(0.85rem, 2.5vw, 1.2rem);
+      text-transform: uppercase;
+      letter-spacing: 0.2em;
+      color: var(--bs-secondary-color);
+      margin-top: 0.75rem;
+    }
+    .countdown-body {
+      max-width: 100%;
+    }
+    @media (max-width: 576px) {
+      .countdown-wrapper {
+        padding: 0 0.5rem;
+      }
+    }
+  </style>
+  {% if event %}
+  <div class="countdown-wrapper d-flex flex-column align-items-center gap-4">
+    <div class="text-center">
+      <h2 class="fw-bold">{{ event.title }}</h2>
+      {% if event.body %}
+      <p class="lead countdown-body">{{ event.body|linebreaksbr }}</p>
+      {% endif %}
+      <p class="text-muted">{% blocktrans %}Scheduled for {{ event.scheduled_for|localtime }}{% endblocktrans %}</p>
+    </div>
+    <div id="countdown-container" class="countdown-grid" role="timer" aria-live="polite">
+      <div class="countdown-segment">
+        <div id="countdown-days" class="countdown-value">00</div>
+        <div class="countdown-label">{% trans "Days" %}</div>
+      </div>
+      <div class="countdown-segment">
+        <div id="countdown-hours" class="countdown-value">00</div>
+        <div class="countdown-label">{% trans "Hours" %}</div>
+      </div>
+      <div class="countdown-segment">
+        <div id="countdown-minutes" class="countdown-value">00</div>
+        <div class="countdown-label">{% trans "Minutes" %}</div>
+      </div>
+      <div class="countdown-segment">
+        <div id="countdown-seconds" class="countdown-value">00</div>
+        <div class="countdown-label">{% trans "Seconds" %}</div>
+      </div>
+    </div>
+    <p class="text-center text-muted">{% trans "The countdown updates automatically in real time." %}</p>
+  </div>
+  {{ target_iso|json_script:"countdown-target" }}
+  <script>
+    (function () {
+      const data = document.getElementById("countdown-target");
+      if (!data) {
+        return;
+      }
+      let targetString;
+      try {
+        targetString = JSON.parse(data.textContent);
+      } catch (err) {
+        console.error("Failed to parse countdown target", err);
+        return;
+      }
+      const target = new Date(targetString);
+      if (Number.isNaN(target.getTime())) {
+        return;
+      }
+      const segments = {
+        days: document.getElementById("countdown-days"),
+        hours: document.getElementById("countdown-hours"),
+        minutes: document.getElementById("countdown-minutes"),
+        seconds: document.getElementById("countdown-seconds"),
+      };
+      function format(value) {
+        return String(value).padStart(2, "0");
+      }
+      function update() {
+        const now = new Date();
+        let diff = Math.max(0, target.getTime() - now.getTime());
+        const totalSeconds = Math.floor(diff / 1000);
+        const days = Math.floor(totalSeconds / 86400);
+        const hours = Math.floor((totalSeconds % 86400) / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const seconds = totalSeconds % 60;
+        segments.days.textContent = format(days);
+        segments.hours.textContent = format(hours);
+        segments.minutes.textContent = format(minutes);
+        segments.seconds.textContent = format(seconds);
+      }
+      update();
+      setInterval(update, 1000);
+    })();
+  </script>
+  {% else %}
+  <div class="text-center py-5">
+    <p class="display-6 fw-semibold mb-3">{% trans "No upcoming events" %}</p>
+    <p class="text-muted mb-0">{% trans "Add a countdown timer in Horologia to see it here." %}</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

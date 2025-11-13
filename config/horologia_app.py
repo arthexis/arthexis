@@ -17,6 +17,8 @@ class HorologiaConfig(BaseBeatConfig):
         from django_celery_beat import admin as celery_admin
         from django_celery_beat.models import IntervalSchedule, PeriodicTask
 
+        from core.models import HorologiaCountdownTimer
+
         class HorologiaPeriodicTaskAdmin(celery_admin.PeriodicTaskAdmin):
             """Patch the periodic task changelist."""
 
@@ -61,8 +63,49 @@ class HorologiaConfig(BaseBeatConfig):
                     last_run_at = timezone.localtime(last_run_at)
                 return last_run_at.replace(microsecond=0).isoformat()
 
+        class CountdownTimerAdmin(admin.ModelAdmin):
+            list_display = ("title", "scheduled_for", "is_upcoming")
+            search_fields = ("title", "body")
+            ordering = ("scheduled_for", "title")
+            date_hierarchy = "scheduled_for"
+            list_filter = ("scheduled_for",)
+            readonly_fields = (
+                "created_on",
+                "updated_on",
+                "is_seed_data",
+                "is_user_data",
+                "is_deleted",
+            )
+            fieldsets = (
+                (None, {"fields": ("title", "body", "scheduled_for")}),
+                (
+                    _("Record details"),
+                    {
+                        "fields": (
+                            "created_on",
+                            "updated_on",
+                            "is_seed_data",
+                            "is_user_data",
+                            "is_deleted",
+                        ),
+                        "classes": ("collapse",),
+                    },
+                ),
+            )
+
+            def get_queryset(self, request):  # pragma: no cover - simple override
+                return self.model.all_objects.all()
+
+            @admin.display(boolean=True, description=_("Is upcoming"))
+            def is_upcoming(self, obj):
+                return obj.is_upcoming
+
         try:
             admin.site.unregister(PeriodicTask)
         except NotRegistered:  # pragma: no cover - defensive
             pass
         admin.site.register(PeriodicTask, HorologiaPeriodicTaskAdmin)
+        try:
+            admin.site.register(HorologiaCountdownTimer, CountdownTimerAdmin)
+        except admin.sites.AlreadyRegistered:  # pragma: no cover - idempotent guard
+            pass

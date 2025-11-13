@@ -4662,6 +4662,75 @@ def validate_relative_url(value: str) -> None:
         raise ValidationError("URL must be relative")
 
 
+class CountdownTimerManager(EntityManager):
+    """Manager with helpers for countdown timers."""
+
+    def upcoming(self):
+        """Return timers scheduled for the future ordered by start time."""
+
+        now = timezone.now()
+        return (
+            super()
+            .get_queryset()
+            .filter(scheduled_for__gte=now)
+            .order_by("scheduled_for", "pk")
+        )
+
+
+class CountdownTimer(Entity):
+    """Represents a dated event used by the countdown calculator."""
+
+    title = models.CharField(max_length=200)
+    body = models.TextField(blank=True, default="")
+    scheduled_for = models.DateTimeField()
+    created_on = models.DateTimeField(auto_now_add=True)
+    updated_on = models.DateTimeField(auto_now=True)
+
+    objects = CountdownTimerManager()
+
+    class Meta:
+        ordering = ("scheduled_for", "title", "pk")
+        verbose_name = _("Countdown Timer")
+        verbose_name_plural = _("Countdown Timers")
+
+    def clean(self):
+        super().clean()
+        if self.scheduled_for is None:
+            return
+        if self.scheduled_for <= timezone.now():
+            raise ValidationError(
+                {
+                    "scheduled_for": _(
+                        "Countdown timers must target a future date and time."
+                    )
+                }
+            )
+
+    @property
+    def is_upcoming(self) -> bool:
+        """Return ``True`` when the timer targets a future moment."""
+
+        return self.scheduled_for >= timezone.now()
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
+
+    def natural_key(self):  # pragma: no cover - simple representation
+        return (self.title, self.scheduled_for.isoformat())
+
+    def __str__(self):  # pragma: no cover - human readable
+        return self.title
+
+
+class HorologiaCountdownTimer(CountdownTimer):
+    class Meta:
+        proxy = True
+        app_label = "django_celery_beat"
+        verbose_name = _("Countdown Timer")
+        verbose_name_plural = _("Countdown Timers")
+
+
 class TodoManager(EntityManager):
     def get_by_natural_key(self, request: str):
         return self.get(request=request)

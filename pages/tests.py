@@ -2474,6 +2474,7 @@ class PowerNavTests(TestCase):
         self.assertEqual(power_module.menu_label.upper(), "CALCULATORS")
         landing_labels = {landing.label for landing in power_module.enabled_landings}
         self.assertIn("AWG Cable Calculator", landing_labels)
+        self.assertIn("Future Event Calculator", landing_labels)
 
     def test_manual_pill_label(self):
         resp = self.client.get(reverse("pages:index"))
@@ -2498,6 +2499,7 @@ class PowerNavTests(TestCase):
         self.assertIsNotNone(power_module)
         landing_labels = {landing.label for landing in power_module.enabled_landings}
         self.assertIn("AWG Cable Calculator", landing_labels)
+        self.assertIn("Future Event Calculator", landing_labels)
         self.assertIn("Energy Tariff Calculator", landing_labels)
 
     def test_locked_landing_shows_lock_icon(self):
