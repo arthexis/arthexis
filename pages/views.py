@@ -2,6 +2,7 @@ import base64
 import csv
 import logging
 import mimetypes
+from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
 import datetime
@@ -1601,112 +1602,13 @@ def client_report(request):
     report_rows = None
     report_summary_rows: list[dict[str, Any]] = []
     if request.method == "POST":
-        if not request.user.is_authenticated:
-            form.is_valid()  # Run validation to surface field errors alongside auth error.
-            form.add_error(
-                None, _("You must log in to generate consumer reports."),
-            )
-        elif form.is_valid():
-            throttle_seconds = getattr(settings, "CLIENT_REPORT_THROTTLE_SECONDS", 60)
-            throttle_keys = []
-            if request.user.is_authenticated:
-                throttle_keys.append(f"client-report:user:{request.user.pk}")
-            remote_addr = request.META.get("HTTP_X_FORWARDED_FOR")
-            if remote_addr:
-                remote_addr = remote_addr.split(",")[0].strip()
-            remote_addr = remote_addr or request.META.get("REMOTE_ADDR")
-            if remote_addr:
-                throttle_keys.append(f"client-report:ip:{remote_addr}")
-
-            added_keys = []
-            blocked = False
-            for key in throttle_keys:
-                if cache.add(key, timezone.now(), throttle_seconds):
-                    added_keys.append(key)
-                else:
-                    blocked = True
-                    break
-
-            if blocked:
-                for key in added_keys:
-                    cache.delete(key)
-                form.add_error(
-                    None,
-                    _(
-                        "Consumer reports can only be generated periodically. Please wait before trying again."
-                    ),
-                )
-            else:
-                owner = form.cleaned_data.get("owner")
-                if not owner and request.user.is_authenticated:
-                    owner = request.user
-                enable_emails = form.cleaned_data.get("enable_emails", False)
-                disable_emails = not enable_emails
-                recipients = (
-                    form.cleaned_data.get("destinations") if enable_emails else []
-                )
-                chargers = list(form.cleaned_data.get("chargers") or [])
-                language = form.cleaned_data.get("language")
-                title = form.cleaned_data.get("title")
-                report = ClientReport.generate(
-                    form.cleaned_data["start"],
-                    form.cleaned_data["end"],
-                    owner=owner,
-                    recipients=recipients,
-                    disable_emails=disable_emails,
-                    chargers=chargers,
-                    language=language,
-                    title=title,
-                )
-                report.store_local_copy()
-                if chargers:
-                    report.chargers.set(chargers)
-                if enable_emails and recipients:
-                    delivered = report.send_delivery(
-                        to=recipients,
-                        cc=[],
-                        outbox=ClientReport.resolve_outbox_for_owner(owner),
-                        reply_to=ClientReport.resolve_reply_to_for_owner(owner),
-                    )
-                    if delivered:
-                        report.recipients = delivered
-                        report.save(update_fields=["recipients"])
-                        messages.success(
-                            request,
-                            _("Consumer report emailed to the selected recipients."),
-                        )
-                recurrence = form.cleaned_data.get("recurrence")
-                if recurrence and recurrence != ClientReportSchedule.PERIODICITY_NONE:
-                    schedule = ClientReportSchedule.objects.create(
-                        owner=owner,
-                        created_by=request.user if request.user.is_authenticated else None,
-                        periodicity=recurrence,
-                        email_recipients=recipients,
-                        disable_emails=disable_emails,
-                        language=language,
-                        title=title,
-                    )
-                    if chargers:
-                        schedule.chargers.set(chargers)
-                    report.schedule = schedule
-                    report.save(update_fields=["schedule"])
-                    messages.success(
-                        request,
-                        _(
-                            "Consumer report schedule created; future reports will be generated automatically."
-                        ),
-                    )
-                if disable_emails:
-                    messages.success(
-                        request,
-                        _(
-                            "Consumer report generated. The download will begin automatically."
-                        ),
-                    )
-                    redirect_url = f"{reverse('pages:client-report')}?download={report.pk}"
-                    return HttpResponseRedirect(redirect_url)
-                report_rows = report.rows_for_display
-                report_summary_rows = ClientReport.build_evcs_summary_rows(report_rows)
+        post_result = _process_client_report_post(request, form)
+        if post_result.response is not None:
+            return post_result.response
+        report = post_result.report
+        schedule = post_result.schedule
+        report_rows = post_result.report_rows
+        report_summary_rows = post_result.report_summary_rows
     download_url = None
     download_param = request.GET.get("download")
     if download_param:
@@ -1751,6 +1653,194 @@ def client_report(request):
         "report_view_mode": selected_view_mode,
     }
     return render(request, "pages/client_report.html", context)
+
+
+@dataclass
+class _ClientReportPostResult:
+    report: ClientReport | None = None
+    schedule: ClientReportSchedule | None = None
+    report_rows: list[dict[str, Any]] | None = None
+    report_summary_rows: list[dict[str, Any]] = field(default_factory=list)
+    response: HttpResponse | None = None
+
+
+def _process_client_report_post(
+    request, form: "ClientReportForm"
+) -> _ClientReportPostResult:
+    if not request.user.is_authenticated:
+        # Run validation to surface field errors alongside auth error.
+        form.is_valid()
+        form.add_error(None, _("You must log in to generate consumer reports."))
+        return _ClientReportPostResult()
+
+    if not form.is_valid():
+        return _ClientReportPostResult()
+
+    throttle_error = _enforce_client_report_throttle(request)
+    if throttle_error:
+        form.add_error(None, throttle_error)
+        return _ClientReportPostResult()
+
+    return _generate_client_report_response(request, form)
+
+
+def _enforce_client_report_throttle(request) -> str | None:
+    throttle_seconds = getattr(settings, "CLIENT_REPORT_THROTTLE_SECONDS", 60)
+    if not throttle_seconds:
+        return None
+
+    throttle_keys = _build_client_report_throttle_keys(request)
+    added_keys: list[str] = []
+    for key in throttle_keys:
+        if cache.add(key, timezone.now(), throttle_seconds):
+            added_keys.append(key)
+            continue
+        for added_key in added_keys:
+            cache.delete(added_key)
+        return _(
+            "Consumer reports can only be generated periodically. Please wait before trying again."
+        )
+    return None
+
+
+def _build_client_report_throttle_keys(request) -> list[str]:
+    keys: list[str] = []
+    if request.user.is_authenticated:
+        keys.append(f"client-report:user:{request.user.pk}")
+
+    remote_addr = request.META.get("HTTP_X_FORWARDED_FOR")
+    if remote_addr:
+        remote_addr = remote_addr.split(",")[0].strip()
+    remote_addr = remote_addr or request.META.get("REMOTE_ADDR")
+    if remote_addr:
+        keys.append(f"client-report:ip:{remote_addr}")
+    return keys
+
+
+def _generate_client_report_response(
+    request, form: "ClientReportForm"
+) -> _ClientReportPostResult:
+    owner = _resolve_client_report_owner(request, form)
+    enable_emails = form.cleaned_data.get("enable_emails", False)
+    disable_emails = not enable_emails
+    recipients = form.cleaned_data.get("destinations") if enable_emails else []
+    chargers = list(form.cleaned_data.get("chargers") or [])
+    language = form.cleaned_data.get("language")
+    title = form.cleaned_data.get("title")
+
+    report = ClientReport.generate(
+        form.cleaned_data["start"],
+        form.cleaned_data["end"],
+        owner=owner,
+        recipients=recipients,
+        disable_emails=disable_emails,
+        chargers=chargers,
+        language=language,
+        title=title,
+    )
+    report.store_local_copy()
+    if chargers:
+        report.chargers.set(chargers)
+
+    if enable_emails and recipients:
+        _deliver_client_report_email(request, report, owner, recipients)
+
+    schedule = _maybe_create_client_report_schedule(
+        request,
+        report,
+        owner,
+        form.cleaned_data.get("recurrence"),
+        recipients,
+        disable_emails,
+        language,
+        title,
+        chargers,
+    )
+
+    if disable_emails:
+        messages.success(
+            request,
+            _("Consumer report generated. The download will begin automatically."),
+        )
+        redirect_url = f"{reverse('pages:client-report')}?download={report.pk}"
+        return _ClientReportPostResult(
+            report=report,
+            schedule=schedule,
+            response=HttpResponseRedirect(redirect_url),
+        )
+
+    report_rows = report.rows_for_display
+    report_summary_rows = ClientReport.build_evcs_summary_rows(report_rows)
+    return _ClientReportPostResult(
+        report=report,
+        schedule=schedule,
+        report_rows=report_rows,
+        report_summary_rows=report_summary_rows,
+    )
+
+
+def _resolve_client_report_owner(request, form: "ClientReportForm"):
+    owner = form.cleaned_data.get("owner")
+    if not owner and request.user.is_authenticated:
+        return request.user
+    return owner
+
+
+def _deliver_client_report_email(
+    request,
+    report: ClientReport,
+    owner,
+    recipients: list[str],
+) -> None:
+    delivered = report.send_delivery(
+        to=recipients,
+        cc=[],
+        outbox=ClientReport.resolve_outbox_for_owner(owner),
+        reply_to=ClientReport.resolve_reply_to_for_owner(owner),
+    )
+    if delivered:
+        report.recipients = delivered
+        report.save(update_fields=["recipients"])
+        messages.success(
+            request,
+            _("Consumer report emailed to the selected recipients."),
+        )
+
+
+def _maybe_create_client_report_schedule(
+    request,
+    report: ClientReport,
+    owner,
+    recurrence,
+    recipients,
+    disable_emails: bool,
+    language,
+    title,
+    chargers: list[Any],
+) -> ClientReportSchedule | None:
+    if not recurrence or recurrence == ClientReportSchedule.PERIODICITY_NONE:
+        return None
+
+    schedule = ClientReportSchedule.objects.create(
+        owner=owner,
+        created_by=request.user if request.user.is_authenticated else None,
+        periodicity=recurrence,
+        email_recipients=recipients,
+        disable_emails=disable_emails,
+        language=language,
+        title=title,
+    )
+    if chargers:
+        schedule.chargers.set(chargers)
+    report.schedule = schedule
+    report.save(update_fields=["schedule"])
+    messages.success(
+        request,
+        _(
+            "Consumer report schedule created; future reports will be generated automatically."
+        ),
+    )
+    return schedule
 
 
 @login_required
