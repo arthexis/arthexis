@@ -2,15 +2,18 @@
   {
     "model": "core.packagerelease",
     "fields": {
-      "is_seed_data": true,
+      "is_seed_data": false,
       "is_user_data": false,
       "is_deleted": false,
       "package": [
         "arthexis"
       ],
-      "release_manager": null,
-      "version": "1.0",
-      "revision": "",
+      "release_manager": [
+        "arthexis",
+        "arthexis"
+      ],
+      "version": "0.1.33",
+      "revision": "c611331c888401d4abbfe5829df407f3354e54ea",
       "severity": "normal",
       "pypi_url": "",
       "github_url": "",
