@@ -75,3 +75,17 @@ class TodoRefreshActiveManualTaskTests(TestCase):
         self.assertIn(todo.pk, [item.pk for item in active])
         todo.refresh_from_db()
         self.assertIsNone(todo.stale_on)
+
+
+class TodoDefaultVersionPatchTests(SimpleTestCase):
+    @mock.patch.object(Todo, "_resolve_local_version_label", return_value="0.1.32")
+    def test_default_version_targets_next_patch(self, _resolve_local_version_label):
+        self.assertEqual(Todo._default_version(), "0.1.33")
+
+    @mock.patch.object(Todo, "_resolve_local_version_label", return_value="0.1.32+")
+    def test_default_version_strips_trailing_plus(self, _resolve_local_version_label):
+        self.assertEqual(Todo._default_version(), "0.1.33")
+
+    @mock.patch.object(Todo, "_resolve_local_version_label", return_value="custom")
+    def test_default_version_preserves_invalid_label(self, _resolve_local_version_label):
+        self.assertEqual(Todo._default_version(), "custom")

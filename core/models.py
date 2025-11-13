@@ -5014,8 +5014,34 @@ class Todo(Entity):
         self.done_username = username_value
 
     @staticmethod
-    def _default_version() -> str:
-        """Return the local version label used for TODO tracking."""
+    def _next_patch_label(label: str) -> str:
+        """Return the next patch version for the provided label."""
+
+        trimmed = (label or "").strip()
+        if not trimmed:
+            return ""
+
+        candidate = trimmed
+        if candidate.endswith("+"):
+            candidate = candidate.rstrip("+").strip()
+        if not candidate:
+            return ""
+
+        try:
+            parsed = Version(candidate)
+        except InvalidVersion:
+            return trimmed
+
+        release = parsed.release
+        major = release[0] if release else 0
+        minor = release[1] if len(release) > 1 else 0
+        micro = release[2] if len(release) > 2 else 0
+        next_patch = micro + 1
+        return f"{major}.{minor}.{next_patch}"
+
+    @staticmethod
+    def _resolve_local_version_label() -> str:
+        """Return the raw local version label without adjustments."""
 
         try:  # pragma: no cover - defensive import guard
             from nodes.models import Node  # type: ignore
@@ -5040,6 +5066,12 @@ class Todo(Entity):
             version_value = ""
 
         return version_value
+
+    @classmethod
+    def _default_version(cls) -> str:
+        """Return the local version label used for TODO tracking."""
+
+        return cls._next_patch_label(cls._resolve_local_version_label())
 
     @classmethod
     def default_version(cls) -> str:
