@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import sys
+from collections import deque
+from decimal import Decimal
 from pathlib import Path
 from unittest.mock import patch
 
@@ -21,6 +23,7 @@ from django.utils import timezone
 
 from core.models import EnergyTariff, Location, Reference, SecurityGroup
 
+from ocpp import store
 from ocpp.models import (
     Charger,
     ChargerConfiguration,
@@ -215,6 +218,79 @@ class ChargerReferenceTests(TestCase):
 
             charger.refresh_from_db()
             self.assertIsNone(charger.reference)
+
+
+class ChargerPurgeTests(TestCase):
+    def test_purge_clears_related_data_and_store_caches(self):
+        charger = Charger.objects.create(charger_id="SERIAL-1", connector_id=1)
+        transaction = charger.transactions.create(
+            start_time=timezone.now(),
+            stop_time=timezone.now(),
+            meter_start=1,
+            meter_stop=2,
+        )
+        charger.meter_values.create(
+            transaction=transaction,
+            timestamp=timezone.now(),
+            energy=Decimal("1.5"),
+        )
+
+        serial = charger.charger_id
+        connector_key = store.identity_key(serial, charger.connector_id)
+        aggregate_key = store.identity_key(serial, None)
+        pending_key = store.pending_key(serial)
+        base_key = serial
+
+        fake_logs = {
+            "charger": {
+                connector_key: deque(["connector log"]),
+                aggregate_key: deque(["aggregate log"]),
+                pending_key: deque(["pending log"]),
+                base_key: deque(["base log"]),
+            },
+            "simulator": {},
+        }
+        fake_transactions = {
+            connector_key: object(),
+            aggregate_key: object(),
+            pending_key: object(),
+            base_key: object(),
+        }
+        fake_history = {
+            connector_key: {"value": 1},
+            aggregate_key: {"value": 2},
+            pending_key: {"value": 3},
+            base_key: {"value": 4},
+        }
+        fake_log_names = {
+            "charger": {
+                connector_key: "SERIAL-1-1",
+                aggregate_key: "SERIAL-1",
+            },
+            "simulator": {},
+        }
+
+        with patch.multiple(
+            store,
+            logs=fake_logs,
+            transactions=fake_transactions,
+            history=fake_history,
+            log_names=fake_log_names,
+        ):
+            with self.assertRaises(ProtectedError):
+                charger.delete()
+
+            charger.purge()
+
+            self.assertFalse(charger.transactions.exists())
+            self.assertFalse(charger.meter_values.exists())
+            self.assertEqual(fake_logs["charger"], {})
+            self.assertEqual(fake_transactions, {})
+            self.assertEqual(fake_history, {})
+
+            charger.delete()
+
+        self.assertFalse(Charger.objects.filter(pk=charger.pk).exists())
 
 
 class ChargerManagerNodeTests(TestCase):
