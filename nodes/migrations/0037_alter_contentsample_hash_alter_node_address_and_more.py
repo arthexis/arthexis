@@ -35,7 +35,6 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunPython(_fill_blank_strings, _noop),
         migrations.AlterField(
             model_name="contentsample",
             name="hash",
@@ -83,6 +82,7 @@ class Migration(migrations.Migration):
             name="mac_address",
             field=models.CharField(blank=True, max_length=17),
         ),
+        migrations.RunPython(_fill_blank_strings, _noop),
         migrations.AlterConstraint(
             model_name="node",
             name="nodes_node_constellation_device_unique",
