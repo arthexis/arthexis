@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Verify Node admin Update Node action",
+      "created_on": "2025-12-01T00:00:00Z",
+      "url": "/admin/nodes/node/",
+      "request_details": "Log into the Django admin, open the Nodes changelist, and edit an existing node. Use the new \"Update Node\" button on the change form and confirm the page reloads without an intermediate dialog while showing a status message that summarizes the local refresh and remote push results. Repeat with a node that cannot reach its peer (or temporarily disable connectivity) to verify the message surfaces partial or error results as appropriate.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.32"
+    }
+  }
+]

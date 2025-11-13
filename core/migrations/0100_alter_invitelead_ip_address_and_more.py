@@ -107,4 +107,5 @@ class Migration(migrations.Migration):
                 validators=[django.core.validators.validate_ipv46_address],
             ),
         ),
+        migrations.RunPython(_fill_blank_fields, _noop),
     ]

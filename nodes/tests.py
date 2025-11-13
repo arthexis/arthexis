@@ -2192,6 +2192,7 @@ class NodeAdminTests(TestCase):
 
     def setUp(self):
         self.client = Client()
+        self.factory = RequestFactory()
         User = get_user_model()
         self.admin = User.objects.create_superuser(
             username="nodes-admin", password="adminpass", email="admin@example.com"
@@ -2344,6 +2345,52 @@ class NodeAdminTests(TestCase):
             f'attachment; filename="{node.public_endpoint}.pub"',
         )
         self.assertIn(node.public_key.strip(), resp.content.decode())
+
+    def test_change_form_shows_update_node_action(self):
+        node = self._create_local_node()
+        change_url = reverse("admin:nodes_node_change", args=[node.pk])
+        response = self.client.get(change_url)
+        self.assertContains(response, 'data-tool-name="update_node_action"')
+        self.assertContains(response, "Update Node")
+
+    def test_update_node_action_reports_status(self):
+        node = Node.objects.create(
+            hostname="remote-update",
+            address="10.0.0.50",
+            port=8080,
+            mac_address="aa:bb:cc:dd:ee:01",
+        )
+        admin_instance = NodeAdmin(Node, admin.site)
+        request = self.factory.post("/")
+        request.user = self.admin
+        request.session = self.client.session
+        from django.contrib.messages.storage.fallback import FallbackStorage
+
+        request._messages = FallbackStorage(request)
+
+        with patch.object(
+            NodeAdmin,
+            "_refresh_local_information",
+            autospec=True,
+            return_value={"ok": True, "message": "Local updated"},
+        ) as mock_refresh, patch.object(
+            NodeAdmin,
+            "_push_remote_information",
+            autospec=True,
+            return_value={"ok": False, "message": "Remote failed"},
+        ) as mock_push:
+            admin_instance.update_node_action(request, node)
+
+        mock_refresh.assert_called_once_with(admin_instance, node)
+        mock_push.assert_called_once_with(admin_instance, node)
+        messages_list = list(request._messages)
+        self.assertTrue(messages_list)
+        message = messages_list[0]
+        self.assertEqual(message.level, messages.WARNING)
+        text = str(message)
+        self.assertIn("Update partially succeeded", text)
+        self.assertIn("Local succeeded", text)
+        self.assertIn("Remote failed", text)
 
     def test_register_current_requires_superuser(self):
         User = get_user_model()

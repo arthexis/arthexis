@@ -119,6 +119,7 @@ class Migration(migrations.Migration):
                 validators=[django.core.validators.validate_ipv46_address],
             ),
         ),
+        migrations.RunPython(_fill_blank_strings, _noop),
         migrations.AlterConstraint(
             model_name="node",
             name="nodes_node_constellation_device_unique",
