@@ -602,7 +602,7 @@ def constellation_setup(request):
     used_ips: set[str] = set()
     for value in (
         Node.objects.exclude(pk=node.pk)
-        .exclude(constellation_ip__isnull=True)
+        .exclude(constellation_ip="")
         .values_list("constellation_ip", flat=True)
     ):
         normalized = _normalize_constellation_ip(value)

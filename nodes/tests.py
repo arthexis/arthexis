@@ -4507,14 +4507,14 @@ class ConstellationUdpKickstartTests(TestCase):
         )
         self.assertEqual(
             list(
-                Node.objects.exclude(constellation_ip__isnull=True)
+                Node.objects.exclude(constellation_ip="")
                 .values_list("constellation_ip", flat=True)
             ),
             ["10.88.0.10", "10.88.0.11"],
         )
 
         constellation_nodes = (
-            Node.objects.filter(constellation_ip__isnull=False)
+            Node.objects.exclude(constellation_ip="")
             .values_list("pk", flat=True)
         )
         self.assertIn(remote.pk, list(constellation_nodes))

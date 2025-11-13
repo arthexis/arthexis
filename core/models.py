@@ -9,7 +9,12 @@ from django.db.models.functions import Lower, Length
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.utils.translation import gettext_lazy as _, gettext, override
-from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
+from django.core.validators import (
+    MaxValueValidator,
+    MinValueValidator,
+    RegexValidator,
+    validate_ipv46_address,
+)
 from django.core.exceptions import ValidationError
 from django.apps import apps
 from django.db.models.signals import m2m_changed, post_delete, post_save
@@ -306,7 +311,11 @@ class Lead(Entity):
     path = models.TextField(blank=True)
     referer = models.TextField(blank=True)
     user_agent = models.TextField(blank=True)
-    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    ip_address = models.CharField(
+        max_length=45,
+        blank=True,
+        validators=[validate_ipv46_address],
+    )
     created_on = models.DateTimeField(auto_now_add=True)
     status = models.CharField(
         max_length=20, choices=Status.choices, default=Status.OPEN
@@ -392,7 +401,11 @@ class User(Entity, AbstractUser):
     all_objects = DjangoUserManager()
     """Custom user model."""
     data_path = models.CharField(max_length=255, blank=True)
-    last_visit_ip_address = models.GenericIPAddressField(null=True, blank=True)
+    last_visit_ip_address = models.CharField(
+        max_length=45,
+        blank=True,
+        validators=[validate_ipv46_address],
+    )
     operate_as = models.ForeignKey(
         "self",
         null=True,
@@ -2328,14 +2341,12 @@ class Location(Entity):
         max_length=3,
         choices=EnergyTariff.Zone.choices,
         blank=True,
-        null=True,
         help_text=_("CFE climate zone used to select matching energy tariffs."),
     )
     contract_type = models.CharField(
         max_length=16,
         choices=EnergyTariff.ContractType.choices,
         blank=True,
-        null=True,
         help_text=_("CFE service contract type required to match energy tariff pricing."),
     )
     address_line1 = models.CharField(

@@ -124,7 +124,7 @@ def kickstart_constellation_udp() -> int:
     window_label = datetime.fromtimestamp(window_epoch, tz=timezone.utc).isoformat()
     logger.debug("Constellation UDP probe window reached at %s", window_label)
 
-    queryset = Node.objects.filter(constellation_ip__isnull=False).order_by("pk")
+    queryset = Node.objects.exclude(constellation_ip="").order_by("pk")
     if local_pk is not None:
         queryset = queryset.exclude(pk=local_pk)
 
