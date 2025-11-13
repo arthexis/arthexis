@@ -36,7 +36,28 @@ def _restore_network_nulls(apps, schema_editor):
     Node.objects.filter(constellation_device="").update(constellation_device=None)
     Node.objects.filter(mac_address="").update(mac_address=None)
 
-    ContentSample.objects.filter(hash="").update(hash=None)
+def _fill_blank_strings(apps, schema_editor):
+    """Ensure legacy ``NULL`` values become empty strings before constraints."""
+
+    Node = apps.get_model("nodes", "Node")
+    ContentSample = apps.get_model("nodes", "ContentSample")
+
+    Node.objects.filter(ipv4_address__isnull=True).update(ipv4_address="")
+    Node.objects.filter(ipv6_address__isnull=True).update(ipv6_address="")
+    Node.objects.filter(constellation_ip__isnull=True).update(constellation_ip="")
+    Node.objects.filter(address__isnull=True).update(address="")
+    Node.objects.filter(constellation_device__isnull=True).update(
+        constellation_device="",
+    )
+    Node.objects.filter(mac_address__isnull=True).update(mac_address="")
+
+    ContentSample.objects.filter(hash__isnull=True).update(hash="")
+
+
+def _noop(apps, schema_editor):
+    """No-op reverse migration."""
+    # Keeping legacy null values is acceptable; future migrations enforce blanks.
+    return None
 
 
 class Migration(migrations.Migration):
