@@ -7,7 +7,7 @@
       "prefix": "EVB",
       "context_type": "entity",
       "content_type": [
-        "core",
+        "ocpp",
         "brand"
       ]
     }

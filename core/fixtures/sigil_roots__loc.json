@@ -7,7 +7,7 @@
       "prefix": "LOC",
       "context_type": "entity",
       "content_type": [
-        "ocpp",
+        "core",
         "location"
       ]
     }

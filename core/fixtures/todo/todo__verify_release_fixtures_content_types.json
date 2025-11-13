@@ -1,0 +1,15 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "is_seed_data": false,
+      "is_deleted": false,
+      "request": "Verify release fixtures bind to active packages and sigil roots",
+      "created_on": "2025-01-15T00:00:00Z",
+      "url": "/admin/core/sigilroot/",
+      "request_details": "1. Load the Sigil roots admin and confirm the ECOLL, EV, EVB, EVM, INBOX, OUTBOX, LOC, and WMI prefixes resolve to the expected models without content-type errors.\n2. Visit the Package releases admin and confirm the 1.0 and 2.0 releases attach to the Arthexis package without raising fixture warnings when editing.",
+      "generated_for_version": "",
+      "generated_for_revision": ""
+    }
+  }
+]

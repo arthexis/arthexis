@@ -7,7 +7,7 @@
       "prefix": "WMI",
       "context_type": "entity",
       "content_type": [
-        "core",
+        "ocpp",
         "wmicode"
       ]
     }
