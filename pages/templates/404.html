@@ -1,0 +1,54 @@
+{% extends "pages/base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Page not found" %} · {{ block.super }}{% endblock %}
+
+{% block content %}
+  <div class="container py-5">
+    <div class="row justify-content-center">
+      <div class="col-lg-8 col-xl-6">
+        <div class="card shadow border-0">
+          <div class="card-body text-center py-5">
+            <div class="display-4 fw-bold text-primary">404</div>
+            <h1 class="h3 mt-4">{% trans "We couldn't find that page" %}</h1>
+            <p class="text-body-secondary mt-3">
+              {% trans "The link may be outdated or the page might have moved." %}
+            </p>
+            <a class="btn btn-primary mt-4" href="{% url 'pages:index' %}">
+              {% trans "Return to the main page" %}
+            </a>
+            <p class="small text-body-secondary mt-3 mb-0" aria-live="polite">
+              {% blocktrans trimmed with span_open='<span data-redirect-countdown>'|safe span_close='</span>'|safe %}
+                You will be redirected to the main page in {{ span_open }}10{{ span_close }} seconds.
+              {% endblocktrans %}
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script>
+    (function () {
+      const redirectDelayMs = 10000;
+      const targetUrl = "{% url 'pages:index' %}";
+      const countdownElement = document.querySelector('[data-redirect-countdown]');
+      let remaining = Math.floor(redirectDelayMs / 1000);
+
+      if (countdownElement) {
+        countdownElement.textContent = remaining.toString();
+        const interval = window.setInterval(function () {
+          remaining -= 1;
+          if (remaining <= 0) {
+            window.clearInterval(interval);
+            remaining = 0;
+          }
+          countdownElement.textContent = remaining.toString();
+        }, 1000);
+      }
+
+      window.setTimeout(function () {
+        window.location.assign(targetUrl);
+      }, redirectDelayMs);
+    })();
+  </script>
+{% endblock %}
