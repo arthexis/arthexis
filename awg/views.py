@@ -599,6 +599,7 @@ def calculator(request):
         }
         zap_values = (request.POST.get(field) for field in _ZAP_NUMERIC_FIELDS)
         if _contains_zap(zap_values):
+            _flag_zapped_display(request)
             PowerLead.objects.create(
                 user=request.user if request.user.is_authenticated else None,
                 values=lead_values,
@@ -649,9 +650,35 @@ def calculator(request):
     return render(request, "awg/calculator.html", context)
 
 
-@landing(_lazy("AWG Cable Calculator"))
+ZAPPED_SESSION_KEY = "awg:zapped_allowed"
+
+
+def _allow_zapped_display(request: "HttpRequest") -> bool:
+    """Return ``True`` when the zap easter egg may be displayed."""
+
+    session = getattr(request, "session", None)
+    if not hasattr(session, "get"):
+        return False
+
+    allowed = session.get(ZAPPED_SESSION_KEY, False)
+    if allowed:
+        session[ZAPPED_SESSION_KEY] = False
+    return bool(allowed)
+
+
+def _flag_zapped_display(request: "HttpRequest") -> None:
+    """Mark the zap easter egg as displayable for the current session."""
+
+    session = getattr(request, "session", None)
+    if hasattr(session, "__setitem__"):
+        session[ZAPPED_SESSION_KEY] = True
+
+
 def zapped_result(request: "HttpRequest") -> TemplateResponse:
     """Display the playful zap easter egg response."""
+
+    if not _allow_zapped_display(request):
+        return redirect("awg:calculator")
 
     context = {
         "zap_message": _lazy("Ouch! I've been zapped!! Now it's my turn..."),

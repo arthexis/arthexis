@@ -242,13 +242,20 @@ class AWGCalculatorTests(TestCase):
             "ground": "1",
         }
         resp = self.client.post(url, data)
-        self.assertRedirects(resp, reverse("awg:zapped"))
+        self.assertRedirects(
+            resp,
+            reverse("awg:zapped"),
+            fetch_redirect_response=False,
+        )
 
         follow = self.client.get(reverse("awg:zapped"))
         self.assertIn(
             "Ouch! I've been zapped!! Now it's my turn...",
             unescape(follow.content.decode()),
         )
+
+        repeat = self.client.get(reverse("awg:zapped"))
+        self.assertRedirects(repeat, reverse("awg:calculator"))
 
         lead = PowerLead.objects.get()
         self.assertFalse(lead.malformed)
@@ -268,11 +275,19 @@ class AWGCalculatorTests(TestCase):
             "ground": "1",
         }
         resp = self.client.post(url, data)
-        self.assertRedirects(resp, reverse("awg:zapped"))
+        self.assertRedirects(
+            resp,
+            reverse("awg:zapped"),
+            fetch_redirect_response=False,
+        )
 
         lead = PowerLead.objects.get()
         self.assertFalse(lead.malformed)
         self.assertEqual(lead.values["amps"], "  z - a_p!!  ")
+
+    def test_zapped_page_requires_calculator_trigger(self):
+        resp = self.client.get(reverse("awg:zapped"))
+        self.assertRedirects(resp, reverse("awg:calculator"))
 
     def test_invalid_ground_reports_error(self):
         url = reverse("awg:calculator")
