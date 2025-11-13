@@ -50,7 +50,7 @@ from .reports import (
     iter_report_periods,
     resolve_period,
 )
-from core.admin import EmailOutboxAdminForm
+from core.admin import EmailOutboxAdminForm, SaveBeforeChangeAction
 from protocols.models import CPForwarder
 from .models import (
     Node,
@@ -262,7 +262,7 @@ class DNSRecordAdmin(EntityModelAdmin):
 
 
 @admin.register(Node)
-class NodeAdmin(EntityModelAdmin):
+class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
     list_display = (
         "hostname",
         "primary_ip",
@@ -336,6 +336,7 @@ class NodeAdmin(EntityModelAdmin):
         "export_rfids_to_selected",
         "send_net_message",
     ]
+    change_actions = ["update_node_action"]
     inlines = [NodeFeatureAssignmentInline]
 
     class SendNetMessageForm(forms.Form):
@@ -1795,6 +1796,64 @@ class NodeAdmin(EntityModelAdmin):
         return super().changeform_view(
             request, object_id, form_url, extra_context=extra_context
         )
+
+    def _format_update_detail(self, label: str, result: Mapping[str, object]) -> str:
+        ok = bool(result.get("ok"))
+        status = _("succeeded") if ok else _("failed")
+        message = str(result.get("message") or "").strip()
+        url = str(result.get("url") or "").strip()
+        detail_parts: list[str] = []
+        if message:
+            detail_parts.append(message)
+        if url:
+            detail_parts.append(_("URL: %(url)s") % {"url": url})
+        if detail_parts:
+            return _("%(label)s %(status)s: %(detail)s") % {
+                "label": label,
+                "status": status,
+                "detail": " ".join(detail_parts),
+            }
+        return _("%(label)s %(status)s.") % {"label": label, "status": status}
+
+    def update_node_action(self, request, obj):
+        local_result = self._refresh_local_information(obj)
+        remote_result = self._push_remote_information(obj)
+
+        local_ok = bool(local_result.get("ok"))
+        remote_ok = bool(remote_result.get("ok"))
+        if local_ok and remote_ok:
+            status_key = "success"
+        elif local_ok or remote_ok:
+            status_key = "partial"
+        else:
+            status_key = "error"
+
+        status_messages = {
+            "success": _("Update succeeded for %(node)s."),
+            "partial": _("Update partially succeeded for %(node)s."),
+            "error": _("Update failed for %(node)s."),
+        }
+        level_map = {
+            "success": messages.SUCCESS,
+            "partial": messages.WARNING,
+            "error": messages.ERROR,
+        }
+        details = [
+            self._format_update_detail(_("Local"), local_result),
+            self._format_update_detail(_("Remote"), remote_result),
+        ]
+        detail_text = " ".join(filter(None, details))
+        message = status_messages[status_key] % {"node": obj}
+        if detail_text:
+            message = f"{message} {detail_text}"
+
+        if getattr(obj, "pk", None):
+            obj.refresh_from_db()
+
+        self.message_user(request, message, level=level_map[status_key])
+
+    update_node_action.label = _("Update Node")
+    update_node_action.short_description = _("Update Node")
 
 
 class EmailOutboxAdmin(EntityModelAdmin):
