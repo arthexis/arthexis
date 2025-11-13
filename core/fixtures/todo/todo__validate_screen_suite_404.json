@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate screen Suite 404 page redirect",
+      "created_on": "2024-01-01T00:00:00Z",
+      "url": "/definitely-missing/",
+      "request_details": "Visit a missing page such as /definitely-missing/ in production mode and confirm the Arthexis styled 404 card appears, shows the redirect countdown, and returns to the main page after 10 seconds. Repeat with DEBUG=True to ensure the Django technical 404 page is still shown without auto-redirect.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]
