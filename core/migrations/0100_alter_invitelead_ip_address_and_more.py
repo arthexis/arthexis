@@ -28,6 +28,26 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        migrations.AlterField(
+            model_name="invitelead",
+            name="ip_address",
+            field=models.CharField(
+                blank=True,
+                max_length=45,
+                null=True,
+                validators=[django.core.validators.validate_ipv46_address],
+            ),
+        ),
+        migrations.AlterField(
+            model_name="user",
+            name="last_visit_ip_address",
+            field=models.CharField(
+                blank=True,
+                max_length=45,
+                null=True,
+                validators=[django.core.validators.validate_ipv46_address],
+            ),
+        ),
         migrations.RunPython(_fill_blank_fields, _noop),
         migrations.AlterField(
             model_name="invitelead",

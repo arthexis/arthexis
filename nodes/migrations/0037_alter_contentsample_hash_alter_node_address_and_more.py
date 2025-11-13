@@ -35,6 +35,56 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        migrations.AlterField(
+            model_name="contentsample",
+            name="hash",
+            field=models.CharField(blank=True, max_length=64, null=True),
+        ),
+        migrations.AlterField(
+            model_name="node",
+            name="address",
+            field=models.CharField(
+                blank=True,
+                max_length=45,
+                null=True,
+                validators=[django.core.validators.validate_ipv46_address],
+            ),
+        ),
+        migrations.AlterField(
+            model_name="node",
+            name="constellation_device",
+            field=models.CharField(blank=True, max_length=16, null=True),
+        ),
+        migrations.AlterField(
+            model_name="node",
+            name="constellation_ip",
+            field=models.CharField(
+                blank=True,
+                max_length=45,
+                null=True,
+                validators=[django.core.validators.validate_ipv46_address],
+            ),
+        ),
+        migrations.AlterField(
+            model_name="node",
+            name="ipv4_address",
+            field=models.TextField(blank=True, null=True),
+        ),
+        migrations.AlterField(
+            model_name="node",
+            name="ipv6_address",
+            field=models.CharField(
+                blank=True,
+                max_length=39,
+                null=True,
+                validators=[django.core.validators.validate_ipv6_address],
+            ),
+        ),
+        migrations.AlterField(
+            model_name="node",
+            name="mac_address",
+            field=models.CharField(blank=True, max_length=17, null=True),
+        ),
         migrations.RunPython(_fill_blank_strings, _noop),
         migrations.AlterField(
             model_name="contentsample",
