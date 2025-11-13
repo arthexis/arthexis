@@ -5,20 +5,25 @@ from django.conf import settings
 from django.db import migrations, models
 
 
-def _fill_blank_strings(apps, schema_editor):
+def _fill_blank_non_ip_fields(apps, schema_editor):
     Node = apps.get_model("nodes", "Node")
     ContentSample = apps.get_model("nodes", "ContentSample")
 
     Node.objects.filter(ipv4_address__isnull=True).update(ipv4_address="")
-    Node.objects.filter(ipv6_address__isnull=True).update(ipv6_address="")
-    Node.objects.filter(constellation_ip__isnull=True).update(constellation_ip="")
     Node.objects.filter(constellation_device__isnull=True).update(
         constellation_device=""
     )
-    Node.objects.filter(address__isnull=True).update(address="")
     Node.objects.filter(mac_address__isnull=True).update(mac_address="")
 
     ContentSample.objects.filter(hash__isnull=True).update(hash="")
+
+
+def _fill_blank_ip_fields(apps, schema_editor):
+    Node = apps.get_model("nodes", "Node")
+
+    Node.objects.filter(ipv6_address__isnull=True).update(ipv6_address="")
+    Node.objects.filter(constellation_ip__isnull=True).update(constellation_ip="")
+    Node.objects.filter(address__isnull=True).update(address="")
 
 
 def _noop(apps, schema_editor):
@@ -35,19 +40,11 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        migrations.RunPython(_fill_blank_non_ip_fields, _noop),
         migrations.AlterField(
             model_name="contentsample",
             name="hash",
             field=models.CharField(blank=True, max_length=64),
-        ),
-        migrations.AlterField(
-            model_name="node",
-            name="address",
-            field=models.CharField(
-                blank=True,
-                max_length=45,
-                validators=[django.core.validators.validate_ipv46_address],
-            ),
         ),
         migrations.AlterField(
             model_name="node",
@@ -56,12 +53,8 @@ class Migration(migrations.Migration):
         ),
         migrations.AlterField(
             model_name="node",
-            name="constellation_ip",
-            field=models.CharField(
-                blank=True,
-                max_length=45,
-                validators=[django.core.validators.validate_ipv46_address],
-            ),
+            name="mac_address",
+            field=models.CharField(blank=True, max_length=17),
         ),
         migrations.AlterField(
             model_name="node",
@@ -74,13 +67,57 @@ class Migration(migrations.Migration):
             field=models.CharField(
                 blank=True,
                 max_length=39,
+                null=True,
                 validators=[django.core.validators.validate_ipv6_address],
             ),
         ),
         migrations.AlterField(
             model_name="node",
-            name="mac_address",
-            field=models.CharField(blank=True, max_length=17),
+            name="constellation_ip",
+            field=models.CharField(
+                blank=True,
+                max_length=45,
+                null=True,
+                validators=[django.core.validators.validate_ipv46_address],
+            ),
+        ),
+        migrations.AlterField(
+            model_name="node",
+            name="address",
+            field=models.CharField(
+                blank=True,
+                max_length=45,
+                null=True,
+                validators=[django.core.validators.validate_ipv46_address],
+            ),
+        ),
+        migrations.RunPython(_fill_blank_ip_fields, _noop),
+        migrations.AlterField(
+            model_name="node",
+            name="ipv6_address",
+            field=models.CharField(
+                blank=True,
+                max_length=39,
+                validators=[django.core.validators.validate_ipv6_address],
+            ),
+        ),
+        migrations.AlterField(
+            model_name="node",
+            name="constellation_ip",
+            field=models.CharField(
+                blank=True,
+                max_length=45,
+                validators=[django.core.validators.validate_ipv46_address],
+            ),
+        ),
+        migrations.AlterField(
+            model_name="node",
+            name="address",
+            field=models.CharField(
+                blank=True,
+                max_length=45,
+                validators=[django.core.validators.validate_ipv46_address],
+            ),
         ),
         migrations.RunPython(_fill_blank_strings, _noop),
         migrations.AlterConstraint(

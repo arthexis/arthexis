@@ -26,6 +26,17 @@ class Migration(migrations.Migration):
             field=models.CharField(
                 blank=True,
                 max_length=45,
+                null=True,
+                validators=[django.core.validators.validate_ipv46_address],
+            ),
+        ),
+        migrations.RunPython(_fill_blank_ip, _noop),
+        migrations.AlterField(
+            model_name="powerlead",
+            name="ip_address",
+            field=models.CharField(
+                blank=True,
+                max_length=45,
                 validators=[django.core.validators.validate_ipv46_address],
             ),
         ),
