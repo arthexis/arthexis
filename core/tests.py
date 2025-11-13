@@ -846,6 +846,44 @@ class CustomerAccountTests(TestCase):
         self.assertTrue(acc.rfids.filter(rfid="NOUSER1").exists())
 
 
+class EnergyTariffValidationTests(TestCase):
+    def _base_fields(self):
+        return {
+            "year": 2025,
+            "season": EnergyTariff.Season.ANNUAL,
+            "zone": EnergyTariff.Zone.ONE,
+            "contract_type": EnergyTariff.ContractType.DOMESTIC,
+            "period": EnergyTariff.Period.FLAT,
+            "unit": EnergyTariff.Unit.KWH,
+            "price_mxn": Decimal("2.5000"),
+            "cost_mxn": Decimal("2.0000"),
+        }
+
+    def test_end_time_must_follow_start_time(self):
+        tariff = EnergyTariff(
+            **self._base_fields(),
+            start_time=time(hour=12, minute=0),
+            end_time=time(hour=12, minute=0),
+        )
+
+        with self.assertRaises(ValidationError) as error_context:
+            tariff.full_clean(validate_unique=False, validate_constraints=False)
+
+        self.assertIn("end_time", error_context.exception.error_dict)
+
+    def test_full_clean_accepts_valid_time_range(self):
+        tariff = EnergyTariff(
+            **self._base_fields(),
+            start_time=time(hour=8, minute=0),
+            end_time=time(hour=12, minute=0),
+        )
+
+        try:
+            tariff.full_clean(validate_unique=False, validate_constraints=False)
+        except ValidationError as exc:  # pragma: no cover - safeguard
+            self.fail(f"Unexpected validation error: {exc}")
+
+
 class ElectricVehicleTests(TestCase):
     def test_account_can_have_multiple_vehicles(self):
         user = User.objects.create_user(username="cars", password="x")
