@@ -24,12 +24,15 @@ CHECK=false
 AUTO_UPGRADE_MODE=""
 DEBUG_MODE=""
 DEBUG_OVERRIDDEN=false
+REPAIR=false
+SKIP_SERVICE_RESTART=false
+REPAIR_AUTO_UPGRADE_CHANNEL=""
 
 BASE_DIR="$SCRIPT_DIR"
 LOCK_DIR="$BASE_DIR/locks"
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--latest|--stable|--regular] [--check] [--auto-upgrade|--no-auto-upgrade] [--debug|--no-debug] [--satellite|--terminal|--control|--watchtower]" >&2
+    echo "Usage: $0 [--service NAME] [--latest|--stable|--regular] [--check] [--auto-upgrade|--no-auto-upgrade] [--debug|--no-debug] [--satellite|--terminal|--control|--watchtower] [--repair]" >&2
     exit 1
 }
 
@@ -37,6 +40,56 @@ write_debug_env() {
     cat > "$BASE_DIR/debug.env" <<EOF
 DEBUG=$1
 EOF
+}
+
+reset_role_features() {
+    ENABLE_CELERY=false
+    ENABLE_LCD_SCREEN=false
+    ENABLE_CONTROL=false
+    REQUIRES_REDIS=false
+    NGINX_MODE="internal"
+}
+
+set_role_from_lock() {
+    local stored_role="$1"
+
+    reset_role_features
+
+    case "$stored_role" in
+        Satellite)
+            require_nginx "satellite"
+            NODE_ROLE="Satellite"
+            ENABLE_CELERY=true
+            REQUIRES_REDIS=true
+            ;;
+        Terminal)
+            NODE_ROLE="Terminal"
+            ENABLE_CELERY=true
+            ;;
+        Control)
+            require_nginx "control"
+            NODE_ROLE="Control"
+            ENABLE_CELERY=true
+            ENABLE_LCD_SCREEN=true
+            ENABLE_CONTROL=true
+            REQUIRES_REDIS=true
+            ;;
+        Watchtower)
+            require_nginx "watchtower"
+            NODE_ROLE="Watchtower"
+            ENABLE_CELERY=true
+            NGINX_MODE="public"
+            REQUIRES_REDIS=true
+            ;;
+        "")
+            echo "Unable to repair because the stored node role is empty." >&2
+            exit 1
+            ;;
+        *)
+            echo "Unable to repair unknown node role: $stored_role" >&2
+            exit 1
+            ;;
+    esac
 }
 
 
@@ -227,12 +280,54 @@ while [[ $# -gt 0 ]]; do
             REQUIRES_REDIS=true
             shift
             ;;
+        --repair)
+            REPAIR=true
+            shift
+            ;;
         *)
             usage
             ;;
     esac
 
 done
+
+if [ "$REPAIR" = true ]; then
+    if [ "$CHECK" = true ] || [ -n "$NODE_ROLE" ] || [ -n "$SERVICE" ] || \
+       [ -n "$AUTO_UPGRADE_MODE" ] || [ -n "$DEBUG_MODE" ] || [ -n "$UPGRADE_CHANNEL" ]; then
+        echo "--repair cannot be combined with other options" >&2
+        usage
+    fi
+
+    if [ ! -f "$LOCK_DIR/role.lck" ]; then
+        echo "Cannot repair because the current node role is unknown." >&2
+        exit 1
+    fi
+
+    stored_role=$(cat "$LOCK_DIR/role.lck")
+    set_role_from_lock "$stored_role"
+    SKIP_SERVICE_RESTART=true
+
+    if [ -f "$LOCK_DIR/service.lck" ]; then
+        SERVICE=$(cat "$LOCK_DIR/service.lck")
+    fi
+
+    if [ -f "$LOCK_DIR/auto_upgrade.lck" ]; then
+        stored_channel=$(tr -d '\r\n\t ' < "$LOCK_DIR/auto_upgrade.lck" | tr '[:upper:]' '[:lower:]')
+        case "$stored_channel" in
+            latest|stable|version)
+                REPAIR_AUTO_UPGRADE_CHANNEL="$stored_channel"
+                ;;
+            "")
+                REPAIR_AUTO_UPGRADE_CHANNEL="version"
+                ;;
+            *)
+                REPAIR_AUTO_UPGRADE_CHANNEL="version"
+                ;;
+        esac
+        AUTO_UPGRADE_MODE="enable"
+        UPGRADE_CHANNEL="$REPAIR_AUTO_UPGRADE_CHANNEL"
+    fi
+fi
 
 if [ "$CHECK" = true ]; then
     if [ -n "$NODE_ROLE" ] || [ -n "$SERVICE" ] || [ -n "$AUTO_UPGRADE_MODE" ] || \
@@ -353,7 +448,7 @@ if [ "$REQUIRES_REDIS" = true ]; then
     require_redis "$NODE_ROLE"
 fi
 SERVICE_ACTIVE=false
-if [ -n "$SERVICE" ] && systemctl list-unit-files | grep -Fq "${SERVICE}.service"; then
+if [ "$SKIP_SERVICE_RESTART" != true ] && [ -n "$SERVICE" ] && systemctl list-unit-files | grep -Fq "${SERVICE}.service"; then
     if systemctl is-active --quiet "$SERVICE"; then
         SERVICE_ACTIVE=true
         if ! "$BASE_DIR/stop.sh"; then
@@ -418,5 +513,9 @@ if [ "$SERVICE_ACTIVE" = true ]; then
     if [ "$ENABLE_LCD_SCREEN" = true ]; then
         sudo systemctl start "lcd-$SERVICE" || true
     fi
+fi
+
+if [ "$REPAIR" = true ]; then
+    echo "Repair completed for the $NODE_ROLE role."
 fi
 
