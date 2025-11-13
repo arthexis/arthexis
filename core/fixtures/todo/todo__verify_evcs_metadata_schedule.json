@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Verify EVCS metadata scheduling",
+      "created_on": "2024-01-01T00:00:00Z",
+      "url": "",
+      "request_details": "1. Connect an EVCS without stored configuration or firmware and confirm its session log shows no automatic GetConfiguration or firmware DataTransfer frames on connect.\n2. While a charging session is in progress, run the daily configuration and firmware Celery tasks (e.g., via Django shell) and confirm both dispatch immediately without waiting for charging to finish.\n3. Repeat with an EVCS that already has firmware captured and confirm only the configuration request is queued.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]
