@@ -770,7 +770,7 @@ class Charger(Entity):
         super().delete(*args, **kwargs)
 
 
-class ConfigurationKey(models.Model):
+class ConfigurationKey(Entity):
     """Single configurationKey entry from a GetConfiguration payload."""
 
     configuration = models.ForeignKey(
@@ -1429,7 +1429,7 @@ class DataTransferMessage(models.Model):
         return f"{self.get_direction_display()} {self.vendor_id or 'DataTransfer'}"
 
 
-class CPFirmwareRequest(models.Model):
+class CPFirmwareRequest(Entity):
     """Temporary record tracking CP firmware requests."""
 
     charger = models.ForeignKey(
