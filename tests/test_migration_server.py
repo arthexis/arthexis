@@ -62,3 +62,26 @@ def test_wait_for_changes_detects_file_updates(tmp_path: Path) -> None:
     update_file()
     updated = migration_server.wait_for_changes(tmp_path, snapshot, interval=0.1)
     assert updated != snapshot
+
+
+def test_main_runs_env_refresh_immediately(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[Path, bool]] = []
+
+    def fake_collect(_: Path) -> dict[str, int]:
+        return {}
+
+    def fake_wait_for_changes(_: Path, __: dict[str, int], **___: object) -> dict[str, int]:
+        raise KeyboardInterrupt
+
+    def fake_run_env_refresh(_: Path, *, latest: bool) -> bool:
+        calls.append((migration_server.BASE_DIR, latest))
+        return True
+
+    monkeypatch.setattr(migration_server, "collect_source_mtimes", fake_collect)
+    monkeypatch.setattr(migration_server, "wait_for_changes", fake_wait_for_changes)
+    monkeypatch.setattr(migration_server, "run_env_refresh", fake_run_env_refresh)
+
+    result = migration_server.main([])
+
+    assert result == 0
+    assert len(calls) == 1

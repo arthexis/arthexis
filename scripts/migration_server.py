@@ -169,6 +169,17 @@ def run_env_refresh(base_dir: Path, *, latest: bool = True) -> bool:
     return True
 
 
+def run_env_refresh_with_report(base_dir: Path, *, latest: bool) -> bool:
+    """Execute ``env-refresh`` and print a summary of the outcome."""
+
+    success = run_env_refresh(base_dir, latest=latest)
+    if success:
+        print("[Migration Server] env-refresh completed successfully.")
+    else:
+        print("[Migration Server] env-refresh failed. Awaiting further changes.")
+    return success
+
+
 def wait_for_changes(base_dir: Path, snapshot: Dict[str, int], *, interval: float) -> Dict[str, int]:
     """Block until watched files differ from *snapshot* and return the update."""
 
@@ -213,6 +224,8 @@ def main(argv: list[str] | None = None) -> int:
     print("[Migration Server] Starting in", BASE_DIR)
     snapshot = collect_source_mtimes(BASE_DIR)
     print("[Migration Server] Watching for changes... Press Ctrl+C to stop.")
+    run_env_refresh_with_report(BASE_DIR, latest=args.latest)
+    snapshot = collect_source_mtimes(BASE_DIR)
 
     try:
         while True:
@@ -228,11 +241,7 @@ def main(argv: list[str] | None = None) -> int:
                 if len(change_summary) > 5:
                     display += "; ..."
                 print(f"[Migration Server] Changes detected: {display}")
-            success = run_env_refresh(BASE_DIR, latest=args.latest)
-            if success:
-                print("[Migration Server] env-refresh completed successfully.")
-            else:
-                print("[Migration Server] env-refresh failed. Awaiting further changes.")
+            run_env_refresh_with_report(BASE_DIR, latest=args.latest)
             snapshot = collect_source_mtimes(BASE_DIR)
     except KeyboardInterrupt:
         print("[Migration Server] Stopped.")
