@@ -443,9 +443,9 @@ class NodeGetLocalTests(TestCase):
         self.assertEqual(response.status_code, 200)
         node = Node.objects.get(mac_address="aa:bb:cc:dd:ee:ff")
         self.assertEqual(node.network_hostname, "domain-node.example.com")
-        self.assertIsNone(node.address)
-        self.assertIsNone(node.ipv4_address)
-        self.assertIsNone(node.ipv6_address)
+        self.assertEqual(node.address, "")
+        self.assertEqual(node.ipv4_address, "")
+        self.assertEqual(node.ipv6_address, "")
 
     def test_register_node_populates_missing_ip_fields_from_address(self):
         response = self.client.post(
@@ -462,7 +462,7 @@ class NodeGetLocalTests(TestCase):
         node = Node.objects.get(mac_address="aa:bb:cc:dd:ee:01")
         self.assertEqual(node.address, "203.0.113.10")
         self.assertEqual(node.ipv4_address, "203.0.113.10")
-        self.assertIsNone(node.ipv6_address)
+        self.assertEqual(node.ipv6_address, "")
 
     def test_register_node_stores_multiple_ipv4_addresses(self):
         payload = {

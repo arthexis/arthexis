@@ -1009,7 +1009,11 @@ def register_node(request):
             ("constellation_ip", constellation_value),
             ("port", port),
         ):
-            if getattr(node, field) != value:
+            current = getattr(node, field)
+            if isinstance(value, str):
+                value = value or ""
+                current = current or ""
+            if current != value:
                 setattr(node, field, value)
                 update_fields.append(field)
         if verified:

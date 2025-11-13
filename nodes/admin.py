@@ -8,6 +8,7 @@ from django.contrib.admin import helpers
 from django.contrib.admin.widgets import FilteredSelectMultiple
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
+from django.db import models
 from django.db.models import Count, Q
 from django.http import Http404, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import redirect, render
@@ -105,7 +106,7 @@ class NodeAdminForm(forms.ModelForm):
     def clean_ipv4_address(self):
         value = self.cleaned_data.get("ipv4_address")
         if value in (None, ""):
-            return None
+            return ""
         serialized = Node.serialize_ipv4_addresses(value)
         if serialized is None:
             raise forms.ValidationError(
@@ -1023,7 +1024,12 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         def apply_field(field: str, value):
             if value is sentinel:
                 return
-            if getattr(node, field) != value:
+            field_obj = node._meta.get_field(field)
+            current = getattr(node, field)
+            if isinstance(field_obj, (models.CharField, models.TextField, models.SlugField)):
+                value = value or ""
+                current = current or ""
+            if current != value:
                 setattr(node, field, value)
                 changed.append(field)
 
@@ -1033,7 +1039,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
 
         ipv4_raw = payload_value("ipv4_address")
         if ipv4_raw is not sentinel:
-            ipv4_value = Node.serialize_ipv4_addresses(ipv4_raw)
+            ipv4_value = Node.serialize_ipv4_addresses(ipv4_raw) or ""
             apply_field("ipv4_address", ipv4_value)
 
         apply_field("ipv6_address", payload_value("ipv6_address"))
