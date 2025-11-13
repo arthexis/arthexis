@@ -83,9 +83,9 @@ def ensure_blocks(block: str) -> tuple[str, bool]:
         ("location = /maintenance/404.html", NOT_FOUND_BLOCK),
     )
 
-    for identifier, block in file_blocks:
+    for identifier, template_block in file_blocks:
         if identifier not in inner:
-            indented_block = textwrap.indent(block, "    ")
+            indented_block = textwrap.indent(template_block, "    ")
             if location_marker in inner:
                 inner = inner.replace(location_marker, f"{indented_block}\n\n{location_marker}", 1)
             else:
