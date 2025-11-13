@@ -858,6 +858,8 @@ class CustomerAccountTests(TestCase):
             contract_type=EnergyTariff.ContractType.DOMESTIC,
             period=EnergyTariff.Period.FLAT,
             unit=EnergyTariff.Unit.KWH,
+            start_time=time(hour=0, minute=0),
+            end_time=time(hour=23, minute=59),
             price_mxn=Decimal("0"),
             cost_mxn=Decimal("0"),
         )
@@ -880,6 +882,8 @@ class CustomerAccountTests(TestCase):
             contract_type=EnergyTariff.ContractType.DOMESTIC,
             period=EnergyTariff.Period.FLAT,
             unit=EnergyTariff.Unit.KWH,
+            start_time=time(hour=0, minute=0),
+            end_time=time(hour=23, minute=59),
             price_mxn=Decimal("2.5000"),
             cost_mxn=Decimal("2.0000"),
         )
