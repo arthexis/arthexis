@@ -850,6 +850,65 @@ class CustomerAccountTests(TestCase):
         self.assertEqual(acc.potential_purchase_kw, expected_kw)
         self.assertTrue(acc.can_authorize())
 
+    def test_potential_purchase_kw_without_tariff(self):
+        user = User.objects.create_user(username="notariff", password="x")
+        acc = CustomerAccount.objects.create(
+            user=user,
+            name="NO_TARIFF",
+            balance_mxn=Decimal("100"),
+        )
+
+        self.assertEqual(acc.potential_purchase_kw, Decimal("0"))
+        self.assertFalse(acc.can_authorize())
+
+    def test_potential_purchase_kw_with_zero_tariff_price(self):
+        user = User.objects.create_user(username="zerotariff", password="x")
+        tariff = EnergyTariff.objects.create(
+            year=2025,
+            season=EnergyTariff.Season.ANNUAL,
+            zone=EnergyTariff.Zone.ONE,
+            contract_type=EnergyTariff.ContractType.DOMESTIC,
+            period=EnergyTariff.Period.FLAT,
+            unit=EnergyTariff.Unit.KWH,
+            start_time=time(hour=0, minute=0),
+            end_time=time(hour=23, minute=59),
+            price_mxn=Decimal("0"),
+            cost_mxn=Decimal("0"),
+        )
+        acc = CustomerAccount.objects.create(
+            user=user,
+            name="ZERO_PRICE",
+            balance_mxn=Decimal("100"),
+            energy_tariff=tariff,
+        )
+
+        self.assertEqual(acc.potential_purchase_kw, Decimal("0"))
+        self.assertFalse(acc.can_authorize())
+
+    def test_potential_purchase_kw_with_negative_balance(self):
+        user = User.objects.create_user(username="negativebalance", password="x")
+        tariff = EnergyTariff.objects.create(
+            year=2025,
+            season=EnergyTariff.Season.ANNUAL,
+            zone=EnergyTariff.Zone.ONE,
+            contract_type=EnergyTariff.ContractType.DOMESTIC,
+            period=EnergyTariff.Period.FLAT,
+            unit=EnergyTariff.Unit.KWH,
+            start_time=time(hour=0, minute=0),
+            end_time=time(hour=23, minute=59),
+            price_mxn=Decimal("2.5000"),
+            cost_mxn=Decimal("2.0000"),
+        )
+        acc = CustomerAccount.objects.create(
+            user=user,
+            name="NEGATIVE_BALANCE",
+            balance_mxn=Decimal("-10"),
+            energy_tariff=tariff,
+        )
+
+        self.assertEqual(acc.potential_purchase_kw, Decimal("0"))
+        self.assertFalse(acc.can_authorize())
+
     def test_account_without_user(self):
         acc = CustomerAccount.objects.create(name="NOUSER")
         tag = RFID.objects.create(rfid="NOUSER1")
