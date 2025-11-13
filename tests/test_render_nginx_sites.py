@@ -24,6 +24,7 @@ def test_apply_sites_generates_http_config(tmp_path):
     assert "listen 80;" in conf
     assert "proxy_pass http://127.0.0.1:8888/" in conf
     assert "listen 443" not in conf
+    assert "proxy_set_header Host $http_host;" in conf
 
 
 def test_apply_sites_generates_https_blocks(tmp_path):
@@ -43,6 +44,7 @@ def test_apply_sites_generates_https_blocks(tmp_path):
     assert "return 301 https://$host$request_uri;" in conf
     assert "listen 443 ssl;" in conf
     assert "proxy_pass http://127.0.0.1:8888/" in conf
+    assert "proxy_set_header Host $http_host;" in conf
 
 
 def test_apply_sites_removes_stale_files(tmp_path):

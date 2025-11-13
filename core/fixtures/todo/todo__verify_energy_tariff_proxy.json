@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Verify AWG energy tariff via nginx proxy",
+      "created_on": "2024-01-01T00:00:00Z",
+      "url": "/awg/energy-tariff/",
+      "request_details": "Sign in to the console and open http://10.42.0.1:8000/awg/energy-tariff/. Confirm the Energy Tariff Calculator loads without a 404 while using the proxied port. Repeat with the backend port (http://10.42.0.1:8888/awg/energy-tariff/) to confirm both endpoints behave consistently, including calculator interactions after submitting a kWh value.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.32"
+    }
+  }
+]
