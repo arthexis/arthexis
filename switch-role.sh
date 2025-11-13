@@ -27,12 +27,13 @@ DEBUG_OVERRIDDEN=false
 REPAIR=false
 SKIP_SERVICE_RESTART=false
 REPAIR_AUTO_UPGRADE_CHANNEL=""
+FAILOVER_ROLE=""
 
 BASE_DIR="$SCRIPT_DIR"
 LOCK_DIR="$BASE_DIR/locks"
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--latest|--stable|--regular] [--check] [--auto-upgrade|--no-auto-upgrade] [--debug|--no-debug] [--satellite|--terminal|--control|--watchtower] [--repair]" >&2
+    echo "Usage: $0 [--service NAME] [--latest|--stable|--regular] [--check] [--auto-upgrade|--no-auto-upgrade] [--debug|--no-debug] [--satellite|--terminal|--control|--watchtower] [--repair [--failover ROLE]]]" >&2
     exit 1
 }
 
@@ -50,12 +51,12 @@ reset_role_features() {
     NGINX_MODE="internal"
 }
 
-set_role_from_lock() {
-    local stored_role="$1"
+configure_role_from_name() {
+    local resolved_role="$1"
 
     reset_role_features
 
-    case "$stored_role" in
+    case "$resolved_role" in
         Satellite)
             require_nginx "satellite"
             NODE_ROLE="Satellite"
@@ -81,15 +82,137 @@ set_role_from_lock() {
             NGINX_MODE="public"
             REQUIRES_REDIS=true
             ;;
-        "")
-            echo "Unable to repair because the stored node role is empty." >&2
-            exit 1
-            ;;
         *)
-            echo "Unable to repair unknown node role: $stored_role" >&2
-            exit 1
+            return 1
             ;;
     esac
+
+    return 0
+}
+
+resolve_role_from_value() {
+    local raw_role="$1"
+    local normalized_role="${raw_role//[$'\r\n\t ']}"
+    local lower_role="${normalized_role,,}"
+
+    case "$lower_role" in
+        satellite)
+            echo "Satellite"
+            return 0
+            ;;
+        terminal)
+            echo "Terminal"
+            return 0
+            ;;
+        control)
+            echo "Control"
+            return 0
+            ;;
+        watchtower)
+            echo "Watchtower"
+            return 0
+            ;;
+        constellation)
+            echo "Watchtower"
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+detect_role_from_environment() {
+    if [ -f "$LOCK_DIR/control.lck" ] || [ -f "$LOCK_DIR/lcd_screen.lck" ]; then
+        echo "Control"
+        return 0
+    fi
+
+    if [ -f "$LOCK_DIR/nginx_mode.lck" ]; then
+        local nginx_mode
+        nginx_mode=$(tr -d '\r\n\t ' < "$LOCK_DIR/nginx_mode.lck" 2>/dev/null || true)
+        if [ "${nginx_mode,,}" = "public" ]; then
+            echo "Watchtower"
+            return 0
+        fi
+    fi
+
+    for role_file in "$BASE_DIR"/*.role "$BASE_DIR"/.*.role; do
+        [ -f "$role_file" ] || continue
+        local role_name
+        role_name=$(basename "$role_file")
+        role_name=${role_name#.}
+        role_name=${role_name%.role}
+        local resolved
+        resolved=$(resolve_role_from_value "$role_name" 2>/dev/null || true)
+        if [ -n "$resolved" ]; then
+            echo "$resolved"
+            return 0
+        fi
+    done
+
+    return 1
+}
+
+set_role_from_lock() {
+    local stored_role="$1"
+    local resolved_role=""
+    local resolution_method="stored"
+
+    if [ -n "$stored_role" ]; then
+        resolved_role=$(resolve_role_from_value "$stored_role" 2>/dev/null || true)
+    fi
+
+    if [ -z "$resolved_role" ]; then
+        resolution_method="detected"
+        resolved_role=$(detect_role_from_environment 2>/dev/null || true)
+    fi
+
+    if [ -z "$resolved_role" ]; then
+        return 1
+    fi
+
+    if ! configure_role_from_name "$resolved_role"; then
+        return 1
+    fi
+
+    local stored_lower="${stored_role,,}"
+    local resolved_lower="${resolved_role,,}"
+
+    if [ "$resolution_method" = "stored" ] && [ -n "$stored_role" ] && [ "$stored_lower" != "$resolved_lower" ]; then
+        echo "Stored node role '$stored_role' is deprecated; using '$resolved_role' instead."
+    elif [ "$resolution_method" = "detected" ]; then
+        if [ -n "$stored_role" ]; then
+            echo "Stored node role '$stored_role' is not recognized; detected '$resolved_role' from existing configuration."
+        else
+            echo "Stored node role was empty; detected '$resolved_role' from existing configuration."
+        fi
+    fi
+
+    return 0
+}
+
+apply_failover_role() {
+    local failover_value="$1"
+    local resolved_role
+    resolved_role=$(resolve_role_from_value "$failover_value" 2>/dev/null || true)
+    if [ -z "$resolved_role" ]; then
+        return 1
+    fi
+
+    if ! configure_role_from_name "$resolved_role"; then
+        return 1
+    fi
+
+    local provided_lower="${failover_value,,}"
+    local resolved_lower="${resolved_role,,}"
+    if [ "$provided_lower" != "$resolved_lower" ]; then
+        echo "Failover role '$failover_value' is deprecated; using '$resolved_role' instead."
+    else
+        echo "Using failover role '$resolved_role' for repair."
+    fi
+
+    return 0
 }
 
 
@@ -284,12 +407,22 @@ while [[ $# -gt 0 ]]; do
             REPAIR=true
             shift
             ;;
+        --failover)
+            [ -z "$2" ] && usage
+            FAILOVER_ROLE="$2"
+            shift 2
+            ;;
         *)
             usage
             ;;
     esac
 
 done
+
+if [ -n "$FAILOVER_ROLE" ] && [ "$REPAIR" != true ]; then
+    echo "--failover can only be used together with --repair" >&2
+    usage
+fi
 
 if [ "$REPAIR" = true ]; then
     if [ "$CHECK" = true ] || [ -n "$NODE_ROLE" ] || [ -n "$SERVICE" ] || \
@@ -303,8 +436,29 @@ if [ "$REPAIR" = true ]; then
         exit 1
     fi
 
-    stored_role=$(cat "$LOCK_DIR/role.lck")
-    set_role_from_lock "$stored_role"
+    stored_role=$(tr -d '\r\n\t ' < "$LOCK_DIR/role.lck" 2>/dev/null || true)
+    if ! set_role_from_lock "$stored_role"; then
+        if [ -n "$FAILOVER_ROLE" ]; then
+            if ! apply_failover_role "$FAILOVER_ROLE"; then
+                echo "Invalid failover role '$FAILOVER_ROLE'. Supported roles: Satellite, Terminal, Control, Watchtower." >&2
+                exit 1
+            fi
+            if [ -n "$stored_role" ]; then
+                echo "Unable to determine node role from stored value '$stored_role'; using failover role '$NODE_ROLE'."
+            else
+                echo "Unable to determine node role from lock files; using failover role '$NODE_ROLE'."
+            fi
+        else
+            if [ -n "$stored_role" ]; then
+                echo "Unable to determine node role from stored value '$stored_role'. Re-run with --failover <role> to specify the role to restore." >&2
+            else
+                echo "Unable to determine node role for repair. Re-run with --failover <role> to specify the role to restore." >&2
+            fi
+            exit 1
+        fi
+    elif [ -n "$FAILOVER_ROLE" ]; then
+        echo "Failover role '$FAILOVER_ROLE' was not needed; continuing with the $NODE_ROLE role."
+    fi
     SKIP_SERVICE_RESTART=true
 
     if [ -f "$LOCK_DIR/service.lck" ]; then
