@@ -207,3 +207,62 @@ def test_switch_role_auto_upgrade_supports_regular_channel():
         _cleanup_switch_role_state(repo_root)
         if created_venv:
             shutil.rmtree(venv_dir, ignore_errors=True)
+
+
+def test_switch_role_repair_requires_role_lock():
+    repo_root = Path(__file__).resolve().parent.parent
+    script_path = repo_root / "switch-role.sh"
+    try:
+        result = subprocess.run(
+            ["bash", str(script_path), "--repair"],
+            capture_output=True,
+            text=True,
+            cwd=repo_root,
+        )
+        assert result.returncode != 0
+        assert "current node role is unknown" in result.stdout
+    finally:
+        _cleanup_switch_role_artifacts(repo_root)
+
+
+def test_switch_role_repair_restores_terminal_defaults(tmp_path):
+    repo_root = Path(__file__).resolve().parent.parent
+    script_path = repo_root / "switch-role.sh"
+    lock_dir = repo_root / "locks"
+    lock_dir.mkdir(exist_ok=True)
+    (lock_dir / "role.lck").write_text("Terminal")
+    (lock_dir / "nginx_mode.lck").write_text("public")
+    auto_upgrade_lock = lock_dir / "auto_upgrade.lck"
+    auto_upgrade_lock.write_text("stable\n")
+
+    venv_dir, created_venv = _ensure_fake_venv_python(repo_root)
+    fake_bin = Path(tempfile.mkdtemp(dir=str(tmp_path)))
+    sudo_stub = fake_bin / "sudo"
+    sudo_stub.write_text("#!/usr/bin/env bash\nexit 0\n")
+    sudo_stub.chmod(0o755)
+
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}:{env['PATH']}"
+
+    debug_env = repo_root / "debug.env"
+    debug_env.unlink(missing_ok=True)
+
+    try:
+        result = subprocess.run(
+            ["bash", str(script_path), "--repair"],
+            capture_output=True,
+            text=True,
+            cwd=repo_root,
+            env=env,
+        )
+        assert result.returncode == 0
+        assert "Repair completed for the Terminal role." in result.stdout
+        assert (lock_dir / "celery.lck").exists()
+        assert (lock_dir / "nginx_mode.lck").read_text().strip() == "internal"
+        assert debug_env.read_text().strip() == "DEBUG=1"
+        assert auto_upgrade_lock.read_text().strip() == "stable"
+    finally:
+        _cleanup_switch_role_state(repo_root)
+        if created_venv:
+            shutil.rmtree(venv_dir, ignore_errors=True)
+        shutil.rmtree(fake_bin, ignore_errors=True)
