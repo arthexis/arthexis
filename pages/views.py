@@ -643,35 +643,22 @@ def admin_model_graph(request, app_label: str):
     download_params["format"] = "pdf"
     download_url = f"{request.path}?{download_params.urlencode()}"
 
-    context = admin.site.each_context(request)
-    context.update(
-        {
-            "app_label": app_label,
-            "app_verbose_name": app_config.verbose_name,
-            "graph_source": graph_source,
-            "graph_svg": graph_svg,
-            "graph_error": graph_error,
-            "models": model_links,
-            "title": _("%(app)s model graph") % {"app": app_config.verbose_name},
-            "download_url": download_url,
-        }
-    )
+    extra_context = {
+        "app_label": app_label,
+        "app_verbose_name": app_config.verbose_name,
+        "graph_source": graph_source,
+        "graph_svg": graph_svg,
+        "graph_error": graph_error,
+        "models": model_links,
+        "title": _("%(app)s model graph") % {"app": app_config.verbose_name},
+        "download_url": download_url,
+    }
 
-    template_name = "admin/model_graph.html"
-    response = render(request, template_name, context)
-    if getattr(response, "context", None) is None:
-        response.context = context
-    if test_signals.template_rendered.receivers:
-        template = loader.get_template(template_name)
-        signal_context = context
-        if request is not None and "request" not in signal_context:
-            signal_context = {**context, "request": request}
-        test_signals.template_rendered.send(
-            sender=template.__class__,
-            template=template,
-            context=signal_context,
-        )
-    return response
+    return _render_admin_template(
+        request,
+        "admin/model_graph.html",
+        extra_context,
+    )
 
 
 def _locate_readme_document(role, doc: str | None, lang: str) -> SimpleNamespace:
@@ -2014,18 +2001,48 @@ def _admin_context(request):
     return context
 
 
+def _render_admin_template(
+    request,
+    template_name: str,
+    extra_context: dict[str, Any] | None = None,
+    *,
+    status: int | None = None,
+):
+    context = _admin_context(request)
+    if extra_context:
+        context.update(extra_context)
+    response = render(request, template_name, context, status=status)
+    if getattr(response, "context", None) is None:
+        response.context = context
+    if test_signals.template_rendered.receivers:
+        template = loader.get_template(template_name)
+        signal_context = context
+        if request is not None and "request" not in signal_context:
+            signal_context = {**context, "request": request}
+        test_signals.template_rendered.send(
+            sender=template.__class__,
+            template=template,
+            context=signal_context,
+        )
+    return response
+
+
 def admin_manual_list(request):
     manuals = UserManual.objects.order_by("title")
-    context = _admin_context(request)
-    context["manuals"] = manuals
-    return render(request, "admin_doc/manuals.html", context)
+    return _render_admin_template(
+        request,
+        "admin_doc/manuals.html",
+        {"manuals": manuals},
+    )
 
 
 def admin_manual_detail(request, slug):
     manual = get_object_or_404(UserManual, slug=slug)
-    context = _admin_context(request)
-    context["manual"] = manual
-    return render(request, "admin_doc/manual_detail.html", context)
+    return _render_admin_template(
+        request,
+        "admin_doc/manual_detail.html",
+        {"manual": manual},
+    )
 
 
 def manual_pdf(request, slug):
