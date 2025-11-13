@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Confirm Customer Account names stay uppercase",
+      "created_on": "2024-05-01T00:00:00Z",
+      "url": "/admin/core/customeraccount/",
+      "request_details": "1. In the Customer Accounts admin, add a new record with the name 'MixedCase'.\n2. Save the record and confirm the stored name is displayed in uppercase.\n3. Edit the same record, change the name to 'mixedcase', and save again.\n4. Verify the name remains uppercase and that Live Subscription start and next renewal fields stay empty when no product is assigned.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": ""
+    }
+  }
+]

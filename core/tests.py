@@ -783,6 +783,18 @@ class RFIDAssignmentTests(TestCase):
 
 
 class CustomerAccountTests(TestCase):
+    def test_uppercase_name_persisted_on_create_and_save(self):
+        account = CustomerAccount.objects.create(name="MixedCase")
+
+        self.assertEqual(account.name, "MIXEDCASE")
+
+        account.refresh_from_db()
+        account.name = "mixedcase"
+        account.save()
+        account.refresh_from_db()
+
+        self.assertEqual(account.name, "MIXEDCASE")
+
     def test_balance_calculation(self):
         user = User.objects.create_user(username="balance", password="x")
         acc = CustomerAccount.objects.create(user=user, name="BALANCE")
@@ -1014,6 +1026,13 @@ class LiveSubscriptionTests(TestCase):
         self.account = CustomerAccount.objects.create(user=self.user, name="SUBSCRIBER")
         self.product = Product.objects.create(name="Gold", renewal_period=30)
         self.client.force_login(self.user)
+
+    def test_account_without_product_keeps_subscription_fields_empty(self):
+        self.account.refresh_from_db()
+
+        self.assertIsNone(self.account.live_subscription_product)
+        self.assertIsNone(self.account.live_subscription_start_date)
+        self.assertIsNone(self.account.live_subscription_next_renewal)
 
     def test_create_and_list_live_subscription(self):
         response = self.client.post(
