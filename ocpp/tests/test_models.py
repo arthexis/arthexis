@@ -236,6 +236,50 @@ class ChargerManagerNodeTests(TestCase):
         self.assertIsNone(unmanaged.manager_node_id)
 
 
+class ChargerLocalOriginTests(TestCase):
+    def setUp(self):
+        self.local_node = Node.objects.create(
+            hostname="local-node", address="127.0.0.1"
+        )
+        self.remote_node = Node.objects.create(
+            hostname="remote-node", address="10.0.0.1"
+        )
+
+    def test_is_local_true_when_origin_matches_local_node(self):
+        charger = Charger.objects.create(
+            charger_id="LOCAL-MATCH", node_origin=self.local_node
+        )
+
+        with patch("nodes.models.Node.get_local", return_value=self.local_node):
+            self.assertTrue(charger.is_local)
+
+    def test_is_local_false_when_local_node_missing(self):
+        charger = Charger.objects.create(
+            charger_id="NO-LOCAL", node_origin=self.remote_node
+        )
+
+        with patch("nodes.models.Node.get_local", return_value=None):
+            self.assertFalse(charger.is_local)
+
+    def test_is_local_false_when_origin_differs_from_local(self):
+        charger = Charger.objects.create(
+            charger_id="REMOTE-ORIGIN", node_origin=self.remote_node
+        )
+
+        with patch("nodes.models.Node.get_local", return_value=self.local_node):
+            self.assertFalse(charger.is_local)
+
+    def test_is_local_true_when_origin_missing_but_local_exists(self):
+        with patch("nodes.models.Node.get_local", return_value=None):
+            charger = Charger.objects.create(charger_id="LOCAL-UNTRACKED")
+
+        charger.refresh_from_db()
+        self.assertIsNone(charger.node_origin_id)
+
+        with patch("nodes.models.Node.get_local", return_value=self.local_node):
+            self.assertTrue(charger.is_local)
+
+
 class ChargerConnectorLabelTests(TestCase):
     def test_connector_labels_use_letters(self):
         connector_a = Charger.objects.create(
