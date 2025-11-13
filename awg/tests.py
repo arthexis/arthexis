@@ -1,6 +1,7 @@
 import os
 from datetime import time
 from decimal import Decimal
+from html import unescape
 
 import os
 
@@ -226,6 +227,52 @@ class AWGCalculatorTests(TestCase):
         lead = PowerLead.objects.get()
         self.assertTrue(lead.malformed)
         self.assertEqual(lead.values["meters"], "oops")
+
+    def test_zap_value_redirects_to_result_page(self):
+        url = reverse("awg:calculator")
+        data = {
+            "meters": "zap",
+            "amps": "40",
+            "volts": "220",
+            "material": "cu",
+            "max_lines": "1",
+            "phases": "2",
+            "temperature": "60",
+            "conduit": "emt",
+            "ground": "1",
+        }
+        resp = self.client.post(url, data)
+        self.assertRedirects(resp, reverse("awg:zapped"))
+
+        follow = self.client.get(reverse("awg:zapped"))
+        self.assertIn(
+            "Ouch! I've been zapped!! Now it's my turn...",
+            unescape(follow.content.decode()),
+        )
+
+        lead = PowerLead.objects.get()
+        self.assertFalse(lead.malformed)
+        self.assertEqual(lead.values["meters"], "zap")
+
+    def test_zap_detection_ignores_spacing_and_symbols(self):
+        url = reverse("awg:calculator")
+        data = {
+            "meters": "10",
+            "amps": "  z - a_p!!  ",
+            "volts": "220",
+            "material": "cu",
+            "max_lines": "1",
+            "phases": "2",
+            "temperature": "60",
+            "conduit": "emt",
+            "ground": "1",
+        }
+        resp = self.client.post(url, data)
+        self.assertRedirects(resp, reverse("awg:zapped"))
+
+        lead = PowerLead.objects.get()
+        self.assertFalse(lead.malformed)
+        self.assertEqual(lead.values["amps"], "  z - a_p!!  ")
 
     def test_invalid_ground_reports_error(self):
         url = reverse("awg:calculator")
