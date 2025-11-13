@@ -69,6 +69,95 @@ class TransactionKwTests(TestCase):
         )
         self.assertEqual(transaction.kw, 0.0)
 
+    def test_kw_prefetched_meter_values_used_without_meter_start_or_stop(self):
+        start = timezone.now()
+        transaction = Transaction.objects.create(
+            charger=self.charger,
+            start_time=start,
+            stop_time=None,
+        )
+
+        first = MeterValue.objects.create(
+            charger=self.charger,
+            transaction=transaction,
+            timestamp=start + timedelta(minutes=1),
+            energy=Decimal("2.000"),
+        )
+        second = MeterValue.objects.create(
+            charger=self.charger,
+            transaction=transaction,
+            timestamp=start + timedelta(minutes=2),
+            energy=Decimal("5.500"),
+        )
+
+        transaction.prefetched_meter_values = [second, first]
+
+        self.assertEqual(transaction.kw, 3.5)
+
+    def test_kw_prefetched_objects_cache_used_when_available(self):
+        start = timezone.now()
+        transaction = Transaction.objects.create(
+            charger=self.charger,
+            start_time=start,
+            stop_time=None,
+        )
+
+        first = MeterValue.objects.create(
+            charger=self.charger,
+            transaction=transaction,
+            timestamp=start + timedelta(minutes=1),
+            energy=Decimal("1.500"),
+        )
+        second = MeterValue.objects.create(
+            charger=self.charger,
+            transaction=transaction,
+            timestamp=start + timedelta(minutes=5),
+            energy=Decimal("4.000"),
+        )
+
+        prefetched = (
+            Transaction.objects.filter(pk=transaction.pk)
+            .prefetch_related("meter_values")
+            .get()
+        )
+
+        self.assertEqual(prefetched.kw, 2.5)
+
+    def test_kw_queryset_used_when_prefetched_data_missing(self):
+        start = timezone.now()
+        transaction = Transaction.objects.create(
+            charger=self.charger,
+            start_time=start,
+            stop_time=None,
+        )
+
+        MeterValue.objects.create(
+            charger=self.charger,
+            transaction=transaction,
+            timestamp=start + timedelta(minutes=3),
+            energy=Decimal("10.000"),
+        )
+        MeterValue.objects.create(
+            charger=self.charger,
+            transaction=transaction,
+            timestamp=start + timedelta(minutes=7),
+            energy=Decimal("12.250"),
+        )
+
+        self.assertEqual(transaction.kw, 2.25)
+
+    def test_kw_returns_zero_when_all_fallbacks_fail(self):
+        start = timezone.now()
+        transaction = Transaction.objects.create(
+            charger=self.charger,
+            start_time=start,
+            stop_time=None,
+        )
+
+        transaction.prefetched_meter_values = []
+
+        self.assertEqual(transaction.kw, 0.0)
+
 
 class MeterReadingNormalizationTests(TestCase):
     def setUp(self):
