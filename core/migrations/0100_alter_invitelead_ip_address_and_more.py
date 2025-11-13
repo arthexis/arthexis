@@ -4,14 +4,18 @@ import django.core.validators
 from django.db import migrations, models
 
 
-def _fill_blank_fields(apps, schema_editor):
-    InviteLead = apps.get_model("core", "InviteLead")
+def _fill_blank_location_fields(apps, schema_editor):
     Location = apps.get_model("core", "Location")
+
+    Location.objects.filter(contract_type__isnull=True).update(contract_type="")
+    Location.objects.filter(zone__isnull=True).update(zone="")
+
+
+def _fill_blank_ip_fields(apps, schema_editor):
+    InviteLead = apps.get_model("core", "InviteLead")
     User = apps.get_model("core", "User")
 
     InviteLead.objects.filter(ip_address__isnull=True).update(ip_address="")
-    Location.objects.filter(contract_type__isnull=True).update(contract_type="")
-    Location.objects.filter(zone__isnull=True).update(zone="")
     User.objects.filter(last_visit_ip_address__isnull=True).update(
         last_visit_ip_address=""
     )
@@ -28,16 +32,7 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunPython(_fill_blank_fields, _noop),
-        migrations.AlterField(
-            model_name="invitelead",
-            name="ip_address",
-            field=models.CharField(
-                blank=True,
-                max_length=45,
-                validators=[django.core.validators.validate_ipv46_address],
-            ),
-        ),
+        migrations.RunPython(_fill_blank_location_fields, _noop),
         migrations.AlterField(
             model_name="location",
             name="contract_type",
@@ -74,6 +69,36 @@ class Migration(migrations.Migration):
             ),
         ),
         migrations.AlterField(
+            model_name="invitelead",
+            name="ip_address",
+            field=models.CharField(
+                blank=True,
+                max_length=45,
+                null=True,
+                validators=[django.core.validators.validate_ipv46_address],
+            ),
+        ),
+        migrations.AlterField(
+            model_name="user",
+            name="last_visit_ip_address",
+            field=models.CharField(
+                blank=True,
+                max_length=45,
+                null=True,
+                validators=[django.core.validators.validate_ipv46_address],
+            ),
+        ),
+        migrations.RunPython(_fill_blank_ip_fields, _noop),
+        migrations.AlterField(
+            model_name="invitelead",
+            name="ip_address",
+            field=models.CharField(
+                blank=True,
+                max_length=45,
+                validators=[django.core.validators.validate_ipv46_address],
+            ),
+        ),
+        migrations.AlterField(
             model_name="user",
             name="last_visit_ip_address",
             field=models.CharField(
@@ -82,4 +107,5 @@ class Migration(migrations.Migration):
                 validators=[django.core.validators.validate_ipv46_address],
             ),
         ),
+        migrations.RunPython(_fill_blank_fields, _noop),
     ]

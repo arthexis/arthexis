@@ -7,10 +7,10 @@ import math
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from collections.abc import MutableMapping
-from typing import Literal, Optional, Union
+from typing import Iterable, Literal, Optional, Union
 
 from django.contrib.auth.decorators import login_required
-from django.shortcuts import render
+from django.shortcuts import redirect, render
 from django.template.response import TemplateResponse
 from django.test import signals as test_signals
 from django.views.decorators.csrf import csrf_exempt
@@ -27,6 +27,16 @@ from .models import (
 )
 
 from .constants import CONDUIT_LABELS
+
+
+_ZAP_NUMERIC_FIELDS: tuple[str, ...] = (
+    "meters",
+    "amps",
+    "volts",
+    "max_lines",
+    "phases",
+    "temperature",
+)
 
 
 class AWG(int):
@@ -87,6 +97,20 @@ def _format_decimal(value: Decimal, places: str = "0.0000") -> Decimal:
 
     quantizer = Decimal(places)
     return value.quantize(quantizer, rounding=ROUND_HALF_UP)
+
+
+def _normalize_special_value(value: Optional[Union[str, int]]) -> str:
+    """Return ``value`` normalized for keyword comparisons."""
+
+    if not isinstance(value, str):
+        return ""
+    return "".join(ch for ch in value.lower() if ch.isalnum())
+
+
+def _contains_zap(values: Iterable[Optional[Union[str, int]]]) -> bool:
+    """Return ``True`` when any ``values`` contain the zap keyword."""
+
+    return any(_normalize_special_value(value) == "zap" for value in values)
 
 
 def _load_awg_data(
@@ -573,6 +597,18 @@ def calculator(request):
         lead_values = {
             k: v for k, v in request.POST.items() if k != "csrfmiddlewaretoken"
         }
+        zap_values = (request.POST.get(field) for field in _ZAP_NUMERIC_FIELDS)
+        if _contains_zap(zap_values):
+            PowerLead.objects.create(
+                user=request.user if request.user.is_authenticated else None,
+                values=lead_values,
+                path=request.path,
+                referer=get_original_referer(request),
+                user_agent=request.META.get("HTTP_USER_AGENT", ""),
+                ip_address=_extract_client_ip(),
+                malformed=False,
+            )
+            return redirect("awg:zapped")
         max_awg = request.POST.get("max_awg") or None
         conduit_field = request.POST.get("conduit")
         conduit_arg = None if conduit_field in (None, "") else conduit_field
@@ -611,6 +647,16 @@ def calculator(request):
         show_in_pages=True
     ).order_by("name")
     return render(request, "awg/calculator.html", context)
+
+
+@landing(_lazy("AWG Cable Calculator"))
+def zapped_result(request: "HttpRequest") -> TemplateResponse:
+    """Display the playful zap easter egg response."""
+
+    context = {
+        "zap_message": _lazy("Ouch! I've been zapped!! Now it's my turn..."),
+    }
+    return render(request, "awg/zapped.html", context)
 
 
 def _prepare_energy_tariff_options(

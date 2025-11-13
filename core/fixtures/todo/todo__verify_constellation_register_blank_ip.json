@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Register node without constellation IP after null constraint fix",
+      "version": "0.1.32",
+      "created_on": "2025-02-15T00:00:00Z",
+      "url": "/nodes/register/",
+      "request_details": "1. Run `python manage.py shell` and execute:\nfrom django.contrib.auth import get_user_model\nfrom django.test import Client\nclient = Client()\nclient.force_login(get_user_model().objects.get(username=\"admin\"))\nresponse = client.post(\"/nodes/register/\", data={\"hostname\": \"qa-constellation\", \"mac_address\": \"aa:bb:cc:dd:ee:99\", \"port\": 8052, \"constellation_ip\": \"\"}, content_type=\"application/json\")\nprint(response.status_code)\nprint(response.json())\n2. Confirm the response status code is 200 and the JSON payload includes the new node ID.\n3. Open the Django admin → Nodes → Nodes changelist, edit the newly created `qa-constellation` node, and verify the Address, IPv4 address, IPv6 address, and Constellation IP fields display as empty strings instead of `None`.\n4. Delete the test node once verified to keep fixtures clean.",
+      "done_on": null,
+      "is_deleted": false
+    }
+  }
+]

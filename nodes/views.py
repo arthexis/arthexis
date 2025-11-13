@@ -941,8 +941,8 @@ def register_node(request):
         return _add_cors_headers(request, response)
 
     mac_address = mac_address.lower()
-    address_value = address
-    ipv6_value = ipv6_address
+    address_value = address or ""
+    ipv6_value = ipv6_address or ""
     constellation_value = constellation_ip
 
     for candidate in Node.sanitize_ipv4_addresses([address, network_hostname, hostname]):

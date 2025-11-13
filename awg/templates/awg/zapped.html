@@ -1,0 +1,10 @@
+{% extends "pages/base.html" %}
+{% load i18n %}
+{% block title %}{% trans "Zapped!" %}{% endblock %}
+{% block content %}
+<div class="py-5 text-center">
+  <div class="display-4 text-warning mb-3">⚡ {% trans "Zapped!" %}</div>
+  <p class="lead mb-4">{{ zap_message }}</p>
+  <a class="btn btn-primary btn-lg" href="{% url 'awg:calculator' %}">{% trans "Take me back to the calculator" %}</a>
+</div>
+{% endblock %}

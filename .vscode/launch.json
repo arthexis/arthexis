@@ -32,6 +32,17 @@
             ],
             "subProcess": true,
             "preLaunchTask": "Dev: collectstatic"
+        },
+        {
+            "name": "Migration Server",
+            "type": "python",
+            "request": "launch",
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "windows": {
+                "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe"
+            },
+            "program": "${workspaceFolder}/scripts/migration_server.py",
+            "noDebug": true
         }
     ]
 }
