@@ -6,11 +6,11 @@
       "is_user_data": false,
       "is_deleted": false,
       "package": [
-        "arthexis"
+        "pkg"
       ],
       "release_manager": null,
       "version": "2.0",
-      "revision": "a848e1ff87df90169c860c4b1dd6f7cb9588376e",
+      "revision": "2b19bd4ad9edbf1793a806b757ee54ac35ea6988",
       "severity": "normal",
       "pypi_url": "",
       "github_url": "",

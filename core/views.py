@@ -782,6 +782,32 @@ def _todo_blocks_publish(todo: Todo, release: PackageRelease) -> bool:
     return False
 
 
+def _ensure_template_name(template, default_name: str):
+    """Ensure debug tooling can access a template ``name`` attribute."""
+
+    if getattr(template, "name", None):
+        return template
+
+    origin = getattr(template, "origin", None)
+    for attr in ("template_name", "name"):
+        if origin is not None:
+            value = getattr(origin, attr, None)
+            if value:
+                break
+    else:
+        value = None
+
+    if not value:
+        value = default_name
+
+    try:
+        setattr(template, "name", value)
+    except Exception:  # pragma: no cover - attribute assignment guard
+        pass
+
+    return template
+
+
 def _render_release_progress_error(
     request,
     release: "PackageRelease | None",
@@ -808,7 +834,10 @@ def _render_release_progress_error(
         except NoReverseMatch:  # pragma: no cover - defensive fallback
             release_url = ""
 
-    template = get_template("core/release_progress_error.html")
+    template = _ensure_template_name(
+        get_template("core/release_progress_error.html"),
+        "core/release_progress_error.html",
+    )
     context = {
         "release": release,
         "action": action,
@@ -2285,7 +2314,10 @@ def release_progress(request, pk: int, action: str):
     else:
         lock_path.parent.mkdir(parents=True, exist_ok=True)
         lock_path.write_text(json.dumps(ctx), encoding="utf-8")
-    template = get_template("core/release_progress.html")
+    template = _ensure_template_name(
+        get_template("core/release_progress.html"),
+        "core/release_progress.html",
+    )
     content = template.render(context, request)
     signals.template_rendered.send(
         sender=template.__class__,
