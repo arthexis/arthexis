@@ -12,7 +12,7 @@ def load_ocpp_manual(apps, schema_editor):
     fixture_path = fixtures_dir / FIXTURE_NAME
     if not fixture_path.exists():
         return
-    data = json.loads(fixture_path.read_text())
+    data = json.loads(fixture_path.read_text(encoding="utf-8"))
     if not data:
         return
     fields = data[0]["fields"]
