@@ -5,11 +5,16 @@ from django.conf import settings
 from django.db import migrations, models
 
 
-def _fill_blank_non_ip_fields(apps, schema_editor):
+def _normalize_network_fields(apps, schema_editor):
+    """Replace ``NULL`` values with empty strings for legacy records."""
+
     Node = apps.get_model("nodes", "Node")
     ContentSample = apps.get_model("nodes", "ContentSample")
 
     Node.objects.filter(ipv4_address__isnull=True).update(ipv4_address="")
+    Node.objects.filter(ipv6_address__isnull=True).update(ipv6_address="")
+    Node.objects.filter(constellation_ip__isnull=True).update(constellation_ip="")
+    Node.objects.filter(address__isnull=True).update(address="")
     Node.objects.filter(constellation_device__isnull=True).update(
         constellation_device=""
     )
@@ -18,13 +23,18 @@ def _fill_blank_non_ip_fields(apps, schema_editor):
     ContentSample.objects.filter(hash__isnull=True).update(hash="")
 
 
-def _fill_blank_ip_fields(apps, schema_editor):
+def _restore_network_nulls(apps, schema_editor):
+    """Recreate the legacy ``NULL`` values when rolling back."""
+
     Node = apps.get_model("nodes", "Node")
+    ContentSample = apps.get_model("nodes", "ContentSample")
 
-    Node.objects.filter(ipv6_address__isnull=True).update(ipv6_address="")
-    Node.objects.filter(constellation_ip__isnull=True).update(constellation_ip="")
-    Node.objects.filter(address__isnull=True).update(address="")
-
+    Node.objects.filter(ipv4_address="").update(ipv4_address=None)
+    Node.objects.filter(ipv6_address="").update(ipv6_address=None)
+    Node.objects.filter(constellation_ip="").update(constellation_ip=None)
+    Node.objects.filter(address="").update(address=None)
+    Node.objects.filter(constellation_device="").update(constellation_device=None)
+    Node.objects.filter(mac_address="").update(mac_address=None)
 
 def _fill_blank_strings(apps, schema_editor):
     """Ensure legacy ``NULL`` values become empty strings before constraints."""
@@ -58,7 +68,10 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunPython(_fill_blank_non_ip_fields, _noop),
+        migrations.RunPython(
+            _normalize_network_fields,
+            _restore_network_nulls,
+        ),
         migrations.AlterField(
             model_name="contentsample",
             name="hash",
@@ -85,37 +98,6 @@ class Migration(migrations.Migration):
             field=models.CharField(
                 blank=True,
                 max_length=39,
-                null=True,
-                validators=[django.core.validators.validate_ipv6_address],
-            ),
-        ),
-        migrations.AlterField(
-            model_name="node",
-            name="constellation_ip",
-            field=models.CharField(
-                blank=True,
-                max_length=45,
-                null=True,
-                validators=[django.core.validators.validate_ipv46_address],
-            ),
-        ),
-        migrations.AlterField(
-            model_name="node",
-            name="address",
-            field=models.CharField(
-                blank=True,
-                max_length=45,
-                null=True,
-                validators=[django.core.validators.validate_ipv46_address],
-            ),
-        ),
-        migrations.RunPython(_fill_blank_ip_fields, _noop),
-        migrations.AlterField(
-            model_name="node",
-            name="ipv6_address",
-            field=models.CharField(
-                blank=True,
-                max_length=39,
                 validators=[django.core.validators.validate_ipv6_address],
             ),
         ),
@@ -137,12 +119,10 @@ class Migration(migrations.Migration):
                 validators=[django.core.validators.validate_ipv46_address],
             ),
         ),
-        migrations.RunPython(_fill_blank_strings, _noop),
-        migrations.AlterConstraint(
+        migrations.AddConstraint(
             model_name="node",
-            name="nodes_node_constellation_device_unique",
             constraint=models.UniqueConstraint(
-                condition=models.Q(("constellation_device", ""), _negated=True),
+                condition=~models.Q(constellation_device=""),
                 fields=("constellation_device",),
                 name="nodes_node_constellation_device_unique",
             ),
@@ -150,7 +130,7 @@ class Migration(migrations.Migration):
         migrations.AddConstraint(
             model_name="node",
             constraint=models.UniqueConstraint(
-                condition=models.Q(("mac_address", ""), _negated=True),
+                condition=~models.Q(mac_address=""),
                 fields=("mac_address",),
                 name="nodes_node_mac_address_unique",
             ),
@@ -158,7 +138,7 @@ class Migration(migrations.Migration):
         migrations.AddConstraint(
             model_name="contentsample",
             constraint=models.UniqueConstraint(
-                condition=models.Q(("hash", ""), _negated=True),
+                condition=~models.Q(hash=""),
                 fields=("hash",),
                 name="nodes_contentsample_hash_unique",
             ),
