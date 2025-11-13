@@ -4885,7 +4885,7 @@ class Todo(Entity):
     def save(self, *args, **kwargs):
         created = self.pk is None
         if created:
-            default_version = self._default_version()
+            default_version = self._default_target_version()
             if default_version and not (self.version or "").strip():
                 self.version = default_version
         tracked_fields = {
@@ -5071,13 +5071,25 @@ class Todo(Entity):
     def _default_version(cls) -> str:
         """Return the local version label used for TODO tracking."""
 
-        return cls._next_patch_label(cls._resolve_local_version_label())
+        return cls._resolve_local_version_label()
+
+    @classmethod
+    def _default_target_version(cls) -> str:
+        """Return the default target version label for new TODOs."""
+
+        return cls._next_patch_label(cls._default_version())
 
     @classmethod
     def default_version(cls) -> str:
         """Public helper returning the tracked version label."""
 
         return cls._default_version()
+
+    @classmethod
+    def default_target_version(cls) -> str:
+        """Public helper returning the default target version label."""
+
+        return cls._default_target_version()
 
     def _update_fixture_state(self) -> None:
         if not self.is_seed_data:
