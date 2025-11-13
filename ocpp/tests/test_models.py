@@ -24,8 +24,32 @@ from ocpp.models import (
     Charger,
     ChargerConfiguration,
     ConfigurationKey,
+    generate_log_request_id,
 )
 from nodes.models import Node
+
+
+class GenerateLogRequestIdTests(TestCase):
+    def test_generate_log_request_id_clamps_and_substitutes_zero(self):
+        max_request_id = (1 << 31) - 1
+        representative_values = [0, 1, max_request_id]
+
+        with patch("ocpp.models.secrets.randbits", side_effect=representative_values) as mocked_randbits:
+            generated_ids = [generate_log_request_id() for _ in representative_values]
+
+        self.assertEqual(mocked_randbits.call_count, len(representative_values))
+
+        self.assertEqual(generated_ids[0], 1)
+        self.assertEqual(generated_ids[1], 1)
+        self.assertEqual(generated_ids[2], max_request_id)
+
+        for generated_id in generated_ids:
+            self.assertGreaterEqual(generated_id, 1)
+            self.assertLessEqual(generated_id, max_request_id)
+
+        follow_up_id = generate_log_request_id()
+        self.assertGreaterEqual(follow_up_id, 1)
+        self.assertLessEqual(follow_up_id, max_request_id)
 
 
 class LocationEnergyTariffFieldsTests(TestCase):
