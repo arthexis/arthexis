@@ -335,14 +335,16 @@ synchronize_constellation_devices() {
     fi
 
     local parser_output
-    parser_output="$(printf '%s' "$payload" | python3 - "$CONSTELLATION_DEVICE_MANIFEST" <<'PY')"
+    parser_output="$(
+        PAYLOAD="$payload" python3 - "$CONSTELLATION_DEVICE_MANIFEST" <<'PY'
 import json
+import os
 import pathlib
 import sys
 
 manifest_path = pathlib.Path(sys.argv[1])
 try:
-    data = json.loads(sys.stdin.read() or "{}")
+    data = json.loads(os.environ.get("PAYLOAD") or "{}")
 except json.JSONDecodeError:
     data = {}
 
@@ -374,7 +376,7 @@ except OSError:
 for item in entries:
     print(f"{item['name']}|{item['alias']}")
 PY
-"
+    )"
     if [[ $? -ne 0 ]]; then
         echo "Warning: failed to parse Constellation device assignments." >&2
         return 1
@@ -405,7 +407,8 @@ restore_constellation_devices_from_manifest() {
     fi
 
     local parser_output
-    parser_output="$(python3 - "$CONSTELLATION_DEVICE_MANIFEST" <<'PY')"
+    parser_output="$(
+        python3 - "$CONSTELLATION_DEVICE_MANIFEST" <<'PY'
 import json
 import pathlib
 import sys
@@ -439,7 +442,7 @@ for entry in entries:
     alias = (entry.get("alias") or "").strip()
     print(f"{name}|{alias}")
 PY
-"
+    )"
     local status=$?
     if [[ $status -ne 0 ]]; then
         return 0
