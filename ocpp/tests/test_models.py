@@ -403,6 +403,44 @@ class ChargerConnectorLabelTests(TestCase):
     def test_letter_conversion_handles_multiple_cycles(self):
         self.assertEqual(Charger.connector_letter_from_value(27), "AA")
 
+    def test_connector_slug_from_value_and_back(self):
+        self.assertEqual(Charger.connector_slug_from_value(None), "all")
+        self.assertEqual(Charger.connector_slug_from_value(5), "5")
+
+        self.assertIsNone(Charger.connector_value_from_slug(None))
+        self.assertIsNone(Charger.connector_value_from_slug(""))
+        self.assertIsNone(Charger.connector_value_from_slug("all"))
+        self.assertEqual(Charger.connector_value_from_slug(7), 7)
+        self.assertEqual(Charger.connector_value_from_slug("8"), 8)
+
+        with self.assertRaises(ValueError):
+            Charger.connector_value_from_slug("AA")
+
+    def test_connector_letter_from_slug_handles_multi_letter(self):
+        self.assertEqual(Charger.connector_letter_from_slug(27), "AA")
+        self.assertEqual(Charger.connector_letter_from_slug("28"), "AB")
+        self.assertIsNone(Charger.connector_letter_from_slug(None))
+
+    def test_connector_value_from_letter_normalizes_case(self):
+        self.assertEqual(Charger.connector_value_from_letter("a"), 1)
+        self.assertEqual(Charger.connector_value_from_letter("A"), 1)
+        self.assertEqual(Charger.connector_value_from_letter("Z"), 26)
+        self.assertEqual(Charger.connector_value_from_letter("aa"), 27)
+
+        with self.assertRaisesMessage(ValueError, "Connector label is required"):
+            Charger.connector_value_from_letter("")
+
+        with self.assertRaises(ValueError):
+            Charger.connector_value_from_letter("A1")
+
+    def test_identity_helpers_handle_aggregate_connector(self):
+        charger = Charger.objects.create(charger_id="AGGREGATE-1")
+
+        self.assertIsNone(charger.connector_id)
+        self.assertEqual(str(charger.connector_label), "All Connectors")
+        self.assertEqual(charger.identity_tuple(), ("AGGREGATE-1", None))
+        self.assertEqual(charger.identity_slug(), "AGGREGATE-1#all")
+
 
 class ChargerVisibilityTests(TestCase):
     @classmethod
