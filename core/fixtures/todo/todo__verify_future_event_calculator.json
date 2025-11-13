@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Validate Future Event Calculator countdown",
+      "created_on": "2024-01-01T00:00:00Z",
+      "url": "/awg/future-event/",
+      "request_details": "1. Open the Future Event Calculator from the Calculators pill.\n2. Confirm a newly created countdown timer in Horologia appears with its title, body, and live countdown.\n3. Let the page sit for at least one minute and verify the seconds update continuously without layout shifts.\n4. Soft-delete the timer or set its scheduled time in the past and reload to ensure the \"No upcoming events\" message appears.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]

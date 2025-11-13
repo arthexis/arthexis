@@ -1,5 +1,5 @@
 import os
-from datetime import time
+from datetime import time, timedelta
 from decimal import Decimal
 from html import unescape
 
@@ -14,8 +14,11 @@ django.setup()
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 from pathlib import Path
 from unittest.mock import patch
+
+from core.models import CountdownTimer
 
 from .models import (
     CableSize,
@@ -188,6 +191,28 @@ class AWGCalculatorTests(TestCase):
         )
         lead = PowerLead.objects.get()
         self.assertEqual(lead.ip_address, "203.0.113.5")
+
+
+class FutureEventCalculatorTests(TestCase):
+    def setUp(self):
+        self.url = reverse("awg:future_event")
+
+    def test_displays_message_without_events(self):
+        resp = self.client.get(self.url)
+        self.assertContains(resp, "No upcoming events")
+        self.assertNotContains(resp, "countdown-target")
+
+    def test_renders_next_event(self):
+        CountdownTimer.objects.create(
+            title="Launch",
+            body="Prepare the crew",
+            scheduled_for=timezone.now() + timedelta(days=2, hours=3),
+        )
+        resp = self.client.get(self.url)
+        self.assertContains(resp, "Launch")
+        self.assertContains(resp, "Prepare the crew")
+        self.assertContains(resp, "countdown-days")
+        self.assertContains(resp, "countdown-target")
 
     def test_invalid_max_awg_reports_error(self):
         url = reverse("awg:calculator")
