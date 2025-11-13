@@ -6,8 +6,15 @@ import sys
 import textwrap
 from pathlib import Path
 
-MAINT_ERROR_LINE = "error_page 500 502 503 504 /maintenance/index.html;"
-FILE_BLOCK = """location = /maintenance/index.html {
+ERROR_LINES = (
+    "error_page 404 /maintenance/404.html;",
+    "error_page 500 502 503 504 /maintenance/index.html;",
+)
+INDEX_BLOCK = """location = /maintenance/index.html {
+    root /usr/share/arthexis-fallback;
+    add_header Cache-Control \"no-store\";
+}"""
+NOT_FOUND_BLOCK = """location = /maintenance/404.html {
     root /usr/share/arthexis-fallback;
     add_header Cache-Control \"no-store\";
 }"""
@@ -55,36 +62,39 @@ def ensure_blocks(block: str) -> tuple[str, bool]:
 
     changed = False
 
-    if MAINT_ERROR_LINE not in inner:
+    missing_error_lines = [line for line in ERROR_LINES if line not in inner]
+    if missing_error_lines:
         idx = inner.find("server_name")
         if idx != -1:
             end_line = inner.find("\n", idx)
             if end_line == -1:
                 end_line = len(inner)
-            inner = (
-                inner[:end_line]
-                + "\n    "
-                + MAINT_ERROR_LINE
-                + inner[end_line:]
-            )
+            insertion = "".join(f"\n    {line}" for line in missing_error_lines)
+            inner = inner[:end_line] + insertion + inner[end_line:]
         else:
-            inner = "\n    " + MAINT_ERROR_LINE + inner
+            insertion = "".join(f"\n    {line}" for line in missing_error_lines)
+            inner = insertion + inner
         changed = True
 
-    indented_file = textwrap.indent(FILE_BLOCK, "    ")
-    if "location = /maintenance/index.html" not in inner:
-        marker = "    location / {"
-        if marker in inner:
-            inner = inner.replace(marker, f"{indented_file}\n\n{marker}", 1)
-        else:
-            inner = inner.rstrip() + "\n" + indented_file + "\n"
-        changed = True
-
+    location_marker = "    location / {"
     indented_dir = textwrap.indent(DIR_BLOCK, "    ")
+    file_blocks = (
+        ("location = /maintenance/index.html", INDEX_BLOCK),
+        ("location = /maintenance/404.html", NOT_FOUND_BLOCK),
+    )
+
+    for identifier, block in file_blocks:
+        if identifier not in inner:
+            indented_block = textwrap.indent(block, "    ")
+            if location_marker in inner:
+                inner = inner.replace(location_marker, f"{indented_block}\n\n{location_marker}", 1)
+            else:
+                inner = inner.rstrip() + "\n" + indented_block + "\n"
+            changed = True
+
     if "location /maintenance/ {" not in inner:
-        marker = "    location / {"
-        if marker in inner:
-            inner = inner.replace(marker, f"{indented_dir}\n\n{marker}", 1)
+        if location_marker in inner:
+            inner = inner.replace(location_marker, f"{indented_dir}\n\n{location_marker}", 1)
         else:
             inner = inner.rstrip() + "\n" + indented_dir + "\n"
         changed = True
