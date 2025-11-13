@@ -35,6 +35,7 @@ from core.celery_utils import (
     periodic_task_name_variants,
 )
 from django.core.exceptions import ValidationError
+from django.core.validators import validate_ipv46_address, validate_ipv6_address
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import padding
@@ -211,14 +212,24 @@ class Node(Entity):
 
     hostname = models.CharField(max_length=100)
     network_hostname = models.CharField(max_length=253, blank=True)
-    ipv4_address = models.TextField(blank=True, null=True)
-    ipv6_address = models.GenericIPAddressField(
-        protocol="IPv6", blank=True, null=True
+    ipv4_address = models.TextField(blank=True)
+    ipv6_address = models.CharField(
+        max_length=39,
+        blank=True,
+        validators=[validate_ipv6_address],
     )
-    constellation_ip = models.GenericIPAddressField(blank=True, null=True)
-    constellation_device = models.CharField(max_length=16, blank=True, null=True)
-    address = models.GenericIPAddressField(blank=True, null=True)
-    mac_address = models.CharField(max_length=17, unique=True, null=True, blank=True)
+    constellation_ip = models.CharField(
+        max_length=45,
+        blank=True,
+        validators=[validate_ipv46_address],
+    )
+    constellation_device = models.CharField(max_length=16, blank=True)
+    address = models.CharField(
+        max_length=45,
+        blank=True,
+        validators=[validate_ipv46_address],
+    )
+    mac_address = models.CharField(max_length=17, blank=True)
     port = models.PositiveIntegerField(default=8888)
     message_queue_length = models.PositiveSmallIntegerField(
         default=10,
@@ -276,9 +287,14 @@ class Node(Entity):
         constraints = [
             models.UniqueConstraint(
                 fields=["constellation_device"],
-                condition=Q(constellation_device__isnull=False),
+                condition=~Q(constellation_device=""),
                 name="nodes_node_constellation_device_unique",
-            )
+            ),
+            models.UniqueConstraint(
+                fields=["mac_address"],
+                condition=~Q(mac_address=""),
+                name="nodes_node_mac_address_unique",
+            ),
         ]
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
@@ -637,7 +653,7 @@ class Node(Entity):
                 return node
             return (
                 cls.objects.filter(current_relation=cls.Relation.SELF)
-                .filter(Q(mac_address__isnull=True) | Q(mac_address=""))
+                .filter(mac_address__in=["", None])
                 .first()
             )
         except DatabaseError:
@@ -2489,7 +2505,7 @@ class ContentSample(Entity):
     content = models.TextField(blank=True)
     path = models.CharField(max_length=255, blank=True)
     method = models.CharField(max_length=10, default="", blank=True)
-    hash = models.CharField(max_length=64, unique=True, null=True, blank=True)
+    hash = models.CharField(max_length=64, blank=True)
     transaction_uuid = models.UUIDField(
         default=uuid.uuid4,
         editable=True,
@@ -2506,6 +2522,13 @@ class ContentSample(Entity):
         ordering = ["-created_at"]
         verbose_name = "Content Sample"
         verbose_name_plural = "Content Samples"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["hash"],
+                condition=~Q(hash=""),
+                name="nodes_contentsample_hash_unique",
+            )
+        ]
 
     def save(self, *args, **kwargs):
         if self.pk:
