@@ -16,6 +16,7 @@ def test_generate_internal_config_uses_ipv4_listeners_by_default():
     assert "server_name _;" in config
     assert "listen 443" not in config
     assert "proxy_pass http://127.0.0.1:8888;" in config
+    assert "proxy_set_header Host $http_host;" in config
 
 
 def test_generate_public_config_includes_https_block():
