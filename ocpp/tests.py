@@ -114,6 +114,8 @@ from .tasks import (
     schedule_daily_charge_point_configuration_checks,
     request_charge_point_log,
     schedule_connected_log_requests,
+    request_charge_point_firmware,
+    schedule_daily_firmware_snapshot_requests,
 )
 from django.db import close_old_connections, connection
 from django.test.utils import CaptureQueriesContext
@@ -1041,7 +1043,7 @@ class CSMSConsumerTests(TransactionTestCase):
             store.log_names["charger"].clear()
             store.log_names["charger"].update(original_log_names)
 
-    async def test_existing_charger_requests_metadata_when_missing(self):
+    async def test_existing_charger_does_not_request_metadata_when_missing(self):
         charger_id = "AUTOFETCH"
         await database_sync_to_async(Charger.objects.create)(charger_id=charger_id)
         pending_key = store.pending_key(charger_id)
@@ -1054,48 +1056,28 @@ class CSMSConsumerTests(TransactionTestCase):
             connected, _ = await communicator.connect()
             self.assertTrue(connected)
 
-            async def _wait_for_requests():
-                for _ in range(40):
-                    metadata_values = list(store.pending_calls.values())
-                    has_configuration = any(
-                        entry.get("action") == "GetConfiguration"
-                        and entry.get("charger_id") == charger_id
-                        for entry in metadata_values
-                    )
-                    has_firmware = any(
-                        entry.get("action") == "DataTransfer"
-                        and entry.get("charger_id") == charger_id
-                        and entry.get("message_pk")
-                        for entry in metadata_values
-                    )
-                    if has_configuration and has_firmware:
-                        return
-                    await asyncio.sleep(0.05)
-                self.fail("Timed out waiting for automatic metadata requests")
-
-            await _wait_for_requests()
-
+            await asyncio.sleep(0.1)
+            metadata_values = list(store.pending_calls.values())
+            self.assertFalse(
+                any(
+                    entry.get("charger_id") == charger_id
+                    and entry.get("action") in {"GetConfiguration", "DataTransfer"}
+                    for entry in metadata_values
+                ),
+                metadata_values,
+            )
             logs = store.get_logs(pending_key, log_type="charger")
-            config_index = next(
-                (
-                    idx
-                    for idx, entry in enumerate(logs)
-                    if "< [2" in entry and "\"GetConfiguration\"" in entry
+            self.assertFalse(
+                any(
+                    "< [2" in entry and "\"GetConfiguration\"" in entry
+                    for entry in logs
                 ),
-                None,
+                logs,
             )
-            firmware_index = next(
-                (
-                    idx
-                    for idx, entry in enumerate(logs)
-                    if "Requested firmware download via DataTransfer." in entry
-                ),
-                None,
+            self.assertFalse(
+                any("Requested firmware download via DataTransfer." in entry for entry in logs),
+                logs,
             )
-            self.assertIsNotNone(config_index, logs)
-            self.assertIsNotNone(firmware_index, logs)
-            self.assertLess(config_index, firmware_index)
-
             has_message = await database_sync_to_async(
                 DataTransferMessage.objects.filter(
                     charger__charger_id=charger_id,
@@ -1103,7 +1085,7 @@ class CSMSConsumerTests(TransactionTestCase):
                     direction=DataTransferMessage.DIRECTION_CSMS_TO_CP,
                 ).exists
             )()
-            self.assertTrue(has_message)
+            self.assertFalse(has_message)
         finally:
             with suppress(Exception):
                 await communicator.disconnect()
@@ -4325,6 +4307,70 @@ class ConfigurationTaskTests(TestCase):
             scheduled = schedule_daily_charge_point_configuration_checks.run()
         self.assertEqual(scheduled, 0)
         mock_delay.assert_not_called()
+
+
+class FirmwareTaskTests(TestCase):
+    def tearDown(self):
+        store.pending_calls.clear()
+
+    def test_request_charge_point_firmware_dispatches_message(self):
+        charger = Charger.objects.create(charger_id="FWREQ")
+        ws = DummyWebSocket()
+        log_key = store.identity_key(charger.charger_id, charger.connector_id)
+        pending_key = store.pending_key(charger.charger_id)
+        store.clear_log(log_key, log_type="charger")
+        store.clear_log(pending_key, log_type="charger")
+        store.set_connection(charger.charger_id, charger.connector_id, ws)
+        try:
+            result = request_charge_point_firmware.run(charger.pk)
+            self.assertTrue(result)
+            self.assertTrue(ws.sent)
+            frame = json.loads(ws.sent[0])
+            self.assertEqual(frame[0], 2)
+            self.assertEqual(frame[2], "DataTransfer")
+            request = CPFirmwareRequest.objects.get(charger=charger)
+            self.assertEqual(request.message.message_id, "DownloadFirmware")
+            metadata = store.pending_calls.get(frame[1])
+            self.assertIsNotNone(metadata)
+            self.assertEqual(metadata.get("message_pk"), request.message.pk)
+        finally:
+            store.pop_connection(charger.charger_id, charger.connector_id)
+            store.pending_calls.clear()
+            store.clear_log(log_key, log_type="charger")
+            store.clear_log(pending_key, log_type="charger")
+
+    def test_request_charge_point_firmware_without_connection(self):
+        charger = Charger.objects.create(charger_id="FWNOCONN")
+        result = request_charge_point_firmware.run(charger.pk)
+        self.assertFalse(result)
+
+    def test_schedule_daily_firmware_only_targets_missing(self):
+        missing = Charger.objects.create(charger_id="FWSCHEDULE")
+        existing = Charger.objects.create(charger_id="FWEXISTS")
+        CPFirmware.objects.create(
+            name="Captured",
+            source=CPFirmware.Source.DOWNLOAD,
+            source_charger=existing,
+            payload_binary=b"",
+        )
+        pending = Charger.objects.create(charger_id="FWPENDING")
+        message = DataTransferMessage.objects.create(
+            charger=pending,
+            direction=DataTransferMessage.DIRECTION_CSMS_TO_CP,
+            ocpp_message_id="pending",
+            message_id="DownloadFirmware",
+            payload={},
+            status="Pending",
+        )
+        CPFirmwareRequest.objects.create(
+            charger=pending,
+            message=message,
+            vendor_id="vendor",
+        )
+        with patch("ocpp.tasks.request_charge_point_firmware.delay") as mock_delay:
+            scheduled = schedule_daily_firmware_snapshot_requests.run()
+        self.assertEqual(scheduled, 1)
+        mock_delay.assert_called_once_with(missing.pk)
 
 
 class LogRequestTaskTests(TestCase):
