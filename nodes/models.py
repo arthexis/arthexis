@@ -728,10 +728,12 @@ class Node(Entity):
         if direct_address and direct_address not in ipv4_candidates:
             ipv4_candidates.append(direct_address)
 
-        ordered_ipv4 = cls.order_ipv4_addresses(cls.sanitize_ipv4_addresses(ipv4_candidates))
-        ipv4_address = ordered_ipv4[0] if ordered_ipv4 else None
-        serialized_ipv4 = ",".join(ordered_ipv4) if ordered_ipv4 else None
-        ipv6_address = cls._select_preferred_ip(ipv6_candidates)
+        ordered_ipv4 = cls.order_ipv4_addresses(
+            cls.sanitize_ipv4_addresses(ipv4_candidates)
+        )
+        ipv4_address = ordered_ipv4[0] if ordered_ipv4 else ""
+        serialized_ipv4 = ",".join(ordered_ipv4) if ordered_ipv4 else ""
+        ipv6_address = cls._select_preferred_ip(ipv6_candidates) or ""
 
         preferred_contact = ipv4_address or ipv6_address or direct_address or "127.0.0.1"
         port = int(os.environ.get("PORT", 8888))
@@ -783,7 +785,7 @@ class Node(Entity):
             "mac_address": mac,
             "current_relation": cls.Relation.SELF,
         }
-        defaults["constellation_ip"] = constellation_ip or None
+        defaults["constellation_ip"] = constellation_ip or ""
         role_lock = Path(settings.BASE_DIR) / "locks" / "role.lck"
         role_name = role_lock.read_text().strip() if role_lock.exists() else "Terminal"
         role_name = ROLE_RENAMES.get(role_name, role_name)
@@ -792,7 +794,11 @@ class Node(Entity):
         if node:
             update_fields = []
             for field, value in defaults.items():
-                if getattr(node, field) != value:
+                current = getattr(node, field)
+                if isinstance(value, str):
+                    value = value or ""
+                    current = current or ""
+                if current != value:
                     setattr(node, field, value)
                     update_fields.append(field)
             if desired_role and node.role_id != desired_role.id:

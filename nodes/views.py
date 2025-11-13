@@ -941,14 +941,14 @@ def register_node(request):
         return _add_cors_headers(request, response)
 
     mac_address = mac_address.lower()
-    address_value = address or None
-    ipv6_value = ipv6_address or None
-    constellation_value = constellation_ip or None
+    address_value = address
+    ipv6_value = ipv6_address
+    constellation_value = constellation_ip
 
     for candidate in Node.sanitize_ipv4_addresses([address, network_hostname, hostname]):
         if candidate not in ipv4_candidates:
             ipv4_candidates.append(candidate)
-    ipv4_value = Node.serialize_ipv4_addresses(ipv4_candidates)
+    ipv4_value = Node.serialize_ipv4_addresses(ipv4_candidates) or ""
 
     for candidate in (address, network_hostname, hostname):
         candidate = (candidate or "").strip()
@@ -964,7 +964,9 @@ def register_node(request):
         try:
             constellation_value = str(ipaddress.ip_address(constellation_value))
         except ValueError:
-            constellation_value = None
+            constellation_value = ""
+    else:
+        constellation_value = ""
 
     defaults = {
         "hostname": hostname,
@@ -1007,7 +1009,11 @@ def register_node(request):
             ("constellation_ip", constellation_value),
             ("port", port),
         ):
-            if getattr(node, field) != value:
+            current = getattr(node, field)
+            if isinstance(value, str):
+                value = value or ""
+                current = current or ""
+            if current != value:
                 setattr(node, field, value)
                 update_fields.append(field)
         if verified:
