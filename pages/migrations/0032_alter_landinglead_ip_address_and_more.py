@@ -23,7 +23,6 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunPython(_fill_blank_ip, _noop),
         migrations.AlterField(
             model_name="landinglead",
             name="ip_address",
@@ -42,4 +41,5 @@ class Migration(migrations.Migration):
                 validators=[django.core.validators.validate_ipv46_address],
             ),
         ),
+        migrations.RunPython(_fill_blank_ip, _noop),
     ]
