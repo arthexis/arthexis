@@ -266,3 +266,99 @@ def test_switch_role_repair_restores_terminal_defaults(tmp_path):
         if created_venv:
             shutil.rmtree(venv_dir, ignore_errors=True)
         shutil.rmtree(fake_bin, ignore_errors=True)
+
+
+def test_switch_role_repair_handles_deprecated_role(tmp_path):
+    repo_root = Path(__file__).resolve().parent.parent
+    script_path = repo_root / "switch-role.sh"
+    lock_dir = repo_root / "locks"
+    lock_dir.mkdir(exist_ok=True)
+    (lock_dir / "role.lck").write_text("Constellation")
+
+    fake_bin = Path(tempfile.mkdtemp(dir=str(tmp_path)))
+    for name in ("nginx", "sudo"):
+        stub = fake_bin / name
+        stub.write_text("#!/usr/bin/env bash\nexit 0\n")
+        stub.chmod(0o755)
+    redis_cli = fake_bin / "redis-cli"
+    redis_cli.write_text(
+        "#!/usr/bin/env bash\nif [ \"$1\" = \"ping\" ]; then\n  echo PONG\n  exit 0\nfi\nexit 0\n"
+    )
+    redis_cli.chmod(0o755)
+
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}:{env['PATH']}"
+
+    try:
+        result = subprocess.run(
+            ["bash", str(script_path), "--repair"],
+            capture_output=True,
+            text=True,
+            cwd=repo_root,
+            env=env,
+        )
+        assert result.returncode == 0
+        assert "deprecated" in result.stdout
+        assert (lock_dir / "role.lck").read_text().strip() == "Watchtower"
+        assert (lock_dir / "nginx_mode.lck").read_text().strip() == "public"
+    finally:
+        _cleanup_switch_role_state(repo_root)
+        shutil.rmtree(fake_bin, ignore_errors=True)
+
+
+def test_switch_role_repair_prompts_for_failover_when_unknown():
+    repo_root = Path(__file__).resolve().parent.parent
+    script_path = repo_root / "switch-role.sh"
+    lock_dir = repo_root / "locks"
+    lock_dir.mkdir(exist_ok=True)
+    (lock_dir / "role.lck").write_text("LegacyRole")
+
+    try:
+        result = subprocess.run(
+            ["bash", str(script_path), "--repair"],
+            capture_output=True,
+            text=True,
+            cwd=repo_root,
+        )
+        assert result.returncode != 0
+        assert "--failover" in result.stdout
+    finally:
+        _cleanup_switch_role_state(repo_root)
+
+
+def test_switch_role_repair_supports_failover_override(tmp_path):
+    repo_root = Path(__file__).resolve().parent.parent
+    script_path = repo_root / "switch-role.sh"
+    lock_dir = repo_root / "locks"
+    lock_dir.mkdir(exist_ok=True)
+    (lock_dir / "role.lck").write_text("LegacyRole")
+
+    fake_bin = Path(tempfile.mkdtemp(dir=str(tmp_path)))
+    for name in ("nginx", "sudo"):
+        stub = fake_bin / name
+        stub.write_text("#!/usr/bin/env bash\nexit 0\n")
+        stub.chmod(0o755)
+    redis_cli = fake_bin / "redis-cli"
+    redis_cli.write_text(
+        "#!/usr/bin/env bash\nif [ \"$1\" = \"ping\" ]; then\n  echo PONG\n  exit 0\nfi\nexit 0\n"
+    )
+    redis_cli.chmod(0o755)
+
+    env = os.environ.copy()
+    env["PATH"] = f"{fake_bin}:{env['PATH']}"
+
+    try:
+        result = subprocess.run(
+            ["bash", str(script_path), "--repair", "--failover", "Control"],
+            capture_output=True,
+            text=True,
+            cwd=repo_root,
+            env=env,
+        )
+        assert result.returncode == 0
+        assert "failover role" in result.stdout
+        assert (lock_dir / "role.lck").read_text().strip() == "Control"
+        assert (lock_dir / "control.lck").exists()
+    finally:
+        _cleanup_switch_role_state(repo_root)
+        shutil.rmtree(fake_bin, ignore_errors=True)
