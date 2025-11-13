@@ -1,4 +1,5 @@
 import base64
+import csv
 import logging
 import mimetypes
 from pathlib import Path
@@ -103,6 +104,10 @@ from django.utils._os import safe_join
 
 MARKDOWN_EXTENSIONS = ["toc", "tables", "mdx_truly_sane_lists"]
 
+MARKDOWN_FILE_EXTENSIONS = {".md", ".markdown"}
+PLAINTEXT_FILE_EXTENSIONS = {".txt", ".text"}
+CSV_FILE_EXTENSIONS = {".csv"}
+
 MARKDOWN_IMAGE_PATTERN = re.compile(
     r"(?P<prefix><img\b[^>]*\bsrc=[\"\'])(?P<scheme>(?:static|work))://(?P<path>[^\"\']+)(?P<suffix>[\"\'])",
     re.IGNORECASE,
@@ -129,6 +134,97 @@ def _render_markdown_with_toc(text: str) -> tuple[str, str]:
     toc_html = md.toc
     toc_html = _strip_toc_wrapper(toc_html)
     return html, toc_html
+
+
+def _render_plain_text_document(text: str) -> tuple[str, str]:
+    """Render plain text content using a preformatted block."""
+
+    html = (
+        '<pre class="reader-plain-text bg-body-tertiary border rounded p-3 text-break">'
+        f"{escape(text)}"
+        "</pre>"
+    )
+    return html, ""
+
+
+def _render_csv_document(text: str) -> tuple[str, str]:
+    """Render CSV content into a responsive HTML table."""
+
+    reader = csv.reader(io.StringIO(text))
+    rows = list(reader)
+    if not rows:
+        empty_html = (
+            '<div class="table-responsive">'
+            '<table class="table table-striped table-bordered table-sm reader-table">'
+            "<tbody><tr><td class=\"text-muted\">No data available.</td></tr></tbody>"
+            "</table></div>"
+        )
+        return empty_html, ""
+
+    column_count = max(len(row) for row in rows)
+
+    def _normalize(row: list[str]) -> list[str]:
+        normalized = list(row)
+        if len(normalized) < column_count:
+            normalized.extend([""] * (column_count - len(normalized)))
+        return normalized
+
+    header_cells = "".join(
+        f"<th scope=\"col\">{escape(value)}</th>" for value in _normalize(rows[0])
+    )
+    header_html = f"<thead><tr>{header_cells}</tr></thead>"
+
+    body_rows = rows[1:]
+    if body_rows:
+        body_html = "".join(
+            "<tr>"
+            + "".join(f"<td>{escape(value)}</td>" for value in _normalize(row))
+            + "</tr>"
+            for row in body_rows
+        )
+    else:
+        body_html = (
+            f"<tr><td class=\"text-muted\" colspan=\"{column_count}\">No rows available.</td></tr>"
+        )
+    body_html = f"<tbody>{body_html}</tbody>"
+
+    table_html = (
+        '<div class="table-responsive">'
+        '<table class="table table-striped table-bordered table-sm reader-table">'
+        f"{header_html}{body_html}</table></div>"
+    )
+    return table_html, ""
+
+
+def _render_code_document(text: str) -> tuple[str, str]:
+    """Render arbitrary text content inside a code viewer block."""
+
+    html = (
+        '<pre class="reader-code-viewer bg-body-tertiary border rounded p-3">'
+        f"<code class=\"font-monospace\">{escape(text)}</code>"
+        "</pre>"
+    )
+    return html, ""
+
+
+def _read_document_text(file_path: Path) -> str:
+    """Read ``file_path`` as UTF-8 text, replacing undecodable bytes."""
+
+    return file_path.read_text(encoding="utf-8", errors="replace")
+
+
+def _render_document_file(file_path: Path) -> tuple[str, str]:
+    """Render a documentation file according to its extension."""
+
+    extension = file_path.suffix.lower()
+    text = _read_document_text(file_path)
+    if extension in MARKDOWN_FILE_EXTENSIONS:
+        return _render_markdown_with_toc(text)
+    if extension in CSV_FILE_EXTENSIONS:
+        return _render_csv_document(text)
+    if extension in PLAINTEXT_FILE_EXTENSIONS:
+        return _render_plain_text_document(text)
+    return _render_code_document(text)
 
 
 def _strip_toc_wrapper(toc_html: str) -> str:
@@ -676,8 +772,7 @@ def _render_readme(request, role, doc: str | None = None):
     lang = getattr(request, "LANGUAGE_CODE", "")
     lang = lang.replace("_", "-").lower()
     document = _locate_readme_document(role, doc, lang)
-    text = document.file.read_text(encoding="utf-8")
-    html, toc_html = _render_markdown_with_toc(text)
+    html, toc_html = _render_document_file(document.file)
     relative_path = _relative_readme_path(document.file, document.root_base)
     user = getattr(request, "user", None)
     can_edit = bool(

@@ -2245,6 +2245,13 @@ class ControlNavTests(TestCase):
         ]
         call_command("loaddata", *map(str, fixtures))
 
+    def _write_doc(self, relative_path: str, content: str) -> Path:
+        file_path = Path(settings.BASE_DIR, relative_path)
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_text(content, encoding="utf-8")
+        self.addCleanup(lambda: file_path.unlink(missing_ok=True))
+        return file_path
+
     def test_ocpp_dashboard_visible(self):
         user = get_user_model().objects.create_user("control", password="pw")
         self.client.force_login(user)
@@ -2352,6 +2359,48 @@ class ControlNavTests(TestCase):
     def test_readme_document_rejects_traversal(self):
         resp = self.client.get("/read/../../SECRET.md")
         self.assertEqual(resp.status_code, 404)
+
+    def test_readme_plain_text_document(self):
+        self._write_doc("docs/sample-viewer.txt", "Plain text file\nSecond line")
+        resp = self.client.get(
+            reverse("pages:readme-document", args=["docs/sample-viewer.txt"])
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'class="reader-plain-text', html=False)
+        self.assertContains(resp, "Plain text file")
+        self.assertContains(resp, "Second line")
+        self.assertFalse(resp.context["toc"])
+
+    def test_readme_csv_document_renders_table(self):
+        self._write_doc(
+            "docs/sample-data.csv",
+            "name,score\nAlice,10\nBob,20",
+        )
+        resp = self.client.get(
+            reverse("pages:readme-document", args=["docs/sample-data.csv"])
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(
+            resp,
+            'class="table table-striped table-bordered table-sm reader-table"',
+            html=False,
+        )
+        self.assertContains(resp, "<th scope=\"col\">name</th>", html=True)
+        self.assertContains(resp, "<td>Alice</td>", html=True)
+        self.assertFalse(resp.context["toc"])
+
+    def test_readme_unknown_document_uses_code_viewer(self):
+        self._write_doc(
+            "docs/sample-script.sh",
+            "#!/bin/bash\necho Script ready",
+        )
+        resp = self.client.get(
+            reverse("pages:readme-document", args=["docs/sample-script.sh"])
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'class="reader-code-viewer', html=False)
+        self.assertContains(resp, "echo Script ready")
+        self.assertFalse(resp.context["toc"])
 
     def test_docs_route_redirects_to_reader(self):
         resp = self.client.get("/docs/cookbooks/sigils.md")
