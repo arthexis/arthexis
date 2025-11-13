@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ipaddress
 import math
+from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from collections.abc import MutableMapping
 from typing import Literal, Optional, Union
@@ -246,6 +247,253 @@ def find_conduit(awg: Union[str, int], cables: int, *, conduit: str = "emt"):
     return {"size_inch": size}
 
 
+@dataclass(frozen=True)
+class _AwgParameters:
+    """Container for validated AWG calculator inputs."""
+
+    amps: int
+    meters: int
+    volts: int
+    material: str
+    max_lines: int
+    phases: int
+    temperature: Optional[int]
+    max_awg: Optional[AWG]
+    conduit: Optional[Union[str, bool]]
+    ground_label: str
+    ground_options: tuple[int, ...]
+
+
+def _coerce_int(value, label, *, required=True, default=None) -> int:
+    """Return ``value`` as an ``int`` or raise a translated ``ValueError``."""
+
+    if value in (None, "", "None"):
+        if not required:
+            return default
+        raise ValueError(_("%(field)s is required.") % {"field": label})
+    try:
+        return int(value)
+    except (TypeError, ValueError) as exc:  # pragma: no cover - defensive
+        raise ValueError(_("%(field)s must be a whole number.") % {"field": label}) from exc
+
+
+def _parse_awg_parameters(
+    *,
+    meters: Union[int, str, None],
+    amps: Union[int, str],
+    volts: Union[int, str],
+    material: Literal["cu", "al", "?"] = "cu",
+    max_awg: Optional[Union[int, str]] = None,
+    max_lines: Union[int, str] = "1",
+    phases: Union[str, int] = "2",
+    temperature: Union[int, str, None] = None,
+    conduit: Optional[Union[str, bool]] = None,
+    ground: Union[int, str] = "1",
+) -> _AwgParameters:
+    """Normalise and validate user-provided inputs for ``find_awg``."""
+
+    amps_int = _coerce_int(amps, _lazy("Amps"))
+    meters_int = _coerce_int(meters, _lazy("Meters"))
+    volts_int = _coerce_int(volts, _lazy("Volts"))
+    max_lines_int = _coerce_int(
+        max_lines, _lazy("Max Lines"), required=False, default=1
+    )
+
+    max_awg_value: Optional[AWG]
+    if max_awg in (None, ""):
+        max_awg_value = None
+    else:
+        try:
+            max_awg_value = AWG(max_awg)
+        except (TypeError, ValueError) as exc:  # pragma: no cover - defensive
+            raise ValueError(_("Max AWG must be a valid gauge value.")) from exc
+
+    phases_int = _coerce_int(phases, _lazy("Phases"))
+    if temperature in (None, "", "auto"):
+        temperature_int = None
+    else:
+        temperature_int = _coerce_int(temperature, _lazy("Temperature"))
+
+    ground_value, ground_label = _parse_ground(ground)
+    ground_options = (1, 0) if ground_label == "[1]" else (ground_value,)
+
+    params = _AwgParameters(
+        amps=amps_int,
+        meters=meters_int,
+        volts=volts_int,
+        material=material,
+        max_lines=max_lines_int,
+        phases=phases_int,
+        temperature=temperature_int,
+        max_awg=max_awg_value,
+        conduit=conduit,
+        ground_label=ground_label,
+        ground_options=ground_options,
+    )
+
+    _validate_awg_parameters(params)
+    return params
+
+
+def _validate_awg_parameters(params: _AwgParameters) -> None:
+    """Ensure ``params`` satisfies business constraints for the calculator."""
+
+    assert params.amps >= 10, _(
+        "Minimum load for this calculator is 15 Amps.  Yours: amps=%(amps)s."
+    ) % {"amps": params.amps}
+    assert (
+        (params.amps <= 546) if params.material == "cu" else (params.amps <= 430)
+    ), _(
+        "Max. load allowed is 546 A (cu) or 430 A (al). Yours: amps=%(amps)s material=%(material)s"
+    ) % {"amps": params.amps, "material": params.material}
+    assert params.meters >= 1, _("Consider at least 1 meter of cable.")
+    assert 110 <= params.volts <= 460, _(
+        "Volt range supported must be between 110-460. Yours: volts=%(volts)s"
+    ) % {"volts": params.volts}
+    assert params.material in ("cu", "al"), _(
+        "Material must be 'cu' (copper) or 'al' (aluminum)."
+    )
+    assert params.phases in (1, 2, 3), _(
+        "AC phases 1, 2 or 3 to calculate for. DC not supported."
+    )
+    if params.temperature is not None:
+        assert params.temperature in (60, 75, 90), _(
+            "Temperature must be 60, 75 or 90"
+        )
+
+
+def _base_vdrop(params: _AwgParameters) -> float:
+    """Return the voltage drop baseline used in the AWG iteration."""
+
+    multiplier = math.sqrt(3) if params.phases in (2, 3) else 2
+    return multiplier * params.meters * params.amps / 1000
+
+
+def _iter_awg_candidates(
+    *,
+    params: _AwgParameters,
+    awg_data: dict[int, dict[int, dict[str, float]]],
+    ground_count: int,
+    base_vdrop: float,
+    force_awg: Optional[Union[int, str]],
+    limit_awg: Optional[Union[int, str]],
+):
+    """Yield candidate AWG results along with their evaluation metadata."""
+
+    for awg_size in _prepare_sizes(
+        awg_data, force_awg=force_awg, limit_awg=limit_awg
+    ):
+        base = awg_data[awg_size][1]
+        for lines in range(1, params.max_lines + 1):
+            info = awg_data[awg_size].get(lines)
+            a60, a75, a90 = _line_capacities(base, info, lines)
+            allowed = _is_ampacity_allowed(
+                amps=params.amps,
+                temperature=params.temperature,
+                a60=a60,
+                a75=a75,
+                a90=a90,
+            )
+            if not allowed and force_awg is None:
+                continue
+
+            vdrop = base_vdrop * base["k"] / lines
+            perc = vdrop / params.volts
+            result = _build_result(
+                awg_size=awg_size,
+                lines=lines,
+                vdrop=vdrop,
+                perc=perc,
+                meters=params.meters,
+                amps=params.amps,
+                volts=params.volts,
+                temperature=params.temperature,
+                phases=params.phases,
+                ground_count=ground_count,
+                ground_label=params.ground_label,
+            )
+            yield allowed, perc, result
+
+
+def _calculate_awg_for_ground(
+    params: _AwgParameters,
+    ground_count: int,
+    *,
+    force_awg: Optional[Union[int, str]] = None,
+    limit_awg: Optional[Union[int, str]] = None,
+) -> dict[str, object]:
+    """Return the best AWG match for ``ground_count`` wires."""
+
+    awg_data = _load_awg_data(
+        material=params.material,
+        max_lines=params.max_lines,
+        force_awg=force_awg,
+        limit_awg=limit_awg,
+    )
+    base_vdrop = _base_vdrop(params)
+
+    best: Optional[dict[str, object]] = None
+    best_perc = 1e9
+
+    for allowed, perc, result in _iter_awg_candidates(
+        params=params,
+        awg_data=awg_data,
+        ground_count=ground_count,
+        base_vdrop=base_vdrop,
+        force_awg=force_awg,
+        limit_awg=limit_awg,
+    ):
+        if allowed and perc <= 0.03:
+            _attach_conduit(
+                result,
+                conduit=params.conduit,
+                phases=params.phases,
+                ground_count=ground_count,
+            )
+            return result
+        if perc < best_perc:
+            best = result
+            best_perc = perc
+
+    if best and (force_awg is not None or limit_awg is not None):
+        if force_awg is not None:
+            best["warning"] = _(
+                "Voltage drop may exceed 3% with chosen parameters"
+            )
+        else:
+            best["warning"] = _("Voltage drop exceeds 3% with given max_awg")
+        _attach_conduit(
+            best,
+            conduit=params.conduit,
+            phases=params.phases,
+            ground_count=ground_count,
+        )
+        return best
+
+    return {"awg": "n/a", "awg_display": "n/a"}
+
+
+def _solve_for_ground(params: _AwgParameters, ground_count: int) -> dict[str, object]:
+    """Solve the AWG calculation for a specific ground configuration."""
+
+    baseline = _calculate_awg_for_ground(params, ground_count)
+    if params.max_awg is None:
+        return baseline
+
+    if baseline.get("awg") == "n/a":
+        return _calculate_awg_for_ground(
+            params, ground_count, limit_awg=params.max_awg
+        )
+
+    if int(AWG(baseline["awg"])) < int(params.max_awg):
+        return _calculate_awg_for_ground(
+            params, ground_count, force_awg=params.max_awg
+        )
+    return _calculate_awg_for_ground(
+        params, ground_count, limit_awg=params.max_awg
+    )
+
+
 def find_awg(
     *,
     meters: Union[int, str, None] = None,  # Required
@@ -259,154 +507,24 @@ def find_awg(
     conduit: Optional[Union[str, bool]] = None,
     ground: Union[int, str] = "1",
 ):
-    """Calculate the cable size required for given parameters.
+    """Calculate the cable size required for given parameters."""
 
-    This function mirrors the behaviour of the original ``projects.awg`` module,
-    but utilises Django's ORM instead of raw SQL.
-    """
-
-    def _coerce_int(value, label, *, required=True, default=None):
-        if value in (None, "", "None"):
-            if not required:
-                return default
-            raise ValueError(_("%(field)s is required.") % {"field": label})
-        try:
-            return int(value)
-        except (TypeError, ValueError):
-            raise ValueError(_("%(field)s must be a whole number.") % {"field": label})
-
-    amps = _coerce_int(amps, _lazy("Amps"))
-    meters = _coerce_int(meters, _lazy("Meters"))
-    volts = _coerce_int(volts, _lazy("Volts"))
-    max_lines = _coerce_int(max_lines, _lazy("Max Lines"), required=False, default=1)
-    if max_awg in (None, ""):
-        max_awg = None
-    else:
-        try:
-            max_awg = AWG(max_awg)
-        except (TypeError, ValueError):
-            raise ValueError(_("Max AWG must be a valid gauge value."))
-    phases = _coerce_int(phases, _lazy("Phases"))
-    if temperature in (None, "", "auto"):
-        temperature = None
-    else:
-        temperature = _coerce_int(temperature, _lazy("Temperature"))
-    ground_value, ground_label = _parse_ground(ground)
-    ground_options = [ground_value]
-    if ground_label == "[1]":
-        ground_options = [1, 0]
-
-    assert amps >= 10, _(
-        "Minimum load for this calculator is 15 Amps.  Yours: amps=%(amps)s."
-    ) % {"amps": amps}
-    assert (amps <= 546) if material == "cu" else (amps <= 430), _(
-        "Max. load allowed is 546 A (cu) or 430 A (al). Yours: amps=%(amps)s material=%(material)s"
-    ) % {"amps": amps, "material": material}
-    assert meters >= 1, _("Consider at least 1 meter of cable.")
-    assert 110 <= volts <= 460, _(
-        "Volt range supported must be between 110-460. Yours: volts=%(volts)s"
-    ) % {"volts": volts}
-    assert material in ("cu", "al"), _(
-        "Material must be 'cu' (copper) or 'al' (aluminum)."
+    params = _parse_awg_parameters(
+        meters=meters,
+        amps=amps,
+        volts=volts,
+        material=material,
+        max_awg=max_awg,
+        max_lines=max_lines,
+        phases=phases,
+        temperature=temperature,
+        conduit=conduit,
+        ground=ground,
     )
-    assert phases in (1, 2, 3), _(
-        "AC phases 1, 2 or 3 to calculate for. DC not supported."
-    )
-    if temperature is not None:
-        assert temperature in (60, 75, 90), _("Temperature must be 60, 75 or 90")
 
-    def solve_for_ground(ground_count: int):
-        def _calc(*, force_awg=None, limit_awg=None):
-            awg_data = _load_awg_data(
-                material=material,
-                max_lines=max_lines,
-                force_awg=force_awg,
-                limit_awg=limit_awg,
-            )
-
-            if phases in (2, 3):
-                base_vdrop = math.sqrt(3) * meters * amps / 1000
-            else:
-                base_vdrop = 2 * meters * amps / 1000
-
-            best = None
-            best_perc = 1e9
-
-            sizes = _prepare_sizes(
-                awg_data, force_awg=force_awg, limit_awg=limit_awg
-            )
-
-            for awg_size in sizes:
-                base = awg_data[awg_size][1]
-                for n in range(1, max_lines + 1):
-                    info = awg_data[awg_size].get(n)
-                    a60, a75, a90 = _line_capacities(base, info, n)
-                    allowed = _is_ampacity_allowed(
-                        amps=amps,
-                        temperature=temperature,
-                        a60=a60,
-                        a75=a75,
-                        a90=a90,
-                    )
-                    if not allowed and force_awg is None:
-                        continue
-
-                    vdrop = base_vdrop * base["k"] / n
-                    perc = vdrop / volts
-                    result = _build_result(
-                        awg_size=awg_size,
-                        lines=n,
-                        vdrop=vdrop,
-                        perc=perc,
-                        meters=meters,
-                        amps=amps,
-                        volts=volts,
-                        temperature=temperature,
-                        phases=phases,
-                        ground_count=ground_count,
-                        ground_label=ground_label,
-                    )
-                    if allowed and perc <= 0.03:
-                        _attach_conduit(
-                            result,
-                            conduit=conduit,
-                            phases=phases,
-                            ground_count=ground_count,
-                        )
-                        return result
-                    if perc < best_perc:
-                        best = result
-                        best_perc = perc
-
-            if best and (force_awg is not None or limit_awg is not None):
-                if force_awg is not None:
-                    best["warning"] = _(
-                        "Voltage drop may exceed 3% with chosen parameters"
-                    )
-                else:
-                    best["warning"] = _("Voltage drop exceeds 3% with given max_awg")
-                _attach_conduit(
-                    best,
-                    conduit=conduit,
-                    phases=phases,
-                    ground_count=ground_count,
-                )
-                return best
-
-            return {"awg": "n/a", "awg_display": "n/a"}
-
-        baseline = _calc()
-        if max_awg is None:
-            return baseline
-
-        if baseline.get("awg") == "n/a":
-            return _calc(limit_awg=max_awg)
-
-        if int(AWG(baseline["awg"])) < int(max_awg):
-            return _calc(force_awg=max_awg)
-        return _calc(limit_awg=max_awg)
-
-    results = [(g, solve_for_ground(g)) for g in ground_options]
+    results = [
+        (count, _solve_for_ground(params, count)) for count in params.ground_options
+    ]
     if len(results) == 1:
         return results[0][1]
 
