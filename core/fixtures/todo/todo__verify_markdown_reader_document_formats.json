@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Verify Markdown reader alternative formats",
+      "created_on": "2024-01-01T00:00:00Z",
+      "url": "/read/",
+      "request_details": "Open the documentation reader and verify the new format handling. View the MPL license at /read/docs/legal/licenses/MPL-2.0.txt and confirm the plain text renders in a preformatted block without a table of contents. Visit /read/docs/examples/reader-sample-data.csv and ensure the CSV rows appear in a bordered table. Finally, load /read/command.sh and confirm scripts render in a monospace code viewer instead of a blank page.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]
