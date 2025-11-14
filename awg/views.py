@@ -883,19 +883,23 @@ def energy_tariff_calculator(request):
 def future_event_calculator(request):
     """Render a live countdown for the next scheduled event."""
 
-    event = CountdownTimer.objects.upcoming().first()
-    target_iso = ""
-    if event:
-        scheduled = event.scheduled_for
+    events: list[dict[str, object]] = []
+    for timer in CountdownTimer.objects.upcoming()[:3]:
+        scheduled = timer.scheduled_for
         if timezone.is_naive(scheduled):
             scheduled = timezone.make_aware(
                 scheduled, timezone.get_current_timezone()
             )
-        scheduled = timezone.localtime(scheduled)
-        target_iso = scheduled.isoformat()
+        local_scheduled = timezone.localtime(scheduled)
+        events.append(
+            {
+                "timer": timer,
+                "scheduled": local_scheduled,
+                "target_iso": local_scheduled.isoformat(),
+            }
+        )
 
     context = {
-        "event": event,
-        "target_iso": target_iso,
+        "events": events,
     }
     return render(request, "awg/future_event_calculator.html", context)
