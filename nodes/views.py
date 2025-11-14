@@ -838,6 +838,8 @@ def _announce_visitor_join(new_node: Node, relation: Node.Relation | None) -> No
     return None
 
 
+# CSRF exemption retained so gateway hardware posting signed JSON without
+# browser cookies can register successfully.
 @csrf_exempt
 def register_node(request):
     """Register or update a node from POSTed JSON data."""
