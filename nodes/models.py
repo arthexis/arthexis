@@ -1498,7 +1498,7 @@ class Node(Entity):
         if not self.is_local:
             return
 
-        from django_celery_beat.models import CrontabSchedule, PeriodicTask
+        from django_celery_beat.models import IntervalSchedule, PeriodicTask
 
         raw_task_name = "nodes_update_all_information"
         task_name = normalize_periodic_task_name(
@@ -1506,26 +1506,22 @@ class Node(Entity):
         )
 
         if celery_enabled:
-            schedule, _ = CrontabSchedule.objects.get_or_create(
-                minute="0",
-                hour="5",
-                day_of_week="*",
-                day_of_month="*",
-                month_of_year="*",
-                timezone="UTC",
+            schedule, _ = IntervalSchedule.objects.get_or_create(
+                every=1,
+                period=IntervalSchedule.HOURS,
             )
             PeriodicTask.objects.update_or_create(
                 name=task_name,
                 defaults={
-                    "crontab": schedule,
-                    "interval": None,
+                    "interval": schedule,
+                    "crontab": None,
                     "task": "nodes.tasks.update_all_nodes_information",
                     "enabled": True,
                     "one_off": False,
                     "args": "[]",
                     "kwargs": "{}",
                     "description": (
-                        "Refreshes node details daily using the admin Update nodes action."
+                        "Refreshes node details hourly using the admin Update nodes action."
                     ),
                 },
             )

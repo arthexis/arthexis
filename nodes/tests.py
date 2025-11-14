@@ -2087,6 +2087,13 @@ class NodeRegisterCurrentTests(TestCase):
         NodeFeatureAssignment.objects.get_or_create(node=node, feature=feature)
         task = PeriodicTask.objects.get(name=task_name)
         self.assertTrue(task.enabled)
+        self.assertIsNotNone(task.interval)
+        self.assertEqual(task.interval.every, 1)
+        self.assertEqual(task.interval.period, IntervalSchedule.HOURS)
+        self.assertEqual(
+            task.description,
+            "Refreshes node details hourly using the admin Update nodes action.",
+        )
 
         NodeFeatureAssignment.objects.filter(node=node, feature=feature).delete()
         task.refresh_from_db()
