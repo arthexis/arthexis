@@ -1124,16 +1124,20 @@ def _system_changelog_report_view(request):
         next_page = initial_page.next_page
         error_message = ""
 
-    context = {
-        "initial_sections": initial_sections,
-        "has_more_sections": has_more,
-        "next_page": next_page,
-        "initial_section_count": len(initial_sections),
-        "error_message": error_message,
-        "loading_label": _("Loading more changes…"),
-        "error_label": _("Unable to load additional changes."),
-        "complete_label": _("You're all caught up."),
-    }
+    context = admin.site.each_context(request)
+    context.update(
+        {
+            "title": _("Changelog Report"),
+            "initial_sections": initial_sections,
+            "has_more_sections": has_more,
+            "next_page": next_page,
+            "initial_section_count": len(initial_sections),
+            "error_message": error_message,
+            "loading_label": _("Loading more changes…"),
+            "error_label": _("Unable to load additional changes."),
+            "complete_label": _("You're all caught up."),
+        }
+    )
     return TemplateResponse(request, "admin/system_changelog_report.html", context)
 
 

@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Confirm changelog admin breadcrumbs",
+      "created_on": "2025-03-01T00:00:00Z",
+      "url": "/admin/system/changelog/",
+      "request_details": "1. Sign in as the release manager and open **System → Changelog Report** in the Django admin.\n2. Verify the breadcrumb trail shows **Home → System → Changelog Report** with working links back to each page.\n3. Confirm the navigation sidebar renders with the filter input and available app sections.\n4. Use the sidebar to visit another admin page, then return to the Changelog Report and ensure the layout and changelog sections still render correctly.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": ""
+    }
+  }
+]
