@@ -243,10 +243,6 @@ class Node(Entity):
         default=Relation.PEER,
     )
     last_seen = models.DateTimeField(auto_now=True)
-    enable_public_api = models.BooleanField(
-        default=False,
-        verbose_name="enable public API",
-    )
     public_endpoint = models.SlugField(blank=True, unique=True)
     uuid = models.UUIDField(
         default=uuid.uuid4,

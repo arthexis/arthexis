@@ -27,7 +27,6 @@ class Command(BaseCommand):
         node_defaults = {
             "address": "127.0.0.1",
             "port": 8888,
-            "enable_public_api": False,
             "role": role,
         }
 
