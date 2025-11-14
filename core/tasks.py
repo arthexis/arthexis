@@ -164,6 +164,36 @@ def _wait_for_service_restart(
     return False
 
 
+def _restart_service_via_start_script(base_dir: Path, service: str) -> bool:
+    """Attempt to restart the managed service using ``start.sh``."""
+
+    start_script = base_dir / "start.sh"
+    if not start_script.exists():
+        _append_auto_upgrade_log(
+            base_dir,
+            (
+                "start.sh not found after upgrade; manual restart "
+                f"required for {service or 'service'}"
+            ),
+        )
+        return False
+
+    try:
+        subprocess.run(["./start.sh"], cwd=base_dir, check=True)
+    except Exception:  # pragma: no cover - defensive restart handling
+        logger.exception("start.sh restart failed after upgrade")
+        _append_auto_upgrade_log(
+            base_dir,
+            (
+                f"start.sh restart failed after upgrade for {service or 'service'}; "
+                "manual intervention required"
+            ),
+        )
+        return False
+
+    return True
+
+
 def _revert_after_restart_failure(base_dir: Path, service: str) -> None:
     """Revert the latest upgrade when ``service`` fails to restart."""
 
@@ -670,23 +700,47 @@ def check_github_updates(channel_override: str | None = None) -> None:
         service_file = base_dir / "locks/service.lck"
         if service_file.exists():
             service = service_file.read_text().strip()
-            subprocess.run(
-                [
-                    "sudo",
-                    "systemctl",
-                    "kill",
-                    "--signal=TERM",
-                    service,
-                ]
-            )
-            if service:
-                _append_auto_upgrade_log(
-                    base_dir,
-                    f"Waiting for {service} to restart after upgrade",
+            command = _systemctl_command()
+            service_is_active = False
+            if command and service:
+                status_result = subprocess.run(
+                    [*command, "is-active", "--quiet", service],
+                    cwd=base_dir,
+                    check=False,
                 )
-                if not _wait_for_service_restart(base_dir, service):
-                    _revert_after_restart_failure(base_dir, service)
-                    return
+                service_is_active = status_result.returncode == 0
+            if service:
+                if service_is_active and command:
+                    subprocess.run(
+                        [*command, "kill", "--signal=TERM", service],
+                        cwd=base_dir,
+                        check=False,
+                    )
+                    _append_auto_upgrade_log(
+                        base_dir,
+                        f"Waiting for {service} to restart after upgrade",
+                    )
+                    if not _wait_for_service_restart(base_dir, service):
+                        _revert_after_restart_failure(base_dir, service)
+                        return
+                else:
+                    _append_auto_upgrade_log(
+                        base_dir,
+                        (
+                            f"Service {service} not active after upgrade; "
+                            "restarting via start.sh"
+                        ),
+                    )
+                    if not _restart_service_via_start_script(base_dir, service):
+                        _revert_after_restart_failure(base_dir, service)
+                        return
+                    _append_auto_upgrade_log(
+                        base_dir,
+                        f"Waiting for {service} to restart after upgrade",
+                    )
+                    if not _wait_for_service_restart(base_dir, service):
+                        _revert_after_restart_failure(base_dir, service)
+                        return
                 _append_auto_upgrade_log(
                     base_dir,
                     f"Service {service} restarted successfully after upgrade",
