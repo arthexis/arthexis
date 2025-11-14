@@ -68,6 +68,13 @@
                     {% endblocktranslate %}
                     <span class="lead-open-badge" aria-label="{{ lead_open_label }}" title="{{ lead_open_label }}">{{ lead_open_count }}</span>
                   {% endif %}
+                  {% model_rule_status app.app_label model.object_name as model_rule %}
+                  {% if model_rule %}
+                    <span class="model-rule-status{% if model_rule.success %} model-rule-status--success{% else %} model-rule-status--error{% endif %}">
+                      <span class="model-rule-status__icon" aria-hidden="true">{{ model_rule.icon }}</span>
+                      <span class="model-rule-status__message">{{ model_rule.message }}</span>
+                    </span>
+                  {% endif %}
                 {% endif %}
               </th>
 
@@ -179,6 +186,13 @@
                       {{ open_count }} open leads
                     {% endblocktranslate %}
                     <span class="lead-open-badge" aria-label="{{ lead_open_label }}" title="{{ lead_open_label }}">{{ lead_open_count }}</span>
+                  {% endif %}
+                  {% model_rule_status app.app_label model.object_name as model_rule %}
+                  {% if model_rule %}
+                    <span class="model-rule-status{% if model_rule.success %} model-rule-status--success{% else %} model-rule-status--error{% endif %}">
+                      <span class="model-rule-status__icon" aria-hidden="true">{{ model_rule.icon }}</span>
+                      <span class="model-rule-status__message">{{ model_rule.message }}</span>
+                    </span>
                   {% endif %}
                 {% endif %}
               </th>
