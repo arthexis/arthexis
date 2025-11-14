@@ -315,7 +315,7 @@ def update_all_nodes_information() -> dict:
     local_node = Node.get_local()
     if local_node is None or not local_node.has_feature("celery-queue"):
         logger.info(
-            "Skipping daily node refresh; local node missing celery-queue feature"
+            "Skipping hourly node refresh; local node missing celery-queue feature"
         )
         summary["skipped"] = True
         summary["reason"] = "Local node missing celery-queue feature"
