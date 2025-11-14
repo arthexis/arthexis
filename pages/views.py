@@ -49,7 +49,7 @@ from django.utils.http import (
     urlsafe_base64_decode,
     urlsafe_base64_encode,
 )
-from core import mailer, public_wifi
+from core import changelog, mailer, public_wifi
 from core.backends import TOTP_DEVICE_NAME
 from django.utils.translation import gettext as _
 from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
@@ -1001,6 +1001,65 @@ def release_checklist(request):
     return response
 
 
+
+@landing(_("Changelog"))
+def changelog_report(request):
+    try:
+        initial_page = changelog.get_initial_page()
+    except changelog.ChangelogError as exc:
+        initial_sections = tuple()
+        has_more = False
+        next_page = None
+        error_message = str(exc)
+    else:
+        initial_sections = initial_page.sections
+        has_more = initial_page.has_more
+        next_page = initial_page.next_page
+        error_message = ""
+
+    context = {
+        "title": _("Changelog"),
+        "initial_sections": initial_sections,
+        "has_more_sections": has_more,
+        "next_page": next_page,
+        "initial_section_count": len(initial_sections),
+        "error_message": error_message,
+        "loading_label": _("Loading more updates…"),
+        "error_label": _("Unable to load additional updates."),
+        "complete_label": _("You're all caught up."),
+    }
+    response = render(request, "pages/changelog.html", context)
+    patch_vary_headers(response, ["Accept-Language", "Cookie"])
+    return response
+
+
+def changelog_report_data(request):
+    try:
+        page_number = int(request.GET.get("page", "1"))
+    except ValueError:
+        return JsonResponse({"error": _("Invalid page number.")}, status=400)
+
+    try:
+        offset = int(request.GET.get("offset", "0"))
+    except ValueError:
+        return JsonResponse({"error": _("Invalid offset.")}, status=400)
+
+    try:
+        page_data = changelog.get_page(page_number, per_page=1, offset=offset)
+    except changelog.ChangelogError as exc:
+        return JsonResponse({"error": str(exc)}, status=503)
+
+    if not page_data.sections:
+        return JsonResponse({"html": "", "has_more": False, "next_page": None})
+
+    html = loader.render_to_string(
+        "includes/changelog/section_list.html",
+        {"sections": page_data.sections, "variant": "public"},
+        request=request,
+    )
+    return JsonResponse(
+        {"html": html, "has_more": page_data.has_more, "next_page": page_data.next_page}
+    )
 
 
 class CustomLoginView(LoginView):

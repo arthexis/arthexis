@@ -17,6 +17,8 @@ urlpatterns = [
     path("read/", views.readme, name="readme"),
     path("read/<path:doc>", views.readme, name="readme-document"),
     path("sitemap.xml", views.sitemap, name="pages-sitemap"),
+    path("changelog/", views.changelog_report, name="changelog"),
+    path("changelog/data/", views.changelog_report_data, name="changelog-data"),
     path("release/", views.release_admin_redirect, name="release-admin"),
     path("client-report/", views.client_report, name="client-report"),
     path(
