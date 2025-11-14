@@ -200,7 +200,7 @@ class FutureEventCalculatorTests(TestCase):
     def test_displays_message_without_events(self):
         resp = self.client.get(self.url)
         self.assertContains(resp, "No upcoming events")
-        self.assertNotContains(resp, "countdown-target")
+        self.assertNotContains(resp, "data-countdown")
 
     def test_renders_next_event(self):
         CountdownTimer.objects.create(
@@ -211,8 +211,25 @@ class FutureEventCalculatorTests(TestCase):
         resp = self.client.get(self.url)
         self.assertContains(resp, "Launch")
         self.assertContains(resp, "Prepare the crew")
-        self.assertContains(resp, "countdown-days")
-        self.assertContains(resp, "countdown-target")
+        self.assertContains(resp, "data-countdown-days")
+        self.assertIn("countdown-slide text-center", resp.content.decode())
+
+    def test_limits_display_to_three_events(self):
+        base_time = timezone.now()
+        for offset in range(4):
+            CountdownTimer.objects.create(
+                title=f"Event {offset + 1}",
+                scheduled_for=base_time + timedelta(days=offset + 1),
+            )
+
+        resp = self.client.get(self.url)
+        html = resp.content.decode()
+        self.assertIn("Event 1", html)
+        self.assertIn("Event 2", html)
+        self.assertIn("Event 3", html)
+        self.assertNotIn("Event 4", html)
+        self.assertIn('data-event-next aria-label="Next event"', html)
+        self.assertEqual(html.count('countdown-slide text-center'), 3)
 
     def test_invalid_max_awg_reports_error(self):
         url = reverse("awg:calculator")
