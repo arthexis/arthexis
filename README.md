@@ -126,6 +126,7 @@ Terminal nodes can start directly with the scripts below without installing; Con
 - Access the [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) at [`http://localhost:8888/admin/`](http://localhost:8888/admin/) to review and manage live data. Use `--port` with the start scripts or installer when you need to expose a different port.
 - Browse the [admindocs](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/) at [`http://localhost:8888/admindocs/`](http://localhost:8888/admindocs/) for API documentation that is generated from your models.
 - Follow the [Install & Administration Guide](docs/cookbooks/install-start-stop-upgrade-uninstall.md) for deployment, lifecycle tasks, and operational runbooks.
+- Onboard and service chargers with the [EVCS Connectivity & Maintenance Cookbook](docs/cookbooks/evcs-connectivity-maintenance.md).
 - Reference the [Sigils Cookbook](docs/cookbooks/sigils.md) when configuring tokenized settings across environments.
 - Manage exports, imports, and audit trails with the [User Data Cookbook](docs/cookbooks/user-data.md).
 - Plan feature rollout strategies using the [Node Features Cookbook](docs/cookbooks/node-features.md).
