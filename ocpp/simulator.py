@@ -15,6 +15,10 @@ from . import store
 from .websocket_headers import connect_headers_kwargs
 
 
+class UnsupportedMessageError(RuntimeError):
+    """Raised when the simulator receives a CSMS message it does not support."""
+
+
 @dataclass
 class SimulatorConfig:
     """Configuration for a simulated charge point."""
@@ -53,6 +57,8 @@ class ChargePointSimulator:
         self._availability_state = "Operative"
         self._pending_availability: Optional[str] = None
         self._in_transaction = False
+        self._unsupported_message = False
+        self._unsupported_message_reason = ""
 
     def trigger_door_open(self) -> None:
         """Queue a DoorOpen status notification for the simulator."""
@@ -321,7 +327,7 @@ class ChargePointSimulator:
         action_name = str(action)
         store.add_log(
             cfg.cp_path,
-            f"Received unsupported action '{action_name}', replying with CallError",
+            f"Received unsupported action '{action_name}', terminating simulator",
             log_type="simulator",
         )
         await send(
@@ -335,6 +341,12 @@ class ChargePointSimulator:
                 ]
             )
         )
+        self._unsupported_message = True
+        self._unsupported_message_reason = (
+            f"Simulator does not implement {action_name}"
+        )
+        self.status = "error"
+        self._stop_event.set()
         return True
 
     async def _handle_get_configuration(self, message_id: str, payload, send) -> None:
@@ -410,6 +422,8 @@ class ChargePointSimulator:
 
         ws = None
         try:
+            self._unsupported_message = False
+            self._unsupported_message_reason = ""
             try:
                 ws = await websockets.connect(
                     uri, subprotocols=["ocpp1.6"], **connect_kwargs
@@ -463,6 +477,10 @@ class ChargePointSimulator:
                         return raw
                     handled = await self._handle_csms_call(parsed, send, recv)
                     if handled:
+                        if self._unsupported_message:
+                            raise UnsupportedMessageError(
+                                self._unsupported_message_reason
+                            )
                         continue
                     return raw
 
@@ -645,6 +663,13 @@ class ChargePointSimulator:
                 self._availability_state = pending
                 status_label = "Available" if pending == "Operative" else "Unavailable"
                 await self._send_status_notification(send, recv, status_label)
+        except UnsupportedMessageError:
+            if not self._connected.is_set():
+                self._connect_error = "Unsupported CSMS message"
+                self._connected.set()
+            self.status = "error"
+            self._stop_event.set()
+            return
         except asyncio.TimeoutError:
             if not self._connected.is_set():
                 self._connect_error = "Timeout waiting for response"
@@ -716,6 +741,8 @@ class ChargePointSimulator:
         self._connected.clear()
         self._connect_error = ""
         self._door_open_event.clear()
+        self._unsupported_message = False
+        self._unsupported_message_reason = ""
 
         def _runner() -> None:
             asyncio.run(self._run())

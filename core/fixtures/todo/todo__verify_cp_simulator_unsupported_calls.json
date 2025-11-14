@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Verify CP simulator stops on unsupported CSMS messages",
+      "created_on": "2024-01-01T00:00:00Z",
+      "url": "/ocpp/evcs/simulator/",
+      "request_details": "1. Run `python manage.py shell`.\n2. Paste the snippet below to simulate an unsupported CSMS call and inspect the results:\n```python\nfrom collections import deque\nimport asyncio\nfrom ocpp.simulator import SimulatorConfig, ChargePointSimulator\nfrom ocpp import store\n\ncfg = SimulatorConfig(cp_path=\"QA-UNSUPPORTED/\")\nsim = ChargePointSimulator(cfg)\nstore.logs[\"simulator\"][cfg.cp_path] = deque(maxlen=store.MAX_IN_MEMORY_LOG_ENTRIES)\n\nasync def run():\n    async def send(payload: str):\n        pass\n    async def recv():\n        return None\n    await sim._handle_csms_call([2, \"manual\", \"Reset\", {}], send, recv)\n\nasyncio.run(run())\nprint(sim.status)\nprint(store.get_logs(cfg.cp_path, log_type=\"simulator\")[-1])\nstore.logs[\"simulator\"].pop(cfg.cp_path, None)\n```\n3. Confirm the shell prints `error` and the final log line includes \"Received unsupported action 'Reset', terminating simulator\".\n4. Exit the shell once complete.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]
