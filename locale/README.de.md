@@ -1,6 +1,6 @@
 # Arthexis-Konstellation
 
-[![Testabdeckung](https://raw.githubusercontent.com/arthexis/arthexis/main/coverage.svg)](https://github.com/arthexis/arthexis/actions/workflows/coverage.yml) [![OCPP 1.6-Abdeckung](https://raw.githubusercontent.com/arthexis/arthexis/main/ocpp_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md)
+[![Testabdeckung](https://raw.githubusercontent.com/arthexis/arthexis/main/coverage.svg)](https://github.com/arthexis/arthexis/actions/workflows/coverage.yml) [![OCPP 1.6-Abdeckung](https://raw.githubusercontent.com/arthexis/arthexis/main/ocpp_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md) [![OCPP 2.1-Abdeckung](https://raw.githubusercontent.com/arthexis/arthexis/main/ocpp21_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md)
 
 
 ## Zweck
@@ -15,40 +15,44 @@ Besuche den öffentlichen [Changelog-Bericht](http://localhost:8888/changelog/),
 
   **Ladepunkt → CSMS**
 
-  | Aktion | Was wir erledigen |
-  | --- | --- |
-  | `Authorize` | Validieren RFID- oder Token-Autorisierungsanfragen vor Sitzungsstart. |
-  | `BootNotification` | Registrieren den Ladepunkt und aktualisieren Identität, Firmware und Status. |
-  | `DataTransfer` | Akzeptieren herstellerspezifische Nutzdaten und protokollieren die Ergebnisse. |
-  | `DiagnosticsStatusNotification` | Verfolgen den Fortschritt von aus dem Backoffice gestarteten Diagnoseuploads. |
-  | `FirmwareStatusNotification` | Verfolgen Firmware-Update-Lebenszyklusmeldungen der Ladepunkte. |
-  | `Heartbeat` | Halten die Websocket-Sitzung aktiv und aktualisieren den Zeitstempel der letzten Verbindung. |
-  | `MeterValues` | Speichern periodische Energie- und Leistungswerte während aktiver Transaktionen. |
-  | `StartTransaction` | Erstellen Ladevorgänge mit Startzählerstand und Identifikationsdaten. |
-  | `StatusNotification` | Spiegeln Verfügbarkeits- und Fehlerzustände der Anschlüsse in Echtzeit. |
-  | `StopTransaction` | Schließen Ladevorgänge und erfassen Endzählerstand sowie Stopgrund. |
+  | Aktion | Version 1.6 | Version 2.1 | Was wir erledigen |
+  | --- | --- | --- | --- |
+  | `Authorize` | ✅ | ✅ | Validieren RFID- oder Token-Autorisierungsanfragen vor Sitzungsstart. |
+  | `BootNotification` | ✅ | ✅ | Registrieren den Ladepunkt und aktualisieren Identität, Firmware und Status. |
+  | `DataTransfer` | ✅ | ✅ | Akzeptieren herstellerspezifische Nutzdaten und protokollieren die Ergebnisse. |
+  | `DiagnosticsStatusNotification` | ✅ | — | Verfolgen den Fortschritt von aus dem Backoffice gestarteten Diagnoseuploads. |
+  | `FirmwareStatusNotification` | ✅ | ✅ | Verfolgen Firmware-Update-Lebenszyklusmeldungen der Ladepunkte. |
+  | `Heartbeat` | ✅ | ✅ | Halten die Websocket-Sitzung aktiv und aktualisieren den Zeitstempel der letzten Verbindung. |
+  | `LogStatusNotification` | — | ✅ | Verfolgen den Fortschritt von Log-Uploads vom Ladepunkt für die Diagnostiküberwachung. |
+  | `MeterValues` | ✅ | ✅ | Speichern periodische Energie- und Leistungswerte während aktiver Transaktionen. |
+  | `SecurityEventNotification` | — | ✅ | Erfassen Sicherheitsereignisse, die vom Ladepunkt gemeldet werden, für Prüfpfade. |
+  | `StartTransaction` | ✅ | — | Erstellen Ladevorgänge mit Startzählerstand und Identifikationsdaten. |
+  | `StatusNotification` | ✅ | ✅ | Spiegeln Verfügbarkeits- und Fehlerzustände der Anschlüsse in Echtzeit. |
+  | `StopTransaction` | ✅ | — | Schließen Ladevorgänge und erfassen Endzählerstand sowie Stopgrund. |
 
   **CSMS → Ladepunkt**
 
-  | Aktion | Was wir erledigen |
-  | --- | --- |
-  | `CancelReservation` | Stornieren ausstehender Reservierungen und geben Anschlüsse direkt aus der Leitwarte frei. |
-  | `ChangeAvailability` | Schalten Anschlüsse oder die gesamte Station zwischen betriebsbereit und außer Betrieb. |
-  | `ChangeConfiguration` | Aktualisieren unterstützte Ladeeinstellungen und übernehmen angewendete Werte in der Leitwarte. |
-  | `ClearCache` | Leeren lokale Autorisierungscaches, um erneute Abgleiche über das CSMS zu erzwingen. |
-  | `DataTransfer` | Senden herstellerspezifische Befehle und protokollieren die Antwort des Ladepunkts. |
-  | `GetConfiguration` | Fragen die aktuellen Werte der überwachten Konfigurationsschlüssel ab. |
-  | `GetLocalListVersion` | Rufen die aktuelle RFID-Whitelist-Version ab und synchronisieren die vom Ladepunkt gemeldeten Einträge. |
-  | `RemoteStartTransaction` | Starten Ladevorgänge remote für identifizierte Kundinnen und Kunden oder Tokens. |
-  | `RemoteStopTransaction` | Beenden aktive Ladevorgänge aus der Leitwarte. |
-  | `ReserveNow` | Reservieren Anschlüsse für kommende Sitzungen mit automatischer Zuweisung und Bestätigungsnachverfolgung. |
-  | `Reset` | Fordern einen Soft- oder Hard-Reset zur Fehlerbehebung an. |
-  | `SendLocalList` | Veröffentlichen freigegebene und genehmigte RFIDs als lokale Autorisierungsliste des Ladepunkts. |
-  | `TriggerMessage` | Fordern sofortige Nachrichten an (z. B. Status oder Diagnose). |
-  | `UnlockConnector` | Entriegeln blockierte Anschlüsse ohne Vor-Ort-Einsatz. |
-  | `UpdateFirmware` | Liefern Firmwarepakete an Ladepunkte mit sicheren Download-Tokens und verfolgen Installationsrückmeldungen. |
+  | Aktion | Version 1.6 | Version 2.1 | Was wir erledigen |
+  | --- | --- | --- | --- |
+  | `CancelReservation` | ✅ | ✅ | Stornieren ausstehender Reservierungen und geben Anschlüsse direkt aus der Leitwarte frei. |
+  | `ChangeAvailability` | ✅ | ✅ | Schalten Anschlüsse oder die gesamte Station zwischen betriebsbereit und außer Betrieb. |
+  | `ChangeConfiguration` | ✅ | — | Aktualisieren unterstützte Ladeeinstellungen und übernehmen angewendete Werte in der Leitwarte. |
+  | `ClearCache` | ✅ | ✅ | Leeren lokale Autorisierungscaches, um erneute Abgleiche über das CSMS zu erzwingen. |
+  | `DataTransfer` | ✅ | ✅ | Senden herstellerspezifische Befehle und protokollieren die Antwort des Ladepunkts. |
+  | `GetConfiguration` | ✅ | — | Fragen die aktuellen Werte der überwachten Konfigurationsschlüssel ab. |
+  | `GetLocalListVersion` | ✅ | ✅ | Rufen die aktuelle RFID-Whitelist-Version ab und synchronisieren die vom Ladepunkt gemeldeten Einträge. |
+  | `RemoteStartTransaction` | ✅ | — | Starten Ladevorgänge remote für identifizierte Kundinnen und Kunden oder Tokens. |
+  | `RemoteStopTransaction` | ✅ | — | Beenden aktive Ladevorgänge aus der Leitwarte. |
+  | `ReserveNow` | ✅ | ✅ | Reservieren Anschlüsse für kommende Sitzungen mit automatischer Zuweisung und Bestätigungsnachverfolgung. |
+  | `Reset` | ✅ | ✅ | Fordern einen Soft- oder Hard-Reset zur Fehlerbehebung an. |
+  | `SendLocalList` | ✅ | ✅ | Veröffentlichen freigegebene und genehmigte RFIDs als lokale Autorisierungsliste des Ladepunkts. |
+  | `TriggerMessage` | ✅ | ✅ | Fordern sofortige Nachrichten an (z. B. Status oder Diagnose). |
+  | `UnlockConnector` | ✅ | ✅ | Entriegeln blockierte Anschlüsse ohne Vor-Ort-Einsatz. |
+  | `UpdateFirmware` | ✅ | ✅ | Liefern Firmwarepakete an Ladepunkte mit sicheren Download-Tokens und verfolgen Installationsrückmeldungen. |
 
   **OCPP-1.6-Roadmap.** Folgende Katalog-Aktionen stehen auf unserer To-do-Liste: `ClearChargingProfile`, `GetCompositeSchedule`, `GetDiagnostics`, `SetChargingProfile`.
+
+  **OCPP-2.1-Roadmap.** Anstehende Aktionen Ladepunkt → CSMS: `ClearedChargingLimit`, `CostUpdated`, `Get15118EVCertificate`, `GetCertificateStatus`, `NotifyChargingLimit`, `NotifyCustomerInformation`, `NotifyDisplayMessages`, `NotifyEVChargingNeeds`, `NotifyEVChargingSchedule`, `NotifyEvent`, `NotifyMonitoringReport`, `NotifyReport`, `PublishFirmwareStatusNotification`, `ReportChargingProfiles`, `ReservationStatusUpdate`, `SignCertificate`, `TransactionEvent`. Rückstand CSMS → Ladepunkt: `CertificateSigned`, `ClearChargingProfile`, `ClearDisplayMessage`, `ClearVariableMonitoring`, `CustomerInformation`, `DeleteCertificate`, `GetBaseReport`, `GetChargingProfiles`, `GetCompositeSchedule`, `GetDisplayMessages`, `GetInstalledCertificateIds`, `GetLog`, `GetMonitoringReport`, `GetReport`, `GetTransactionStatus`, `GetVariables`, `InstallCertificate`, `PublishFirmware`, `RequestStartTransaction`, `RequestStopTransaction`, `SetChargingProfile`, `SetDisplayMessage`, `SetMonitoringBase`, `SetMonitoringLevel`, `SetNetworkProfile`, `SetVariableMonitoring`, `SetVariables`, `UnpublishFirmware`.
 
 - Ladepunktreservierungen mit automatischer Anschlusswahl, Verknüpfung zu Energiekonten und RFID-Tags, EVCS-Bestätigung sowie Stornierung über die Leitwarte.
 
