@@ -6634,6 +6634,92 @@ class ChargerStatusViewTests(TestCase):
         statuses = [segment["status"] for segment in segments]
         self.assertEqual(statuses, ["available", "charging", "available"])
 
+    @patch("ocpp.views.Node.get_local")
+    def test_usage_timeline_marks_untracked_for_remote_node(self, mock_get_local):
+        original_logs = store.logs["charger"]
+        store.logs["charger"] = {}
+        self.addCleanup(lambda: store.logs.__setitem__("charger", original_logs))
+        original_connections = store.connections.copy()
+
+        def restore_connections():
+            store.connections.clear()
+            store.connections.update(original_connections)
+
+        self.addCleanup(restore_connections)
+        store.connections.clear()
+
+        fixed_now = timezone.now().replace(microsecond=0)
+        local_node = Node.objects.create(
+            hostname="local-node",
+            mac_address="aa:bb:cc:dd:ee:00",
+            current_relation=Node.Relation.SELF,
+        )
+        mock_get_local.return_value = local_node
+        remote_node = Node.objects.create(
+            hostname="remote-node",
+            mac_address="aa:bb:cc:dd:ee:11",
+            current_relation=Node.Relation.DOWNSTREAM,
+        )
+        Node.objects.filter(pk=remote_node.pk).update(
+            last_seen=fixed_now - timedelta(minutes=10)
+        )
+        remote_node.refresh_from_db()
+
+        charger = Charger.objects.create(
+            charger_id="TLUNTRACKED",
+            connector_id=1,
+            node_origin=remote_node,
+        )
+
+        data, _window = _usage_timeline(charger, [], now=fixed_now)
+        self.assertEqual(len(data), 1)
+        segments = data[0]["segments"]
+        self.assertEqual(len(segments), 1)
+        self.assertEqual(segments[0]["status"], "untracked")
+
+    @patch("ocpp.views.Node.get_local")
+    def test_usage_timeline_offline_when_remote_node_recent(self, mock_get_local):
+        original_logs = store.logs["charger"]
+        store.logs["charger"] = {}
+        self.addCleanup(lambda: store.logs.__setitem__("charger", original_logs))
+        original_connections = store.connections.copy()
+
+        def restore_connections():
+            store.connections.clear()
+            store.connections.update(original_connections)
+
+        self.addCleanup(restore_connections)
+        store.connections.clear()
+
+        fixed_now = timezone.now().replace(microsecond=0)
+        local_node = Node.objects.create(
+            hostname="local-node",
+            mac_address="aa:bb:cc:dd:ee:22",
+            current_relation=Node.Relation.SELF,
+        )
+        mock_get_local.return_value = local_node
+        remote_node = Node.objects.create(
+            hostname="remote-node",
+            mac_address="aa:bb:cc:dd:ee:33",
+            current_relation=Node.Relation.DOWNSTREAM,
+        )
+        Node.objects.filter(pk=remote_node.pk).update(
+            last_seen=fixed_now - timedelta(minutes=1)
+        )
+        remote_node.refresh_from_db()
+
+        charger = Charger.objects.create(
+            charger_id="TLOFFLINE",
+            connector_id=1,
+            node_origin=remote_node,
+        )
+
+        data, _window = _usage_timeline(charger, [], now=fixed_now)
+        self.assertEqual(len(data), 1)
+        segments = data[0]["segments"]
+        self.assertEqual(len(segments), 1)
+        self.assertEqual(segments[0]["status"], "offline")
+
     def test_diagnostics_status_displayed(self):
         reported_at = timezone.now().replace(microsecond=0)
         charger = Charger.objects.create(
