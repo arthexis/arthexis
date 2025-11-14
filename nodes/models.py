@@ -53,6 +53,9 @@ logger = logging.getLogger(__name__)
 ROLE_RENAMES: dict[str, str] = {"Constellation": "Watchtower"}
 
 
+ROLE_CONFIGURATION_SKIP_IDS: set[int] = set()
+
+
 class NodeRoleManager(models.Manager):
     def get_by_natural_key(self, name: str):
         return self.get(name=name)
@@ -1309,7 +1312,79 @@ class Node(Entity):
             ).delete()
         self.sync_feature_tasks()
 
-    def update_manual_features(self, slugs: Iterable[str]):
+    @staticmethod
+    def mark_role_configuration_skip(node_id: int | None):
+        if not node_id:
+            return
+        ROLE_CONFIGURATION_SKIP_IDS.add(int(node_id))
+
+    @staticmethod
+    def clear_role_configuration_skip(node_id: int | None):
+        if not node_id:
+            return
+        ROLE_CONFIGURATION_SKIP_IDS.discard(int(node_id))
+
+    def enqueue_role_configuration(
+        self,
+        *,
+        trigger: str,
+        user=None,
+    ) -> None:
+        """Schedule a role configuration run for this node."""
+
+        if hasattr(self, "_skip_role_configuration_enqueue"):
+            delattr(self, "_skip_role_configuration_enqueue")
+        self.clear_role_configuration_skip(getattr(self, "pk", None))
+        user_id = getattr(user, "pk", None)
+        self._queue_role_configuration(trigger=trigger, user_id=user_id)
+
+    def _queue_role_configuration(
+        self,
+        *,
+        trigger: str | None = None,
+        user_id: int | None = None,
+    ) -> None:
+        if not self.pk or not self.role_id:
+            return
+
+        resolved_trigger = trigger or NodeConfigurationJob.Trigger.AUTOMATIC
+        if isinstance(resolved_trigger, NodeConfigurationJob.Trigger):
+            resolved_trigger = resolved_trigger.value
+
+        role = getattr(self, "role", None)
+        profile = None
+        if role is not None:
+            try:
+                profile = role.configuration_profile
+            except RoleConfigurationProfile.DoesNotExist:
+                profile = None
+        if profile is None:
+            profile = (
+                RoleConfigurationProfile.objects.filter(role_id=self.role_id)
+                .only("ansible_playbook_path")
+                .first()
+            )
+        if profile is None or not (profile.ansible_playbook_path or "").strip():
+            return
+
+        try:
+            from .tasks import apply_node_role_configuration
+        except Exception:  # pragma: no cover - defensive logging
+            logger.exception("Unable to import role configuration task")
+            return
+
+        apply_node_role_configuration.delay(
+            node_id=self.pk,
+            trigger=str(resolved_trigger),
+            user_id=user_id,
+        )
+
+    def update_manual_features(
+        self, slugs: Iterable[str], *, suppress_role_configuration: bool = False
+    ):
+        if suppress_role_configuration:
+            setattr(self, "_skip_role_configuration_enqueue", True)
+            self.mark_role_configuration_skip(getattr(self, "pk", None))
         desired = {slug for slug in slugs if slug in self.MANUAL_FEATURE_SLUGS}
         remove_slugs = self.MANUAL_FEATURE_SLUGS - desired
         if remove_slugs:
@@ -1322,6 +1397,10 @@ class Node(Entity):
                     node=self, feature=feature
                 )
         self.sync_feature_tasks()
+        if suppress_role_configuration:
+            self.clear_role_configuration_skip(getattr(self, "pk", None))
+            if hasattr(self, "_skip_role_configuration_enqueue"):
+                delattr(self, "_skip_role_configuration_enqueue")
 
     def sync_feature_tasks(self):
         clipboard_enabled = self.has_feature("clipboard-poll")
@@ -1334,6 +1413,10 @@ class Node(Entity):
         self._sync_upstream_poll_task(celery_enabled)
         self._sync_net_message_purge_task(celery_enabled)
         self._sync_node_update_task(celery_enabled)
+        skip_requested = getattr(self, "_skip_role_configuration_enqueue", False)
+        skip_for_node = self.pk in ROLE_CONFIGURATION_SKIP_IDS if self.pk else False
+        if not skip_requested and not skip_for_node:
+            self._queue_role_configuration()
 
     def _sync_clipboard_task(self, enabled: bool):
         from django_celery_beat.models import IntervalSchedule, PeriodicTask
@@ -1668,6 +1751,70 @@ def _sync_tasks_on_assignment_delete(sender, instance, **kwargs):
     if node:
         node.sync_feature_tasks()
 
+
+class NodeConfigurationJob(Entity):
+    """Historical record of Ansible configuration runs for a node."""
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        RUNNING = "running", "Running"
+        SUCCESS = "success", "Success"
+        FAILED = "failed", "Failed"
+
+    class Trigger(models.TextChoices):
+        AUTOMATIC = "automatic", "Automatic"
+        ADMIN = "admin", "Admin"
+        MANUAL = "manual", "Manual"
+
+    node = models.ForeignKey(
+        Node,
+        on_delete=models.CASCADE,
+        related_name="configuration_jobs",
+    )
+    role = models.ForeignKey(
+        NodeRole,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="configuration_jobs",
+    )
+    triggered_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="node_configuration_jobs",
+    )
+    trigger = models.CharField(
+        max_length=20,
+        choices=Trigger.choices,
+        default=Trigger.AUTOMATIC,
+    )
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.PENDING,
+    )
+    status_message = models.TextField(blank=True, default="")
+    playbook_path = models.CharField(max_length=255, blank=True, default="")
+    inventory = models.JSONField(default=dict, blank=True)
+    extra_vars = models.JSONField(default=dict, blank=True)
+    tags = models.JSONField(default=list, blank=True)
+    return_code = models.IntegerField(null=True, blank=True)
+    stdout = models.TextField(blank=True, default="")
+    stderr = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Node Configuration Job"
+        verbose_name_plural = "Node Configuration Jobs"
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        label = self.node.hostname if self.node_id else "Unknown node"
+        return f"{label} configuration ({self.get_status_display()})"
 
 class NodeManager(Profile):
     """Credentials for interacting with external DNS providers."""

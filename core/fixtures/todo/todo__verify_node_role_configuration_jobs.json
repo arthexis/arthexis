@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Verify node role configuration job history",
+      "created_on": "2025-12-01T00:00:00Z",
+      "url": "/admin/nodes/node/",
+      "request_details": "Open the Django admin Nodes section and edit a node with an assigned role that has a configuration profile. Save a role change or toggle a feature so the configuration playbook runs. Confirm the Node change form shows the new Configuration Jobs table with the latest run marked with the expected status and timestamp. Review the Node Configuration Jobs list view to verify the stdout/stderr and status message reflect the playbook result.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]

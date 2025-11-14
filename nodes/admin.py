@@ -57,6 +57,7 @@ from .models import (
     Node,
     NodeRole,
     RoleConfigurationProfile,
+    NodeConfigurationJob,
     NodeFeature,
     NodeFeatureAssignment,
     ContentSample,
@@ -113,6 +114,29 @@ class NodeFeatureAssignmentInline(admin.TabularInline):
     model = NodeFeatureAssignment
     extra = 0
     autocomplete_fields = ("feature",)
+
+
+class NodeConfigurationJobInline(admin.TabularInline):
+    model = NodeConfigurationJob
+    extra = 0
+    can_delete = False
+    show_change_link = True
+    ordering = ("-created_at",)
+    fields = (
+        "created_at",
+        "status",
+        "trigger",
+        "playbook_path",
+        "status_message",
+        "return_code",
+    )
+    readonly_fields = fields
+
+    def has_add_permission(self, request, obj=None):  # pragma: no cover - admin hook
+        return False
+
+    def has_change_permission(self, request, obj=None):  # pragma: no cover - admin hook
+        return False
 
 
 class RoleConfigurationProfileInline(admin.StackedInline):
@@ -339,7 +363,54 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         "send_net_message",
     ]
     change_actions = ["update_node_action"]
-    inlines = [NodeFeatureAssignmentInline]
+    inlines = [NodeFeatureAssignmentInline, NodeConfigurationJobInline]
+
+    def _queue_role_configuration(self, node: Node, request) -> None:
+        if not node.pk:
+            return
+        node.enqueue_role_configuration(
+            trigger=NodeConfigurationJob.Trigger.ADMIN,
+            user=request.user,
+        )
+
+    def save_model(self, request, obj, form, change):
+        should_queue = False
+        if not change and obj.role_id:
+            should_queue = True
+        elif change and "role" in (form.changed_data or []):
+            should_queue = True
+        if should_queue:
+            setattr(obj, "_skip_role_configuration_enqueue", True)
+        super().save_model(request, obj, form, change)
+        if should_queue:
+            if hasattr(obj, "_skip_role_configuration_enqueue"):
+                delattr(obj, "_skip_role_configuration_enqueue")
+            self._queue_role_configuration(obj, request)
+
+    def save_related(self, request, form, formsets, change):
+        node: Node = form.instance
+        should_queue = False
+        for formset in formsets:
+            if getattr(formset, "model", None) is not NodeFeatureAssignment:
+                continue
+            changed = any(
+                f.has_changed() and not f.cleaned_data.get("DELETE", False)
+                for f in formset.forms
+            )
+            if formset.deleted_objects:
+                changed = True
+            if changed:
+                should_queue = True
+                break
+        if should_queue:
+            setattr(node, "_skip_role_configuration_enqueue", True)
+            node.mark_role_configuration_skip(getattr(node, "pk", None))
+        super().save_related(request, form, formsets, change)
+        if should_queue:
+            if hasattr(node, "_skip_role_configuration_enqueue"):
+                delattr(node, "_skip_role_configuration_enqueue")
+            node.clear_role_configuration_skip(getattr(node, "pk", None))
+            self._queue_role_configuration(node, request)
 
     class SendNetMessageForm(forms.Form):
         subject = forms.CharField(
@@ -2132,9 +2203,15 @@ class NodeFeatureAdmin(EntityModelAdmin):
             )
             return
 
-        node.update_manual_features(desired_manual)
+        node.update_manual_features(
+            desired_manual, suppress_role_configuration=True
+        )
         display_map = {feature.slug: feature.display for feature in manual_features}
         newly_enabled_names = [display_map[slug] for slug in sorted(newly_enabled)]
+        node.enqueue_role_configuration(
+            trigger=NodeConfigurationJob.Trigger.ADMIN,
+            user=request.user,
+        )
         self.message_user(
             request,
             "Enabled {} feature(s): {}".format(
@@ -2714,3 +2791,42 @@ class NetMessageAdmin(EntityModelAdmin):
     @admin.display(description="TL", ordering="target_limit")
     def target_limit_display(self, obj):
         return obj.target_limit or ""
+
+
+@admin.register(NodeConfigurationJob)
+class NodeConfigurationJobAdmin(EntityModelAdmin):
+    list_display = (
+        "node",
+        "role",
+        "status",
+        "trigger",
+        "playbook_path",
+        "created_at",
+        "completed_at",
+    )
+    list_filter = ("status", "trigger", "role")
+    search_fields = ("node__hostname", "playbook_path", "status_message")
+    readonly_fields = (
+        "node",
+        "role",
+        "triggered_by",
+        "trigger",
+        "status",
+        "status_message",
+        "playbook_path",
+        "inventory",
+        "extra_vars",
+        "tags",
+        "return_code",
+        "stdout",
+        "stderr",
+        "created_at",
+        "started_at",
+        "completed_at",
+    )
+
+    def has_add_permission(self, request):  # pragma: no cover - admin hook
+        return False
+
+    def has_delete_permission(self, request, obj=None):  # pragma: no cover - admin hook
+        return False
