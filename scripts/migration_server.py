@@ -194,69 +194,6 @@ def wait_for_changes(base_dir: Path, snapshot: Dict[str, int], *, interval: floa
             return current
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        description="Run env-refresh whenever source code changes are detected."
-    )
-    parser.add_argument(
-        "--interval",
-        type=float,
-        default=1.0,
-        help="Polling interval (seconds) before checking for updates.",
-    )
-    parser.add_argument(
-        "--latest",
-        dest="latest",
-        action="store_true",
-        default=True,
-        help="Pass --latest to env-refresh (default).",
-    )
-    parser.add_argument(
-        "--no-latest",
-        dest="latest",
-        action="store_false",
-        help="Do not force --latest when invoking env-refresh.",
-    )
-    parser.add_argument(
-        "--debounce",
-        type=float,
-        default=1.0,
-        help="Sleep for this many seconds after detecting a change to allow batches.",
-    )
-    args = parser.parse_args(argv)
-
-    print("[Migration Server] Starting in", BASE_DIR)
-    snapshot = collect_source_mtimes(BASE_DIR)
-    print("[Migration Server] Watching for changes... Press Ctrl+C to stop.")
-    with migration_server_state(LOCK_DIR):
-        run_env_refresh_with_report(BASE_DIR, latest=args.latest)
-        snapshot = collect_source_mtimes(BASE_DIR)
-
-        try:
-            while True:
-                updated = wait_for_changes(BASE_DIR, snapshot, interval=args.interval)
-                if args.debounce > 0:
-                    time.sleep(args.debounce)
-                    updated = collect_source_mtimes(BASE_DIR)
-                    if updated == snapshot:
-                        continue
-                change_summary = diff_snapshots(snapshot, updated)
-                if change_summary:
-                    display = "; ".join(change_summary[:5])
-                    if len(change_summary) > 5:
-                        display += "; ..."
-                    print(f"[Migration Server] Changes detected: {display}")
-                run_env_refresh_with_report(BASE_DIR, latest=args.latest)
-                snapshot = collect_source_mtimes(BASE_DIR)
-        except KeyboardInterrupt:
-            print("[Migration Server] Stopped.")
-            return 0
-
-
-if __name__ == "__main__":  # pragma: no cover - CLI entry point
-    raise SystemExit(main())
-
-
 def _is_process_alive(pid: int) -> bool:
     """Return ``True`` if *pid* refers to a running process."""
 
@@ -323,3 +260,66 @@ def request_runserver_restart(lock_dir: Path) -> None:
     except OSError:
         return
     print("[Migration Server] Signalled VS Code run/debug tasks to restart.")
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Run env-refresh whenever source code changes are detected."
+    )
+    parser.add_argument(
+        "--interval",
+        type=float,
+        default=1.0,
+        help="Polling interval (seconds) before checking for updates.",
+    )
+    parser.add_argument(
+        "--latest",
+        dest="latest",
+        action="store_true",
+        default=True,
+        help="Pass --latest to env-refresh (default).",
+    )
+    parser.add_argument(
+        "--no-latest",
+        dest="latest",
+        action="store_false",
+        help="Do not force --latest when invoking env-refresh.",
+    )
+    parser.add_argument(
+        "--debounce",
+        type=float,
+        default=1.0,
+        help="Sleep for this many seconds after detecting a change to allow batches.",
+    )
+    args = parser.parse_args(argv)
+
+    print("[Migration Server] Starting in", BASE_DIR)
+    snapshot = collect_source_mtimes(BASE_DIR)
+    print("[Migration Server] Watching for changes... Press Ctrl+C to stop.")
+    with migration_server_state(LOCK_DIR):
+        run_env_refresh_with_report(BASE_DIR, latest=args.latest)
+        snapshot = collect_source_mtimes(BASE_DIR)
+
+        try:
+            while True:
+                updated = wait_for_changes(BASE_DIR, snapshot, interval=args.interval)
+                if args.debounce > 0:
+                    time.sleep(args.debounce)
+                    updated = collect_source_mtimes(BASE_DIR)
+                    if updated == snapshot:
+                        continue
+                change_summary = diff_snapshots(snapshot, updated)
+                if change_summary:
+                    display = "; ".join(change_summary[:5])
+                    if len(change_summary) > 5:
+                        display += "; ..."
+                    print(f"[Migration Server] Changes detected: {display}")
+                run_env_refresh_with_report(BASE_DIR, latest=args.latest)
+                snapshot = collect_source_mtimes(BASE_DIR)
+        except KeyboardInterrupt:
+            print("[Migration Server] Stopped.")
+            return 0
+
+
+if __name__ == "__main__":  # pragma: no cover - CLI entry point
+    raise SystemExit(main())
