@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Validate VS Code runserver interrupt fallback on Windows",
+      "version": "0.1.33",
+      "created_on": "2025-11-14T00:00:00Z",
+      "url": "",
+      "request_details": "From a Windows workstation launch the bundled VS Code Runserver task while the migration server task is already active. Confirm that triggering a restart (Ctrl+R in the VS Code debug toolbar) interrupts the runserver session without raising AttributeError and the server restarts cleanly. Capture the integrated terminal output showing both servers running and the restart completing without exceptions.",
+      "done_on": null,
+      "is_deleted": false
+    }
+  }
+]
