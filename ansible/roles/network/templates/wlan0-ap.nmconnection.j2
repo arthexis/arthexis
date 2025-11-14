@@ -1,0 +1,32 @@
+[connection]
+id={{ network_wifi_connection_name }}
+{% if network_wifi_uuid | length > 0 %}uuid={{ network_wifi_uuid }}
+{% endif %}type=wifi
+autoconnect={{ 'true' if network_wifi_autoconnect else 'false' }}
+interface-name={{ network_wifi_interface }}
+
+[wifi]
+mode=ap
+band={{ network_wifi_band }}
+ssid={{ network_wifi_ssid }}
+hidden={{ 'true' if network_wifi_hidden else 'false' }}
+{% if network_wifi_channel %}channel={{ network_wifi_channel }}
+{% endif %}
+
+{% if network_wifi_security and network_wifi_security != 'none' %}
+[wifi-security]
+key-mgmt={{ network_wifi_security }}
+{% if network_wifi_psk | length > 0 %}psk={{ network_wifi_psk }}
+{% endif %}
+{% endif %}
+
+[ipv4]
+method={{ network_wifi_ipv4_method }}
+{% if network_wifi_ipv4_method != 'auto' and network_eth_ipv4_address %}address1={{ network_eth_ipv4_address }}/{{ network_eth_prefix }}
+{% endif %}
+may-fail=false
+
+[ipv6]
+method={{ network_wifi_ipv6_method }}
+
+[proxy]

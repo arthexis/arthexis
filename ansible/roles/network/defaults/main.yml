@@ -1,0 +1,53 @@
+---
+# Default network configuration for Arthexis nodes that require managed networking.
+network_manage_network_manager: true
+network_remove_connections:
+  - "Wired connection 1"
+  - "Wired connection 2"
+  - "Ethernet"
+network_connection_directory: /etc/NetworkManager/system-connections
+
+network_eth_interface: eth0
+network_eth_connection_name: eth0-shared
+network_eth_uuid: ""
+network_eth_ipv4_address: 192.168.129.1
+network_eth_prefix: 16
+network_eth_gateway: ""
+network_eth_dns: []
+network_eth_method: shared
+network_eth_autoconnect: true
+
+network_wifi_interface: wlan0
+network_wifi_connection_name: gelectriic-ap
+network_wifi_uuid: ""
+network_wifi_ssid: gelectriic-ap
+network_wifi_band: bg
+network_wifi_channel: ""
+network_wifi_hidden: false
+network_wifi_security: wpa-psk
+network_wifi_psk: ""
+network_wifi_autoconnect: true
+network_wifi_ipv4_method: shared
+network_wifi_ipv6_method: ignore
+
+network_wifi_secondary_interface: wlan1
+network_wifi_secondary_autoconnect: false
+
+network_nmcli_path: /usr/bin/nmcli
+
+network_constellation_enabled: false
+network_constellation_interface: wg-constellation
+network_constellation_address: ""
+network_constellation_port: 51820
+network_constellation_private_key: ""
+network_constellation_dns: []
+network_constellation_peers: []
+network_constellation_save_config: true
+network_wireguard_directory: /etc/wireguard
+network_wireguard_owner: root
+network_wireguard_group: root
+network_wireguard_mode: "0600"
+
+# When true, attempt to enable wireless radio via nmcli before configuring
+# connections. This mirrors the behaviour of the legacy network-setup script.
+network_enable_wifi_radio: true
