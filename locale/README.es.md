@@ -129,6 +129,7 @@ Los nodos Terminal pueden iniciarse directamente con los siguientes scripts sin 
 - Gestiona exportaciones, importaciones y trazabilidad con el [Cookbook de datos de usuario](docs/cookbooks/user-data.md).
 - Planifica estrategias de despliegue de funciones con el [Cookbook de características de nodos](docs/cookbooks/node-features.md).
 - Organiza accesos directos para usuarios avanzados mediante el [Cookbook de favoritos](docs/cookbooks/favorites.md).
+- Conecta espacios de trabajo de Slack con el [Cookbook de incorporación de Slack Bot](docs/cookbooks/slack-bot-onboarding.md).
 
 ## Soporte
 
