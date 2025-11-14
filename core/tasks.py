@@ -696,7 +696,47 @@ def check_github_updates(channel_override: str | None = None) -> None:
                     "Service restart requested but service lock was empty; skipping automatic verification",
                 )
         else:
-            subprocess.run(["pkill", "-f", "manage.py runserver"])
+            result = subprocess.run(
+                ["pkill", "-f", "manage.py runserver"],
+                cwd=base_dir,
+            )
+            if result.returncode == 0:
+                _append_auto_upgrade_log(
+                    base_dir,
+                    "Restarting development server via start.sh after upgrade",
+                )
+                start_script = base_dir / "start.sh"
+                if start_script.exists():
+                    try:
+                        subprocess.Popen(
+                            ["./start.sh"],
+                            cwd=base_dir,
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                            start_new_session=True,
+                        )
+                    except Exception as exc:  # pragma: no cover - subprocess errors
+                        _append_auto_upgrade_log(
+                            base_dir,
+                            (
+                                "Failed to restart development server automatically: "
+                                f"{exc}"
+                            ),
+                        )
+                        raise
+                else:  # pragma: no cover - installation invariant
+                    _append_auto_upgrade_log(
+                        base_dir,
+                        "start.sh not found; manual restart required for development server",
+                    )
+            else:
+                _append_auto_upgrade_log(
+                    base_dir,
+                    (
+                        "No manage.py runserver process was active during upgrade; "
+                        "skipping development server restart"
+                    ),
+                )
 
         if upgrade_was_applied:
             _append_auto_upgrade_log(
