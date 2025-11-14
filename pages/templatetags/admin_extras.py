@@ -14,11 +14,11 @@ from django.conf import settings
 from django.core.cache import cache
 from django.urls import NoReverseMatch, reverse
 from django.utils.text import capfirst
-from django.utils.translation import gettext_lazy as _
+from django.utils.translation import gettext_lazy as _, ngettext
 from core import mailer
 from core.models import Lead, RFID, GoogleCalendarProfile, Todo
 from core.entity import Entity
-from ocpp.models import Charger
+from ocpp.models import Charger, ChargerConfiguration, CPFirmware
 from nodes.models import NetMessage
 
 register = template.Library()
@@ -29,6 +29,86 @@ _CACHE_MISS = object()
 _LEAD_OPEN_COUNT_CACHE_PREFIX = f"{_BADGE_CACHE_PREFIX}.lead_open_count"
 _RFID_STATS_CACHE_KEY = f"{_BADGE_CACHE_PREFIX}.rfid_release_stats"
 _CHARGER_STATS_CACHE_KEY = f"{_BADGE_CACHE_PREFIX}.charger_availability_stats"
+_MODEL_RULES_CACHE_KEY = "_model_rule_status_cache"
+_ALL_RULES_MET_MESSAGE = _("All rules met.")
+_SUCCESS_ICON = "✓"
+_ERROR_ICON = "✗"
+
+
+def _format_evcs_list(evcs_identifiers: list[str]) -> str:
+    """Return a human-readable list of EVCS identifiers."""
+
+    return ", ".join(evcs_identifiers)
+
+
+def _rule_success() -> dict[str, object]:
+    return {"success": True, "message": _ALL_RULES_MET_MESSAGE, "icon": _SUCCESS_ICON}
+
+
+def _rule_failure(message: str) -> dict[str, object]:
+    return {"success": False, "message": message, "icon": _ERROR_ICON}
+
+
+def _evaluate_cp_configuration_rules() -> dict[str, object] | None:
+    chargers = list(
+        Charger.objects.filter(connector_id__isnull=True)
+        .order_by("charger_id")
+        .values_list("charger_id", flat=True)
+    )
+    charger_ids = [identifier for identifier in chargers if identifier]
+    if not charger_ids:
+        return _rule_success()
+
+    configured = set(
+        ChargerConfiguration.objects.filter(charger_identifier__in=charger_ids)
+        .values_list("charger_identifier", flat=True)
+    )
+    missing = [identifier for identifier in charger_ids if identifier not in configured]
+    if missing:
+        evcs_list = _format_evcs_list(missing)
+        message = ngettext(
+            "Missing CP Configuration for %(evcs)s.",
+            "Missing CP Configurations for %(evcs)s.",
+            len(missing),
+        ) % {"evcs": evcs_list}
+        return _rule_failure(message)
+
+    return _rule_success()
+
+
+def _evaluate_cp_firmware_rules() -> dict[str, object] | None:
+    chargers = list(
+        Charger.objects.filter(connector_id__isnull=True)
+        .order_by("charger_id")
+        .values_list("charger_id", flat=True)
+    )
+    charger_ids = [identifier for identifier in chargers if identifier]
+    if not charger_ids:
+        return _rule_success()
+
+    firmware_sources = set(
+        CPFirmware.objects.filter(
+            source_charger__isnull=False,
+            source_charger__charger_id__in=charger_ids,
+        ).values_list("source_charger__charger_id", flat=True)
+    )
+    missing = [identifier for identifier in charger_ids if identifier not in firmware_sources]
+    if missing:
+        evcs_list = _format_evcs_list(missing)
+        message = ngettext(
+            "Missing CP Firmware for %(evcs)s.",
+            "Missing CP Firmware for %(evcs)s.",
+            len(missing),
+        ) % {"evcs": evcs_list}
+        return _rule_failure(message)
+
+    return _rule_success()
+
+
+_MODEL_RULE_EVALUATORS = {
+    "ocpp.ChargerConfiguration": _evaluate_cp_configuration_rules,
+    "ocpp.CPFirmware": _evaluate_cp_firmware_rules,
+}
 
 
 @register.simple_tag
@@ -501,6 +581,29 @@ def release_manager_todos(limit: int = 5) -> list[Todo]:
         return todos
 
     return todos[:limit]
+
+
+@register.simple_tag(takes_context=True)
+def model_rule_status(context, app_label: str, model_name: str):
+    """Return dashboard rule status metadata for the requested model."""
+
+    cache_map = context.get(_MODEL_RULES_CACHE_KEY)
+    if cache_map is None:
+        cache_map = {}
+        context[_MODEL_RULES_CACHE_KEY] = cache_map
+
+    model_key = f"{app_label}.{model_name}"
+    if model_key in cache_map:
+        return cache_map[model_key]
+
+    evaluator = _MODEL_RULE_EVALUATORS.get(model_key)
+    if evaluator is None:
+        result = None
+    else:
+        result = evaluator()
+
+    cache_map[model_key] = result
+    return result
 
 
 @register.simple_tag(takes_context=True)

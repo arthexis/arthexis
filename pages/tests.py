@@ -74,7 +74,7 @@ from core.models import (
     Todo,
     TOTPDeviceSettings,
 )
-from ocpp.models import Charger
+from ocpp.models import Charger, ChargerConfiguration, CPFirmware
 from django.core.files.uploadedfile import SimpleUploadedFile
 import base64
 import json
@@ -852,6 +852,49 @@ class AdminDashboardAppListTests(TestCase):
         resp = self.client.get(reverse("admin:index"))
 
         self.assertContains(resp, gettext("No net messages available"))
+
+    def test_dashboard_shows_model_rules_success_message(self):
+        charger = Charger.objects.create(charger_id="EVCS-100")
+        ChargerConfiguration.objects.create(charger_identifier="EVCS-100")
+        CPFirmware.objects.create(source_charger=charger, payload_json={})
+
+        resp = self.client.get(reverse("admin:index"))
+
+        self.assertContains(resp, "model-rule-status--success")
+        self.assertContains(resp, gettext("All rules met."))
+
+    def test_dashboard_shows_model_rules_failure_message(self):
+        healthy = Charger.objects.create(charger_id="EVCS-OK")
+        ChargerConfiguration.objects.create(charger_identifier="EVCS-OK")
+        CPFirmware.objects.create(source_charger=healthy, payload_json={})
+        Charger.objects.create(charger_id="EVCS-MISS")
+
+        resp = self.client.get(reverse("admin:index"))
+
+        self.assertContains(resp, "model-rule-status--error")
+        self.assertContains(resp, "Missing CP Configuration for EVCS-MISS.")
+        self.assertContains(resp, "Missing CP Firmware for EVCS-MISS.")
+
+
+class AdminModelRuleTemplateTagTests(TestCase):
+    def test_model_rule_status_uses_context_cache(self):
+        Charger.objects.create(charger_id="EVCS-CACHE")
+        ChargerConfiguration.objects.create(charger_identifier="EVCS-CACHE")
+
+        context = Context({})
+
+        with self.assertNumQueries(2):
+            status = admin_extras.model_rule_status(
+                context, "ocpp", "ChargerConfiguration"
+            )
+        self.assertTrue(status["success"])
+
+        with self.assertNumQueries(0):
+            cached = admin_extras.model_rule_status(
+                context, "ocpp", "ChargerConfiguration"
+            )
+
+        self.assertEqual(cached, status)
 
 
 class AdminProtocolGroupingTests(TestCase):

@@ -426,6 +426,24 @@
         color: var(--button-fg, #fff);
         border: none;
     }
+    .dashboard-main .model-rule-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        margin-left: 8px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+    .dashboard-main .model-rule-status__icon {
+        font-size: 0.85rem;
+        line-height: 1;
+    }
+    .dashboard-main .model-rule-status--success {
+        color: var(--success-fg, #1e7f47);
+    }
+    .dashboard-main .model-rule-status--error {
+        color: var(--error-fg, #b42318);
+    }
     .dashboard-main .rfid-release-separator {
         font-weight: 700;
         color: var(--body-quiet-color);
@@ -565,6 +583,7 @@
 <div id="admin-home-header">
   <h1>Home</h1>
   <div class="admin-home-net-message" role="status" aria-live="polite">
+    <span class="admin-home-net-message__label">{% translate 'Net message' %}</span>
     <span class="admin-home-net-message__content{% if not admin_last_net_message.has_content %} admin-home-net-message__content--empty{% endif %}" title="{% if admin_last_net_message.has_content %}{{ admin_last_net_message.text }}{% else %}{% translate 'No net messages available' %}{% endif %}">{% if admin_last_net_message.has_content %}{{ admin_last_net_message.text }}{% else %}{% translate 'No net messages available' %}{% endif %}</span>
   </div>
   <div class="admin-home-actions">
