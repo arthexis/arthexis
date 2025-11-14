@@ -1,6 +1,6 @@
 # Arthexis Constellation
 
-[![Coverage](https://raw.githubusercontent.com/arthexis/arthexis/main/coverage.svg)](https://github.com/arthexis/arthexis/actions/workflows/coverage.yml) [![OCPP 1.6 Coverage](https://raw.githubusercontent.com/arthexis/arthexis/main/ocpp_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md)
+[![Coverage](https://raw.githubusercontent.com/arthexis/arthexis/main/coverage.svg)](https://github.com/arthexis/arthexis/actions/workflows/coverage.yml) [![OCPP 1.6 Coverage](https://raw.githubusercontent.com/arthexis/arthexis/main/ocpp_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md) [![OCPP 2.1 Coverage](https://raw.githubusercontent.com/arthexis/arthexis/main/ocpp21_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md)
 
 
 ## Purpose
@@ -15,40 +15,44 @@ Visit the public [Changelog Report](http://localhost:8888/changelog/) to browse 
 
   **Charge point → CSMS**
 
-  | Action | What we do |
-  | --- | --- |
-  | `Authorize` | Validate RFID or token authorization requests before a session starts. |
-  | `BootNotification` | Register the charge point and update identity, firmware, and status details. |
-  | `DataTransfer` | Accept vendor-specific payloads and record the results. |
-  | `DiagnosticsStatusNotification` | Track the progress of diagnostic uploads kicked off from the back office. |
-  | `FirmwareStatusNotification` | Track firmware update lifecycle events from charge points. |
-  | `Heartbeat` | Keep the websocket session alive and update last-seen timestamps. |
-  | `MeterValues` | Persist periodic energy and power readings while a transaction is active. |
-  | `StartTransaction` | Create charging sessions with initial meter values and identification data. |
-  | `StatusNotification` | Reflect connector availability and fault states in real time. |
-  | `StopTransaction` | Close charging sessions, capturing closing meter values and stop reasons. |
+  | Action | Version 1.6 | Version 2.1 | What we do |
+  | --- | --- | --- | --- |
+  | `Authorize` | ✅ | ✅ | Validate RFID or token authorization requests before a session starts. |
+  | `BootNotification` | ✅ | ✅ | Register the charge point and update identity, firmware, and status details. |
+  | `DataTransfer` | ✅ | ✅ | Accept vendor-specific payloads and record the results. |
+  | `DiagnosticsStatusNotification` | ✅ | — | Track the progress of diagnostic uploads kicked off from the back office. |
+  | `FirmwareStatusNotification` | ✅ | ✅ | Track firmware update lifecycle events from charge points. |
+  | `Heartbeat` | ✅ | ✅ | Keep the websocket session alive and update last-seen timestamps. |
+  | `LogStatusNotification` | — | ✅ | Report log upload progress from the charge point for diagnostics oversight. |
+  | `MeterValues` | ✅ | ✅ | Persist periodic energy and power readings while a transaction is active. |
+  | `SecurityEventNotification` | — | ✅ | Record charge point security events for audit trails. |
+  | `StartTransaction` | ✅ | — | Create charging sessions with initial meter values and identification data. |
+  | `StatusNotification` | ✅ | ✅ | Reflect connector availability and fault states in real time. |
+  | `StopTransaction` | ✅ | — | Close charging sessions, capturing closing meter values and stop reasons. |
 
   **CSMS → Charge point**
 
-  | Action | What we do |
-  | --- | --- |
-  | `CancelReservation` | Withdraw pending reservations and release connectors directly from the control center. |
-  | `ChangeAvailability` | Switch connectors or the whole station between operative and inoperative states. |
-  | `ChangeConfiguration` | Update supported charger settings and persist applied values in the control center. |
-  | `ClearCache` | Flush local authorization caches to force fresh lookups from the CSMS. |
-  | `DataTransfer` | Send vendor-specific commands and log the charge point response. |
-  | `GetConfiguration` | Poll the device for the current values of tracked configuration keys. |
-  | `GetLocalListVersion` | Retrieve the current RFID whitelist version and synchronize entries reported by the charge point. |
-  | `RemoteStartTransaction` | Initiate a charging session remotely for an identified customer or token. |
-  | `RemoteStopTransaction` | Terminate active charging sessions from the control center. |
-  | `ReserveNow` | Reserve connectors for upcoming sessions with automatic connector selection and confirmation tracking. |
-  | `Reset` | Request a soft or hard reboot to recover from faults. |
-  | `SendLocalList` | Publish released and approved RFIDs as the charge point's local authorization list. |
-  | `TriggerMessage` | Ask the device to send an immediate update (for example status or diagnostics). |
-  | `UnlockConnector` | Release stuck connectors without on-site intervention. |
-  | `UpdateFirmware` | Deliver firmware packages to chargers with secure download tokens and track installation responses. |
+  | Action | Version 1.6 | Version 2.1 | What we do |
+  | --- | --- | --- | --- |
+  | `CancelReservation` | ✅ | ✅ | Withdraw pending reservations and release connectors directly from the control center. |
+  | `ChangeAvailability` | ✅ | ✅ | Switch connectors or the whole station between operative and inoperative states. |
+  | `ChangeConfiguration` | ✅ | — | Update supported charger settings and persist applied values in the control center. |
+  | `ClearCache` | ✅ | ✅ | Flush local authorization caches to force fresh lookups from the CSMS. |
+  | `DataTransfer` | ✅ | ✅ | Send vendor-specific commands and log the charge point response. |
+  | `GetConfiguration` | ✅ | — | Poll the device for the current values of tracked configuration keys. |
+  | `GetLocalListVersion` | ✅ | ✅ | Retrieve the current RFID whitelist version and synchronize entries reported by the charge point. |
+  | `RemoteStartTransaction` | ✅ | — | Initiate a charging session remotely for an identified customer or token. |
+  | `RemoteStopTransaction` | ✅ | — | Terminate active charging sessions from the control center. |
+  | `ReserveNow` | ✅ | ✅ | Reserve connectors for upcoming sessions with automatic connector selection and confirmation tracking. |
+  | `Reset` | ✅ | ✅ | Request a soft or hard reboot to recover from faults. |
+  | `SendLocalList` | ✅ | ✅ | Publish released and approved RFIDs as the charge point's local authorization list. |
+  | `TriggerMessage` | ✅ | ✅ | Ask the device to send an immediate update (for example status or diagnostics). |
+  | `UnlockConnector` | ✅ | ✅ | Release stuck connectors without on-site intervention. |
+  | `UpdateFirmware` | ✅ | ✅ | Deliver firmware packages to chargers with secure download tokens and track installation responses. |
 
   **OCPP 1.6 roadmap.** The following catalogue actions are in our backlog: `ClearChargingProfile`, `GetCompositeSchedule`, `GetDiagnostics`, `SetChargingProfile`.
+ 
+  **OCPP 2.1 roadmap.** Upcoming charge point → CSMS actions: `ClearedChargingLimit`, `CostUpdated`, `Get15118EVCertificate`, `GetCertificateStatus`, `NotifyChargingLimit`, `NotifyCustomerInformation`, `NotifyDisplayMessages`, `NotifyEVChargingNeeds`, `NotifyEVChargingSchedule`, `NotifyEvent`, `NotifyMonitoringReport`, `NotifyReport`, `PublishFirmwareStatusNotification`, `ReportChargingProfiles`, `ReservationStatusUpdate`, `SignCertificate`, `TransactionEvent`. CSMS → charge point backlog: `CertificateSigned`, `ClearChargingProfile`, `ClearDisplayMessage`, `ClearVariableMonitoring`, `CustomerInformation`, `DeleteCertificate`, `GetBaseReport`, `GetChargingProfiles`, `GetCompositeSchedule`, `GetDisplayMessages`, `GetInstalledCertificateIds`, `GetLog`, `GetMonitoringReport`, `GetReport`, `GetTransactionStatus`, `GetVariables`, `InstallCertificate`, `PublishFirmware`, `RequestStartTransaction`, `RequestStopTransaction`, `SetChargingProfile`, `SetDisplayMessage`, `SetMonitoringBase`, `SetMonitoringLevel`, `SetNetworkProfile`, `SetVariableMonitoring`, `SetVariables`, `UnpublishFirmware`.
 
 - Charge point reservations with automated connector assignment, energy account and RFID linkage, EVCS confirmation tracking, and control-center cancellation support.
 - [API](https://en.wikipedia.org/wiki/API) integration with [Odoo](https://www.odoo.com/), syncing:
