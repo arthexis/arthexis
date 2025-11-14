@@ -271,6 +271,28 @@ class Charger(Entity):
         ),
     )
     last_online_at = models.DateTimeField(null=True, blank=True)
+    ws_auth_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="ws_authenticated_chargers",
+        verbose_name=_("WS Auth User"),
+        help_text=_(
+            "Charge point connections must authenticate with HTTP Basic using this user."
+        ),
+    )
+    ws_auth_group = models.ForeignKey(
+        SecurityGroup,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="ws_group_authenticated_chargers",
+        verbose_name=_("WS Auth Group"),
+        help_text=_(
+            "Charge point connections must authenticate with HTTP Basic as a member of this security group."
+        ),
+    )
     owner_users = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
         blank=True,
@@ -326,6 +348,28 @@ class Charger(Entity):
         return self.owner_groups.filter(pk__in=user_group_ids).exists()
 
     @property
+    def requires_ws_auth(self) -> bool:
+        """Return ``True`` when HTTP Basic authentication is required."""
+
+        return bool(self.ws_auth_user_id or self.ws_auth_group_id)
+
+    def is_ws_user_authorized(self, user) -> bool:
+        """Return ``True`` when ``user`` satisfies the websocket auth rules."""
+
+        if not self.requires_ws_auth:
+            return True
+        if self.ws_auth_user_id:
+            return getattr(user, "pk", None) == self.ws_auth_user_id
+        if self.ws_auth_group_id:
+            if getattr(user, "pk", None) is None:
+                return False
+            groups = getattr(user, "groups", None)
+            if groups is None:
+                return False
+            return groups.filter(pk=self.ws_auth_group_id).exists()
+        return False
+
+    @property
     def is_local(self) -> bool:
         """Return ``True`` when this charger originates from the local node."""
 
@@ -356,6 +400,13 @@ class Charger(Entity):
                 fields=("charger_id",),
                 condition=models.Q(connector_id__isnull=True),
                 name="charger_unique_without_connector",
+            ),
+            models.CheckConstraint(
+                check=(
+                    models.Q(ws_auth_user__isnull=True)
+                    | models.Q(ws_auth_group__isnull=True)
+                ),
+                name="charger_ws_auth_user_or_group",
             ),
         ]
 
@@ -571,9 +622,20 @@ class Charger(Entity):
     def clean(self):
         super().clean()
         self.charger_id = type(self).validate_serial(self.charger_id)
+        if self.ws_auth_user_id and self.ws_auth_group_id:
+            raise ValidationError(
+                {
+                    "ws_auth_user": _(
+                        "Select either a WS Auth User or WS Auth Group, not both."
+                    ),
+                    "ws_auth_group": _(
+                        "Select either a WS Auth User or WS Auth Group, not both."
+                    ),
+                }
+            )
 
     def save(self, *args, **kwargs):
-        self.charger_id = type(self).validate_serial(self.charger_id)
+        self.clean()
         update_fields = kwargs.get("update_fields")
         update_list = list(update_fields) if update_fields is not None else None
         if not self.manager_node_id:

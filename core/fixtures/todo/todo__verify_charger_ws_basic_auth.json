@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Verify Charge Point WS auth enforcement",
+      "created_on": "2024-01-01T00:00:00Z",
+      "url": "/admin/ocpp/charger/",
+      "request_details": "1. In Admin → OCPP → Chargers, pick a test charge point (or create a new one) and set the new \"WS Auth User\" field to a service account with a known password. Leave \"WS Auth Group\" blank and save.\n2. From the node shell, run `python manage.py shell` and execute (replace `<SERIAL>` with the selected charger id):\n```python\nimport asyncio, websockets\nserial = '<SERIAL>'\nurl = f'ws://127.0.0.1:8000/{serial}/'\n\nasync def attempt(headers=None):\n    try:\n        async with websockets.connect(url, extra_headers=headers):\n            print('connected')\n    except Exception as exc:\n        print('failed', exc)\n\nasyncio.run(attempt())\n```\nConfirm the connection is rejected and the charge point log records the HTTP Basic authentication error.\n3. Still in the shell, repeat the attempt including the Authorization header:\n```python\nimport base64\nheaders={'Authorization': 'Basic ' + base64.b64encode(b"<username>:<password>").decode('ascii')}\nasyncio.run(attempt(headers=headers))\n```\nVerify the connection succeeds and the charger shows as Online in the admin changelist. Clear the WS Auth fields after the test.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]

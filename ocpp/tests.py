@@ -3,6 +3,7 @@ import os
 import sys
 import time
 import tempfile
+import base64
 from collections import deque
 from unittest import mock
 from importlib import util as importlib_util
@@ -702,6 +703,18 @@ class CSMSConsumerTests(TransactionTestCase):
                 await asyncio.sleep(delay)
         raise
 
+    def _reset_charger_logs(self, charger_id: str) -> str:
+        """Clear in-memory and disk logs for the provided charger."""
+
+        pending_key = store.pending_key(charger_id)
+        store.ip_connections.clear()
+        store.clear_log(pending_key, log_type="charger")
+        lower_key = pending_key.lower()
+        for key in list(store.logs["charger"].keys()):
+            if key.lower() == lower_key:
+                store.logs["charger"].pop(key, None)
+        return pending_key
+
     def _create_firmware_deployment(self, charger_id: str) -> int:
         try:
             charger = Charger.objects.get(charger_id=charger_id, connector_id=None)
@@ -864,6 +877,116 @@ class CSMSConsumerTests(TransactionTestCase):
             for key in list(store.logs["charger"].keys()):
                 if key.lower() == lower_key:
                     store.logs["charger"].pop(key, None)
+            with suppress(Exception):
+                await communicator.disconnect()
+
+    async def test_basic_auth_accepts_configured_user(self):
+        user_model = get_user_model()
+        user = await database_sync_to_async(user_model.objects.create_user)(
+            username="ws-user", password="secret", email="ws@example.com"
+        )
+        await database_sync_to_async(Charger.objects.create)(
+            charger_id="BASIC-USER", ws_auth_user=user
+        )
+        self._reset_charger_logs("BASIC-USER")
+
+        credentials = base64.b64encode(b"ws-user:secret").decode("ascii")
+        communicator = ClientWebsocketCommunicator(
+            application,
+            "/BASIC-USER/",
+            headers=[(b"authorization", f"Basic {credentials}".encode("ascii"))],
+        )
+
+        try:
+            connected, _ = await communicator.connect()
+            self.assertTrue(connected)
+        finally:
+            store.pop_connection("BASIC-USER", None)
+            self._reset_charger_logs("BASIC-USER")
+            with suppress(Exception):
+                await communicator.disconnect()
+
+    async def test_basic_auth_rejects_missing_credentials(self):
+        user_model = get_user_model()
+        user = await database_sync_to_async(user_model.objects.create_user)(
+            username="ws-required", password="secret", email="req@example.com"
+        )
+        await database_sync_to_async(Charger.objects.create)(
+            charger_id="BASIC-MISSING", ws_auth_user=user
+        )
+        pending_key = self._reset_charger_logs("BASIC-MISSING")
+
+        communicator = ClientWebsocketCommunicator(application, "/BASIC-MISSING/")
+
+        try:
+            connected = await communicator.connect()
+            self.assertEqual(connected, (False, 4003))
+            log_entries = store.get_logs(pending_key, log_type="charger")
+            self.assertTrue(
+                any("HTTP Basic authentication" in entry for entry in log_entries),
+                log_entries,
+            )
+        finally:
+            self._reset_charger_logs("BASIC-MISSING")
+            with suppress(Exception):
+                await communicator.disconnect()
+
+    async def test_basic_auth_requires_group_membership(self):
+        user_model = get_user_model()
+        member = await database_sync_to_async(user_model.objects.create_user)(
+            username="group-member", password="secret", email="member@example.com"
+        )
+        outsider = await database_sync_to_async(user_model.objects.create_user)(
+            username="group-outsider",
+            password="secret",
+            email="outsider@example.com",
+        )
+        group = await database_sync_to_async(SecurityGroup.objects.create)(
+            name="WS Operators"
+        )
+        await database_sync_to_async(group.user_set.add)(member)
+        await database_sync_to_async(Charger.objects.create)(
+            charger_id="BASIC-GROUP", ws_auth_group=group
+        )
+
+        self._reset_charger_logs("BASIC-GROUP")
+        member_credentials = base64.b64encode(b"group-member:secret").decode("ascii")
+        communicator = ClientWebsocketCommunicator(
+            application,
+            "/BASIC-GROUP/",
+            headers=[(b"authorization", f"Basic {member_credentials}".encode("ascii"))],
+        )
+
+        try:
+            connected, _ = await communicator.connect()
+            self.assertTrue(connected)
+        finally:
+            store.pop_connection("BASIC-GROUP", None)
+            self._reset_charger_logs("BASIC-GROUP")
+            with suppress(Exception):
+                await communicator.disconnect()
+
+        outsider_key = self._reset_charger_logs("BASIC-GROUP")
+        outsider_credentials = base64.b64encode(b"group-outsider:secret").decode(
+            "ascii"
+        )
+        communicator = ClientWebsocketCommunicator(
+            application,
+            "/BASIC-GROUP/",
+            headers=[
+                (b"authorization", f"Basic {outsider_credentials}".encode("ascii"))
+            ],
+        )
+
+        try:
+            connected = await communicator.connect()
+            self.assertEqual(connected, (False, 4003))
+            log_entries = store.get_logs(outsider_key, log_type="charger")
+            self.assertTrue(
+                any("unauthorized user" in entry for entry in log_entries), log_entries
+            )
+        finally:
+            self._reset_charger_logs("BASIC-GROUP")
             with suppress(Exception):
                 await communicator.disconnect()
 
