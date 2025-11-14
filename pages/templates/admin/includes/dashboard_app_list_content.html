@@ -73,7 +73,7 @@
 
               {% if model.admin_url and show_changelinks %}
                 {% model_admin_actions app.app_label model.object_name as extra_actions %}
-                <td class="actions">
+                <td class="actions" data-label="{% translate 'Model actions' %}">
                   {% for action in extra_actions %}
                     <a href="{{ action.url }}" class="actionlink" aria-describedby="favorites-{{ app.app_label }}-{{ model_name }}">{{ action.label }}</a>{% if not forloop.last %}&nbsp;{% endif %}
                   {% endfor %}
@@ -83,13 +83,13 @@
               {% endif %}
 
               {% if model.add_url %}
-                <td><a href="{{ model.add_url }}" class="addlink" aria-describedby="favorites-{{ app.app_label }}-{{ model_name }}">{% translate 'Add' %}</a></td>
+                <td data-label="{% translate 'Add' %}"><a href="{{ model.add_url }}" class="addlink" aria-describedby="favorites-{{ app.app_label }}-{{ model_name }}">{% translate 'Add' %}</a></td>
               {% else %}
-                <td></td>
+                <td data-label="{% translate 'Add' %}"></td>
               {% endif %}
 
               {% if model.admin_url and show_changelinks %}
-                <td>
+                <td class="change-link-cell{% if model.view_only %} change-link-cell--view-only{% endif %}" data-label="{% translate 'Change or view list link' %}">
                   {% if model.view_only %}
                     <a href="{{ model.admin_url }}" class="viewlink" aria-describedby="favorites-{{ app.app_label }}-{{ model_name }}">{% translate 'View' %}</a>
                   {% else %}
@@ -97,7 +97,7 @@
                   {% endif %}
                 </td>
               {% elif show_changelinks %}
-                <td></td>
+                <td class="change-link-cell" data-label="{% translate 'Change or view list link' %}"></td>
               {% endif %}
             </tr>
             {% endwith %}
@@ -185,7 +185,7 @@
 
               {% if model.admin_url and show_changelinks %}
                 {% model_admin_actions app.app_label model.object_name as extra_actions %}
-                <td class="actions">
+                <td class="actions" data-label="{% translate 'Model actions' %}">
                   {% for action in extra_actions %}
                     <a href="{{ action.url }}" class="actionlink" aria-describedby="{{ app.app_label }}-{{ model_name }}">{{ action.label }}</a>{% if not forloop.last %}&nbsp;{% endif %}
                   {% endfor %}
@@ -195,13 +195,13 @@
               {% endif %}
 
               {% if model.add_url %}
-                <td><a href="{{ model.add_url }}" class="addlink" aria-describedby="{{ app.app_label }}-{{ model_name }}">{% translate 'Add' %}</a></td>
+                <td data-label="{% translate 'Add' %}"><a href="{{ model.add_url }}" class="addlink" aria-describedby="{{ app.app_label }}-{{ model_name }}">{% translate 'Add' %}</a></td>
               {% else %}
-                <td></td>
+                <td data-label="{% translate 'Add' %}"></td>
               {% endif %}
 
               {% if model.admin_url and show_changelinks %}
-                <td>
+                <td class="change-link-cell{% if model.view_only %} change-link-cell--view-only{% endif %}" data-label="{% translate 'Change or view list link' %}">
                   {% if model.view_only %}
                     <a href="{{ model.admin_url }}" class="viewlink" aria-describedby="{{ app.app_label }}-{{ model_name }}">{% translate 'View' %}</a>
                   {% else %}
@@ -209,7 +209,7 @@
                   {% endif %}
                 </td>
               {% elif show_changelinks %}
-                <td></td>
+                <td class="change-link-cell" data-label="{% translate 'Change or view list link' %}"></td>
               {% endif %}
             </tr>
             {% endif %}

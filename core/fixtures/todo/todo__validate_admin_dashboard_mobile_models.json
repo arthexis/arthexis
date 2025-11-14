@@ -1,0 +1,15 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "is_seed_data": false,
+      "is_deleted": false,
+      "request": "Validate admin dashboard model list on mobile",
+      "created_on": "2024-01-01T00:00:00Z",
+      "url": "/admin/",
+      "request_details": "1. Log into the Django admin and open the index page.\n2. Resize the browser to 640px wide or smaller (or enable a comparable mobile device emulator).\n3. Confirm each model list renders as stacked cards with labelled sections and that Change buttons stay hidden while Add links and extra actions remain visible.",
+      "generated_for_version": "",
+      "generated_for_revision": ""
+    }
+  }
+]
