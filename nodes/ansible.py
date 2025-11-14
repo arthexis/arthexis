@@ -69,6 +69,15 @@ def render_inventory_host(node: Node) -> dict[str, Any]:
         "node_is_local": node.is_local,
     }
 
+    profile = node.get_node_profile()
+    profile_data = node.get_profile_data()
+    if profile is not None:
+        host_vars["node_profile_name"] = profile.name
+    if profile_data:
+        host_vars["node_profile"] = profile_data
+        for key, value in profile_data.items():
+            host_vars.setdefault(key, value)
+
     return {"name": host_name, "vars": host_vars}
 
 

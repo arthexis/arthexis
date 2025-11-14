@@ -68,6 +68,7 @@ from .models import (
     NodeManager,
     DNSRecord,
     _format_upgrade_body,
+    NodeProfile,
 )
 from . import dns as dns_utils
 from core.models import RFID
@@ -162,6 +163,13 @@ class DeployDNSRecordsForm(forms.Form):
         self.fields["manager"].queryset = NodeManager.objects.filter(
             provider=NodeManager.Provider.GODADDY, is_enabled=True
         )
+
+
+@admin.register(NodeProfile)
+class NodeProfileAdmin(EntityModelAdmin):
+    list_display = ("name",)
+    search_fields = ("name",)
+    fields = ("name", "data")
 
 
 @admin.register(NodeManager)
@@ -330,7 +338,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
                 )
             },
         ),
-        (_("Role"), {"fields": ("role",)}),
+        (_("Role"), {"fields": ("role", "profile")}),
         (
             _("Public endpoint"),
             {

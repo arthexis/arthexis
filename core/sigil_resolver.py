@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 from typing import Optional
@@ -197,6 +198,19 @@ def _resolve_token(token: str, current: Optional[models.Model] = None) -> str:
                         instance = _first_instance(model)
             if instance:
                 if normalized_key:
+                    resolver = getattr(instance, "resolve_profile_field_value", None)
+                    if callable(resolver):
+                        try:
+                            handled, custom_value = resolver(normalized_key or raw_key or "")
+                        except TypeError:
+                            handled = False
+                            custom_value = None
+                        if handled:
+                            if isinstance(custom_value, (dict, list)):
+                                return json.dumps(custom_value)
+                            if custom_value is None:
+                                return ""
+                            return str(custom_value)
                     field = next(
                         (
                             f
