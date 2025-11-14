@@ -1590,13 +1590,16 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
                 "description": _(
                     "Only charge points with Export transactions enabled can be "
                     "forwarded. Allow remote lets the manager or forwarder send "
-                    "commands to the device."
+                    "commands to the device. Allow insecure local websocket is "
+                    "only for trusted LAN segments and should be disabled once "
+                    "TLS is available."
                 ),
                 "fields": (
                     "node_origin",
                     "manager_node",
                     "forwarded_to",
                     "forwarding_watermark",
+                    "allow_insecure_local_ws",
                     "allow_remote",
                     "export_transactions",
                     "last_online_at",
@@ -1995,7 +1998,11 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
     def get_readonly_fields(self, request, obj=None):
         readonly = list(super().get_readonly_fields(request, obj))
         if obj and not obj.is_local:
-            for field in ("allow_remote", "export_transactions"):
+            for field in (
+                "allow_insecure_local_ws",
+                "allow_remote",
+                "export_transactions",
+            ):
                 if field not in readonly:
                     readonly.append(field)
         return tuple(readonly)

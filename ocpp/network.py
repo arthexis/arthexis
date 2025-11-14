@@ -75,6 +75,7 @@ def serialize_charger_for_network(
         "charger_id": charger.charger_id,
         "connector_id": charger.connector_id,
         "allow_remote": charger.allow_remote,
+        "allow_insecure_local_ws": charger.allow_insecure_local_ws,
         "export_transactions": charger.export_transactions,
         "last_meter_values": charger.last_meter_values or {},
     }
@@ -162,6 +163,9 @@ def apply_remote_charger_payload(
     updates: dict[str, object] = {
         "node_origin": node,
         "allow_remote": bool(payload.get("allow_remote", False)),
+        "allow_insecure_local_ws": bool(
+            payload.get("allow_insecure_local_ws", False)
+        ),
         "export_transactions": bool(payload.get("export_transactions", False)),
         "last_online_at": timezone.now(),
         "forwarded_to": None,

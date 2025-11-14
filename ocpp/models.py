@@ -256,6 +256,14 @@ class Charger(Entity):
         blank=True,
         help_text=_("Timestamp of the last forwarded transaction."),
     )
+    allow_insecure_local_ws = models.BooleanField(
+        _("Allow insecure local websocket"),
+        default=False,
+        help_text=_(
+            "Permit this charge point to connect over an unencrypted ws://"
+            " connection when it comes from the local network."
+        ),
+    )
     allow_remote = models.BooleanField(
         default=False,
         help_text=_(

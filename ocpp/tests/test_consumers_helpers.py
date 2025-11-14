@@ -12,6 +12,7 @@ import tests.conftest  # noqa: F401
 import pytest
 
 from django.utils import timezone
+from unittest.mock import AsyncMock, Mock, patch
 
 from ocpp.consumers import (
     CSMSConsumer,
@@ -105,6 +106,118 @@ def test_resolve_client_ip_trims_formats(header, expected):
     scope = {"headers": [header]}
 
     assert _resolve_client_ip(scope) == expected
+
+
+def test_connect_accepts_local_insecure_websocket():
+    consumer = CSMSConsumer()
+    consumer.scope = {
+        "type": "websocket",
+        "scheme": "ws",
+        "query_string": b"",
+        "url_route": {"kwargs": {"cid": "CP-LOCAL"}},
+        "headers": [],
+        "client": ("192.168.1.50", 3210),
+        "subprotocols": [],
+        "path": "/ws/ocpp/CP-LOCAL",
+    }
+    consumer.channel_name = "test-channel"
+    consumer.channel_layer = Mock()
+    consumer.accept = AsyncMock(return_value=None)
+    consumer.close = AsyncMock(return_value=None)
+    consumer.send = AsyncMock(return_value=None)
+
+    store.connections.clear()
+    store.ip_connections.clear()
+    store.logs["charger"].clear()
+    store.log_names["charger"].clear()
+
+    with patch("ocpp.consumers.store.register_ip_connection", return_value=True), patch(
+        "ocpp.consumers.store.add_log"
+    ) as mock_add_log, patch.object(Charger, "refresh_manager_node", return_value=None):
+        async_to_sync(consumer.connect)()
+
+    consumer.accept.assert_awaited_once()
+    consumer.close.assert_not_called()
+
+    messages = [call.args[1] for call in mock_add_log.call_args_list]
+    assert any("WARNING: Accepted insecure websocket connection" in msg for msg in messages)
+
+    charger = Charger.objects.get(charger_id="CP-LOCAL", connector_id=None)
+    assert charger.allow_insecure_local_ws is True
+
+
+def test_connect_rejects_remote_insecure_websocket():
+    consumer = CSMSConsumer()
+    consumer.scope = {
+        "type": "websocket",
+        "scheme": "ws",
+        "query_string": b"",
+        "url_route": {"kwargs": {"cid": "CP-REMOTE"}},
+        "headers": [],
+        "client": ("198.51.100.25", 9000),
+        "subprotocols": [],
+        "path": "/ws/ocpp/CP-REMOTE",
+    }
+    consumer.channel_name = "remote-channel"
+    consumer.channel_layer = Mock()
+    consumer.accept = AsyncMock(return_value=None)
+    consumer.close = AsyncMock(return_value=None)
+    consumer.send = AsyncMock(return_value=None)
+
+    store.connections.clear()
+    store.ip_connections.clear()
+    store.logs["charger"].clear()
+    store.log_names["charger"].clear()
+
+    with patch("ocpp.consumers.store.add_log") as mock_add_log:
+        async_to_sync(consumer.connect)()
+
+    consumer.accept.assert_not_called()
+    consumer.close.assert_awaited_once()
+    assert consumer.close.await_args.kwargs.get("code") == 4003
+
+    messages = [call.args[1] for call in mock_add_log.call_args_list]
+    assert any("local network required" in msg for msg in messages)
+    assert not Charger.objects.filter(charger_id="CP-REMOTE").exists()
+
+
+def test_connect_rejects_insecure_when_flag_disabled():
+    Charger.objects.create(charger_id="CP-DISABLED", allow_insecure_local_ws=False)
+
+    consumer = CSMSConsumer()
+    consumer.scope = {
+        "type": "websocket",
+        "scheme": "ws",
+        "query_string": b"",
+        "url_route": {"kwargs": {"cid": "CP-DISABLED"}},
+        "headers": [],
+        "client": ("10.0.0.5", 9100),
+        "subprotocols": [],
+        "path": "/ws/ocpp/CP-DISABLED",
+    }
+    consumer.channel_name = "disabled-channel"
+    consumer.channel_layer = Mock()
+    consumer.accept = AsyncMock(return_value=None)
+    consumer.close = AsyncMock(return_value=None)
+    consumer.send = AsyncMock(return_value=None)
+
+    store.connections.clear()
+    store.ip_connections.clear()
+    store.logs["charger"].clear()
+    store.log_names["charger"].clear()
+
+    with patch("ocpp.consumers.store.add_log") as mock_add_log:
+        async_to_sync(consumer.connect)()
+
+    consumer.accept.assert_not_called()
+    consumer.close.assert_awaited_once()
+    assert consumer.close.await_args.kwargs.get("code") == 4003
+
+    messages = [call.args[1] for call in mock_add_log.call_args_list]
+    assert any("insecure local websockets are disabled" in msg for msg in messages)
+
+    charger = Charger.objects.get(charger_id="CP-DISABLED", connector_id=None)
+    assert charger.allow_insecure_local_ws is False
 
 
 @pytest.mark.parametrize("query_key", SERIAL_QUERY_PARAM_NAMES)

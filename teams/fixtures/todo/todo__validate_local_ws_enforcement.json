@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Validate local-only ws fallback for charge points",
+      "created_on": "2025-01-01T00:00:00Z",
+      "version": "0.1.33",
+      "url": "/admin/ocpp/charger/",
+      "request_details": "Use a charger on a trusted LAN to connect over ws:// and confirm the new Allow insecure local websocket flag is enabled automatically. Verify the charger logs include the persistent warning about accepting an insecure websocket connection. Then attempt a ws:// connection from a non-local network (e.g., VPN or by overriding the client IP) and confirm the session is rejected and the log records the remote rejection message.",
+      "done_on": null,
+      "is_deleted": false
+    }
+  }
+]

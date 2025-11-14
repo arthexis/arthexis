@@ -143,6 +143,28 @@ def _resolve_client_ip(scope: dict) -> str | None:
     return fallback
 
 
+def _client_ip_is_local_network(ip: str | None) -> bool:
+    """Return ``True`` when ``ip`` belongs to a trusted local network."""
+
+    parsed = _parse_ip(ip)
+    if not parsed:
+        return False
+    if isinstance(parsed, ipaddress.IPv4Address):
+        if parsed.is_loopback or parsed.is_link_local:
+            return True
+        private_ranges = (
+            ipaddress.IPv4Network("10.0.0.0/8"),
+            ipaddress.IPv4Network("172.16.0.0/12"),
+            ipaddress.IPv4Network("192.168.0.0/16"),
+        )
+        return any(parsed in network for network in private_ranges)
+    if isinstance(parsed, ipaddress.IPv6Address):
+        if parsed.is_loopback or parsed.is_link_local:
+            return True
+        return parsed.is_private
+    return False
+
+
 def _parse_ocpp_timestamp(value) -> datetime | None:
     """Return an aware :class:`~datetime.datetime` for OCPP timestamps."""
 
@@ -284,6 +306,48 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             subprotocol = "ocpp1.6"
         self.client_ip = _resolve_client_ip(self.scope)
         self._header_reference_created = False
+        self._insecure_local_ws = False
+        self._insecure_local_ws_autoset = False
+        scheme = (self.scope.get("scheme") or "").lower()
+        if scheme == "ws":
+            ip_text = self.client_ip or "unknown"
+            if not _client_ip_is_local_network(self.client_ip):
+                message = (
+                    f"Rejected insecure websocket connection from {ip_text} for "
+                    f"charger {self.charger_id}: local network required."
+                )
+                logger.warning(message)
+                store.add_log(self.store_key, message, log_type="charger")
+                await self.close(code=4003)
+                return
+
+            def _lookup_insecure_permission() -> tuple[bool, bool]:
+                charger = (
+                    Charger.objects.filter(
+                        charger_id=self.charger_id, connector_id=None
+                    )
+                    .only("pk", "allow_insecure_local_ws")
+                    .first()
+                )
+                if charger is None:
+                    return False, False
+                return True, bool(charger.allow_insecure_local_ws)
+
+            charger_exists, allow_insecure = await database_sync_to_async(
+                _lookup_insecure_permission
+            )()
+            if charger_exists and not allow_insecure:
+                message = (
+                    f"Rejected insecure websocket connection from {ip_text} for "
+                    f"charger {self.charger_id}: insecure local websockets are disabled."
+                )
+                logger.warning(message)
+                store.add_log(self.store_key, message, log_type="charger")
+                await self.close(code=4003)
+                return
+
+            self._insecure_local_ws = True
+            self._insecure_local_ws_autoset = not charger_exists
         # Close any pending connection for this charger so reconnections do
         # not leak stale consumers when the connector id has not been
         # negotiated yet.
@@ -300,6 +364,15 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             await self.close(code=4003)
             return
         await self.accept(subprotocol=subprotocol)
+        if self._insecure_local_ws:
+            ip_text = self.client_ip or "unknown"
+            message = (
+                "WARNING: Accepted insecure websocket connection from "
+                f"{ip_text} for charger {self.charger_id} using ws://. "
+                "Restrict to trusted LAN segments and migrate to WSS."
+            )
+            logger.warning(message)
+            store.add_log(self.store_key, message, log_type="charger")
         store.add_log(
             self.store_key,
             f"Connected (subprotocol={subprotocol or 'none'})",
@@ -309,12 +382,15 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         store.logs["charger"].setdefault(
             self.store_key, deque(maxlen=store.MAX_IN_MEMORY_LOG_ENTRIES)
         )
+        defaults = {"last_path": self.scope.get("path", "")}
+        if self._insecure_local_ws and self._insecure_local_ws_autoset:
+            defaults["allow_insecure_local_ws"] = True
         self.charger, created = await database_sync_to_async(
             Charger.objects.get_or_create
         )(
             charger_id=self.charger_id,
             connector_id=None,
-            defaults={"last_path": self.scope.get("path", "")},
+            defaults=defaults,
         )
         await database_sync_to_async(self.charger.refresh_manager_node)()
         self.aggregate_charger = self.charger
