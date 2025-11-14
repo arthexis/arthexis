@@ -870,9 +870,15 @@ def energy_tariff_calculator(request):
     template = response.resolve_template(response.template_name)
     response.add_post_render_callback(lambda r: setattr(r, "context", context))
     response.render()
+
+    # The Django Debug Toolbar expects template objects to expose a ``name`` attribute.
+    # ``django.template.backends.django.Template`` proxies the underlying template via
+    # its ``template`` attribute, so unwrap it when available before emitting the
+    # ``template_rendered`` signal.
+    signal_template = getattr(template, "template", template)
     test_signals.template_rendered.send(
-        sender=template.__class__,
-        template=template,
+        sender=signal_template.__class__,
+        template=signal_template,
         context=context,
         request=request,
     )

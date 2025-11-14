@@ -13,6 +13,7 @@ django.setup()
 
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.test import signals as test_signals
 from django.urls import reverse
 from django.utils import timezone
 from pathlib import Path
@@ -723,3 +724,19 @@ class EnergyTariffCalculatorTests(TestCase):
         resp = self.client.get(target)
         self.assertEqual(resp.status_code, 302)
         self.assertEqual(resp.url, f"{login_url}?next={target}")
+
+    def test_template_rendered_signal_provides_named_template(self):
+        captured = {}
+
+        def handler(sender, template, **kwargs):
+            captured["name"] = getattr(template, "name", None)
+
+        dispatch_uid = "energy-tariff-template-signal"
+        test_signals.template_rendered.connect(handler, dispatch_uid=dispatch_uid)
+        try:
+            resp = self.client.get(reverse("awg:energy_tariff"))
+            self.assertEqual(resp.status_code, 200)
+        finally:
+            test_signals.template_rendered.disconnect(dispatch_uid=dispatch_uid)
+
+        self.assertEqual(captured["name"], "awg/energy_tariff_calculator.html")
