@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Run network setup status check",
+      "created_on": "2025-01-15T00:00:00Z",
+      "url": "",
+      "request_details": "SSH into a staging node and execute \"sudo /opt/arthexis/network-setup.sh --status\". Confirm the command completes without syntax errors, prints the network summary, and returns exit status 0. Capture the resulting output in the release notes if anomalies appear.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]

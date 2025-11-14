@@ -2710,34 +2710,35 @@ if [[ $RUN_CONFIGURE_NET == true ]]; then
                 nmcli connection delete "$con"
             done
 
-        if [[ $AP_HYPERLINE_BY_USER == true ]]; then
-            echo "Skipping Hyperline client connection setup because access point name is '$AP_NAME'."
-        else
-            nmcli connection delete "$HYPERLINE_NAME" 2>/dev/null || true
-            nmcli connection add type wifi ifname wlan0 con-name "$HYPERLINE_NAME" \
-                connection.interface-name wlan0 \
-                ssid "Hyperline" wifi-sec.key-mgmt wpa-psk wifi-sec.psk "arthexis" \
-                autoconnect yes connection.autoconnect-priority 20 \
-                ipv4.method auto ipv6.method auto ipv4.route-metric 50
-
-            if [[ $AP_ACTIVATED == true ]]; then
-                echo "Hyperline client connection configured but left inactive while '$AP_NAME' access point is running."
+            if [[ $AP_HYPERLINE_BY_USER == true ]]; then
+                echo "Skipping Hyperline client connection setup because access point name is '$AP_NAME'."
             else
-                if ! nmcli connection up "$HYPERLINE_NAME"; then
-                    echo "Failed to activate Hyperline connection; trying existing wlan0 connections." >&2
-                    while read -r con; do
-                        if nmcli connection up "$con"; then
-                            break
-                        fi
-                    done < <(nmcli -t -f NAME connection show | grep '^gate-')
+                nmcli connection delete "$HYPERLINE_NAME" 2>/dev/null || true
+                nmcli connection add type wifi ifname wlan0 con-name "$HYPERLINE_NAME" \
+                    connection.interface-name wlan0 \
+                    ssid "Hyperline" wifi-sec.key-mgmt wpa-psk wifi-sec.psk "arthexis" \
+                    autoconnect yes connection.autoconnect-priority 20 \
+                    ipv4.method auto ipv6.method auto ipv4.route-metric 50
+
+                if [[ $AP_ACTIVATED == true ]]; then
+                    echo "Hyperline client connection configured but left inactive while '$AP_NAME' access point is running."
+                else
+                    if ! nmcli connection up "$HYPERLINE_NAME"; then
+                        echo "Failed to activate Hyperline connection; trying existing wlan0 connections." >&2
+                        while read -r con; do
+                            if nmcli connection up "$con"; then
+                                break
+                            fi
+                        done < <(nmcli -t -f NAME connection show | grep '^gate-')
+                    fi
                 fi
             fi
-        fi
 
-        if [[ $AP_ACTIVATED == true ]]; then
-            if ! nmcli -t -f NAME connection show --active | grep -Fxq "$AP_NAME"; then
-                if ! nmcli connection up "$AP_NAME" ifname wlan0; then
-                    echo "Warning: Unable to reactivate access point '$AP_NAME' after wlan0 client configuration." >&2
+            if [[ $AP_ACTIVATED == true ]]; then
+                if ! nmcli -t -f NAME connection show --active | grep -Fxq "$AP_NAME"; then
+                    if ! nmcli connection up "$AP_NAME" ifname wlan0; then
+                        echo "Warning: Unable to reactivate access point '$AP_NAME' after wlan0 client configuration." >&2
+                    fi
                 fi
             fi
         fi
