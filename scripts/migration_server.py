@@ -4,14 +4,17 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import subprocess
 import sys
 import time
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Dict, Iterable
 
 BASE_DIR = Path(__file__).resolve().parents[1]
+LOCK_DIR = BASE_DIR / "locks"
 
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
@@ -175,6 +178,7 @@ def run_env_refresh_with_report(base_dir: Path, *, latest: bool) -> bool:
     success = run_env_refresh(base_dir, latest=latest)
     if success:
         print("[Migration Server] env-refresh completed successfully.")
+        request_runserver_restart(LOCK_DIR)
     else:
         print("[Migration Server] env-refresh failed. Awaiting further changes.")
     return success
@@ -224,29 +228,98 @@ def main(argv: list[str] | None = None) -> int:
     print("[Migration Server] Starting in", BASE_DIR)
     snapshot = collect_source_mtimes(BASE_DIR)
     print("[Migration Server] Watching for changes... Press Ctrl+C to stop.")
-    run_env_refresh_with_report(BASE_DIR, latest=args.latest)
-    snapshot = collect_source_mtimes(BASE_DIR)
+    with migration_server_state(LOCK_DIR):
+        run_env_refresh_with_report(BASE_DIR, latest=args.latest)
+        snapshot = collect_source_mtimes(BASE_DIR)
 
-    try:
-        while True:
-            updated = wait_for_changes(BASE_DIR, snapshot, interval=args.interval)
-            if args.debounce > 0:
-                time.sleep(args.debounce)
-                updated = collect_source_mtimes(BASE_DIR)
-                if updated == snapshot:
-                    continue
-            change_summary = diff_snapshots(snapshot, updated)
-            if change_summary:
-                display = "; ".join(change_summary[:5])
-                if len(change_summary) > 5:
-                    display += "; ..."
-                print(f"[Migration Server] Changes detected: {display}")
-            run_env_refresh_with_report(BASE_DIR, latest=args.latest)
-            snapshot = collect_source_mtimes(BASE_DIR)
-    except KeyboardInterrupt:
-        print("[Migration Server] Stopped.")
-        return 0
+        try:
+            while True:
+                updated = wait_for_changes(BASE_DIR, snapshot, interval=args.interval)
+                if args.debounce > 0:
+                    time.sleep(args.debounce)
+                    updated = collect_source_mtimes(BASE_DIR)
+                    if updated == snapshot:
+                        continue
+                change_summary = diff_snapshots(snapshot, updated)
+                if change_summary:
+                    display = "; ".join(change_summary[:5])
+                    if len(change_summary) > 5:
+                        display += "; ..."
+                    print(f"[Migration Server] Changes detected: {display}")
+                run_env_refresh_with_report(BASE_DIR, latest=args.latest)
+                snapshot = collect_source_mtimes(BASE_DIR)
+        except KeyboardInterrupt:
+            print("[Migration Server] Stopped.")
+            return 0
 
 
 if __name__ == "__main__":  # pragma: no cover - CLI entry point
     raise SystemExit(main())
+
+
+def _is_process_alive(pid: int) -> bool:
+    """Return ``True`` if *pid* refers to a running process."""
+
+    if pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
+def migration_server_state(lock_dir: Path):
+    """Context manager that records the migration server PID."""
+
+    lock_dir.mkdir(parents=True, exist_ok=True)
+    state_path = lock_dir / "migration_server.json"
+
+    @contextmanager
+    def _manager():
+        payload = {"pid": os.getpid(), "timestamp": time.time()}
+        try:
+            state_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        except OSError:
+            pass
+        try:
+            yield state_path
+        finally:
+            try:
+                state_path.unlink()
+            except FileNotFoundError:
+                pass
+            except OSError:
+                pass
+
+    return _manager()
+
+
+def request_runserver_restart(lock_dir: Path) -> None:
+    """Signal VS Code run/debug servers to restart after migrations."""
+
+    state_path = lock_dir / "vscode_runserver.json"
+    try:
+        payload = json.loads(state_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return
+    except json.JSONDecodeError:
+        return
+    pid = payload.get("pid")
+    token = payload.get("token")
+    if isinstance(pid, str) and pid.isdigit():
+        pid = int(pid)
+    if not isinstance(pid, int) or not _is_process_alive(pid):
+        return
+    if not isinstance(token, str) or not token:
+        return
+    restart_path = lock_dir / f"vscode_runserver.restart.{token}"
+    try:
+        restart_path.write_text(str(time.time()), encoding="utf-8")
+    except OSError:
+        return
+    print("[Migration Server] Signalled VS Code run/debug tasks to restart.")
