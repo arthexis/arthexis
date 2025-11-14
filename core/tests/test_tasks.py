@@ -380,6 +380,82 @@ def test_check_github_updates_allows_stable_critical_patch(monkeypatch, tmp_path
     assert ["./upgrade.sh", "--stable", "--no-restart"] in run_commands
 
 
+def test_check_github_updates_restarts_dev_server(monkeypatch, tmp_path):
+    """Nodes without systemd should restart the development server after upgrade."""
+
+    from core import tasks
+
+    base_dir = tmp_path / "node"
+    locks = base_dir / "locks"
+    logs = base_dir / "logs"
+    locks.mkdir(parents=True)
+    logs.mkdir(parents=True)
+    (base_dir / "VERSION").write_text("0.0.0", encoding="utf-8")
+    (locks / "auto_upgrade.lck").write_text("latest", encoding="utf-8")
+    start_script = base_dir / "start.sh"
+    start_script.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+
+    monkeypatch.setitem(
+        sys.modules,
+        "core.notifications",
+        SimpleNamespace(notify=lambda *args, **kwargs: None),
+    )
+
+    import nodes.apps as nodes_apps
+
+    monkeypatch.setattr(nodes_apps, "_startup_notification", lambda: None)
+
+    monkeypatch.setattr(tasks, "_load_skipped_revisions", lambda base: set())
+    monkeypatch.setattr(tasks, "_resolve_release_severity", lambda version: tasks.SEVERITY_NORMAL)
+    monkeypatch.setattr(tasks, "_read_remote_version", lambda base, branch: "0.0.1")
+    monkeypatch.setattr(tasks, "_read_local_version", lambda base: "0.0.0")
+    monkeypatch.setattr(tasks, "_schedule_health_check", lambda *args, **kwargs: None)
+
+    log_path = logs / "auto-upgrade.log"
+    monkeypatch.setattr(tasks, "_auto_upgrade_log_path", lambda _base: log_path)
+
+    messages: list[str] = []
+    monkeypatch.setattr(
+        tasks,
+        "_append_auto_upgrade_log",
+        lambda _base, message: messages.append(message),
+    )
+
+    run_commands: list[list[str]] = []
+
+    def fake_run(command, *args, **kwargs):
+        run_commands.append(command)
+        if command[:2] == ["pkill", "-f"]:
+            return CompletedProcess(command, 0)
+        return CompletedProcess(command, 0)
+
+    def fake_check_output(command, *args, **kwargs):
+        if command[:3] == ["git", "rev-parse", "origin/main"]:
+            return "remote"
+        if command[:3] == ["git", "rev-parse", "main"]:
+            return "local"
+        return ""
+
+    popen_calls: list[list[str]] = []
+
+    class DummyPopen:
+        def __init__(self, command, *args, **kwargs):
+            popen_calls.append(command)
+
+    monkeypatch.setattr(tasks.subprocess, "run", fake_run)
+    monkeypatch.setattr(tasks.subprocess, "check_output", fake_check_output)
+    monkeypatch.setattr(tasks.subprocess, "Popen", DummyPopen)
+
+    with override_settings(BASE_DIR=base_dir):
+        tasks.check_github_updates()
+
+    assert any(cmd[0] == "./upgrade.sh" and "--no-restart" in cmd for cmd in run_commands)
+    assert popen_calls == [["./start.sh"]]
+    assert any(
+        "Restarting development server via start.sh" in message for message in messages
+    )
+
+
 def test_check_github_updates_skips_latest_low_severity_patch(monkeypatch, tmp_path):
     """Latest mode should skip low severity patches during auto-upgrade."""
 
