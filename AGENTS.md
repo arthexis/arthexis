@@ -22,6 +22,7 @@
 - Follow the UI and visual design guidelines in `DESIGN.md` when making any interface changes.
 - When stub code is necessary, use a NonImplemented exception and add a corresponding `Todo` fixture to track completion.
 - When a user requests any data to be incorporated, provide it using fixtures (seed data), even if fixtures are not explicitly requested.
+- Provide an inline comment immediately above any code that may appear insecure during an audit (for example, security exemptions such as `@csrf_exempt`) explaining the operational requirement for that implementation.
 - Store each fixture object in its own file to avoid merge conflicts, giving each file a unique name related to the item it contains.
 - Fixtures must not include numeric primary keys; use natural keys instead.
   - awg.CableSize: (awg_size, material)
