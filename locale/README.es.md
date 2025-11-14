@@ -124,6 +124,7 @@ Los nodos Terminal pueden iniciarse directamente con los siguientes scripts sin 
 - Accede al [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) en [`http://localhost:8888/admin/`](http://localhost:8888/admin/) para revisar y gestionar datos en vivo. Usa `--port` con los scripts de inicio o el instalador si necesitas exponer otro puerto.
 - Consulta la [documentación de administración](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/) en [`http://localhost:8888/admindocs/`](http://localhost:8888/admindocs/) para leer la API generada automáticamente a partir de tus modelos.
 - Sigue la [Guía de instalación y administración](docs/cookbooks/install-start-stop-upgrade-uninstall.md) para tareas de despliegue, ciclo de vida y runbooks operativos.
+- Integra y da mantenimiento a los cargadores con el [Cookbook de conectividad y mantenimiento EVCS](docs/cookbooks/evcs-connectivity-maintenance.md).
 - Revisa el [Cookbook de sigilos](docs/cookbooks/sigils.md) cuando configures ajustes tokenizados entre entornos.
 - Gestiona exportaciones, importaciones y trazabilidad con el [Cookbook de datos de usuario](docs/cookbooks/user-data.md).
 - Planifica estrategias de despliegue de funciones con el [Cookbook de características de nodos](docs/cookbooks/node-features.md).
