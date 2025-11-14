@@ -999,7 +999,7 @@ def register_node(request):
     if not created:
         previous_version = (node.installed_version or "").strip()
         previous_revision = (node.installed_revision or "").strip()
-        update_fields = []
+        update_fields: list[str] = []
         for field, value in (
             ("hostname", hostname),
             ("network_hostname", network_hostname),
@@ -1033,7 +1033,17 @@ def register_node(request):
         if desired_role and node.role_id != desired_role.id:
             node.role = desired_role
             update_fields.append("role")
+        timestamp = timezone.now()
+        node.last_seen = timestamp
+        if "last_seen" not in update_fields:
+            update_fields.append("last_seen")
+
         if update_fields:
+            # ``auto_now`` fields such as ``last_seen`` are not updated when
+            # ``update_fields`` is provided unless they are explicitly
+            # included. Ensure the heartbeat timestamp is always refreshed so
+            # remote syncs reflect the latest contact time even when no other
+            # fields changed.
             node.save(update_fields=update_fields)
         current_version = (node.installed_version or "").strip()
         current_revision = (node.installed_revision or "").strip()
