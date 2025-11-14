@@ -12,6 +12,20 @@ import pytest
 from core import release as release_module
 
 
+def make_proc(returncode: int, stdout: str = "", stderr: str = ""):
+    proc = mock.Mock()
+    proc.returncode = returncode
+    proc.stdout = stdout
+    proc.stderr = stderr
+    return proc
+
+
+def _patch_sleep(monkeypatch):
+    sleep = mock.Mock()
+    monkeypatch.setattr(release_module.time, "sleep", sleep)
+    return sleep
+
+
 @pytest.mark.django_db
 def test_build_sanitizes_runtime_directories(monkeypatch):
     base_dir = Path(__file__).resolve().parents[1]
@@ -61,3 +75,58 @@ def test_build_sanitizes_runtime_directories(monkeypatch):
             if dist_dir.exists():
                 shutil.rmtree(dist_dir)
             dist_backup.rename(dist_dir)
+
+
+def test_upload_with_retries_eventual_success(monkeypatch):
+    sleep = _patch_sleep(monkeypatch)
+    attempts = [
+        make_proc(1, stderr="ConnectionResetError: connection aborted"),
+        make_proc(1, stderr="ProtocolError: remote host closed the connection"),
+        make_proc(0, stdout="Uploaded"),
+    ]
+
+    monkeypatch.setattr(
+        release_module.subprocess,
+        "run",
+        mock.Mock(side_effect=attempts),
+    )
+
+    release_module._upload_with_retries(["twine", "upload"], repository="PyPI", retries=3)
+
+    run_mock = release_module.subprocess.run
+    assert run_mock.call_count == 3
+    assert sleep.call_count == 2
+
+
+def test_upload_with_retries_exhausts_retryable_errors(monkeypatch):
+    sleep = _patch_sleep(monkeypatch)
+    errors = [
+        make_proc(1, stderr="ConnectionResetError: remote host closed the connection"),
+        make_proc(1, stderr="ConnectionResetError: remote host closed the connection"),
+        make_proc(1, stderr="ConnectionResetError: remote host closed the connection"),
+    ]
+
+    run_mock = mock.Mock(side_effect=errors)
+    monkeypatch.setattr(release_module.subprocess, "run", run_mock)
+
+    with pytest.raises(release_module.ReleaseError) as excinfo:
+        release_module._upload_with_retries(["twine", "upload"], repository="PyPI", retries=3)
+
+    message = str(excinfo.value)
+    assert "failed after 3 attempts" in message
+    assert "remote host closed the connection" in message
+    assert run_mock.call_count == 3
+    assert sleep.call_count == 2
+
+
+def test_upload_with_retries_non_retryable_failure(monkeypatch):
+    sleep = _patch_sleep(monkeypatch)
+    run_mock = mock.Mock(return_value=make_proc(1, stderr="HTTP 403 forbidden"))
+    monkeypatch.setattr(release_module.subprocess, "run", run_mock)
+
+    with pytest.raises(release_module.ReleaseError) as excinfo:
+        release_module._upload_with_retries(["twine", "upload"], repository="PyPI", retries=3)
+
+    assert str(excinfo.value) == "HTTP 403 forbidden"
+    run_mock.assert_called_once()
+    sleep.assert_not_called()
