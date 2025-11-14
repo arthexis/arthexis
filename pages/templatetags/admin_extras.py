@@ -11,6 +11,7 @@ from django.db import DatabaseError
 from django.db.models import Count, Exists, OuterRef, Q
 from django.db.models import Model
 from django.conf import settings
+from django.core.cache import cache
 from django.urls import NoReverseMatch, reverse
 from django.utils.text import capfirst
 from django.utils.translation import gettext_lazy as _
@@ -20,6 +21,13 @@ from ocpp.models import Charger
 from nodes.models import NetMessage
 
 register = template.Library()
+
+_BADGE_CACHE_TIMEOUT = getattr(settings, "ADMIN_DASHBOARD_BADGE_TIMEOUT", 300)
+_BADGE_CACHE_PREFIX = "admin.dashboard.badges"
+_CACHE_MISS = object()
+_LEAD_OPEN_COUNT_CACHE_PREFIX = f"{_BADGE_CACHE_PREFIX}.lead_open_count"
+_RFID_STATS_CACHE_KEY = f"{_BADGE_CACHE_PREFIX}.rfid_release_stats"
+_CHARGER_STATS_CACHE_KEY = f"{_BADGE_CACHE_PREFIX}.charger_availability_stats"
 
 
 @register.simple_tag
@@ -369,37 +377,42 @@ def related_admin_models(opts):
 def lead_open_count(context, app_label: str, model_name: str):
     """Return the number of open leads for the given model."""
 
-    cache = context.setdefault("_lead_open_counts", {})
+    context_cache = context.setdefault("_lead_open_counts", {})
     cache_key = f"{app_label}.{model_name}".lower()
-    if cache_key in cache:
-        return cache[cache_key]
+    if cache_key in context_cache:
+        return context_cache[cache_key]
 
     try:
         model = apps.get_model(app_label, model_name)
     except LookupError:
-        cache[cache_key] = None
+        context_cache[cache_key] = None
         return None
 
     concrete = model._meta.concrete_model
     if not issubclass(concrete, Lead):
-        cache[cache_key] = None
+        context_cache[cache_key] = None
         return None
 
     concrete_key = concrete._meta.label_lower
-    if concrete_key in cache:
-        count = cache[concrete_key]
+    if concrete_key in context_cache:
+        count = context_cache[concrete_key]
     else:
-        try:
-            open_value = concrete.Status.OPEN
-        except AttributeError:
-            count = None
-        else:
-            count = (
-                concrete._default_manager.filter(status=open_value).count()
-            )
-        cache[concrete_key] = count
+        global_cache_key = f"{_LEAD_OPEN_COUNT_CACHE_PREFIX}:{concrete_key}"
+        cached_count = cache.get(global_cache_key, _CACHE_MISS)
+        if cached_count is _CACHE_MISS:
+            try:
+                open_value = concrete.Status.OPEN
+            except AttributeError:
+                cached_count = None
+            else:
+                cached_count = (
+                    concrete._default_manager.filter(status=open_value).count()
+                )
+            cache.set(global_cache_key, cached_count, _BADGE_CACHE_TIMEOUT)
+        count = cached_count
+        context_cache[concrete_key] = count
 
-    cache[cache_key] = count
+    context_cache[cache_key] = count
     return count
 
 
@@ -410,16 +423,20 @@ def rfid_release_stats(context):
     cache_key = "_rfid_release_stats"
     stats = context.get(cache_key)
     if stats is None:
-        counts = RFID.objects.aggregate(
-            total=Count("pk"),
-            released_allowed=Count(
-                "pk", filter=Q(released=True, allowed=True)
-            ),
-        )
-        stats = {
-            "released_allowed": counts.get("released_allowed") or 0,
-            "total": counts.get("total") or 0,
-        }
+        cached_stats = cache.get(_RFID_STATS_CACHE_KEY, _CACHE_MISS)
+        if cached_stats is _CACHE_MISS:
+            counts = RFID.objects.aggregate(
+                total=Count("pk"),
+                released_allowed=Count(
+                    "pk", filter=Q(released=True, allowed=True)
+                ),
+            )
+            cached_stats = {
+                "released_allowed": counts.get("released_allowed") or 0,
+                "total": counts.get("total") or 0,
+            }
+            cache.set(_RFID_STATS_CACHE_KEY, cached_stats, _BADGE_CACHE_TIMEOUT)
+        stats = dict(cached_stats)
         context[cache_key] = stats
     return stats
 
@@ -431,26 +448,34 @@ def charger_availability_stats(context):
     cache_key = "_charger_availability_stats"
     stats = context.get(cache_key)
     if stats is None:
-        available = Charger.objects.filter(last_status__iexact="Available")
-        available_with_cp_number = available.filter(
-            connector_id__isnull=False
-        ).count()
+        cached_stats = cache.get(_CHARGER_STATS_CACHE_KEY, _CACHE_MISS)
+        if cached_stats is _CACHE_MISS:
+            available = Charger.objects.filter(last_status__iexact="Available")
+            available_with_cp_number = available.filter(
+                connector_id__isnull=False
+            ).count()
 
-        available_without_cp_number = available.filter(connector_id__isnull=True)
-        has_connector = Charger.objects.filter(
-            charger_id=OuterRef("charger_id"),
-            connector_id__isnull=False,
-        )
-        missing_connector_count = available_without_cp_number.annotate(
-            has_connector=Exists(has_connector)
-        ).filter(has_connector=False).count()
+            available_without_cp_number = available.filter(
+                connector_id__isnull=True
+            )
+            has_connector = Charger.objects.filter(
+                charger_id=OuterRef("charger_id"),
+                connector_id__isnull=False,
+            )
+            missing_connector_count = available_without_cp_number.annotate(
+                has_connector=Exists(has_connector)
+            ).filter(has_connector=False).count()
 
-        available_total = available_with_cp_number + missing_connector_count
-        stats = {
-            "available_total": available_total,
-            "available_with_cp_number": available_with_cp_number,
-            "available_missing_cp_number": missing_connector_count,
-        }
+            available_total = available_with_cp_number + missing_connector_count
+            cached_stats = {
+                "available_total": available_total,
+                "available_with_cp_number": available_with_cp_number,
+                "available_missing_cp_number": missing_connector_count,
+            }
+            cache.set(
+                _CHARGER_STATS_CACHE_KEY, cached_stats, _BADGE_CACHE_TIMEOUT
+            )
+        stats = dict(cached_stats)
         context[cache_key] = stats
     return stats
 

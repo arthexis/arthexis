@@ -12,6 +12,7 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.shortcuts import resolve_url
 from django.templatetags.static import static
+from django.template import Context
 from urllib.parse import quote
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
@@ -53,6 +54,7 @@ from pages.screenshot_specs import (
     registry,
 )
 from pages.context_processors import nav_links
+from pages.templatetags import admin_extras
 from pages.middleware import LanguagePreferenceMiddleware
 from django.apps import apps as django_apps
 from config.middleware import SiteHttpsRedirectMiddleware
@@ -3132,6 +3134,7 @@ class FaviconTests(TestCase):
 
 class FavoriteTests(TestCase):
     def setUp(self):
+        cache.clear()
         self.client = Client()
         User = get_user_model()
         self.user = User.objects.create_superuser(
@@ -3311,6 +3314,55 @@ class FavoriteTests(TestCase):
         self.assertContains(resp, 'class="charger-availability-badge"')
         self.assertContains(resp, f'title="{badge_label}"')
         self.assertContains(resp, f'aria-label="{badge_label}"')
+
+    def test_lead_open_count_uses_cache_across_requests(self):
+        InviteLead.objects.create(email="cached@example.com")
+
+        first_context = Context({})
+        with self.assertNumQueries(1):
+            count = admin_extras.lead_open_count(
+                first_context, "teams", "InviteLead"
+            )
+        self.assertEqual(count, 1)
+
+        second_context = Context({})
+        with self.assertNumQueries(0):
+            cached_count = admin_extras.lead_open_count(
+                second_context, "teams", "InviteLead"
+            )
+        self.assertEqual(cached_count, 1)
+
+    def test_rfid_release_stats_uses_cache_across_requests(self):
+        RFID.objects.create(rfid="ABCDEF01", released=True, allowed=True)
+        RFID.objects.create(rfid="ABCDEF02", released=False, allowed=True)
+
+        first_context = Context({})
+        with self.assertNumQueries(1):
+            stats = admin_extras.rfid_release_stats(first_context)
+        self.assertEqual(stats["released_allowed"], 1)
+        self.assertEqual(stats["total"], 2)
+
+        second_context = Context({})
+        with self.assertNumQueries(0):
+            cached_stats = admin_extras.rfid_release_stats(second_context)
+        self.assertEqual(cached_stats["released_allowed"], 1)
+        self.assertEqual(cached_stats["total"], 2)
+
+    def test_charger_availability_stats_uses_cache_across_requests(self):
+        Charger.objects.create(
+            charger_id="CP-100", connector_id=1, last_status="Available"
+        )
+        Charger.objects.create(charger_id="CP-100", last_status="Available")
+
+        first_context = Context({})
+        admin_extras.charger_availability_stats(first_context)
+
+        second_context = Context({})
+        with self.assertNumQueries(0):
+            cached_stats = admin_extras.charger_availability_stats(second_context)
+
+        self.assertEqual(cached_stats["available_with_cp_number"], 1)
+        self.assertEqual(cached_stats["available_total"], 2)
 
     def test_dashboard_charge_point_badge_ignores_aggregator(self):
         Charger.objects.create(charger_id="CP-AGG", last_status="Available")
