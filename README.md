@@ -133,6 +133,7 @@ Terminal nodes can start directly with the scripts below without installing; Con
 - Manage exports, imports, and audit trails with the [User Data Cookbook](docs/cookbooks/user-data.md).
 - Plan feature rollout strategies using the [Node Features Cookbook](docs/cookbooks/node-features.md).
 - Curate shortcuts for power users through the [Favorites Cookbook](docs/cookbooks/favorites.md).
+- Connect Slack workspaces through the [Slack Bot Onboarding Cookbook](docs/cookbooks/slack-bot-onboarding.md).
 
 ## Support
 

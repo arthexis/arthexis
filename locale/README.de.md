@@ -132,6 +132,7 @@ Terminal-Knoten können direkt mit den untenstehenden Skripten ohne Installation
 - Verwalte Exporte, Importe und Prüfprotokolle mit dem [User-Data-Cookbook](docs/cookbooks/user-data.md).
 - Plane Feature-Rollouts mit dem [Node-Features-Cookbook](docs/cookbooks/node-features.md).
 - Kuratiere Abkürzungen für Power-User über das [Favorites-Cookbook](docs/cookbooks/favorites.md).
+- Verbinde Slack-Workspaces mit dem [Slack-Bot-Onboarding-Cookbook](docs/cookbooks/slack-bot-onboarding.md).
 
 ## Support
 

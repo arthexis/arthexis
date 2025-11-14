@@ -132,6 +132,7 @@ I nodi Terminal possono avviarsi direttamente con gli script sottostanti senza i
 - Gestisci esportazioni, importazioni e tracciamenti con il [Cookbook sui dati utente](docs/cookbooks/user-data.md).
 - Pianifica le strategie di rilascio delle funzionalità con il [Cookbook sulle funzionalità dei nodi](docs/cookbooks/node-features.md).
 - Cura scorciatoie per gli utenti esperti tramite il [Cookbook dei preferiti](docs/cookbooks/favorites.md).
+- Collega i workspace Slack con il [Cookbook di onboarding dello Slack Bot](docs/cookbooks/slack-bot-onboarding.md).
 
 ## Supporto
 
