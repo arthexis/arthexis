@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Verify control/satellite network playbooks",
+      "created_on": "2025-02-15T00:00:00Z",
+      "url": "",
+      "request_details": "Use a staging environment with both control and satellite nodes assigned configuration profiles that reference the new ansible playbooks. Run `ansible-playbook ansible/playbooks/control.yml --limit <control-host>` and `ansible-playbook ansible/playbooks/satellite.yml --limit <satellite-host>` from the repo root. Confirm that NetworkManager now contains refreshed eth0-shared and gelectriic-ap profiles, the Wi-Fi radio is enabled, and the WireGuard constellation interface is provisioned with the expected peers. Capture before/after `nmcli connection show` output if differences appear.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]

@@ -1,0 +1,20 @@
+---
+- name: Configure Satellite node networking
+  hosts: satellite
+  become: true
+  vars:
+    network_eth_ipv4_address: "{{ satellite_eth_ipv4_address | default(eth_ipv4_address | default('192.168.129.1')) }}"
+    network_eth_prefix: "{{ satellite_eth_prefix | default(eth_prefix | default(16)) }}"
+    network_eth_gateway: "{{ satellite_eth_gateway | default(eth_gateway | default('')) }}"
+    network_eth_dns: "{{ satellite_eth_dns | default(eth_dns | default([], true), true) }}"
+    network_wifi_ssid: "{{ satellite_wifi_ssid | default(wifi_ssid | default('gelectriic-ap')) }}"
+    network_wifi_psk: "{{ satellite_wifi_psk | default(wifi_psk | default('')) }}"
+    network_wifi_band: "{{ satellite_wifi_band | default(wifi_band | default('bg')) }}"
+    network_wifi_channel: "{{ satellite_wifi_channel | default(wifi_channel | default('')) }}"
+    network_constellation_enabled: "{{ (satellite_constellation_enabled | default(true)) | bool }}"
+    network_constellation_address: "{{ satellite_constellation_address | default(node_constellation_ip | default('')) }}"
+    network_constellation_private_key: "{{ satellite_constellation_private_key | default(node_constellation_private_key | default('')) }}"
+    network_constellation_peers: "{{ satellite_constellation_peers | default(node_constellation_peers | default([], true), true) }}"
+    network_constellation_dns: "{{ satellite_constellation_dns | default(node_constellation_dns | default([], true), true) }}"
+  roles:
+    - role: network

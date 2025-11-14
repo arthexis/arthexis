@@ -1,0 +1,20 @@
+---
+- name: Configure Control node networking
+  hosts: control
+  become: true
+  vars:
+    network_eth_ipv4_address: "{{ control_eth_ipv4_address | default(eth_ipv4_address | default('192.168.129.1')) }}"
+    network_eth_prefix: "{{ control_eth_prefix | default(eth_prefix | default(16)) }}"
+    network_eth_gateway: "{{ control_eth_gateway | default(eth_gateway | default('')) }}"
+    network_eth_dns: "{{ control_eth_dns | default(eth_dns | default([], true), true) }}"
+    network_wifi_ssid: "{{ control_wifi_ssid | default(wifi_ssid | default('gelectriic-ap')) }}"
+    network_wifi_psk: "{{ control_wifi_psk | default(wifi_psk | default('')) }}"
+    network_wifi_band: "{{ control_wifi_band | default(wifi_band | default('bg')) }}"
+    network_wifi_channel: "{{ control_wifi_channel | default(wifi_channel | default('')) }}"
+    network_constellation_enabled: "{{ (control_constellation_enabled | default(true)) | bool }}"
+    network_constellation_address: "{{ control_constellation_address | default(node_constellation_ip | default('')) }}"
+    network_constellation_private_key: "{{ control_constellation_private_key | default(node_constellation_private_key | default('')) }}"
+    network_constellation_peers: "{{ control_constellation_peers | default(node_constellation_peers | default([], true), true) }}"
+    network_constellation_dns: "{{ control_constellation_dns | default(node_constellation_dns | default([], true), true) }}"
+  roles:
+    - role: network

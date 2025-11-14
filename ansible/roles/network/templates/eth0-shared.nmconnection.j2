@@ -1,0 +1,24 @@
+[connection]
+id={{ network_eth_connection_name }}
+{% if network_eth_uuid | length > 0 %}uuid={{ network_eth_uuid }}
+{% endif %}type=ethernet
+autoconnect={{ 'true' if network_eth_autoconnect else 'false' }}
+interface-name={{ network_eth_interface }}
+
+[ethernet]
+cloned-mac-address=
+mac-address-blacklist=
+
+[ipv4]
+method={{ network_eth_method }}
+address1={{ network_eth_ipv4_address }}/{{ network_eth_prefix }}
+{% if network_eth_gateway %}gateway={{ network_eth_gateway }}
+{% endif %}{% if network_eth_dns %}dns={{ network_eth_dns | join(';') }};
+{% endif %}
+never-default=false
+may-fail=false
+
+[ipv6]
+method=ignore
+
+[proxy]
