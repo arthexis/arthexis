@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Confirm network profile default addresses",
+      "created_on": "2025-02-16T00:00:00Z",
+      "url": "",
+      "request_details": "On a staging control node with the refreshed network role, run `ansible-playbook ansible/playbooks/control.yml --limit <host>` and then check `nmcli connection show eth0-shared` and `nmcli connection show gelectriic-ap`. Verify that eth0-shared reports 192.168.129.10/16 and gelectriic-ap reports 10.42.0.1/16 so the seeded fixtures remain valid. Capture screenshots or logs if the addresses differ.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]

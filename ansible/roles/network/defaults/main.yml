@@ -10,7 +10,7 @@ network_connection_directory: /etc/NetworkManager/system-connections
 network_eth_interface: eth0
 network_eth_connection_name: eth0-shared
 network_eth_uuid: ""
-network_eth_ipv4_address: 192.168.129.1
+network_eth_ipv4_address: 192.168.129.10
 network_eth_prefix: 16
 network_eth_gateway: ""
 network_eth_dns: []
@@ -29,6 +29,8 @@ network_wifi_psk: ""
 network_wifi_autoconnect: true
 network_wifi_ipv4_method: shared
 network_wifi_ipv6_method: ignore
+network_wifi_ipv4_address: 10.42.0.1
+network_wifi_prefix: 16
 
 network_wifi_secondary_interface: wlan1
 network_wifi_secondary_autoconnect: false
