@@ -69,10 +69,6 @@ def main(argv=None):
             beat.terminate()
 
 
-if __name__ == "__main__":
-    main(sys.argv[1:])
-
-
 def _run_vscode_runserver(base_dir: Path, argv: Iterable[str], is_debug_session: bool) -> None:
     """Start ``runserver`` with VS Code specific lifecycle handling."""
 
@@ -197,6 +193,10 @@ class RunserverSession:
             self.state_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
         except OSError:
             pass
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])
 
     def _cleanup_files(self) -> None:
         for path in [self.restart_path, self.state_path]:
