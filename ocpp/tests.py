@@ -5524,7 +5524,8 @@ class ChargePointSimulatorTests(TransactionTestCase):
             logs = store.get_logs(cfg.cp_path, log_type="simulator")
             self.assertTrue(
                 any(
-                    "Received unsupported action 'Reset'" in entry
+                    "Received unsupported action 'Reset', terminating simulator"
+                    in entry
                     for entry in logs
                 ),
                 logs,
@@ -5535,6 +5536,8 @@ class ChargePointSimulatorTests(TransactionTestCase):
             self.assertEqual(frame[1], "msg1")
             self.assertEqual(frame[2], "NotSupported")
             self.assertIn("Simulator does not implement Reset", frame[3])
+            self.assertTrue(sim._stop_event.is_set())
+            self.assertEqual(sim.status, "error")
             self.assertNotIn(sim, store.simulators.values())
         finally:
             store.clear_log(cfg.cp_path, log_type="simulator")

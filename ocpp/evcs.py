@@ -253,24 +253,74 @@ async def simulate_cp(
             reset_event = asyncio.Event()
 
             async def listen():
+                def terminate(message: str) -> None:
+                    state.last_error = message
+                    state.last_status = message
+                    state.phase = "Error"
+                    state.running = False
+                    stop_event.set()
+                    store.add_log(
+                        cp_path,
+                        message,
+                        log_type="simulator",
+                    )
+
                 try:
                     while True:
                         raw = await _recv()
                         try:
                             msg = json.loads(raw)
                         except json.JSONDecodeError:
+                            terminate(
+                                "Received non-JSON response from CSMS; terminating simulator"
+                            )
+                            return
+
+                        if not isinstance(msg, list) or not msg:
+                            terminate(
+                                "Received invalid OCPP frame from CSMS; terminating simulator"
+                            )
+                            return
+
+                        message_type = msg[0]
+                        if message_type != 2:
+                            terminate(
+                                f"Received unsupported message type {message_type} from CSMS; terminating simulator"
+                            )
+                            return
+
+                        raw_msg_id = msg[1] if len(msg) > 1 else ""
+                        msg_id = str(raw_msg_id)
+                        action = msg[2] if len(msg) > 2 else ""
+                        action_name = str(action)
+
+                        if action_name == "RemoteStopTransaction":
+                            await _send([3, msg_id, {}])
+                            state.last_message = "RemoteStopTransaction"
+                            stop_event.set()
                             continue
 
-                        if isinstance(msg, list) and msg and msg[0] == 2:
-                            msg_id, action = msg[1], msg[2]
+                        if action_name == "Reset":
                             await _send([3, msg_id, {}])
-                            if action == "RemoteStopTransaction":
-                                state.last_message = "RemoteStopTransaction"
-                                stop_event.set()
-                            elif action == "Reset":
-                                state.last_message = "Reset"
-                                reset_event.set()
-                                stop_event.set()
+                            state.last_message = "Reset"
+                            reset_event.set()
+                            stop_event.set()
+                            continue
+
+                        await _send(
+                            [
+                                4,
+                                msg_id,
+                                "NotSupported",
+                                f"Simulator does not implement {action_name}",
+                                {},
+                            ]
+                        )
+                        state.last_message = action_name
+                        terminate(
+                            f"Received unsupported action '{action_name}' from CSMS; terminating simulator"
+                        )
+                        return
                 except websockets.ConnectionClosed:
                     stop_event.set()
 
