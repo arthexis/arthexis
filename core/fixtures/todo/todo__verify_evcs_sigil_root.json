@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Verify EVCS sigil root filters connectors",
+      "created_on": "2024-01-01T00:00:00Z",
+      "url": "/admin/sigil-builder/",
+      "request_details": "1. Open the Sigil Builder at /admin/sigil-builder/ and locate the EVCS entry in the built-in Sigil roots list.\n2. Confirm the EVCS row links to the Charge Point model and lists CHARGER_ID among the available fields.\n3. Use the Resolve Sigil tool to evaluate [EVCS.<station_pk>.CHARGER_ID] for a charge point that has no connector ID and confirm it resolves to the serial number.\n4. Repeat the lookup with a connector-specific record (connector ID populated) and verify the resolver leaves the token untouched, confirming connectors are excluded from the EVCS root.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]
