@@ -258,7 +258,10 @@ def _load_signed_node(
             loaded_key.verify(
                 signature_bytes,
                 request.body,
-                padding.PKCS1v15(),
+                padding.PSS(
+                    mgf=padding.MGF1(hashes.SHA256()),
+                    salt_length=padding.PSS.MAX_LENGTH,
+                ),
                 hashes.SHA256(),
             )
         except Exception:
@@ -783,7 +786,10 @@ def node_info(request):
             )
             signature = private_key.sign(
                 token.encode(),
-                padding.PKCS1v15(),
+                padding.PSS(
+                    mgf=padding.MGF1(hashes.SHA256()),
+                    salt_length=padding.PSS.MAX_LENGTH,
+                ),
                 hashes.SHA256(),
             )
             data["token_signature"] = base64.b64encode(signature).decode()
@@ -930,7 +936,10 @@ def register_node(request):
             pub.verify(
                 base64.b64decode(signature),
                 token.encode(),
-                padding.PKCS1v15(),
+                padding.PSS(
+                    mgf=padding.MGF1(hashes.SHA256()),
+                    salt_length=padding.PSS.MAX_LENGTH,
+                ),
                 hashes.SHA256(),
             )
             verified = True
@@ -2187,7 +2196,10 @@ def net_message(request):
         public_key.verify(
             base64.b64decode(signature),
             request.body,
-            padding.PKCS1v15(),
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()),
+                salt_length=padding.PSS.MAX_LENGTH,
+            ),
             hashes.SHA256(),
         )
     except Exception:
@@ -2226,7 +2238,10 @@ def net_message_pull(request):
         public_key.verify(
             base64.b64decode(signature),
             request.body,
-            padding.PKCS1v15(),
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()),
+                salt_length=padding.PSS.MAX_LENGTH,
+            ),
             hashes.SHA256(),
         )
     except Exception:

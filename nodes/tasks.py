@@ -205,7 +205,10 @@ def poll_unreachable_upstream() -> None:
         signature = base64.b64encode(
             private_key.sign(
                 payload_json.encode(),
-                padding.PKCS1v15(),
+                padding.PSS(
+                    mgf=padding.MGF1(hashes.SHA256()),
+                    salt_length=padding.PSS.MAX_LENGTH,
+                ),
                 hashes.SHA256(),
             )
         ).decode()
@@ -260,7 +263,10 @@ def poll_unreachable_upstream() -> None:
                 public_key.verify(
                     base64.b64decode(payload_signature),
                     payload_text.encode(),
-                    padding.PKCS1v15(),
+                    padding.PSS(
+                        mgf=padding.MGF1(hashes.SHA256()),
+                        salt_length=padding.PSS.MAX_LENGTH,
+                    ),
                     hashes.SHA256(),
                 )
             except Exception:

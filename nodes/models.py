@@ -868,7 +868,10 @@ class Node(Entity):
         try:
             signature = private_key.sign(
                 token.encode(),
-                padding.PKCS1v15(),
+                padding.PSS(
+                    mgf=padding.MGF1(hashes.SHA256()),
+                    salt_length=padding.PSS.MAX_LENGTH,
+                ),
                 hashes.SHA256(),
             )
         except Exception as exc:  # pragma: no cover - defensive
@@ -2147,7 +2150,10 @@ class NetMessage(Entity):
         try:
             signature = private_key.sign(
                 payload_json.encode(),
-                padding.PKCS1v15(),
+                padding.PSS(
+                    mgf=padding.MGF1(hashes.SHA256()),
+                    salt_length=padding.PSS.MAX_LENGTH,
+                ),
                 hashes.SHA256(),
             )
         except Exception:
