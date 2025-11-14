@@ -2,6 +2,7 @@ import subprocess
 import sys
 import types
 import uuid
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -145,6 +146,61 @@ def test_build_removes_shadow_build_package(monkeypatch, release_sandbox):
 
     assert _without_pip_installs(calls) == [[sys.executable, "-m", "build"]]
     assert not build_pkg.exists()
+
+
+@pytest.mark.django_db
+def test_push_tag_raises_authentication_error(monkeypatch, release_sandbox):
+    User = get_user_model()
+    user = User.objects.create_user(username="manager", password="pwd")
+    manager = ReleaseManager.objects.create(
+        user=user,
+        git_username="relmgr",
+        git_password="token",
+    )
+    package_obj = Package.objects.create(
+        name=f"pkg-{uuid.uuid4().hex}",
+        release_manager=manager,
+    )
+    package = replace(release.DEFAULT_PACKAGE, name=package_obj.name)
+
+    def fake_git_remote_tag_commit(remote: str, tag_name: str):
+        return None
+
+    def fake_git_remote_url(remote: str = "origin"):
+        return "https://example.com/org/repo.git"
+
+    def make_auth_error(cmd):
+        return subprocess.CalledProcessError(
+            returncode=128,
+            cmd=cmd,
+            stderr="fatal: Authentication failed",
+        )
+
+    push_commands: list[list[str]] = []
+
+    def fake_run(cmd, check=True):
+        if cmd[:2] == ["git", "push"]:
+            push_commands.append(list(cmd))
+            raise make_auth_error(cmd)
+        return subprocess.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(release, "_git_remote_tag_commit", fake_git_remote_tag_commit)
+    monkeypatch.setattr(release, "_git_remote_url", fake_git_remote_url)
+    monkeypatch.setattr(release, "_run", fake_run)
+
+    with pytest.raises(release.ReleaseError) as excinfo:
+        release._push_tag("vX.Y.Z", package)
+
+    assert push_commands == [
+        ["git", "push", "origin", "vX.Y.Z"],
+        ["git", "push", "https://relmgr:token@example.com/org/repo.git", "vX.Y.Z"],
+    ]
+    assert (
+        str(excinfo.value)
+        == "Git authentication failed while pushing tag vX.Y.Z. Configure Git credentials in the release manager profile or "
+        "authenticate locally, then rerun the publish step or push the tag manually with `git push origin vX.Y.Z`. Git reported: "
+        "fatal: Authentication failed"
+    )
 
 
 def test_build_raises_when_tests_fail(monkeypatch, release_sandbox):
