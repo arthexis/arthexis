@@ -1,0 +1,150 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  <style>
+    #content-main .changelog-wrapper {
+      display: flex;
+      flex-direction: column;
+      gap: 1.5rem;
+    }
+
+    #content-main .changelog-section {
+      border: 1px solid var(--border-color, #d0d0d0);
+      border-radius: 0.5rem;
+      padding: 1rem 1.25rem;
+      background-color: var(--body-bg, #fff);
+      box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.05);
+    }
+
+    html[data-theme="dark"] #content-main .changelog-section,
+    body.dark-theme #content-main .changelog-section {
+      border-color: rgba(255, 255, 255, 0.15);
+      background-color: rgba(255, 255, 255, 0.05);
+    }
+
+    #content-main .changelog-section__header {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      margin-bottom: 0.75rem;
+    }
+
+    #content-main .changelog-section__title {
+      margin: 0;
+      font-size: 1.25rem;
+    }
+
+    #content-main .changelog-section__meta {
+      margin: 0;
+      font-size: 0.9rem;
+      color: #555;
+    }
+
+    html[data-theme="dark"] #content-main .changelog-section__meta,
+    body.dark-theme #content-main .changelog-section__meta {
+      color: rgba(255, 255, 255, 0.75);
+    }
+
+    #content-main .changelog-entries {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    #content-main .changelog-entry__summary {
+      font-weight: 500;
+      word-break: break-word;
+    }
+
+    #content-main .changelog-entry__meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      font-size: 0.85rem;
+      color: #666;
+    }
+
+    html[data-theme="dark"] #content-main .changelog-entry__meta,
+    body.dark-theme #content-main .changelog-entry__meta {
+      color: rgba(255, 255, 255, 0.7);
+    }
+
+    #content-main .changelog-entry__link {
+      color: var(--link-color, #0b5ed7);
+    }
+
+    #content-main .changelog-sentinel {
+      text-align: center;
+      font-size: 0.9rem;
+      color: #666;
+      padding-bottom: 2rem;
+    }
+
+    #content-main .changelog-sentinel[data-state="error"] {
+      color: #b02a37;
+    }
+
+    #content-main .changelog-sentinel[data-state="complete"] {
+      color: #555;
+    }
+
+    html[data-theme="dark"] #content-main .changelog-sentinel,
+    body.dark-theme #content-main .changelog-sentinel {
+      color: rgba(255, 255, 255, 0.7);
+    }
+
+    #content-main .changelog-entry--empty {
+      color: #888;
+      font-style: italic;
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <div class="module">
+    <h2>{% trans "Changelog Report" %}</h2>
+    <p class="help">
+      {% trans "Review live git commit history grouped by release. Scroll to load older versions on demand." %}
+    </p>
+    {% if error_message %}
+      <p class="errornote">{{ error_message }}</p>
+    {% endif %}
+    {% if not initial_sections %}
+      <p class="help">{% trans "No changelog information is available." %}</p>
+    {% endif %}
+    <div class="changelog-wrapper">
+      <div
+        class="changelog-container"
+        data-changelog-container
+        data-changelog-endpoint="{% url 'admin:system-changelog-data' %}"
+        data-changelog-next-page="{{ next_page|default_if_none:'' }}"
+        data-changelog-has-more="{{ has_more_sections|yesno:'true,false' }}"
+        data-changelog-loading-label="{{ loading_label }}"
+        data-changelog-error-label="{{ error_label }}"
+        data-changelog-complete-label="{{ complete_label }}"
+        data-changelog-offset="{{ initial_section_count }}"
+      >
+        {% include "includes/changelog/section_list.html" with sections=initial_sections variant='admin' %}
+      </div>
+      <div
+        class="changelog-sentinel"
+        data-changelog-sentinel
+        data-state="{% if has_more_sections %}idle{% else %}complete{% endif %}"
+      >
+        {% if has_more_sections %}
+          {{ loading_label }}
+        {% else %}
+          {{ complete_label }}
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% include "includes/changelog/scroll_script.html" %}
+{% endblock %}

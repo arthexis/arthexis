@@ -24,6 +24,14 @@
         </tr>
         <tr>
           <th scope="row">
+            <a href="{% url 'admin:system-changelog-report' %}">
+              {% trans "Changelog Report" %}
+            </a>
+          </th>
+          <td>{% trans "Review git commits grouped by release with on-demand loading." %}</td>
+        </tr>
+        <tr>
+          <th scope="row">
             <a href="{% url 'admin:system-pending-todos-report' %}">
               {% trans "Pending TODOs Report" %}
             </a>

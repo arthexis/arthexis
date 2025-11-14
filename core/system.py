@@ -19,8 +19,9 @@ from django import forms
 from django.conf import settings
 from django.contrib import admin, messages
 from django.forms import modelformset_factory
+from django.template.loader import render_to_string
 from django.template.response import TemplateResponse
-from django.http import HttpResponseRedirect
+from django.http import HttpResponseRedirect, JsonResponse
 from django.urls import NoReverseMatch, path, reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -45,6 +46,7 @@ from core.release import (
 from core.tasks import check_github_updates
 from core.models import Todo
 from utils import revision
+from core import changelog
 
 
 AUTO_UPGRADE_LOCK_NAME = "auto_upgrade.lck"
@@ -1073,6 +1075,66 @@ def _system_pending_todos_report_view(request):
     )
 
 
+def _system_changelog_report_view(request):
+    """Render the changelog report with lazy-loaded sections."""
+
+    try:
+        initial_page = changelog.get_initial_page()
+    except changelog.ChangelogError as exc:
+        initial_sections = tuple()
+        has_more = False
+        next_page = None
+        error_message = str(exc)
+    else:
+        initial_sections = initial_page.sections
+        has_more = initial_page.has_more
+        next_page = initial_page.next_page
+        error_message = ""
+
+    context = {
+        "initial_sections": initial_sections,
+        "has_more_sections": has_more,
+        "next_page": next_page,
+        "initial_section_count": len(initial_sections),
+        "error_message": error_message,
+        "loading_label": _("Loading more changes…"),
+        "error_label": _("Unable to load additional changes."),
+        "complete_label": _("You're all caught up."),
+    }
+    return TemplateResponse(request, "admin/system_changelog_report.html", context)
+
+
+def _system_changelog_report_data_view(request):
+    """Return additional changelog sections for infinite scrolling."""
+
+    try:
+        page_number = int(request.GET.get("page", "1"))
+    except ValueError:
+        return JsonResponse({"error": _("Invalid page number.")}, status=400)
+
+    try:
+        offset = int(request.GET.get("offset", "0"))
+    except ValueError:
+        return JsonResponse({"error": _("Invalid offset.")}, status=400)
+
+    try:
+        page_data = changelog.get_page(page_number, per_page=1, offset=offset)
+    except changelog.ChangelogError as exc:
+        return JsonResponse({"error": str(exc)}, status=503)
+
+    if not page_data.sections:
+        return JsonResponse({"html": "", "has_more": False, "next_page": None})
+
+    html = render_to_string(
+        "includes/changelog/section_list.html",
+        {"sections": page_data.sections, "variant": "admin"},
+        request=request,
+    )
+    return JsonResponse(
+        {"html": html, "has_more": page_data.has_more, "next_page": page_data.next_page}
+    )
+
+
 def _trigger_upgrade_check(*, channel_override: str | None = None) -> bool:
     """Return ``True`` when the upgrade check was queued asynchronously."""
 
@@ -1174,6 +1236,16 @@ def patch_admin_system_view() -> None:
         urls = original_get_urls()
         custom = [
             path("system/", admin.site.admin_view(_system_view), name="system"),
+            path(
+                "system/changelog/",
+                admin.site.admin_view(_system_changelog_report_view),
+                name="system-changelog-report",
+            ),
+            path(
+                "system/changelog/data/",
+                admin.site.admin_view(_system_changelog_report_data_view),
+                name="system-changelog-data",
+            ),
             path(
                 "system/pending-todos-report/",
                 admin.site.admin_view(_system_pending_todos_report_view),
