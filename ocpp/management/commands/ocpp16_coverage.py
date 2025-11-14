@@ -4,6 +4,8 @@ from pathlib import Path
 
 from django.core.management.base import BaseCommand
 
+from utils.coverage import coverage_color, render_badge
+
 
 def _load_spec() -> dict[str, list[str]]:
     app_dir = Path(__file__).resolve().parents[2]
@@ -110,45 +112,6 @@ def _implemented_csms_to_cp(app_dir: Path) -> set[str]:
     return visitor.actions
 
 
-def _coverage_color(percentage: float) -> str:
-    if percentage >= 90:
-        return "#4c1"
-    if percentage >= 75:
-        return "#97CA00"
-    if percentage >= 60:
-        return "#dfb317"
-    if percentage >= 40:
-        return "#fe7d37"
-    return "#e05d44"
-
-
-def _render_badge(label: str, value: str, color: str) -> str:
-    label_width = 6 * len(label) + 20
-    value_width = 6 * len(value) + 20
-    total_width = label_width + value_width
-    return f"""
-<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{total_width}\" height=\"20\" role=\"img\" aria-label=\"{label}: {value}\">
-  <title>{label}: {value}</title>
-  <linearGradient id=\"s\" x2=\"0\" y2=\"100%\">
-    <stop offset=\"0\" stop-color=\"#bbb\" stop-opacity=\".1\"/>
-    <stop offset=\"1\" stop-opacity=\".1\"/>
-  </linearGradient>
-  <clipPath id=\"r\">
-    <rect width=\"{total_width}\" height=\"20\" rx=\"3\" fill=\"#fff\"/>
-  </clipPath>
-  <g clip-path=\"url(#r)\">
-    <rect width=\"{label_width}\" height=\"20\" fill=\"#555\"/>
-    <rect x=\"{label_width}\" width=\"{value_width}\" height=\"20\" fill=\"{color}\"/>
-    <rect width=\"{total_width}\" height=\"20\" fill=\"url(#s)\"/>
-  </g>
-  <g fill=\"#fff\" text-anchor=\"middle\" font-family=\"Verdana,Geneva,DejaVu Sans,sans-serif\" font-size=\"11\">
-    <text x=\"{label_width / 2:.1f}\" y=\"14\">{label}</text>
-    <text x=\"{label_width + value_width / 2:.1f}\" y=\"14\">{value}</text>
-  </g>
-</svg>
-""".strip()
-
-
 class Command(BaseCommand):
     help = "Compute OCPP 1.6 call coverage and generate a badge."
 
@@ -246,8 +209,8 @@ class Command(BaseCommand):
 
         badge_value = f"{round(overall_percentage, 1)}%"
         badge_label = "ocpp 1.6"
-        badge_color = _coverage_color(overall_percentage)
-        badge_svg = _render_badge(badge_label, badge_value, badge_color)
+        badge_color = coverage_color(overall_percentage)
+        badge_svg = render_badge(badge_label, badge_value, badge_color)
         badge_path.write_text(badge_svg + "\n", encoding="utf-8")
 
         if overall_percentage < 100:
