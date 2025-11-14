@@ -50,6 +50,12 @@ class AdminChangelogReportTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Changelog Report")
         self.assertContains(response, "Fix telemetry pipeline")
+        self.assertContains(response, 'class="breadcrumbs"')
+        self.assertContains(response, f'href="{reverse("admin:index")}"')
+        self.assertContains(response, f'href="{reverse("admin:system")}"')
+        context = response.context_data
+        self.assertIn("available_apps", context)
+        self.assertEqual(context["title"], "Changelog Report")
         get_initial_page.assert_called_once_with()
 
     @mock.patch("core.system.render_to_string", return_value="<section>More</section>")
