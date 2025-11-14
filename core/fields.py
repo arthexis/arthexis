@@ -1,6 +1,6 @@
 from dataclasses import dataclass
+import ast
 import re
-import sqlite3
 
 from django.db import models
 from django.db.models.fields import DeferredAttribute
@@ -101,8 +101,216 @@ _FORBIDDEN_KEYWORDS = re.compile(
 )
 
 
+def _tokenize_condition(expression: str) -> list[str]:
+    """Split a condition expression into SQL-style tokens."""
+
+    tokens: list[str] = []
+    length = len(expression)
+    index = 0
+    while index < length:
+        char = expression[index]
+        if char.isspace():
+            index += 1
+            continue
+        if char == "'":
+            start = index
+            index += 1
+            while index < length:
+                if expression[index] == "'":
+                    if index + 1 < length and expression[index + 1] == "'":
+                        index += 2
+                        continue
+                    index += 1
+                    break
+                index += 1
+            else:
+                raise ConditionEvaluationError(
+                    _("Unterminated string literal in condition.")
+                )
+            tokens.append(expression[start:index])
+            continue
+        two_char = expression[index : index + 2]
+        if two_char in {"<=", ">=", "!=", "<>"}:
+            tokens.append(two_char)
+            index += 2
+            continue
+        if char in "=<>(),+-*/%":
+            tokens.append(char)
+            index += 1
+            continue
+        if char.isdigit():
+            start = index
+            has_decimal = False
+            while index < length:
+                current = expression[index]
+                if current.isdigit():
+                    index += 1
+                    continue
+                if current == "." and not has_decimal:
+                    has_decimal = True
+                    index += 1
+                    continue
+                break
+            if index < length and expression[index] in {"e", "E"}:
+                exp_index = index + 1
+                if exp_index < length and expression[exp_index] in {"+", "-"}:
+                    exp_index += 1
+                while exp_index < length and expression[exp_index].isdigit():
+                    exp_index += 1
+                if exp_index == index + 1 or (
+                    expression[index + 1] in {"+", "-"} and exp_index == index + 2
+                ):
+                    raise ConditionEvaluationError(
+                        _("Invalid numeric literal in condition.")
+                    )
+                index = exp_index
+            tokens.append(expression[start:index])
+            continue
+        if char.isalpha() or char == "_":
+            start = index
+            while index < length and (
+                expression[index].isalnum() or expression[index] in {"_", "."}
+            ):
+                index += 1
+            tokens.append(expression[start:index])
+            continue
+        raise ConditionEvaluationError(
+            _("Unsupported character %(character)r in condition.")
+            % {"character": char}
+        )
+    return tokens
+
+
+def _convert_tokens_to_python(tokens: list[str]) -> list[str]:
+    """Map SQL-like tokens to their Python equivalents."""
+
+    python_tokens: list[str] = []
+    index = 0
+    length = len(tokens)
+    while index < length:
+        token = tokens[index]
+        upper = token.upper()
+        if token.startswith("'"):
+            python_tokens.append(token)
+        elif token[0].isdigit() or (
+            token[0] in {"+", "-"} and token[1:].replace('.', '', 1).isdigit()
+        ):
+            python_tokens.append(token)
+        elif token in {"+", "-", "*", "/", "%", "(", ")", ","}:
+            python_tokens.append(token)
+        elif token in {"<=", ">=", "!=", "<>"}:
+            python_tokens.append("!=" if token == "<>" else token)
+        elif token == "=":
+            python_tokens.append("==")
+        elif upper == "AND":
+            python_tokens.append("and")
+        elif upper == "OR":
+            python_tokens.append("or")
+        elif upper == "NOT":
+            if index + 1 < length and tokens[index + 1].upper() == "IN":
+                python_tokens.append("not")
+                python_tokens.append("in")
+                index += 2
+                continue
+            python_tokens.append("not")
+        elif upper == "IS":
+            if index + 1 < length and tokens[index + 1].upper() == "NOT":
+                python_tokens.append("is")
+                python_tokens.append("not")
+                index += 2
+                continue
+            python_tokens.append("is")
+        elif upper == "IN":
+            python_tokens.append("in")
+        elif upper == "NULL":
+            python_tokens.append("None")
+        elif upper == "TRUE":
+            python_tokens.append("True")
+        elif upper == "FALSE":
+            python_tokens.append("False")
+        else:
+            raise ConditionEvaluationError(
+                _("Unsupported token in condition: %(token)s")
+                % {"token": token}
+            )
+        index += 1
+    return python_tokens
+
+
+_ALLOWED_AST_NODES = (
+    ast.Expression,
+    ast.BoolOp,
+    ast.BinOp,
+    ast.UnaryOp,
+    ast.Compare,
+    ast.Name,
+    ast.Load,
+    ast.Constant,
+    ast.Tuple,
+    ast.List,
+)
+
+_ALLOWED_BOOL_OPS = (ast.And, ast.Or)
+_ALLOWED_UNARY_OPS = (ast.Not, ast.USub, ast.UAdd)
+_ALLOWED_BIN_OPS = (
+    ast.Add,
+    ast.Sub,
+    ast.Mult,
+    ast.Div,
+    ast.Mod,
+    ast.FloorDiv,
+    ast.Pow,
+)
+_ALLOWED_CMP_OPS = (
+    ast.Eq,
+    ast.NotEq,
+    ast.Lt,
+    ast.LtE,
+    ast.Gt,
+    ast.GtE,
+    ast.Is,
+    ast.IsNot,
+    ast.In,
+    ast.NotIn,
+)
+_ALLOWED_NAMES = {"True", "False", "None"}
+
+
+def _validate_condition_ast(tree: ast.AST) -> None:
+    """Ensure the compiled AST only contains safe operations."""
+
+    for node in ast.walk(tree):
+        if not isinstance(node, _ALLOWED_AST_NODES):
+            raise ConditionEvaluationError(
+                _("Unsupported expression in condition.")
+            )
+        if isinstance(node, ast.BoolOp) and not isinstance(node.op, _ALLOWED_BOOL_OPS):
+            raise ConditionEvaluationError(
+                _("Unsupported boolean operator in condition.")
+            )
+        if isinstance(node, ast.UnaryOp) and not isinstance(node.op, _ALLOWED_UNARY_OPS):
+            raise ConditionEvaluationError(
+                _("Unsupported unary operator in condition.")
+            )
+        if isinstance(node, ast.BinOp) and not isinstance(node.op, _ALLOWED_BIN_OPS):
+            raise ConditionEvaluationError(
+                _("Unsupported arithmetic operator in condition.")
+            )
+        if isinstance(node, ast.Compare):
+            for op in node.ops:
+                if not isinstance(op, _ALLOWED_CMP_OPS):
+                    raise ConditionEvaluationError(
+                        _("Unsupported comparison operator in condition.")
+                    )
+        if isinstance(node, ast.Name) and node.id not in _ALLOWED_NAMES:
+            raise ConditionEvaluationError(
+                _("Unknown identifier in condition: %(name)s")
+                % {"name": node.id}
+            )
+
+
 def _evaluate_sql_condition(expression: str) -> bool:
-    """Evaluate a SQL expression in an isolated SQLite connection."""
+    """Evaluate a condition expression without constructing raw SQL."""
 
     if ";" in expression:
         raise ConditionEvaluationError(
@@ -119,25 +327,27 @@ def _evaluate_sql_condition(expression: str) -> bool:
             % {"keyword": match.group(1)},
         )
 
+    tokens = _tokenize_condition(expression)
+    python_tokens = _convert_tokens_to_python(tokens)
+    python_expression = " ".join(python_tokens)
+
     try:
-        conn = sqlite3.connect(":memory:")
-        try:
-            conn.execute("PRAGMA trusted_schema = OFF")
-            conn.execute("PRAGMA foreign_keys = OFF")
-            try:
-                conn.enable_load_extension(False)
-            except AttributeError:
-                # ``enable_load_extension`` is not available on some platforms.
-                pass
-            cursor = conn.execute(
-                f"SELECT CASE WHEN ({expression}) THEN 1 ELSE 0 END"
-            )
-            row = cursor.fetchone()
-            return bool(row[0]) if row else False
-        finally:
-            conn.close()
-    except sqlite3.Error as exc:  # pragma: no cover - exact error message varies
+        tree = ast.parse(python_expression, mode="eval")
+    except SyntaxError as exc:
+        raise ConditionEvaluationError(
+            _("Invalid condition expression.")
+        ) from exc
+
+    _validate_condition_ast(tree)
+
+    try:
+        result = eval(compile(tree, "<condition>", "eval"), {}, {})
+    except Exception as exc:  # pragma: no cover - runtime errors surface to the user
         raise ConditionEvaluationError(str(exc)) from exc
+
+    if isinstance(result, bool):
+        return result
+    return bool(result)
 
 
 class ConditionTextField(models.TextField):
