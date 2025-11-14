@@ -660,6 +660,35 @@ class NodeGetLocalTests(TestCase):
         self.assertEqual(node.installed_version, "2.1.0")
         self.assertEqual(node.installed_revision, "rev-fedcba")
 
+    def test_register_node_refresh_updates_last_seen_timestamp(self):
+        node = Node.objects.create(
+            hostname="friend",
+            address="10.1.1.6",
+            port=8124,
+            mac_address="aa:bb:cc:dd:ee:20",
+        )
+        Node.objects.filter(pk=node.pk).update(
+            last_seen=timezone.now() - timedelta(days=2)
+        )
+        node.refresh_from_db()
+        previous_seen = node.last_seen
+
+        url = reverse("register-node")
+        payload = {
+            "hostname": "friend",
+            "address": "10.1.1.6",
+            "port": 8124,
+            "mac_address": "aa:bb:cc:dd:ee:20",
+        }
+
+        response = self.client.post(
+            url, data=json.dumps(payload), content_type="application/json"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        node.refresh_from_db()
+        self.assertGreater(node.last_seen, previous_seen)
+
     def test_register_node_update_triggers_notification(self):
         node = Node.objects.create(
             hostname="friend",
