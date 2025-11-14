@@ -8,6 +8,7 @@ from django.contrib.contenttypes.models import ContentType
 from core.models import SigilRoot, OdooProfile, EmailArtifact
 from teams.models import EmailInbox, EmailCollector
 from nodes.models import Node, NodeProfile, NodeRole
+from ocpp.models import Charger, EVCSChargePoint
 from core.sigil_builder import (
     generate_model_sigils,
     _resolve_sigil,
@@ -85,6 +86,16 @@ class SigilResolutionTests(TestCase):
             defaults={
                 "context_type": SigilRoot.Context.CONFIG,
                 "content_type": None,
+            },
+        )
+        ct_evcs = ContentType.objects.get_for_model(
+            EVCSChargePoint, for_concrete_model=False
+        )
+        SigilRoot.objects.update_or_create(
+            prefix="EVCS",
+            defaults={
+                "context_type": SigilRoot.Context.ENTITY,
+                "content_type": ct_evcs,
             },
         )
 
@@ -325,13 +336,14 @@ class SigilResolutionTests(TestCase):
             root = SigilRoot.objects.create(
                 prefix="ROLE", context_type=SigilRoot.Context.ENTITY, content_type=ct
             )
-        term = NodeRole.objects.create(name="Terminal", description="term role")
+        role_name = "SigilTerminal"
+        term = NodeRole.objects.create(name=role_name, description="term role")
         other = NodeRole.objects.create(
-            name="Other", description="[ROLE=Terminal.DESCRIPTION]"
+            name="Other", description=f"[ROLE={role_name}.DESCRIPTION]"
         )
         self.assertEqual(other.resolve_sigils("description"), term.description)
         self.assertEqual(
-            _resolve_sigil("[ROLE=Terminal.DESCRIPTION]"), term.description
+            _resolve_sigil(f"[ROLE={role_name}.DESCRIPTION]"), term.description
         )
 
     def test_node_role_serialized_sigil(self):
@@ -341,9 +353,10 @@ class SigilResolutionTests(TestCase):
             root = SigilRoot.objects.create(
                 prefix="ROLE", context_type=SigilRoot.Context.ENTITY, content_type=ct
             )
-        term = NodeRole.objects.create(name="Terminal", description="term role")
+        role_name = "SigilTerminal"
+        term = NodeRole.objects.create(name=role_name, description="term role")
         other = NodeRole.objects.create(
-            name="Other", description=f"[{root.prefix}=Terminal]"
+            name="Other", description=f"[{root.prefix}={role_name}]"
         )
         expected = [
             {
@@ -353,13 +366,41 @@ class SigilResolutionTests(TestCase):
                     "is_seed_data": False,
                     "is_deleted": False,
                     "is_user_data": False,
-                    "name": "Terminal",
+                    "name": role_name,
                     "description": "term role",
                 },
             }
         ]
         self.assertJSONEqual(other.resolve_sigils("description"), expected)
-        self.assertJSONEqual(_resolve_sigil(f"[{root.prefix}=Terminal]"), expected)
+        self.assertJSONEqual(
+            _resolve_sigil(f"[{root.prefix}={role_name}]"), expected
+        )
+
+    def test_evcs_sigil_root_excludes_connectors(self):
+        ct_evcs = ContentType.objects.get_for_model(
+            EVCSChargePoint, for_concrete_model=False
+        )
+        SigilRoot.objects.update_or_create(
+            prefix="EVCS",
+            defaults={
+                "context_type": SigilRoot.Context.ENTITY,
+                "content_type": ct_evcs,
+            },
+        )
+        station = Charger.objects.create(charger_id="EVCS-100")
+        connector = Charger.objects.create(
+            charger_id="EVCS-100", connector_id=1
+        )
+
+        resolved_station = _resolve_sigil(f"[EVCS={station.pk}.CHARGER_ID]")
+        self.assertEqual(resolved_station, "EVCS-100")
+
+        resolved_connector = _resolve_sigil(
+            f"[EVCS={connector.pk}.CHARGER_ID]"
+        )
+        self.assertEqual(
+            resolved_connector, f"[EVCS={connector.pk}.CHARGER_ID]"
+        )
 
     def test_node_profile_sigils_resolve_profile_data(self):
         profile = NodeProfile.objects.create(

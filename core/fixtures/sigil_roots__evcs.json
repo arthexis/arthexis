@@ -1,0 +1,15 @@
+[
+  {
+    "model": "core.sigilroot",
+    "fields": {
+      "is_seed_data": false,
+      "is_deleted": false,
+      "prefix": "EVCS",
+      "context_type": "entity",
+      "content_type": [
+        "ocpp",
+        "evcschargepoint"
+      ]
+    }
+  }
+]

@@ -2190,6 +2190,20 @@ class ElectricVehicle(Entity):
         return f"{parts} ({self.vin})" if parts else self.vin
 
 
+class EVCSChargePointManager(EntityManager):
+    def get_queryset(self):
+        return super().get_queryset().filter(connector_id__isnull=True)
+
+
+class EVCSChargePoint(Charger):
+    objects = EVCSChargePointManager()
+
+    class Meta:
+        proxy = True
+        verbose_name = _("EVCS Charge Point")
+        verbose_name_plural = _("EVCS Charge Points")
+
+
 class RFID(CoreRFID):
     class Meta:
         proxy = True
