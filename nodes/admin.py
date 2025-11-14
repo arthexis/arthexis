@@ -56,6 +56,7 @@ from protocols.models import CPForwarder
 from .models import (
     Node,
     NodeRole,
+    RoleConfigurationProfile,
     NodeFeature,
     NodeFeatureAssignment,
     ContentSample,
@@ -112,6 +113,17 @@ class NodeFeatureAssignmentInline(admin.TabularInline):
     model = NodeFeatureAssignment
     extra = 0
     autocomplete_fields = ("feature",)
+
+
+class RoleConfigurationProfileInline(admin.StackedInline):
+    model = RoleConfigurationProfile
+    extra = 0
+    fields = (
+        "ansible_playbook_path",
+        "inventory_group",
+        "extra_vars",
+        "default_tags",
+    )
 
 
 class DeployDNSRecordsForm(forms.Form):
@@ -1944,6 +1956,7 @@ class NodeRoleAdminForm(forms.ModelForm):
 class NodeRoleAdmin(EntityModelAdmin):
     form = NodeRoleAdminForm
     list_display = ("name", "description", "registered", "default_features")
+    inlines = (RoleConfigurationProfileInline,)
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)

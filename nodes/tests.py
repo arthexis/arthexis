@@ -72,6 +72,7 @@ from .models import (
     ContentSample,
     ContentTag,
     NodeRole,
+    RoleConfigurationProfile,
     NodeFeature,
     NodeFeatureAssignment,
     NetMessage,
@@ -5278,6 +5279,50 @@ class NodeRoleAdminTests(TestCase):
         )
         resp = self.client.get(reverse("admin:nodes_noderole_changelist"))
         self.assertContains(resp, '<td class="field-registered">1</td>', html=True)
+
+    def test_configuration_profile_inline_updates(self):
+        role = NodeRole.objects.create(name="OpsRole")
+        profile = RoleConfigurationProfile.objects.create(
+            role=role,
+            ansible_playbook_path="ansible/playbooks/original.yml",
+            inventory_group="ops",
+            extra_vars={"enable_celery": True},
+            default_tags=["ops"],
+        )
+
+        url = reverse("admin:nodes_noderole_change", args=[role.pk])
+        response = self.client.get(url)
+        self.assertIn(
+            "configuration_profile-0-ansible_playbook_path",
+            response.content.decode(),
+        )
+
+        payload = {
+            "name": "OpsRole",
+            "description": "",
+            "nodes": [],
+            "configuration_profile-TOTAL_FORMS": "1",
+            "configuration_profile-INITIAL_FORMS": "1",
+            "configuration_profile-MIN_NUM_FORMS": "0",
+            "configuration_profile-MAX_NUM_FORMS": "1",
+            "configuration_profile-0-id": str(profile.pk),
+            "configuration_profile-0-role": str(role.pk),
+            "configuration_profile-0-ansible_playbook_path": "ansible/playbooks/ops.yml",
+            "configuration_profile-0-inventory_group": "ops",
+            "configuration_profile-0-extra_vars": json.dumps(
+                {"enable_celery": False, "nginx_mode": "internal"}
+            ),
+            "configuration_profile-0-default_tags": json.dumps(
+                ["ops", "manual"]
+            ),
+        }
+
+        response = self.client.post(url, payload)
+        self.assertRedirects(response, reverse("admin:nodes_noderole_changelist"))
+        profile.refresh_from_db()
+        self.assertEqual(profile.ansible_playbook_path, "ansible/playbooks/ops.yml")
+        self.assertEqual(profile.extra_vars, {"enable_celery": False, "nginx_mode": "internal"})
+        self.assertEqual(profile.default_tags, ["ops", "manual"])
 
 
 class NodeFeatureFixtureTests(TestCase):

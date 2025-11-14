@@ -78,6 +78,27 @@ class NodeRole(Entity):
         return self.name
 
 
+class RoleConfigurationProfile(Entity):
+    """Declarative automation settings for a :class:`NodeRole`."""
+
+    role = models.OneToOneField(
+        NodeRole,
+        on_delete=models.CASCADE,
+        related_name="configuration_profile",
+    )
+    ansible_playbook_path = models.CharField(max_length=255)
+    inventory_group = models.CharField(max_length=128)
+    extra_vars = models.JSONField(default=dict, blank=True)
+    default_tags = models.JSONField(blank=True, default=list)
+
+    class Meta:
+        verbose_name = "Role Configuration Profile"
+        verbose_name_plural = "Role Configuration Profiles"
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return f"{self.role.name} configuration"
+
+
 class NodeFeatureManager(models.Manager):
     def get_by_natural_key(self, slug: str):
         return self.get(slug=slug)
