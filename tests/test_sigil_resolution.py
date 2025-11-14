@@ -7,7 +7,7 @@ from django.contrib.contenttypes.models import ContentType
 
 from core.models import SigilRoot, OdooProfile, EmailArtifact
 from teams.models import EmailInbox, EmailCollector
-from nodes.models import NodeRole
+from nodes.models import Node, NodeProfile, NodeRole
 from core.sigil_builder import (
     generate_model_sigils,
     _resolve_sigil,
@@ -63,6 +63,14 @@ class SigilResolutionTests(TestCase):
             defaults={
                 "context_type": SigilRoot.Context.ENTITY,
                 "content_type": ct_user,
+            },
+        )
+        ct_node = ContentType.objects.get_for_model(Node)
+        SigilRoot.objects.update_or_create(
+            prefix="NODE",
+            defaults={
+                "context_type": SigilRoot.Context.ENTITY,
+                "content_type": ct_node,
             },
         )
         SigilRoot.objects.update_or_create(
@@ -352,6 +360,29 @@ class SigilResolutionTests(TestCase):
         ]
         self.assertJSONEqual(other.resolve_sigils("description"), expected)
         self.assertJSONEqual(_resolve_sigil(f"[{root.prefix}=Terminal]"), expected)
+
+    def test_node_profile_sigils_resolve_profile_data(self):
+        profile = NodeProfile.objects.create(
+            name="Sigil Defaults",
+            data={"timezone": "UTC", "asset_tag": "GW-001"},
+        )
+        node = Node.objects.create(
+            hostname="sigil-node",
+            mac_address="00:11:22:33:44:55",
+            address="10.0.0.9",
+            port=9000,
+            profile=profile,
+        )
+        set_context({Node: node.pk})
+        try:
+            resolved_profile = resolve_sigils_in_text("[NODE.PROFILE.TIMEZONE]")
+            self.assertEqual(resolved_profile, "UTC")
+            resolved_direct = resolve_sigils_in_text("[NODE.TIMEZONE]")
+            self.assertEqual(resolved_direct, "UTC")
+            resolved_name = resolve_sigils_in_text("[NODE.NAME]")
+            self.assertEqual(resolved_name, profile.name)
+        finally:
+            clear_context()
 
     def test_user_sigil_defaults_to_current_user(self):
         set_context({get_user_model(): self.user.pk})

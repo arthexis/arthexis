@@ -82,6 +82,7 @@ from .models import (
     NodeManager,
     DNSRecord,
     NodeConfigurationJob,
+    NodeProfile,
 )
 from .backends import OutboxEmailBackend
 from .tasks import (
@@ -6345,6 +6346,25 @@ class RoleConfigurationWorkflowTests(TestCase):
         self.assertIn("automation-probe", host_vars["node_features"])
         self.assertEqual(host_vars["ansible_port"], self.node.port)
         self.assertEqual(host_vars["ansible_host"], "10.1.0.10")
+
+    def test_render_inventory_host_includes_profile_data(self):
+        profile = NodeProfile.objects.create(
+            name="Terminal Defaults",
+            data={"timezone": "UTC", "region": "ca-central"},
+        )
+        self.node.profile = profile
+        self.node.save(update_fields=["profile"])
+        self.node.refresh_from_db()
+
+        definition = render_inventory_host(self.node)
+
+        host_vars = definition["vars"]
+        self.assertEqual(host_vars["node_profile_name"], profile.name)
+        self.assertEqual(
+            host_vars["node_profile"], {"timezone": "UTC", "region": "ca-central"}
+        )
+        self.assertEqual(host_vars["timezone"], "UTC")
+        self.assertEqual(host_vars["region"], "ca-central")
 
     def test_sync_feature_tasks_queues_role_configuration(self):
         with patch("nodes.tasks.apply_node_role_configuration.delay") as mocked_delay:
