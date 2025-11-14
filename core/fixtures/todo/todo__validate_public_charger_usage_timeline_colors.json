@@ -5,7 +5,7 @@
       "request": "Manual QA: Validate public charger usage timeline colors",
       "created_on": "2024-01-01T00:00:00Z",
       "url": "",
-      "request_details": "Identify a public charger with recent status activity and log in with access to its advanced status view.\n- Navigate to the charger status page at /ocpp/c/<charger-id>/status/.\n- Confirm the usage timeline legend renders Offline with a black swatch, Available with a dark blue swatch, and Charging with a green swatch.\n- Inspect the usage timeline bars and ensure each segment color matches the legend entry for its status.\n- Trigger or wait for at least one update to verify the colors remain visible after the page refreshes.",
+      "request_details": "Identify a public charger with recent status activity and log in with access to its advanced status view.\n- Navigate to the charger status page at /ocpp/c/<charger-id>/status/.\n- Confirm the usage timeline legend renders Offline with a black swatch, Untracked with a dark grey swatch, Available with a dark blue swatch, and Charging with a green swatch.\n- Inspect the usage timeline bars and ensure each segment color matches the legend entry for its status, including Untracked segments when the managing node is offline.\n- Trigger or wait for at least one update to verify the colors remain visible after the page refreshes.",
       "done_on": null,
       "is_deleted": false,
       "version": "0.1.31"

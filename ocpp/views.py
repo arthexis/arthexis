@@ -427,9 +427,47 @@ def _timeline_labels() -> dict[str, str]:
 
     return {
         "offline": gettext("Offline"),
+        "untracked": gettext("Untracked"),
         "available": gettext("Available"),
         "charging": gettext("Charging"),
     }
+
+
+def _remote_node_active_delta() -> timedelta:
+    """Return the grace period for considering a remote node online."""
+
+    value = getattr(settings, "NODE_LAST_SEEN_ACTIVE_DELTA", None)
+    if isinstance(value, timedelta):
+        return value
+    if value is None:
+        return timedelta(minutes=5)
+    try:
+        seconds = float(value)
+    except (TypeError, ValueError):
+        return timedelta(minutes=5)
+    return timedelta(seconds=seconds)
+
+
+def _is_untracked_origin(
+    connector: Charger,
+    local_node: Node | None,
+    reference_time: datetime,
+    active_delta: timedelta,
+) -> bool:
+    """Return ``True`` when the connector's node origin appears offline."""
+
+    origin = getattr(connector, "node_origin", None)
+    if origin is None:
+        return False
+    local_pk = getattr(local_node, "pk", None)
+    if local_pk is not None and origin.pk == local_pk:
+        return False
+    last_seen = getattr(origin, "last_seen", None)
+    if last_seen is None:
+        return True
+    if timezone.is_naive(last_seen):
+        last_seen = timezone.make_aware(last_seen, timezone.get_current_timezone())
+    return reference_time - last_seen > active_delta
 
 
 def _format_segment_range(start: datetime, end: datetime) -> tuple[str, str]:
@@ -536,6 +574,8 @@ def _usage_timeline(
         now = timezone.now()
     window_end = now
     window_start = now - timedelta(days=7)
+    local_node = Node.get_local()
+    active_delta = _remote_node_active_delta()
 
     if charger.connector_id is not None:
         connectors = [charger]
@@ -571,12 +611,22 @@ def _usage_timeline(
             charger, connector, window_start, window_end
         )
         fallback_state = _normalize_timeline_status(connector.last_status)
+        fallback_source = "status"
         if fallback_state is None:
+            fallback_source = "connection"
             fallback_state = (
                 "available"
                 if store.is_connected(connector.charger_id, connector.connector_id)
                 else "offline"
             )
+        if (
+            fallback_state == "offline"
+            and fallback_source == "connection"
+            and _is_untracked_origin(
+                connector, local_node, window_end, active_delta
+            )
+        ):
+            fallback_state = "untracked"
         current_state = fallback_state
         if prior_event is not None:
             current_state = prior_event[1]

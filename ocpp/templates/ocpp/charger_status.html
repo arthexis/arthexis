@@ -59,6 +59,10 @@
       );
       background-color: rgba(0, 0, 0, 0.85);
     }
+    .usage-legend-swatch.usage-untracked,
+    .usage-timeline-segment.usage-untracked {
+      background-color: #343a40;
+    }
     .usage-legend-swatch.usage-available,
     .usage-timeline-segment.usage-available {
       background-color: #0b3d91;
@@ -236,6 +240,7 @@
         </div>
         <div class="usage-timeline-legend small text-muted mb-3">
           <span class="usage-legend-item"><span class="usage-legend-swatch usage-offline"></span> {% trans "Offline" %}</span>
+          <span class="usage-legend-item"><span class="usage-legend-swatch usage-untracked"></span> {% trans "Untracked" %}</span>
           <span class="usage-legend-item"><span class="usage-legend-swatch usage-available"></span> {% trans "Available" %}</span>
           <span class="usage-legend-item"><span class="usage-legend-swatch usage-charging"></span> {% trans "Charging" %}</span>
         </div>
