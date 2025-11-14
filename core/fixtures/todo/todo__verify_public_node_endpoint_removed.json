@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Confirm node public endpoint is no longer exposed",
+      "created_on": "2025-11-14T00:00:00Z",
+      "url": "",
+      "request_details": "Log into any environment with multiple nodes configured. Pick a node with a known public endpoint slug (e.g. from the Nodes changelist) and attempt to visit /nodes/<slug>/ while authenticated. The request should return a 404 or redirect to login rather than exposing node metadata. Also confirm that posting to the same path fails. Record the node slug and HTTP responses in the ticket.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]

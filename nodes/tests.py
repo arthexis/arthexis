@@ -1671,45 +1671,6 @@ class NodeRegisterCurrentTests(TestCase):
             ContentSample.objects.filter(kind=ContentSample.IMAGE).count(), 0
         )
 
-    def test_public_api_get_and_post(self):
-        node = Node.objects.create(
-            hostname="public",
-            address="127.0.0.1",
-            port=8001,
-            enable_public_api=True,
-            mac_address="00:11:22:33:44:77",
-        )
-        node.installed_version = "1.2.3"
-        node.installed_revision = "rev123456"
-        node.save(update_fields=["installed_version", "installed_revision"])
-        url = reverse("node-public-endpoint", args=[node.public_endpoint])
-
-        get_resp = self.client.get(url)
-        self.assertEqual(get_resp.status_code, 200)
-        payload = get_resp.json()
-        self.assertEqual(payload["hostname"], "public")
-        self.assertEqual(payload.get("installed_version"), "1.2.3")
-        self.assertEqual(payload.get("installed_revision"), "rev123456")
-
-        pre_count = NetMessage.objects.count()
-        post_resp = self.client.post(url, data="hello", content_type="text/plain")
-        self.assertEqual(post_resp.status_code, 200)
-        self.assertEqual(NetMessage.objects.count(), pre_count + 1)
-        msg = NetMessage.objects.order_by("-created").first()
-        self.assertEqual(msg.body, "hello")
-        self.assertEqual(msg.reach.name, "Terminal")
-
-    def test_public_api_disabled(self):
-        node = Node.objects.create(
-            hostname="nopublic",
-            address="127.0.0.2",
-            port=8002,
-            mac_address="00:11:22:33:44:88",
-        )
-        url = reverse("node-public-endpoint", args=[node.public_endpoint])
-        resp = self.client.get(url)
-        self.assertEqual(resp.status_code, 404)
-
     def test_net_message_requires_signature(self):
         payload = {
             "uuid": str(uuid.uuid4()),
@@ -2348,7 +2309,7 @@ class NodeAdminTests(TestCase):
             hostname=hostname,
             address="127.0.0.1",
             port=8888,
-            mac_address=None,
+            mac_address="",
         )
 
         response = self.client.get(
@@ -4048,7 +4009,7 @@ class NetMessageFilterTests(TestCase):
 
 class NetMessageBroadcastStringReachTests(TestCase):
     def test_broadcast_uses_role_lookup_for_string_reach(self):
-        role = NodeRole.objects.create(name="Terminal")
+        role, _ = NodeRole.objects.get_or_create(name="Terminal")
         local = Node.objects.create(
             hostname="terminal-local",
             address="10.10.0.1",
@@ -4074,7 +4035,7 @@ class NetMessageBroadcastStringReachTests(TestCase):
         self.assertIs(called_args.kwargs["seen"], seen)
 
     def test_broadcast_applies_attachments(self):
-        role = NodeRole.objects.create(name="Terminal")
+        role, _ = NodeRole.objects.get_or_create(name="Terminal")
         local = Node.objects.create(
             hostname="terminal-local",
             address="10.10.0.1",

@@ -18,7 +18,7 @@ from django.core.cache import cache
 from django.core.signing import BadSignature, SignatureExpired, TimestampSigner
 from django.http import HttpResponse, JsonResponse
 from django.http.request import split_domain_port
-from django.shortcuts import get_object_or_404, redirect
+from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -2160,43 +2160,6 @@ def proxy_execute(request):
 
     return JsonResponse({"detail": "unsupported action"}, status=400)
 
-
-@csrf_exempt
-@api_login_required
-def public_node_endpoint(request, endpoint):
-    """Public API endpoint for a node.
-
-    - ``GET`` returns information about the node.
-    - ``POST`` broadcasts the request body as a :class:`NetMessage`.
-    """
-
-    node = get_object_or_404(Node, public_endpoint=endpoint, enable_public_api=True)
-
-    if request.method == "GET":
-        data = {
-            "hostname": node.hostname,
-            "network_hostname": node.network_hostname,
-            "address": node.address or node.get_primary_contact(),
-            "ipv4_address": node.ipv4_address,
-            "ipv6_address": node.ipv6_address,
-            "port": node.port,
-            "badge_color": node.badge_color,
-            "last_seen": node.last_seen,
-            "features": list(node.features.values_list("slug", flat=True)),
-            "installed_version": node.installed_version,
-            "installed_revision": node.installed_revision,
-        }
-        return JsonResponse(data)
-
-    if request.method == "POST":
-        NetMessage.broadcast(
-            subject=request.method,
-            body=request.body.decode("utf-8") if request.body else "",
-            seen=[str(node.uuid)],
-        )
-        return JsonResponse({"status": "stored"})
-
-    return JsonResponse({"detail": "Method not allowed"}, status=405)
 
 
 @csrf_exempt

@@ -89,13 +89,6 @@ class NodeAdminForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        enable_public = self.fields.get("enable_public_api")
-        if enable_public:
-            enable_public.label = _("Enable public admin access")
-            enable_public.help_text = _(
-                "Expose the admin API through this node's public endpoint. "
-                "Only enable when trusted peers require administrative access."
-            )
         ipv4_field = self.fields.get("ipv4_address")
         if ipv4_field:
             ipv4_field.widget = forms.TextInput()
@@ -320,10 +313,6 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
                     "installed_revision",
                 )
             },
-        ),
-        (
-            _("Public admin"),
-            {"fields": ("enable_public_api",)},
         ),
     )
     actions = [

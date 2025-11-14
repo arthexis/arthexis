@@ -26,5 +26,4 @@ urlpatterns = [
     path("proxy/session/", views.proxy_session, name="node-proxy-session"),
     path("proxy/login/<str:token>/", views.proxy_login, name="node-proxy-login"),
     path("proxy/execute/", views.proxy_execute, name="node-proxy-execute"),
-    path("<slug:endpoint>/", views.public_node_endpoint, name="node-public-endpoint"),
 ]
