@@ -108,7 +108,6 @@ from core.backends import TOTP_DEVICE_NAME
 import time
 
 from nodes.models import (
-    EmailOutbox,
     Node,
     ContentSample,
     NodeRole,
@@ -116,6 +115,7 @@ from nodes.models import (
     NodeFeatureAssignment,
     NetMessage,
 )
+from teams.models import EmailOutbox
 from django.contrib.auth.models import AnonymousUser
 
 class LoginViewTests(TestCase):
@@ -1290,6 +1290,35 @@ class ViewHistoryAdminTests(TestCase):
         self.assertContains(resp, "viewhistory-mini-module")
         self.assertContains(resp, reverse("admin:pages_viewhistory_traffic_graph"))
         self.assertContains(resp, static("core/vendor/chart.umd.min.js"))
+
+
+class AdminDashboardEmailWarningTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User = get_user_model()
+        self.superuser = User.objects.create_superuser(
+            username="email-admin", password="pwd", email="email@example.com"
+        )
+        self.client.force_login(self.superuser)
+
+    def test_dashboard_shows_warning_when_email_disabled(self):
+        with patch(
+            "pages.templatetags.admin_extras.mailer.can_send_email",
+            return_value=False,
+        ):
+            response = self.client.get(reverse("admin:index"))
+
+        self.assertContains(response, "Email delivery is not configured.")
+        self.assertContains(response, reverse("admin:teams_emailoutbox_add"))
+
+    def test_dashboard_hides_warning_when_email_configured(self):
+        with patch(
+            "pages.templatetags.admin_extras.mailer.can_send_email",
+            return_value=True,
+        ):
+            response = self.client.get(reverse("admin:index"))
+
+        self.assertNotContains(response, "Email delivery is not configured.")
 
 
 class LandingLeadAdminTests(TestCase):

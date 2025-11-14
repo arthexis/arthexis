@@ -14,6 +14,7 @@ from django.conf import settings
 from django.urls import NoReverseMatch, reverse
 from django.utils.text import capfirst
 from django.utils.translation import gettext_lazy as _
+from core import mailer
 from core.models import Lead, RFID, GoogleCalendarProfile
 from core.entity import Entity
 from ocpp.models import Charger
@@ -30,6 +31,13 @@ def safe_admin_url(view_name: str, *args, **kwargs) -> str:
         return reverse(view_name, args=args, kwargs=kwargs)
     except NoReverseMatch:
         return ""
+
+
+@register.simple_tag
+def admin_can_send_email() -> bool:
+    """Return ``True`` when outbound email is configured for this node."""
+
+    return mailer.can_send_email()
 
 
 def _admin_model_instance(model_admin, request, user):

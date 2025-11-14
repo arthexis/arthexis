@@ -68,6 +68,32 @@
         gap: 8px;
         flex-wrap: wrap;
     }
+    .admin-dashboard-warning {
+        margin-bottom: 1.25rem;
+        padding: 0.9rem 1rem;
+        border-radius: 8px;
+        border: 1px solid rgba(240, 129, 15, 0.35);
+        background: rgba(240, 129, 15, 0.12);
+        color: inherit;
+        line-height: 1.5;
+    }
+    .admin-dashboard-warning__title {
+        margin: 0 0 0.35rem;
+        font-size: 1rem;
+        font-weight: 600;
+    }
+    .admin-dashboard-warning__body {
+        margin: 0;
+    }
+    .admin-dashboard-warning__body a {
+        color: inherit;
+        font-weight: 600;
+        text-decoration: underline;
+    }
+    [data-theme="dark"] .admin-dashboard-warning {
+        border-color: rgba(240, 129, 15, 0.5);
+        background: rgba(240, 129, 15, 0.2);
+    }
     @media (max-width: 992px) {
         #admin-home-header {
             grid-template-columns: 1fr;
@@ -340,6 +366,18 @@
 {% block bodyclass %}{{ block.super }} dashboard{% endblock %}
 
 {% block content_title %}
+{% admin_can_send_email as admin_email_configured %}
+{% if user.is_superuser and not admin_email_configured %}
+  {% url 'admin:teams_emailoutbox_add' as email_outbox_add_url %}
+  <div class="admin-dashboard-warning" role="alert" aria-live="polite">
+    <p class="admin-dashboard-warning__title">{% translate "Email delivery is not configured." %}</p>
+    <p class="admin-dashboard-warning__body">
+      {% blocktrans trimmed with link_start='<a href="'|add:email_outbox_add_url|add:'">'|safe link_end='</a>'|safe %}
+        Configure Django email settings or {{ link_start }}add an Email Outbox{{ link_end }} to restore outbound email for this node.
+      {% endblocktrans %}
+    </p>
+  </div>
+{% endif %}
 {% last_net_message as admin_last_net_message %}
 <div id="admin-home-header">
   <h1>Home</h1>
