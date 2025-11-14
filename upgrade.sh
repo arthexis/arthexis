@@ -562,7 +562,7 @@ VENV_PRESENT=1
 [ -d .venv ] || VENV_PRESENT=0
 
 # Stop running instance only if the node is installed
-if [[ $NO_RESTART -eq 0 && $VENV_PRESENT -eq 1 ]]; then
+if [[ $VENV_PRESENT -eq 1 ]]; then
   echo "Stopping running instance..."
   STOP_ARGS=(--all)
   if [[ $FORCE_STOP -eq 1 ]]; then
@@ -572,7 +572,7 @@ if [[ $NO_RESTART -eq 0 && $VENV_PRESENT -eq 1 ]]; then
     if [[ $FORCE_STOP -eq 1 ]]; then
       echo "Upgrade aborted even after forcing stop. Resolve active charging sessions before retrying." >&2
     else
-      echo "Upgrade aborted because active charging sessions are in progress. Resolve them or rerun with --force during a maintenance window to apply --force to stop.sh before retrying." >&2
+      echo "Upgrade aborted because active charging sessions are in progress. Resolve active charging sessions before retrying." >&2
     fi
     exit 1
   fi
