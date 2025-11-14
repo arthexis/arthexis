@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import os
 import time
 from pathlib import Path
 
@@ -64,8 +66,11 @@ def test_wait_for_changes_detects_file_updates(tmp_path: Path) -> None:
     assert updated != snapshot
 
 
-def test_main_runs_env_refresh_immediately(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_main_runs_env_refresh_immediately(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     calls: list[tuple[Path, bool]] = []
+    restarts: list[Path] = []
 
     def fake_collect(_: Path) -> dict[str, int]:
         return {}
@@ -80,8 +85,53 @@ def test_main_runs_env_refresh_immediately(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.setattr(migration_server, "collect_source_mtimes", fake_collect)
     monkeypatch.setattr(migration_server, "wait_for_changes", fake_wait_for_changes)
     monkeypatch.setattr(migration_server, "run_env_refresh", fake_run_env_refresh)
+    monkeypatch.setattr(
+        migration_server, "request_runserver_restart", lambda lock_dir: restarts.append(lock_dir)
+    )
+    monkeypatch.setattr(migration_server, "BASE_DIR", tmp_path)
+    monkeypatch.setattr(migration_server, "LOCK_DIR", tmp_path / "locks")
 
     result = migration_server.main([])
 
     assert result == 0
     assert len(calls) == 1
+    assert restarts == [tmp_path / "locks"]
+
+
+def test_migration_server_state_records_pid(tmp_path: Path) -> None:
+    with migration_server.migration_server_state(tmp_path / "locks") as state_path:
+        data = json.loads(state_path.read_text(encoding="utf-8"))
+        assert data["pid"] == os.getpid()
+        assert state_path.exists()
+    assert not state_path.exists()
+
+
+def test_request_runserver_restart_creates_signal(tmp_path: Path) -> None:
+    lock_dir = tmp_path / "locks"
+    lock_dir.mkdir()
+    token = "abc123"
+    state_path = lock_dir / "vscode_runserver.json"
+    state_path.write_text(
+        json.dumps({"pid": os.getpid(), "token": token}), encoding="utf-8"
+    )
+
+    migration_server.request_runserver_restart(lock_dir)
+
+    restart_path = lock_dir / f"vscode_runserver.restart.{token}"
+    assert restart_path.exists()
+
+
+def test_request_runserver_restart_ignores_dead_pid(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lock_dir = tmp_path / "locks"
+    lock_dir.mkdir()
+    token = "dead"
+    state_path = lock_dir / "vscode_runserver.json"
+    state_path.write_text(json.dumps({"pid": 999999, "token": token}), encoding="utf-8")
+
+    monkeypatch.setattr(migration_server, "_is_process_alive", lambda pid: False)
+
+    migration_server.request_runserver_restart(lock_dir)
+
+    assert not any(lock_dir.glob("vscode_runserver.restart.*"))
