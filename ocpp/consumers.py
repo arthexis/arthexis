@@ -1,4 +1,5 @@
 import base64
+import binascii
 import ipaddress
 import re
 from datetime import datetime
@@ -14,6 +15,7 @@ from django.utils import timezone
 from core.models import CustomerAccount, Reference, RFID as CoreRFID
 from nodes.models import NetMessage
 from django.core.exceptions import ValidationError
+from django.contrib.auth import authenticate
 
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
@@ -246,6 +248,49 @@ class CSMSConsumer(AsyncWebsocketConsumer):
 
         return segments[-1]
 
+    def _parse_basic_auth_header(self) -> tuple[tuple[str, str] | None, str | None]:
+        """Return decoded Basic auth credentials and an error code if any."""
+
+        headers = self.scope.get("headers") or []
+        for raw_name, raw_value in headers:
+            if not isinstance(raw_name, (bytes, bytearray)):
+                continue
+            if raw_name.lower() != b"authorization":
+                continue
+            try:
+                header_value = raw_value.decode("latin1")
+            except Exception:
+                return None, "invalid"
+            scheme, _, param = header_value.partition(" ")
+            if scheme.lower() != "basic" or not param:
+                return None, "invalid"
+            try:
+                decoded = base64.b64decode(param.strip(), validate=True).decode(
+                    "utf-8"
+                )
+            except (binascii.Error, UnicodeDecodeError):
+                return None, "invalid"
+            username, sep, password = decoded.partition(":")
+            if not sep:
+                return None, "invalid"
+            return (username, password), None
+        return None, "missing"
+
+    async def _authenticate_basic_credentials(
+        self, username: str, password: str
+    ):
+        """Return the authenticated user for HTTP Basic credentials, if valid."""
+
+        if username is None or password is None:
+            return None
+
+        user = await sync_to_async(authenticate)(
+            request=None, username=username, password=password
+        )
+        if user is None or not getattr(user, "is_active", False):
+            return None
+        return user
+
     @requires_network
     async def connect(self):
         raw_serial = self._extract_serial_identifier()
@@ -284,6 +329,55 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             subprotocol = "ocpp1.6"
         self.client_ip = _resolve_client_ip(self.scope)
         self._header_reference_created = False
+        existing_charger = await database_sync_to_async(
+            lambda: Charger.objects.select_related("ws_auth_user", "ws_auth_group")
+            .filter(charger_id=self.charger_id, connector_id=None)
+            .first()
+        )()
+        if existing_charger and existing_charger.requires_ws_auth:
+            credentials, error_code = self._parse_basic_auth_header()
+            rejection_reason: str | None = None
+            if error_code == "missing":
+                rejection_reason = "HTTP Basic authentication required (credentials missing)"
+            elif error_code == "invalid":
+                rejection_reason = "HTTP Basic authentication header is invalid"
+            else:
+                if not credentials:
+                    rejection_reason = "HTTP Basic authentication header is invalid"
+                else:
+                    username, password = credentials
+                    auth_user = await self._authenticate_basic_credentials(
+                        username, password
+                    )
+                    if auth_user is None:
+                        rejection_reason = "HTTP Basic authentication failed"
+                    else:
+                        authorized = await database_sync_to_async(
+                            existing_charger.is_ws_user_authorized
+                        )(auth_user)
+                        if not authorized:
+                            user_label = getattr(auth_user, "get_username", None)
+                            if callable(user_label):
+                                user_label = user_label()
+                            else:
+                                user_label = getattr(auth_user, "username", "")
+                            if user_label:
+                                rejection_reason = (
+                                    "HTTP Basic authentication rejected for unauthorized user "
+                                    f"'{user_label}'"
+                                )
+                            else:
+                                rejection_reason = (
+                                    "HTTP Basic authentication rejected for unauthorized user"
+                                )
+            if rejection_reason:
+                store.add_log(
+                    self.store_key,
+                    f"Rejected connection: {rejection_reason}",
+                    log_type="charger",
+                )
+                await self.close(code=4003)
+                return
         # Close any pending connection for this charger so reconnections do
         # not leak stale consumers when the connector id has not been
         # negotiated yet.
@@ -309,13 +403,17 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         store.logs["charger"].setdefault(
             self.store_key, deque(maxlen=store.MAX_IN_MEMORY_LOG_ENTRIES)
         )
-        self.charger, created = await database_sync_to_async(
-            Charger.objects.get_or_create
-        )(
-            charger_id=self.charger_id,
-            connector_id=None,
-            defaults={"last_path": self.scope.get("path", "")},
-        )
+        created = False
+        if existing_charger is not None:
+            self.charger = existing_charger
+        else:
+            self.charger, created = await database_sync_to_async(
+                Charger.objects.get_or_create
+            )(
+                charger_id=self.charger_id,
+                connector_id=None,
+                defaults={"last_path": self.scope.get("path", "")},
+            )
         await database_sync_to_async(self.charger.refresh_manager_node)()
         self.aggregate_charger = self.charger
         location_name = await sync_to_async(

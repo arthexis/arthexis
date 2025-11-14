@@ -518,6 +518,7 @@ class ChargerVisibilityTests(TestCase):
                 )
                 self.assertSetEqual(queryset_ids, expected_visible)
 
+
                 for charger in chargers:
                     with self.subTest(charger=charger.charger_id):
                         should_be_visible = charger.charger_id in expected_visible
@@ -525,6 +526,47 @@ class ChargerVisibilityTests(TestCase):
                             charger.is_visible_to(user),
                             should_be_visible,
                         )
+
+
+class ChargerWSAuthTests(TestCase):
+    def setUp(self):
+        user_model = get_user_model()
+        self.user = user_model.objects.create_user(
+            username="ws-user", password="secret", email="ws@example.com"
+        )
+        self.other = user_model.objects.create_user(
+            username="ws-other", password="secret", email="other@example.com"
+        )
+        self.group = SecurityGroup.objects.create(name="WS QA")
+        self.group.user_set.add(self.user)
+
+    def test_clean_rejects_user_and_group(self):
+        charger = Charger(charger_id="AUTH-CLEAN")
+        charger.ws_auth_user = self.user
+        charger.ws_auth_group = self.group
+
+        with self.assertRaises(ValidationError):
+            charger.clean()
+
+    def test_requires_ws_auth_property(self):
+        charger = Charger.objects.create(charger_id="AUTH-REQ")
+        self.assertFalse(charger.requires_ws_auth)
+
+        charger.ws_auth_user = self.user
+        self.assertTrue(charger.requires_ws_auth)
+
+    def test_is_ws_user_authorized_matches_expected_subjects(self):
+        user_scoped = Charger.objects.create(
+            charger_id="AUTH-USER", ws_auth_user=self.user
+        )
+        self.assertTrue(user_scoped.is_ws_user_authorized(self.user))
+        self.assertFalse(user_scoped.is_ws_user_authorized(self.other))
+
+        group_scoped = Charger.objects.create(
+            charger_id="AUTH-GROUP", ws_auth_group=self.group
+        )
+        self.assertTrue(group_scoped.is_ws_user_authorized(self.user))
+        self.assertFalse(group_scoped.is_ws_user_authorized(self.other))
 
 
 class ChargerSerialValidationTests(TestCase):

@@ -1604,6 +1604,15 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
             },
         ),
         (
+            "Authentication",
+            {
+                "description": _(
+                    "Configure HTTP Basic authentication requirements for this charge point."
+                ),
+                "fields": ("ws_auth_user", "ws_auth_group"),
+            },
+        ),
+        (
             "References",
             {
                 "fields": ("reference",),
