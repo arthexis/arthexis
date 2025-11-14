@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Confirm admin dashboard badge metrics are cached",
+      "created_on": "2025-01-01T00:00:00Z",
+      "url": "/admin/",
+      "request_details": "Log in to the Django admin and open /admin/. Confirm the lead, RFID, and charger badges render with the expected counts. Refresh the page immediately and note that the badges render without a noticeable pause. In a separate shell, adjust the underlying data (close an Invite Lead, toggle an RFID released flag, and change an Available charger to Unavailable), then run `python manage.py shell -c \"from django.core.cache import cache; cache.clear()\"`. Reload /admin/ and confirm the badge counts update to the new values. Refresh once more to ensure the counts remain stable and the page continues to load quickly without additional manual cache clears.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]
