@@ -701,6 +701,10 @@ configure_library_loggers(DEBUG, LOGGING)
 CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "memory://")
 CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", "cache+memory://")
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
+# Allow Celery workers extra time to finish acknowledged jobs before SIGTERM.
+CELERY_WORKER_SHUTDOWN_TIMEOUT = int(
+    os.environ.get("CELERY_WORKER_SHUTDOWN_TIMEOUT", "60")
+)
 
 CONSTELLATION_UDP_PROBE_INTERVAL_SECONDS = int(
     os.environ.get("CONSTELLATION_UDP_PROBE_INTERVAL_SECONDS", "30")
