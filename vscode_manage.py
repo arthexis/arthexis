@@ -1,6 +1,7 @@
 import json
 import os
 import runpy
+import signal
 import subprocess
 import sys
 import threading
@@ -8,6 +9,33 @@ import time
 import uuid
 from pathlib import Path
 from typing import Callable, Iterable
+
+
+def _resolve_interrupt_main() -> Callable[[], None]:
+    """Return a callable that raises ``KeyboardInterrupt`` in the main thread."""
+
+    interrupt = getattr(threading, "interrupt_main", None)
+    if interrupt:
+        return interrupt
+
+    try:  # pragma: no cover - fallback exercised on specific platforms
+        import _thread
+    except ImportError:  # pragma: no cover - fallback exercised on specific platforms
+        _thread = None
+
+    if _thread is not None and hasattr(_thread, "interrupt_main"):
+        return _thread.interrupt_main  # type: ignore[attr-defined]
+
+    if hasattr(signal, "SIGINT"):
+        def _send_sigint() -> None:
+            os.kill(os.getpid(), signal.SIGINT)
+
+        return _send_sigint
+
+    def _raise_keyboard_interrupt() -> None:
+        raise KeyboardInterrupt
+
+    return _raise_keyboard_interrupt
 
 
 def main(argv=None):
@@ -150,7 +178,7 @@ class RunserverSession:
         self.is_debug_session = is_debug_session
         self.lock_dir = base_dir / "locks"
         self.poll_interval = max(0.05, poll_interval)
-        self._interrupt_main = interrupt_main or threading.interrupt_main
+        self._interrupt_main = interrupt_main or _resolve_interrupt_main()
         self._restart_event = threading.Event()
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
@@ -195,9 +223,6 @@ class RunserverSession:
             pass
 
 
-if __name__ == "__main__":
-    main(sys.argv[1:])
-
     def _cleanup_files(self) -> None:
         for path in [self.restart_path, self.state_path]:
             try:
@@ -232,3 +257,7 @@ if __name__ == "__main__":
                 except RuntimeError:
                     pass
             time.sleep(self.poll_interval)
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])
