@@ -592,7 +592,8 @@ def check_github_updates(channel_override: str | None = None) -> None:
         local_version = _read_local_version(base_dir)
         remote_severity = _resolve_release_severity(remote_version)
 
-        upgrade_stamp = timezone.now().strftime("@ %Y%m%d %H:%M")
+        local_timestamp = timezone.localtime(timezone.now())
+        upgrade_stamp = local_timestamp.strftime("@ %Y%m%d %H:%M")
 
         upgrade_was_applied = False
 

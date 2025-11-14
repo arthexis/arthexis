@@ -1,6 +1,7 @@
 import types
 from datetime import datetime
 from urllib.error import URLError
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -28,6 +29,7 @@ def _setup_tmp(monkeypatch, tmp_path):
     fake_file = core_dir / "tasks.py"
     fake_file.write_text("")
     monkeypatch.setattr(tasks, "__file__", str(fake_file))
+    monkeypatch.setattr(tasks.settings, "BASE_DIR", tmp_path, raising=False)
     return tmp_path
 
 
@@ -88,6 +90,20 @@ def test_upgrade_shows_message(monkeypatch, tmp_path):
         lambda subject, body="": notify_calls.append((subject, body)),
     )
 
+    fake_now = datetime(2024, 3, 1, 21, 2, tzinfo=ZoneInfo("UTC"))
+    local_zone = ZoneInfo("America/Monterrey")
+    seen_times: dict[str, datetime] = {}
+
+    def fake_now_func():
+        return fake_now
+
+    def fake_localtime(value):
+        seen_times["localtime_arg"] = value
+        return fake_now.astimezone(local_zone)
+
+    monkeypatch.setattr(tasks.timezone, "now", fake_now_func)
+    monkeypatch.setattr(tasks.timezone, "localtime", fake_localtime)
+
     scheduled = []
 
     def fake_apply_async(*args, **kwargs):
@@ -101,9 +117,10 @@ def test_upgrade_shows_message(monkeypatch, tmp_path):
 
     tasks.check_github_updates()
 
+    assert seen_times.get("localtime_arg") is fake_now
+    expected_body = fake_now.astimezone(local_zone).strftime("@ %Y%m%d %H:%M")
     assert any(
-        subject == "Upgrading..."
-        and _matches_upgrade_stamp(body)
+        subject == "Upgrading..." and body == expected_body
         for subject, body in notify_calls
     )
     upgrade_call = run_recorder.find("./upgrade.sh")
@@ -199,6 +216,20 @@ def test_stable_mode_triggers_minor_upgrade(monkeypatch, tmp_path):
         lambda subject, body="": notify_calls.append((subject, body)),
     )
 
+    fake_now = datetime(2024, 3, 1, 21, 2, tzinfo=ZoneInfo("UTC"))
+    local_zone = ZoneInfo("America/Monterrey")
+    seen_times: dict[str, datetime] = {}
+
+    def fake_now_func():
+        return fake_now
+
+    def fake_localtime(value):
+        seen_times["localtime_arg"] = value
+        return fake_now.astimezone(local_zone)
+
+    monkeypatch.setattr(tasks.timezone, "now", fake_now_func)
+    monkeypatch.setattr(tasks.timezone, "localtime", fake_localtime)
+
     run_recorder = CommandRecorder()
     monkeypatch.setattr(tasks.subprocess, "run", run_recorder)
 
@@ -215,9 +246,10 @@ def test_stable_mode_triggers_minor_upgrade(monkeypatch, tmp_path):
 
     tasks.check_github_updates()
 
+    assert seen_times.get("localtime_arg") is fake_now
+    expected_body = fake_now.astimezone(local_zone).strftime("@ %Y%m%d %H:%M")
     assert any(
-        subject == "Upgrading..."
-        and _matches_upgrade_stamp(body)
+        subject == "Upgrading..." and body == expected_body
         for subject, body in notify_calls
     )
     upgrade_call = run_recorder.find("./upgrade.sh")
@@ -339,16 +371,3 @@ def test_check_github_updates_skips_blocked_revision(monkeypatch, tmp_path):
     assert fetch_kwargs.get("cwd") == base
     assert fetch_kwargs.get("check") is True
     assert run_recorder.find("./upgrade.sh") is None
-
-
-def _matches_upgrade_stamp(body: str) -> bool:
-    if not body.startswith("@ "):
-        return False
-
-    candidate = body[2:]
-
-    try:
-        datetime.strptime(candidate, "%Y%m%d %H:%M")
-    except ValueError:
-        return False
-    return True
