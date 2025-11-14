@@ -569,7 +569,10 @@ class NodeGetLocalTests(TestCase):
         signature = base64.b64encode(
             private_key.sign(
                 token.encode(),
-                padding.PKCS1v15(),
+                padding.PSS(
+                    mgf=padding.MGF1(hashes.SHA256()),
+                    salt_length=padding.PSS.MAX_LENGTH,
+                ),
                 hashes.SHA256(),
             )
         ).decode()
@@ -871,7 +874,10 @@ class NodeGetLocalTests(TestCase):
         signature = base64.b64encode(
             private_key.sign(
                 token.encode(),
-                padding.PKCS1v15(),
+                padding.PSS(
+                    mgf=padding.MGF1(hashes.SHA256()),
+                    salt_length=padding.PSS.MAX_LENGTH,
+                ),
                 hashes.SHA256(),
             )
         ).decode()
@@ -1730,7 +1736,14 @@ class NodeRegisterCurrentTests(TestCase):
             "filter_installed_revision": "rev123",
         }
         payload_json = json.dumps(payload, separators=(",", ":"), sort_keys=True)
-        signature = key.sign(payload_json.encode(), padding.PKCS1v15(), hashes.SHA256())
+        signature = key.sign(
+            payload_json.encode(),
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()),
+                salt_length=padding.PSS.MAX_LENGTH,
+            ),
+            hashes.SHA256(),
+        )
         resp = self.client.post(
             reverse("net-message"),
             data=payload_json,
@@ -1825,7 +1838,12 @@ class NodeRegisterCurrentTests(TestCase):
         }
         payload_json = json.dumps(payload, separators=(",", ":"), sort_keys=True)
         signature = key.sign(
-            payload_json.encode(), padding.PKCS1v15(), hashes.SHA256()
+            payload_json.encode(),
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()),
+                salt_length=padding.PSS.MAX_LENGTH,
+            ),
+            hashes.SHA256(),
         )
         with patch.object(NetMessage, "propagate") as mock_propagate:
             response = self.client.post(
@@ -1914,7 +1932,12 @@ class NodeRegisterCurrentTests(TestCase):
         }
         payload_json = json.dumps(payload, separators=(",", ":"), sort_keys=True)
         signature = key.sign(
-            payload_json.encode(), padding.PKCS1v15(), hashes.SHA256()
+            payload_json.encode(),
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()),
+                salt_length=padding.PSS.MAX_LENGTH,
+            ),
+            hashes.SHA256(),
         )
         response = self.client.post(
             reverse("net-message"),
@@ -3204,7 +3227,10 @@ class NodeAdminTests(TestCase):
         key.public_key().verify(
             signature,
             payload.encode(),
-            padding.PKCS1v15(),
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()),
+                salt_length=padding.PSS.MAX_LENGTH,
+            ),
             hashes.SHA256(),
         )
 
@@ -3362,7 +3388,10 @@ class NodeAdminTests(TestCase):
         key.public_key().verify(
             signature,
             payload.encode(),
-            padding.PKCS1v15(),
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()),
+                salt_length=padding.PSS.MAX_LENGTH,
+            ),
             hashes.SHA256(),
         )
 
@@ -3551,7 +3580,12 @@ class NodeProxyGatewayTests(TestCase):
         body = json.dumps(payload, separators=(",", ":"), sort_keys=True)
         signature = base64.b64encode(
             self.private_key.sign(
-                body.encode(), padding.PKCS1v15(), hashes.SHA256()
+                body.encode(),
+                padding.PSS(
+                    mgf=padding.MGF1(hashes.SHA256()),
+                    salt_length=padding.PSS.MAX_LENGTH,
+                ),
+                hashes.SHA256(),
             )
         ).decode()
         return body, signature
@@ -3723,7 +3757,14 @@ class NodeRFIDAPITests(TestCase):
         }
         body = json.dumps(payload, separators=(",", ":"), sort_keys=True)
         signature = base64.b64encode(
-            key.sign(body.encode(), padding.PKCS1v15(), hashes.SHA256())
+            key.sign(
+                body.encode(),
+                padding.PSS(
+                    mgf=padding.MGF1(hashes.SHA256()),
+                    salt_length=padding.PSS.MAX_LENGTH,
+                ),
+                hashes.SHA256(),
+            )
         ).decode()
 
         response = self.client.post(
@@ -3779,7 +3820,10 @@ class RFIDExportViewTests(TestCase):
         payload_json = json.dumps(payload, separators=(",", ":"), sort_keys=True)
         signature = self.remote_key.sign(
             payload_json.encode(),
-            padding.PKCS1v15(),
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()),
+                salt_length=padding.PSS.MAX_LENGTH,
+            ),
             hashes.SHA256(),
         )
         return payload_json, base64.b64encode(signature).decode()
@@ -4365,7 +4409,10 @@ class NetMessageQueueTests(TestCase):
         signature = base64.b64encode(
             downstream_key.sign(
                 body.encode(),
-                padding.PKCS1v15(),
+                padding.PSS(
+                    mgf=padding.MGF1(hashes.SHA256()),
+                    salt_length=padding.PSS.MAX_LENGTH,
+                ),
                 hashes.SHA256(),
             )
         ).decode()
@@ -4398,7 +4445,10 @@ class NetMessageQueueTests(TestCase):
         local_public.verify(
             base64.b64decode(response_signature),
             json.dumps(payload_data, separators=(",", ":"), sort_keys=True).encode(),
-            padding.PKCS1v15(),
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()),
+                salt_length=padding.PSS.MAX_LENGTH,
+            ),
             hashes.SHA256(),
         )
 
@@ -4440,7 +4490,10 @@ class NetMessageQueueTests(TestCase):
         payload_signature = base64.b64encode(
             upstream_key.sign(
                 payload_text.encode(),
-                padding.PKCS1v15(),
+                padding.PSS(
+                    mgf=padding.MGF1(hashes.SHA256()),
+                    salt_length=padding.PSS.MAX_LENGTH,
+                ),
                 hashes.SHA256(),
             )
         ).decode()
@@ -4757,7 +4810,10 @@ class NetworkChargerActionSecurityTests(TestCase):
         body = json.dumps(payload).encode()
         signature = self.unauthorized_key.sign(
             body,
-            padding.PKCS1v15(),
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()),
+                salt_length=padding.PSS.MAX_LENGTH,
+            ),
             hashes.SHA256(),
         )
         headers = {"HTTP_X_SIGNATURE": base64.b64encode(signature).decode()}

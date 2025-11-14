@@ -1866,7 +1866,10 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         try:
             signature = private_key.sign(
                 payload_json.encode(),
-                padding.PKCS1v15(),
+                padding.PSS(
+                    mgf=padding.MGF1(hashes.SHA256()),
+                    salt_length=padding.PSS.MAX_LENGTH,
+                ),
                 hashes.SHA256(),
             )
             headers["X-Signature"] = base64.b64encode(signature).decode()

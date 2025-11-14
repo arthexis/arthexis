@@ -170,7 +170,10 @@ class SuiteGateway:
         signature = base64.b64encode(
             self._private_key.sign(
                 token.encode(),
-                padding.PKCS1v15(),
+                padding.PSS(
+                    mgf=padding.MGF1(hashes.SHA256()),
+                    salt_length=padding.PSS.MAX_LENGTH,
+                ),
                 hashes.SHA256(),
             )
         ).decode()
@@ -252,7 +255,10 @@ class SuiteGateway:
             "X-Signature": base64.b64encode(
                 self._private_key.sign(
                     json.dumps(payload, separators=(",", ":"), sort_keys=True).encode(),
-                    padding.PKCS1v15(),
+                    padding.PSS(
+                        mgf=padding.MGF1(hashes.SHA256()),
+                        salt_length=padding.PSS.MAX_LENGTH,
+                    ),
                     hashes.SHA256(),
                 )
             ).decode()
