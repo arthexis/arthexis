@@ -226,7 +226,27 @@ def test_check_github_updates_treats_latest_mode_case_insensitively(
     assert ["./upgrade.sh", "--latest", "--no-restart"] in run_commands
 
 
-def test_check_github_updates_respects_channel_override(monkeypatch, tmp_path):
+@pytest.mark.parametrize(
+    (
+        "channel_override",
+        "expected_command",
+        "override_message",
+        "severity_name",
+    ),
+    [
+        ("latest", ["./upgrade.sh", "--latest", "--no-restart"], "latest", "NORMAL"),
+        ("stable", ["./upgrade.sh", "--stable", "--no-restart"], "stable", "CRITICAL"),
+        ("normal", ["./upgrade.sh", "--no-restart"], None, "NORMAL"),
+    ],
+)
+def test_check_github_updates_respects_channel_override(
+    monkeypatch,
+    tmp_path,
+    channel_override,
+    expected_command,
+    override_message,
+    severity_name,
+):
     """An explicit channel override should force the requested upgrade mode."""
 
     from core import tasks
@@ -280,10 +300,11 @@ def test_check_github_updates_respects_channel_override(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(tasks, "_schedule_health_check", lambda *args, **kwargs: None)
     monkeypatch.setattr(tasks, "_load_skipped_revisions", lambda base: set())
+    severity_value = getattr(tasks, f"SEVERITY_{severity_name}")
     monkeypatch.setattr(
         tasks,
         "_resolve_release_severity",
-        lambda version: tasks.SEVERITY_NORMAL,
+        lambda version: severity_value,
     )
     monkeypatch.setattr(tasks, "_read_remote_version", lambda base, branch: "0.1.26")
     monkeypatch.setattr(tasks, "_read_local_version", lambda base: "0.1.25")
@@ -304,10 +325,18 @@ def test_check_github_updates_respects_channel_override(monkeypatch, tmp_path):
     monkeypatch.setattr(tasks.subprocess, "run", fake_run)
     monkeypatch.setattr(tasks.subprocess, "check_output", fake_check_output)
 
-    tasks.check_github_updates(channel_override="latest")
+    tasks.check_github_updates(channel_override=channel_override)
 
-    assert ["./upgrade.sh", "--latest", "--no-restart"] in run_commands
-    assert any("Using admin override channel: latest" in message for message in messages)
+    assert expected_command in run_commands
+    if override_message is None:
+        assert all(
+            "Using admin override channel" not in message for message in messages
+        )
+    else:
+        assert any(
+            f"Using admin override channel: {override_message}" in message
+            for message in messages
+        )
 
 
 def test_check_github_updates_allows_stable_critical_patch(monkeypatch, tmp_path):
