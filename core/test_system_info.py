@@ -88,6 +88,29 @@ class SystemInfoPortLockTests(SimpleTestCase):
                 lock_dir.rmdir()
 
 
+class SystemInfoUpgradeLockTests(SimpleTestCase):
+    def test_upgrade_lock_absent_defaults(self):
+        info = _gather_info()
+        self.assertFalse(info["upgrade_running"])
+        self.assertEqual(info["upgrade_started_at"], "")
+        self.assertEqual(info["upgrade_pid"], "")
+
+    def test_upgrade_lock_present_reads_metadata(self):
+        lock_dir = Path(settings.BASE_DIR) / "locks"
+        lock_dir.mkdir(exist_ok=True)
+        lock_file = lock_dir / "upgrade_in_progress.lck"
+        lock_file.write_text("2024-01-01T00:00:00Z\n4242\n", encoding="utf-8")
+        try:
+            info = _gather_info()
+            self.assertTrue(info["upgrade_running"])
+            self.assertEqual(info["upgrade_started_at"], "2024-01-01T00:00:00Z")
+            self.assertEqual(info["upgrade_pid"], "4242")
+        finally:
+            lock_file.unlink()
+            if not any(lock_dir.iterdir()):
+                lock_dir.rmdir()
+
+
 class SystemInfoRevisionTests(SimpleTestCase):
     @patch("core.system.revision.get_revision", return_value="abcdef1234567890")
     def test_includes_full_revision(self, mock_revision):

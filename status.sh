@@ -101,6 +101,24 @@ echo "Features:"
 echo "  Celery: $CELERY_FEATURE"
 echo "  LCD screen: $LCD_FEATURE"
 
+UPGRADE_LOCK_FILE="$LOCK_DIR/upgrade_in_progress.lck"
+if [ -f "$UPGRADE_LOCK_FILE" ]; then
+  if ! mapfile -t UPGRADE_LOCK_LINES < "$UPGRADE_LOCK_FILE"; then
+    UPGRADE_LOCK_LINES=()
+  fi
+  UPGRADE_STARTED="${UPGRADE_LOCK_LINES[0]}"
+  UPGRADE_PID="${UPGRADE_LOCK_LINES[1]}"
+  echo "Upgrade in progress: true"
+  if [ -n "$UPGRADE_STARTED" ]; then
+    echo "  Started at: $UPGRADE_STARTED"
+  fi
+  if [ -n "$UPGRADE_PID" ]; then
+    echo "  PID: $UPGRADE_PID"
+  fi
+else
+  echo "Upgrade in progress: false"
+fi
+
 echo "Checking running status..."
 RUNNING=false
 if [ -n "$SERVICE" ] && command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files | grep -Fq "${SERVICE}.service"; then

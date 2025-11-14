@@ -19,10 +19,37 @@ exec 2> >(tee "$LOG_FILE" >&2)
 cd "$BASE_DIR"
 
 LOCK_DIR="$BASE_DIR/locks"
+UPGRADE_LOCK_FILE="$LOCK_DIR/upgrade_in_progress.lck"
+UPGRADE_LOCK_CREATED=0
 
 BACKUP_DIR="$BASE_DIR/backups"
 
 LAST_FAILOVER_BRANCH=""
+
+create_upgrade_lock() {
+  local timestamp
+
+  if [ -f "$UPGRADE_LOCK_FILE" ]; then
+    echo "Existing upgrade lock detected at $UPGRADE_LOCK_FILE; overwriting." >&2
+  fi
+
+  timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date +"%Y-%m-%dT%H:%M:%SZ")
+  if {
+    printf '%s\n' "$timestamp"
+    printf '%s\n' "$$"
+  } >"$UPGRADE_LOCK_FILE"; then
+    UPGRADE_LOCK_CREATED=1
+    echo "Recorded upgrade start in $UPGRADE_LOCK_FILE (started $timestamp, pid $$)"
+  else
+    echo "Warning: unable to write upgrade lock to $UPGRADE_LOCK_FILE" >&2
+  fi
+}
+
+remove_upgrade_lock() {
+  if [ "$UPGRADE_LOCK_CREATED" -eq 1 ]; then
+    rm -f "$UPGRADE_LOCK_FILE"
+  fi
+}
 
 determine_node_role() {
   if [ -n "${NODE_ROLE:-}" ]; then
@@ -175,6 +202,13 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+mkdir -p "$LOCK_DIR"
+
+if [[ $REVERT -eq 0 ]]; then
+  create_upgrade_lock
+  trap remove_upgrade_lock EXIT
+fi
 
 if [[ $LATEST -eq 1 && $STABLE -eq 1 ]]; then
   echo "--stable cannot be used together with --latest." >&2

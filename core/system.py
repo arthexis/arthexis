@@ -638,6 +638,21 @@ def _build_system_fields(info: dict[str, object]) -> list[SystemField]:
         visible=bool(info.get("service")),
     )
 
+    upgrade_running = bool(info.get("upgrade_running", False))
+    add_field(_("Upgrade running"), "UPGRADE_RUNNING", upgrade_running, field_type="boolean")
+    add_field(
+        _("Upgrade started at"),
+        "UPGRADE_STARTED_AT",
+        info.get("upgrade_started_at", ""),
+        visible=upgrade_running and bool(info.get("upgrade_started_at")),
+    )
+    add_field(
+        _("Upgrade process ID"),
+        "UPGRADE_PID",
+        info.get("upgrade_pid", ""),
+        visible=upgrade_running and bool(info.get("upgrade_pid")),
+    )
+
     add_field(_("Hostname"), "HOSTNAME", info.get("hostname", ""))
 
     ip_addresses: Iterable[str] = info.get("ip_addresses", [])  # type: ignore[assignment]
@@ -901,6 +916,24 @@ def _gather_info() -> dict:
     info["running"] = running
     info["port"] = detected_port if detected_port is not None else default_port
     info["service_status"] = service_status
+
+    upgrade_lock_file = lock_dir / "upgrade_in_progress.lck"
+    upgrade_running = False
+    upgrade_started_at = ""
+    upgrade_pid = ""
+    if upgrade_lock_file.exists():
+        upgrade_running = True
+        try:
+            raw_lines = upgrade_lock_file.read_text().splitlines()
+        except OSError:
+            raw_lines = []
+        if raw_lines:
+            upgrade_started_at = raw_lines[0].strip()
+            if len(raw_lines) > 1:
+                upgrade_pid = raw_lines[1].strip()
+    info["upgrade_running"] = upgrade_running
+    info["upgrade_started_at"] = upgrade_started_at
+    info["upgrade_pid"] = upgrade_pid
 
     try:
         hostname = socket.gethostname()

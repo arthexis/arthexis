@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Verify upgrade lock visibility",
+      "created_on": "2025-11-12T00:00:00Z",
+      "url": "/admin/system/",
+      "request_details": "1. Remove any existing upgrade lock with `rm locks/upgrade_in_progress.lck` if present.\n2. Simulate an upgrade by running `printf '2025-01-01T00:00:00Z\\n9999\\n' > locks/upgrade_in_progress.lck`.\n3. Execute `./status.sh` and confirm it reports an upgrade in progress with the timestamp and PID values from the lock.\n4. Open the System Reports page in the Django admin and confirm the Upgrade running field reads Yes and shows the start time and process ID.\n5. Delete the lock file and refresh the System Reports page to confirm the upgrade indicators reset to No and the details disappear.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.31"
+    }
+  }
+]
