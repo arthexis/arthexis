@@ -16,7 +16,11 @@ class FakeCommon:
 
 class FakeModels:
     def __init__(self, info=None, raise_error=False):
-        self.info = info or {"name": "Odoo User", "email": "user@example.com"}
+        self.info = info or {
+            "name": "Odoo User",
+            "email": "user@example.com",
+            "partner_id": [99, "Partner"],
+        }
         self.raise_error = raise_error
 
     def execute_kw(self, db, uid, password, model, method, args, kwargs):
@@ -46,6 +50,7 @@ def test_verify_success(monkeypatch):
     assert profile.name == "u0"
     assert profile.email == "user@example.com"
     assert profile.verified_on is not None
+    assert profile.partner_id == 99
 
 
 def test_credentials_change_resets_verification(monkeypatch):
@@ -76,6 +81,9 @@ def test_execute_failure_marks_unverified(monkeypatch):
     )
     profile.odoo_uid = 42
     profile.verified_on = timezone.now()
+    profile.name = "Agent"
+    profile.email = "agent@example.com"
+    profile.partner_id = 555
     profile.save()
 
     def fake_proxy(url):
@@ -88,6 +96,10 @@ def test_execute_failure_marks_unverified(monkeypatch):
         pass
     profile.refresh_from_db()
     assert profile.verified_on is None
+    assert profile.odoo_uid is None
+    assert profile.name == profile._profile_name()
+    assert profile.email == ""
+    assert profile.partner_id is None
 
 
 def test_execute_passes_kwargs(monkeypatch):

@@ -2034,7 +2034,7 @@ class OdooProfileAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdm
     form = OdooProfileAdminForm
     list_display = ("owner", "host", "database", "credentials_ok", "verified_on")
     list_filter = ("crm",)
-    readonly_fields = ("verified_on", "odoo_uid", "name", "email")
+    readonly_fields = ("verified_on", "odoo_uid", "name", "email", "partner_id")
     actions = ["verify_credentials"]
     change_actions = ["verify_credentials_action", "my_profile_action"]
     changelist_actions = ["my_profile", "generate_quote_report"]
@@ -2044,7 +2044,7 @@ class OdooProfileAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdm
         ("Credentials", {"fields": ("username", "password")}),
         (
             "CRM Employee",
-            {"fields": ("verified_on", "odoo_uid", "name", "email")},
+            {"fields": ("verified_on", "odoo_uid", "name", "email", "partner_id")},
         ),
     )
 

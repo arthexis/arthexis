@@ -37,6 +37,7 @@ from .models import (
     Application,
     SiteProxy,
     DeveloperArticle,
+    OdooChatBridge,
     ChatMessage,
     ChatSession,
     Module,
@@ -778,6 +779,33 @@ class ViewHistoryAdmin(EntityModelAdmin):
             )
 
         return {"labels": labels, "datasets": datasets, "meta": meta}
+
+
+@admin.register(OdooChatBridge)
+class OdooChatBridgeAdmin(EntityModelAdmin):
+    list_display = ("bridge_label", "site", "channel_id", "is_enabled", "is_default")
+    list_filter = ("is_enabled", "is_default", "site")
+    search_fields = ("channel_uuid", "channel_id")
+    ordering = ("site__domain", "channel_id")
+    readonly_fields = ("is_seed_data", "is_user_data", "is_deleted")
+    fieldsets = (
+        (None, {"fields": ("site", "is_default", "profile", "is_enabled")}),
+        (
+            _("Odoo channel"),
+            {"fields": ("channel_id", "channel_uuid", "notify_partner_ids")},
+        ),
+        (
+            _("Flags"),
+            {
+                "fields": ("is_seed_data", "is_user_data", "is_deleted"),
+                "classes": ("collapse",),
+            },
+        ),
+    )
+
+    @admin.display(description=_("Bridge"))
+    def bridge_label(self, obj):
+        return str(obj)
 
 
 class ChatMessageInline(admin.TabularInline):

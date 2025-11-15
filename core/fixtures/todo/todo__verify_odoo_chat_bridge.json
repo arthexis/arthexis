@@ -1,0 +1,15 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "is_seed_data": false,
+      "is_deleted": false,
+      "request": "Verify Odoo chat bridge forwards visitor conversations",
+      "created_on": "2025-01-01T00:00:00Z",
+      "url": "/admin/pages/odoochatbridge/",
+      "request_details": "1. Configure an Odoo chat bridge pointing to a sandbox mail.channel and save it with a verified Odoo employee profile.\n2. Submit a visitor message through the public chat widget and confirm the bridge posts the formatted transcript in the target Odoo channel.\n3. Join the same session as a staff user and send a reply from Arthexis, verifying the staff response is forwarded with the appropriate metadata in Odoo.",
+      "generated_for_version": "",
+      "generated_for_revision": ""
+    }
+  }
+]
