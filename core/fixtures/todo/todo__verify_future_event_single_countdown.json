@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Confirm Future Event single countdown layout",
+      "created_on": "2024-01-01T00:00:00Z",
+      "url": "/awg/future-event/",
+      "request_details": "1. In Horologia, leave only one published upcoming countdown timer and archive or unpublish any others.\n2. Visit the Future Event Calculator at /awg/future-event/ and confirm the page renders a single countdown card without duplicating the event.\n3. Reload the page after a few seconds and verify the countdown continues to update in place without additional cards appearing.\n4. Optionally add a second timer, refresh, and confirm the carousel controls return for multiple events before restoring the original single-timer state.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": ""
+    }
+  }
+]

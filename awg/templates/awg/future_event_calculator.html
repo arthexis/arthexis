@@ -266,6 +266,19 @@
       let intervalId = null;
       let resizeTimer = null;
 
+      // Avoid enabling carousel affordances when only one event is available.
+      if (slides.length <= 1) {
+        const onlySlide = slides[0];
+        if (onlySlide) {
+          onlySlide.setAttribute('data-active', 'true');
+          onlySlide.removeAttribute('aria-hidden');
+          if (!onlySlide.hasAttribute('tabindex')) {
+            onlySlide.setAttribute('tabindex', '-1');
+          }
+        }
+        return;
+      }
+
       const setIndicators = (index) => {
         indicators.forEach((indicator) => {
           const matches = Number(indicator.dataset.eventIndicator) === index;
