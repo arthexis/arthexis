@@ -3606,6 +3606,7 @@ class NodeProxyGatewayTests(TestCase):
             "requester": str(self.node.uuid),
             "user": {
                 "username": "proxy-user",
+                "password": "pass",
                 "email": "proxy@example.com",
                 "first_name": "Proxy",
                 "last_name": "User",
@@ -3642,6 +3643,7 @@ class NodeProxyGatewayTests(TestCase):
             "requester": str(self.node.uuid),
             "user": {
                 "username": "proxy-user",
+                "password": "pass",
                 "email": "proxy@example.com",
                 "first_name": "Proxy",
                 "last_name": "User",
@@ -3666,6 +3668,7 @@ class NodeProxyGatewayTests(TestCase):
                 "requester": str(self.node.uuid),
                 "user": {
                     "username": "proxy-user",
+                    "password": "pass",
                     "is_staff": True,
                 },
                 "target": "/admin/",
@@ -3681,6 +3684,50 @@ class NodeProxyGatewayTests(TestCase):
         user.refresh_from_db()
         self.assertFalse(user.is_staff)
 
+    def test_proxy_session_requires_password(self):
+        User = get_user_model()
+        user = User.objects.create_user(username="proxy-user", password="pass")
+        user.is_staff = True
+        user.save(update_fields=["is_staff"])
+        body, signature = self._sign(
+            {
+                "requester": str(self.node.uuid),
+                "user": {"username": "proxy-user"},
+            }
+        )
+        response = self.client.post(
+            reverse("node-proxy-session"),
+            data=body,
+            content_type="application/json",
+            HTTP_X_SIGNATURE=signature,
+        )
+        self.assertEqual(response.status_code, 401)
+        self.assertNotIn("login_url", response.json())
+        user.refresh_from_db()
+        self.assertTrue(user.is_staff)
+
+    def test_proxy_session_rejects_invalid_password(self):
+        User = get_user_model()
+        user = User.objects.create_user(username="proxy-user", password="pass")
+        user.is_staff = True
+        user.save(update_fields=["is_staff"])
+        body, signature = self._sign(
+            {
+                "requester": str(self.node.uuid),
+                "user": {"username": "proxy-user", "password": "nope"},
+            }
+        )
+        response = self.client.post(
+            reverse("node-proxy-session"),
+            data=body,
+            content_type="application/json",
+            HTTP_X_SIGNATURE=signature,
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertNotIn("login_url", response.json())
+        user.refresh_from_db()
+        self.assertTrue(user.is_staff)
+
     def test_proxy_session_accepts_mac_hint_when_uuid_unknown(self):
         User = get_user_model()
         user = User.objects.create_user(username="proxy-user", password="pass")
@@ -3692,6 +3739,7 @@ class NodeProxyGatewayTests(TestCase):
             "requester_public_key": self.node.public_key,
             "user": {
                 "username": "proxy-user",
+                "password": "pass",
                 "email": "proxy@example.com",
                 "first_name": "Proxy",
                 "last_name": "User",

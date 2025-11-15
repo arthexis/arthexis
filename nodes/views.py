@@ -1922,6 +1922,19 @@ def proxy_session(request):
         if desired_staff != user.is_staff:
             return JsonResponse({"detail": "staff updates not allowed"}, status=403)
 
+    password_value = user_payload.get("password")
+    password = (
+        password_value
+        if isinstance(password_value, str)
+        else str(password_value or "")
+    )
+    if not password:
+        return JsonResponse({"detail": "password required"}, status=401)
+
+    auth_user = authenticate(request=None, username=username, password=password)
+    if auth_user is None or auth_user.pk != user.pk:
+        return JsonResponse({"detail": "authentication failed"}, status=403)
+
     updates: list[str] = []
     for field in ("first_name", "last_name", "email"):
         value = user_payload.get(field)
