@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate screen CP Simulator",
+      "created_on": "2024-01-01T00:00:00Z",
+      "url": "/ocpp/evcs/simulator/",
+      "request_details": "1. Visit the Charge Point Simulator page on the public site.\n2. Resize to a desktop viewport and confirm the simulator fields appear in three columns with the start/stop controls, status, and details stacked in a fourth column on the right.\n3. Resize to a narrow viewport and verify the action column stacks below the fields without clipping or overlap.\n4. Run a brief start/stop cycle to confirm the controls remain functional and status updates appear in the action column.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]
