@@ -1,4 +1,5 @@
 import uuid
+import uuid
 from unittest.mock import Mock
 
 import pytest
@@ -7,12 +8,15 @@ from django_otp.oath import TOTP
 from django_otp.plugins.otp_totp.models import TOTPDevice
 
 from core.backends import TOTPBackend, TOTP_DEVICE_NAME
+from core.models import TOTPDeviceSettings
 
 
 pytestmark = pytest.mark.django_db
 
 
-def create_staff_user_with_device(*, confirmed=True, name=TOTP_DEVICE_NAME, is_active=True):
+def create_staff_user_with_device(
+    *, confirmed=True, name=TOTP_DEVICE_NAME, is_active=True, allow_passwordless=False
+):
     User = get_user_model()
     unique_suffix = uuid.uuid4().hex
     user = User.objects.create_user(
@@ -27,6 +31,11 @@ def create_staff_user_with_device(*, confirmed=True, name=TOTP_DEVICE_NAME, is_a
         name=name,
         confirmed=confirmed,
     )
+    if allow_passwordless:
+        TOTPDeviceSettings.objects.create(
+            device=device,
+            allow_without_password=True,
+        )
     return user, device
 
 
@@ -45,6 +54,42 @@ def test_authenticate_valid_token():
     token = _current_token(device)
 
     backend = TOTPBackend()
+    result = backend.authenticate(
+        None, username=user.username, otp_token=token, password="password123"
+    )
+
+    assert result is not None
+    assert result.pk == user.pk
+    assert getattr(result, "otp_device") == device
+
+
+def test_authenticate_missing_password_returns_none_by_default():
+    user, device = create_staff_user_with_device()
+    token = _current_token(device)
+
+    backend = TOTPBackend()
+    result = backend.authenticate(None, username=user.username, otp_token=token)
+
+    assert result is None
+
+
+def test_authenticate_rejects_incorrect_password():
+    user, device = create_staff_user_with_device()
+    token = _current_token(device)
+
+    backend = TOTPBackend()
+    result = backend.authenticate(
+        None, username=user.username, otp_token=token, password="wrong-password"
+    )
+
+    assert result is None
+
+
+def test_authenticate_allows_passwordless_device():
+    user, device = create_staff_user_with_device(allow_passwordless=True)
+    token = _current_token(device)
+
+    backend = TOTPBackend()
     result = backend.authenticate(None, username=user.username, otp_token=token)
 
     assert result is not None
@@ -57,7 +102,12 @@ def test_authenticate_rejects_blank_tokens(otp_value):
     user, _ = create_staff_user_with_device()
 
     backend = TOTPBackend()
-    result = backend.authenticate(None, username=user.username, otp_token=otp_value)
+    result = backend.authenticate(
+        None,
+        username=user.username,
+        otp_token=otp_value,
+        password="password123",
+    )
 
     assert result is None
 
@@ -67,7 +117,9 @@ def test_authenticate_inactive_user_returns_none():
     token = _current_token(device)
 
     backend = TOTPBackend()
-    result = backend.authenticate(None, username=user.username, otp_token=token)
+    result = backend.authenticate(
+        None, username=user.username, otp_token=token, password="password123"
+    )
 
     assert result is None
 
@@ -77,7 +129,9 @@ def test_authenticate_requires_confirmed_device():
     token = _current_token(device)
 
     backend = TOTPBackend()
-    result = backend.authenticate(None, username=user.username, otp_token=token)
+    result = backend.authenticate(
+        None, username=user.username, otp_token=token, password="password123"
+    )
 
     assert result is None
 
@@ -87,7 +141,9 @@ def test_authenticate_falls_back_to_any_confirmed_device():
     token = _current_token(device)
 
     backend = TOTPBackend()
-    result = backend.authenticate(None, username=user.username, otp_token=token)
+    result = backend.authenticate(
+        None, username=user.username, otp_token=token, password="password123"
+    )
 
     assert result is not None
     assert result.pk == user.pk
@@ -104,7 +160,9 @@ def test_authenticate_prefers_named_device():
     token = _current_token(named_device)
 
     backend = TOTPBackend()
-    result = backend.authenticate(None, username=user.username, otp_token=token)
+    result = backend.authenticate(
+        None, username=user.username, otp_token=token, password="password123"
+    )
 
     assert result is not None
     assert result.pk == user.pk
@@ -118,7 +176,9 @@ def test_authenticate_handles_verify_exceptions(monkeypatch):
     monkeypatch.setattr(TOTPDevice, "verify_token", Mock(side_effect=Exception("boom")))
 
     backend = TOTPBackend()
-    result = backend.authenticate(None, username=user.username, otp_token=token)
+    result = backend.authenticate(
+        None, username=user.username, otp_token=token, password="password123"
+    )
 
     assert result is None
 
@@ -130,7 +190,9 @@ def test_authenticate_returns_none_when_verification_fails(monkeypatch):
     monkeypatch.setattr(TOTPDevice, "verify_token", lambda *args, **kwargs: False)
 
     backend = TOTPBackend()
-    result = backend.authenticate(None, username=user.username, otp_token=token)
+    result = backend.authenticate(
+        None, username=user.username, otp_token=token, password="password123"
+    )
 
     assert result is None
 

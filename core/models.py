@@ -5335,6 +5335,10 @@ class TOTPDeviceSettings(models.Model):
         default="",
         help_text=_("Label shown in authenticator apps. Leave blank to use Arthexis."),
     )
+    allow_without_password = models.BooleanField(
+        default=False,
+        help_text=_("Allow authenticator logins to skip the password step."),
+    )
     is_seed_data = models.BooleanField(default=False)
     is_user_data = models.BooleanField(default=False)
 

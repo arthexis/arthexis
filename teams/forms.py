@@ -17,6 +17,11 @@ class TOTPDeviceAdminForm(forms.ModelForm):
         required=False,
         help_text=_("Label shown in authenticator apps. Leave blank to use Arthexis."),
     )
+    allow_without_password = forms.BooleanField(
+        label=_("Allow without a password"),
+        required=False,
+        help_text=_("Let this authenticator work without requiring the user's password."),
+    )
 
     class Meta:
         model = TOTPDevice
@@ -30,30 +35,48 @@ class TOTPDeviceAdminForm(forms.ModelForm):
             settings_obj = None
         if settings_obj is not None:
             self.fields["issuer"].initial = settings_obj.issuer
+            self.fields["allow_without_password"].initial = (
+                settings_obj.allow_without_password
+            )
         default_issuer = getattr(settings, "OTP_TOTP_ISSUER", "Arthexis")
         self.fields["issuer"].widget.attrs.setdefault("placeholder", default_issuer)
 
-    def _save_issuer(self, instance):
+    def _save_settings(self, instance):
         issuer = (self.cleaned_data.get("issuer") or "").strip()
+        allow_without_password = bool(
+            self.cleaned_data.get("allow_without_password")
+        )
         try:
             settings_obj = instance.custom_settings
         except ObjectDoesNotExist:
             settings_obj = None
-        if issuer:
+
+        if issuer or allow_without_password or settings_obj is not None:
             if settings_obj is None:
                 settings_obj = TOTPDeviceSettings(device=instance)
             settings_obj.issuer = issuer
+            settings_obj.allow_without_password = allow_without_password
             if settings_obj.pk:
                 settings_obj.save(
-                    update_fields=["issuer", "is_seed_data", "is_user_data"]
+                    update_fields=[
+                        "issuer",
+                        "allow_without_password",
+                        "is_seed_data",
+                        "is_user_data",
+                    ]
                 )
             else:
                 settings_obj.save()
-        elif settings_obj is not None:
-            settings_obj.issuer = ""
+        if settings_obj is not None and not issuer and not allow_without_password:
             if settings_obj.is_seed_data or settings_obj.is_user_data:
+                settings_obj.allow_without_password = False
                 settings_obj.save(
-                    update_fields=["issuer", "is_seed_data", "is_user_data"]
+                    update_fields=[
+                        "issuer",
+                        "allow_without_password",
+                        "is_seed_data",
+                        "is_user_data",
+                    ]
                 )
             else:
                 settings_obj.delete()
@@ -61,16 +84,16 @@ class TOTPDeviceAdminForm(forms.ModelForm):
     def save(self, commit=True):
         instance = super().save(commit=commit)
         if commit:
-            self._save_issuer(instance)
+            self._save_settings(instance)
         else:
             self._pending_instance = instance
         return instance
 
-    def save_m2m(self):
-        super().save_m2m()
+    def _save_m2m(self):
+        super()._save_m2m()
         pending_instance = getattr(self, "_pending_instance", None)
         if pending_instance is not None:
-            self._save_issuer(pending_instance)
+            self._save_settings(pending_instance)
             delattr(self, "_pending_instance")
 
 class TOTPDeviceCalibrationActionForm(ActionForm):

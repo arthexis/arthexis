@@ -171,6 +171,7 @@ def _patch_totp_device():
                 settings_obj.issuer
                 or settings_obj.is_seed_data
                 or settings_obj.is_user_data
+                or getattr(settings_obj, "allow_without_password", False)
             )
         )
 
