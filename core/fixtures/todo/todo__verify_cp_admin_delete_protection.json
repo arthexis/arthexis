@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Charge Point deletion handles protected data",
+      "created_on": "2024-01-01T00:00:00Z",
+      "url": "/admin/ocpp/charger/",
+      "request_details": "1. Sign into the admin and open OCPP → Charge Points.\n2. Ensure one charger has historical data (for example, create a test transaction) and another has no stored sessions.\n3. Select both chargers and run the 'Delete selected charge points' action.\n4. Confirm the admin reports that data must be purged instead of returning a server error, and that the clean charger is deleted while the charger with data remains listed.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]

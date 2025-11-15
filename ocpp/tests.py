@@ -60,6 +60,7 @@ from django.contrib.sites.models import Site
 from django.core.exceptions import ValidationError
 from pages.models import Application, Module
 from nodes.models import Node, NodeRole
+from django.contrib import messages
 from django.contrib.admin.sites import AdminSite
 from django.contrib.admin.utils import quote
 
@@ -3738,6 +3739,29 @@ class ChargerAdminTests(TestCase):
         self.assertTrue(any(name.startswith("SIMCP-001") for name in names))
         created_paths = {sim.cp_path for sim in created}
         self.assertEqual(len(created_paths), 2)
+
+    def test_delete_queryset_handles_protected_error(self):
+        deletable = Charger.objects.create(charger_id="DELETE-ADMIN")
+        protected = Charger.objects.create(charger_id="KEEP-ADMIN")
+        Transaction.objects.create(charger=protected, start_time=timezone.now())
+
+        site = AdminSite()
+        admin_instance = ChargerAdmin(Charger, site)
+        request = RequestFactory().post("/admin/ocpp/charger/")
+        request.user = self.admin
+
+        with patch.object(admin_instance, "message_user") as message_mock:
+            admin_instance.delete_queryset(
+                request,
+                Charger.objects.filter(pk__in=[deletable.pk, protected.pk]),
+            )
+
+        self.assertFalse(Charger.objects.filter(pk=deletable.pk).exists())
+        self.assertTrue(Charger.objects.filter(pk=protected.pk).exists())
+        message_mock.assert_called_once()
+        args, kwargs = message_mock.call_args
+        self.assertEqual(kwargs.get("level"), messages.ERROR)
+        self.assertIn("Purge charger data", str(args[1]))
 
     def test_admin_lists_log_link(self):
         charger = Charger.objects.create(charger_id="LOG1")
