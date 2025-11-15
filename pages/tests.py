@@ -7,6 +7,8 @@ import pytest
 
 django.setup()
 
+from datetime import timedelta
+
 from django.test import Client, RequestFactory, TestCase, SimpleTestCase, override_settings
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
@@ -76,6 +78,7 @@ from core.models import (
     TOTPDeviceSettings,
 )
 from ocpp.models import Charger, ChargerConfiguration, CPFirmware
+from django.utils import timezone
 from django.core.files.uploadedfile import SimpleUploadedFile
 import base64
 import json
@@ -855,7 +858,9 @@ class AdminDashboardAppListTests(TestCase):
         self.assertContains(resp, gettext("No net messages available"))
 
     def test_dashboard_shows_model_rules_success_message(self):
-        charger = Charger.objects.create(charger_id="EVCS-100")
+        charger = Charger.objects.create(
+            charger_id="EVCS-100", last_heartbeat=timezone.now()
+        )
         ChargerConfiguration.objects.create(charger_identifier="EVCS-100")
         CPFirmware.objects.create(source_charger=charger, payload_json={})
 
@@ -865,16 +870,37 @@ class AdminDashboardAppListTests(TestCase):
         self.assertContains(resp, gettext("All rules met."))
 
     def test_dashboard_shows_model_rules_failure_message(self):
-        healthy = Charger.objects.create(charger_id="EVCS-OK")
+        healthy = Charger.objects.create(
+            charger_id="EVCS-OK", last_heartbeat=timezone.now()
+        )
         ChargerConfiguration.objects.create(charger_identifier="EVCS-OK")
         CPFirmware.objects.create(source_charger=healthy, payload_json={})
-        Charger.objects.create(charger_id="EVCS-MISS")
+        Charger.objects.create(
+            charger_id="EVCS-MISS",
+            last_heartbeat=timezone.now() - timedelta(hours=2),
+        )
 
         resp = self.client.get(reverse("admin:index"))
 
         self.assertContains(resp, "model-rule-status--error")
         self.assertContains(resp, "Missing CP Configuration for EVCS-MISS.")
         self.assertContains(resp, "Missing CP Firmware for EVCS-MISS.")
+        self.assertContains(
+            resp, "Missing EVCS heartbeat within the last hour for EVCS-MISS."
+        )
+
+    def test_dashboard_shows_evcs_heartbeat_failure_message(self):
+        Charger.objects.create(
+            charger_id="EVCS-LATE",
+            last_heartbeat=timezone.now() - timedelta(hours=2),
+        )
+
+        resp = self.client.get(reverse("admin:index"))
+
+        self.assertContains(resp, "model-rule-status--error")
+        self.assertContains(
+            resp, "Missing EVCS heartbeat within the last hour for EVCS-LATE."
+        )
 
 
 class AdminModelRuleTemplateTagTests(TestCase):
@@ -897,6 +923,28 @@ class AdminModelRuleTemplateTagTests(TestCase):
 
         self.assertEqual(cached, status)
 
+    def test_model_rule_status_reports_evcs_heartbeat_success(self):
+        Charger.objects.create(
+            charger_id="EVCS-PASS", last_heartbeat=timezone.now()
+        )
+
+        context = Context({})
+
+        status = admin_extras.model_rule_status(context, "ocpp", "Charger")
+
+        self.assertTrue(status["success"])
+
+    def test_model_rule_status_reports_evcs_heartbeat_failure(self):
+        Charger.objects.create(
+            charger_id="EVCS-FAIL", last_heartbeat=timezone.now() - timedelta(hours=3)
+        )
+
+        context = Context({})
+
+        status = admin_extras.model_rule_status(context, "ocpp", "Charger")
+
+        self.assertFalse(status["success"])
+        self.assertIn("EVCS-FAIL", status["message"])
     def test_model_rule_status_for_nodes_requires_local_node(self):
         context = Context({})
 

@@ -4,6 +4,8 @@ import textwrap
 from datetime import timedelta
 from pathlib import Path
 
+from datetime import timedelta
+
 from django import template
 from django.apps import apps
 from django.contrib import admin
@@ -107,51 +109,40 @@ def _evaluate_cp_firmware_rules() -> dict[str, object] | None:
     return _rule_success()
 
 
-def _evaluate_node_rules() -> dict[str, object] | None:
-    try:
-        local_node = Node.get_local()
-    except DatabaseError:
-        return _rule_failure(_("Unable to determine local node status."))
+def _evaluate_evcs_heartbeat_rules() -> dict[str, object] | None:
+    cutoff = timezone.now() - timedelta(hours=1)
+    chargers = list(
+        Charger.objects.filter(connector_id__isnull=True)
+        .order_by("charger_id")
+        .values_list("charger_id", "last_heartbeat")
+    )
+    registered = [
+        (identifier, heartbeat)
+        for identifier, heartbeat in chargers
+        if identifier and heartbeat is not None
+    ]
+    if not registered:
+        return _rule_success()
 
-    if local_node is None:
-        return _rule_failure(_("Local node record is missing."))
-
-    try:
-        upstream_nodes = Node.objects.filter(
-            current_relation=Node.Relation.UPSTREAM
-        )
-        has_upstream = upstream_nodes.exists()
-    except DatabaseError:
-        return _rule_failure(_("Unable to determine upstream node status."))
-
-    if not has_upstream:
-        return _rule_failure(_("At least one upstream node is required."))
-
-    threshold = timezone.now() - timedelta(hours=24)
-    try:
-        if not upstream_nodes.filter(last_seen__gte=threshold).exists():
-            return _rule_failure(
-                _("No upstream nodes have checked in within the last 24 hours.")
-            )
-    except DatabaseError:
-        return _rule_failure(_("Unable to verify upstream activity."))
-
-    role_id = getattr(local_node, "role_id", None)
-    if not role_id:
-        return _rule_failure(_("Local node is missing an assigned role."))
-
-    try:
-        if not NodeRole.objects.filter(pk=role_id).exists():
-            return _rule_failure(
-                _("Local node has an invalid role assignment.")
-            )
-    except DatabaseError:
-        return _rule_failure(_("Unable to validate the local node role."))
+    missing = [
+        identifier
+        for identifier, heartbeat in registered
+        if heartbeat < cutoff
+    ]
+    if missing:
+        evcs_list = _format_evcs_list(missing)
+        message = ngettext(
+            "Missing EVCS heartbeat within the last hour for %(evcs)s.",
+            "Missing EVCS heartbeats within the last hour for %(evcs)s.",
+            len(missing),
+        ) % {"evcs": evcs_list}
+        return _rule_failure(message)
 
     return _rule_success()
 
 
 _MODEL_RULE_EVALUATORS = {
+    "ocpp.Charger": _evaluate_evcs_heartbeat_rules,
     "ocpp.ChargerConfiguration": _evaluate_cp_configuration_rules,
     "ocpp.CPFirmware": _evaluate_cp_firmware_rules,
     "nodes.Node": _evaluate_node_rules,
