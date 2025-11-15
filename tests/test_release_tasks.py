@@ -14,7 +14,7 @@ class CommandRecorder:
 
     def __call__(self, *args, **kwargs):
         self.calls.append((args, kwargs))
-        return types.SimpleNamespace(returncode=0)
+        return types.SimpleNamespace(returncode=0, stdout="", stderr="")
 
     def find(self, executable: str):
         for args, kwargs in self.calls:
@@ -138,6 +138,68 @@ def test_upgrade_shows_message(monkeypatch, tmp_path):
     first_call = scheduled[0]
     assert first_call["kwargs"].get("countdown") == tasks.AUTO_UPGRADE_HEALTH_DELAY_SECONDS
     assert first_call["kwargs"].get("kwargs") == {"attempt": 1}
+
+
+@pytest.mark.role("Watchtower")
+def test_auto_upgrade_restarts_celery_units(monkeypatch, tmp_path):
+    base = _setup_tmp(monkeypatch, tmp_path)
+    (base / "VERSION").write_text("1.0")
+    locks = base / "locks"
+    locks.mkdir()
+    (locks / "service.lck").write_text("arthexis")
+    (locks / "celery.lck").write_text("enabled")
+
+    run_recorder = CommandRecorder()
+    monkeypatch.setattr(tasks.subprocess, "run", run_recorder)
+
+    def fake_check_output(args, cwd=None, stderr=None, text=None):
+        if args[:3] == ["git", "rev-parse", "origin/main"]:
+            return "remote"
+        if args[:3] == ["git", "show", "origin/main:VERSION"]:
+            return "2.0"
+        if args[:3] == ["git", "rev-parse", "main"]:
+            return "local"
+        if args[:3] == ["git", "rev-parse", "HEAD"]:
+            return "local"
+        return "local"
+
+    monkeypatch.setattr(tasks.subprocess, "check_output", fake_check_output)
+
+    def fake_which(name):
+        if name == "systemctl":
+            return "/bin/systemctl"
+        if name == "sudo":
+            return None
+        return None
+
+    monkeypatch.setattr(tasks.shutil, "which", fake_which)
+
+    scheduled: list[dict] = []
+
+    def record_schedule(*args, **kwargs):
+        scheduled.append({"args": args, "kwargs": kwargs})
+
+    monkeypatch.setattr(
+        tasks.verify_auto_upgrade_health,
+        "apply_async",
+        record_schedule,
+    )
+
+    tasks.check_github_updates()
+
+    celery_restart_commands = [
+        call_args[0]
+        for call_args, _ in run_recorder.calls
+        if call_args
+        and call_args[0]
+        and call_args[0][0] == "systemctl"
+        and len(call_args[0]) >= 3
+        and call_args[0][1] == "restart"
+    ]
+
+    assert ["systemctl", "restart", "celery-arthexis"] in celery_restart_commands
+    assert ["systemctl", "restart", "celery-beat-arthexis"] in celery_restart_commands
+    assert scheduled
 
 
 @pytest.mark.role("Watchtower")
