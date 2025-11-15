@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Confirm protected charge points remain after bulk delete",
+      "created_on": "2025-01-15T00:00:00Z",
+      "url": "/admin/ocpp/charger/",
+      "request_details": "1. Sign into the Django admin and open OCPP → Charge Points.\n2. Create a test charge point with a reservation (or use an existing unit with protected firmware/reservation data) and a second disposable charger.\n3. Select both records and run the 'Delete selected charge points' action.\n4. Confirm the admin shows the error banner explaining protected data must be purged ("Purge charger data") and that the protected charge point is still listed while the disposable charger is removed.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]
