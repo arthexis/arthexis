@@ -1,0 +1,15 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "is_seed_data": false,
+      "is_deleted": false,
+      "request": "Validate scheduled Package Release automation",
+      "created_on": "2024-01-01T00:00:00Z",
+      "url": "/admin/core/packagerelease/",
+      "request_details": "1. Open the Package Release change form for the next build and populate the Scheduled Date and Scheduled Time fields with a future value.\n2. Save the release and confirm django-celery-beat now lists a one-off task pointing to core.tasks.run_scheduled_release for the same release (Admin → Periodic tasks).\n3. Allow the scheduled task to run (or trigger it manually) and review the release log to verify the workflow starts automatically without prompting for Release Manager approval.\n4. After the run finishes, clear the schedule and confirm the periodic task is removed.",
+      "generated_for_version": "",
+      "generated_for_revision": ""
+    }
+  }
+]
