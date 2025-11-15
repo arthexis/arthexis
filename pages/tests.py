@@ -38,6 +38,7 @@ from pages import site_config
 from pages.models import (
     Application,
     ChatMessage,
+    ChatSession,
     DeveloperArticle,
     Landing,
     Module,
@@ -4584,6 +4585,78 @@ class ChatConsumerTests(TransactionTestCase):
         with patch("nodes.models.NetMessage.broadcast") as mock_broadcast:
             async_to_sync(self._open_session)("Help")
         self.assertTrue(mock_broadcast.called)
+
+    @override_settings(PAGES_CHAT_NOTIFY_STAFF=True)
+    def test_chat_session_notify_staff_broadcasts_details(self):
+        session = ChatSession()
+        session.pk = 1
+        session.created_at = timezone.now()
+        session.last_activity_at = session.created_at
+        message = ChatMessage(session=session, body="Need assistance", from_staff=False)
+        with patch("nodes.models.NetMessage.broadcast") as mock_broadcast:
+            result = session.notify_staff_of_message(message)
+        self.assertTrue(result)
+        call_args = mock_broadcast.call_args
+        self.assertIsNotNone(call_args)
+        subject = call_args.kwargs.get("subject") if call_args.kwargs else None
+        if subject is None and call_args.args:
+            subject = call_args.args[0]
+        self.assertEqual(subject, "New visitor chat message")
+        body = ""
+        if call_args.kwargs and "body" in call_args.kwargs:
+            body = call_args.kwargs["body"]
+        elif call_args.args:
+            body = call_args.args[1] if len(call_args.args) > 1 else ""
+        self.assertIn(str(session.uuid), body)
+        self.assertIn("Need assistance", body)
+        self.assertIn("/admin/pages/chatsession/", body)
+
+    @override_settings(PAGES_CHAT_NOTIFY_STAFF=True)
+    def test_add_message_invokes_notification_for_visitors(self):
+        session = ChatSession()
+        session.pk = 1
+        session.created_at = timezone.now()
+        session.last_activity_at = session.created_at
+
+        def _assign_pk(self, *args, **kwargs):
+            self.pk = 1
+
+        with patch.object(ChatMessage, "save", new=_assign_pk), patch.object(
+            ChatSession, "save"
+        ) as mock_session_save, patch.object(
+            ChatSession, "notify_staff_of_message"
+        ) as mock_notify, patch.object(
+            ChatSession, "maybe_escalate_on_idle"
+        ) as mock_escalate:
+            mock_notify.return_value = True
+            mock_escalate.return_value = False
+            message = session.add_message(content="Need assistance", from_staff=False)
+        mock_notify.assert_called_once()
+        mock_escalate.assert_called_once()
+        mock_session_save.assert_called()
+        self.assertIsInstance(message, ChatMessage)
+
+    @override_settings(PAGES_CHAT_NOTIFY_STAFF=True)
+    def test_add_message_skips_notification_for_staff(self):
+        session = ChatSession()
+        session.pk = 1
+        session.created_at = timezone.now()
+        session.last_activity_at = session.created_at
+
+        def _assign_pk(self, *args, **kwargs):
+            self.pk = 1
+
+        with patch.object(ChatMessage, "save", new=_assign_pk), patch.object(
+            ChatSession, "save"
+        ), patch.object(
+            ChatSession, "notify_staff_of_message"
+        ) as mock_notify, patch.object(
+            ChatSession, "maybe_escalate_on_idle"
+        ) as mock_escalate:
+            mock_escalate.return_value = False
+            session.add_message(content="Status update", from_staff=True)
+        mock_notify.assert_not_called()
+        mock_escalate.assert_not_called()
 
 
 class ChatWidgetViewTests(TestCase):

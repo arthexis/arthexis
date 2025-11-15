@@ -364,6 +364,7 @@ class ChatSession(Entity):
         message.save()
         self.touch_activity(visitor=not from_staff, staff=from_staff)
         if not from_staff:
+            self.notify_staff_of_message(message)
             self.maybe_escalate_on_idle()
         return message
 
@@ -408,6 +409,65 @@ class ChatSession(Entity):
                 "Failed to broadcast escalation NetMessage for chat session %s",
                 self.pk,
             )
+        return True
+
+    def notify_staff_of_message(self, message: "ChatMessage") -> bool:
+        notify = getattr(settings, "PAGES_CHAT_NOTIFY_STAFF", False)
+        if not notify:
+            return False
+
+        subject = gettext("New visitor chat message")
+        snippet = (message.body or "").strip()
+        if snippet:
+            snippet = " ".join(snippet.split())
+        author = message.author_label()
+        if snippet and author:
+            snippet_text = gettext("%(author)s: %(snippet)s") % {
+                "author": author,
+                "snippet": snippet,
+            }
+        elif snippet:
+            snippet_text = snippet
+        else:
+            snippet_text = gettext("Visitor sent a message without additional text.")
+
+        if len(snippet_text) > 180:
+            snippet_text = f"{snippet_text[:177]}..."
+
+        admin_path = ""
+        try:
+            admin_path = reverse("admin:pages_chatsession_change", args=[self.pk])
+        except Exception:
+            logger.exception(
+                "Failed to resolve admin URL for chat session %s", self.pk
+            )
+
+        body_parts = [
+            gettext("Chat session %(uuid)s received a new visitor message.")
+            % {"uuid": self.uuid}
+        ]
+        if snippet_text:
+            body_parts.append(
+                gettext("Latest message: %(snippet)s") % {"snippet": snippet_text}
+            )
+        if admin_path:
+            body_parts.append(
+                gettext("Review conversation in admin: %(path)s")
+                % {"path": admin_path}
+            )
+
+        body = "\n\n".join(part for part in body_parts if part).strip()
+        body = body[:256]
+
+        try:
+            from nodes.models import NetMessage
+
+            NetMessage.broadcast(subject=subject, body=body)
+        except Exception:
+            logger.exception(
+                "Failed to broadcast chat notification for session %s", self.pk
+            )
+            return False
         return True
 
 
