@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import time
 from pathlib import Path
 
@@ -71,6 +72,7 @@ def test_main_runs_env_refresh_immediately(
 ) -> None:
     calls: list[tuple[Path, bool]] = []
     restarts: list[Path] = []
+    updates: list[Path] = []
 
     def fake_collect(_: Path) -> dict[str, int]:
         return {}
@@ -88,6 +90,11 @@ def test_main_runs_env_refresh_immediately(
     monkeypatch.setattr(
         migration_server, "request_runserver_restart", lambda lock_dir: restarts.append(lock_dir)
     )
+    monkeypatch.setattr(
+        migration_server,
+        "update_requirements",
+        lambda base_dir: updates.append(base_dir) or False,
+    )
     monkeypatch.setattr(migration_server, "BASE_DIR", tmp_path)
     monkeypatch.setattr(migration_server, "LOCK_DIR", tmp_path / "locks")
 
@@ -96,6 +103,53 @@ def test_main_runs_env_refresh_immediately(
     assert result == 0
     assert len(calls) == 1
     assert restarts == [tmp_path / "locks"]
+    assert updates == [tmp_path]
+
+
+def test_main_notifies_and_stops_on_new_requirements(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    calls: list[tuple[Path, bool]] = []
+    notifications: list[tuple[str, str]] = []
+    update_calls: list[Path] = []
+
+    def fake_collect(_: Path) -> dict[str, int]:
+        return {}
+
+    def fake_wait_for_changes(_: Path, __: dict[str, int], **___: object) -> dict[str, int]:
+        return {"requirements.txt": 1}
+
+    def fake_run_env_refresh(_: Path, *, latest: bool) -> bool:
+        calls.append((migration_server.BASE_DIR, latest))
+        return True
+
+    def fake_update(base_dir: Path) -> bool:
+        update_calls.append(base_dir)
+        return len(update_calls) > 1
+
+    monkeypatch.setattr(migration_server, "collect_source_mtimes", fake_collect)
+    monkeypatch.setattr(migration_server, "wait_for_changes", fake_wait_for_changes)
+    monkeypatch.setattr(migration_server, "run_env_refresh", fake_run_env_refresh)
+    monkeypatch.setattr(migration_server, "update_requirements", fake_update)
+    monkeypatch.setattr(
+        migration_server,
+        "notify_async",
+        lambda subject, body="": notifications.append((subject, body)),
+    )
+    monkeypatch.setattr(migration_server, "BASE_DIR", tmp_path)
+    monkeypatch.setattr(migration_server, "LOCK_DIR", tmp_path / "locks")
+
+    result = migration_server.main(["--debounce", "0"])
+
+    assert result == 0
+    assert len(calls) == 1
+    assert notifications == [
+        (
+            "New Python requirements installed",
+            "The migration server stopped after installing new dependencies.",
+        )
+    ]
+    assert update_calls == [tmp_path, tmp_path]
 
 
 def test_migration_server_state_records_pid(tmp_path: Path) -> None:
@@ -135,3 +189,69 @@ def test_request_runserver_restart_ignores_dead_pid(
     migration_server.request_runserver_restart(lock_dir)
 
     assert not any(lock_dir.glob("vscode_runserver.restart.*"))
+
+
+def test_update_requirements_installs_when_hash_changes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    requirements = tmp_path / "requirements.txt"
+    requirements.write_text("demo==1.0\n", encoding="utf-8")
+    helper = tmp_path / "scripts" / "helpers"
+    helper.mkdir(parents=True)
+    (helper / "pip_install.py").write_text("print('noop')\n", encoding="utf-8")
+
+    runs: list[tuple[list[str], Path | None]] = []
+
+    class DummyResult:
+        returncode = 0
+
+    def fake_run(cmd, cwd=None, **_: object):
+        runs.append((cmd, cwd))
+        return DummyResult()
+
+    monkeypatch.setattr(migration_server.subprocess, "run", fake_run)
+
+    updated = migration_server.update_requirements(tmp_path)
+
+    assert updated is True
+    assert runs
+    assert runs[0][0][0] == sys.executable
+    assert (tmp_path / "requirements.md5").exists()
+
+    runs.clear()
+    updated_again = migration_server.update_requirements(tmp_path)
+    assert updated_again is False
+    assert not runs
+
+
+def test_update_requirements_reports_failures(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    requirements = tmp_path / "requirements.txt"
+    requirements.write_text("demo==1.0\n", encoding="utf-8")
+    notifications: list[tuple[str, str]] = []
+
+    class DummyResult:
+        returncode = 1
+
+    monkeypatch.setattr(
+        migration_server.subprocess,
+        "run",
+        lambda *args, **kwargs: DummyResult(),
+    )
+    monkeypatch.setattr(
+        migration_server,
+        "notify_async",
+        lambda subject, body="": notifications.append((subject, body)),
+    )
+
+    updated = migration_server.update_requirements(tmp_path)
+
+    assert updated is False
+    assert notifications == [
+        (
+            "Python requirements update failed",
+            "See migration server output for details.",
+        )
+    ]
+    assert not (tmp_path / "requirements.md5").exists()
