@@ -269,7 +269,7 @@ def test_check_github_updates_treats_latest_mode_case_insensitively(
 
     tasks.check_github_updates()
 
-    assert ["./upgrade.sh", "--latest", "--no-restart"] in run_commands
+    assert ["./upgrade.sh", "--latest"] in run_commands
 
 
 @pytest.mark.parametrize(
@@ -280,9 +280,9 @@ def test_check_github_updates_treats_latest_mode_case_insensitively(
         "severity_name",
     ),
     [
-        ("latest", ["./upgrade.sh", "--latest", "--no-restart"], "latest", "NORMAL"),
-        ("stable", ["./upgrade.sh", "--stable", "--no-restart"], "stable", "CRITICAL"),
-        ("normal", ["./upgrade.sh", "--no-restart"], None, "NORMAL"),
+        ("latest", ["./upgrade.sh", "--latest"], "latest", "NORMAL"),
+        ("stable", ["./upgrade.sh", "--stable"], "stable", "CRITICAL"),
+        ("normal", ["./upgrade.sh"], None, "NORMAL"),
     ],
 )
 def test_check_github_updates_respects_channel_override(
@@ -452,7 +452,7 @@ def test_check_github_updates_allows_stable_critical_patch(monkeypatch, tmp_path
 
     tasks.check_github_updates()
 
-    assert ["./upgrade.sh", "--stable", "--no-restart"] in run_commands
+    assert ["./upgrade.sh", "--stable"] in run_commands
 
 
 def test_check_github_updates_restarts_dev_server(monkeypatch, tmp_path):
@@ -524,7 +524,7 @@ def test_check_github_updates_restarts_dev_server(monkeypatch, tmp_path):
     with override_settings(BASE_DIR=base_dir):
         tasks.check_github_updates()
 
-    assert any(cmd[0] == "./upgrade.sh" and "--no-restart" in cmd for cmd in run_commands)
+    assert any(cmd for cmd in run_commands if cmd and cmd[0] == "./upgrade.sh")
     assert popen_calls == [["./start.sh"]]
     assert any(
         "Restarting development server via start.sh" in message for message in messages
@@ -600,7 +600,7 @@ def test_check_github_updates_skips_latest_low_severity_patch(monkeypatch, tmp_p
 
     tasks.check_github_updates()
 
-    assert ["./upgrade.sh", "--latest", "--no-restart"] not in run_commands
+    assert not any(cmd for cmd in run_commands if cmd and cmd[0] == "./upgrade.sh")
     assert any(
         message.startswith("Skipping auto-upgrade for low severity patch")
         for message in messages
@@ -1015,6 +1015,85 @@ def test_check_github_updates_restarts_inactive_service(monkeypatch, tmp_path):
         for message in messages
     )
     assert messages.count("Waiting for arthexis to restart after upgrade") == 1
+
+
+def test_check_github_updates_heals_inactive_service_when_up_to_date(
+    monkeypatch, tmp_path
+) -> None:
+    """Auto-upgrade should revive inactive services even when no update applies."""
+
+    from core import tasks
+
+    base_dir = tmp_path / "node"
+    base_dir.mkdir()
+    (base_dir / "VERSION").write_text("0.0.1")
+    logs_dir = base_dir / "logs"
+    logs_dir.mkdir()
+    locks = base_dir / "locks"
+    locks.mkdir()
+    (locks / "service.lck").write_text("arthexis")
+
+    start_script = base_dir / "start.sh"
+    start_script.write_text("#!/bin/sh\nexit 0\n")
+    start_script.chmod(start_script.stat().st_mode | 0o111)
+
+    fake_module = base_dir / "core" / "tasks.py"
+    fake_module.parent.mkdir()
+    fake_module.write_text("")
+    monkeypatch.setattr(tasks, "__file__", str(fake_module))
+
+    monkeypatch.setitem(
+        sys.modules,
+        "core.notifications",
+        SimpleNamespace(notify=lambda *args, **kwargs: None),
+    )
+
+    import nodes.apps as nodes_apps
+
+    monkeypatch.setattr(nodes_apps, "_startup_notification", lambda: None)
+
+    monkeypatch.setattr(tasks, "_load_skipped_revisions", lambda base: set())
+    monkeypatch.setattr(tasks, "_read_remote_version", lambda base, branch: "0.0.1")
+    monkeypatch.setattr(tasks, "_read_local_version", lambda base: "0.0.1")
+    monkeypatch.setattr(tasks, "_resolve_release_severity", lambda version: tasks.SEVERITY_NORMAL)
+    monkeypatch.setattr(tasks, "_auto_upgrade_log_path", lambda _base: logs_dir / "auto-upgrade.log")
+    monkeypatch.setattr(tasks, "_reset_network_failure_count", lambda _base: None)
+    monkeypatch.setattr(tasks, "_systemctl_command", lambda: ["systemctl"])
+
+    run_commands: list[list[str]] = []
+
+    def fake_run(command, *args, **kwargs):
+        run_commands.append(command)
+        if command[:2] == ["git", "fetch"]:
+            return CompletedProcess(command, 0)
+        if command[:3] == ["systemctl", "is-active", "--quiet"]:
+            return CompletedProcess(command, 3)
+        if command[0] == "./start.sh":
+            return CompletedProcess(command, 0)
+        return CompletedProcess(command, 0)
+
+    def fake_check_output(command, *args, **kwargs):
+        if command[:3] == ["git", "rev-parse", "origin/main"]:
+            return "remote"
+        return "remote"
+
+    messages: list[str] = []
+
+    monkeypatch.setattr(tasks.subprocess, "run", fake_run)
+    monkeypatch.setattr(tasks.subprocess, "check_output", fake_check_output)
+    monkeypatch.setattr(
+        tasks,
+        "_append_auto_upgrade_log",
+        lambda _base, message: messages.append(message),
+    )
+
+    with override_settings(BASE_DIR=base_dir):
+        tasks.check_github_updates()
+
+    assert ["./start.sh"] in run_commands
+    assert any(
+        "inactive during auto-upgrade check" in message for message in messages
+    )
 
 
 def test_resolve_service_url_handles_case_insensitive_mode(tmp_path):

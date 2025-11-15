@@ -19,36 +19,161 @@ exec 2> >(tee "$LOG_FILE" >&2)
 cd "$BASE_DIR"
 
 LOCK_DIR="$BASE_DIR/locks"
-UPGRADE_LOCK_FILE="$LOCK_DIR/upgrade_in_progress.lck"
-UPGRADE_LOCK_CREATED=0
+SERVICE_NAME=""
+[ -f "$LOCK_DIR/service.lck" ] && SERVICE_NAME="$(cat "$LOCK_DIR/service.lck")"
+
+SYSTEMCTL_CMD=()
+if command -v systemctl >/dev/null 2>&1; then
+  SYSTEMCTL_CMD=(systemctl)
+  if command -v sudo >/dev/null 2>&1; then
+    if sudo -n true 2>/dev/null; then
+      SYSTEMCTL_CMD=(sudo -n systemctl)
+    else
+      SYSTEMCTL_CMD=(systemctl)
+    fi
+  fi
+fi
+
+SUDO_CMD=(sudo)
+if ! command -v sudo >/dev/null 2>&1; then
+  SUDO_CMD=()
+fi
+
+UPGRADE_GUARD_SERVICE=""
+UPGRADE_GUARD_ACTIVE=0
 
 BACKUP_DIR="$BASE_DIR/backups"
 
 LAST_FAILOVER_BRANCH=""
 
-create_upgrade_lock() {
-  local timestamp
-
-  if [ -f "$UPGRADE_LOCK_FILE" ]; then
-    echo "Existing upgrade lock detected at $UPGRADE_LOCK_FILE; overwriting." >&2
+ensure_upgrade_guard_units() {
+  local service="$1"
+  if [ -z "$service" ]; then
+    return 1
+  fi
+  if [ ${#SYSTEMCTL_CMD[@]} -eq 0 ]; then
+    return 1
   fi
 
-  timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date +"%Y-%m-%dT%H:%M:%SZ")
-  if {
-    printf '%s\n' "$timestamp"
-    printf '%s\n' "$$"
-  } >"$UPGRADE_LOCK_FILE"; then
-    UPGRADE_LOCK_CREATED=1
-    echo "Recorded upgrade start in $UPGRADE_LOCK_FILE (started $timestamp, pid $$)"
+  local guard_service="${service}-upgrade-guard"
+  local guard_service_file="/etc/systemd/system/${guard_service}.service"
+  local guard_timer_file="/etc/systemd/system/${guard_service}.timer"
+
+  if [ ${#SUDO_CMD[@]} -gt 0 ]; then
+    "${SUDO_CMD[@]}" bash -c "cat > '$guard_service_file' <<SERVICEEOF
+[Unit]
+Description=Restart guard for ${service} after upgrades
+After=network.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=$BASE_DIR
+EnvironmentFile=-$BASE_DIR/redis.env
+EnvironmentFile=-$BASE_DIR/debug.env
+ExecStart=$BASE_DIR/start.sh
+User=$(id -un)
+
+[Install]
+WantedBy=multi-user.target
+SERVICEEOF"
+    "${SUDO_CMD[@]}" bash -c "cat > '$guard_timer_file' <<TIMEREOF
+[Unit]
+Description=Automatically restart ${service} if an upgrade stalls
+
+[Timer]
+OnActiveSec=5min
+AccuracySec=30s
+Persistent=false
+Unit=${guard_service}.service
+
+[Install]
+WantedBy=timers.target
+TIMEREOF"
+    "${SUDO_CMD[@]}" systemctl daemon-reload >/dev/null 2>&1 || true
   else
-    echo "Warning: unable to write upgrade lock to $UPGRADE_LOCK_FILE" >&2
+    cat > "$guard_service_file" <<SERVICEEOF
+[Unit]
+Description=Restart guard for ${service} after upgrades
+After=network.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=$BASE_DIR
+EnvironmentFile=-$BASE_DIR/redis.env
+EnvironmentFile=-$BASE_DIR/debug.env
+ExecStart=$BASE_DIR/start.sh
+User=$(id -un)
+
+[Install]
+WantedBy=multi-user.target
+SERVICEEOF
+    cat > "$guard_timer_file" <<TIMEREOF
+[Unit]
+Description=Automatically restart ${service} if an upgrade stalls
+
+[Timer]
+OnActiveSec=5min
+AccuracySec=30s
+Persistent=false
+Unit=${guard_service}.service
+
+[Install]
+WantedBy=timers.target
+TIMEREOF
+    systemctl daemon-reload >/dev/null 2>&1 || true
   fi
+
+  return 0
 }
 
-remove_upgrade_lock() {
-  if [ "$UPGRADE_LOCK_CREATED" -eq 1 ]; then
-    rm -f "$UPGRADE_LOCK_FILE"
+start_upgrade_guard_timer() {
+  local service="$1"
+  if [ -z "$service" ]; then
+    return 1
   fi
+  if [ ${#SYSTEMCTL_CMD[@]} -eq 0 ]; then
+    echo "Systemd is not available; cannot schedule automatic restart guard." >&2
+    return 1
+  fi
+
+  ensure_upgrade_guard_units "$service" || return 1
+
+  local guard_service="${service}-upgrade-guard"
+  local guard_timer="${guard_service}.timer"
+
+  "${SYSTEMCTL_CMD[@]}" stop "$guard_timer" >/dev/null 2>&1 || true
+  "${SYSTEMCTL_CMD[@]}" reset-failed "$guard_timer" >/dev/null 2>&1 || true
+  "${SYSTEMCTL_CMD[@]}" reset-failed "${guard_service}.service" >/dev/null 2>&1 || true
+
+  if "${SYSTEMCTL_CMD[@]}" start "$guard_timer"; then
+    echo "Scheduled automatic restart via $guard_timer in 5 minutes."
+    UPGRADE_GUARD_SERVICE="$guard_service"
+    UPGRADE_GUARD_ACTIVE=1
+    return 0
+  fi
+
+  echo "Warning: unable to start upgrade restart guard timer ($guard_timer)." >&2
+  return 1
+}
+
+stop_upgrade_guard_timer() {
+  if [ "$UPGRADE_GUARD_ACTIVE" -ne 1 ] || [ -z "$UPGRADE_GUARD_SERVICE" ]; then
+    return 0
+  fi
+  if [ ${#SYSTEMCTL_CMD[@]} -eq 0 ]; then
+    return 0
+  fi
+
+  local guard_timer="${UPGRADE_GUARD_SERVICE}.timer"
+
+  if "${SYSTEMCTL_CMD[@]}" stop "$guard_timer"; then
+    "${SYSTEMCTL_CMD[@]}" reset-failed "$guard_timer" >/dev/null 2>&1 || true
+    "${SYSTEMCTL_CMD[@]}" reset-failed "${UPGRADE_GUARD_SERVICE}.service" >/dev/null 2>&1 || true
+    echo "Stopped upgrade restart guard timer ($guard_timer)."
+  fi
+
+  UPGRADE_GUARD_ACTIVE=0
+  UPGRADE_GUARD_SERVICE=""
 }
 
 determine_node_role() {
@@ -204,11 +329,6 @@ while [[ $# -gt 0 ]]; do
 done
 
 mkdir -p "$LOCK_DIR"
-
-if [[ $REVERT -eq 0 ]]; then
-  create_upgrade_lock
-  trap remove_upgrade_lock EXIT
-fi
 
 if [[ $LATEST -eq 1 && $STABLE -eq 1 ]]; then
   echo "--stable cannot be used together with --latest." >&2
@@ -454,6 +574,8 @@ revert_after_failed_restart() {
     return 1
   fi
 
+  stop_upgrade_guard_timer
+
   echo "Services restarted from failover branch $branch"
   return 0
 }
@@ -647,6 +769,9 @@ VENV_PRESENT=1
 
 # Stop running instance only if the node is installed
 if [[ $VENV_PRESENT -eq 1 ]]; then
+  if [ -n "$SERVICE_NAME" ]; then
+    start_upgrade_guard_timer "$SERVICE_NAME" || true
+  fi
   echo "Stopping running instance..."
   STOP_ARGS=(--all)
   if [[ $FORCE_STOP -eq 1 ]]; then
@@ -776,6 +901,10 @@ BEATSERVICEEOF
   fi
 fi
 
+if [ -n "$SERVICE_NAME" ]; then
+  ensure_upgrade_guard_units "$SERVICE_NAME" || true
+fi
+
 if [[ $NO_RESTART -eq 0 ]]; then
   if ! restart_services; then
     echo "Detected failed restart after upgrade." >&2
@@ -786,6 +915,7 @@ if [[ $NO_RESTART -eq 0 ]]; then
     fi
     exit 1
   fi
+  stop_upgrade_guard_timer
 fi
 
 arthexis_refresh_desktop_shortcuts "$BASE_DIR"
