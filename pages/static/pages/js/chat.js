@@ -214,6 +214,16 @@
       }, 200);
     };
 
+    const clearStoredSession = () => {
+      sessionId = null;
+      updateSessionHint(null);
+      try {
+        window.localStorage.removeItem(storageKey);
+      } catch (error) {
+        /* ignore storage errors */
+      }
+    };
+
     const buildSocketUrl = () => {
       const protocol = window.location.protocol === 'https:' ? 'wss://' : 'ws://';
       const host = window.location.host;
@@ -286,7 +296,10 @@
             break;
         }
       });
-      socket.addEventListener('close', () => {
+      socket.addEventListener('close', (event) => {
+        if (event && typeof event.code === 'number' && event.code >= 4400 && event.code < 4500) {
+          clearStoredSession();
+        }
         setStatus('disconnected');
         if (!intentionallyClosed) {
           reconnectTimer = window.setTimeout(connect, 2500);
