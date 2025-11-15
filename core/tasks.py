@@ -273,6 +273,235 @@ def _revert_after_restart_failure(base_dir: Path, service: str) -> None:
         )
 
 
+def _ensure_managed_service(
+    base_dir: Path,
+    service: str,
+    *,
+    restart_if_active: bool,
+    revert_on_failure: bool,
+) -> bool:
+    command = _systemctl_command()
+    service_is_active = False
+    if command and service:
+        status_result = subprocess.run(
+            [*command, "is-active", "--quiet", service],
+            cwd=base_dir,
+            check=False,
+        )
+        service_is_active = status_result.returncode == 0
+
+    if restart_if_active:
+        if service_is_active and command:
+            subprocess.run(
+                [*command, "kill", "--signal=TERM", service],
+                cwd=base_dir,
+                check=False,
+            )
+            _append_auto_upgrade_log(
+                base_dir,
+                f"Waiting for {service} to restart after upgrade",
+            )
+            if not _wait_for_service_restart(base_dir, service):
+                if revert_on_failure:
+                    _revert_after_restart_failure(base_dir, service)
+                return False
+        else:
+            _append_auto_upgrade_log(
+                base_dir,
+                (
+                    f"Service {service} not active after upgrade; "
+                    "restarting via start.sh"
+                ),
+            )
+            if not _restart_service_via_start_script(base_dir, service):
+                if revert_on_failure:
+                    _revert_after_restart_failure(base_dir, service)
+                return False
+            _append_auto_upgrade_log(
+                base_dir,
+                f"Waiting for {service} to restart after upgrade",
+            )
+            if not _wait_for_service_restart(base_dir, service):
+                if revert_on_failure:
+                    _revert_after_restart_failure(base_dir, service)
+                return False
+
+        _append_auto_upgrade_log(
+            base_dir,
+            f"Service {service} restarted successfully after upgrade",
+        )
+        return True
+
+    if service_is_active:
+        return True
+
+    restart_message = (
+        f"Service {service} not active after upgrade; restarting via start.sh"
+        if revert_on_failure
+        else (
+            f"Service {service} inactive during auto-upgrade check; restarting via start.sh"
+        )
+    )
+    _append_auto_upgrade_log(
+        base_dir,
+        restart_message,
+    )
+    if not _restart_service_via_start_script(base_dir, service):
+        _append_auto_upgrade_log(
+            base_dir,
+            (
+                "Automatic restart via start.sh failed for inactive service "
+                f"{service}"
+            ),
+        )
+        if revert_on_failure:
+            _revert_after_restart_failure(base_dir, service)
+        return False
+    if command:
+        _append_auto_upgrade_log(
+            base_dir,
+            f"Waiting for {service} to restart after upgrade",
+        )
+        if not _wait_for_service_restart(base_dir, service):
+            _append_auto_upgrade_log(
+                base_dir,
+                (
+                    f"Service {service} did not report active status after "
+                    "automatic restart"
+                ),
+            )
+            if revert_on_failure:
+                _revert_after_restart_failure(base_dir, service)
+            return False
+    _append_auto_upgrade_log(
+        base_dir,
+        f"Service {service} restarted successfully during auto-upgrade check",
+    )
+    return True
+
+
+def _ensure_development_server(
+    base_dir: Path,
+    *,
+    restart_if_active: bool,
+) -> bool:
+    if restart_if_active:
+        result = subprocess.run(
+            ["pkill", "-f", "manage.py runserver"],
+            cwd=base_dir,
+        )
+        if result.returncode == 0:
+            _append_auto_upgrade_log(
+                base_dir,
+                "Restarting development server via start.sh after upgrade",
+            )
+            start_script = base_dir / "start.sh"
+            if start_script.exists():
+                try:
+                    subprocess.Popen(
+                        ["./start.sh"],
+                        cwd=base_dir,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        start_new_session=True,
+                    )
+                except Exception as exc:  # pragma: no cover - subprocess errors
+                    _append_auto_upgrade_log(
+                        base_dir,
+                        (
+                            "Failed to restart development server automatically: "
+                            f"{exc}"
+                        ),
+                    )
+                    raise
+            else:  # pragma: no cover - installation invariant
+                _append_auto_upgrade_log(
+                    base_dir,
+                    "start.sh not found; manual restart required for development server",
+                )
+        else:
+            _append_auto_upgrade_log(
+                base_dir,
+                (
+                    "No manage.py runserver process was active during upgrade; "
+                    "skipping development server restart"
+                ),
+            )
+        return True
+
+    check = subprocess.run(
+        ["pgrep", "-f", "manage.py runserver"],
+        cwd=base_dir,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    if check.returncode == 0:
+        return True
+
+    _append_auto_upgrade_log(
+        base_dir,
+        "Development server inactive during auto-upgrade check; restarting via start.sh",
+    )
+    start_script = base_dir / "start.sh"
+    if not start_script.exists():  # pragma: no cover - installation invariant
+        _append_auto_upgrade_log(
+            base_dir,
+            "start.sh not found; manual restart required for development server",
+        )
+        return False
+    try:
+        subprocess.Popen(
+            ["./start.sh"],
+            cwd=base_dir,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+    except Exception as exc:  # pragma: no cover - subprocess errors
+        _append_auto_upgrade_log(
+            base_dir,
+            (
+                "Failed to restart development server automatically: "
+                f"{exc}"
+            ),
+        )
+        return False
+    return True
+
+
+def _ensure_runtime_services(
+    base_dir: Path,
+    *,
+    restart_if_active: bool,
+    revert_on_failure: bool,
+) -> bool:
+    service_file = base_dir / "locks" / "service.lck"
+    if service_file.exists():
+        try:
+            service = service_file.read_text().strip()
+        except OSError:
+            service = ""
+        if not service:
+            if restart_if_active:
+                _append_auto_upgrade_log(
+                    base_dir,
+                    "Service restart requested but service lock was empty; "
+                    "skipping automatic verification",
+                )
+            return True
+        return _ensure_managed_service(
+            base_dir,
+            service,
+            restart_if_active=restart_if_active,
+            revert_on_failure=revert_on_failure,
+        )
+
+    return _ensure_development_server(
+        base_dir,
+        restart_if_active=restart_if_active or revert_on_failure,
+    )
+
+
 def _resolve_release_severity(version: str | None) -> str:
     """Return the stored severity for *version*, defaulting to normal."""
 
@@ -630,6 +859,11 @@ def check_github_updates(channel_override: str | None = None) -> None:
                 base_dir,
                 f"Skipping auto-upgrade for blocked revision {remote_revision}",
             )
+            _ensure_runtime_services(
+                base_dir,
+                restart_if_active=False,
+                revert_on_failure=False,
+            )
             if startup:
                 startup()
             return
@@ -654,6 +888,11 @@ def check_github_updates(channel_override: str | None = None) -> None:
                 .strip()
             )
             if local_revision == remote_revision:
+                _ensure_runtime_services(
+                    base_dir,
+                    restart_if_active=False,
+                    revert_on_failure=False,
+                )
                 if startup:
                     startup()
                 return
@@ -669,19 +908,29 @@ def check_github_updates(channel_override: str | None = None) -> None:
                     base_dir,
                     f"Skipping auto-upgrade for low severity patch {remote_version}",
                 )
+                _ensure_runtime_services(
+                    base_dir,
+                    restart_if_active=False,
+                    revert_on_failure=False,
+                )
                 if startup:
                     startup()
                 return
 
             if notify:
                 notify("Upgrading...", upgrade_stamp)
-            args = ["./upgrade.sh", "--latest", "--no-restart"]
+            args = ["./upgrade.sh", "--latest"]
             upgrade_was_applied = True
         else:
             local_value = local_version or "0"
             remote_value = remote_version or local_value
 
             if local_value == remote_value:
+                _ensure_runtime_services(
+                    base_dir,
+                    restart_if_active=False,
+                    revert_on_failure=False,
+                )
                 if startup:
                     startup()
                 return
@@ -694,6 +943,11 @@ def check_github_updates(channel_override: str | None = None) -> None:
                 and _shares_stable_series(local_version, remote_version)
                 and remote_severity != SEVERITY_CRITICAL
             ):
+                _ensure_runtime_services(
+                    base_dir,
+                    restart_if_active=False,
+                    revert_on_failure=False,
+                )
                 if startup:
                     startup()
                 return
@@ -701,9 +955,9 @@ def check_github_updates(channel_override: str | None = None) -> None:
             if notify:
                 notify("Upgrading...", upgrade_stamp)
             if mode == "stable":
-                args = ["./upgrade.sh", "--stable", "--no-restart"]
+                args = ["./upgrade.sh", "--stable"]
             else:
-                args = ["./upgrade.sh", "--no-restart"]
+                args = ["./upgrade.sh"]
             upgrade_was_applied = True
 
         with log_file.open("a") as fh:
@@ -713,101 +967,12 @@ def check_github_updates(channel_override: str | None = None) -> None:
 
         subprocess.run(args, cwd=base_dir, check=True)
 
-        service_file = base_dir / "locks/service.lck"
-        if service_file.exists():
-            service = service_file.read_text().strip()
-            command = _systemctl_command()
-            service_is_active = False
-            if command and service:
-                status_result = subprocess.run(
-                    [*command, "is-active", "--quiet", service],
-                    cwd=base_dir,
-                    check=False,
-                )
-                service_is_active = status_result.returncode == 0
-            if service:
-                if service_is_active and command:
-                    subprocess.run(
-                        [*command, "kill", "--signal=TERM", service],
-                        cwd=base_dir,
-                        check=False,
-                    )
-                    _append_auto_upgrade_log(
-                        base_dir,
-                        f"Waiting for {service} to restart after upgrade",
-                    )
-                    if not _wait_for_service_restart(base_dir, service):
-                        _revert_after_restart_failure(base_dir, service)
-                        return
-                else:
-                    _append_auto_upgrade_log(
-                        base_dir,
-                        (
-                            f"Service {service} not active after upgrade; "
-                            "restarting via start.sh"
-                        ),
-                    )
-                    if not _restart_service_via_start_script(base_dir, service):
-                        _revert_after_restart_failure(base_dir, service)
-                        return
-                    _append_auto_upgrade_log(
-                        base_dir,
-                        f"Waiting for {service} to restart after upgrade",
-                    )
-                    if not _wait_for_service_restart(base_dir, service):
-                        _revert_after_restart_failure(base_dir, service)
-                        return
-                _append_auto_upgrade_log(
-                    base_dir,
-                    f"Service {service} restarted successfully after upgrade",
-                )
-            else:
-                _append_auto_upgrade_log(
-                    base_dir,
-                    "Service restart requested but service lock was empty; skipping automatic verification",
-                )
-        else:
-            result = subprocess.run(
-                ["pkill", "-f", "manage.py runserver"],
-                cwd=base_dir,
-            )
-            if result.returncode == 0:
-                _append_auto_upgrade_log(
-                    base_dir,
-                    "Restarting development server via start.sh after upgrade",
-                )
-                start_script = base_dir / "start.sh"
-                if start_script.exists():
-                    try:
-                        subprocess.Popen(
-                            ["./start.sh"],
-                            cwd=base_dir,
-                            stdout=subprocess.DEVNULL,
-                            stderr=subprocess.DEVNULL,
-                            start_new_session=True,
-                        )
-                    except Exception as exc:  # pragma: no cover - subprocess errors
-                        _append_auto_upgrade_log(
-                            base_dir,
-                            (
-                                "Failed to restart development server automatically: "
-                                f"{exc}"
-                            ),
-                        )
-                        raise
-                else:  # pragma: no cover - installation invariant
-                    _append_auto_upgrade_log(
-                        base_dir,
-                        "start.sh not found; manual restart required for development server",
-                    )
-            else:
-                _append_auto_upgrade_log(
-                    base_dir,
-                    (
-                        "No manage.py runserver process was active during upgrade; "
-                        "skipping development server restart"
-                    ),
-                )
+        if not _ensure_runtime_services(
+            base_dir,
+            restart_if_active=True,
+            revert_on_failure=True,
+        ):
+            return
 
         if upgrade_was_applied:
             _append_auto_upgrade_log(
