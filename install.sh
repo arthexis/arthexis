@@ -291,6 +291,8 @@ if [ -f "$DB_FILE" ]; then
         STAMP="$(date +%Y%m%d%H%M%S)"
         cp "$DB_FILE" "$BACKUP_DIR/db.sqlite3.${VERSION}.${REVISION}.${STAMP}.bak"
         rm "$DB_FILE"
+    elif [ "$REPAIR" = true ]; then
+        echo "Repair mode: reusing existing database at $DB_FILE."
     else
         echo "Database file $DB_FILE exists. Use --clean to remove it before installing." >&2
         exit 1
