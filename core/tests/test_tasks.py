@@ -42,6 +42,52 @@ def test_project_base_dir_prefers_settings(tmp_path):
         assert tasks._project_base_dir() == tmp_path
 
 
+def test_systemctl_command_prefers_passwordless_sudo(monkeypatch):
+    """_systemctl_command should use sudo when non-interactive access is available."""
+
+    from core import tasks
+
+    def fake_which(command: str) -> str | None:
+        if command == "systemctl":
+            return "/bin/systemctl"
+        if command == "sudo":
+            return "/usr/bin/sudo"
+        return None
+
+    monkeypatch.setattr(tasks.shutil, "which", fake_which)
+
+    def fake_run(args, **kwargs):
+        assert tuple(args) == ("/usr/bin/sudo", "-n", "true")
+        return subprocess.CompletedProcess(args, 0)
+
+    monkeypatch.setattr(tasks.subprocess, "run", fake_run)
+
+    assert tasks._systemctl_command() == ["/usr/bin/sudo", "-n", "systemctl"]
+
+
+def test_systemctl_command_falls_back_without_sudo(monkeypatch):
+    """_systemctl_command should avoid sudo when passwordless access fails."""
+
+    from core import tasks
+
+    def fake_which(command: str) -> str | None:
+        if command == "systemctl":
+            return "/bin/systemctl"
+        if command == "sudo":
+            return "/usr/bin/sudo"
+        return None
+
+    monkeypatch.setattr(tasks.shutil, "which", fake_which)
+
+    def fake_run(args, **kwargs):
+        assert tuple(args) == ("/usr/bin/sudo", "-n", "true")
+        return subprocess.CompletedProcess(args, 1)
+
+    monkeypatch.setattr(tasks.subprocess, "run", fake_run)
+
+    assert tasks._systemctl_command() == ["systemctl"]
+
+
 def test_check_github_updates_uses_project_base_dir(monkeypatch, tmp_path):
     """The auto-upgrade task should honor ``settings.BASE_DIR`` for log writes."""
 
