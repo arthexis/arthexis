@@ -52,9 +52,7 @@ Consulta il nuovo [articolo degli sviluppatori](http://localhost:8888/articles/p
   | `UnlockConnector` | ✅ | ✅ | Sblocchiamo i connettori bloccati senza intervento in loco. |
   | `UpdateFirmware` | ✅ | ✅ | Distribuiamo pacchetti firmware ai charger con token di download sicuri e tracciamo le risposte di installazione. |
 
-  **Roadmap OCPP 1.6.** Le seguenti azioni del catalogo sono nel nostro backlog: `ClearChargingProfile`, `GetCompositeSchedule`, `GetDiagnostics`, `SetChargingProfile`.
-
-  **Roadmap OCPP 2.1.** Prossime azioni Punto di ricarica → CSMS: `ClearedChargingLimit`, `CostUpdated`, `Get15118EVCertificate`, `GetCertificateStatus`, `NotifyChargingLimit`, `NotifyCustomerInformation`, `NotifyDisplayMessages`, `NotifyEVChargingNeeds`, `NotifyEVChargingSchedule`, `NotifyEvent`, `NotifyMonitoringReport`, `NotifyReport`, `PublishFirmwareStatusNotification`, `ReportChargingProfiles`, `ReservationStatusUpdate`, `SignCertificate`, `TransactionEvent`. Da implementare CSMS → Punto di ricarica: `CertificateSigned`, `ClearChargingProfile`, `ClearDisplayMessage`, `ClearVariableMonitoring`, `CustomerInformation`, `DeleteCertificate`, `GetBaseReport`, `GetChargingProfiles`, `GetCompositeSchedule`, `GetDisplayMessages`, `GetInstalledCertificateIds`, `GetLog`, `GetMonitoringReport`, `GetReport`, `GetTransactionStatus`, `GetVariables`, `InstallCertificate`, `PublishFirmware`, `RequestStartTransaction`, `RequestStopTransaction`, `SetChargingProfile`, `SetDisplayMessage`, `SetMonitoringBase`, `SetMonitoringLevel`, `SetNetworkProfile`, `SetVariableMonitoring`, `SetVariables`, `UnpublishFirmware`.
+  **Roadmap OCPP.** Esplora il lavoro pianificato per i cataloghi OCPP 1.6 e 2.1 nel [cookbook della roadmap OCPP](docs/cookbooks/ocpp-roadmap.md).
 
 - Prenotazioni dei punti di ricarica con assegnazione automatica del connettore, collegamento agli Energy Account e ai RFID, conferma EVCS e annullamento dal centro di controllo.
 
