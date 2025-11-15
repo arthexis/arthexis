@@ -36,6 +36,7 @@
     const statusEl = widget.querySelector('[data-chat-status]');
     const form = widget.querySelector('[data-chat-form]');
     const input = widget.querySelector('[data-chat-input]');
+    const submitButton = form ? form.querySelector('button[type="submit"]') : null;
     const unreadBadge = widget.querySelector('[data-chat-unread]');
     const sessionHint = widget.querySelector('[data-chat-session-hint]');
     const toggleLabel = toggle.querySelector('.chat-toggle-label');
@@ -94,21 +95,24 @@
 
     const setStatus = (state) => {
       let label = '';
+      let isConnected = false;
       switch (state) {
         case 'connected':
           label = strings.connected;
-          input.disabled = false;
+          isConnected = true;
           break;
         case 'connecting':
           label = strings.connecting;
-          input.disabled = true;
           break;
         default:
           label = strings.disconnected;
-          input.disabled = true;
           break;
       }
       statusEl.textContent = label;
+      if (submitButton) {
+        submitButton.disabled = !isConnected;
+        submitButton.setAttribute('aria-disabled', isConnected ? 'false' : 'true');
+      }
     };
 
     const updateSessionHint = (id) => {
