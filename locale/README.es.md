@@ -9,6 +9,8 @@ Constelación Arthexis es una [suite de software](https://es.wikipedia.org/wiki/
 
 Visita el [Informe de cambios](http://localhost:8888/changelog/) público para explorar actualizaciones inéditas e históricas generadas directamente desde los commits de git.
 
+Consulta el nuevo [artículo para desarrolladores](http://localhost:8888/articles/protoline-integration/) con los aspectos destacados del próximo lanzamiento y los detalles del despliegue.
+
 ## Características actuales
 
 - Compatible con el [Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/) como sistema central. Las acciones soportadas se resumen a continuación.

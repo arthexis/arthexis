@@ -20,6 +20,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from core.models import CountdownTimer
+from pages.models import DeveloperArticle
 
 from .models import (
     CableSize,
@@ -208,6 +209,7 @@ class FutureEventCalculatorTests(TestCase):
             title="Launch",
             body="Prepare the crew",
             scheduled_for=timezone.now() + timedelta(days=2, hours=3),
+            is_published=True,
         )
         resp = self.client.get(self.url)
         self.assertContains(resp, "Launch")
@@ -221,6 +223,7 @@ class FutureEventCalculatorTests(TestCase):
             CountdownTimer.objects.create(
                 title=f"Event {offset + 1}",
                 scheduled_for=base_time + timedelta(days=offset + 1),
+                is_published=True,
             )
 
         resp = self.client.get(self.url)
@@ -231,6 +234,24 @@ class FutureEventCalculatorTests(TestCase):
         self.assertNotIn("Event 4", html)
         self.assertIn('data-event-next aria-label="Next event"', html)
         self.assertEqual(html.count('countdown-slide text-center'), 3)
+
+    def test_event_links_to_article_when_available(self):
+        article = DeveloperArticle.objects.create(
+            title="Release Highlights",
+            summary="Preview the next rollout.",
+            content="# Release Incoming\n\nStay tuned.",
+            is_published=True,
+        )
+        CountdownTimer.objects.create(
+            title="Release Countdown",
+            scheduled_for=timezone.now() + timedelta(days=1),
+            article=article,
+            is_published=True,
+        )
+
+        resp = self.client.get(self.url)
+        self.assertContains(resp, article.get_absolute_url())
+        self.assertContains(resp, "Read article")
 
     def test_invalid_max_awg_reports_error(self):
         url = reverse("awg:calculator")

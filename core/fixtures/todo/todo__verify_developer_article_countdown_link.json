@@ -1,0 +1,13 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Verify developer article countdown link",
+      "created_on": "2025-11-14T00:00:00Z",
+      "url": "/awg/future-event/",
+      "request_details": "1. Load the Future Event Calculator at /awg/future-event/ and confirm the Protoline Integration timer appears with the \"Read article\" badge.\n2. Click anywhere on the countdown card and confirm the browser opens the Developer Article page at /articles/protoline-integration/.\n3. On the article page, verify the summary banner, table of contents sidebar, and QR code render correctly and the markdown heading anchors function.\n4. Return to Horologia and toggle the countdown's \"Published\" flag off, reload the calculator, and confirm the timer disappears.\n5. Re-enable publishing for both the countdown and article when finished.",
+      "version": "0.1.34",
+      "is_deleted": false
+    }
+  }
+]

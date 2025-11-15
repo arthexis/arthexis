@@ -16,6 +16,7 @@ urlpatterns = [
     path("read/<path:doc>/edit/", views.readme_edit, name="readme-edit"),
     path("read/", views.readme, name="readme"),
     path("read/<path:doc>", views.readme, name="readme-document"),
+    path("articles/<slug:slug>/", views.developer_article_detail, name="developer-article"),
     path("sitemap.xml", views.sitemap, name="pages-sitemap"),
     path("changelog/", views.changelog_report, name="changelog"),
     path("changelog/data/", views.changelog_report_data, name="changelog-data"),

@@ -902,6 +902,9 @@ def future_event_calculator(request):
                 "timer": timer,
                 "scheduled": local_scheduled,
                 "target_iso": local_scheduled.isoformat(),
+                "article_url": timer.article.get_absolute_url()
+                if timer.article
+                else "",
             }
         )
 

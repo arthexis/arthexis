@@ -64,11 +64,11 @@ class HorologiaConfig(BaseBeatConfig):
                 return last_run_at.replace(microsecond=0).isoformat()
 
         class CountdownTimerAdmin(admin.ModelAdmin):
-            list_display = ("title", "scheduled_for", "is_upcoming")
+            list_display = ("title", "scheduled_for", "is_published", "is_upcoming")
             search_fields = ("title", "body")
             ordering = ("scheduled_for", "title")
             date_hierarchy = "scheduled_for"
-            list_filter = ("scheduled_for",)
+            list_filter = ("scheduled_for", "is_published")
             readonly_fields = (
                 "created_on",
                 "updated_on",
@@ -77,7 +77,18 @@ class HorologiaConfig(BaseBeatConfig):
                 "is_deleted",
             )
             fieldsets = (
-                (None, {"fields": ("title", "body", "scheduled_for")}),
+                (
+                    None,
+                    {
+                        "fields": (
+                            "title",
+                            "body",
+                            "scheduled_for",
+                            "article",
+                            "is_published",
+                        )
+                    },
+                ),
                 (
                     _("Record details"),
                     {

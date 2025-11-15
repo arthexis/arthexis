@@ -1,11 +1,14 @@
 """Business model tests for core application."""
 
-from datetime import time
+from datetime import time, timedelta
 from decimal import Decimal
 
 from django.test import TestCase
+from django.utils import timezone
+from django.core.exceptions import ValidationError
 
-from core.models import EnergyTariff
+from core.models import CountdownTimer, EnergyTariff
+from pages.models import DeveloperArticle
 
 
 class EnergyTariffManagerTests(TestCase):
@@ -50,3 +53,39 @@ class EnergyTariffManagerTests(TestCase):
             self.tariff.end_time,
         )
         self.assertEqual(tariff, self.tariff)
+
+
+class CountdownTimerManagerTests(TestCase):
+    """Validate countdown timer publishing helpers."""
+
+    def test_upcoming_excludes_unpublished(self):
+        future_time = timezone.now() + timedelta(days=1)
+        published = CountdownTimer.objects.create(
+            title="Launch Party",
+            scheduled_for=future_time,
+            is_published=True,
+        )
+        CountdownTimer.objects.create(
+            title="Soft Launch",
+            scheduled_for=future_time + timedelta(hours=1),
+            is_published=False,
+        )
+
+        upcoming = list(CountdownTimer.objects.upcoming())
+        self.assertEqual(upcoming, [published])
+
+    def test_rejects_unpublished_article_link(self):
+        article = DeveloperArticle.objects.create(
+            title="Sneak Peek",
+            summary="Work in progress.",
+            content="Details coming soon.",
+            is_published=False,
+        )
+
+        with self.assertRaises(ValidationError):
+            CountdownTimer.objects.create(
+                title="Unpublished",
+                scheduled_for=timezone.now() + timedelta(days=2),
+                article=article,
+                is_published=True,
+            )

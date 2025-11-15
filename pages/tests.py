@@ -27,6 +27,7 @@ from django.db import connection
 from pages import site_config
 from pages.models import (
     Application,
+    DeveloperArticle,
     Landing,
     Module,
     RoleLanding,
@@ -4166,6 +4167,40 @@ class ClientReportLiveUpdateTests(TestCase):
         self.assertIsNone(getattr(resp.wsgi_request, "live_update_interval", None))
         self.assertContains(resp, "report-download-frame")
         self.assertNotContains(resp, "setInterval(() => location.reload()")
+
+
+class DeveloperArticleViewTests(TestCase):
+    def test_published_article_renders(self):
+        article = DeveloperArticle.objects.create(
+            title="Protoline Integration",
+            summary="Arthexis.com prepares for the 0.2 release.",
+            content="## Release Overview\n\nExciting updates ahead.",
+            is_published=True,
+        )
+
+        response = self.client.get(
+            reverse("pages:developer-article", kwargs={"slug": article.slug})
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, article.title)
+        self.assertContains(response, article.summary)
+        self.assertContains(response, 'href="#release-overview"')
+        self.assertContains(response, "markdown-body")
+
+    def test_unpublished_article_returns_404(self):
+        article = DeveloperArticle.objects.create(
+            title="Hidden Draft",
+            summary="Not yet ready.",
+            content="Draft content.",
+            is_published=False,
+        )
+
+        response = self.client.get(
+            reverse("pages:developer-article", kwargs={"slug": article.slug})
+        )
+
+        self.assertEqual(response.status_code, 404)
 
 
 class ScreenshotSpecInfrastructureTests(TestCase):

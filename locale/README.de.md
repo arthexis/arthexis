@@ -9,6 +9,8 @@ Die Arthexis-Konstellation ist eine [narrativ orientierte](https://de.wikipedia.
 
 Besuche den öffentlichen [Changelog-Bericht](http://localhost:8888/changelog/), um unveröffentlichte und historische Aktualisierungen direkt aus Git-Commits nachzuvollziehen.
 
+Lies den aktuellen [Developer-Artikel](http://localhost:8888/articles/protoline-integration/) mit den wichtigsten Informationen zum kommenden Release und zum Rollout.
+
 ## Aktuelle Funktionen
 
 - Kompatibel mit dem [Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/) als zentrales System. Unterstützte Aktionen im Überblick.
