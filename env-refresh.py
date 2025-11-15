@@ -149,6 +149,8 @@ def _fixture_sort_key(name: str) -> tuple[int, str]:
         priority = 1
     elif "__module_" in filename:
         priority = 2
+    elif filename.startswith("developerarticle__"):
+        priority = 3
     elif "__landing_" in filename:
         priority = 3
     else:
