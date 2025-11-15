@@ -4,8 +4,6 @@ import textwrap
 from datetime import timedelta
 from pathlib import Path
 
-from datetime import timedelta
-
 from django import template
 from django.apps import apps
 from django.contrib import admin
@@ -23,7 +21,7 @@ from core import mailer
 from core.models import Lead, RFID, GoogleCalendarProfile, Todo
 from core.entity import Entity
 from ocpp.models import Charger, ChargerConfiguration, CPFirmware
-from nodes.models import NetMessage, Node, NodeRole
+from nodes.models import NetMessage, Node
 
 register = template.Library()
 
@@ -137,6 +135,29 @@ def _evaluate_evcs_heartbeat_rules() -> dict[str, object] | None:
             len(missing),
         ) % {"evcs": evcs_list}
         return _rule_failure(message)
+
+    return _rule_success()
+
+
+def _evaluate_node_rules() -> dict[str, object]:
+    """Return admin dashboard rule metadata for ``nodes.Node``."""
+
+    local_node = Node.get_local()
+    if local_node is None:
+        return _rule_failure(_("Local node record is missing."))
+
+    if not getattr(local_node, "role_id", None):
+        return _rule_failure(_("Local node is missing an assigned role."))
+
+    upstream_nodes = Node.objects.filter(current_relation=Node.Relation.UPSTREAM)
+    if not upstream_nodes.exists():
+        return _rule_failure(_("At least one upstream node is required."))
+
+    recent_cutoff = timezone.now() - timedelta(hours=24)
+    if not upstream_nodes.filter(last_seen__gte=recent_cutoff).exists():
+        return _rule_failure(
+            _("No upstream nodes have checked in within the last 24 hours."),
+        )
 
     return _rule_success()
 
