@@ -169,9 +169,10 @@ def _patch_totp_device():
             settings_obj
             and (
                 settings_obj.issuer
+                or getattr(settings_obj, "allow_without_password", False)
+                or getattr(settings_obj, "security_group_id", None)
                 or settings_obj.is_seed_data
                 or settings_obj.is_user_data
-                or getattr(settings_obj, "allow_without_password", False)
             )
         )
 
@@ -181,7 +182,13 @@ def _patch_totp_device():
         if _totp_should_persist(settings_obj):
             if settings_obj.pk:
                 settings_obj.save(
-                    update_fields=["issuer", "is_seed_data", "is_user_data"]
+                    update_fields=[
+                        "issuer",
+                        "allow_without_password",
+                        "security_group",
+                        "is_seed_data",
+                        "is_user_data",
+                    ]
                 )
             else:
                 settings_obj.save()

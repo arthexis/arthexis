@@ -43,6 +43,7 @@
       {{ form.auth_method }}
       {{ form.otp_ready }}
       {{ form.otp_requires_password }}
+      {{ form.otp_password_optional }}
       <div class="mb-3{% if current_method != 'otp' or otp_ready == '1' %} d-none{% endif %}" data-otp-precheck>
         <div class="alert alert-info mb-3" role="status">
           {% trans "Enter your username and continue so we can check your authenticator settings." %}
@@ -145,6 +146,7 @@
   const authMethodField = form?.querySelector('input[name="{{ form.auth_method.html_name }}"]');
   const otpReadyField = form?.querySelector('input[name="{{ form.otp_ready.html_name }}"]');
   const otpRequiresPasswordField = form?.querySelector('input[name="{{ form.otp_requires_password.html_name }}"]');
+  const otpPasswordOptionalField = form?.querySelector('input[name="{{ form.otp_password_optional.html_name }}"]');
   const passwordInput = form?.querySelector('#{{ form.password.id_for_label }}');
   const otpInput = form?.querySelector('#{{ form.otp_token.id_for_label }}');
   const usernameInput = form?.querySelector('#{{ form.username.id_for_label }}');
@@ -175,12 +177,16 @@
     if (otpRequiresPasswordField) {
       otpRequiresPasswordField.value = '1';
     }
+    if (otpPasswordOptionalField) {
+      otpPasswordOptionalField.value = '0';
+    }
     clearOtpError();
   };
 
   const updateOtpVisibility = () => {
     const ready = otpReadyField?.value === '1';
     const requiresPassword = otpRequiresPasswordField?.value !== '0';
+    const passwordOptional = otpPasswordOptionalField?.value === '1';
     if (!ready) {
       otpPrecheck?.classList.remove('d-none');
       otpGroup?.classList.add('d-none');
@@ -197,7 +203,11 @@
     if (requiresPassword) {
       passwordGroup?.classList.remove('d-none');
       if (passwordInput) {
-        passwordInput.setAttribute('required', 'required');
+        if (passwordOptional) {
+          passwordInput.removeAttribute('required');
+        } else {
+          passwordInput.setAttribute('required', 'required');
+        }
       }
     } else {
       passwordGroup?.classList.add('d-none');
@@ -296,6 +306,9 @@
       }
       if (otpRequiresPasswordField) {
         otpRequiresPasswordField.value = data.requires_password ? '1' : '0';
+      }
+      if (otpPasswordOptionalField) {
+        otpPasswordOptionalField.value = data.password_optional ? '1' : '0';
       }
       updateOtpVisibility();
       if (data.requires_password) {

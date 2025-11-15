@@ -50,11 +50,13 @@ from django.utils.http import (
     urlsafe_base64_decode,
     urlsafe_base64_encode,
 )
+from django_otp import DEVICE_ID_SESSION_KEY
 from core import changelog, mailer, passkeys, public_wifi
 from core.backends import (
     TOTP_DEVICE_NAME,
-    get_user_totp_device,
-    totp_device_requires_password,
+    get_user_totp_devices,
+    totp_devices_allow_passwordless,
+    totp_devices_require_password,
 )
 from django.utils.translation import gettext as _
 from django.views.decorators.csrf import csrf_exempt, csrf_protect, ensure_csrf_cookie
@@ -1182,6 +1184,11 @@ class CustomLoginView(LoginView):
         response = super().form_valid(form)
         device = form.get_verified_device()
         if device is not None:
+            if device.user_id != self.request.user.pk:
+                device.user = self.request.user
+                device.user_id = self.request.user.pk
+            self.request.session[DEVICE_ID_SESSION_KEY] = device.persistent_id
+            self.request.user.otp_device = device
             otp_login(self.request, device)
         return response
 
@@ -1214,8 +1221,8 @@ def authenticator_login_check(request):
             status=404,
         )
 
-    device = get_user_totp_device(user)
-    if device is None:
+    devices = list(get_user_totp_devices(user))
+    if not devices:
         return JsonResponse(
             {
                 "error": _(
@@ -1225,10 +1232,12 @@ def authenticator_login_check(request):
             status=404,
         )
 
-    requires_password = totp_device_requires_password(device)
+    requires_password = totp_devices_require_password(devices)
+    allows_passwordless = totp_devices_allow_passwordless(devices)
     return JsonResponse(
         {
             "requires_password": requires_password,
+            "password_optional": requires_password and allows_passwordless,
             "username": user.get_username(),
         }
     )

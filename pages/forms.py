@@ -9,7 +9,12 @@ from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
 from django.views.decorators.debug import sensitive_variables
 
-from core.backends import get_user_totp_device, totp_device_requires_password
+from core.backends import (
+    get_user_totp_devices,
+    totp_devices_allow_passwordless,
+    totp_devices_require_password,
+    verify_user_totp_token,
+)
 from core.form_fields import Base64FileField
 
 from .models import UserManual, UserStory
@@ -35,6 +40,11 @@ class AuthenticatorLoginForm(AuthenticationForm):
         required=False,
         widget=forms.HiddenInput(),
         initial="1",
+    )
+    otp_password_optional = forms.CharField(
+        required=False,
+        widget=forms.HiddenInput(),
+        initial="0",
     )
 
     error_messages = {
@@ -78,23 +88,30 @@ class AuthenticatorLoginForm(AuthenticationForm):
                     user = UserModel._default_manager.get_by_natural_key(username)
                 except UserModel.DoesNotExist:
                     raise self.get_invalid_login_error()
-                device = get_user_totp_device(user)
-                if device is None:
+                devices = list(get_user_totp_devices(user))
+                if not devices:
                     raise self.get_invalid_token_error()
-                requires_password = totp_device_requires_password(device)
-                self.cleaned_data["otp_requires_password"] = "1" if requires_password else "0"
+                requires_password = totp_devices_require_password(devices)
+                allows_passwordless = totp_devices_allow_passwordless(devices)
+                self.cleaned_data["otp_requires_password"] = (
+                    "1" if requires_password else "0"
+                )
+                self.cleaned_data["otp_password_optional"] = (
+                    "1" if requires_password and allows_passwordless else "0"
+                )
                 password = self.cleaned_data.get("password") or ""
-                if requires_password:
-                    if not password:
+                device, result = verify_user_totp_token(user, token, password)
+                if device is None:
+                    error_code = (result or {}).get("error")
+                    if error_code == "password_required":
                         raise self.get_password_required_error()
-                    if not user.check_password(password):
+                    if error_code == "invalid_password":
                         raise self.get_invalid_login_error()
-                try:
-                    verified = device.verify_token(token)
-                except Exception:
-                    verified = False
-                if not verified:
                     raise self.get_invalid_token_error()
+                if device.user_id != user.pk:
+                    device.user = user
+                    device.user_id = user.pk
+                user.otp_device = device
                 backend_path = "core.backends.TOTPBackend"
                 user.backend = backend_path
                 self.user_cache = user

@@ -331,6 +331,12 @@ class TOTPDeviceAdminProxy(UserDatumAdminMixin, CoreTOTPDeviceAdmin):
                 except ValueError:
                     issuer_index = len(identity_fields)
                 identity_fields.insert(issuer_index, "allow_without_password")
+            if "security_group" not in identity_fields:
+                try:
+                    password_index = identity_fields.index("allow_without_password") + 1
+                except ValueError:
+                    password_index = len(identity_fields)
+                identity_fields.insert(password_index, "security_group")
             fieldsets[0][1]["fields"] = identity_fields
         return fieldsets
 

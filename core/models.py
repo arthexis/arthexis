@@ -5339,6 +5339,16 @@ class TOTPDeviceSettings(models.Model):
         default=False,
         help_text=_("Allow authenticator logins to skip the password step."),
     )
+    security_group = models.ForeignKey(
+        "core.SecurityGroup",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="totp_devices",
+        help_text=_(
+            "Share this authenticator with every user in the selected security group."
+        ),
+    )
     is_seed_data = models.BooleanField(default=False)
     is_user_data = models.BooleanField(default=False)
 
