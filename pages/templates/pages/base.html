@@ -730,6 +730,7 @@
       data-session-storage-key="pages.chat.session"
       data-connected-text="{% trans 'Connected' %}"
       data-connecting-text="{% trans 'Connecting…' %}"
+      data-awaiting-text="{% trans 'Please submit your inquiry our staff will respond as soon as available.' %}"
       data-disconnected-text="{% trans 'Disconnected' %}"
       data-unread-text="{% trans 'New' %}"
       data-open-text="{% trans 'Need help?' %}"
@@ -782,7 +783,7 @@
           <header class="chat-header">
             <div>
               <h2 class="mb-0" id="chat-title">{% trans "Support" %}</h2>
-              <small data-chat-status>{% trans "Connecting…" %}</small>
+              <small data-chat-status>{% trans "Please submit your inquiry our staff will respond as soon as available." %}</small>
             </div>
             <button type="button" class="btn-close" data-chat-close aria-label="{% trans 'Close chat' %}"></button>
           </header>

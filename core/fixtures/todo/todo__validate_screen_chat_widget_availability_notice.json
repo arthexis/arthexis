@@ -1,0 +1,15 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "is_seed_data": false,
+      "is_deleted": false,
+      "request": "Validate screen Chat widget availability messaging",
+      "created_on": "2025-01-01T00:00:00Z",
+      "url": "/",
+      "request_details": "1. Open the public site and expand the chat widget with no staff connected. Confirm the status shows \"Please submit your inquiry our staff will respond as soon as available.\" without flickering between connecting and disconnected while reconnection attempts run.\n2. Establish a staff connection, then disconnect staff and observe the status stays on the connected message for at least five minutes before showing \"Disconnected.\"\n3. Verify visitor messages continue to appear when the connection is restored after the grace period.",
+      "generated_for_version": "",
+      "generated_for_revision": ""
+    }
+  }
+]

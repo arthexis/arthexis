@@ -47,6 +47,8 @@
 
     const strings = {
       connected: widget.dataset.connectedText || 'Connected',
+      awaiting: widget.dataset.awaitingText ||
+        'Please submit your inquiry our staff will respond as soon as available.',
       connecting: widget.dataset.connectingText || 'Connecting…',
       disconnected: widget.dataset.disconnectedText || 'Disconnected',
       unread: widget.dataset.unreadText || 'New',
@@ -65,7 +67,9 @@
     const socketPath = widget.dataset.path || '/ws/pages/chat/';
     let socket = null;
     let reconnectTimer = null;
+    let pendingDisconnect = null;
     let intentionallyClosed = false;
+    let hasEverConnected = false;
     let sessionId = window.localStorage.getItem(storageKey) || null;
     let unread = 0;
     let drawerOpen = false;
@@ -94,24 +98,17 @@
     };
 
     const setStatus = (state) => {
-      let label = '';
-      let isConnected = false;
-      switch (state) {
-        case 'connected':
-          label = strings.connected;
-          isConnected = true;
-          break;
-        case 'connecting':
-          label = strings.connecting;
-          break;
-        default:
-          label = strings.disconnected;
-          break;
-      }
-      statusEl.textContent = label;
+      const definitions = {
+        connected: { label: strings.connected, allowSend: true },
+        connectedGrace: { label: strings.connected, allowSend: false },
+        disconnected: { label: strings.disconnected, allowSend: false },
+        awaiting: { label: strings.awaiting, allowSend: false },
+      };
+      const definition = definitions[state] || definitions.awaiting;
+      statusEl.textContent = definition.label;
       if (submitButton) {
-        submitButton.disabled = !isConnected;
-        submitButton.setAttribute('aria-disabled', isConnected ? 'false' : 'true');
+        submitButton.disabled = !definition.allowSend;
+        submitButton.setAttribute('aria-disabled', definition.allowSend ? 'false' : 'true');
       }
     };
 
@@ -269,6 +266,39 @@
       return `${protocol}${host}${socketPath}${query ? (socketPath.includes('?') ? '&' : '?') + query : ''}`;
     };
 
+    const reconnectDelay = 2500;
+    const disconnectGraceMs = 5 * 60 * 1000;
+
+    const clearPendingDisconnect = () => {
+      if (pendingDisconnect) {
+        window.clearTimeout(pendingDisconnect);
+        pendingDisconnect = null;
+      }
+    };
+
+    const scheduleReconnect = () => {
+      if (reconnectTimer) {
+        window.clearTimeout(reconnectTimer);
+      }
+      reconnectTimer = window.setTimeout(connect, reconnectDelay);
+    };
+
+    const handleConnectionLoss = () => {
+      if (hasEverConnected) {
+        setStatus('connectedGrace');
+        clearPendingDisconnect();
+        pendingDisconnect = window.setTimeout(() => {
+          pendingDisconnect = null;
+          setStatus('disconnected');
+        }, disconnectGraceMs);
+      } else {
+        setStatus('awaiting');
+      }
+      if (!intentionallyClosed) {
+        scheduleReconnect();
+      }
+    };
+
     const connect = () => {
       if (socket && socket.readyState === WebSocket.OPEN) {
         return;
@@ -277,15 +307,19 @@
         window.clearTimeout(reconnectTimer);
         reconnectTimer = null;
       }
-      setStatus('connecting');
+      if (!hasEverConnected) {
+        setStatus('awaiting');
+      }
       intentionallyClosed = false;
       try {
         socket = new WebSocket(buildSocketUrl());
       } catch (error) {
-        setStatus('disconnected');
+        handleConnectionLoss();
         return;
       }
       socket.addEventListener('open', () => {
+        clearPendingDisconnect();
+        hasEverConnected = true;
         setStatus('connected');
         resetPlaceholder();
       });
@@ -334,13 +368,10 @@
         if (event && typeof event.code === 'number' && event.code >= 4400 && event.code < 4500) {
           clearStoredSession();
         }
-        setStatus('disconnected');
-        if (!intentionallyClosed) {
-          reconnectTimer = window.setTimeout(connect, 2500);
-        }
+        handleConnectionLoss();
       });
       socket.addEventListener('error', () => {
-        setStatus('disconnected');
+        handleConnectionLoss();
       });
     };
 
@@ -376,8 +407,8 @@
         return;
       }
       if (!socket || socket.readyState !== WebSocket.OPEN) {
-        statusEl.textContent = strings.error || strings.disconnected;
-        window.setTimeout(() => setStatus('disconnected'), 3000);
+        statusEl.textContent = strings.error || strings.awaiting;
+        window.setTimeout(() => setStatus(hasEverConnected ? 'connectedGrace' : 'awaiting'), 3000);
         return;
       }
       try {
@@ -399,7 +430,7 @@
       toggleLabel.textContent = strings.open;
     }
     ensurePlaceholder();
-    setStatus('connecting');
+    setStatus('awaiting');
     connect();
 
     window.addEventListener('beforeunload', () => {
