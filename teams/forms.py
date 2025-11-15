@@ -4,7 +4,7 @@ from django.contrib.admin.helpers import ActionForm
 from django.core.exceptions import ObjectDoesNotExist
 from django.utils.translation import gettext_lazy as _
 
-from core.models import TOTPDeviceSettings
+from core.models import SecurityGroup, TOTPDeviceSettings
 from core.widgets import OdooProductWidget
 from django_otp.plugins.otp_totp.models import TOTPDevice
 
@@ -22,6 +22,12 @@ class TOTPDeviceAdminForm(forms.ModelForm):
         required=False,
         help_text=_("Let this authenticator work without requiring the user's password."),
     )
+    security_group = forms.ModelChoiceField(
+        label=_("Security group"),
+        required=False,
+        queryset=SecurityGroup.objects.all(),
+        help_text=_("Share this authenticator with every user in the selected group."),
+    )
 
     class Meta:
         model = TOTPDevice
@@ -38,6 +44,7 @@ class TOTPDeviceAdminForm(forms.ModelForm):
             self.fields["allow_without_password"].initial = (
                 settings_obj.allow_without_password
             )
+            self.fields["security_group"].initial = settings_obj.security_group
         default_issuer = getattr(settings, "OTP_TOTP_ISSUER", "Arthexis")
         self.fields["issuer"].widget.attrs.setdefault("placeholder", default_issuer)
 
@@ -46,34 +53,44 @@ class TOTPDeviceAdminForm(forms.ModelForm):
         allow_without_password = bool(
             self.cleaned_data.get("allow_without_password")
         )
+        security_group = self.cleaned_data.get("security_group")
         try:
             settings_obj = instance.custom_settings
         except ObjectDoesNotExist:
             settings_obj = None
 
-        if issuer or allow_without_password or settings_obj is not None:
+        if issuer or allow_without_password or security_group or settings_obj is not None:
             if settings_obj is None:
                 settings_obj = TOTPDeviceSettings(device=instance)
             settings_obj.issuer = issuer
             settings_obj.allow_without_password = allow_without_password
+            settings_obj.security_group = security_group
             if settings_obj.pk:
                 settings_obj.save(
                     update_fields=[
                         "issuer",
                         "allow_without_password",
+                        "security_group",
                         "is_seed_data",
                         "is_user_data",
                     ]
                 )
             else:
                 settings_obj.save()
-        if settings_obj is not None and not issuer and not allow_without_password:
+        if (
+            settings_obj is not None
+            and not issuer
+            and not allow_without_password
+            and security_group is None
+        ):
             if settings_obj.is_seed_data or settings_obj.is_user_data:
                 settings_obj.allow_without_password = False
+                settings_obj.security_group = None
                 settings_obj.save(
                     update_fields=[
                         "issuer",
                         "allow_without_password",
+                        "security_group",
                         "is_seed_data",
                         "is_user_data",
                     ]

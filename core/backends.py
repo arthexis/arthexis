@@ -12,9 +12,10 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.backends import ModelBackend
 from django.core.exceptions import DisallowedHost, ObjectDoesNotExist
 from django.http.request import split_domain_port
+from django.db.models import Q
 from django_otp.plugins.otp_totp.models import TOTPDevice
 
-from .models import CustomerAccount, PasskeyCredential, RFID
+from .models import CustomerAccount, PasskeyCredential, RFID, TOTPDeviceSettings
 from . import temp_passwords
 
 
@@ -24,14 +25,26 @@ TOTP_DEVICE_NAME = "authenticator"
 def get_user_totp_device(user):
     """Return the most appropriate authenticator device for the user."""
 
-    device_qs = TOTPDevice.objects.filter(user=user, confirmed=True)
+    devices = list(get_user_totp_devices(user))
+    if not devices:
+        return None
     if TOTP_DEVICE_NAME:
-        device = device_qs.filter(name=TOTP_DEVICE_NAME).order_by("-id").first()
-    else:
-        device = None
-    if device is None:
-        device = device_qs.order_by("-id").first()
-    return device
+        named = [device for device in devices if device.name == TOTP_DEVICE_NAME]
+        if named:
+            return named[0]
+    return devices[0]
+
+
+def get_user_totp_devices(user):
+    """Return confirmed authenticator devices available to the user."""
+
+    group_ids = list(user.groups.values_list("id", flat=True))
+    device_qs = TOTPDevice.objects.filter(confirmed=True, user=user)
+    if group_ids:
+        device_qs = TOTPDevice.objects.filter(confirmed=True).filter(
+            Q(user=user) | Q(custom_settings__security_group_id__in=group_ids)
+        )
+    return device_qs.select_related("custom_settings").order_by("-id").distinct()
 
 
 def totp_device_allows_passwordless(device):
@@ -52,6 +65,115 @@ def totp_device_requires_password(device):
     """Return True when the device requires a password alongside the OTP."""
 
     return not totp_device_allows_passwordless(device)
+
+
+def totp_devices_require_password(devices):
+    """Return True when any device requires a password alongside the OTP."""
+
+    return any(totp_device_requires_password(device) for device in devices)
+
+
+def totp_devices_allow_passwordless(devices):
+    """Return True when any device allows passwordless authentication."""
+
+    return any(totp_device_allows_passwordless(device) for device in devices)
+
+
+def _get_or_clone_device_for_user(device, user, settings_obj):
+    """Return a device bound to the provided user, cloning shared devices when needed."""
+
+    existing = (
+        TOTPDevice.objects.filter(
+            user=user, confirmed=True, key=device.key, name=device.name
+        )
+        .order_by("-id")
+        .first()
+    )
+    if existing:
+        return existing
+
+    cloned = TOTPDevice.objects.create(
+        user=user,
+        name=device.name,
+        key=device.key,
+        step=device.step,
+        t0=device.t0,
+        digits=device.digits,
+        tolerance=device.tolerance,
+        drift=device.drift,
+        last_t=device.last_t,
+        confirmed=True,
+        throttling_failure_count=0,
+        throttling_failure_timestamp=None,
+    )
+
+    if settings_obj is not None:
+        TOTPDeviceSettings.objects.update_or_create(
+            device=cloned,
+            defaults={
+                "issuer": settings_obj.issuer,
+                "allow_without_password": settings_obj.allow_without_password,
+                "security_group": settings_obj.security_group,
+            },
+        )
+
+    return cloned
+
+
+def verify_user_totp_token(user, token: str, password: str | None = None):
+    """Verify a TOTP token against all of the user's available devices."""
+
+    group_ids = set(user.groups.values_list("id", flat=True))
+    devices = list(get_user_totp_devices(user))
+    if not devices:
+        return None, {"error": "missing_device", "requires_password": False}
+
+    password_value = password or ""
+    password_valid = bool(password_value and user.check_password(password_value))
+    requires_password = False
+
+    for device in devices:
+        device_requires_password = totp_device_requires_password(device)
+        requires_password = requires_password or device_requires_password
+
+        if device_requires_password and not password_valid:
+            try:
+                matches = device.verify_token(token)
+            except Exception:
+                matches = False
+
+            if matches:
+                if not password_value:
+                    return None, {
+                        "error": "password_required",
+                        "requires_password": True,
+                    }
+                return None, {
+                    "error": "invalid_password",
+                    "requires_password": True,
+                }
+            continue
+
+        try:
+            verified = device.verify_token(token)
+        except Exception:
+            verified = False
+
+        if verified:
+            try:
+                settings_obj = device.custom_settings
+            except ObjectDoesNotExist:
+                settings_obj = None
+            if device.user_id != user.pk:
+                security_group_id = getattr(settings_obj, "security_group_id", None)
+                if security_group_id and security_group_id in group_ids:
+                    device = _get_or_clone_device_for_user(device, user, settings_obj)
+                else:
+                    device.user = user
+                    device.user_id = user.pk
+            return device, {"requires_password": device_requires_password}
+
+    return None, {"error": "invalid_token", "requires_password": requires_password}
 
 
 class PasskeyBackend(ModelBackend):
@@ -107,23 +229,8 @@ class TOTPBackend(ModelBackend):
         if not user.is_active:
             return None
 
-        device = get_user_totp_device(user)
+        device, result = verify_user_totp_token(user, token, password)
         if device is None:
-            return None
-
-        if totp_device_requires_password(device):
-            password_value = str(password or "")
-            if not password_value:
-                return None
-            if not user.check_password(password_value):
-                return None
-
-        try:
-            verified = device.verify_token(token)
-        except Exception:
-            return None
-
-        if not verified:
             return None
 
         user.otp_device = device
