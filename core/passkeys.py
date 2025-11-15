@@ -97,11 +97,13 @@ def build_registration_options(
     ]
     if isinstance(user_id, (bytes, bytearray)):
         user_id_bytes = bytes(user_id)
+        user_id_value = bytes_to_base64url(user_id_bytes)
     else:
+        user_id_value = str(user_id)
         try:
-            user_id_bytes = base64url_to_bytes(str(user_id))
+            user_id_bytes = base64url_to_bytes(user_id_value)
         except (ValueError, TypeError):
-            user_id_bytes = str(user_id).encode("utf-8")
+            user_id_bytes = user_id_value.encode("utf-8")
     user_handle = bytes_to_base64url(user_id_bytes)
     selection = AuthenticatorSelectionCriteria(
         resident_key=ResidentKeyRequirement.PREFERRED,
@@ -110,7 +112,7 @@ def build_registration_options(
     options = generate_registration_options(
         rp_id=_rp_id(request),
         rp_name=rp_name,
-        user_id=user_id_bytes,
+        user_id=user_id_value,
         user_name=user_name,
         user_display_name=user_display_name,
         authenticator_selection=selection,

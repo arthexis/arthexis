@@ -118,6 +118,33 @@ class TOTPDeviceAdminActionTests(TestCase):
         self.assertContains(response, 'name="_user_datum"')
         self.assertContains(response, 'name="_seed_datum"')
 
+    def test_change_form_updates_allow_without_password(self):
+        device = TOTPDevice.objects.create(user=self.user, name="Test device")
+        url, data = self._change_form_data(device)
+        data.update({"allow_without_password": "on", "_save": "Save"})
+
+        response = self.client.post(url, data, follow=True)
+
+        self.assertEqual(response.status_code, 200)
+        settings_obj = TOTPDeviceSettings.objects.get(device=device)
+        self.assertTrue(settings_obj.allow_without_password)
+
+    def test_change_form_clears_allow_without_password(self):
+        device = TOTPDevice.objects.create(user=self.user, name="Test device")
+        TOTPDeviceSettings.objects.create(device=device, allow_without_password=True)
+        url, data = self._change_form_data(device)
+        data.pop("allow_without_password", None)
+        data.update({"_save": "Save"})
+
+        response = self.client.post(url, data, follow=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(
+            TOTPDeviceSettings.objects.filter(
+                device=device, allow_without_password=True
+            ).exists()
+        )
+
     def test_enabling_user_datum_persists_flags_and_fixture(self):
         device = TOTPDevice.objects.create(user=self.user, name="Samsung")
         url, data = self._change_form_data(device)

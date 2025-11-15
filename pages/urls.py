@@ -29,6 +29,11 @@ urlpatterns = [
     ),
     path("release-checklist", views.release_checklist, name="release-checklist"),
     path("login/rfid/", views.rfid_login_page, name="rfid-login"),
+    path(
+        "login/authenticator/check/",
+        views.authenticator_login_check,
+        name="authenticator-login-check",
+    ),
     path("login/", views.login_view, name="login"),
     path("passkeys/login/options/", views.passkey_login_options, name="passkey-login-options"),
     path("passkeys/login/verify/", views.passkey_login_verify, name="passkey-login-verify"),

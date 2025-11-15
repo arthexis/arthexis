@@ -10,7 +10,7 @@ import sys
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.backends import ModelBackend
-from django.core.exceptions import DisallowedHost
+from django.core.exceptions import DisallowedHost, ObjectDoesNotExist
 from django.http.request import split_domain_port
 from django_otp.plugins.otp_totp.models import TOTPDevice
 
@@ -19,6 +19,39 @@ from . import temp_passwords
 
 
 TOTP_DEVICE_NAME = "authenticator"
+
+
+def get_user_totp_device(user):
+    """Return the most appropriate authenticator device for the user."""
+
+    device_qs = TOTPDevice.objects.filter(user=user, confirmed=True)
+    if TOTP_DEVICE_NAME:
+        device = device_qs.filter(name=TOTP_DEVICE_NAME).order_by("-id").first()
+    else:
+        device = None
+    if device is None:
+        device = device_qs.order_by("-id").first()
+    return device
+
+
+def totp_device_allows_passwordless(device):
+    """Return True when the device can be used without a password."""
+
+    if device is None:
+        return False
+    try:
+        settings_obj = device.custom_settings
+    except ObjectDoesNotExist:
+        settings_obj = None
+    if settings_obj is None:
+        return False
+    return bool(getattr(settings_obj, "allow_without_password", False))
+
+
+def totp_device_requires_password(device):
+    """Return True when the device requires a password alongside the OTP."""
+
+    return not totp_device_allows_passwordless(device)
 
 
 class PasskeyBackend(ModelBackend):
@@ -55,13 +88,15 @@ class PasskeyBackend(ModelBackend):
 class TOTPBackend(ModelBackend):
     """Authenticate using a TOTP code from an enrolled authenticator app."""
 
-    def authenticate(self, request, username=None, otp_token=None, **kwargs):
+    def authenticate(self, request, username=None, otp_token=None, password=None, **kwargs):
         if not username or otp_token in (None, ""):
             return None
 
         token = str(otp_token).strip().replace(" ", "")
         if not token:
             return None
+
+        password = kwargs.get("password", password)
 
         UserModel = get_user_model()
         try:
@@ -72,16 +107,16 @@ class TOTPBackend(ModelBackend):
         if not user.is_active:
             return None
 
-        device_qs = TOTPDevice.objects.filter(user=user, confirmed=True)
-        if TOTP_DEVICE_NAME:
-            device = device_qs.filter(name=TOTP_DEVICE_NAME).order_by("-id").first()
-        else:
-            device = None
-
-        if device is None:
-            device = device_qs.order_by("-id").first()
+        device = get_user_totp_device(user)
         if device is None:
             return None
+
+        if totp_device_requires_password(device):
+            password_value = str(password or "")
+            if not password_value:
+                return None
+            if not user.check_password(password_value):
+                return None
 
         try:
             verified = device.verify_token(token)

@@ -162,6 +162,24 @@ class LoginViewTests(TestCase):
         NodeFeatureAssignment.objects.get_or_create(node=node, feature=feature)
         return node
 
+    def _create_totp_device(self, *, allow_without_password=False):
+        device = TOTPDevice.objects.create(
+            user=self.staff,
+            name=TOTP_DEVICE_NAME,
+            confirmed=True,
+        )
+        if allow_without_password:
+            TOTPDeviceSettings.objects.create(
+                device=device,
+                allow_without_password=True,
+            )
+        return device
+
+    def _current_token(self, device):
+        totp = TOTP(device.bin_key, device.step, device.t0, device.digits, device.drift)
+        totp.time = time.time()
+        return f"{totp.token():0{device.digits}d}"
+
     def test_login_link_in_navbar(self):
         resp = self.client.get(reverse("pages:index"))
         login_url = resolve_url(settings.LOGIN_URL)
@@ -308,14 +326,58 @@ class LoginViewTests(TestCase):
         self.assertRedirects(resp, reverse("admin:index"))
 
     def test_login_with_authenticator_code(self):
-        device = TOTPDevice.objects.create(
-            user=self.staff,
-            name=TOTP_DEVICE_NAME,
-            confirmed=True,
+        device = self._create_totp_device()
+        token = self._current_token(device)
+
+        resp = self.client.post(
+            reverse("pages:login"),
+            {
+                "username": "staff",
+                "auth_method": "otp",
+                "otp_token": token,
+                "password": "pwd",
+            },
         )
-        totp = TOTP(device.bin_key, device.step, device.t0, device.digits, device.drift)
-        totp.time = time.time()
-        token = f"{totp.token():0{device.digits}d}"
+
+        self.assertRedirects(resp, reverse("admin:index"))
+        session = self.client.session
+        self.assertIn(DEVICE_ID_SESSION_KEY, session)
+        self.assertEqual(session[DEVICE_ID_SESSION_KEY], device.persistent_id)
+
+    def test_login_with_invalid_authenticator_code(self):
+        self._create_totp_device()
+
+        resp = self.client.post(
+            reverse("pages:login"),
+            {
+                "username": "staff",
+                "auth_method": "otp",
+                "otp_token": "000000",
+                "password": "pwd",
+            },
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "authenticator code is invalid", status_code=200)
+
+    def test_login_with_authenticator_requires_password_when_flag_disabled(self):
+        device = self._create_totp_device()
+        token = self._current_token(device)
+
+        resp = self.client.post(
+            reverse("pages:login"),
+            {
+                "username": "staff",
+                "auth_method": "otp",
+                "otp_token": token,
+            },
+        )
+
+        self.assertContains(resp, "Enter your password.", status_code=200)
+
+    def test_login_with_authenticator_without_password_when_allowed(self):
+        device = self._create_totp_device(allow_without_password=True)
+        token = self._current_token(device)
 
         resp = self.client.post(
             reverse("pages:login"),
@@ -327,28 +389,33 @@ class LoginViewTests(TestCase):
         )
 
         self.assertRedirects(resp, reverse("admin:index"))
-        session = self.client.session
-        self.assertIn(DEVICE_ID_SESSION_KEY, session)
-        self.assertEqual(session[DEVICE_ID_SESSION_KEY], device.persistent_id)
 
-    def test_login_with_invalid_authenticator_code(self):
-        TOTPDevice.objects.create(
-            user=self.staff,
-            name=TOTP_DEVICE_NAME,
-            confirmed=True,
-        )
+    def test_authenticator_login_check_requires_username(self):
+        resp = self.client.post(reverse("pages:authenticator-login-check"), {})
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("username", resp.json().get("error", "").lower())
+
+    def test_authenticator_login_check_reports_password_requirement(self):
+        self._create_totp_device()
 
         resp = self.client.post(
-            reverse("pages:login"),
-            {
-                "username": "staff",
-                "auth_method": "otp",
-                "otp_token": "000000",
-            },
+            reverse("pages:authenticator-login-check"),
+            {"username": "staff"},
         )
 
         self.assertEqual(resp.status_code, 200)
-        self.assertContains(resp, "authenticator code is invalid", status_code=200)
+        self.assertTrue(resp.json()["requires_password"])
+
+    def test_authenticator_login_check_respects_passwordless_flag(self):
+        self._create_totp_device(allow_without_password=True)
+
+        resp = self.client.post(
+            reverse("pages:authenticator-login-check"),
+            {"username": "staff"},
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(resp.json()["requires_password"])
 
     def test_already_logged_in_staff_redirects(self):
         self.client.force_login(self.staff)

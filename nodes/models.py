@@ -1198,6 +1198,9 @@ class Node(Entity):
             update_fields = tuple(fields)
             kwargs["update_fields"] = update_fields
 
+        if self.mac_address is None:
+            self.mac_address = ""
+
         role_name = None
         role = getattr(self, "role", None)
         if role and getattr(role, "name", None):

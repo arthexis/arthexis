@@ -51,9 +51,13 @@ from django.utils.http import (
     urlsafe_base64_encode,
 )
 from core import changelog, mailer, passkeys, public_wifi
-from core.backends import TOTP_DEVICE_NAME
+from core.backends import (
+    TOTP_DEVICE_NAME,
+    get_user_totp_device,
+    totp_device_requires_password,
+)
 from django.utils.translation import gettext as _
-from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
+from django.views.decorators.csrf import csrf_exempt, csrf_protect, ensure_csrf_cookie
 from django.views.decorators.http import require_POST
 from django.core.cache import cache
 from django.views.decorators.cache import never_cache
@@ -1148,6 +1152,7 @@ class CustomLoginView(LoginView):
                 "username_readonly": getattr(self, "_login_check_mode", False),
             }
         )
+        context["authenticator_check_url"] = reverse("pages:authenticator-login-check")
         context["passkey_login_options_url"] = reverse("pages:passkey-login-options")
         context["passkey_login_verify_url"] = reverse("pages:passkey-login-verify")
         node = Node.get_local()
@@ -1182,6 +1187,51 @@ class CustomLoginView(LoginView):
 
 
 login_view = CustomLoginView.as_view()
+
+
+@require_POST
+@csrf_protect
+def authenticator_login_check(request):
+    """Return whether an authenticator login requires a password."""
+
+    username = (request.POST.get("username") or "").strip()
+    if not username:
+        return JsonResponse(
+            {"error": _("Enter your username to continue with the authenticator.")},
+            status=400,
+        )
+
+    UserModel = get_user_model()
+    try:
+        user = UserModel._default_manager.get_by_natural_key(username)
+    except UserModel.DoesNotExist:
+        return JsonResponse(
+            {
+                "error": _(
+                    "No authenticator enrollment was found for the provided username."
+                )
+            },
+            status=404,
+        )
+
+    device = get_user_totp_device(user)
+    if device is None:
+        return JsonResponse(
+            {
+                "error": _(
+                    "No authenticator enrollment was found for the provided username."
+                )
+            },
+            status=404,
+        )
+
+    requires_password = totp_device_requires_password(device)
+    return JsonResponse(
+        {
+            "requires_password": requires_password,
+            "username": user.get_username(),
+        }
+    )
 
 
 def _get_login_redirect(request, user, candidate: str | None = None) -> str:

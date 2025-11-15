@@ -325,7 +325,13 @@ class TOTPDeviceAdminProxy(UserDatumAdminMixin, CoreTOTPDeviceAdmin):
                 except ValueError:
                     insert_at = len(identity_fields)
                 identity_fields.insert(insert_at, "issuer")
-                fieldsets[0][1]["fields"] = identity_fields
+            if "allow_without_password" not in identity_fields:
+                try:
+                    issuer_index = identity_fields.index("issuer") + 1
+                except ValueError:
+                    issuer_index = len(identity_fields)
+                identity_fields.insert(issuer_index, "allow_without_password")
+            fieldsets[0][1]["fields"] = identity_fields
         return fieldsets
 
     @admin.action(description=_("Test/calibrate selected device"))
