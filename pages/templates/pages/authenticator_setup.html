@@ -93,9 +93,335 @@
           <p class="mt-4 text-muted small">
             {% trans "Password-based logins remain available even when an authenticator app is enabled." %}
           </p>
+          <hr class="my-4">
+          <h2 class="h5 mb-3">{% trans "Passkeys" %}</h2>
+          <p class="text-muted">{% trans "Register passkeys to sign in without entering a password." %}</p>
+          <div data-passkey-area>
+            <input type="hidden" name="csrfmiddlewaretoken" value="{{ csrf_token }}" data-passkey-csrf>
+            {% if passkeys %}
+            <ul class="list-group mb-3" data-passkey-list>
+              {% for passkey in passkeys %}
+              <li class="list-group-item d-flex justify-content-between align-items-center gap-3" data-passkey-item data-passkey-id="{{ passkey.pk }}">
+                <div>
+                  <div class="fw-semibold">{{ passkey.name }}</div>
+                  <div class="small text-muted">
+                    {% blocktrans with created=passkey.created_at|date:"M j, Y" %}Added {{ created }}{% endblocktrans %}
+                  </div>
+                </div>
+                <form method="post" action="{% url 'pages:passkey-delete' passkey.pk %}" data-passkey-delete-form>
+                  {% csrf_token %}
+                  <button type="submit" class="btn btn-sm btn-outline-danger">{% trans "Remove" %}</button>
+                </form>
+              </li>
+              {% endfor %}
+            </ul>
+            {% else %}
+            <div class="alert alert-secondary" role="status" data-passkey-empty>
+              {% trans "No passkeys are registered yet." %}
+            </div>
+            {% endif %}
+            <div class="mb-3">
+              <label for="passkey-label" class="form-label">{% trans "Passkey label" %}</label>
+              <input
+                type="text"
+                id="passkey-label"
+                class="form-control"
+                maxlength="{{ passkey_name_max_length }}"
+                data-passkey-label
+                placeholder="{% trans 'e.g. Laptop Face ID' %}"
+              >
+              <div class="form-text">{% trans "Choose a short name so you recognise this device later." %}</div>
+            </div>
+            <button
+              type="button"
+              class="btn btn-outline-primary"
+              data-passkey-register
+              data-options-url="{{ passkey_register_options_url }}"
+              data-verify-url="{{ passkey_register_verify_url }}"
+              data-error-label="{% trans "We could not register your passkey. Please try again." %}"
+              data-progress-label="{% trans "Approve the passkey prompt to finish setup." %}"
+              data-success-label="{% trans "Passkey added successfully." %}"
+              data-browser-error="{% trans "Passkeys are not supported in this browser yet." %}"
+              data-name-required="{% trans "Enter a label before registering your passkey." %}"
+              data-remove-label="{% trans "Remove" %}"
+              data-remove-success="{% trans "Passkey removed." %}"
+            >
+              {% trans "Register passkey" %}
+            </button>
+            <div class="mt-3 small text-muted d-none" data-passkey-message></div>
+          </div>
         </div>
       </div>
     </div>
   </div>
 </div>
+</div>
+<script>
+(function () {
+  const area = document.querySelector('[data-passkey-area]');
+  if (!area) {
+    return;
+  }
+
+  const registerButton = area.querySelector('[data-passkey-register]');
+  const message = area.querySelector('[data-passkey-message]');
+  const labelInput = area.querySelector('[data-passkey-label]');
+  const list = area.querySelector('[data-passkey-list]');
+  const emptyState = area.querySelector('[data-passkey-empty]');
+  const csrfInput = area.querySelector('[data-passkey-csrf]') || document.querySelector('input[name="csrfmiddlewaretoken"]');
+  const csrfToken = csrfInput?.value || '';
+
+  const base64urlToBuffer = (value) => {
+    if (!value) {
+      return new ArrayBuffer(0);
+    }
+    const padded = value.replace(/-/g, '+').replace(/_/g, '/');
+    const base64 = padded + '='.repeat((4 - (padded.length % 4)) % 4);
+    const binary = window.atob(base64);
+    const buffer = new ArrayBuffer(binary.length);
+    const bytes = new Uint8Array(buffer);
+    for (let i = 0; i < binary.length; i += 1) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return buffer;
+  };
+
+  const bufferToBase64url = (buffer) => {
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    bytes.forEach((value) => {
+      binary += String.fromCharCode(value);
+    });
+    return window
+      .btoa(binary)
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/g, '');
+  };
+
+  const preparePublicKeyOptions = (options) => {
+    const prepared = { ...options };
+    if (prepared.challenge) {
+      prepared.challenge = base64urlToBuffer(prepared.challenge);
+    }
+    if (prepared.user && prepared.user.id) {
+      prepared.user = { ...prepared.user, id: base64urlToBuffer(prepared.user.id) };
+    }
+    if (Array.isArray(prepared.excludeCredentials)) {
+      prepared.excludeCredentials = prepared.excludeCredentials.map((item) => ({
+        ...item,
+        id: base64urlToBuffer(item.id),
+      }));
+    }
+    return prepared;
+  };
+
+  const serializeCredential = (credential) => {
+    const response = credential.response || {};
+    const serialized = {
+      id: credential.id,
+      type: credential.type,
+      rawId: bufferToBase64url(credential.rawId),
+      response: {},
+      clientExtensionResults:
+        typeof credential.getClientExtensionResults === 'function'
+          ? credential.getClientExtensionResults()
+          : {},
+    };
+    if (response.clientDataJSON) {
+      serialized.response.clientDataJSON = bufferToBase64url(response.clientDataJSON);
+    }
+    if (response.attestationObject) {
+      serialized.response.attestationObject = bufferToBase64url(response.attestationObject);
+    }
+    if (response.authenticatorData) {
+      serialized.response.authenticatorData = bufferToBase64url(response.authenticatorData);
+    }
+    if (response.signature) {
+      serialized.response.signature = bufferToBase64url(response.signature);
+    }
+    if (response.userHandle) {
+      serialized.response.userHandle = bufferToBase64url(response.userHandle);
+    }
+    if (typeof response.getTransports === 'function') {
+      serialized.transports = response.getTransports();
+    }
+    return serialized;
+  };
+
+  const postJson = async (url, payload) => {
+    const headers = { 'Content-Type': 'application/json' };
+    if (csrfToken) {
+      headers['X-CSRFToken'] = csrfToken;
+    }
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+      credentials: 'same-origin',
+    });
+    let data = {};
+    try {
+      data = await response.json();
+    } catch (error) {
+      data = {};
+    }
+    if (!response.ok) {
+      const requestError = new Error(data.error || 'Request failed');
+      requestError.payload = data;
+      throw requestError;
+    }
+    return data;
+  };
+
+  const showMessage = (text, tone = 'info') => {
+    if (!message) {
+      return;
+    }
+    message.classList.remove('d-none', 'text-danger', 'text-success', 'text-muted');
+    if (!text) {
+      message.classList.add('d-none');
+      message.textContent = '';
+      return;
+    }
+    message.textContent = text;
+    if (tone === 'error') {
+      message.classList.add('text-danger');
+    } else if (tone === 'success') {
+      message.classList.add('text-success');
+    } else {
+      message.classList.add('text-muted');
+    }
+  };
+
+  const attachDeleteHandlers = () => {
+    area.querySelectorAll('[data-passkey-delete-form]').forEach((form) => {
+      if (form.dataset.bound === '1') {
+        return;
+      }
+      form.dataset.bound = '1';
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        try {
+          await postJson(form.getAttribute('action'), {});
+          const item = form.closest('[data-passkey-item]');
+          if (item) {
+            item.remove();
+          }
+          if (!area.querySelector('[data-passkey-item]') && emptyState) {
+            emptyState.classList.remove('d-none');
+          }
+          const successMessage = registerButton?.dataset.removeSuccess || '';
+          if (successMessage) {
+            showMessage(successMessage, 'success');
+          }
+        } catch (error) {
+          const errMessage = (error && error.payload && error.payload.error) || registerButton?.dataset.errorLabel || '';
+          showMessage(errMessage, 'error');
+        }
+      });
+    });
+  };
+
+  if (!window.PublicKeyCredential) {
+    if (registerButton) {
+      registerButton.disabled = true;
+    }
+    const unsupported = registerButton?.dataset.browserError || '';
+    if (unsupported) {
+      showMessage(unsupported, 'error');
+    }
+    return;
+  }
+
+  attachDeleteHandlers();
+
+  registerButton?.addEventListener('click', async () => {
+    const name = (labelInput?.value || '').trim();
+    if (!name) {
+      const warning = registerButton?.dataset.nameRequired || '';
+      showMessage(warning, 'error');
+      labelInput?.focus();
+      return;
+    }
+
+    registerButton.disabled = true;
+    showMessage(registerButton.dataset.progressLabel || '', 'info');
+
+    try {
+      const optionsData = await postJson(registerButton.dataset.optionsUrl, { name });
+      const publicKeyOptions = optionsData && optionsData.publicKey;
+      if (!publicKeyOptions) {
+        throw new Error('missing-options');
+      }
+      const credential = await navigator.credentials.create({
+        publicKey: preparePublicKeyOptions(publicKeyOptions),
+      });
+      const verifyData = await postJson(registerButton.dataset.verifyUrl, {
+        credential: serializeCredential(credential),
+      });
+
+      if (labelInput) {
+        labelInput.value = '';
+      }
+
+      if (emptyState) {
+        emptyState.classList.add('d-none');
+      }
+
+      if (list) {
+        const item = document.createElement('li');
+        item.className = 'list-group-item d-flex justify-content-between align-items-center gap-3';
+        item.setAttribute('data-passkey-item', '');
+        item.dataset.passkeyId = String(verifyData.id);
+
+        const details = document.createElement('div');
+        const title = document.createElement('div');
+        title.className = 'fw-semibold';
+        title.textContent = verifyData.name;
+        const meta = document.createElement('div');
+        meta.className = 'small text-muted';
+        if (verifyData.created_at) {
+          const createdDate = new Date(verifyData.created_at);
+          meta.textContent = createdDate.toLocaleString();
+        }
+        details.appendChild(title);
+        details.appendChild(meta);
+
+        const form = document.createElement('form');
+        form.method = 'post';
+        form.action = verifyData.delete_url;
+        form.setAttribute('data-passkey-delete-form', '');
+        const csrfField = document.createElement('input');
+        csrfField.type = 'hidden';
+        csrfField.name = 'csrfmiddlewaretoken';
+        csrfField.value = csrfToken;
+        form.appendChild(csrfField);
+        const removeButton = document.createElement('button');
+        removeButton.type = 'submit';
+        removeButton.className = 'btn btn-sm btn-outline-danger';
+        removeButton.textContent = registerButton.dataset.removeLabel || 'Remove';
+        form.appendChild(removeButton);
+
+        item.appendChild(details);
+        item.appendChild(form);
+        list.appendChild(item);
+
+        attachDeleteHandlers();
+      }
+
+      showMessage(registerButton.dataset.successLabel || '', 'success');
+    } catch (error) {
+      if (error && error.name === 'AbortError') {
+        showMessage('', 'info');
+      } else {
+        const errMessage = (error && error.payload && error.payload.error) || registerButton?.dataset.errorLabel || '';
+        showMessage(errMessage, 'error');
+      }
+    } finally {
+      registerButton.disabled = false;
+    }
+  });
+})();
+</script>
 {% endblock %}

@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate screen Login passkey controls",
+      "created_on": "2024-01-01T00:00:00Z",
+      "url": "/login/",
+      "request_details": "Open the public login page and verify the new \"Use a passkey\" control appears beneath the primary submit button. Click the passkey button in a supported browser and confirm it triggers a WebAuthn prompt and shows inline status messages when the prompt is approved, cancelled, or fails. Confirm the password/OTP toggle still works as expected after interacting with the passkey button.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]
