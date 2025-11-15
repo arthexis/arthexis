@@ -1,4 +1,4 @@
-{% load i18n ref_tags %}
+{% load i18n ref_tags static %}
 <!doctype html>
 <html lang="{{ LANGUAGE_CODE }}" data-bs-theme="dark">
   <head>
@@ -382,6 +382,156 @@
           border-radius: 1rem;
         }
       }
+      .chat-widget {
+        position: fixed;
+        left: 1.5rem;
+        bottom: 1.5rem;
+        z-index: 1090;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.75rem;
+      }
+      .chat-toggle {
+        border: 0;
+        border-radius: 999px;
+        padding: 0.75rem 1.25rem;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        background: linear-gradient(135deg, #38bdf8, #0ea5e9);
+        color: #0f172a;
+        box-shadow: 0 1.25rem 2.5rem rgba(15, 23, 42, 0.35);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+      }
+      .chat-toggle:hover,
+      .chat-toggle:focus-visible {
+        transform: translateY(-2px);
+        box-shadow: 0 1.75rem 3rem rgba(15, 23, 42, 0.45);
+      }
+      .chat-toggle .chat-unread {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 1.5rem;
+        padding: 0.1rem 0.5rem;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        background: #ef4444;
+        color: #fff;
+      }
+      .chat-toggle .chat-unread[hidden] {
+        display: none;
+      }
+      .chat-drawer {
+        position: absolute;
+        left: 0;
+        bottom: 3.75rem;
+        width: min(24rem, 90vw);
+        border-radius: 1rem;
+        background: var(--bs-body-bg);
+        color: var(--bs-body-color);
+        box-shadow: 0 1.5rem 3rem rgba(15, 23, 42, 0.45);
+        border: 1px solid rgba(148, 163, 184, 0.25);
+        overflow: hidden;
+        transform: translateY(110%);
+        opacity: 0;
+        pointer-events: none;
+        transition: transform 0.25s ease, opacity 0.25s ease;
+      }
+      .chat-drawer.open {
+        transform: translateY(0);
+        opacity: 1;
+        pointer-events: auto;
+      }
+      .chat-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        padding: 1rem 1.25rem;
+        background: linear-gradient(
+          135deg,
+          rgba(59, 130, 246, 0.18),
+          rgba(14, 165, 233, 0.2)
+        );
+        border-bottom: 1px solid rgba(148, 163, 184, 0.25);
+      }
+      .chat-header h2 {
+        margin: 0;
+        font-size: 1rem;
+      }
+      .chat-header small {
+        display: block;
+        font-size: 0.75rem;
+        opacity: 0.8;
+      }
+      .chat-messages {
+        max-height: 18rem;
+        overflow-y: auto;
+        padding: 1rem 1.25rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.85rem;
+      }
+      .chat-message {
+        display: flex;
+        flex-direction: column;
+        gap: 0.2rem;
+        font-size: 0.9rem;
+        line-height: 1.45;
+      }
+      .chat-message.staff {
+        align-items: flex-end;
+      }
+      .chat-message.staff .chat-meta {
+        text-align: right;
+      }
+      .chat-bubble {
+        padding: 0.6rem 0.9rem;
+        border-radius: 0.85rem;
+        background: rgba(59, 130, 246, 0.12);
+        max-width: 100%;
+        word-break: break-word;
+        white-space: pre-wrap;
+      }
+      .chat-message.staff .chat-bubble {
+        background: rgba(16, 185, 129, 0.18);
+      }
+      .chat-meta {
+        font-size: 0.75rem;
+        opacity: 0.7;
+      }
+      .chat-form {
+        border-top: 1px solid rgba(148, 163, 184, 0.25);
+        padding: 0.75rem 1.25rem 1.25rem;
+        background: var(--bs-body-bg);
+      }
+      .chat-form textarea {
+        resize: vertical;
+        min-height: 3.5rem;
+      }
+      .chat-actions {
+        margin-top: 0.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 0.75rem;
+      }
+      .chat-session-hint {
+        font-size: 0.75rem;
+        opacity: 0.7;
+      }
+      @media (max-width: 575.98px) {
+        .chat-widget {
+          left: 1rem;
+          bottom: 1rem;
+        }
+        .chat-drawer {
+          width: min(100vw - 2rem, 22rem);
+        }
+      }
     </style>
     {% block extra_head %}{% endblock %}
   </head>
@@ -499,6 +649,79 @@
       </nav>
       {% block content %}{% endblock %}
     </div>
+    {% if chat_enabled %}
+    <div
+      id="chat-widget"
+      class="chat-widget"
+      data-path="{{ chat_socket_path }}"
+      data-session-storage-key="pages.chat.session"
+      data-connected-text="{% trans 'Connected' %}"
+      data-connecting-text="{% trans 'Connecting…' %}"
+      data-disconnected-text="{% trans 'Disconnected' %}"
+      data-unread-text="{% trans 'New' %}"
+      data-open-text="{% trans 'Need help?' %}"
+      data-close-text="{% trans 'Close chat' %}"
+      data-session-label="{% trans 'Session' %}"
+      data-empty-text="{% trans 'Say hello to start the conversation.' %}"
+      data-error-text="{% trans 'We could not send your message. Please retry.' %}"
+      data-staff-join-text="{% trans 'A staff member joined the chat.' %}"
+      data-staff-leave-text="{% trans 'A staff member left the chat.' %}"
+      data-visitor-join-text="{% trans 'You joined the chat.' %}"
+      data-visitor-leave-text="{% trans 'You left the chat.' %}"
+      data-staff="{% if request.user.is_authenticated and request.user.is_staff %}true{% else %}false{% endif %}"
+    >
+      <button
+        type="button"
+        class="chat-toggle"
+        data-chat-toggle
+        aria-expanded="false"
+        aria-controls="chat-drawer"
+      >
+        <span class="chat-toggle-label">{% trans "Need help?" %}</span>
+        <span class="chat-unread" data-chat-unread hidden>{% trans "New" %}</span>
+      </button>
+      <section
+        id="chat-drawer"
+        class="chat-drawer"
+        data-chat-drawer
+        role="region"
+        aria-live="polite"
+        aria-label="{% trans 'Support chat' %}"
+        hidden
+      >
+        <header class="chat-header">
+          <div>
+            <h2 class="mb-0">{% trans "Support" %}</h2>
+            <small data-chat-status>{% trans "Connecting…" %}</small>
+          </div>
+          <button type="button" class="btn-close" data-chat-close aria-label="{% trans 'Close chat' %}"></button>
+        </header>
+        <div
+          class="chat-messages"
+          data-chat-messages
+          role="log"
+          aria-live="polite"
+          aria-relevant="additions"
+        ></div>
+        <form class="chat-form" data-chat-form>
+          <label class="visually-hidden" for="chat-message-input">{% trans "Message" %}</label>
+          <textarea
+            id="chat-message-input"
+            class="form-control"
+            data-chat-input
+            rows="2"
+            maxlength="2000"
+            placeholder="{% trans 'Type your message…' %}"
+            required
+          ></textarea>
+          <div class="chat-actions">
+            <span class="chat-session-hint text-muted" data-chat-session-hint></span>
+            <button type="submit" class="btn btn-primary">{% trans "Send" %}</button>
+          </div>
+        </form>
+      </section>
+    </div>
+    {% endif %}
     <button
       type="button"
       id="user-story-toggle"
@@ -645,6 +868,9 @@
     {% render_footer %}
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    {% if chat_enabled %}
+    <script src="{% static 'pages/js/chat.js' %}" defer></script>
+    {% endif %}
     <script>
       function setTheme(theme, persist = true) {
         document.documentElement.setAttribute('data-bs-theme', theme);

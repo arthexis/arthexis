@@ -7,7 +7,14 @@ import pytest
 
 django.setup()
 
-from django.test import Client, RequestFactory, TestCase, SimpleTestCase, override_settings
+from django.test import (
+    Client,
+    RequestFactory,
+    TestCase,
+    SimpleTestCase,
+    TransactionTestCase,
+    override_settings,
+)
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.shortcuts import resolve_url
@@ -19,14 +26,18 @@ from django.contrib.auth.models import Permission
 from django.contrib.sites.models import Site
 from django.contrib import admin, messages
 from django.contrib.messages.storage.fallback import FallbackStorage
+from django.contrib.sessions.backends.db import SessionStore
 from django.core.exceptions import DisallowedHost
 from django.core.cache import cache
 from django.db import connection
 import socket
 from django.db import connection
+from asgiref.sync import async_to_sync, sync_to_async
+from channels.testing import WebsocketCommunicator
 from pages import site_config
 from pages.models import (
     Application,
+    ChatMessage,
     DeveloperArticle,
     Landing,
     Module,
@@ -58,6 +69,7 @@ from pages.context_processors import nav_links
 from pages.templatetags import admin_extras
 from pages.middleware import LanguagePreferenceMiddleware
 from django.apps import apps as django_apps
+from config.asgi import application
 from config.middleware import SiteHttpsRedirectMiddleware
 from core import mailer
 from core.admin import ProfileAdminMixin
@@ -109,6 +121,7 @@ from django_otp.oath import TOTP
 from django_otp.plugins.otp_totp.models import TOTPDevice
 from core.backends import TOTP_DEVICE_NAME
 import time
+import asyncio
 
 from nodes.models import (
     Node,
@@ -4332,3 +4345,118 @@ class CaptureUIScreenshotsCommandTests(TestCase):
             runner_cls.assert_called_once()
             runner.run.assert_called_once_with(spec)
             self.assertIn("Captured 'auto-cmd'", out.getvalue())
+
+
+class ChatConsumerTests(TransactionTestCase):
+    def _ensure_site(self):
+        Site.objects.update_or_create(
+            id=1, defaults={"domain": "example.com", "name": "Example"}
+        )
+
+    async def _open_session(self, message: str | None = None) -> str:
+        from django.conf import settings
+
+        assert getattr(settings, "PAGES_CHAT_ENABLED", False)
+        session = SessionStore()
+        await sync_to_async(session.save)()
+        headers = [(b"cookie", f"sessionid={session.session_key}".encode("ascii"))]
+        communicator = WebsocketCommunicator(
+            application,
+            "/ws/pages/chat/",
+            headers=headers,
+        )
+        communicator.scope.setdefault("cookies", {})["sessionid"] = session.session_key
+        communicator.scope["session"] = session
+        connected, _ = await communicator.connect()
+        assert connected
+
+        history = None
+        events = []
+        for _ in range(5):
+            try:
+                event = await communicator.receive_json_from(timeout=3)
+            except asyncio.TimeoutError:
+                break
+            events.append(event)
+            if event.get("type") == "history":
+                history = event
+                break
+        assert history is not None, f"Expected history event, saw: {events}"
+        session_uuid = history.get("session")
+        assert session_uuid
+
+        if message:
+            await communicator.send_json_to({"type": "message", "content": message})
+            while True:
+                payload = await communicator.receive_json_from()
+                if payload.get("type") == "message":
+                    break
+
+        await communicator.disconnect()
+        return session_uuid
+
+    @override_settings(PAGES_CHAT_ENABLED=True)
+    def test_chat_flow_persists_messages(self):
+        self._ensure_site()
+        session_uuid = async_to_sync(self._open_session)("Hello")
+        stored = ChatMessage.objects.filter(body="Hello").first()
+        self.assertIsNotNone(stored)
+        assert stored is not None
+        self.assertEqual(str(stored.session.uuid), session_uuid)
+
+    @override_settings(PAGES_CHAT_ENABLED=True)
+    def test_chat_rejects_unrelated_sessions(self):
+        self._ensure_site()
+        session_uuid = async_to_sync(self._open_session)()
+
+        async def _attempt_foreign() -> bool:
+            session = SessionStore()
+            await sync_to_async(session.save)()
+            headers = [(b"cookie", f"sessionid={session.session_key}".encode("ascii"))]
+            communicator = WebsocketCommunicator(
+                application,
+                f"/ws/pages/chat/?session={session_uuid}",
+                headers=headers,
+            )
+            communicator.scope.setdefault("cookies", {})["sessionid"] = (
+                session.session_key
+            )
+            communicator.scope["session"] = session
+            connected, _ = await communicator.connect()
+            if connected:
+                await communicator.disconnect()
+            else:
+                await communicator.wait()
+            return connected
+
+        connected = async_to_sync(_attempt_foreign)()
+        self.assertFalse(connected)
+
+    @override_settings(
+        PAGES_CHAT_ENABLED=True,
+        PAGES_CHAT_NOTIFY_STAFF=True,
+        PAGES_CHAT_IDLE_ESCALATE_SECONDS=0,
+    )
+    def test_chat_idle_escalation_triggers_broadcast(self):
+        self._ensure_site()
+        with patch("nodes.models.NetMessage.broadcast") as mock_broadcast:
+            async_to_sync(self._open_session)("Help")
+        self.assertTrue(mock_broadcast.called)
+
+
+class ChatWidgetViewTests(TestCase):
+    @override_settings(PAGES_CHAT_ENABLED=True)
+    def test_chat_widget_present_when_enabled(self):
+        Site.objects.update_or_create(
+            id=1, defaults={"domain": "example.com", "name": "Example"}
+        )
+        response = self.client.get(reverse("pages:index"))
+        self.assertContains(response, 'id="chat-widget"')
+
+    @override_settings(PAGES_CHAT_ENABLED=False)
+    def test_chat_widget_hidden_when_disabled(self):
+        Site.objects.update_or_create(
+            id=1, defaults={"domain": "example.com", "name": "Example"}
+        )
+        response = self.client.get(reverse("pages:index"))
+        self.assertNotContains(response, 'id="chat-widget"')
