@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Ensure auto-upgrade restarts services without interactive sudo",
+      "created_on": "2025-11-15T00:00:00Z",
+      "url": "/admin/system/upgrade-report/",
+      "request_details": "1. On a control node with systemd management enabled (locks/service.lck present), run `sudo -K` to clear any cached sudo credentials and confirm `sudo -n true` succeeds without prompting.\n2. Trigger an auto-upgrade via `python manage.py shell -c \"from core.tasks import check_github_updates; check_github_updates()\"`.\n3. Wait for the task to finish, then run `./status.sh` and verify the service status reports active and the upgrade lock is cleared.\n4. Open logs/start.log and confirm the restart output shows `sudo -n systemctl restart` for the managed services.\n5. Review the Upgrade Report (System → Upgrade Report) to ensure the auto-upgrade entry records a successful restart after the upgrade.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.34"
+    }
+  }
+]

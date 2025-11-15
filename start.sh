@@ -48,29 +48,42 @@ else
 fi
 
 # If a systemd service was installed, restart it instead of launching a new process
+SYSTEMCTL_CMD=()
+if command -v systemctl >/dev/null 2>&1; then
+  SYSTEMCTL_CMD=(systemctl)
+  if command -v sudo >/dev/null 2>&1; then
+    if sudo -n true 2>/dev/null; then
+      SYSTEMCTL_CMD=(sudo -n systemctl)
+    elif [ "$(id -u)" -ne 0 ]; then
+      # sudo is available but requires interactivity; fall back to systemctl without sudo
+      SYSTEMCTL_CMD=(systemctl)
+    fi
+  fi
+fi
+
 if [ -f "$LOCK_DIR/service.lck" ]; then
   SERVICE_NAME="$(cat "$LOCK_DIR/service.lck")"
-  if systemctl list-unit-files | grep -Fq "${SERVICE_NAME}.service"; then
-    sudo systemctl restart "$SERVICE_NAME"
+  if [ ${#SYSTEMCTL_CMD[@]} -gt 0 ] && "${SYSTEMCTL_CMD[@]}" list-unit-files | grep -Fq "${SERVICE_NAME}.service"; then
+    "${SYSTEMCTL_CMD[@]}" restart "$SERVICE_NAME"
     # Show status information so the user can verify the service state
-    sudo systemctl status "$SERVICE_NAME" --no-pager
+    "${SYSTEMCTL_CMD[@]}" status "$SERVICE_NAME" --no-pager
     if [ -f "$LOCK_DIR/lcd_screen.lck" ]; then
       LCD_SERVICE="lcd-$SERVICE_NAME"
-      if systemctl list-unit-files | grep -Fq "${LCD_SERVICE}.service"; then
-        sudo systemctl restart "$LCD_SERVICE"
-        sudo systemctl status "$LCD_SERVICE" --no-pager || true
+      if "${SYSTEMCTL_CMD[@]}" list-unit-files | grep -Fq "${LCD_SERVICE}.service"; then
+        "${SYSTEMCTL_CMD[@]}" restart "$LCD_SERVICE"
+        "${SYSTEMCTL_CMD[@]}" status "$LCD_SERVICE" --no-pager || true
       fi
     fi
     if [ -f "$LOCK_DIR/celery.lck" ]; then
       CELERY_SERVICE="celery-$SERVICE_NAME"
       CELERY_BEAT_SERVICE="celery-beat-$SERVICE_NAME"
-      if systemctl list-unit-files | grep -Fq "${CELERY_SERVICE}.service"; then
-        sudo systemctl restart "$CELERY_SERVICE"
-        sudo systemctl status "$CELERY_SERVICE" --no-pager || true
+      if "${SYSTEMCTL_CMD[@]}" list-unit-files | grep -Fq "${CELERY_SERVICE}.service"; then
+        "${SYSTEMCTL_CMD[@]}" restart "$CELERY_SERVICE"
+        "${SYSTEMCTL_CMD[@]}" status "$CELERY_SERVICE" --no-pager || true
       fi
-      if systemctl list-unit-files | grep -Fq "${CELERY_BEAT_SERVICE}.service"; then
-        sudo systemctl restart "$CELERY_BEAT_SERVICE"
-        sudo systemctl status "$CELERY_BEAT_SERVICE" --no-pager || true
+      if "${SYSTEMCTL_CMD[@]}" list-unit-files | grep -Fq "${CELERY_BEAT_SERVICE}.service"; then
+        "${SYSTEMCTL_CMD[@]}" restart "$CELERY_BEAT_SERVICE"
+        "${SYSTEMCTL_CMD[@]}" status "$CELERY_BEAT_SERVICE" --no-pager || true
       fi
     fi
     exit 0
