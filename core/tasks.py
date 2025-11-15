@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 import re
 import shlex
@@ -180,6 +181,81 @@ def _wait_for_service_restart(
     return False
 
 
+def _service_restart_timeout() -> int:
+    """Return the maximum wait time for services to report active."""
+
+    value = os.environ.get("ARTHEXIS_WAIT_FOR_ACTIVE_TIMEOUT", "")
+    if value.isdigit():
+        parsed = int(value)
+        if parsed > 0:
+            return parsed
+    return 60
+
+
+def _ensure_celery_services_ready(
+    base_dir: Path, command: list[str], service: str, restart: bool
+) -> bool:
+    """Restart Celery units when required and confirm they report active."""
+
+    celery_lock = base_dir / "locks" / "celery.lck"
+    if not celery_lock.exists() or not service:
+        return True
+
+    if not command:
+        _append_auto_upgrade_log(
+            base_dir,
+            "Skipping Celery restart verification; systemctl not available",
+        )
+        return True
+
+    celery_services = [f"celery-{service}", f"celery-beat-{service}"]
+    timeout = _service_restart_timeout()
+
+    for celery_service in celery_services:
+        if restart:
+            _append_auto_upgrade_log(
+                base_dir,
+                f"Restarting Celery service {celery_service} after upgrade",
+            )
+            restart_result = subprocess.run(
+                [*command, "restart", celery_service],
+                cwd=base_dir,
+                check=False,
+            )
+            if restart_result.returncode != 0:
+                _append_auto_upgrade_log(
+                    base_dir,
+                    (
+                        f"Celery service {celery_service} failed to restart automatically "
+                        "after upgrade; reverting to failover branch"
+                    ),
+                )
+                _revert_after_restart_failure(base_dir, celery_service)
+                return False
+        else:
+            _append_auto_upgrade_log(
+                base_dir,
+                f"Verifying Celery service {celery_service} after upgrade",
+            )
+
+        if not _wait_for_service_restart(base_dir, celery_service, timeout=timeout):
+            _append_auto_upgrade_log(
+                base_dir,
+                (
+                    f"Celery service {celery_service} did not become active after restart; "
+                    "reverting to failover branch"
+                ),
+            )
+            _revert_after_restart_failure(base_dir, celery_service)
+            return False
+
+    _append_auto_upgrade_log(
+        base_dir,
+        "Celery services restarted successfully after upgrade",
+    )
+    return True
+
+
 def _restart_service_via_start_script(base_dir: Path, service: str) -> bool:
     """Attempt to restart the managed service using ``start.sh``."""
 
@@ -258,7 +334,9 @@ def _revert_after_restart_failure(base_dir: Path, service: str) -> None:
         )
         return
 
-    if _wait_for_service_restart(base_dir, service):
+    if _wait_for_service_restart(
+        base_dir, service, timeout=_service_restart_timeout()
+    ):
         _append_auto_upgrade_log(
             base_dir,
             f"Service {service} restarted successfully from failover branch",
@@ -726,6 +804,7 @@ def check_github_updates(channel_override: str | None = None) -> None:
                 )
                 service_is_active = status_result.returncode == 0
             if service:
+                celery_requires_restart = False
                 if service_is_active and command:
                     subprocess.run(
                         [*command, "kill", "--signal=TERM", service],
@@ -736,9 +815,14 @@ def check_github_updates(channel_override: str | None = None) -> None:
                         base_dir,
                         f"Waiting for {service} to restart after upgrade",
                     )
-                    if not _wait_for_service_restart(base_dir, service):
+                    if not _wait_for_service_restart(
+                        base_dir,
+                        service,
+                        timeout=_service_restart_timeout(),
+                    ):
                         _revert_after_restart_failure(base_dir, service)
                         return
+                    celery_requires_restart = True
                 else:
                     _append_auto_upgrade_log(
                         base_dir,
@@ -754,9 +838,17 @@ def check_github_updates(channel_override: str | None = None) -> None:
                         base_dir,
                         f"Waiting for {service} to restart after upgrade",
                     )
-                    if not _wait_for_service_restart(base_dir, service):
+                    if not _wait_for_service_restart(
+                        base_dir,
+                        service,
+                        timeout=_service_restart_timeout(),
+                    ):
                         _revert_after_restart_failure(base_dir, service)
                         return
+                if not _ensure_celery_services_ready(
+                    base_dir, command, service, restart=celery_requires_restart
+                ):
+                    return
                 _append_auto_upgrade_log(
                     base_dir,
                     f"Service {service} restarted successfully after upgrade",
