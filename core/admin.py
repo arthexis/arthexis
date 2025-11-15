@@ -4200,6 +4200,7 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         "is_current",
         "pypi_url",
         "github_url",
+        "scheduled_for",
         "release_on",
         "revision_short",
         "published_status",
@@ -4218,6 +4219,8 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         "is_current",
         "pypi_url",
         "github_url",
+        "scheduled_date",
+        "scheduled_time",
         "release_on",
     )
 
@@ -4230,6 +4233,13 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         return obj.revision_short
 
     revision_short.short_description = "revision"
+
+    @admin.display(description="Scheduled for", ordering="scheduled_date")
+    def scheduled_for(self, obj):
+        moment = obj.scheduled_datetime
+        if not moment:
+            return "—"
+        return timezone.localtime(moment).strftime("%Y-%m-%d %H:%M")
 
     def refresh_from_pypi(self, request, queryset):
         package = Package.objects.filter(is_active=True).first()
