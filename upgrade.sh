@@ -316,6 +316,7 @@ cleanup_failover_branches() {
 
 wait_for_service_active() {
   local service="$1"
+  local require_registered="${2:-0}"
   if [ -z "$service" ]; then
     return 0
   fi
@@ -325,19 +326,45 @@ wait_for_service_active() {
 
   local -a systemctl_cmd=(systemctl)
   if command -v sudo >/dev/null 2>&1; then
-    systemctl_cmd=(sudo systemctl)
+    if sudo -n true 2>/dev/null; then
+      systemctl_cmd=(sudo -n systemctl)
+    else
+      systemctl_cmd=(systemctl)
+    fi
   fi
 
-  local deadline=$((SECONDS + 60))
+  if ! "${systemctl_cmd[@]}" list-unit-files | grep -Fq "${service}.service"; then
+    if [ "$require_registered" -eq 1 ]; then
+      echo "Service $service is not registered with systemd." >&2
+      return 1
+    fi
+    return 0
+  fi
+
+  local timeout="${ARTHEXIS_WAIT_FOR_ACTIVE_TIMEOUT:-60}"
+  if [[ ! "$timeout" =~ ^[0-9]+$ ]] || [ "$timeout" -le 0 ]; then
+    timeout=60
+  fi
+  local deadline=$((SECONDS + timeout))
   echo "Waiting for service $service to report active..."
   while (( SECONDS < deadline )); do
-    if "${systemctl_cmd[@]}" is-active --quiet "$service"; then
-      echo "Service $service is active."
-      return 0
-    fi
+    local status
+    status=$("${systemctl_cmd[@]}" is-active "$service" 2>/dev/null || true)
+    case "$status" in
+      active)
+        echo "Service $service is active."
+        return 0
+        ;;
+      failed)
+        echo "Service $service reported failed status." >&2
+        "${systemctl_cmd[@]}" status "$service" --no-pager || true
+        return 1
+        ;;
+    esac
     sleep 2
   done
 
+  echo "Timed out waiting for service $service to become active." >&2
   "${systemctl_cmd[@]}" status "$service" --no-pager || true
   return 1
 }
@@ -350,7 +377,11 @@ restart_services() {
     if command -v systemctl >/dev/null 2>&1; then
       local -a systemctl_cmd=(systemctl)
       if command -v sudo >/dev/null 2>&1; then
-        systemctl_cmd=(sudo systemctl)
+        if sudo -n true 2>/dev/null; then
+          systemctl_cmd=(sudo -n systemctl)
+        else
+          systemctl_cmd=(systemctl)
+        fi
       fi
       echo "Existing services before restart:"
       "${systemctl_cmd[@]}" status "$service_name" --no-pager || true
@@ -366,6 +397,25 @@ restart_services() {
     if ! wait_for_service_active "$service_name"; then
       echo "Service $service_name did not become active after restart." >&2
       return 1
+    fi
+    if [ -f "$LOCK_DIR/celery.lck" ]; then
+      local celery_service="celery-$service_name"
+      local celery_beat_service="celery-beat-$service_name"
+      if ! wait_for_service_active "$celery_service" 1; then
+        echo "Celery service $celery_service did not become active after restart." >&2
+        return 1
+      fi
+      if ! wait_for_service_active "$celery_beat_service" 1; then
+        echo "Celery beat service $celery_beat_service did not become active after restart." >&2
+        return 1
+      fi
+    fi
+    if [ -f "$LOCK_DIR/lcd_screen.lck" ]; then
+      local lcd_service="lcd-$service_name"
+      if ! wait_for_service_active "$lcd_service" 1; then
+        echo "LCD service $lcd_service did not become active after restart." >&2
+        return 1
+      fi
     fi
     return 0
   fi
