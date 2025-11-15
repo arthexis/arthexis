@@ -93,13 +93,14 @@ from .status_display import STATUS_BADGE_MAP
 from core.models import (
     CustomerAccount,
     EnergyCredit,
+    EnergyTariff,
     Location,
     Reference,
     RFID,
     SecurityGroup,
 )
 from . import store
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 import json
 import websockets
 import asyncio
@@ -107,7 +108,7 @@ from .simulator import SimulatorConfig, ChargePointSimulator
 from .evcs import simulate, SimulatorState, _simulators
 from .websocket_headers import connect_headers_kwargs
 import re
-from datetime import datetime, timedelta, timezone as dt_timezone
+from datetime import datetime, time, timedelta, timezone as dt_timezone
 from .tasks import (
     purge_meter_readings,
     send_daily_session_report,
@@ -3910,6 +3911,62 @@ class ChargerAdminTests(TestCase):
         self.assertContains(resp, "Total kW")
         self.assertContains(resp, "Today kW")
         self.assertContains(resp, "5.00")
+        self.assertContains(resp, "Estimated Cost")
+        self.assertContains(resp, "Availability (24h)")
+
+    def test_quick_stats_compute_cost_and_availability(self):
+        admin_site = AdminSite()
+        admin_instance = ChargerAdmin(Charger, admin_site)
+        now = timezone.now()
+        tariff = EnergyTariff.objects.create(
+            year=now.year,
+            season=EnergyTariff.Season.ANNUAL,
+            zone=EnergyTariff.Zone.ONE,
+            contract_type=EnergyTariff.ContractType.DOMESTIC,
+            period=EnergyTariff.Period.FLAT,
+            unit=EnergyTariff.Unit.KWH,
+            start_time=time(0, 0),
+            end_time=time(23, 59, 59),
+            price_mxn=Decimal("1.5000"),
+            cost_mxn=Decimal("1.2000"),
+        )
+        location = Location.objects.create(
+            name="Costed Site",
+            zone=tariff.zone,
+            contract_type=tariff.contract_type,
+        )
+        productive = Charger.objects.create(
+            charger_id="STATCOST-1",
+            location=location,
+            availability_state="Operative",
+            availability_state_updated_at=now - timedelta(hours=2),
+        )
+        Transaction.objects.create(
+            charger=productive,
+            meter_start=1000,
+            meter_stop=4000,
+            start_time=now - timedelta(hours=3),
+            stop_time=now - timedelta(hours=2, minutes=30),
+        )
+        Charger.objects.create(
+            charger_id="STATCOST-2",
+            availability_state="Inoperative",
+            availability_state_updated_at=now - timedelta(hours=1),
+        )
+
+        queryset = Charger.objects.filter(charger_id__startswith="STATCOST")
+        context = admin_instance._charger_quick_stats_context(queryset)
+        stats = context["charger_quick_stats"]
+
+        energy_24h = Decimal(
+            str(productive.total_kw_for_range(now - timedelta(hours=24), now))
+        )
+        expected_cost = (energy_24h * tariff.price_mxn).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+
+        self.assertEqual(stats["estimated_cost"], expected_cost)
+        self.assertEqual(stats["availability_percentage"], 50.0)
 
     def test_admin_changelist_does_not_indent_connectors(self):
         Charger.objects.create(charger_id="INDENTMAIN")

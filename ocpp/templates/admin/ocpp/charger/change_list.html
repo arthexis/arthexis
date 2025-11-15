@@ -48,6 +48,26 @@
         <span class="charger-quick-stats__label">{% trans "Today kW" %}</span>
         <span class="charger-quick-stats__value">{{ charger_quick_stats.today_kw|floatformat:2 }}</span>
       </div>
+      <div class="charger-quick-stats__item">
+        <span class="charger-quick-stats__label">{% trans "Estimated Cost" %}</span>
+        <span class="charger-quick-stats__value">
+          {% if charger_quick_stats.estimated_cost is not None %}
+            ${{ charger_quick_stats.estimated_cost|floatformat:2 }} MXN
+          {% else %}
+            &mdash;
+          {% endif %}
+        </span>
+      </div>
+      <div class="charger-quick-stats__item">
+        <span class="charger-quick-stats__label">{% trans "Availability (24h)" %}</span>
+        <span class="charger-quick-stats__value">
+          {% if charger_quick_stats.availability_percentage is not None %}
+            {{ charger_quick_stats.availability_percentage|floatformat:1 }}%
+          {% else %}
+            &mdash;
+          {% endif %}
+        </span>
+      </div>
     </div>
   {% endif %}
   {{ block.super }}
