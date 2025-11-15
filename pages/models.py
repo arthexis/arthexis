@@ -208,6 +208,13 @@ class SiteProxy(Site):
         app_label = "pages"
         verbose_name = "Site"
         verbose_name_plural = "Sites"
+        default_permissions = ()
+        permissions = [
+            ("add_siteproxy", "Can add site"),
+            ("change_siteproxy", "Can change site"),
+            ("delete_siteproxy", "Can delete site"),
+            ("view_siteproxy", "Can view site"),
+        ]
 
 
 class DeveloperArticleManager(EntityManager):
