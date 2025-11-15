@@ -5436,7 +5436,15 @@ class NodeRoleAdminTests(TestCase):
         url = reverse("admin:nodes_noderole_change", args=[role.pk])
         resp = self.client.get(url)
         self.assertContains(resp, f'<option value="{node1.pk}" selected>')
-        post_data = {"name": "TestRole", "description": "", "nodes": [node2.pk]}
+        post_data = {
+            "name": "TestRole",
+            "description": "",
+            "nodes": [node2.pk],
+            "configuration_profile-TOTAL_FORMS": "0",
+            "configuration_profile-INITIAL_FORMS": "0",
+            "configuration_profile-MIN_NUM_FORMS": "0",
+            "configuration_profile-MAX_NUM_FORMS": "1",
+        }
         resp = self.client.post(url, post_data, follow=True)
         self.assertRedirects(resp, reverse("admin:nodes_noderole_changelist"))
         node1.refresh_from_db()
@@ -5499,6 +5507,22 @@ class NodeRoleAdminTests(TestCase):
         self.assertEqual(profile.ansible_playbook_path, "ansible/playbooks/ops.yml")
         self.assertEqual(profile.extra_vars, {"enable_celery": False, "nginx_mode": "internal"})
         self.assertEqual(profile.default_tags, ["ops", "manual"])
+
+    def test_configuration_profile_inline_displays_expected_playbook_path(self):
+        role = NodeRole.objects.create(name="Control QA")
+        RoleConfigurationProfile.objects.create(
+            role=role,
+            ansible_playbook_path="",
+            inventory_group="control",
+            extra_vars={},
+            default_tags=[],
+        )
+
+        url = reverse("admin:nodes_noderole_change", args=[role.pk])
+        response = self.client.get(url)
+
+        self.assertContains(response, "Expected playbook path: ansible/playbooks/control-qa.yml")
+        self.assertContains(response, 'value="ansible/playbooks/control-qa.yml"')
 
 
 class NodeFeatureFixtureTests(TestCase):
