@@ -269,7 +269,7 @@ def test_check_github_updates_treats_latest_mode_case_insensitively(
 
     tasks.check_github_updates()
 
-    assert ["./upgrade.sh", "--latest", "--no-restart"] in run_commands
+    assert ["./upgrade.sh", "--latest"] in run_commands
 
 
 @pytest.mark.parametrize(
@@ -280,9 +280,9 @@ def test_check_github_updates_treats_latest_mode_case_insensitively(
         "severity_name",
     ),
     [
-        ("latest", ["./upgrade.sh", "--latest", "--no-restart"], "latest", "NORMAL"),
-        ("stable", ["./upgrade.sh", "--stable", "--no-restart"], "stable", "CRITICAL"),
-        ("normal", ["./upgrade.sh", "--no-restart"], None, "NORMAL"),
+        ("latest", ["./upgrade.sh", "--latest"], "latest", "NORMAL"),
+        ("stable", ["./upgrade.sh", "--stable"], "stable", "CRITICAL"),
+        ("normal", ["./upgrade.sh"], None, "NORMAL"),
     ],
 )
 def test_check_github_updates_respects_channel_override(
@@ -452,7 +452,7 @@ def test_check_github_updates_allows_stable_critical_patch(monkeypatch, tmp_path
 
     tasks.check_github_updates()
 
-    assert ["./upgrade.sh", "--stable", "--no-restart"] in run_commands
+    assert ["./upgrade.sh", "--stable"] in run_commands
 
 
 def test_check_github_updates_restarts_dev_server(monkeypatch, tmp_path):
@@ -524,7 +524,7 @@ def test_check_github_updates_restarts_dev_server(monkeypatch, tmp_path):
     with override_settings(BASE_DIR=base_dir):
         tasks.check_github_updates()
 
-    assert any(cmd[0] == "./upgrade.sh" and "--no-restart" in cmd for cmd in run_commands)
+    assert any(cmd for cmd in run_commands if cmd and cmd[0] == "./upgrade.sh")
     assert popen_calls == [["./start.sh"]]
     assert any(
         "Restarting development server via start.sh" in message for message in messages
@@ -600,7 +600,7 @@ def test_check_github_updates_skips_latest_low_severity_patch(monkeypatch, tmp_p
 
     tasks.check_github_updates()
 
-    assert ["./upgrade.sh", "--latest", "--no-restart"] not in run_commands
+    assert not any(cmd for cmd in run_commands if cmd and cmd[0] == "./upgrade.sh")
     assert any(
         message.startswith("Skipping auto-upgrade for low severity patch")
         for message in messages

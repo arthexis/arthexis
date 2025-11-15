@@ -335,9 +335,16 @@ def _ensure_managed_service(
     if service_is_active:
         return True
 
+    restart_message = (
+        f"Service {service} not active after upgrade; restarting via start.sh"
+        if revert_on_failure
+        else (
+            f"Service {service} inactive during auto-upgrade check; restarting via start.sh"
+        )
+    )
     _append_auto_upgrade_log(
         base_dir,
-        f"Service {service} inactive during auto-upgrade check; restarting via start.sh",
+        restart_message,
     )
     if not _restart_service_via_start_script(base_dir, service):
         _append_auto_upgrade_log(
@@ -347,16 +354,25 @@ def _ensure_managed_service(
                 f"{service}"
             ),
         )
+        if revert_on_failure:
+            _revert_after_restart_failure(base_dir, service)
         return False
-    if command and not _wait_for_service_restart(base_dir, service):
+    if command:
         _append_auto_upgrade_log(
             base_dir,
-            (
-                f"Service {service} did not report active status after "
-                "automatic restart"
-            ),
+            f"Waiting for {service} to restart after upgrade",
         )
-        return False
+        if not _wait_for_service_restart(base_dir, service):
+            _append_auto_upgrade_log(
+                base_dir,
+                (
+                    f"Service {service} did not report active status after "
+                    "automatic restart"
+                ),
+            )
+            if revert_on_failure:
+                _revert_after_restart_failure(base_dir, service)
+            return False
     _append_auto_upgrade_log(
         base_dir,
         f"Service {service} restarted successfully during auto-upgrade check",
@@ -480,7 +496,10 @@ def _ensure_runtime_services(
             revert_on_failure=revert_on_failure,
         )
 
-    return _ensure_development_server(base_dir, restart_if_active=restart_if_active)
+    return _ensure_development_server(
+        base_dir,
+        restart_if_active=restart_if_active or revert_on_failure,
+    )
 
 
 def _resolve_release_severity(version: str | None) -> str:
@@ -900,7 +919,7 @@ def check_github_updates(channel_override: str | None = None) -> None:
 
             if notify:
                 notify("Upgrading...", upgrade_stamp)
-            args = ["./upgrade.sh", "--latest", "--no-restart"]
+            args = ["./upgrade.sh", "--latest"]
             upgrade_was_applied = True
         else:
             local_value = local_version or "0"
@@ -936,9 +955,9 @@ def check_github_updates(channel_override: str | None = None) -> None:
             if notify:
                 notify("Upgrading...", upgrade_stamp)
             if mode == "stable":
-                args = ["./upgrade.sh", "--stable", "--no-restart"]
+                args = ["./upgrade.sh", "--stable"]
             else:
-                args = ["./upgrade.sh", "--no-restart"]
+                args = ["./upgrade.sh"]
             upgrade_was_applied = True
 
         with log_file.open("a") as fh:
