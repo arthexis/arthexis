@@ -1,6 +1,7 @@
 import ast
 import inspect
 import textwrap
+from datetime import timedelta
 from pathlib import Path
 
 from datetime import timedelta
@@ -22,7 +23,7 @@ from core import mailer
 from core.models import Lead, RFID, GoogleCalendarProfile, Todo
 from core.entity import Entity
 from ocpp.models import Charger, ChargerConfiguration, CPFirmware
-from nodes.models import NetMessage
+from nodes.models import NetMessage, Node, NodeRole
 
 register = template.Library()
 
@@ -144,6 +145,7 @@ _MODEL_RULE_EVALUATORS = {
     "ocpp.Charger": _evaluate_evcs_heartbeat_rules,
     "ocpp.ChargerConfiguration": _evaluate_cp_configuration_rules,
     "ocpp.CPFirmware": _evaluate_cp_firmware_rules,
+    "nodes.Node": _evaluate_node_rules,
 }
 
 

@@ -945,6 +945,100 @@ class AdminModelRuleTemplateTagTests(TestCase):
 
         self.assertFalse(status["success"])
         self.assertIn("EVCS-FAIL", status["message"])
+    def test_model_rule_status_for_nodes_requires_local_node(self):
+        context = Context({})
+
+        status = admin_extras.model_rule_status(context, "nodes", "Node")
+
+        self.assertFalse(status["success"])
+        self.assertIn("Local node record is missing.", status["message"])
+
+    def test_model_rule_status_for_nodes_requires_upstream_node(self):
+        mac = Node.get_current_mac()
+        role, _ = NodeRole.objects.get_or_create(name="Terminal")
+        Node.objects.create(
+            hostname="local-node",
+            mac_address=mac,
+            public_endpoint="local-node",
+            current_relation=Node.Relation.SELF,
+            role=role,
+        )
+
+        context = Context({})
+        status = admin_extras.model_rule_status(context, "nodes", "Node")
+
+        self.assertFalse(status["success"])
+        self.assertIn("At least one upstream node is required.", status["message"])
+
+    def test_model_rule_status_for_nodes_requires_recent_upstream_update(self):
+        mac = Node.get_current_mac()
+        role, _ = NodeRole.objects.get_or_create(name="Terminal")
+        Node.objects.create(
+            hostname="local-node",
+            mac_address=mac,
+            public_endpoint="local-node",
+            current_relation=Node.Relation.SELF,
+            role=role,
+        )
+        upstream = Node.objects.create(
+            hostname="upstream-node",
+            public_endpoint="upstream-node",
+            current_relation=Node.Relation.UPSTREAM,
+        )
+        stale = timezone.now() - timedelta(days=2)
+        Node.objects.filter(pk=upstream.pk).update(last_seen=stale)
+
+        context = Context({})
+        status = admin_extras.model_rule_status(context, "nodes", "Node")
+
+        self.assertFalse(status["success"])
+        self.assertIn(
+            "No upstream nodes have checked in within the last 24 hours.",
+            status["message"],
+        )
+
+    def test_model_rule_status_for_nodes_requires_local_role(self):
+        mac = Node.get_current_mac()
+        Node.objects.create(
+            hostname="local-node",
+            mac_address=mac,
+            public_endpoint="local-node",
+            current_relation=Node.Relation.SELF,
+        )
+        Node.objects.create(
+            hostname="upstream-node",
+            public_endpoint="upstream-node",
+            current_relation=Node.Relation.UPSTREAM,
+        )
+
+        context = Context({})
+        status = admin_extras.model_rule_status(context, "nodes", "Node")
+
+        self.assertFalse(status["success"])
+        self.assertIn("Local node is missing an assigned role.", status["message"])
+
+    def test_model_rule_status_for_nodes_succeeds_when_all_checks_pass(self):
+        mac = Node.get_current_mac()
+        role, _ = NodeRole.objects.get_or_create(name="Terminal")
+        local = Node.objects.create(
+            hostname="local-node",
+            mac_address=mac,
+            public_endpoint="local-node",
+            current_relation=Node.Relation.SELF,
+            role=role,
+        )
+        upstream = Node.objects.create(
+            hostname="upstream-node",
+            public_endpoint="upstream-node",
+            current_relation=Node.Relation.UPSTREAM,
+        )
+        Node.objects.filter(pk=upstream.pk).update(last_seen=timezone.now())
+
+        context = Context({})
+        status = admin_extras.model_rule_status(context, "nodes", "Node")
+
+        self.assertTrue(status["success"])
+        self.assertEqual(status["message"], gettext("All rules met."))
 
 
 class AdminProtocolGroupingTests(TestCase):
