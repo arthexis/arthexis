@@ -18,6 +18,7 @@ from django.urls import NoReverseMatch, path, reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.utils.html import format_html, format_html_join
+from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _, ngettext
 from pathlib import Path
 from types import SimpleNamespace
@@ -149,6 +150,27 @@ class RoleConfigurationProfileInline(admin.StackedInline):
         "extra_vars",
         "default_tags",
     )
+
+    def get_formset(self, request, obj=None, **kwargs):
+        formset = super().get_formset(request, obj, **kwargs)
+        expected_slug = slugify(obj.name) if obj else None
+        expected_path = (
+            f"ansible/playbooks/{expected_slug}.yml"
+            if expected_slug
+            else "ansible/playbooks/<role>.yml"
+        )
+        help_text = _("Expected playbook path: %(path)s") % {"path": expected_path}
+        base_form = formset.form
+
+        class InlineForm(base_form):  # type: ignore[valid-type]
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                if not (self.instance.ansible_playbook_path or "").strip():
+                    self.initial.setdefault("ansible_playbook_path", expected_path)
+
+        InlineForm.base_fields["ansible_playbook_path"].help_text = help_text
+        formset.form = InlineForm
+        return formset
 
 
 class DeployDNSRecordsForm(forms.Form):
@@ -2030,6 +2052,9 @@ class NodeRoleAdminForm(forms.ModelForm):
     class Meta:
         model = NodeRole
         fields = ("name", "description", "nodes")
+
+    class Media:
+        css = {"all": ("nodes/css/noderole_admin.css",)}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
