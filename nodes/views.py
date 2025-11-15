@@ -93,6 +93,10 @@ CONSTELLATION_LOCK_PATH = Path(settings.BASE_DIR) / "locks" / "constellation_ip.
 CONSTELLATION_DEVICE_PATTERN = re.compile(r"^gw[0-9]{1,6}$")
 
 
+def _proxy_access_enabled() -> bool:
+    return bool(getattr(settings, "ENABLE_NODE_PROXY_SESSION", False))
+
+
 def _normalize_constellation_ip(value: str) -> str:
     value = (value or "").strip()
     if not value:
@@ -1867,12 +1871,17 @@ def network_charger_action(request):
     )
 
 
+# Node-to-node proxy login requests arrive without CSRF cookies; access is
+# restricted via signed node payloads and feature gating.
 @csrf_exempt
 def proxy_session(request):
     """Create a proxy login session for a remote administrator."""
 
     if request.method != "POST":
         return JsonResponse({"detail": "POST required"}, status=405)
+
+    if not _proxy_access_enabled():
+        return JsonResponse({"detail": "proxy session endpoint deprecated"}, status=410)
 
     try:
         payload = json.loads(request.body.decode() or "{}")
@@ -1922,6 +1931,19 @@ def proxy_session(request):
         if desired_staff != user.is_staff:
             return JsonResponse({"detail": "staff updates not allowed"}, status=403)
 
+    password_value = user_payload.get("password")
+    password = (
+        password_value
+        if isinstance(password_value, str)
+        else str(password_value or "")
+    )
+    if not password:
+        return JsonResponse({"detail": "password required"}, status=401)
+
+    auth_user = authenticate(request=None, username=username, password=password)
+    if auth_user is None or auth_user.pk != user.pk:
+        return JsonResponse({"detail": "authentication failed"}, status=403)
+
     updates: list[str] = []
     for field in ("first_name", "last_name", "email"):
         value = user_payload.get(field)
@@ -1949,9 +1971,14 @@ def proxy_session(request):
     return JsonResponse({"login_url": login_url, "expires": expires.isoformat()})
 
 
+# Proxy login redemption relies on the signed token alone; CSRF is disabled
+# because the token is single-use and feature gated.
 @csrf_exempt
 def proxy_login(request, token):
     """Redeem a proxy login token and redirect to the target path."""
+
+    if not _proxy_access_enabled():
+        return HttpResponse(status=410)
 
     signer = TimestampSigner(salt=PROXY_TOKEN_SALT)
     try:
@@ -2003,12 +2030,17 @@ def _suite_model_name(meta) -> str:
     return normalized or meta.object_name
 
 
+# Remote proxy operations come from nodes without CSRF cookies; requests are
+# signed and feature gated instead.
 @csrf_exempt
 def proxy_execute(request):
     """Execute model operations on behalf of a remote interface node."""
 
     if request.method != "POST":
         return JsonResponse({"detail": "POST required"}, status=405)
+
+    if not _proxy_access_enabled():
+        return JsonResponse({"detail": "proxy endpoints deprecated"}, status=410)
 
     try:
         payload = json.loads(request.body.decode() or "{}")
