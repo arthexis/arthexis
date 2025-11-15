@@ -145,9 +145,14 @@ def nav_links(request):
         node=node,
     )
 
+    chat_enabled = getattr(settings, "PAGES_CHAT_ENABLED", False)
+    chat_socket_path = getattr(settings, "PAGES_CHAT_SOCKET_PATH", "/ws/pages/chat/")
+
     return {
         "nav_modules": valid_modules,
         "favicon_url": favicon_url,
         "header_references": header_references,
         "login_url": resolve_url(settings.LOGIN_URL),
+        "chat_enabled": chat_enabled,
+        "chat_socket_path": chat_socket_path,
     }

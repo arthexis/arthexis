@@ -1,0 +1,15 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "is_seed_data": false,
+      "is_deleted": false,
+      "request": "Exercise the public chat widget and verify staff escalation",
+      "created_on": "2025-01-01T00:00:00Z",
+      "url": "/admin/pages/chatsession/",
+      "request_details": "1. Load the public site and open the chat widget. Submit a visitor message and confirm it appears immediately in the drawer.\n2. Sign into the Django admin and open the Chat sessions module; verify the new session contains the message transcript.\n3. With the visitor still connected, wait for the idle escalation window and confirm a NetMessage/Slack alert is generated when staff notifications are enabled.",
+      "generated_for_version": "",
+      "generated_for_revision": ""
+    }
+  }
+]

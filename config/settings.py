@@ -486,6 +486,16 @@ ASGI_APPLICATION = "config.asgi.application"
 # Channels configuration
 CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
 
+PAGES_CHAT_ENABLED = _env_bool("PAGES_CHAT_ENABLED", True)
+PAGES_CHAT_NOTIFY_STAFF = _env_bool("PAGES_CHAT_NOTIFY_STAFF", False)
+try:
+    PAGES_CHAT_IDLE_ESCALATE_SECONDS = int(
+        os.environ.get("PAGES_CHAT_IDLE_ESCALATE_SECONDS", "300")
+    )
+except (TypeError, ValueError):
+    PAGES_CHAT_IDLE_ESCALATE_SECONDS = 300
+PAGES_CHAT_SOCKET_PATH = os.environ.get("PAGES_CHAT_SOCKET_PATH", "/ws/pages/chat/")
+
 
 # Custom user model
 AUTH_USER_MODEL = "core.User"
