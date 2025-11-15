@@ -3598,6 +3598,10 @@ class NodeProxyGatewayTests(TestCase):
         return body, signature
 
     def test_proxy_session_creates_login_url(self):
+        User = get_user_model()
+        user = User.objects.create_user(username="proxy-user", password="pass")
+        user.is_staff = True
+        user.save(update_fields=["is_staff"])
         payload = {
             "requester": str(self.node.uuid),
             "user": {
@@ -3606,7 +3610,7 @@ class NodeProxyGatewayTests(TestCase):
                 "first_name": "Proxy",
                 "last_name": "User",
                 "is_staff": True,
-                "is_superuser": True,
+                "is_superuser": False,
                 "groups": [],
                 "permissions": [],
             },
@@ -3622,8 +3626,9 @@ class NodeProxyGatewayTests(TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.json()
         self.assertIn("login_url", data)
-        user = get_user_model().objects.get(username="proxy-user")
+        user.refresh_from_db()
         self.assertTrue(user.is_staff)
+        self.assertFalse(user.is_superuser)
         parsed = urlparse(data["login_url"])
         login_response = self.client.get(parsed.path)
         self.assertEqual(login_response.status_code, 302)
@@ -3632,7 +3637,55 @@ class NodeProxyGatewayTests(TestCase):
         second = self.client.get(parsed.path)
         self.assertEqual(second.status_code, 410)
 
+    def test_proxy_session_rejects_unknown_user(self):
+        payload = {
+            "requester": str(self.node.uuid),
+            "user": {
+                "username": "proxy-user",
+                "email": "proxy@example.com",
+                "first_name": "Proxy",
+                "last_name": "User",
+            },
+            "target": "/admin/",
+        }
+        body, signature = self._sign(payload)
+        response = self.client.post(
+            reverse("node-proxy-session"),
+            data=body,
+            content_type="application/json",
+            HTTP_X_SIGNATURE=signature,
+        )
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(get_user_model().objects.filter(username="proxy-user").exists())
+
+    def test_proxy_session_rejects_staff_escalation_attempt(self):
+        User = get_user_model()
+        user = User.objects.create_user(username="proxy-user", password="pass")
+        body, signature = self._sign(
+            {
+                "requester": str(self.node.uuid),
+                "user": {
+                    "username": "proxy-user",
+                    "is_staff": True,
+                },
+                "target": "/admin/",
+            }
+        )
+        response = self.client.post(
+            reverse("node-proxy-session"),
+            data=body,
+            content_type="application/json",
+            HTTP_X_SIGNATURE=signature,
+        )
+        self.assertEqual(response.status_code, 403)
+        user.refresh_from_db()
+        self.assertFalse(user.is_staff)
+
     def test_proxy_session_accepts_mac_hint_when_uuid_unknown(self):
+        User = get_user_model()
+        user = User.objects.create_user(username="proxy-user", password="pass")
+        user.is_staff = True
+        user.save(update_fields=["is_staff"])
         payload = {
             "requester": str(uuid.uuid4()),
             "requester_mac": self.node.mac_address,
@@ -3643,7 +3696,7 @@ class NodeProxyGatewayTests(TestCase):
                 "first_name": "Proxy",
                 "last_name": "User",
                 "is_staff": True,
-                "is_superuser": True,
+                "is_superuser": False,
                 "groups": [],
                 "permissions": [],
             },
@@ -3665,6 +3718,15 @@ class NodeProxyGatewayTests(TestCase):
             port=8010,
             mac_address="aa:bb:cc:dd:ee:bb",
         )
+        User = get_user_model()
+        user = User.objects.create_user(username="suite-user", password="secret")
+        user.is_staff = True
+        user.save(update_fields=["is_staff"])
+        perm = Permission.objects.filter(
+            content_type__app_label="nodes", codename="view_node"
+        ).first()
+        self.assertIsNotNone(perm)
+        user.user_permissions.add(perm)
         payload = {
             "requester": str(self.node.uuid),
             "action": "list",
@@ -3689,12 +3751,14 @@ class NodeProxyGatewayTests(TestCase):
         self.assertEqual(len(data.get("objects", [])), 1)
         record = data["objects"][0]
         self.assertEqual(record["fields"]["hostname"], "target")
-        user = get_user_model().objects.get(username="suite-user")
-        self.assertTrue(user.is_superuser)
+        user.refresh_from_db()
+        self.assertFalse(user.is_superuser)
 
     def test_proxy_execute_requires_valid_password_for_existing_user(self):
         User = get_user_model()
-        User.objects.create_user(username="suite-user", password="correct")
+        user = User.objects.create_user(username="suite-user", password="correct")
+        user.is_staff = True
+        user.save(update_fields=["is_staff"])
         payload = {
             "requester": str(self.node.uuid),
             "action": "list",
@@ -3713,7 +3777,57 @@ class NodeProxyGatewayTests(TestCase):
         )
         self.assertEqual(response.status_code, 403)
 
+    def test_proxy_execute_rejects_unknown_user(self):
+        payload = {
+            "requester": str(self.node.uuid),
+            "action": "list",
+            "model": "nodes.Node",
+            "credentials": {
+                "username": "suite-user",
+                "password": "secret",
+            },
+        }
+        body, signature = self._sign(payload)
+        response = self.client.post(
+            reverse("node-proxy-execute"),
+            data=body,
+            content_type="application/json",
+            HTTP_X_SIGNATURE=signature,
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(get_user_model().objects.filter(username="suite-user").exists())
+
+    def test_proxy_execute_rejects_superuser_escalation(self):
+        User = get_user_model()
+        user = User.objects.create_user(username="suite-user", password="secret")
+        user.is_staff = True
+        user.save(update_fields=["is_staff"])
+        payload = {
+            "requester": str(self.node.uuid),
+            "action": "list",
+            "model": "nodes.Node",
+            "credentials": {
+                "username": "suite-user",
+                "password": "secret",
+                "is_superuser": True,
+            },
+        }
+        body, signature = self._sign(payload)
+        response = self.client.post(
+            reverse("node-proxy-execute"),
+            data=body,
+            content_type="application/json",
+            HTTP_X_SIGNATURE=signature,
+        )
+        self.assertEqual(response.status_code, 403)
+        user.refresh_from_db()
+        self.assertFalse(user.is_superuser)
+
     def test_proxy_execute_schema_returns_models(self):
+        User = get_user_model()
+        user = User.objects.create_user(username="suite-user", password="secret")
+        user.is_staff = True
+        user.save(update_fields=["is_staff"])
         payload = {
             "requester": str(self.node.uuid),
             "action": "schema",

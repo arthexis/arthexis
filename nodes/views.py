@@ -1902,14 +1902,25 @@ def proxy_session(request):
         return JsonResponse({"detail": "username required"}, status=400)
 
     User = get_user_model()
-    user, created = User.objects.get_or_create(
-        username=username,
-        defaults={
-            "email": user_payload.get("email", ""),
-            "first_name": user_payload.get("first_name", ""),
-            "last_name": user_payload.get("last_name", ""),
-        },
-    )
+    user = User.objects.filter(username=username).first()
+    if user is None:
+        return JsonResponse({"detail": "user not found"}, status=404)
+
+    if not user.is_active:
+        return JsonResponse({"detail": "user inactive"}, status=403)
+
+    if not user.is_staff:
+        return JsonResponse({"detail": "user is not staff"}, status=403)
+
+    if "is_superuser" in user_payload:
+        desired_superuser = bool(user_payload.get("is_superuser"))
+        if desired_superuser != user.is_superuser:
+            return JsonResponse({"detail": "superuser updates not allowed"}, status=403)
+
+    if "is_staff" in user_payload:
+        desired_staff = bool(user_payload.get("is_staff"))
+        if desired_staff != user.is_staff:
+            return JsonResponse({"detail": "staff updates not allowed"}, status=403)
 
     updates: list[str] = []
     for field in ("first_name", "last_name", "email"):
@@ -1917,30 +1928,6 @@ def proxy_session(request):
         if isinstance(value, str) and getattr(user, field) != value:
             setattr(user, field, value)
             updates.append(field)
-
-    if created:
-        user.set_unusable_password()
-        updates.append("password")
-
-    staff_flag = user_payload.get("is_staff")
-    if staff_flag is not None:
-        is_staff = bool(staff_flag)
-    else:
-        is_staff = True
-    if user.is_staff != is_staff:
-        user.is_staff = is_staff
-        updates.append("is_staff")
-
-    superuser_flag = user_payload.get("is_superuser")
-    if superuser_flag is not None:
-        is_superuser = bool(superuser_flag)
-        if user.is_superuser != is_superuser:
-            user.is_superuser = is_superuser
-            updates.append("is_superuser")
-
-    if not user.is_active:
-        user.is_active = True
-        updates.append("is_active")
 
     if updates:
         user.save(update_fields=updates)
@@ -2057,40 +2044,31 @@ def proxy_execute(request):
         return JsonResponse({"detail": "credentials required"}, status=401)
 
     User = get_user_model()
-    existing_user = User.objects.filter(username=username).first()
     auth_user = authenticate(request=None, username=username, password=password)
 
     if auth_user is None:
-        if existing_user is not None:
-            return JsonResponse({"detail": "authentication failed"}, status=403)
-        auth_user = User.objects.create_user(
-            username=username,
-            password=password,
-            email=str(credentials.get("email", "")),
-        )
-        auth_user.is_staff = True
-        auth_user.is_superuser = True
-        auth_user.first_name = str(credentials.get("first_name", ""))
-        auth_user.last_name = str(credentials.get("last_name", ""))
-        auth_user.save()
-    else:
-        updates: list[str] = []
-        for field in ("first_name", "last_name", "email"):
-            value = credentials.get(field)
-            if isinstance(value, str) and getattr(auth_user, field) != value:
-                setattr(auth_user, field, value)
-                updates.append(field)
-        for flag in ("is_staff", "is_superuser"):
-            if flag in credentials:
-                desired = bool(credentials.get(flag))
-                if getattr(auth_user, flag) != desired:
-                    setattr(auth_user, flag, desired)
-                    updates.append(flag)
-        if updates:
-            auth_user.save(update_fields=updates)
+        return JsonResponse({"detail": "authentication failed"}, status=403)
 
     if not auth_user.is_active:
         return JsonResponse({"detail": "user inactive"}, status=403)
+
+    if not auth_user.is_staff and not auth_user.is_superuser:
+        return JsonResponse({"detail": "user is not staff"}, status=403)
+
+    for flag in ("is_staff", "is_superuser"):
+        if flag in credentials:
+            desired = bool(credentials.get(flag))
+            if desired != getattr(auth_user, flag):
+                return JsonResponse({"detail": f"{flag} updates not allowed"}, status=403)
+
+    updates: list[str] = []
+    for field in ("first_name", "last_name", "email"):
+        value = credentials.get(field)
+        if isinstance(value, str) and getattr(auth_user, field) != value:
+            setattr(auth_user, field, value)
+            updates.append(field)
+    if updates:
+        auth_user.save(update_fields=updates)
 
     _assign_groups_and_permissions(auth_user, credentials)
 
