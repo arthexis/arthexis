@@ -3,6 +3,8 @@ import inspect
 import textwrap
 from pathlib import Path
 
+from datetime import timedelta
+
 from django import template
 from django.apps import apps
 from django.contrib import admin
@@ -13,6 +15,7 @@ from django.db.models import Model
 from django.conf import settings
 from django.core.cache import cache
 from django.urls import NoReverseMatch, reverse
+from django.utils import timezone
 from django.utils.text import capfirst
 from django.utils.translation import gettext_lazy as _, ngettext
 from core import mailer
@@ -105,7 +108,40 @@ def _evaluate_cp_firmware_rules() -> dict[str, object] | None:
     return _rule_success()
 
 
+def _evaluate_evcs_heartbeat_rules() -> dict[str, object] | None:
+    cutoff = timezone.now() - timedelta(hours=1)
+    chargers = list(
+        Charger.objects.filter(connector_id__isnull=True)
+        .order_by("charger_id")
+        .values_list("charger_id", "last_heartbeat")
+    )
+    registered = [
+        (identifier, heartbeat)
+        for identifier, heartbeat in chargers
+        if identifier and heartbeat is not None
+    ]
+    if not registered:
+        return _rule_success()
+
+    missing = [
+        identifier
+        for identifier, heartbeat in registered
+        if heartbeat < cutoff
+    ]
+    if missing:
+        evcs_list = _format_evcs_list(missing)
+        message = ngettext(
+            "Missing EVCS heartbeat within the last hour for %(evcs)s.",
+            "Missing EVCS heartbeats within the last hour for %(evcs)s.",
+            len(missing),
+        ) % {"evcs": evcs_list}
+        return _rule_failure(message)
+
+    return _rule_success()
+
+
 _MODEL_RULE_EVALUATORS = {
+    "ocpp.Charger": _evaluate_evcs_heartbeat_rules,
     "ocpp.ChargerConfiguration": _evaluate_cp_configuration_rules,
     "ocpp.CPFirmware": _evaluate_cp_firmware_rules,
 }
