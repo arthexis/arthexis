@@ -101,22 +101,28 @@ echo "Features:"
 echo "  Celery: $CELERY_FEATURE"
 echo "  LCD screen: $LCD_FEATURE"
 
-UPGRADE_LOCK_FILE="$LOCK_DIR/upgrade_in_progress.lck"
-if [ -f "$UPGRADE_LOCK_FILE" ]; then
-  if ! mapfile -t UPGRADE_LOCK_LINES < "$UPGRADE_LOCK_FILE"; then
-    UPGRADE_LOCK_LINES=()
+UPGRADE_GUARD_ACTIVE=false
+UPGRADE_GUARD_DEADLINE=""
+if [ -n "$SERVICE" ] && command -v systemctl >/dev/null 2>&1; then
+  GUARD_TIMER="${SERVICE}-upgrade-guard.timer"
+  if systemctl list-unit-files | grep -Fq "$GUARD_TIMER"; then
+    GUARD_INFO=$(systemctl show "$GUARD_TIMER" --property=ActiveState --property=NextElapseUSecRealtime 2>/dev/null || true)
+    GUARD_STATE=$(printf '%s\n' "$GUARD_INFO" | awk -F= '/^ActiveState=/{print $2}')
+    GUARD_DEADLINE=$(printf '%s\n' "$GUARD_INFO" | awk -F= '/^NextElapseUSecRealtime=/{print $2}')
+    case "$GUARD_STATE" in
+      active|activating)
+        UPGRADE_GUARD_ACTIVE=true
+        if [ -n "$GUARD_DEADLINE" ] && [ "$GUARD_DEADLINE" != "0" ]; then
+          UPGRADE_GUARD_DEADLINE="$GUARD_DEADLINE"
+        fi
+        ;;
+    esac
   fi
-  UPGRADE_STARTED="${UPGRADE_LOCK_LINES[0]}"
-  UPGRADE_PID="${UPGRADE_LOCK_LINES[1]}"
-  echo "Upgrade in progress: true"
-  if [ -n "$UPGRADE_STARTED" ]; then
-    echo "  Started at: $UPGRADE_STARTED"
-  fi
-  if [ -n "$UPGRADE_PID" ]; then
-    echo "  PID: $UPGRADE_PID"
-  fi
-else
-  echo "Upgrade in progress: false"
+fi
+
+echo "Upgrade restart guard active: $UPGRADE_GUARD_ACTIVE"
+if [ "$UPGRADE_GUARD_ACTIVE" = true ] && [ -n "$UPGRADE_GUARD_DEADLINE" ]; then
+  echo "  Restart deadline: $UPGRADE_GUARD_DEADLINE"
 fi
 
 echo "Checking running status..."

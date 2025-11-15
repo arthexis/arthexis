@@ -640,19 +640,18 @@ def _build_system_fields(info: dict[str, object]) -> list[SystemField]:
         visible=bool(info.get("service")),
     )
 
-    upgrade_running = bool(info.get("upgrade_running", False))
-    add_field(_("Upgrade running"), "UPGRADE_RUNNING", upgrade_running, field_type="boolean")
+    upgrade_guard_active = bool(info.get("upgrade_guard_active", False))
     add_field(
-        _("Upgrade started at"),
-        "UPGRADE_STARTED_AT",
-        info.get("upgrade_started_at", ""),
-        visible=upgrade_running and bool(info.get("upgrade_started_at")),
+        _("Upgrade restart guard active"),
+        "UPGRADE_GUARD_ACTIVE",
+        upgrade_guard_active,
+        field_type="boolean",
     )
     add_field(
-        _("Upgrade process ID"),
-        "UPGRADE_PID",
-        info.get("upgrade_pid", ""),
-        visible=upgrade_running and bool(info.get("upgrade_pid")),
+        _("Automatic restart deadline"),
+        "UPGRADE_RESTART_DEADLINE",
+        info.get("upgrade_restart_deadline", ""),
+        visible=upgrade_guard_active and bool(info.get("upgrade_restart_deadline", "")),
     )
 
     add_field(_("Hostname"), "HOSTNAME", info.get("hostname", ""))
@@ -791,6 +790,47 @@ def _port_candidates(default_port: int) -> list[int]:
     return candidates
 
 
+def _read_upgrade_guard_state(service: str) -> tuple[bool, str]:
+    """Inspect the systemd timer responsible for post-upgrade recovery."""
+
+    if not service or not shutil.which("systemctl"):
+        return False, ""
+
+    guard_timer = f"{service}-upgrade-guard.timer"
+    try:
+        result = subprocess.run(
+            [
+                "systemctl",
+                "show",
+                guard_timer,
+                "--property=ActiveState",
+                "--property=NextElapseUSecRealtime",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except Exception:
+        return False, ""
+
+    if result.returncode != 0:
+        return False, ""
+
+    active_state = ""
+    next_elapse = ""
+    for line in result.stdout.splitlines():
+        if line.startswith("ActiveState="):
+            active_state = line.partition("=")[2].strip()
+        elif line.startswith("NextElapseUSecRealtime="):
+            next_elapse = line.partition("=")[2].strip()
+
+    is_active = active_state in {"active", "activating"}
+    if not is_active or next_elapse == "0":
+        next_elapse = ""
+
+    return is_active, next_elapse
+
+
 def _gather_info() -> dict:
     """Collect basic system information similar to status.sh."""
     base_dir = Path(settings.BASE_DIR)
@@ -919,23 +959,9 @@ def _gather_info() -> dict:
     info["port"] = detected_port if detected_port is not None else default_port
     info["service_status"] = service_status
 
-    upgrade_lock_file = lock_dir / "upgrade_in_progress.lck"
-    upgrade_running = False
-    upgrade_started_at = ""
-    upgrade_pid = ""
-    if upgrade_lock_file.exists():
-        upgrade_running = True
-        try:
-            raw_lines = upgrade_lock_file.read_text().splitlines()
-        except OSError:
-            raw_lines = []
-        if raw_lines:
-            upgrade_started_at = raw_lines[0].strip()
-            if len(raw_lines) > 1:
-                upgrade_pid = raw_lines[1].strip()
-    info["upgrade_running"] = upgrade_running
-    info["upgrade_started_at"] = upgrade_started_at
-    info["upgrade_pid"] = upgrade_pid
+    upgrade_guard_active, upgrade_restart_deadline = _read_upgrade_guard_state(service)
+    info["upgrade_guard_active"] = upgrade_guard_active
+    info["upgrade_restart_deadline"] = upgrade_restart_deadline
 
     try:
         hostname = socket.gethostname()

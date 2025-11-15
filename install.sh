@@ -30,9 +30,10 @@ ENABLE_CONTROL=false
 NODE_ROLE="Terminal"
 REQUIRES_REDIS=false
 START_SERVICES=false
+REPAIR=false
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--public|--internal] [--port PORT] [--upgrade] [--auto-upgrade] [--latest|--stable] [--satellite] [--terminal] [--control] [--watchtower] [--celery] [--lcd-screen|--no-lcd-screen] [--clean] [--start]" >&2
+    echo "Usage: $0 [--service NAME] [--public|--internal] [--port PORT] [--upgrade] [--auto-upgrade] [--latest|--stable] [--satellite] [--terminal] [--control] [--watchtower] [--celery] [--lcd-screen|--no-lcd-screen] [--clean] [--start] [--repair]" >&2
     exit 1
 }
 
@@ -188,6 +189,10 @@ while [[ $# -gt 0 ]]; do
             START_SERVICES=true
             shift
             ;;
+        --repair)
+            REPAIR=true
+            shift
+            ;;
         --satellite)
             require_nginx "satellite"
             AUTO_UPGRADE=true
@@ -238,6 +243,27 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+if [ "$REPAIR" = true ]; then
+    LOCK_DIR_PATH="$SCRIPT_DIR/locks"
+    if [ -z "$SERVICE" ] && [ -f "$LOCK_DIR_PATH/service.lck" ]; then
+        SERVICE="$(cat "$LOCK_DIR_PATH/service.lck")"
+        echo "Repair mode: reusing existing service '$SERVICE'."
+    fi
+    if [ -f "$LOCK_DIR_PATH/nginx_mode.lck" ]; then
+        NGINX_MODE="$(cat "$LOCK_DIR_PATH/nginx_mode.lck")"
+    fi
+    if [ "$ENABLE_CELERY" = false ] && [ -f "$LOCK_DIR_PATH/celery.lck" ]; then
+        ENABLE_CELERY=true
+    fi
+    if [ "$ENABLE_LCD_SCREEN" = false ] && [ -f "$LOCK_DIR_PATH/lcd_screen.lck" ]; then
+        ENABLE_LCD_SCREEN=true
+        DISABLE_LCD_SCREEN=false
+    fi
+    if [ "$ENABLE_CONTROL" = false ] && [ -f "$LOCK_DIR_PATH/control.lck" ]; then
+        ENABLE_CONTROL=true
+    fi
+fi
 
 if [ "$LATEST" = true ] && [ "$STABLE" = true ]; then
     echo "--stable cannot be used together with --latest." >&2
@@ -385,6 +411,38 @@ User=$(id -un)
 [Install]
 WantedBy=multi-user.target
 SERVICEEOF
+    GUARD_SERVICE="${SERVICE}-upgrade-guard"
+    GUARD_SERVICE_FILE="/etc/systemd/system/${GUARD_SERVICE}.service"
+    sudo bash -c "cat > '$GUARD_SERVICE_FILE'" <<GUARDSERVICEEOF
+[Unit]
+Description=Restart guard for ${SERVICE} after upgrades
+After=network.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=$BASE_DIR
+EnvironmentFile=-$BASE_DIR/redis.env
+EnvironmentFile=-$BASE_DIR/debug.env
+ExecStart=$BASE_DIR/start.sh
+User=$(id -un)
+
+[Install]
+WantedBy=multi-user.target
+GUARDSERVICEEOF
+    GUARD_TIMER_FILE="/etc/systemd/system/${GUARD_SERVICE}.timer"
+    sudo bash -c "cat > '$GUARD_TIMER_FILE'" <<GUARDTIMEREOF
+[Unit]
+Description=Automatically restart ${SERVICE} if an upgrade stalls
+
+[Timer]
+OnActiveSec=5min
+AccuracySec=30s
+Persistent=false
+Unit=${GUARD_SERVICE}.service
+
+[Install]
+WantedBy=timers.target
+GUARDTIMEREOF
     if [ "$ENABLE_CELERY" = true ]; then
         CELERY_SERVICE="celery-$SERVICE"
         CELERY_SERVICE_FILE="/etc/systemd/system/${CELERY_SERVICE}.service"

@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Confirm upgrade restart guard enforces 5-minute deadline",
+      "created_on": "2025-11-15T00:00:00Z",
+      "url": "/admin/system/",
+      "request_details": "1. On a node with a systemd deployment, note the service name from `cat locks/service.lck`.\n2. Trigger an upgrade with `./upgrade.sh --latest --no-restart` to leave the suite stopped after migrations run.\n3. Immediately run `sudo systemctl show ${SERVICE}-upgrade-guard.timer --property=ActiveState --property=NextElapseUSecRealtime` (replace ${SERVICE} with the recorded service name) and confirm the timer reports ActiveState=active with a deadline approximately five minutes in the future.\n4. Without manually restarting the suite, wait for the timer to elapse and confirm `sudo systemctl status ${SERVICE}` reports the Django service as active again.\n5. Review `logs/upgrade.sh.log` and ensure it records the scheduled guard activation and the automatic restart.\n6. Re-run `./status.sh` and verify it reports `Upgrade restart guard active: false` once the service is healthy.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]
