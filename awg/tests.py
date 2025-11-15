@@ -217,6 +217,21 @@ class FutureEventCalculatorTests(TestCase):
         self.assertContains(resp, "data-countdown-days")
         self.assertIn("countdown-slide text-center", resp.content.decode())
 
+    def test_single_event_outputs_one_slide(self):
+        CountdownTimer.objects.all().delete()
+        CountdownTimer.objects.create(
+            title="Solo Event",
+            scheduled_for=timezone.now() + timedelta(days=1),
+            is_published=True,
+        )
+
+        resp = self.client.get(self.url)
+        html = resp.content.decode()
+
+        self.assertEqual(html.count(' data-event-slide'), 1)
+        self.assertNotIn(' data-event-next', html)
+        self.assertNotIn(' data-event-prev', html)
+
     def test_limits_display_to_three_events(self):
         base_time = timezone.now()
         for offset in range(4):
