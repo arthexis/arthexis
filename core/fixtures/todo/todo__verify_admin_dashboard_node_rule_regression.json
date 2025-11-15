@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Confirm admin node health rules load without errors",
+      "created_on": "2025-01-02T00:00:00Z",
+      "url": "/admin/",
+      "request_details": "1. Sign in to the Django admin and open /admin/.\n2. Verify the dashboard loads without a NameError and the Nodes → Nodes row renders the health status badge.\n3. Confirm the badge shows a red cross with the appropriate error message when the local node is missing, lacks a role, or all upstream nodes are stale, then restore the original data so the badge returns to the green 'All rules met.' state.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]
