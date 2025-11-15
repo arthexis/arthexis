@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate screen Markdown reader TOC text wrapping",
+      "created_on": "2024-01-01T00:00:00Z",
+      "url": "/read/docs/cookbooks/ocpp-roadmap/",
+      "request_details": "Open the OCPP Roadmap cookbook in the Markdown reader and scroll through the left-hand contents sidebar on a desktop display. Confirm long section titles wrap to the next line instead of forcing a horizontal scrollbar at any zoom level. Resize the browser between 992px and full HD widths to double-check that the sidebar continues to avoid horizontal scrolling and that links remain readable.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]
