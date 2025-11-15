@@ -3,126 +3,134 @@
     <form method="post" class="simulator-form">
       {% csrf_token %}
       <input type="hidden" name="cp" value="{{ idx }}">
-      <div class="row g-2">
-        <div class="col-sm-6 col-md-4">
-          <div class="mb-2">
-            <label class="form-label" for="host{{ idx }}">Host</label>
-            <input id="host{{ idx }}" name="host" value="{{ cp.params.host|default:default_host }}" class="form-control form-control-sm">
+      <div class="row g-3 align-items-start">
+        <div class="col-12 col-xl-9">
+          <div class="row g-2">
+            <div class="col-sm-6 col-md-4">
+              <div class="mb-2">
+                <label class="form-label" for="host{{ idx }}">Host</label>
+                <input id="host{{ idx }}" name="host" value="{{ cp.params.host|default:default_host }}" class="form-control form-control-sm">
+              </div>
+            </div>
+            <div class="col-sm-6 col-md-4">
+              <div class="mb-2">
+                <label class="form-label" for="ws_port{{ idx }}">Port</label>
+                <input id="ws_port{{ idx }}" name="ws_port" value="{{ cp.params.ws_port|default:default_ws_port }}" class="form-control form-control-sm">
+              </div>
+            </div>
+            <div class="col-sm-6 col-md-4">
+              <div class="mb-2">
+                <label class="form-label" for="cp_path{{ idx }}">Serial Number</label>
+                <input id="cp_path{{ idx }}" name="cp_path" aria-describedby="cp_path_help{{ idx }}" value="{{ cp.params.cp_path|default:default_cp_path }}" class="form-control form-control-sm">
+                <div id="cp_path_help{{ idx }}" class="form-text">Charge Point WS path</div>
+              </div>
+            </div>
+            <div class="col-sm-6 col-md-4">
+              <div class="mb-2">
+                <label class="form-label" for="serial_number{{ idx }}">Serial Number</label>
+                <input id="serial_number{{ idx }}" name="serial_number" value="{{ cp.params.serial_number|default:default_serial_number }}" class="form-control form-control-sm">
+              </div>
+            </div>
+            <div class="col-sm-6 col-md-4">
+              <div class="mb-2">
+                <label class="form-label" for="connector_id{{ idx }}">Connector ID</label>
+                <input id="connector_id{{ idx }}" name="connector_id" value="{{ cp.params.connector_id|default:default_connector_id }}" class="form-control form-control-sm">
+              </div>
+            </div>
+            <div class="col-sm-6 col-md-4">
+              <div class="mb-2">
+                <label class="form-label" for="rfid{{ idx }}">RFID</label>
+                <input id="rfid{{ idx }}" name="rfid" value="{{ cp.params.rfid|default:default_rfid }}" class="form-control form-control-sm">
+              </div>
+            </div>
+            <div class="col-sm-6 col-md-4">
+              <div class="mb-2">
+                <label class="form-label" for="vin{{ idx }}">VIN</label>
+                <input id="vin{{ idx }}" name="vin" value="{{ cp.params.vin|default:default_vin }}" class="form-control form-control-sm">
+              </div>
+            </div>
+            <div class="col-sm-6 col-md-4">
+              <div class="mb-2">
+                <label class="form-label" for="duration{{ idx }}">Duration (s)</label>
+                <input id="duration{{ idx }}" name="duration" value="{{ cp.params.duration|default:600 }}" class="form-control form-control-sm">
+              </div>
+            </div>
+            <div class="col-sm-6 col-md-4">
+              <div class="mb-2">
+                <label class="form-label" for="interval{{ idx }}">Interval (s)</label>
+                <input id="interval{{ idx }}" name="interval" value="{{ cp.params.interval|default:5 }}" class="form-control form-control-sm">
+              </div>
+            </div>
+            <div class="col-sm-6 col-md-4">
+              <div class="mb-2">
+                <label class="form-label" for="pre_charge_delay{{ idx }}">Pre-charge Delay (s)</label>
+                <input id="pre_charge_delay{{ idx }}" name="pre_charge_delay" value="{{ cp.params.pre_charge_delay|default:0 }}" class="form-control form-control-sm">
+              </div>
+            </div>
+            <div class="col-sm-6 col-md-4">
+              <div class="mb-2">
+                <label class="form-label" for="kw_min{{ idx }}">Energy Min (kW)</label>
+                <input id="kw_min{{ idx }}" name="kw_min" value="{{ cp.params.kw_min|default:30 }}" class="form-control form-control-sm">
+              </div>
+            </div>
+            <div class="col-sm-6 col-md-4">
+              <div class="mb-2">
+                <label class="form-label" for="kw_max{{ idx }}">Energy Max (kW)</label>
+                <input id="kw_max{{ idx }}" name="kw_max" value="{{ cp.params.kw_max|default:60 }}" class="form-control form-control-sm">
+              </div>
+            </div>
+            <div class="col-sm-6 col-md-4">
+              <div class="mb-2">
+                <label class="form-label" for="repeat{{ idx }}">Repeat</label>
+                <select id="repeat{{ idx }}" name="repeat" class="form-select form-select-sm">
+                  <option value="False" {% if not cp.params.repeat %}selected{% endif %}>No</option>
+                  <option value="True" {% if cp.params.repeat %}selected{% endif %}>Yes</option>
+                </select>
+              </div>
+            </div>
+            <div class="col-sm-6 col-md-4">
+              <div class="mb-2">
+                <label class="form-label" for="username{{ idx }}">User</label>
+                <input id="username{{ idx }}" name="username" value="" class="form-control form-control-sm">
+              </div>
+            </div>
+            <div class="col-sm-6 col-md-4">
+              <div class="mb-2">
+                <label class="form-label" for="password{{ idx }}">Pass</label>
+                <input id="password{{ idx }}" name="password" type="password" value="" class="form-control form-control-sm">
+              </div>
+            </div>
           </div>
         </div>
-        <div class="col-sm-6 col-md-4">
-          <div class="mb-2">
-            <label class="form-label" for="ws_port{{ idx }}">Port</label>
-            <input id="ws_port{{ idx }}" name="ws_port" value="{{ cp.params.ws_port|default:default_ws_port }}" class="form-control form-control-sm">
+        <div class="col-12 col-xl-3">
+          <div class="d-flex flex-column gap-3">
+            <div class="d-grid gap-2">
+              <button type="submit" name="action" value="start" class="btn btn-primary" {% if cp.running %}disabled{% endif %}>Start</button>
+              <button type="submit" name="action" value="stop" class="btn btn-secondary" {% if not cp.running %}disabled{% endif %}>Stop</button>
+            </div>
+            <div class="simulator-status"><span class="state-dot {% if cp.running %}online{% else %}stopped{% endif %}"></span><span>{% if cp.running %}Running{% else %}Stopped{% endif %}</span></div>
+            <div class="simulator-details">
+              <label>Last Status:</label> <span class="stat">{{ cp.last_status|default:"-" }}</span>
+              <label>Phase:</label> <span class="stat">{{ cp.phase|default:"-" }}</span>
+              <label>Last Message:</label> <span class="stat">{{ cp.last_message|default:"-" }}</span>
+              <label>Last Command:</label> <span class="stat">{{ cp.last_command|default:"-" }}</span>
+              <label>Started:</label> <span class="stat">{{ cp.start_time|default:"-" }}</span>
+              <label>Stopped:</label> <span class="stat">{{ cp.stop_time|default:"-" }}</span>
+            </div>
+            {% if cp.last_error %}
+            <div class="error"><b>Error:</b><pre>{{ cp.last_error }}</pre></div>
+            {% endif %}
+            <details class="simulator-panel"><summary>Show CP Simulator Params</summary><pre>{{ params_json|safe }}</pre></details>
+            <details class="simulator-panel"><summary>Show CP Simulator State JSON</summary><pre>{{ state_json|safe }}</pre></details>
+            {% if prev_tab or next_tab %}
+            <div class="d-flex justify-content-between">
+              {% if prev_tab %}<a class="btn btn-outline-secondary" data-bs-toggle="tab" href="#{{ prev_tab }}">Prev</a>{% endif %}
+              {% if next_tab %}<a class="btn btn-outline-secondary ms-auto" data-bs-toggle="tab" href="#{{ next_tab }}">Next</a>{% endif %}
+            </div>
+            {% endif %}
           </div>
         </div>
-        <div class="col-sm-6 col-md-4">
-          <div class="mb-2">
-            <label class="form-label" for="cp_path{{ idx }}">Serial Number</label>
-            <input id="cp_path{{ idx }}" name="cp_path" aria-describedby="cp_path_help{{ idx }}" value="{{ cp.params.cp_path|default:default_cp_path }}" class="form-control form-control-sm">
-            <div id="cp_path_help{{ idx }}" class="form-text">Charge Point WS path</div>
-          </div>
-        </div>
-        <div class="col-sm-6 col-md-4">
-          <div class="mb-2">
-            <label class="form-label" for="serial_number{{ idx }}">Serial Number</label>
-            <input id="serial_number{{ idx }}" name="serial_number" value="{{ cp.params.serial_number|default:default_serial_number }}" class="form-control form-control-sm">
-          </div>
-        </div>
-        <div class="col-sm-6 col-md-4">
-          <div class="mb-2">
-            <label class="form-label" for="connector_id{{ idx }}">Connector ID</label>
-            <input id="connector_id{{ idx }}" name="connector_id" value="{{ cp.params.connector_id|default:default_connector_id }}" class="form-control form-control-sm">
-          </div>
-        </div>
-        <div class="col-sm-6 col-md-4">
-          <div class="mb-2">
-            <label class="form-label" for="rfid{{ idx }}">RFID</label>
-            <input id="rfid{{ idx }}" name="rfid" value="{{ cp.params.rfid|default:default_rfid }}" class="form-control form-control-sm">
-          </div>
-        </div>
-        <div class="col-sm-6 col-md-4">
-          <div class="mb-2">
-            <label class="form-label" for="vin{{ idx }}">VIN</label>
-            <input id="vin{{ idx }}" name="vin" value="{{ cp.params.vin|default:default_vin }}" class="form-control form-control-sm">
-          </div>
-        </div>
-        <div class="col-sm-6 col-md-4">
-          <div class="mb-2">
-            <label class="form-label" for="duration{{ idx }}">Duration (s)</label>
-            <input id="duration{{ idx }}" name="duration" value="{{ cp.params.duration|default:600 }}" class="form-control form-control-sm">
-          </div>
-        </div>
-        <div class="col-sm-6 col-md-4">
-          <div class="mb-2">
-            <label class="form-label" for="interval{{ idx }}">Interval (s)</label>
-            <input id="interval{{ idx }}" name="interval" value="{{ cp.params.interval|default:5 }}" class="form-control form-control-sm">
-          </div>
-        </div>
-        <div class="col-sm-6 col-md-4">
-          <div class="mb-2">
-            <label class="form-label" for="pre_charge_delay{{ idx }}">Pre-charge Delay (s)</label>
-            <input id="pre_charge_delay{{ idx }}" name="pre_charge_delay" value="{{ cp.params.pre_charge_delay|default:0 }}" class="form-control form-control-sm">
-          </div>
-        </div>
-        <div class="col-sm-6 col-md-4">
-          <div class="mb-2">
-            <label class="form-label" for="kw_min{{ idx }}">Energy Min (kW)</label>
-            <input id="kw_min{{ idx }}" name="kw_min" value="{{ cp.params.kw_min|default:30 }}" class="form-control form-control-sm">
-          </div>
-        </div>
-        <div class="col-sm-6 col-md-4">
-          <div class="mb-2">
-            <label class="form-label" for="kw_max{{ idx }}">Energy Max (kW)</label>
-            <input id="kw_max{{ idx }}" name="kw_max" value="{{ cp.params.kw_max|default:60 }}" class="form-control form-control-sm">
-          </div>
-        </div>
-        <div class="col-sm-6 col-md-4">
-          <div class="mb-2">
-            <label class="form-label" for="repeat{{ idx }}">Repeat</label>
-            <select id="repeat{{ idx }}" name="repeat" class="form-select form-select-sm">
-              <option value="False" {% if not cp.params.repeat %}selected{% endif %}>No</option>
-              <option value="True" {% if cp.params.repeat %}selected{% endif %}>Yes</option>
-            </select>
-          </div>
-        </div>
-        <div class="col-sm-6 col-md-4">
-          <div class="mb-2">
-            <label class="form-label" for="username{{ idx }}">User</label>
-            <input id="username{{ idx }}" name="username" value="" class="form-control form-control-sm">
-          </div>
-        </div>
-        <div class="col-sm-6 col-md-4">
-          <div class="mb-2">
-            <label class="form-label" for="password{{ idx }}">Pass</label>
-            <input id="password{{ idx }}" name="password" type="password" value="" class="form-control form-control-sm">
-          </div>
-        </div>
-      </div>
-      <div class="d-flex gap-2">
-        <button type="submit" name="action" value="start" class="btn btn-primary" {% if cp.running %}disabled{% endif %}>Start</button>
-        <button type="submit" name="action" value="stop" class="btn btn-secondary" {% if not cp.running %}disabled{% endif %}>Stop</button>
       </div>
     </form>
-    <div class="simulator-status mt-2"><span class="state-dot {% if cp.running %}online{% else %}stopped{% endif %}"></span><span>{% if cp.running %}Running{% else %}Stopped{% endif %}</span></div>
-    <div class="simulator-details">
-      <label>Last Status:</label> <span class="stat">{{ cp.last_status|default:"-" }}</span>
-      <label>Phase:</label> <span class="stat">{{ cp.phase|default:"-" }}</span>
-      <label>Last Message:</label> <span class="stat">{{ cp.last_message|default:"-" }}</span>
-      <label>Last Command:</label> <span class="stat">{{ cp.last_command|default:"-" }}</span>
-      <label>Started:</label> <span class="stat">{{ cp.start_time|default:"-" }}</span>
-      <label>Stopped:</label> <span class="stat">{{ cp.stop_time|default:"-" }}</span>
-    </div>
-    {% if cp.last_error %}
-    <div class="error mt-2"><b>Error:</b><pre>{{ cp.last_error }}</pre></div>
-    {% endif %}
-    <details class="simulator-panel"><summary>Show CP Simulator Params</summary><pre>{{ params_json|safe }}</pre></details>
-    <details class="simulator-panel"><summary>Show CP Simulator State JSON</summary><pre>{{ state_json|safe }}</pre></details>
-    {% if prev_tab or next_tab %}
-    <div class="d-flex justify-content-between mt-3">
-      {% if prev_tab %}<a class="btn btn-outline-secondary" data-bs-toggle="tab" href="#{{ prev_tab }}">Prev</a>{% endif %}
-      {% if next_tab %}<a class="btn btn-outline-secondary ms-auto" data-bs-toggle="tab" href="#{{ next_tab }}">Next</a>{% endif %}
-    </div>
-    {% endif %}
   </div>
 </div>
