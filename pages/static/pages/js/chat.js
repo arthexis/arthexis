@@ -29,6 +29,7 @@
     }
 
     const toggle = widget.querySelector('[data-chat-toggle]');
+    const overlay = widget.querySelector('[data-chat-overlay]');
     const drawer = widget.querySelector('[data-chat-drawer]');
     const closeBtn = widget.querySelector('[data-chat-close]');
     const messages = widget.querySelector('[data-chat-messages]');
@@ -39,7 +40,7 @@
     const sessionHint = widget.querySelector('[data-chat-session-hint]');
     const toggleLabel = toggle.querySelector('.chat-toggle-label');
 
-    if (!toggle || !drawer || !messages || !form || !input || !statusEl) {
+    if (!toggle || !overlay || !drawer || !messages || !form || !input || !statusEl) {
       return;
     }
 
@@ -68,6 +69,7 @@
     let unread = 0;
     let drawerOpen = false;
     let placeholderEl = null;
+    let previousFocus = null;
 
     const resetPlaceholder = () => {
       if (placeholderEl) {
@@ -188,29 +190,57 @@
     };
 
     const openDrawer = () => {
-      drawer.classList.add('open');
-      drawer.removeAttribute('hidden');
+      if (drawerOpen) {
+        return;
+      }
       drawerOpen = true;
+      previousFocus = document.activeElement;
+      widget.classList.add('open');
       toggle.setAttribute('aria-expanded', 'true');
       if (toggleLabel) {
         toggleLabel.textContent = strings.close;
       }
       resetUnread();
+      overlay.removeAttribute('hidden');
       window.requestAnimationFrame(() => {
-        input.focus({ preventScroll: false });
-        scrollToBottom();
+        overlay.classList.add('show');
+        drawer.classList.add('open');
+        document.body.classList.add('chat-open');
+        window.requestAnimationFrame(() => {
+          try {
+            input.focus({ preventScroll: false });
+          } catch (error) {
+            input.focus();
+          }
+          scrollToBottom();
+        });
       });
     };
 
     const closeDrawer = () => {
-      drawer.classList.remove('open');
+      if (!drawerOpen) {
+        return;
+      }
       drawerOpen = false;
+      widget.classList.remove('open');
+      overlay.classList.remove('show');
+      drawer.classList.remove('open');
+      document.body.classList.remove('chat-open');
       toggle.setAttribute('aria-expanded', 'false');
       if (toggleLabel) {
         toggleLabel.textContent = strings.open;
       }
+      const focusTarget = previousFocus && typeof previousFocus.focus === 'function' ? previousFocus : toggle;
+      previousFocus = null;
       window.setTimeout(() => {
-        drawer.setAttribute('hidden', '');
+        overlay.setAttribute('hidden', '');
+        if (focusTarget) {
+          try {
+            focusTarget.focus({ preventScroll: true });
+          } catch (error) {
+            focusTarget.focus();
+          }
+        }
       }, 200);
     };
 
@@ -322,6 +352,12 @@
       closeBtn.addEventListener('click', closeDrawer);
     }
 
+    overlay.addEventListener('click', (event) => {
+      if (event.target === overlay) {
+        closeDrawer();
+      }
+    });
+
     document.addEventListener('keydown', (event) => {
       if (event.key === 'Escape' && drawerOpen) {
         event.preventDefault();
@@ -354,7 +390,6 @@
       }
     });
 
-    drawer.setAttribute('hidden', '');
     toggle.setAttribute('aria-expanded', 'false');
     if (toggleLabel) {
       toggleLabel.textContent = strings.open;

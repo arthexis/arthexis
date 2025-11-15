@@ -1,0 +1,15 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "is_seed_data": false,
+      "is_deleted": false,
+      "request": "Confirm public chat overlay matches feedback modal",
+      "created_on": "2025-01-01T00:00:00Z",
+      "url": "/",
+      "request_details": "1. Open the public site and launch the feedback dialog; note the fade-in timing, darkened background, and card styling for comparison.\n2. Trigger the support chat overlay and confirm it reuses the same fade animation, background dimming, rounded card layout, and typography as the feedback dialog while keeping the green header, bubbles, and send button.\n3. Close the chat by pressing Escape and by clicking the dimmed background, verifying the fade-out mirrors the feedback dialog and the green launcher button regains the shared shading with the feedback toggle.",
+      "generated_for_version": "",
+      "generated_for_revision": ""
+    }
+  }
+]
