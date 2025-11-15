@@ -238,6 +238,11 @@
         flex-direction: column;
         gap: 12px;
     }
+    #release-manager-module .release-manager-module__empty {
+        margin: 0;
+        padding: 0 16px 16px;
+        color: var(--body-quiet-color);
+    }
     #release-manager-module .release-manager-task {
         background: var(--body-bg);
         border: 1px solid var(--hairline-color);
@@ -608,9 +613,9 @@
   </div>
 <div class="dashboard-side" id="recent-boxes">
     {% release_manager_todos as release_manager_tasks %}
-    {% if release_manager_tasks %}
     <div class="module" id="release-manager-module">
-        <h2>{% translate 'Release manager tasks' %}</h2>
+        <h2>{% translate 'Pending TODOs' %}</h2>
+        {% if release_manager_tasks %}
         <ul class="release-manager-task-list">
             {% for todo in release_manager_tasks %}
             <li class="release-manager-task">
@@ -636,9 +641,11 @@
             </li>
             {% endfor %}
         </ul>
+        {% else %}
+        <p class="release-manager-module__empty">{% translate 'No pending TODOs require approval.' %}</p>
+        {% endif %}
         <p class="release-manager-module__footer"><a href="{% url 'admin:core_todo_changelist' %}">{% translate 'View all tasks' %}</a></p>
     </div>
-    {% endif %}
     {% user_google_calendar as google_calendar %}
     {% if google_calendar %}
     <div class="module" id="google-calendar-module">
