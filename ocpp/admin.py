@@ -3047,8 +3047,20 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
             )
 
     def delete_queryset(self, request, queryset):
+        protected: list[Charger] = []
         for obj in queryset:
-            obj.delete()
+            try:
+                obj.delete()
+            except ProtectedError:
+                protected.append(obj)
+        if protected:
+            count = len(protected)
+            message = ngettext(
+                "Purge charger data before deleting this charger.",
+                "Purge charger data before deleting these chargers.",
+                count,
+            )
+            self.message_user(request, message, level=messages.ERROR)
 
     def delete_view(self, request, object_id, extra_context=None):
         try:
