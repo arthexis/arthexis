@@ -924,6 +924,30 @@ class AdminBadgesTests(TestCase):
         self.assertContains(resp, 'style="background-color: #28a745;"', 2)
 
 
+class SiteProxyAdminPermissionTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            username="siteproxy_viewer", password="pwd", is_staff=True
+        )
+        Site.objects.update_or_create(
+            id=1, defaults={"name": "test", "domain": "testserver"}
+        )
+
+    def test_staff_without_permissions_cannot_load_change_list(self):
+        self.client.force_login(self.user)
+        resp = self.client.get(reverse("admin:pages_siteproxy_changelist"))
+        self.assertEqual(resp.status_code, 403)
+
+    def test_staff_with_pages_siteproxy_permission_can_load_change_list(self):
+        perm = Permission.objects.get(codename="view_siteproxy")
+        self.user.user_permissions.add(perm)
+        self.client.force_login(self.user)
+        resp = self.client.get(reverse("admin:pages_siteproxy_changelist"))
+        self.assertEqual(resp.status_code, 200)
+
+
 class AdminDashboardAppListTests(TestCase):
     def setUp(self):
         self.client = Client()

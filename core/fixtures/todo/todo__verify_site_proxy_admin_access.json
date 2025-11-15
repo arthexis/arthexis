@@ -1,0 +1,13 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Confirm Site admin is accessible",
+      "created_on": "2025-01-01T00:00:00Z",
+      "url": "/admin/pages/siteproxy/",
+      "request_details": "Log into the Django admin with a Release Manager account. Open /admin/pages/siteproxy/ and confirm the page renders instead of returning a 404. Use the \"Register current domain\" action to ensure it responds with a success or already registered message, then reload the list to verify the sites display as expected.",
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]
