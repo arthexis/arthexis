@@ -3743,7 +3743,8 @@ class ChargerAdminTests(TestCase):
     def test_delete_queryset_handles_protected_error(self):
         deletable = Charger.objects.create(charger_id="DELETE-ADMIN")
         protected = Charger.objects.create(charger_id="KEEP-ADMIN")
-        Transaction.objects.create(charger=protected, start_time=timezone.now())
+        firmware = CPFirmware.objects.create(name="Protected Firmware")
+        CPFirmwareDeployment.objects.create(firmware=firmware, charger=protected)
 
         site = AdminSite()
         admin_instance = ChargerAdmin(Charger, site)
