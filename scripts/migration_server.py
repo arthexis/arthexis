@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import subprocess
@@ -15,6 +16,9 @@ from typing import Dict, Iterable
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 LOCK_DIR = BASE_DIR / "locks"
+REQUIREMENTS_FILE = Path("requirements.txt")
+REQUIREMENTS_HASH_FILE = Path("requirements.md5")
+PIP_INSTALL_HELPER = Path("scripts") / "helpers" / "pip_install.py"
 
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
@@ -184,6 +188,72 @@ def run_env_refresh_with_report(base_dir: Path, *, latest: bool) -> bool:
     return success
 
 
+def _hash_file(path: Path) -> str:
+    """Return the md5 hash of *path*."""
+
+    digest = hashlib.md5(usedforsecurity=False)
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(8192), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def update_requirements(base_dir: Path) -> bool:
+    """Install Python requirements when ``requirements.txt`` changes."""
+
+    req_file = base_dir / REQUIREMENTS_FILE
+    hash_file = base_dir / REQUIREMENTS_HASH_FILE
+    helper_script = base_dir / PIP_INSTALL_HELPER
+
+    if not req_file.exists():
+        return False
+
+    try:
+        current_hash = _hash_file(req_file)
+    except OSError:
+        return False
+
+    try:
+        stored_hash = hash_file.read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        stored_hash = ""
+    except OSError:
+        stored_hash = ""
+
+    if current_hash == stored_hash:
+        return False
+
+    print("[Migration Server] Installing Python requirements...")
+    if helper_script.exists():
+        command = [sys.executable, str(helper_script), "-r", str(req_file)]
+    else:
+        command = [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "-r",
+            str(req_file),
+        ]
+
+    result = subprocess.run(command, cwd=base_dir)
+    if result.returncode != 0:
+        print("[Migration Server] Failed to install Python requirements.")
+        notify_async(
+            "Python requirements update failed",
+            "See migration server output for details.",
+        )
+        return False
+
+    try:
+        hash_file.write_text(current_hash, encoding="utf-8")
+    except OSError:
+        pass
+
+    print("[Migration Server] Python requirements updated.")
+    return True
+
+
 def wait_for_changes(base_dir: Path, snapshot: Dict[str, int], *, interval: float) -> Dict[str, int]:
     """Block until watched files differ from *snapshot* and return the update."""
 
@@ -293,6 +363,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
+    update_requirements(BASE_DIR)
     print("[Migration Server] Starting in", BASE_DIR)
     snapshot = collect_source_mtimes(BASE_DIR)
     print("[Migration Server] Watching for changes... Press Ctrl+C to stop.")
@@ -308,6 +379,16 @@ def main(argv: list[str] | None = None) -> int:
                     updated = collect_source_mtimes(BASE_DIR)
                     if updated == snapshot:
                         continue
+                if update_requirements(BASE_DIR):
+                    notify_async(
+                        "New Python requirements installed",
+                        "The migration server stopped after installing new dependencies.",
+                    )
+                    print(
+                        "[Migration Server] New Python requirements installed."
+                        " Stopping."
+                    )
+                    return 0
                 change_summary = diff_snapshots(snapshot, updated)
                 if change_summary:
                     display = "; ".join(change_summary[:5])
