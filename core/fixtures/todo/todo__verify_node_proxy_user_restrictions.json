@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Confirm node proxy endpoints reject user creation",
+      "created_on": "2025-01-01T00:00:00Z",
+      "url": "",
+      "request_details": "1. Using a downstream node credential, call /nodes/proxy/session/ with a username that does not exist and confirm the response is 404 and no Django user record is created.\n2. Call /nodes/proxy/execute/ with credentials for a nonexistent user and verify the API responds 403 without provisioning an account.\n3. Repeat the calls with an existing staff user and confirm the endpoints only log the user in without granting superuser privileges.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]
