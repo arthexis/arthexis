@@ -163,6 +163,24 @@
     return;
   }
 
+  const replaceAll = (source, search, replacement) => {
+    if (!search) {
+      return source;
+    }
+    return source.split(search).join(replacement);
+  };
+
+  const stripPadding = (value, padChar) => {
+    if (!padChar) {
+      return value;
+    }
+    let end = value.length;
+    while (end > 0 && value.charAt(end - 1) === padChar) {
+      end -= 1;
+    }
+    return value.slice(0, end);
+  };
+
   const registerButton = area.querySelector('[data-passkey-register]');
   const message = area.querySelector('[data-passkey-message]');
   const labelInput = area.querySelector('[data-passkey-label]');
@@ -175,7 +193,7 @@
     if (!value) {
       return new ArrayBuffer(0);
     }
-    const padded = value.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = replaceAll(replaceAll(value, '-', '+'), '_', '/');
     const base64 = padded + '='.repeat((4 - (padded.length % 4)) % 4);
     const binary = window.atob(base64);
     const buffer = new ArrayBuffer(binary.length);
@@ -192,11 +210,9 @@
     bytes.forEach((value) => {
       binary += String.fromCharCode(value);
     });
-    return window
-      .btoa(binary)
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
-      .replace(/=+$/g, '');
+    const base64 = window.btoa(binary);
+    const urlSafe = replaceAll(replaceAll(base64, '+', '-'), '/', '_');
+    return stripPadding(urlSafe, '=');
   };
 
   const preparePublicKeyOptions = (options) => {

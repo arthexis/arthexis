@@ -80,7 +80,7 @@ def _expected_origins(request: HttpRequest) -> list[str]:
 def build_registration_options(
     request: HttpRequest,
     *,
-    user_id: str,
+    user_id: str | bytes,
     user_name: str,
     user_display_name: str,
     rp_name: str,
@@ -95,6 +95,14 @@ def build_registration_options(
         )
         for credential_id in exclude_credentials
     ]
+    if isinstance(user_id, (bytes, bytearray)):
+        user_id_bytes = bytes(user_id)
+    else:
+        try:
+            user_id_bytes = base64url_to_bytes(str(user_id))
+        except (ValueError, TypeError):
+            user_id_bytes = str(user_id).encode("utf-8")
+    user_handle = bytes_to_base64url(user_id_bytes)
     selection = AuthenticatorSelectionCriteria(
         resident_key=ResidentKeyRequirement.PREFERRED,
         user_verification=UserVerificationRequirement.REQUIRED,
@@ -102,7 +110,7 @@ def build_registration_options(
     options = generate_registration_options(
         rp_id=_rp_id(request),
         rp_name=rp_name,
-        user_id=user_id,
+        user_id=user_id_bytes,
         user_name=user_name,
         user_display_name=user_display_name,
         authenticator_selection=selection,
@@ -111,7 +119,7 @@ def build_registration_options(
     return RegistrationOptions(
         data=json.loads(options_to_json(options)),
         challenge=bytes_to_base64url(options.challenge),
-        user_handle=user_id,
+        user_handle=user_handle,
     )
 
 
