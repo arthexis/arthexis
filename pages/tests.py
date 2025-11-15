@@ -40,6 +40,7 @@ from pages.models import (
     ChatMessage,
     ChatSession,
     DeveloperArticle,
+    OdooChatBridge,
     Landing,
     Module,
     RoleLanding,
@@ -74,12 +75,14 @@ from config.asgi import application
 from config.middleware import SiteHttpsRedirectMiddleware
 from core import mailer
 from core.admin import ProfileAdminMixin
+from pages.odoo import forward_chat_message
 from core.models import (
     AdminHistory,
     ClientReport,
     InviteLead,
     Package,
     PackageRelease,
+    OdooProfile,
     Reference,
     RFID,
     ReleaseManager,
@@ -4627,13 +4630,16 @@ class ChatConsumerTests(TransactionTestCase):
             ChatSession, "notify_staff_of_message"
         ) as mock_notify, patch.object(
             ChatSession, "maybe_escalate_on_idle"
-        ) as mock_escalate:
+        ) as mock_escalate, patch(
+            "pages.models.odoo_bridge.forward_chat_message"
+        ) as mock_forward:
             mock_notify.return_value = True
             mock_escalate.return_value = False
             message = session.add_message(content="Need assistance", from_staff=False)
         mock_notify.assert_called_once()
         mock_escalate.assert_called_once()
         mock_session_save.assert_called()
+        mock_forward.assert_called_once_with(session, message)
         self.assertIsInstance(message, ChatMessage)
 
     @override_settings(PAGES_CHAT_NOTIFY_STAFF=True)
@@ -4652,11 +4658,14 @@ class ChatConsumerTests(TransactionTestCase):
             ChatSession, "notify_staff_of_message"
         ) as mock_notify, patch.object(
             ChatSession, "maybe_escalate_on_idle"
-        ) as mock_escalate:
+        ) as mock_escalate, patch(
+            "pages.models.odoo_bridge.forward_chat_message"
+        ) as mock_forward:
             mock_escalate.return_value = False
             session.add_message(content="Status update", from_staff=True)
         mock_notify.assert_not_called()
         mock_escalate.assert_not_called()
+        mock_forward.assert_called_once()
 
 
 class ChatWidgetViewTests(TestCase):
@@ -4675,3 +4684,66 @@ class ChatWidgetViewTests(TestCase):
         )
         response = self.client.get(reverse("pages:index"))
         self.assertNotContains(response, 'id="chat-widget"')
+
+
+class OdooChatBridgeTests(TestCase):
+    def setUp(self):
+        self.site = Site(domain="bridge.example.com", name="Bridge")
+        User = get_user_model()
+        self.user = User.objects.create_user(username="bridge-user", password="pwd")
+        self.profile = OdooProfile.objects.create(
+            user=self.user,
+            host="https://odoo.example.com",
+            database="example",
+            username="demo",
+            password="secret",
+            partner_id=42,
+            odoo_uid=7,
+            verified_on=timezone.now(),
+        )
+
+    def test_post_message_calls_odoo(self):
+        bridge = OdooChatBridge.objects.create(
+            site=None,
+            profile=self.profile,
+            channel_id=77,
+        )
+        session = ChatSession(site=None)
+        message = ChatMessage(session=session, body="Need help", from_staff=False)
+        with patch.object(OdooProfile, "execute", return_value=None) as mock_execute:
+            result = bridge.post_message(session, message)
+        self.assertTrue(result)
+        mock_execute.assert_called_once()
+        args, kwargs = mock_execute.call_args
+        self.assertEqual(args[0], "mail.channel")
+        self.assertEqual(args[1], "message_post")
+        self.assertEqual(args[2], [bridge.channel_id])
+        payload = args[3]
+        self.assertIn("body", payload)
+        self.assertIn("Need help", payload["body"])
+        partner_ids = payload.get("partner_ids", [])
+        self.assertIn(self.profile.partner_id, partner_ids)
+
+    def test_forward_chat_message_uses_site_bridge(self):
+        bridge = OdooChatBridge.objects.create(
+            site=None,
+            profile=self.profile,
+            channel_id=88,
+        )
+        session = ChatSession(site=self.site)
+        message = ChatMessage(session=session, body="Hello", from_staff=False)
+        with patch(
+            "pages.odoo.OdooChatBridge.objects.for_site", return_value=bridge
+        ) as mock_for_site, patch.object(
+            OdooChatBridge, "post_message", return_value=True
+        ) as mock_post:
+            result = forward_chat_message(session, message)
+        self.assertTrue(result)
+        mock_for_site.assert_called_once_with(self.site)
+        mock_post.assert_called_once_with(session, message)
+
+    def test_forward_chat_message_returns_false_without_bridge(self):
+        session = ChatSession(site=None)
+        message = ChatMessage(session=session, body="Hello", from_staff=False)
+        result = forward_chat_message(session, message)
+        self.assertFalse(result)

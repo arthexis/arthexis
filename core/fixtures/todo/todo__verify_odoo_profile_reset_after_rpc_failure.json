@@ -1,0 +1,15 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "is_seed_data": false,
+      "is_deleted": false,
+      "request": "Confirm Odoo profiles clear metadata after failed RPC calls",
+      "created_on": "2025-01-02T00:00:00Z",
+      "url": "/admin/core/odooprofile/",
+      "request_details": "1. Open the verified Odoo profile powering chat forwarding and note the current Odoo UID, Name, Email, Partner ID, and Verified on values.\n2. Temporarily change the password to an incorrect value and save the profile.\n3. Submit a visitor message through the public chat widget so the bridge attempts to post to Odoo with the invalid credentials.\n4. Refresh the Odoo profile detail page and confirm Verified on is blank and the Odoo UID, Name, Email, and Partner ID fields are cleared. Restore the original password once the check is complete.",
+      "generated_for_version": "",
+      "generated_for_revision": ""
+    }
+  }
+]

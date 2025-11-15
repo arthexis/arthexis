@@ -642,12 +642,14 @@ class OdooProfile(Profile):
     odoo_uid = models.PositiveIntegerField(null=True, blank=True, editable=False)
     name = models.CharField(max_length=255, blank=True, editable=False)
     email = models.EmailField(blank=True, editable=False)
+    partner_id = models.PositiveIntegerField(null=True, blank=True, editable=False)
 
     def _clear_verification(self):
         self.verified_on = None
         self.odoo_uid = None
         self.name = ""
         self.email = ""
+        self.partner_id = None
 
     def _resolved_field_value(self, field: str) -> str:
         """Return the resolved value for ``field`` falling back to raw data."""
@@ -662,9 +664,11 @@ class OdooProfile(Profile):
         """Return the display label for this profile."""
 
         username = self._resolved_field_value("username")
+        database = self._resolved_field_value("database")
+        if username and database:
+            return f"{username}@{database}"
         if username:
             return username
-        database = self._resolved_field_value("database")
         return database or ""
 
     def _profile_name(self) -> str:
@@ -715,13 +719,31 @@ class OdooProfile(Profile):
             "res.users",
             "read",
             [uid],
-            {"fields": ["name", "email"]},
+            {"fields": ["name", "email", "partner_id"]},
         )[0]
         self.odoo_uid = uid
         self.email = info.get("email", "")
         self.verified_on = timezone.now()
+        partner_info = info.get("partner_id")
+        partner_id: int | None = None
+        if isinstance(partner_info, (list, tuple)) and partner_info:
+            try:
+                partner_id = int(partner_info[0])
+            except (TypeError, ValueError):
+                partner_id = None
+        elif isinstance(partner_info, int):
+            partner_id = partner_info
+        self.partner_id = partner_id
         self.name = self._profile_name()
-        self.save(update_fields=["odoo_uid", "name", "email", "verified_on"])
+        self.save(
+            update_fields=[
+                "odoo_uid",
+                "name",
+                "email",
+                "verified_on",
+                "partner_id",
+            ]
+        )
         return True
 
     def execute(self, model, method, *args, **kwargs):
@@ -750,7 +772,15 @@ class OdooProfile(Profile):
                 self.username,
             )
             self._clear_verification()
-            self.save(update_fields=["verified_on"])
+            self.save(
+                update_fields=[
+                    "verified_on",
+                    "odoo_uid",
+                    "name",
+                    "email",
+                    "partner_id",
+                ]
+            )
             raise
 
     def __str__(self):  # pragma: no cover - simple representation
