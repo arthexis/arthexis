@@ -58,3 +58,9 @@ def test_primary_scripts_do_not_manage_network_interfaces(script_name: str) -> N
     assert all(token not in script_text for token in forbidden_tokens), (
         f"{script_name} should not contain network configuration commands"
     )
+
+
+def test_start_script_uses_non_interactive_sudo_when_available() -> None:
+    script_text = (REPO_ROOT / "start.sh").read_text()
+    assert "sudo -n true" in script_text
+    assert "sudo -n systemctl" in script_text
