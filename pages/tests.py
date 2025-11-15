@@ -88,6 +88,7 @@ from core.models import (
     TOTPDeviceSettings,
 )
 from ocpp.models import Charger, ChargerConfiguration, CPFirmware
+from django.utils import timezone
 from django.core.files.uploadedfile import SimpleUploadedFile
 import base64
 import json
@@ -868,7 +869,9 @@ class AdminDashboardAppListTests(TestCase):
         self.assertContains(resp, gettext("No net messages available"))
 
     def test_dashboard_shows_model_rules_success_message(self):
-        charger = Charger.objects.create(charger_id="EVCS-100")
+        charger = Charger.objects.create(
+            charger_id="EVCS-100", last_heartbeat=timezone.now()
+        )
         ChargerConfiguration.objects.create(charger_identifier="EVCS-100")
         CPFirmware.objects.create(source_charger=charger, payload_json={})
 
@@ -878,16 +881,37 @@ class AdminDashboardAppListTests(TestCase):
         self.assertContains(resp, gettext("All rules met."))
 
     def test_dashboard_shows_model_rules_failure_message(self):
-        healthy = Charger.objects.create(charger_id="EVCS-OK")
+        healthy = Charger.objects.create(
+            charger_id="EVCS-OK", last_heartbeat=timezone.now()
+        )
         ChargerConfiguration.objects.create(charger_identifier="EVCS-OK")
         CPFirmware.objects.create(source_charger=healthy, payload_json={})
-        Charger.objects.create(charger_id="EVCS-MISS")
+        Charger.objects.create(
+            charger_id="EVCS-MISS",
+            last_heartbeat=timezone.now() - timedelta(hours=2),
+        )
 
         resp = self.client.get(reverse("admin:index"))
 
         self.assertContains(resp, "model-rule-status--error")
         self.assertContains(resp, "Missing CP Configuration for EVCS-MISS.")
         self.assertContains(resp, "Missing CP Firmware for EVCS-MISS.")
+        self.assertContains(
+            resp, "Missing EVCS heartbeat within the last hour for EVCS-MISS."
+        )
+
+    def test_dashboard_shows_evcs_heartbeat_failure_message(self):
+        Charger.objects.create(
+            charger_id="EVCS-LATE",
+            last_heartbeat=timezone.now() - timedelta(hours=2),
+        )
+
+        resp = self.client.get(reverse("admin:index"))
+
+        self.assertContains(resp, "model-rule-status--error")
+        self.assertContains(
+            resp, "Missing EVCS heartbeat within the last hour for EVCS-LATE."
+        )
 
 
 class AdminModelRuleTemplateTagTests(TestCase):
@@ -909,6 +933,123 @@ class AdminModelRuleTemplateTagTests(TestCase):
             )
 
         self.assertEqual(cached, status)
+
+    def test_model_rule_status_reports_evcs_heartbeat_success(self):
+        Charger.objects.create(
+            charger_id="EVCS-PASS", last_heartbeat=timezone.now()
+        )
+
+        context = Context({})
+
+        status = admin_extras.model_rule_status(context, "ocpp", "Charger")
+
+        self.assertTrue(status["success"])
+
+    def test_model_rule_status_reports_evcs_heartbeat_failure(self):
+        Charger.objects.create(
+            charger_id="EVCS-FAIL", last_heartbeat=timezone.now() - timedelta(hours=3)
+        )
+
+        context = Context({})
+
+        status = admin_extras.model_rule_status(context, "ocpp", "Charger")
+
+        self.assertFalse(status["success"])
+        self.assertIn("EVCS-FAIL", status["message"])
+    def test_model_rule_status_for_nodes_requires_local_node(self):
+        context = Context({})
+
+        status = admin_extras.model_rule_status(context, "nodes", "Node")
+
+        self.assertFalse(status["success"])
+        self.assertIn("Local node record is missing.", status["message"])
+
+    def test_model_rule_status_for_nodes_requires_upstream_node(self):
+        mac = Node.get_current_mac()
+        role, _ = NodeRole.objects.get_or_create(name="Terminal")
+        Node.objects.create(
+            hostname="local-node",
+            mac_address=mac,
+            public_endpoint="local-node",
+            current_relation=Node.Relation.SELF,
+            role=role,
+        )
+
+        context = Context({})
+        status = admin_extras.model_rule_status(context, "nodes", "Node")
+
+        self.assertFalse(status["success"])
+        self.assertIn("At least one upstream node is required.", status["message"])
+
+    def test_model_rule_status_for_nodes_requires_recent_upstream_update(self):
+        mac = Node.get_current_mac()
+        role, _ = NodeRole.objects.get_or_create(name="Terminal")
+        Node.objects.create(
+            hostname="local-node",
+            mac_address=mac,
+            public_endpoint="local-node",
+            current_relation=Node.Relation.SELF,
+            role=role,
+        )
+        upstream = Node.objects.create(
+            hostname="upstream-node",
+            public_endpoint="upstream-node",
+            current_relation=Node.Relation.UPSTREAM,
+        )
+        stale = timezone.now() - timedelta(days=2)
+        Node.objects.filter(pk=upstream.pk).update(last_seen=stale)
+
+        context = Context({})
+        status = admin_extras.model_rule_status(context, "nodes", "Node")
+
+        self.assertFalse(status["success"])
+        self.assertIn(
+            "No upstream nodes have checked in within the last 24 hours.",
+            status["message"],
+        )
+
+    def test_model_rule_status_for_nodes_requires_local_role(self):
+        mac = Node.get_current_mac()
+        Node.objects.create(
+            hostname="local-node",
+            mac_address=mac,
+            public_endpoint="local-node",
+            current_relation=Node.Relation.SELF,
+        )
+        Node.objects.create(
+            hostname="upstream-node",
+            public_endpoint="upstream-node",
+            current_relation=Node.Relation.UPSTREAM,
+        )
+
+        context = Context({})
+        status = admin_extras.model_rule_status(context, "nodes", "Node")
+
+        self.assertFalse(status["success"])
+        self.assertIn("Local node is missing an assigned role.", status["message"])
+
+    def test_model_rule_status_for_nodes_succeeds_when_all_checks_pass(self):
+        mac = Node.get_current_mac()
+        role, _ = NodeRole.objects.get_or_create(name="Terminal")
+        local = Node.objects.create(
+            hostname="local-node",
+            mac_address=mac,
+            public_endpoint="local-node",
+            current_relation=Node.Relation.SELF,
+            role=role,
+        )
+        upstream = Node.objects.create(
+            hostname="upstream-node",
+            public_endpoint="upstream-node",
+            current_relation=Node.Relation.UPSTREAM,
+        )
+        Node.objects.filter(pk=upstream.pk).update(last_seen=timezone.now())
+
+        context = Context({})
+        status = admin_extras.model_rule_status(context, "nodes", "Node")
+
+        self.assertTrue(status["success"])
+        self.assertEqual(status["message"], gettext("All rules met."))
 
 
 class AdminProtocolGroupingTests(TestCase):

@@ -1,0 +1,13 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Confirm Protoline countdown loads via env-refresh",
+      "created_on": "2025-11-14T00:00:00Z",
+      "url": "/admin/django_celery_beat/horologiacountdowntimer/",
+      "request_details": "1. Run `python env-refresh.py database --latest` on the release candidate branch.\n2. Observe the script output and confirm the `countdowntimer__protoline_integration.json` fixture loads without being skipped.\n3. In the Horologia Countdown Timers admin, verify the \"Protoline Integration\" record is present and linked to the published developer article.\n4. Visit /awg/future-event/ to confirm the countdown renders with the Read Article badge.\n5. Revert any temporary changes made during validation.",
+      "version": "0.1.34",
+      "is_deleted": false
+    }
+  }
+]

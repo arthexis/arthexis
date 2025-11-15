@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Validate admin dashboard node health checks",
+      "created_on": "2025-01-01T00:00:00Z",
+      "url": "/admin/",
+      "request_details": "1. Sign in to the Django admin and open /admin/.\n2. Locate the Nodes → Nodes row and confirm it shows a green check with the 'All rules met.' message when a local node, a recently updated upstream node, and a valid role assignment are present.\n3. In a staging environment, temporarily clear the local node role or mark an upstream node as stale, refresh /admin/, and confirm the dashboard shows the corresponding red error message before restoring the original data.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]

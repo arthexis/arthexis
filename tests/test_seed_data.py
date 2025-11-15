@@ -28,11 +28,11 @@ from django.contrib.auth.models import Group
 from django.core.management import call_command
 from django.utils import timezone
 import socket
-from core.models import Todo
+from core.models import CountdownTimer, Todo
 from ocpp.models import Brand, WMICode
 from core import user_data
 from core.user_data import dump_user_fixture
-from pages.models import Application, Module, Landing
+from pages.models import Application, DeveloperArticle, Module, Landing
 
 
 class SeedDataEntityTests(TestCase):
@@ -312,6 +312,99 @@ class EnvRefreshFixtureTests(TestCase):
         self.assertEqual(len(loaded_fixtures), 1)
         self.assertEqual(loaded_fixtures[0], str(fixture_path))
         shutil.rmtree(tmp_dir)
+
+    def test_env_refresh_orders_developer_articles_before_dependents(self):
+        base_dir = Path(settings.BASE_DIR)
+        unique_id = uuid.uuid4().hex
+        tmp_dir = base_dir / f"temp_fixture_dependencies_{unique_id}"
+        fixture_dir = tmp_dir / "fixtures"
+        fixture_dir.mkdir(parents=True, exist_ok=True)
+
+        developer_path = fixture_dir / "developerarticle__dependency_check.json"
+        countdown_path = fixture_dir / "countdowntimer__dependency_check.json"
+
+        developer_path.write_text(
+            json.dumps(
+                [
+                    {
+                        "model": "pages.developerarticle",
+                        "fields": {
+                            "is_seed_data": True,
+                            "is_deleted": False,
+                            "title": "Dependency Check Article",
+                            "slug": "dependency-check-article",
+                            "summary": "Release checklist instructions for dependency ordering.",
+                            "content": "## Dependency Ordering\n\nThis article exists for fixture tests.",
+                            "is_published": True,
+                            "created_on": "2125-11-14T00:00:00Z",
+                            "updated_on": "2125-11-14T00:00:00Z",
+                        },
+                    }
+                ]
+            )
+        )
+
+        countdown_path.write_text(
+            json.dumps(
+                [
+                    {
+                        "model": "core.countdowntimer",
+                        "fields": {
+                            "is_seed_data": True,
+                            "is_deleted": False,
+                            "title": "Dependency Check Event",
+                            "body": "Countdown seeded via dependency test.",
+                            "scheduled_for": "2125-12-01T12:00:00Z",
+                            "article": ["dependency-check-article"],
+                            "is_published": True,
+                            "created_on": "2125-11-14T00:00:00Z",
+                            "updated_on": "2125-11-14T00:00:00Z",
+                        },
+                    }
+                ]
+            )
+        )
+
+        rel_developer = str(developer_path.relative_to(base_dir))
+        rel_countdown = str(countdown_path.relative_to(base_dir))
+
+        spec = importlib.util.spec_from_file_location(
+            "env_refresh_dependencies", base_dir / "env-refresh.py"
+        )
+        env_refresh = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(env_refresh)
+        env_refresh._fixture_files = lambda: [rel_countdown, rel_developer]
+
+        from django.core.management import call_command as django_call
+
+        loaded_fixtures: list[str] = []
+
+        def fake_call_command(name, *args, **kwargs):
+            if name == "loaddata":
+                loaded_fixtures.extend(args)
+                return django_call(name, *args, **kwargs)
+            return None
+
+        env_refresh.call_command = fake_call_command
+
+        CountdownTimer.objects.filter(title="Dependency Check Event").delete()
+        DeveloperArticle.objects.filter(slug="dependency-check-article").delete()
+
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            env_refresh.run_database_tasks()
+
+        try:
+            self.assertGreaterEqual(len(loaded_fixtures), 2)
+            names = [Path(path).name for path in loaded_fixtures[:2]]
+            self.assertEqual("developerarticle__dependency_check.json", names[0])
+            timer = CountdownTimer.objects.get(title="Dependency Check Event")
+            self.assertIsNotNone(timer.article)
+            self.assertEqual(timer.article.slug, "dependency-check-article")
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+            CountdownTimer.objects.filter(title="Dependency Check Event").delete()
+            DeveloperArticle.objects.filter(slug="dependency-check-article").delete()
 
     def test_env_refresh_preserves_non_fixture_sites(self):
         base_dir = Path(settings.BASE_DIR)
