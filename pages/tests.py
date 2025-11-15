@@ -85,6 +85,7 @@ from core.models import (
     OdooProfile,
     Reference,
     RFID,
+    PasskeyCredential,
     ReleaseManager,
     SecurityGroup,
     GoogleCalendarProfile,
@@ -125,6 +126,7 @@ from django_otp import DEVICE_ID_SESSION_KEY
 from django_otp.oath import TOTP
 from django_otp.plugins.otp_totp.models import TOTPDevice
 from core.backends import TOTP_DEVICE_NAME
+from pages.views import PASSKEY_LOGIN_SESSION_KEY, PASSKEY_REGISTRATION_SESSION_KEY
 import time
 import asyncio
 
@@ -173,6 +175,122 @@ class LoginViewTests(TestCase):
     def test_login_page_shows_authenticator_toggle(self):
         resp = self.client.get(reverse("pages:login"))
         self.assertContains(resp, "Use Authenticator app")
+
+    def test_passkey_login_options_sets_session_challenge(self):
+        response = self.client.post(reverse("pages:passkey-login-options"))
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("publicKey", payload)
+        session = self.client.session
+        self.assertIn(PASSKEY_LOGIN_SESSION_KEY, session)
+        self.assertTrue(session[PASSKEY_LOGIN_SESSION_KEY])
+
+    @patch("pages.views.passkeys.verify_authentication_response")
+    def test_passkey_login_verify_authenticates_user(self, mock_verify):
+        passkey = PasskeyCredential.objects.create(
+            user=self.staff,
+            name="Primary",
+            credential_id="cred-1",
+            public_key=b"public",
+            sign_count=1,
+            user_handle="user-handle",
+        )
+        session = self.client.session
+        session[PASSKEY_LOGIN_SESSION_KEY] = "expected-challenge"
+        session.save()
+
+        mock_verify.return_value = SimpleNamespace(new_sign_count=5)
+
+        response = self.client.post(
+            reverse("pages:passkey-login-verify"),
+            data=json.dumps(
+                {
+                    "credential": {
+                        "id": passkey.credential_id,
+                        "type": "public-key",
+                        "response": {
+                            "clientDataJSON": "YQ",
+                            "authenticatorData": "Yg",
+                            "signature": "Yw",
+                            "userHandle": passkey.user_handle,
+                        },
+                    },
+                    "next": "",
+                }
+            ),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["redirect"], reverse("admin:index"))
+        session = self.client.session
+        self.assertEqual(session.get("_auth_user_id"), str(self.staff.pk))
+        passkey.refresh_from_db()
+        self.assertEqual(passkey.sign_count, 5)
+        self.assertIsNotNone(passkey.last_used_at)
+        self.assertNotIn(PASSKEY_LOGIN_SESSION_KEY, session)
+
+    @patch("pages.views.passkeys.verify_registration_response")
+    def test_passkey_registration_creates_credential(self, mock_verify):
+        self.client.force_login(self.staff)
+        options_response = self.client.post(
+            reverse("pages:passkey-register-options"),
+            data=json.dumps({"name": "Laptop"}),
+            content_type="application/json",
+        )
+        self.assertEqual(options_response.status_code, 200)
+        session = self.client.session
+        self.assertIn(PASSKEY_REGISTRATION_SESSION_KEY, session)
+        session_data = session[PASSKEY_REGISTRATION_SESSION_KEY]
+        self.assertEqual(session_data["name"], "Laptop")
+
+        mock_verify.return_value = SimpleNamespace(
+            credential_id=b"credential",
+            credential_public_key=b"public-key",
+            sign_count=2,
+        )
+
+        verify_response = self.client.post(
+            reverse("pages:passkey-register-verify"),
+            data=json.dumps(
+                {
+                    "credential": {
+                        "id": "credential",
+                        "type": "public-key",
+                        "response": {
+                            "clientDataJSON": "YQ",
+                            "attestationObject": "Yg",
+                            "userHandle": session_data["user_handle"],
+                        },
+                    }
+                }
+            ),
+            content_type="application/json",
+        )
+
+        self.assertEqual(verify_response.status_code, 200)
+        payload = verify_response.json()
+        self.assertEqual(payload["name"], "Laptop")
+        passkey = PasskeyCredential.objects.get(pk=payload["id"])
+        self.assertEqual(passkey.name, "Laptop")
+        self.assertEqual(passkey.sign_count, 2)
+        self.assertNotIn(PASSKEY_REGISTRATION_SESSION_KEY, self.client.session)
+
+    def test_passkey_delete_removes_credential(self):
+        self.client.force_login(self.staff)
+        passkey = PasskeyCredential.objects.create(
+            user=self.staff,
+            name="Tablet",
+            credential_id="tablet-cred",
+            public_key=b"data",
+            sign_count=0,
+            user_handle="tablet-handle",
+        )
+        response = self.client.post(
+            reverse("pages:passkey-delete", args=[passkey.pk])
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(PasskeyCredential.objects.filter(pk=passkey.pk).exists())
 
     def test_cp_simulator_redirect_shows_restricted_message(self):
         simulator_path = reverse("cp-simulator")
@@ -359,6 +477,7 @@ class AdminTemplateVersionBannerTests(TestCase):
         resp = self.client.get(reverse("pages:login"))
         self.assertTrue(resp.context["can_request_invite"])
         self.assertContains(resp, reverse("pages:request-invite"))
+
 
     @override_settings(ALLOWED_HOSTS=["gway-qk32000"])
     def test_login_allows_forwarded_https_origin(self):

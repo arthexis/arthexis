@@ -76,6 +76,24 @@
       {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
       <button type="submit" class="btn btn-primary w-100">{% trans "Log in" %}</button>
     </form>
+    <div class="mt-3" data-passkey-container>
+      <button
+        type="button"
+        class="btn btn-outline-primary w-100"
+        data-passkey-login
+        data-options-url="{{ passkey_login_options_url }}"
+        data-verify-url="{{ passkey_login_verify_url }}"
+        data-next-value="{{ next|default_if_none:'' }}"
+        data-error-label="{% trans "Unable to use your passkey. Please try again." %}"
+        data-progress-label="{% trans "Confirm the passkey prompt to continue." %}"
+        data-success-label="{% trans "Passkey accepted. Signing you in…" %}"
+        data-browser-error="{% trans "Passkeys are not supported in this browser yet." %}"
+        data-redirect-field="{{ view.redirect_field_name }}"
+      >
+        {% trans "Use a passkey" %}
+      </button>
+      <div class="mt-2 small text-muted d-none" data-passkey-status></div>
+    </div>
     <div class="mt-3 text-center">
       <a
         href="#"
@@ -103,16 +121,13 @@
 (function () {
   const form = document.querySelector('[data-auth-form]');
   const toggle = document.querySelector('[data-auth-toggle]');
-  if (!form || !toggle) {
-    return;
-  }
-  const passwordGroup = form.querySelector('[data-password-group]');
-  const otpGroup = form.querySelector('[data-otp-group]');
-  const authMethodField = form.querySelector('input[name="{{ form.auth_method.html_name }}"]');
-  const passwordInput = form.querySelector('#{{ form.password.id_for_label }}');
-  const otpInput = form.querySelector('#{{ form.otp_token.id_for_label }}');
-  const passwordLabel = toggle.getAttribute('data-password-label');
-  const otpLabel = toggle.getAttribute('data-otp-label');
+  const passwordGroup = form?.querySelector('[data-password-group]');
+  const otpGroup = form?.querySelector('[data-otp-group]');
+  const authMethodField = form?.querySelector('input[name="{{ form.auth_method.html_name }}"]');
+  const passwordInput = form?.querySelector('#{{ form.password.id_for_label }}');
+  const otpInput = form?.querySelector('#{{ form.otp_token.id_for_label }}');
+  const passwordLabel = toggle?.getAttribute('data-password-label');
+  const otpLabel = toggle?.getAttribute('data-otp-label');
 
   const setMode = (mode) => {
     if (!authMethodField) {
@@ -127,7 +142,9 @@
         otpInput.setAttribute('required', 'required');
         otpInput.focus();
       }
-      toggle.textContent = passwordLabel;
+      if (toggle && passwordLabel) {
+        toggle.textContent = passwordLabel;
+      }
     } else {
       passwordGroup?.classList.remove('d-none');
       otpGroup?.classList.add('d-none');
@@ -136,18 +153,214 @@
         passwordInput.setAttribute('required', 'required');
         passwordInput.focus();
       }
-      toggle.textContent = otpLabel;
+      if (toggle && otpLabel) {
+        toggle.textContent = otpLabel;
+      }
     }
   };
 
-  toggle.addEventListener('click', (event) => {
-    event.preventDefault();
-    const nextMode = authMethodField && authMethodField.value === 'otp' ? 'password' : 'otp';
-    setMode(nextMode);
-  });
+  if (toggle) {
+    toggle.addEventListener('click', (event) => {
+      event.preventDefault();
+      const nextMode = authMethodField && authMethodField.value === 'otp' ? 'password' : 'otp';
+      setMode(nextMode);
+    });
+  }
 
   const initialMode = authMethodField && authMethodField.value === 'otp' ? 'otp' : 'password';
   setMode(initialMode);
+
+  const csrfToken = form?.querySelector('input[name="csrfmiddlewaretoken"]')?.value || '';
+
+  const replaceAll = (source, search, replacement) => {
+    if (!search) {
+      return source;
+    }
+    return source.split(search).join(replacement);
+  };
+
+  const stripPadding = (value, padChar) => {
+    if (!padChar) {
+      return value;
+    }
+    let end = value.length;
+    while (end > 0 && value.charAt(end - 1) === padChar) {
+      end -= 1;
+    }
+    return value.slice(0, end);
+  };
+
+  const base64urlToBuffer = (value) => {
+    if (!value) {
+      return new ArrayBuffer(0);
+    }
+    const padded = replaceAll(replaceAll(value, '-', '+'), '_', '/');
+    const base64 = padded + '='.repeat((4 - (padded.length % 4)) % 4);
+    const binary = window.atob(base64);
+    const buffer = new ArrayBuffer(binary.length);
+    const bytes = new Uint8Array(buffer);
+    for (let i = 0; i < binary.length; i += 1) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return buffer;
+  };
+
+  const bufferToBase64url = (buffer) => {
+    const bytes = new Uint8Array(buffer);
+    let binary = '';
+    bytes.forEach((value) => {
+      binary += String.fromCharCode(value);
+    });
+    const base64 = window.btoa(binary);
+    const urlSafe = replaceAll(replaceAll(base64, '+', '-'), '/', '_');
+    return stripPadding(urlSafe, '=');
+  };
+
+  const preparePublicKeyOptions = (options) => {
+    const prepared = { ...options };
+    if (prepared.challenge) {
+      prepared.challenge = base64urlToBuffer(prepared.challenge);
+    }
+    if (Array.isArray(prepared.allowCredentials)) {
+      prepared.allowCredentials = prepared.allowCredentials.map((item) => ({
+        ...item,
+        id: base64urlToBuffer(item.id),
+      }));
+    }
+    return prepared;
+  };
+
+  const serializeCredential = (credential) => {
+    const response = credential.response || {};
+    const serialized = {
+      id: credential.id,
+      type: credential.type,
+      rawId: bufferToBase64url(credential.rawId),
+      response: {},
+      clientExtensionResults:
+        typeof credential.getClientExtensionResults === 'function'
+          ? credential.getClientExtensionResults()
+          : {},
+    };
+    if (response.clientDataJSON) {
+      serialized.response.clientDataJSON = bufferToBase64url(response.clientDataJSON);
+    }
+    if (response.authenticatorData) {
+      serialized.response.authenticatorData = bufferToBase64url(response.authenticatorData);
+    }
+    if (response.signature) {
+      serialized.response.signature = bufferToBase64url(response.signature);
+    }
+    if (response.userHandle) {
+      serialized.response.userHandle = bufferToBase64url(response.userHandle);
+    }
+    if (response.attestationObject) {
+      serialized.response.attestationObject = bufferToBase64url(response.attestationObject);
+    }
+    if (typeof response.getTransports === 'function') {
+      serialized.transports = response.getTransports();
+    }
+    return serialized;
+  };
+
+  const postJson = async (url, payload) => {
+    const headers = { 'Content-Type': 'application/json' };
+    if (csrfToken) {
+      headers['X-CSRFToken'] = csrfToken;
+    }
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+      credentials: 'same-origin',
+    });
+    let data = {};
+    try {
+      data = await response.json();
+    } catch (error) {
+      data = {};
+    }
+    if (!response.ok) {
+      const requestError = new Error(data.error || 'Request failed');
+      requestError.payload = data;
+      throw requestError;
+    }
+    return data;
+  };
+
+  const passkeyContainer = document.querySelector('[data-passkey-container]');
+  const passkeyButton = passkeyContainer?.querySelector('[data-passkey-login]');
+  const passkeyStatus = passkeyContainer?.querySelector('[data-passkey-status]');
+  const updateStatus = (message, tone = 'info') => {
+    if (!passkeyStatus) {
+      return;
+    }
+    passkeyStatus.classList.remove('d-none', 'text-danger', 'text-success', 'text-muted');
+    if (!message) {
+      passkeyStatus.classList.add('d-none');
+      passkeyStatus.textContent = '';
+      return;
+    }
+    passkeyStatus.textContent = message;
+    if (tone === 'error') {
+      passkeyStatus.classList.add('text-danger');
+    } else if (tone === 'success') {
+      passkeyStatus.classList.add('text-success');
+    } else {
+      passkeyStatus.classList.add('text-muted');
+    }
+  };
+
+  if (passkeyContainer && passkeyButton) {
+    if (!window.PublicKeyCredential) {
+      passkeyContainer.classList.add('d-none');
+    } else {
+      passkeyContainer.classList.remove('d-none');
+      passkeyButton.addEventListener('click', async () => {
+        if (!window.PublicKeyCredential) {
+          updateStatus(passkeyButton.dataset.browserError || '', 'error');
+          return;
+        }
+        passkeyButton.disabled = true;
+        updateStatus(passkeyButton.dataset.progressLabel || '', 'info');
+        try {
+          const optionsData = await postJson(passkeyButton.dataset.optionsUrl, {});
+          const publicKeyOptions = optionsData && optionsData.publicKey;
+          if (!publicKeyOptions) {
+            throw new Error('missing-options');
+          }
+          const credential = await navigator.credentials.get({
+            publicKey: preparePublicKeyOptions(publicKeyOptions),
+          });
+          const payload = {
+            credential: serializeCredential(credential),
+          };
+          const redirectField = passkeyButton.dataset.redirectField || 'next';
+          const nextValue = passkeyButton.dataset.nextValue || '';
+          if (nextValue) {
+            payload[redirectField] = nextValue;
+          }
+          const verifyData = await postJson(passkeyButton.dataset.verifyUrl, payload);
+          updateStatus(passkeyButton.dataset.successLabel || '', 'success');
+          const target = verifyData && verifyData.redirect;
+          if (target) {
+            window.location.href = target;
+          } else {
+            window.location.reload();
+          }
+        } catch (error) {
+          if (error && error.name === 'AbortError') {
+            updateStatus('', 'info');
+          } else {
+            const message = (error && error.payload && error.payload.error) || passkeyButton.dataset.errorLabel || '';
+            updateStatus(message, 'error');
+          }
+        } finally {
+          passkeyButton.disabled = false;
+        }
+      });
+    }
+  }
 })();
 </script>
 {% endblock %}

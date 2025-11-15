@@ -14,11 +14,42 @@ from django.core.exceptions import DisallowedHost
 from django.http.request import split_domain_port
 from django_otp.plugins.otp_totp.models import TOTPDevice
 
-from .models import CustomerAccount, RFID
+from .models import CustomerAccount, PasskeyCredential, RFID
 from . import temp_passwords
 
 
 TOTP_DEVICE_NAME = "authenticator"
+
+
+class PasskeyBackend(ModelBackend):
+    """Authenticate using a WebAuthn passkey credential."""
+
+    def authenticate(self, request, credential_id=None, **kwargs):
+        if not credential_id:
+            return None
+
+        credential_value = str(credential_id).strip()
+        if not credential_value:
+            return None
+
+        try:
+            passkey = PasskeyCredential.objects.select_related("user").get(
+                credential_id=credential_value
+            )
+        except PasskeyCredential.DoesNotExist:
+            return None
+
+        user = passkey.user
+        if not user.is_active:
+            return None
+        return user
+
+    def get_user(self, user_id):
+        UserModel = get_user_model()
+        try:
+            return UserModel._default_manager.get(pk=user_id)
+        except UserModel.DoesNotExist:
+            return None
 
 
 class TOTPBackend(ModelBackend):
