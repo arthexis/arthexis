@@ -36,6 +36,7 @@ from .models import (
     SiteBadge,
     Application,
     SiteProxy,
+    DeveloperArticle,
     Module,
     Landing,
     LandingLead,
@@ -299,6 +300,37 @@ class SiteAdmin(DjangoSiteAdmin):
 
 admin.site.unregister(Site)
 admin.site.register(SiteProxy, SiteAdmin)
+
+
+@admin.register(DeveloperArticle)
+class DeveloperArticleAdmin(EntityModelAdmin):
+    list_display = ("title", "is_published", "updated_on")
+    list_filter = ("is_published", "created_on")
+    search_fields = ("title", "summary", "content")
+    prepopulated_fields = {"slug": ("title",)}
+    readonly_fields = (
+        "created_on",
+        "updated_on",
+        "is_seed_data",
+        "is_user_data",
+        "is_deleted",
+    )
+    fieldsets = (
+        (None, {"fields": ("title", "slug", "summary", "content", "is_published")}),
+        (
+            _("Record details"),
+            {
+                "fields": (
+                    "created_on",
+                    "updated_on",
+                    "is_seed_data",
+                    "is_user_data",
+                    "is_deleted",
+                ),
+                "classes": ("collapse",),
+            },
+        ),
+    )
 
 
 class ApplicationForm(forms.ModelForm):

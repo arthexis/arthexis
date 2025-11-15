@@ -9,6 +9,8 @@ Costellazione Arthexis è una [suite software](https://it.wikipedia.org/wiki/Sui
 
 Visita il [Report del changelog](http://localhost:8888/changelog/) pubblico per consultare aggiornamenti inediti e storici generati direttamente dai commit git.
 
+Consulta il nuovo [articolo degli sviluppatori](http://localhost:8888/articles/protoline-integration/) con le novità del prossimo rilascio e i dettagli del rollout.
+
 ## Caratteristiche attuali
 
 - Compatibile con il [Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/) come sistema centrale. Le azioni supportate sono riassunte di seguito.

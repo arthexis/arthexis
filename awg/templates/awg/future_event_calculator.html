@@ -61,11 +61,15 @@
       transition: transform 0.6s ease;
     }
     .countdown-slide {
+      position: relative;
       padding: 1.5rem 1rem 2.5rem;
       display: flex;
       flex-direction: column;
       align-items: center;
       gap: 1.5rem;
+    }
+    .countdown-slide[data-has-link="true"] {
+      cursor: pointer;
     }
     .countdown-slide:focus-visible {
       outline: 2px solid var(--bs-primary);
@@ -103,7 +107,19 @@
     <div class="countdown-carousel" data-event-view>
       <div class="countdown-track" data-event-track>
         {% for item in events %}
-        <article class="countdown-slide text-center" data-event-slide tabindex="-1">
+        <article
+          class="countdown-slide text-center"
+          data-event-slide
+          tabindex="-1"
+          {% if item.article_url %}data-has-link="true"{% endif %}
+        >
+          {% if item.article_url %}
+          <a
+            class="stretched-link"
+            href="{{ item.article_url }}"
+            aria-label="{% blocktrans with event_title=item.timer.title %}View developer article for {{ event_title }}{% endblocktrans %}"
+          ></a>
+          {% endif %}
           <div class="countdown-slide-body w-100">
             <h2 class="fw-bold mb-2">{{ item.timer.title }}</h2>
             {% if item.timer.body %}
@@ -129,6 +145,11 @@
               <div class="countdown-label">{% trans "Seconds" %}</div>
             </div>
           </div>
+          {% if item.article_url %}
+          <div class="mt-2">
+            <span class="badge text-bg-primary fw-semibold">{% trans "Read article" %}</span>
+          </div>
+          {% endif %}
         </article>
         {% endfor %}
       </div>

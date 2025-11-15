@@ -1,0 +1,16 @@
+[
+  {
+    "model": "pages.developerarticle",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "title": "Protoline Integration",
+      "slug": "protoline-integration",
+      "summary": "Arthexis.com ready for the 0.2 version upgrade within 72 hours, please standby.",
+      "content": "## Protoline Integration Rollout\n\nArthexis.com will upgrade to version 0.2 to enable the new Protoline workflow and refreshed device telemetry.\n\n### Schedule\n\n- **Deployment window:** November 16, 2025 at 6:00 a.m. CST\n- **Expected duration:** 2 hours\n- **Impact:** Short authentication pauses while services recycle\n\n### Highlights\n\n1. Native Protoline connector with live diagnostics.\n2. Expanded charger analytics dashboards for launch-day monitoring.\n3. Guided onboarding for site operators rolling out the new workflows.\n\n### Next Steps\n\n- Review the Protoline configuration guide in advance.\n- Notify partners about the maintenance window.\n- Join the deployment stand-up 30 minutes before the cutover.\n",
+      "is_published": true,
+      "created_on": "2025-11-14T00:00:00Z",
+      "updated_on": "2025-11-14T00:00:00Z"
+    }
+  }
+]

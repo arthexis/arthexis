@@ -9,6 +9,8 @@ Arthexis Constellation is a [story-driven](https://en.wikipedia.org/wiki/User_st
 
 Visit the public [Changelog Report](http://localhost:8888/changelog/) to browse unreleased and historical updates generated directly from git commits.
 
+Check out the latest [Developer Article](http://localhost:8888/articles/protoline-integration/) for upcoming release highlights and rollout details.
+
 ## Current Features
 
 - Compatible with the [Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/) central system. Supported actions are summarized below.

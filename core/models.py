@@ -4665,13 +4665,17 @@ def validate_relative_url(value: str) -> None:
 class CountdownTimerManager(EntityManager):
     """Manager with helpers for countdown timers."""
 
+    def published(self):
+        """Return timers marked as published."""
+
+        return super().get_queryset().filter(is_published=True)
+
     def upcoming(self):
         """Return timers scheduled for the future ordered by start time."""
 
         now = timezone.now()
         return (
-            super()
-            .get_queryset()
+            self.published()
             .filter(scheduled_for__gte=now)
             .order_by("scheduled_for", "pk")
         )
@@ -4683,6 +4687,14 @@ class CountdownTimer(Entity):
     title = models.CharField(max_length=200)
     body = models.TextField(blank=True, default="")
     scheduled_for = models.DateTimeField()
+    article = models.ForeignKey(
+        "pages.DeveloperArticle",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="countdown_timers",
+    )
+    is_published = models.BooleanField(default=False)
     created_on = models.DateTimeField(auto_now_add=True)
     updated_on = models.DateTimeField(auto_now=True)
 
@@ -4702,6 +4714,14 @@ class CountdownTimer(Entity):
                 {
                     "scheduled_for": _(
                         "Countdown timers must target a future date and time."
+                    )
+                }
+            )
+        if self.article and not self.article.is_published:
+            raise ValidationError(
+                {
+                    "article": _(
+                        "Only published developer articles can be linked to a countdown timer."
                     )
                 }
             )
