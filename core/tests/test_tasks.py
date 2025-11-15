@@ -1097,6 +1097,46 @@ def test_revert_after_restart_failure_sets_failover_lock(monkeypatch, tmp_path):
     assert recorded["revision"] == "cafebabe"
 
 
+def test_revert_after_celery_failure_restarts_primary_service(monkeypatch, tmp_path):
+    """Reverting after a Celery failure should restart the primary service."""
+
+    from core import tasks
+
+    locks = tmp_path / "locks"
+    locks.mkdir()
+    (locks / "service.lck").write_text("arthexis")
+
+    monkeypatch.setattr(tasks, "_append_auto_upgrade_log", lambda *args, **kwargs: None)
+    monkeypatch.setattr(tasks, "_current_revision", lambda _base: "cafebabe")
+    monkeypatch.setattr(tasks, "write_failover_lock", lambda *args, **kwargs: None)
+    monkeypatch.setattr(tasks, "_systemctl_command", lambda: ["systemctl"])
+
+    restarted: list[str] = []
+
+    def fake_run(args, cwd=None, check=None, **kwargs):
+        if args[:2] == ["./upgrade.sh", "--revert"]:
+            return CompletedProcess(args, 0)
+        if args[:2] == ["systemctl", "restart"] and len(args) >= 3:
+            restarted.append(args[2])
+            return CompletedProcess(args, 0)
+        raise AssertionError(f"unexpected command: {args}")
+
+    monkeypatch.setattr(tasks.subprocess, "run", fake_run)
+
+    waited_for: list[str] = []
+
+    def fake_wait(base_dir, service, timeout=None):
+        waited_for.append(service)
+        return True
+
+    monkeypatch.setattr(tasks, "_wait_for_service_restart", fake_wait)
+
+    tasks._revert_after_restart_failure(tmp_path, "celery-arthexis")
+
+    assert restarted == ["arthexis", "celery-arthexis"]
+    assert waited_for == ["arthexis", "celery-arthexis"]
+
+
 def test_verify_auto_upgrade_health_clears_failover_lock(monkeypatch):
     """Successful health checks should remove the failover alert."""
 

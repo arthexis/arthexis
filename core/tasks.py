@@ -318,37 +318,57 @@ def _revert_after_restart_failure(base_dir: Path, service: str) -> None:
     )
 
     command = _systemctl_command()
-    if not command or not service:
+    service_lock = base_dir / "locks" / "service.lck"
+    services_to_restart: list[str] = []
+    if service_lock.exists():
+        primary_service = service_lock.read_text().strip()
+        if primary_service:
+            services_to_restart.append(primary_service)
+    if service:
+        services_to_restart.append(service)
+
+    if not command or not services_to_restart:
         return
 
-    try:
-        subprocess.run([*command, "restart", service], cwd=base_dir, check=True)
-    except subprocess.CalledProcessError:
-        logger.exception("Failed to restart %s after reverting to failover branch", service)
-        _append_auto_upgrade_log(
-            base_dir,
-            (
-                f"Restart after reverting to failover branch failed for {service}; "
-                "manual intervention required"
-            ),
-        )
-        return
+    seen: set[str] = set()
+    timeout = _service_restart_timeout()
+    for restart_service in services_to_restart:
+        if not restart_service or restart_service in seen:
+            continue
+        seen.add(restart_service)
 
-    if _wait_for_service_restart(
-        base_dir, service, timeout=_service_restart_timeout()
-    ):
-        _append_auto_upgrade_log(
-            base_dir,
-            f"Service {service} restarted successfully from failover branch",
-        )
-    else:
-        _append_auto_upgrade_log(
-            base_dir,
-            (
-                f"Service {service} is still inactive after reverting; "
-                "manual intervention required"
-            ),
-        )
+        try:
+            subprocess.run(
+                [*command, "restart", restart_service],
+                cwd=base_dir,
+                check=True,
+            )
+        except subprocess.CalledProcessError:
+            logger.exception(
+                "Failed to restart %s after reverting to failover branch", restart_service
+            )
+            _append_auto_upgrade_log(
+                base_dir,
+                (
+                    "Restart after reverting to failover branch failed for "
+                    f"{restart_service}; manual intervention required"
+                ),
+            )
+            continue
+
+        if _wait_for_service_restart(base_dir, restart_service, timeout=timeout):
+            _append_auto_upgrade_log(
+                base_dir,
+                f"Service {restart_service} restarted successfully from failover branch",
+            )
+        else:
+            _append_auto_upgrade_log(
+                base_dir,
+                (
+                    f"Service {restart_service} is still inactive after reverting; "
+                    "manual intervention required"
+                ),
+            )
 
 
 def _resolve_release_severity(version: str | None) -> str:
