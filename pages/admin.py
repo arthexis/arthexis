@@ -174,32 +174,43 @@ class SiteAdmin(DjangoSiteAdmin):
                     messages.INFO,
                 )
 
+    def _has_siteproxy_permission(self, request, action: str) -> bool:
+        """Return True when the user has the requested proxy or sites perm."""
+
+        meta = self.model._meta
+        proxy_perm = f"{meta.app_label}.{action}_{meta.model_name}"
+        site_perm = f"sites.{action}_site"
+        return request.user.has_perm(proxy_perm) or request.user.has_perm(site_perm)
+
     def has_add_permission(self, request):
         if super().has_add_permission(request):
             return True
-        return request.user.has_perm("sites.add_site")
+        return self._has_siteproxy_permission(request, "add")
 
     def has_change_permission(self, request, obj=None):
         if super().has_change_permission(request, obj=obj):
             return True
-        return request.user.has_perm("sites.change_site")
+        return self._has_siteproxy_permission(request, "change")
 
     def has_delete_permission(self, request, obj=None):
         if super().has_delete_permission(request, obj=obj):
             return True
-        return request.user.has_perm("sites.delete_site")
+        return self._has_siteproxy_permission(request, "delete")
 
     def has_view_permission(self, request, obj=None):
         if super().has_view_permission(request, obj=obj):
             return True
-        return request.user.has_perm("sites.view_site") or request.user.has_perm(
-            "sites.change_site"
+        return self._has_siteproxy_permission(request, "view") or self._has_siteproxy_permission(
+            request, "change"
         )
 
     def has_module_permission(self, request):
         if super().has_module_permission(request):
             return True
-        return request.user.has_module_perms("sites")
+        meta = self.model._meta
+        return request.user.has_module_perms(meta.app_label) or request.user.has_module_perms(
+            "sites"
+        )
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
