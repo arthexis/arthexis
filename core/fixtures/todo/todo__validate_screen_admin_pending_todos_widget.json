@@ -1,0 +1,13 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate screen Admin Pending TODOs widget",
+      "created_on": "2025-01-01T00:00:00Z",
+      "url": "/admin/",
+      "request_details": "1. Sign into the Django admin while no Release Manager TODOs are pending and open /admin/. Confirm the Pending TODOs widget renders with the empty-state message and the View all tasks link.\n2. Create or reopen a Release Manager TODO and refresh /admin/. Verify the widget lists the task with working Check and Config links.\n3. Complete the TODO and reload the dashboard to ensure the widget returns to the empty-state message without disappearing.",
+      "generated_for_version": "",
+      "generated_for_revision": ""
+    }
+  }
+]

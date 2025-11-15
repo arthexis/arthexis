@@ -3621,10 +3621,11 @@ class FavoriteTests(TestCase):
         self.assertNotContains(resp, "lead-open-badge")
         self.assertNotContains(resp, "rfid-release-badge")
 
-    def test_dashboard_hides_release_manager_tasks_without_items(self):
+    def test_dashboard_shows_empty_pending_todos_widget(self):
         Todo.objects.all().delete()
         resp = self.client.get(reverse("admin:index"))
-        self.assertNotContains(resp, "Release manager tasks")
+        self.assertContains(resp, "Pending TODOs")
+        self.assertContains(resp, "No pending TODOs require approval.")
 
     def test_dashboard_shows_release_manager_tasks(self):
         Todo.objects.all().delete()
@@ -3636,7 +3637,7 @@ class FavoriteTests(TestCase):
 
         resp = self.client.get(reverse("admin:index"))
 
-        self.assertContains(resp, "Release manager tasks")
+        self.assertContains(resp, "Pending TODOs")
         self.assertContains(resp, "Review release checklist")
         focus_prefix = f"{reverse('todo-focus', args=[todo.pk])}?next="
         self.assertContains(resp, focus_prefix)
