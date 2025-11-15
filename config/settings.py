@@ -504,7 +504,6 @@ AUTH_USER_MODEL = "core.User"
 AUTHENTICATION_BACKENDS = [
     "core.backends.TempPasswordBackend",
     "core.backends.LocalhostAdminBackend",
-    "core.backends.PasskeyBackend",
     "core.backends.TOTPBackend",
     "core.backends.RFIDBackend",
 ]
