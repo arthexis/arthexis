@@ -1,4 +1,5 @@
 import os
+import json
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
@@ -41,6 +42,7 @@ from pages.models import (
     ChatSession,
     DeveloperArticle,
     OdooChatBridge,
+    WhatsAppChatBridge,
     Landing,
     Module,
     RoleLanding,
@@ -76,6 +78,7 @@ from config.middleware import SiteHttpsRedirectMiddleware
 from core import mailer
 from core.admin import ProfileAdminMixin
 from pages.odoo import forward_chat_message
+from pages.whatsapp import forward_chat_message as forward_whatsapp_message
 from core.models import (
     AdminHistory,
     ClientReport,
@@ -4991,7 +4994,9 @@ class ChatConsumerTests(TransactionTestCase):
             ChatSession, "maybe_escalate_on_idle"
         ) as mock_escalate, patch(
             "pages.models.odoo_bridge.forward_chat_message"
-        ) as mock_forward:
+        ) as mock_forward, patch(
+            "pages.models.whatsapp_bridge.forward_chat_message"
+        ) as mock_whatsapp_forward:
             mock_notify.return_value = True
             mock_escalate.return_value = False
             message = session.add_message(content="Need assistance", from_staff=False)
@@ -4999,6 +5004,7 @@ class ChatConsumerTests(TransactionTestCase):
         mock_escalate.assert_called_once()
         mock_session_save.assert_called()
         mock_forward.assert_called_once_with(session, message)
+        mock_whatsapp_forward.assert_called_once_with(session, message)
         self.assertIsInstance(message, ChatMessage)
 
     @override_settings(PAGES_CHAT_NOTIFY_STAFF=True)
@@ -5019,12 +5025,42 @@ class ChatConsumerTests(TransactionTestCase):
             ChatSession, "maybe_escalate_on_idle"
         ) as mock_escalate, patch(
             "pages.models.odoo_bridge.forward_chat_message"
-        ) as mock_forward:
+        ) as mock_forward, patch(
+            "pages.models.whatsapp_bridge.forward_chat_message"
+        ) as mock_whatsapp_forward:
             mock_escalate.return_value = False
             session.add_message(content="Status update", from_staff=True)
         mock_notify.assert_not_called()
         mock_escalate.assert_not_called()
         mock_forward.assert_called_once()
+        mock_whatsapp_forward.assert_called_once()
+
+    @override_settings(PAGES_CHAT_NOTIFY_STAFF=True)
+    def test_add_message_avoids_whatsapp_loopback(self):
+        session = ChatSession(whatsapp_number="+15551234567")
+        session.pk = 1
+        session.created_at = timezone.now()
+        session.last_activity_at = session.created_at
+
+        def _assign_pk(self, *args, **kwargs):
+            self.pk = 1
+
+        with patch.object(ChatMessage, "save", new=_assign_pk), patch.object(
+            ChatSession, "save"
+        ), patch.object(
+            ChatSession, "notify_staff_of_message"
+        ), patch.object(
+            ChatSession, "maybe_escalate_on_idle"
+        ), patch(
+            "pages.models.odoo_bridge.forward_chat_message"
+        ) as mock_forward, patch(
+            "pages.models.whatsapp_bridge.forward_chat_message"
+        ) as mock_whatsapp_forward:
+            session.add_message(
+                content="Inbound from WhatsApp", source="whatsapp", from_staff=False
+            )
+        mock_forward.assert_called_once()
+        mock_whatsapp_forward.assert_not_called()
 
 
 class ChatWidgetViewTests(TestCase):
@@ -5125,3 +5161,107 @@ class OdooChatBridgeTests(TestCase):
         message = ChatMessage(session=session, body="Hello", from_staff=False)
         result = forward_chat_message(session, message)
         self.assertFalse(result)
+
+
+class WhatsAppChatBridgeTests(TestCase):
+    def setUp(self):
+        self.site = Site.objects.create(domain="whatsapp.example.com", name="WA")
+        self.bridge = WhatsAppChatBridge.objects.create(
+            site=None,
+            phone_number_id="1111",
+            access_token="token",
+            is_default=True,
+        )
+
+    @override_settings(PAGES_WHATSAPP_ENABLED=True)
+    def test_send_message_posts_payload(self):
+        session = ChatSession(site=self.site, whatsapp_number="+15551234567")
+        message = ChatMessage(session=session, body="Hello", from_staff=True)
+        fake_response = SimpleNamespace(status_code=200, text="")
+        with patch("pages.models.requests.post", return_value=fake_response) as mock_post:
+            result = self.bridge.send_message(
+                recipient=session.whatsapp_number,
+                content=message.body,
+                session=session,
+                message=message,
+            )
+        self.assertTrue(result)
+        mock_post.assert_called_once()
+        called_url = mock_post.call_args.args[0]
+        self.assertIn(self.bridge.phone_number_id, called_url)
+        payload = mock_post.call_args.kwargs.get("json", {})
+        self.assertEqual(payload.get("text", {}).get("body"), "Hello")
+
+    @override_settings(PAGES_WHATSAPP_ENABLED=True)
+    def test_send_message_handles_http_errors(self):
+        session = ChatSession(site=self.site, whatsapp_number="+15557654321")
+        message = ChatMessage(session=session, body="Hello", from_staff=True)
+        fake_response = SimpleNamespace(status_code=500, text="error")
+        with patch("pages.models.requests.post", return_value=fake_response):
+            result = self.bridge.send_message(
+                recipient=session.whatsapp_number,
+                content=message.body,
+                session=session,
+                message=message,
+            )
+        self.assertFalse(result)
+
+    @override_settings(PAGES_WHATSAPP_ENABLED=True)
+    def test_forward_chat_message_uses_site_bridge(self):
+        session = ChatSession(site=self.site, whatsapp_number="+15550001111")
+        message = ChatMessage(session=session, body="Ping", from_staff=True)
+        with patch(
+            "pages.whatsapp.WhatsAppChatBridge.objects.for_site",
+            return_value=self.bridge,
+        ) as mock_for_site, patch.object(
+            WhatsAppChatBridge, "send_message", return_value=True
+        ) as mock_send:
+            result = forward_whatsapp_message(session, message)
+        self.assertTrue(result)
+        mock_for_site.assert_called_once_with(self.site)
+        mock_send.assert_called_once_with(
+            recipient=session.whatsapp_number,
+            content=message.body,
+            session=session,
+            message=message,
+        )
+
+    @override_settings(PAGES_WHATSAPP_ENABLED=False)
+    def test_forward_chat_message_respects_disabled_setting(self):
+        session = ChatSession(site=self.site, whatsapp_number="+15550002222")
+        message = ChatMessage(session=session, body="Ping", from_staff=True)
+        self.assertFalse(forward_whatsapp_message(session, message))
+
+
+class WhatsAppWebhookTests(TestCase):
+    def setUp(self):
+        self.url = reverse("pages:whatsapp-webhook")
+        self.site = Site.objects.create(domain="hook.example.com", name="Hook")
+
+    @override_settings(PAGES_WHATSAPP_ENABLED=True)
+    def test_webhook_creates_session_and_message(self):
+        payload = {"from": "+14445556666", "message": "Need help", "site": self.site.id}
+        response = self.client.post(
+            self.url, data=json.dumps(payload), content_type="application/json"
+        )
+        self.assertEqual(response.status_code, 201)
+        session = ChatSession.objects.filter(whatsapp_number=payload["from"]).first()
+        assert session is not None
+        self.assertEqual(session.site, self.site)
+        self.assertEqual(session.messages.count(), 1)
+        self.assertEqual(session.messages.first().body, payload["message"])
+
+    @override_settings(PAGES_WHATSAPP_ENABLED=True)
+    def test_webhook_rejects_invalid_payload(self):
+        response = self.client.post(
+            self.url, data="not-json", content_type="application/json"
+        )
+        self.assertEqual(response.status_code, 400)
+
+    @override_settings(PAGES_WHATSAPP_ENABLED=False)
+    def test_webhook_respects_disabled_setting(self):
+        payload = {"from": "+19998887777", "message": "Hello"}
+        response = self.client.post(
+            self.url, data=json.dumps(payload), content_type="application/json"
+        )
+        self.assertEqual(response.status_code, 503)
