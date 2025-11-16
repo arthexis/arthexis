@@ -494,6 +494,7 @@ restart_services() {
   if [ -f "$LOCK_DIR/service.lck" ]; then
     local service_name
     service_name="$(cat "$LOCK_DIR/service.lck")"
+    local restart_via_systemd=0
     if command -v systemctl >/dev/null 2>&1; then
       local -a systemctl_cmd=(systemctl)
       if command -v sudo >/dev/null 2>&1; then
@@ -509,6 +510,56 @@ restart_services() {
         "${systemctl_cmd[@]}" status "celery-$service_name" --no-pager || true
         "${systemctl_cmd[@]}" status "celery-beat-$service_name" --no-pager || true
       fi
+      if "${systemctl_cmd[@]}" is-active --quiet "$service_name"; then
+        echo "Signaling $service_name to restart via systemd..."
+        "${systemctl_cmd[@]}" kill --signal=TERM "$service_name" || true
+        restart_via_systemd=1
+      fi
+      if [ -f "$LOCK_DIR/celery.lck" ]; then
+        local celery_service="celery-$service_name"
+        local celery_beat_service="celery-beat-$service_name"
+        if "${systemctl_cmd[@]}" is-active --quiet "$celery_service"; then
+          echo "Signaling $celery_service for restart via systemd..."
+          "${systemctl_cmd[@]}" kill --signal=TERM "$celery_service" || true
+        fi
+        if "${systemctl_cmd[@]}" is-active --quiet "$celery_beat_service"; then
+          echo "Signaling $celery_beat_service for restart via systemd..."
+          "${systemctl_cmd[@]}" kill --signal=TERM "$celery_beat_service" || true
+        fi
+      fi
+      if [ -f "$LOCK_DIR/lcd_screen.lck" ]; then
+        local lcd_service="lcd-$service_name"
+        if "${systemctl_cmd[@]}" is-active --quiet "$lcd_service"; then
+          echo "Signaling $lcd_service for restart via systemd..."
+          "${systemctl_cmd[@]}" kill --signal=TERM "$lcd_service" || true
+        fi
+      fi
+    fi
+    if [ "$restart_via_systemd" -eq 1 ]; then
+      if ! wait_for_service_active "$service_name" 1; then
+        echo "Service $service_name did not become active after restart." >&2
+        return 1
+      fi
+      if [ -f "$LOCK_DIR/celery.lck" ]; then
+        local celery_service="celery-$service_name"
+        local celery_beat_service="celery-beat-$service_name"
+        if ! wait_for_service_active "$celery_service" 1; then
+          echo "Celery service $celery_service did not become active after restart." >&2
+          return 1
+        fi
+        if ! wait_for_service_active "$celery_beat_service" 1; then
+          echo "Celery beat service $celery_beat_service did not become active after restart." >&2
+          return 1
+        fi
+      fi
+      if [ -f "$LOCK_DIR/lcd_screen.lck" ]; then
+        local lcd_service="lcd-$service_name"
+        if ! wait_for_service_active "$lcd_service" 1; then
+          echo "LCD service $lcd_service did not become active after restart." >&2
+          return 1
+        fi
+      fi
+      return 0
     fi
     if ! ./start.sh; then
       echo "Service restart command failed." >&2
