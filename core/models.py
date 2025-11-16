@@ -5193,6 +5193,7 @@ class Todo(Entity):
         todos = list(cls.objects.filter(is_deleted=False, done_on__isnull=True))
         active: list["Todo"] = []
         for todo in todos:
+            todo._normalize_created_on(now=moment)
             if not todo.refresh_version_state(
                 current_label=current_label,
                 current_version=current_version,
@@ -5213,6 +5214,9 @@ class Todo(Entity):
     def save(self, *args, **kwargs):
         created = self.pk is None
         if created:
+            now = timezone.now()
+            if self.created_on and self.created_on > now:
+                self.created_on = now
             default_version = self._default_target_version()
             if default_version and not (self.version or "").strip():
                 self.version = default_version
@@ -5294,6 +5298,19 @@ class Todo(Entity):
             return
 
         self._update_fixture_state()
+
+    def _normalize_created_on(self, *, now: datetime_datetime | None = None) -> bool:
+        timestamp = self.created_on
+        if timestamp is None:
+            return False
+
+        current = now or timezone.now()
+        if timestamp <= current:
+            return False
+
+        type(self).all_objects.filter(pk=self.pk).update(created_on=current)
+        self.created_on = current
+        return True
 
     def populate_done_metadata(self, user=None) -> None:
         """Populate metadata fields for a completed TODO."""

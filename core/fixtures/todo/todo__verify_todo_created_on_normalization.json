@@ -1,0 +1,13 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Verify TODO creation timestamps are normalized",
+      "created_on": "2024-01-01T00:00:00Z",
+      "url": "/admin/",
+      "request_details": "1. Create a Release Manager TODO (for example, by submitting a user story that opens a TODO) and confirm the new task's created_on timestamp is set to the current date rather than a future value.\n2. Refresh the Django admin Home dashboard and verify the Pending TODOs widget lists the new task.\n3. Open the Pending TODOs report and ensure the task appears there and can be approved without disappearing from the dashboard until completed.",
+      "generated_for_version": "",
+      "generated_for_revision": ""
+    }
+  }
+]
