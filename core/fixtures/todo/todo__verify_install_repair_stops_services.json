@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Ensure install --repair stops running services to avoid database locks",
+      "created_on": "2025-02-20T00:00:00Z",
+      "url": "",
+      "request_details": "1. Identify the deployment service name (for example `arthexis`) from `locks/service.lck` or the `--service` flag.\n2. Start the existing service with `sudo systemctl start ${SERVICE}` and confirm it is active with `systemctl is-active ${SERVICE}`. If celery units exist, start them as well so they are running.\n3. From the deployment root, run `./install.sh --repair --service ${SERVICE}`.\n4. Watch the output for the \"Stopping\" messages and confirm no `database is locked` errors occur during migrations.\n5. After the script finishes, verify `systemctl is-active ${SERVICE}` returns `active` and any celery units are running again, confirming the repair restarted the stack successfully.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]

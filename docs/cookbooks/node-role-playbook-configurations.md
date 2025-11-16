@@ -7,6 +7,8 @@ Release engineering can now manage Ansible metadata for each node role directly 
 - `extra_vars` – JSON payload mirroring the shell defaults enforced by `switch-role.sh` (Celery, Redis, LCD flags, nginx mode, etc.).
 - `default_tags` – optional JSON array describing the default tag set to run for the role.
 
+Before switching a node into the **Control** or **Satellite** role (whether through `switch-role.sh` or by applying the associated playbook profile), verify that the host runs Ubuntu 22.04 or newer and exposes an `eth0` network interface. These baselines ensure the role playbooks can bind to predictable networking without additional overrides.
+
 ## Current Seed Values
 
 Existing roles were backfilled during migration `0042_roleconfigurationprofile` using the flags hard-coded in `switch-role.sh`:

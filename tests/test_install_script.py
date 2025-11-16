@@ -110,3 +110,12 @@ def test_nginx_setup_script_renders_nginx_config_with_helper():
     assert "nginx_mode.lck" in content
     assert "--remove" in content
     assert "--ip6" in content
+
+
+def test_install_script_stops_services_during_repair():
+    script_path = Path(__file__).resolve().parent.parent / "install.sh"
+    content = script_path.read_text()
+
+    assert "stop_existing_units_for_repair" in content
+    assert 'if [ "$REPAIR" = true ] && [ -n "$SERVICE" ]; then' in content
+    assert 'stop_existing_units_for_repair "$SERVICE"' in content

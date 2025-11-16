@@ -210,7 +210,10 @@ class DispatchActionTests(TestCase):
             is_staff=True,
         )
 
-        response = dispatch_action(request, "TRIGGER1")
+        with patch(
+            "ocpp.views._evaluate_pending_call_result", return_value=(True, None, None)
+        ):
+            response = dispatch_action(request, "TRIGGER1")
         self.assertEqual(response.status_code, 200)
         self.assertTrue(dummy.sent)
         frame = json.loads(dummy.sent[-1])
@@ -252,6 +255,97 @@ class DispatchActionTests(TestCase):
         payload = json.loads(response.content.decode("utf-8"))
         self.assertIn("stop the session first", payload.get("detail", "").lower())
         self.assertFalse(dummy.sent)
+
+    def test_send_local_list_registers_version_metadata(self):
+        charger = Charger.objects.create(
+            charger_id="LOCALLIST", local_auth_list_version=2
+        )
+        dummy = DummyWebSocket()
+        connection_key = store.set_connection(
+            charger.charger_id, charger.connector_id, dummy
+        )
+        self.addCleanup(lambda: store.connections.pop(connection_key, None))
+        self.addCleanup(lambda: store.clear_pending_calls(charger.charger_id))
+        log_key = store.identity_key(charger.charger_id, charger.connector_id)
+        store.clear_log(log_key, log_type="charger")
+        self.addCleanup(lambda: store.clear_log(log_key, log_type="charger"))
+
+        request = self.factory.post(
+            "/chargers/LOCALLIST/action/",
+            data=json.dumps(
+                {
+                    "action": "send_local_list",
+                    "localAuthorizationList": [{"idTag": "A1", "idTagInfo": {"status": "Accepted"}}],
+                }
+            ),
+            content_type="application/json",
+        )
+        request.user = SimpleNamespace(
+            is_authenticated=True,
+            is_superuser=True,
+            is_staff=True,
+        )
+
+        with patch(
+            "ocpp.views._evaluate_pending_call_result", return_value=(True, None, None)
+        ):
+            response = dispatch_action(request, charger.charger_id)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(dummy.sent)
+        frame = json.loads(dummy.sent[-1])
+        self.assertEqual(frame[0], 2)
+        self.assertEqual(frame[2], "SendLocalList")
+        payload = frame[3]
+        self.assertEqual(payload.get("listVersion"), 3)
+        self.assertEqual(payload.get("updateType"), "Full")
+        self.assertEqual(len(payload.get("localAuthorizationList", [])), 1)
+        message_id = frame[1]
+        self.assertIn(message_id, store.pending_calls)
+        metadata = store.pending_calls[message_id]
+        self.assertEqual(metadata.get("list_version"), 3)
+        self.assertEqual(metadata.get("list_size"), 1)
+        self.assertEqual(metadata.get("action"), "SendLocalList")
+        self.assertEqual(metadata.get("log_key"), log_key)
+
+    def test_get_local_list_version_dispatches_call(self):
+        charger = Charger.objects.create(charger_id="LISTVERSION")
+        dummy = DummyWebSocket()
+        connection_key = store.set_connection(
+            charger.charger_id, charger.connector_id, dummy
+        )
+        self.addCleanup(lambda: store.connections.pop(connection_key, None))
+        self.addCleanup(lambda: store.clear_pending_calls(charger.charger_id))
+        log_key = store.identity_key(charger.charger_id, charger.connector_id)
+        store.clear_log(log_key, log_type="charger")
+        self.addCleanup(lambda: store.clear_log(log_key, log_type="charger"))
+
+        request = self.factory.post(
+            "/chargers/LISTVERSION/action/",
+            data=json.dumps({"action": "get_local_list_version"}),
+            content_type="application/json",
+        )
+        request.user = SimpleNamespace(
+            is_authenticated=True,
+            is_superuser=True,
+            is_staff=True,
+        )
+
+        with patch(
+            "ocpp.views._evaluate_pending_call_result", return_value=(True, None, None)
+        ):
+            response = dispatch_action(request, charger.charger_id)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(dummy.sent)
+        frame = json.loads(dummy.sent[-1])
+        self.assertEqual(frame[0], 2)
+        self.assertEqual(frame[2], "GetLocalListVersion")
+        self.assertIsInstance(frame[3], dict)
+        self.assertFalse(frame[3])
+        message_id = frame[1]
+        self.assertIn(message_id, store.pending_calls)
+        metadata = store.pending_calls[message_id]
+        self.assertEqual(metadata.get("action"), "GetLocalListVersion")
+        self.assertEqual(metadata.get("log_key"), log_key)
 
 class ChargerFixtureTests(TestCase):
     fixtures = [
@@ -6242,8 +6336,9 @@ class DispatchActionViewTests(TestCase):
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
         self.addCleanup(self._close_loop)
+        self.location = Location.objects.create(name="Dispatch Site")
         self.charger = Charger.objects.create(
-            charger_id="DISPATCH", connector_id=1
+            charger_id="DISPATCH", connector_id=1, location=self.location
         )
         self.ws = DummyWebSocket()
         store.set_connection(
@@ -6269,6 +6364,7 @@ class DispatchActionViewTests(TestCase):
             "charger-action-connector",
             args=[self.charger.charger_id, self.charger.connector_slug],
         )
+        self.last_metadata = None
         self.wait_patch = patch(
             "ocpp.views.store.wait_for_pending_call",
             side_effect=self._wait_success,
@@ -6292,12 +6388,14 @@ class DispatchActionViewTests(TestCase):
 
     def _wait_success(self, message_id, timeout=5.0):  # noqa: D401 - helper for patch
         metadata = store.pending_calls.pop(message_id, None)
+        metadata_copy = dict(metadata or {})
+        self.last_metadata = metadata_copy
         store._pending_call_events.pop(message_id, None)
         store._pending_call_results.pop(message_id, None)
         return {
             "success": True,
             "payload": {"status": "Accepted"},
-            "metadata": dict(metadata or {}),
+            "metadata": metadata_copy,
         }
 
     def test_remote_start_requires_id_tag(self):
@@ -6329,6 +6427,71 @@ class DispatchActionViewTests(TestCase):
         self.assertTrue(
             any("RemoteStartTransaction" in entry for entry in log_entries)
         )
+
+    def test_reserve_now_dispatches_frame_and_metadata(self):
+        start = timezone.now() + timedelta(hours=1)
+        reservation = CPReservation.objects.create(
+            location=self.location,
+            connector=self.charger,
+            start_time=start,
+            duration_minutes=45,
+            id_tag="TAG-RSV",
+        )
+
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"action": "reserve_now", "reservation": reservation.pk}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.loop.run_until_complete(asyncio.sleep(0))
+        self.assertEqual(len(self.ws.sent), 1)
+        frame = json.loads(self.ws.sent[0])
+        self.assertEqual(frame[0], 2)
+        self.assertEqual(frame[2], "ReserveNow")
+        self.assertEqual(frame[3]["reservationId"], reservation.pk)
+        self.assertEqual(frame[3]["connectorId"], self.charger.connector_id)
+        self.assertEqual(frame[3]["idTag"], "TAG-RSV")
+        self.assertEqual(self.mock_schedule.call_count, 1)
+        metadata = self.last_metadata or {}
+        self.assertEqual(metadata.get("reservation_pk"), reservation.pk)
+        self.assertEqual(metadata.get("connector_id"), self.charger.connector_id)
+        reservation.refresh_from_db()
+        self.assertEqual(reservation.ocpp_message_id, frame[1])
+        self.assertEqual(reservation.evcs_status, "")
+        self.assertFalse(reservation.evcs_confirmed)
+
+    def test_cancel_reservation_dispatches_frame(self):
+        start = timezone.now() + timedelta(hours=1)
+        reservation = CPReservation.objects.create(
+            location=self.location,
+            connector=self.charger,
+            start_time=start,
+            duration_minutes=30,
+            id_tag="TAG-CANCEL",
+        )
+
+        response = self.client.post(
+            self.url,
+            data=json.dumps(
+                {"action": "cancel_reservation", "reservation": reservation.pk}
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.loop.run_until_complete(asyncio.sleep(0))
+        self.assertEqual(len(self.ws.sent), 1)
+        frame = json.loads(self.ws.sent[0])
+        self.assertEqual(frame[2], "CancelReservation")
+        self.assertEqual(frame[3]["reservationId"], reservation.pk)
+        self.assertEqual(self.mock_schedule.call_count, 1)
+        metadata = self.last_metadata or {}
+        self.assertEqual(metadata.get("reservation_pk"), reservation.pk)
+        self.assertEqual(metadata.get("action"), "CancelReservation")
+        reservation.refresh_from_db()
+        self.assertEqual(reservation.ocpp_message_id, frame[1])
+        self.assertEqual(reservation.evcs_status, "")
+        self.assertFalse(reservation.evcs_confirmed)
 
     def test_change_availability_dispatches_frame(self):
         response = self.client.post(

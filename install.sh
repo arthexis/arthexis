@@ -37,6 +37,32 @@ usage() {
     exit 1
 }
 
+stop_systemd_unit_if_present() {
+    local unit_name="$1"
+
+    if ! command -v systemctl >/dev/null 2>&1; then
+        return 0
+    fi
+
+    if systemctl list-unit-files | awk '{print $1}' | grep -Fxq "$unit_name"; then
+        echo "Stopping ${unit_name} before repair to avoid database locks."
+        sudo systemctl stop "$unit_name" || true
+    fi
+}
+
+stop_existing_units_for_repair() {
+    local service_name="$1"
+
+    stop_systemd_unit_if_present "${service_name}.service"
+    stop_systemd_unit_if_present "${service_name}-upgrade-guard.timer"
+    stop_systemd_unit_if_present "${service_name}-upgrade-guard.service"
+
+    if [ "$ENABLE_CELERY" = true ]; then
+        stop_systemd_unit_if_present "celery-${service_name}.service"
+        stop_systemd_unit_if_present "celery-beat-${service_name}.service"
+    fi
+}
+
 ensure_nginx_in_path() {
     if command -v nginx >/dev/null 2>&1; then
         return 0
@@ -272,6 +298,10 @@ fi
 
 if [ -z "$PORT" ]; then
     PORT="$(arthexis_detect_backend_port "$SCRIPT_DIR")"
+fi
+
+if [ "$REPAIR" = true ] && [ -n "$SERVICE" ]; then
+    stop_existing_units_for_repair "$SERVICE"
 fi
 
 
