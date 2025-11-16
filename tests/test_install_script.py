@@ -89,6 +89,14 @@ def test_install_script_uses_auto_upgrade_lockfile():
     assert "auto_upgrade.lck" in content
 
 
+def test_install_script_records_systemd_units():
+    script_path = Path(__file__).resolve().parent.parent / "install.sh"
+    content = script_path.read_text()
+
+    assert "systemd_services.lck" in content
+    assert "arthexis_record_systemd_unit" in content
+
+
 def test_install_script_checks_rfid_for_control_nodes():
     script_path = Path(__file__).resolve().parent.parent / "install.sh"
     content = script_path.read_text()
