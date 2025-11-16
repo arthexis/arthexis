@@ -66,11 +66,18 @@ echo "Short Revision: $SHORT_REVISION"
 SERVICE=""
 if [ -f "$LOCK_DIR/service.lck" ]; then
   SERVICE="$(cat "$LOCK_DIR/service.lck")"
-  if [ -n "$SERVICE" ] && ! printf '%s' "$SERVICE" | grep -Eq '^[A-Za-z0-9_.]+$'; then
-    echo "Invalid service name detected: $SERVICE"
-    echo "Service names may only contain letters, numbers, underscores, and dots."
-    echo "Refusing to continue to avoid creating or managing unsafe systemd units."
-    exit 1
+  if [ -n "$SERVICE" ]; then
+    if printf '%s' "$SERVICE" | grep -Eq '^-'; then
+      echo "Invalid service name detected: $SERVICE"
+      echo "Service names must not begin with a dash to avoid unsafe systemd unit creation."
+      exit 1
+    fi
+    if ! printf '%s' "$SERVICE" | grep -Eq '^[A-Za-z0-9_.-]+$'; then
+      echo "Invalid service name detected: $SERVICE"
+      echo "Service names may only contain letters, numbers, underscores, dots, and hyphens."
+      echo "Refusing to continue to avoid creating or managing unsafe systemd units."
+      exit 1
+    fi
   fi
   echo "Service: $SERVICE"
 else
