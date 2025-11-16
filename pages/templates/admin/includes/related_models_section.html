@@ -5,7 +5,12 @@
     <ul class="related-models__list">
       {% for related in related_models %}
         <li class="related-models__item">
-          <a class="related-models__link" href="{{ related.url }}">{{ related.label }}</a>
+          <a class="related-models__link" href="{{ related.url }}">
+            <span class="related-models__relation" aria-label="{{ related.relation_title|default:related.label }}">
+              {{ related.relation_type|default:"—" }}
+            </span>
+            <span class="related-models__label">{{ related.label }}</span>
+          </a>
         </li>
       {% endfor %}
     </ul>
