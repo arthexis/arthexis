@@ -164,3 +164,36 @@ def test_discover_local_ip_addresses_reads_metadata(monkeypatch):
 def test_normalize_candidate_ip(candidate, expected):
     result = settings_helpers._normalize_candidate_ip(candidate)
     assert result == expected
+
+
+class TestResolveCeleryShutdownTimeout:
+    def test_prefers_soft_timeout_env(self):
+        env = {"CELERY_WORKER_SOFT_SHUTDOWN_TIMEOUT": "12.5"}
+
+        result = settings_helpers.resolve_celery_shutdown_timeout(env=env, default=5)
+
+        assert result == pytest.approx(12.5)
+
+    def test_falls_back_to_legacy_env(self):
+        env = {"CELERY_WORKER_SHUTDOWN_TIMEOUT": "45"}
+
+        result = settings_helpers.resolve_celery_shutdown_timeout(env=env, default=5)
+
+        assert result == pytest.approx(45)
+
+    def test_skips_invalid_values(self):
+        env = {
+            "CELERY_WORKER_SOFT_SHUTDOWN_TIMEOUT": "oops",
+            "CELERY_WORKER_SHUTDOWN_TIMEOUT": "9",
+        }
+
+        result = settings_helpers.resolve_celery_shutdown_timeout(env=env, default=5)
+
+        assert result == pytest.approx(9)
+
+    def test_returns_default_for_negative_values(self):
+        env = {"CELERY_WORKER_SOFT_SHUTDOWN_TIMEOUT": "-1"}
+
+        result = settings_helpers.resolve_celery_shutdown_timeout(env=env, default=11)
+
+        assert result == pytest.approx(11)

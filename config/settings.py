@@ -36,6 +36,7 @@ from config.settings_helpers import (
     extract_ip_from_host,
     install_validate_host_with_subnets,
     load_secret_key,
+    resolve_celery_shutdown_timeout,
     strip_ipv6_brackets,
 )
 
@@ -713,9 +714,9 @@ CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "memory://")
 CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", "cache+memory://")
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 # Allow Celery workers extra time to finish acknowledged jobs before SIGTERM.
-CELERY_WORKER_SHUTDOWN_TIMEOUT = int(
-    os.environ.get("CELERY_WORKER_SHUTDOWN_TIMEOUT", "60")
-)
+CELERY_WORKER_SOFT_SHUTDOWN_TIMEOUT = resolve_celery_shutdown_timeout()
+# Legacy alias retained for fixture references and admin guidance.
+CELERY_WORKER_SHUTDOWN_TIMEOUT = CELERY_WORKER_SOFT_SHUTDOWN_TIMEOUT
 
 CONSTELLATION_UDP_PROBE_INTERVAL_SECONDS = int(
     os.environ.get("CONSTELLATION_UDP_PROBE_INTERVAL_SECONDS", "30")

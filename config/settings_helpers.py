@@ -22,6 +22,7 @@ __all__ = [
     "extract_ip_from_host",
     "install_validate_host_with_subnets",
     "load_secret_key",
+    "resolve_celery_shutdown_timeout",
     "strip_ipv6_brackets",
     "validate_host_with_subnets",
 ]
@@ -282,3 +283,31 @@ def load_secret_key(
         secret_file.write_text(generated_key, encoding="utf-8")
 
     return generated_key
+
+
+def resolve_celery_shutdown_timeout(
+    env: Mapping[str, str] | MutableMapping[str, str] | None = None,
+    default: float = 60.0,
+) -> float:
+    """Return the configured Celery soft shutdown timeout in seconds."""
+
+    if env is None:
+        env = os.environ
+
+    candidates = (
+        "CELERY_WORKER_SOFT_SHUTDOWN_TIMEOUT",
+        "CELERY_WORKER_SHUTDOWN_TIMEOUT",
+    )
+    for variable in candidates:
+        raw_value = (env.get(variable) or "").strip()
+        if not raw_value:
+            continue
+        try:
+            parsed = float(raw_value)
+        except (TypeError, ValueError):
+            continue
+        if parsed < 0:
+            continue
+        return parsed
+
+    return float(default)
