@@ -24,6 +24,14 @@
         </tr>
         <tr>
           <th scope="row">
+            <a href="{% url 'admin:system-uptime-report' %}">
+              {% trans "Uptime Report" %}
+            </a>
+          </th>
+          <td>{% trans "Visualize node uptime and downtime over common timeframes." %}</td>
+        </tr>
+        <tr>
+          <th scope="row">
             <a href="{% url 'admin:system-changelog-report' %}">
               {% trans "Changelog Report" %}
             </a>

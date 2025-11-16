@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import deque
 from contextlib import closing
 from dataclasses import dataclass
-from datetime import datetime, timezone as datetime_timezone
+from datetime import datetime, timedelta, timezone as datetime_timezone
 from functools import lru_cache
 from pathlib import Path
 import json
@@ -542,6 +542,248 @@ def _suite_uptime() -> str:
     return timesince(boot_time, now)
 
 
+_DAY_NAMES = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"}
+
+
+def _parse_last_history_line(line: str) -> dict[str, object] | None:
+    """Parse a single ``last -x -F`` line for shutdown or reboot entries."""
+
+    if not line or line.startswith("wtmp begins"):
+        return None
+
+    tokens = line.split()
+    if not tokens or tokens[0] not in {"reboot", "shutdown"}:
+        return None
+
+    try:
+        start_index = next(index for index, token in enumerate(tokens) if token in _DAY_NAMES)
+    except StopIteration:
+        return None
+
+    if start_index + 4 >= len(tokens):
+        return None
+
+    start_text = " ".join(tokens[start_index : start_index + 5])
+    try:
+        start_dt = datetime.strptime(start_text, "%a %b %d %H:%M:%S %Y")
+    except ValueError:
+        return None
+    start_dt = timezone.make_aware(start_dt, timezone.get_current_timezone())
+
+    dash_index = None
+    for index in range(start_index + 5, len(tokens)):
+        if tokens[index] == "-":
+            dash_index = index
+            break
+
+    end_dt = None
+    if dash_index is not None and dash_index + 5 < len(tokens):
+        end_text = " ".join(tokens[dash_index + 1 : dash_index + 6])
+        try:
+            end_dt = datetime.strptime(end_text, "%a %b %d %H:%M:%S %Y")
+        except ValueError:
+            end_dt = None
+        else:
+            end_dt = timezone.make_aware(end_dt, timezone.get_current_timezone())
+
+    return {"type": tokens[0], "start": start_dt, "end": end_dt}
+
+
+def _load_shutdown_periods() -> tuple[list[tuple[datetime, datetime | None]], str | None]:
+    """Return shutdown periods parsed from ``last -x -F`` output."""
+
+    try:
+        result = subprocess.run(
+            ["last", "-x", "-F"], capture_output=True, check=False, text=True
+        )
+    except FileNotFoundError:
+        return [], _("The `last` command is not available on this node.")
+
+    if result.returncode not in (0, 1):
+        return [], _("Unable to read uptime history from the system log.")
+
+    shutdown_periods: list[tuple[datetime, datetime | None]] = []
+    for line in result.stdout.splitlines():
+        record = _parse_last_history_line(line.strip())
+        if not record or record["type"] != "shutdown":
+            continue
+        start = record.get("start")
+        end = record.get("end")
+        if isinstance(start, datetime):
+            shutdown_periods.append((start, end if isinstance(end, datetime) else None))
+
+    return shutdown_periods, None
+
+
+def _format_datetime(dt: datetime | None) -> str:
+    if not dt:
+        return ""
+    return date_format(timezone.localtime(dt), "Y-m-d H:i")
+
+
+def _merge_shutdown_periods(periods: Iterable[tuple[datetime, datetime]]) -> list[tuple[datetime, datetime]]:
+    normalized: list[tuple[datetime, datetime]] = []
+    for start, end in periods:
+        if end < start:
+            continue
+        normalized.append((start, end))
+
+    normalized.sort(key=lambda value: value[0])
+    merged: list[tuple[datetime, datetime]] = []
+    for start, end in normalized:
+        if not merged:
+            merged.append((start, end))
+            continue
+        last_start, last_end = merged[-1]
+        if start <= last_end:
+            merged[-1] = (last_start, max(last_end, end))
+        else:
+            merged.append((start, end))
+    return merged
+
+
+def _build_uptime_segments(
+    *, window_start: datetime, window_end: datetime, shutdown_periods: list[tuple[datetime, datetime]]
+) -> list[dict[str, object]]:
+    segments: list[dict[str, object]] = []
+    if window_end <= window_start:
+        return segments
+
+    merged_periods = _merge_shutdown_periods(shutdown_periods)
+    cursor = window_start
+    for down_start, down_end in merged_periods:
+        if down_end <= window_start or down_start >= window_end:
+            continue
+        if cursor < down_start:
+            up_end = min(down_start, window_end)
+            duration = up_end - cursor
+            segments.append(
+                {
+                    "status": "up",
+                    "start": cursor,
+                    "end": up_end,
+                    "duration": duration,
+                }
+            )
+        segment_start = max(down_start, window_start)
+        segment_end = min(down_end, window_end)
+        duration = segment_end - segment_start
+        segments.append(
+            {
+                "status": "down",
+                "start": segment_start,
+                "end": segment_end,
+                "duration": duration,
+            }
+        )
+        cursor = segment_end
+    if cursor < window_end:
+        duration = window_end - cursor
+        segments.append(
+            {
+                "status": "up",
+                "start": cursor,
+                "end": window_end,
+                "duration": duration,
+            }
+        )
+
+    return segments
+
+
+def _serialize_segments(segments: list[dict[str, object]], *, window_duration: float) -> list[dict[str, object]]:
+    serialized: list[dict[str, object]] = []
+    for segment in segments:
+        start = segment["start"]
+        end = segment["end"]
+        duration: timedelta = segment["duration"]
+        duration_seconds = max(duration.total_seconds(), 0.0)
+        width = 0.0
+        if window_duration > 0:
+            width = (duration_seconds / window_duration) * 100
+        serialized.append(
+            {
+                "status": segment["status"],
+                "start": start,
+                "end": end,
+                "width": width,
+                "duration": duration,
+                "duration_label": timesince(start, end),
+                "label": _(
+                    "%(status)s from %(start)s to %(end)s"
+                )
+                % {
+                    "status": _(segment["status"] == "up" and "Up" or "Down"),
+                    "start": _format_datetime(start),
+                    "end": _format_datetime(end),
+                },
+            }
+        )
+    return serialized
+
+
+def _build_uptime_report(*, now: datetime | None = None) -> dict[str, object]:
+    current_time = now or timezone.now()
+    raw_periods, error = _load_shutdown_periods()
+    shutdown_periods = []
+    for start, end in raw_periods:
+        normalized_end = end or current_time
+        if normalized_end < start:
+            continue
+        shutdown_periods.append((start, normalized_end))
+
+    windows = [
+        (_("Last 24 hours"), current_time - timedelta(hours=24)),
+        (_("Last 7 days"), current_time - timedelta(days=7)),
+        (_("Last 30 days"), current_time - timedelta(days=30)),
+    ]
+
+    report_windows: list[dict[str, object]] = []
+    for label, start in windows:
+        window_duration = (current_time - start).total_seconds()
+        segments = _build_uptime_segments(
+            window_start=start, window_end=current_time, shutdown_periods=shutdown_periods
+        )
+        serialized_segments = _serialize_segments(segments, window_duration=window_duration)
+        uptime_seconds = sum(
+            segment["duration"].total_seconds()
+            for segment in serialized_segments
+            if segment["status"] == "up"
+        )
+        downtime_seconds = max(window_duration - uptime_seconds, 0.0)
+        uptime_percent = 0.0
+        downtime_percent = 0.0
+        if window_duration > 0:
+            uptime_percent = (uptime_seconds / window_duration) * 100
+            downtime_percent = (downtime_seconds / window_duration) * 100
+
+        report_windows.append(
+            {
+                "label": label,
+                "start": start,
+                "end": current_time,
+                "segments": serialized_segments,
+                "uptime_percent": round(uptime_percent, 1),
+                "downtime_percent": round(downtime_percent, 1),
+                "downtime_events": [
+                    {
+                        "start": _format_datetime(segment["start"]),
+                        "end": _format_datetime(segment["end"]),
+                        "duration": timesince(segment["start"], segment["end"]),
+                    }
+                    for segment in serialized_segments
+                    if segment["status"] == "down"
+                ],
+            }
+        )
+
+    return {
+        "generated_at": current_time,
+        "windows": report_windows,
+        "error": error,
+    }
+
+
 def _build_auto_upgrade_report(*, limit: int = AUTO_UPGRADE_LOG_LIMIT) -> dict[str, object]:
     """Assemble the composite auto-upgrade report for the admin view."""
 
@@ -1018,6 +1260,17 @@ def _system_view(request):
     return TemplateResponse(request, "admin/system.html", context)
 
 
+def _system_uptime_report_view(request):
+    context = admin.site.each_context(request)
+    context.update(
+        {
+            "title": _("Uptime Report"),
+            "uptime_report": _build_uptime_report(),
+        }
+    )
+    return TemplateResponse(request, "admin/system_uptime_report.html", context)
+
+
 def _system_upgrade_report_view(request):
     context = admin.site.each_context(request)
     context.update(
@@ -1339,6 +1592,11 @@ def patch_admin_system_view() -> None:
                 "system/pending-todos-report/",
                 admin.site.admin_view(_system_pending_todos_report_view),
                 name="system-pending-todos-report",
+            ),
+            path(
+                "system/uptime-report/",
+                admin.site.admin_view(_system_uptime_report_view),
+                name="system-uptime-report",
             ),
             path(
                 "system/upgrade-report/",
