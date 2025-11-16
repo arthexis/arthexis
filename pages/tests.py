@@ -1274,6 +1274,23 @@ class AdminModelRuleTemplateTagTests(TestCase):
         self.assertFalse(status["success"])
         self.assertIn("At least one upstream node is required.", status["message"])
 
+    def test_model_rule_status_for_watchtower_skips_upstream_requirement(self):
+        mac = Node.get_current_mac()
+        role, _ = NodeRole.objects.get_or_create(name="Watchtower")
+        Node.objects.create(
+            hostname="watchtower-node",
+            mac_address=mac,
+            public_endpoint="watchtower-node",
+            current_relation=Node.Relation.SELF,
+            role=role,
+        )
+
+        context = Context({})
+        status = admin_extras.model_rule_status(context, "nodes", "Node")
+
+        self.assertTrue(status["success"])
+        self.assertEqual(status["message"], gettext("All rules met."))
+
     def test_model_rule_status_for_nodes_requires_recent_upstream_update(self):
         mac = Node.get_current_mac()
         role, _ = NodeRole.objects.get_or_create(name="Terminal")
