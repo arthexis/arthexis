@@ -66,6 +66,9 @@ class UpgradeReportTests(SimpleTestCase):
                 with mock.patch(
                     "core.system._load_auto_upgrade_schedule",
                     return_value=schedule_stub,
+                ), mock.patch(
+                    "core.system._suite_uptime",
+                    return_value="5 hours",
                 ):
                     report = system._build_auto_upgrade_report(limit=10)
 
@@ -82,6 +85,7 @@ class UpgradeReportTests(SimpleTestCase):
         )
         self.assertFalse(report["log_error"])
         self.assertTrue(report["settings"]["log_path"].endswith("auto-upgrade.log"))
+        self.assertEqual(report["settings"]["suite_uptime"], "5 hours")
 
     def test_load_auto_upgrade_log_entries_limits_and_orders_entries(self):
         with tempfile.TemporaryDirectory() as tmpdir:
