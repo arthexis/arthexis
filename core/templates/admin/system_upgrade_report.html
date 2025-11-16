@@ -116,6 +116,14 @@
         </dd>
         <dt>{% trans "Log file" %}</dt>
         <dd><code>{{ report.settings.log_path }}</code></dd>
+        <dt>{% trans "Suite uptime" %}</dt>
+        <dd>
+          {% if report.settings.suite_uptime %}
+            {{ report.settings.suite_uptime }}
+          {% else %}
+            <em>{% trans "Unavailable" %}</em>
+          {% endif %}
+        </dd>
         <dt>{% trans "Blocked revisions" %}</dt>
         <dd>
           {% if report.settings.skip_revisions %}

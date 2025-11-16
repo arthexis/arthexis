@@ -24,6 +24,7 @@ from django.template.response import TemplateResponse
 from django.http import HttpResponseRedirect, JsonResponse
 from django.urls import NoReverseMatch, path, reverse
 from django.utils import timezone
+from django.utils.timesince import timesince
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.formats import date_format
 from django.utils.html import format_html, format_html_join
@@ -517,6 +518,30 @@ def _load_auto_upgrade_schedule() -> dict[str, object]:
     return info
 
 
+def _suite_uptime() -> str:
+    """Return a human-readable uptime for the running suite when possible."""
+
+    try:
+        import psutil
+    except Exception:
+        return ""
+
+    try:
+        boot_timestamp = float(psutil.boot_time())
+    except Exception:
+        return ""
+
+    if not boot_timestamp:
+        return ""
+
+    boot_time = datetime.fromtimestamp(boot_timestamp, tz=timezone.utc)
+    now = timezone.now()
+    if boot_time > now:
+        return ""
+
+    return timesince(boot_time, now)
+
+
 def _build_auto_upgrade_report(*, limit: int = AUTO_UPGRADE_LOG_LIMIT) -> dict[str, object]:
     """Assemble the composite auto-upgrade report for the admin view."""
 
@@ -540,6 +565,7 @@ def _build_auto_upgrade_report(*, limit: int = AUTO_UPGRADE_LOG_LIMIT) -> dict[s
         "task_name": AUTO_UPGRADE_TASK_NAME,
         "task_path": AUTO_UPGRADE_TASK_PATH,
         "log_path": str(log_info.get("path")),
+        "suite_uptime": _suite_uptime(),
     }
 
     return {
