@@ -734,6 +734,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "ocpp.tasks.schedule_daily_charge_point_configuration_checks",
         "schedule": crontab(minute=0, hour=0),
     },
+    "ocpp_power_projection": {
+        "task": "ocpp.tasks.schedule_power_projection_requests",
+        "schedule": crontab(minute=0),
+    },
     "ocpp_firmware_snapshot": {
         "task": "ocpp.tasks.schedule_daily_firmware_snapshot_requests",
         "schedule": crontab(minute=30, hour=0),
