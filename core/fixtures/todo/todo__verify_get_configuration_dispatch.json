@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: charger action GetConfiguration",
+      "created_on": "2024-01-01T00:00:00Z",
+      "url": "/admin/ocpp/charger/",
+      "request_details": "1. Connect a charger with an active websocket session.\n2. Issue a POST to the charger action endpoint (e.g., /chargers/<charger_id>/<connector_slug>/action/) with action=\"get_configuration\" and a key filter list.\n3. Confirm the charger log records the GetConfiguration call and the corresponding CP Configuration entry updates for that connector without creating duplicates.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]

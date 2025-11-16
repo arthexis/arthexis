@@ -1893,6 +1893,34 @@ def dispatch_action(request, cid, connector=None):
     ocpp_action: str | None = None
     expected_statuses: set[str] | None = None
     msg: str | None = None
+    if action == "get_configuration":
+        payload: dict[str, object] = {}
+        raw_key = data.get("key")
+        keys: list[str] = []
+        if raw_key not in (None, "", []):
+            if isinstance(raw_key, str):
+                trimmed = raw_key.strip()
+                if trimmed:
+                    keys.append(trimmed)
+            elif isinstance(raw_key, (list, tuple)):
+                for entry in raw_key:
+                    if not isinstance(entry, str):
+                        return JsonResponse(
+                            {"detail": "key entries must be strings"}, status=400
+                        )
+                    entry_text = entry.strip()
+                    if entry_text:
+                        keys.append(entry_text)
+            else:
+                return JsonResponse(
+                    {"detail": "key must be a string or list of strings"}, status=400
+                )
+            if keys:
+                payload["key"] = keys
+        message_id = uuid.uuid4().hex
+        ocpp_action = "GetConfiguration"
+        expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
+        msg = json.dumps([2, message_id, "GetConfiguration", payload])
     if action == "reserve_now":
         reservation_pk = data.get("reservation") or data.get("reservationId")
         if reservation_pk in (None, ""):
@@ -1934,6 +1962,23 @@ def dispatch_action(request, cid, connector=None):
         store.register_pending_call(
             message_id,
             {
+                "action": "GetConfiguration",
+                "charger_id": cid,
+                "connector_id": connector_value,
+                "log_key": log_key,
+                "requested_at": requested_at,
+            },
+        )
+        timeout_message = (
+            "GetConfiguration timed out: charger did not respond"
+            " (operation may not be supported)"
+        )
+        store.schedule_call_timeout(
+            message_id,
+            timeout=5.0,
+            action="GetConfiguration",
+            log_key=log_key,
+            message=timeout_message,
                 "action": "ReserveNow",
                 "charger_id": cid,
                 "connector_id": connector_value,

@@ -6756,6 +6756,66 @@ class DispatchActionViewTests(TestCase):
         self.assertIn("did not receive", detail)
         self.mock_wait.side_effect = self._wait_success
 
+    def test_get_configuration_dispatches_frame(self):
+        self.mock_schedule.reset_mock()
+        original_register = store.register_pending_call
+        captured: dict[str, dict[str, object]] = {}
+
+        def _register(message_id: str, metadata: dict[str, object]):
+            captured[message_id] = dict(metadata)
+            return original_register(message_id, metadata)
+
+        with patch("ocpp.views.store.register_pending_call", side_effect=_register):
+            response = self.client.post(
+                self.url,
+                data=json.dumps({"action": "get_configuration"}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 200)
+        self.loop.run_until_complete(asyncio.sleep(0))
+        self.assertEqual(len(self.ws.sent), 1)
+        frame = json.loads(self.ws.sent[0])
+        self.assertEqual(frame[0], 2)
+        self.assertEqual(frame[2], "GetConfiguration")
+        self.assertEqual(frame[3], {})
+        self.mock_schedule.assert_called_once()
+        metadata = captured.get(frame[1])
+        self.assertIsNotNone(metadata)
+        assert metadata is not None  # for type checkers
+        self.assertEqual(metadata.get("connector_id"), self.charger.connector_id)
+        self.assertEqual(metadata.get("log_key"), self.log_key)
+
+    def test_get_configuration_accepts_key_filter(self):
+        self.mock_schedule.reset_mock()
+        response = self.client.post(
+            self.url,
+            data=json.dumps(
+                {
+                    "action": "get_configuration",
+                    "key": ["HeartbeatInterval", " MeterValueSampleInterval "],
+                }
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.loop.run_until_complete(asyncio.sleep(0))
+        self.assertEqual(len(self.ws.sent), 1)
+        frame = json.loads(self.ws.sent[0])
+        self.assertEqual(frame[2], "GetConfiguration")
+        self.assertEqual(frame[3].get("key"), ["HeartbeatInterval", "MeterValueSampleInterval"])
+        self.mock_schedule.assert_called_once()
+
+    def test_get_configuration_rejects_invalid_key_types(self):
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"action": "get_configuration", "key": ["valid", 123]}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.loop.run_until_complete(asyncio.sleep(0))
+        self.assertEqual(self.ws.sent, [])
+        self.mock_schedule.assert_not_called()
+
     def test_change_availability_requires_valid_type(self):
         response = self.client.post(
             self.url,
