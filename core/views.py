@@ -1379,7 +1379,9 @@ def _step_promote_build(release, ctx, log_path: Path, *, user=None) -> None:
 def _step_release_manager_approval(
     release, ctx, log_path: Path, *, user=None
 ) -> None:
-    if release.to_credentials(user=user) is None:
+    auto_release = bool(ctx.get("auto_release"))
+    creds = release.to_credentials(user=user)
+    if creds is None:
         ctx.pop("release_approval", None)
         if not ctx.get("approval_credentials_missing"):
             _append_log(log_path, "Release manager publishing credentials missing")
@@ -1390,6 +1392,14 @@ def _step_release_manager_approval(
     missing_before = ctx.pop("approval_credentials_missing", None)
     if missing_before:
         ctx.pop("awaiting_approval", None)
+    if auto_release:
+        ctx.pop("release_approval", None)
+        ctx.pop("awaiting_approval", None)
+        ctx.pop("approval_credentials_missing", None)
+        if not ctx.get("auto_release_approval_logged"):
+            _append_log(log_path, "Scheduled release automatically approved")
+            ctx["auto_release_approval_logged"] = True
+        return
     decision = ctx.get("release_approval")
     if decision == "approved":
         ctx.pop("release_approval", None)

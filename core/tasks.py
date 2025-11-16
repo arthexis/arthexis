@@ -12,6 +12,7 @@ import urllib.request
 
 from celery import shared_task
 from core import github_issues
+from . import release_workflow
 from core.auto_upgrade_failover import clear_failover_lock, write_failover_lock
 from django.conf import settings
 from django.db import DatabaseError
@@ -1136,6 +1137,32 @@ def verify_auto_upgrade_health(attempt: int = 1) -> bool | None:
     _record_health_check_result(base_dir, attempt, status, detail)
     _handle_failed_health_check(base_dir, detail)
     return False
+
+
+def execute_scheduled_release(release_id: int) -> None:
+    """Run the automated release flow for a scheduled PackageRelease."""
+
+    model = _get_package_release_model()
+    if model is None:
+        logger.warning("Scheduled release %s skipped: model unavailable", release_id)
+        return
+
+    release = model.objects.filter(pk=release_id).first()
+    if release is None:
+        logger.warning("Scheduled release %s skipped: release not found", release_id)
+        return
+
+    try:
+        release_workflow.run_headless_publish(release, auto_release=True)
+    finally:
+        release.clear_schedule(save=True)
+
+
+@shared_task
+def run_scheduled_release(release_id: int) -> None:
+    """Entrypoint used by django-celery-beat to trigger scheduled releases."""
+
+    execute_scheduled_release(release_id)
 
 
 @shared_task
