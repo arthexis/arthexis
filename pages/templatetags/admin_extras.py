@@ -32,6 +32,7 @@ _LEAD_OPEN_COUNT_CACHE_PREFIX = f"{_BADGE_CACHE_PREFIX}.lead_open_count"
 _RFID_STATS_CACHE_KEY = f"{_BADGE_CACHE_PREFIX}.rfid_release_stats"
 _CHARGER_STATS_CACHE_KEY = f"{_BADGE_CACHE_PREFIX}.charger_availability_stats"
 _MODEL_RULES_CACHE_KEY = "_model_rule_status_cache"
+_NODE_COUNT_CACHE_KEY = f"{_BADGE_CACHE_PREFIX}.node_known_count"
 _ALL_RULES_MET_MESSAGE = _("All rules met.")
 _SUCCESS_ICON = "✓"
 _ERROR_ICON = "✗"
@@ -578,6 +579,27 @@ def lead_open_count(context, app_label: str, model_name: str):
 
     context_cache[cache_key] = count
     return count
+
+
+@register.simple_tag(takes_context=True)
+def node_known_count(context) -> int | None:
+    """Return the number of nodes known to this deployment."""
+
+    context_cache = context.setdefault("_node_known_counts", {})
+    cached_count = context_cache.get("count", _CACHE_MISS)
+    if cached_count is not _CACHE_MISS:
+        return cached_count
+
+    cached_count = cache.get(_NODE_COUNT_CACHE_KEY, _CACHE_MISS)
+    if cached_count is _CACHE_MISS:
+        try:
+            cached_count = Node.objects.count()
+        except DatabaseError:
+            cached_count = None
+        cache.set(_NODE_COUNT_CACHE_KEY, cached_count, _BADGE_CACHE_TIMEOUT)
+
+    context_cache["count"] = cached_count
+    return cached_count
 
 
 @register.simple_tag(takes_context=True)

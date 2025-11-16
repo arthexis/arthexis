@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Verify admin dashboard node count badge",
+      "created_on": "2025-01-02T00:00:00Z",
+      "url": "/admin/",
+      "request_details": "1. Sign in to the Django admin and open /admin/.\n2. Confirm the Nodes → Nodes row shows a numeric badge immediately to the left of the rules check text indicating the total nodes known to this deployment.\n3. Add or remove a Node record and refresh to ensure the badge updates while the rule status text remains to the right.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]

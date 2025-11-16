@@ -48,6 +48,17 @@
         {% endblocktranslate %}
         <span class="lead-open-badge" aria-label="{{ lead_open_label }}" title="{{ lead_open_label }}">{{ lead_open_count }}</span>
       {% endif %}
+      {% if model.object_name == 'Node' %}
+        {% node_known_count as node_known_total %}
+        {% if node_known_total is not None %}
+          {% blocktranslate count node_total=node_known_total asvar node_known_label trimmed %}
+            {{ node_total }} node known to this deployment
+          {% plural %}
+            {{ node_total }} nodes known to this deployment
+          {% endblocktranslate %}
+          <span class="node-count-badge" aria-label="{{ node_known_label }}" title="{{ node_known_label }}">{{ node_known_total }}</span>
+        {% endif %}
+      {% endif %}
       {% model_rule_status app_label model.object_name as model_rule %}
       {% if model_rule %}
         <span class="model-rule-status{% if model_rule.success %} model-rule-status--success{% else %} model-rule-status--error{% endif %}">

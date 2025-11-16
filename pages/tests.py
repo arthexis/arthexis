@@ -3697,6 +3697,7 @@ class FavoriteTests(TestCase):
         from nodes.models import Node, NodeRole
 
         terminal_role, _ = NodeRole.objects.get_or_create(name="Terminal")
+        self.terminal_role = terminal_role
         self.node, _ = Node.objects.update_or_create(
             mac_address=Node.get_current_mac(),
             defaults={
@@ -3864,6 +3865,27 @@ class FavoriteTests(TestCase):
         self.assertContains(resp, f'title="{badge_label}"')
         self.assertContains(resp, f'aria-label="{badge_label}"')
 
+    def test_dashboard_shows_node_known_badge(self):
+        Node.objects.create(
+            hostname="upstream-node",
+            address="10.0.0.2",
+            mac_address="11:22:33:44:55:66",
+            role=self.terminal_role,
+            current_relation=Node.Relation.UPSTREAM,
+        )
+
+        resp = self.client.get(reverse("admin:index"))
+
+        content = resp.content.decode()
+        self.assertIn('class="node-count-badge"', content)
+        self.assertIn('title="2 nodes known to this deployment"', content)
+        self.assertIn('aria-label="2 nodes known to this deployment"', content)
+        self.assertIn('>2<', content)
+
+        badge_index = content.index("node-count-badge")
+        rule_index = content.index("model-rule-status")
+        self.assertLess(badge_index, rule_index)
+
     def test_lead_open_count_uses_cache_across_requests(self):
         InviteLead.objects.create(email="cached@example.com")
 
@@ -3912,6 +3934,25 @@ class FavoriteTests(TestCase):
 
         self.assertEqual(cached_stats["available_with_cp_number"], 1)
         self.assertEqual(cached_stats["available_total"], 2)
+
+    def test_node_known_count_uses_cache_across_requests(self):
+        Node.objects.create(
+            hostname="cached-node",
+            address="10.0.0.3",
+            mac_address="22:33:44:55:66:77",
+            role=self.terminal_role,
+            current_relation=Node.Relation.UPSTREAM,
+        )
+
+        first_context = Context({})
+        with self.assertNumQueries(1):
+            count = admin_extras.node_known_count(first_context)
+
+        second_context = Context({})
+        with self.assertNumQueries(0):
+            cached_count = admin_extras.node_known_count(second_context)
+
+        self.assertEqual(cached_count, count)
 
     def test_dashboard_charge_point_badge_ignores_aggregator(self):
         Charger.objects.create(charger_id="CP-AGG", last_status="Available")
