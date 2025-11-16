@@ -1,32 +1,23 @@
 import base64
 import ipaddress
-import ipaddress
 import json
 import re
-import secrets
 import socket
 import uuid
 from collections.abc import Mapping
-from datetime import timedelta
-
 from django.apps import apps
 from django.conf import settings
-from django.contrib.auth import authenticate, get_user_model, login
-from django.contrib.auth.models import Group, Permission
+from django.contrib.auth import authenticate, get_user_model
 from django.core import serializers
 from django.core.cache import cache
-from django.core.signing import BadSignature, SignatureExpired, TimestampSigner
-from django.http import HttpResponse, JsonResponse
+from django.http import JsonResponse
 from django.http.request import split_domain_port
-from django.shortcuts import redirect
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.utils.cache import patch_vary_headers
-from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.csrf import csrf_exempt
 from pathlib import Path
-from urllib.parse import urlsplit
 
 from utils.api import api_login_required
 
@@ -57,11 +48,6 @@ from .models import (
     node_information_updated,
 )
 from .utils import capture_screenshot, save_screenshot
-
-
-PROXY_TOKEN_SALT = "nodes.proxy.session"
-PROXY_TOKEN_TIMEOUT = 300
-PROXY_CACHE_PREFIX = "nodes:proxy-session:"
 
 
 _CONSTELLATION_SUBNET_VALUE = getattr(settings, "CONSTELLATION_WG_SUBNET", "10.88.0.0/24")
@@ -278,66 +264,6 @@ def _clean_requester_hint(value, *, strip: bool = True) -> str | None:
     if not cleaned:
         return None
     return cleaned
-
-
-def _sanitize_proxy_target(target: str | None, request) -> str:
-    default_target = reverse("admin:index")
-    if not target:
-        return default_target
-    candidate = str(target).strip()
-    if not candidate:
-        return default_target
-    if candidate.startswith(("http://", "https://")):
-        parsed = urlsplit(candidate)
-        if not parsed.path:
-            return default_target
-        allowed = url_has_allowed_host_and_scheme(
-            candidate,
-            allowed_hosts={request.get_host()},
-            require_https=request.is_secure(),
-        )
-        if not allowed:
-            return default_target
-        path = parsed.path
-        if parsed.query:
-            path = f"{path}?{parsed.query}"
-        return path
-    if not candidate.startswith("/"):
-        candidate = f"/{candidate}"
-    return candidate
-
-
-def _assign_groups_and_permissions(user, payload: Mapping) -> None:
-    groups = payload.get("groups", [])
-    group_objs: list[Group] = []
-    if isinstance(groups, (list, tuple)):
-        for name in groups:
-            if not isinstance(name, str):
-                continue
-            cleaned = name.strip()
-            if not cleaned:
-                continue
-            group, _ = Group.objects.get_or_create(name=cleaned)
-            group_objs.append(group)
-    if group_objs or user.groups.exists():
-        user.groups.set(group_objs)
-
-    permissions = payload.get("permissions", [])
-    perm_objs: list[Permission] = []
-    if isinstance(permissions, (list, tuple)):
-        for label in permissions:
-            if not isinstance(label, str):
-                continue
-            app_label, _, codename = label.partition(".")
-            if not app_label or not codename:
-                continue
-            perm = Permission.objects.filter(
-                content_type__app_label=app_label, codename=codename
-            ).first()
-            if perm:
-                perm_objs.append(perm)
-    if perm_objs:
-        user.user_permissions.set(perm_objs)
 
 
 def _normalize_requested_chargers(values) -> list[tuple[str, int | None, object]]:
@@ -1865,302 +1791,6 @@ def network_charger_action(request):
         {"status": status_label, "detail": message, "updates": serialized_updates},
         status=status_code,
     )
-
-
-@csrf_exempt
-def proxy_session(request):
-    """Create a proxy login session for a remote administrator."""
-
-    if request.method != "POST":
-        return JsonResponse({"detail": "POST required"}, status=405)
-
-    try:
-        payload = json.loads(request.body.decode() or "{}")
-    except json.JSONDecodeError:
-        return JsonResponse({"detail": "invalid json"}, status=400)
-
-    requester = payload.get("requester")
-    if not requester:
-        return JsonResponse({"detail": "requester required"}, status=400)
-
-    requester_mac = _clean_requester_hint(payload.get("requester_mac"))
-    requester_public_key = _clean_requester_hint(
-        payload.get("requester_public_key"), strip=False
-    )
-    node, error_response = _load_signed_node(
-        request,
-        requester,
-        mac_address=requester_mac,
-        public_key=requester_public_key,
-    )
-    if error_response is not None:
-        return error_response
-
-    user_payload = payload.get("user") or {}
-    username = str(user_payload.get("username", "")).strip()
-    if not username:
-        return JsonResponse({"detail": "username required"}, status=400)
-
-    User = get_user_model()
-    user = User.objects.filter(username=username).first()
-    if user is None:
-        return JsonResponse({"detail": "user not found"}, status=404)
-
-    if not user.is_active:
-        return JsonResponse({"detail": "user inactive"}, status=403)
-
-    if not user.is_staff:
-        return JsonResponse({"detail": "user is not staff"}, status=403)
-
-    if "is_superuser" in user_payload:
-        desired_superuser = bool(user_payload.get("is_superuser"))
-        if desired_superuser != user.is_superuser:
-            return JsonResponse({"detail": "superuser updates not allowed"}, status=403)
-
-    if "is_staff" in user_payload:
-        desired_staff = bool(user_payload.get("is_staff"))
-        if desired_staff != user.is_staff:
-            return JsonResponse({"detail": "staff updates not allowed"}, status=403)
-
-    password_value = user_payload.get("password")
-    password = (
-        password_value
-        if isinstance(password_value, str)
-        else str(password_value or "")
-    )
-    if not password:
-        return JsonResponse({"detail": "password required"}, status=401)
-
-    auth_user = authenticate(request=None, username=username, password=password)
-    if auth_user is None or auth_user.pk != user.pk:
-        return JsonResponse({"detail": "authentication failed"}, status=403)
-
-    updates: list[str] = []
-    for field in ("first_name", "last_name", "email"):
-        value = user_payload.get(field)
-        if isinstance(value, str) and getattr(user, field) != value:
-            setattr(user, field, value)
-            updates.append(field)
-
-    if updates:
-        user.save(update_fields=updates)
-
-    _assign_groups_and_permissions(user, user_payload)
-
-    target_path = _sanitize_proxy_target(payload.get("target"), request)
-    nonce = secrets.token_urlsafe(24)
-    cache_key = f"{PROXY_CACHE_PREFIX}{nonce}"
-    cache.set(cache_key, {"user_id": user.pk}, PROXY_TOKEN_TIMEOUT)
-
-    signer = TimestampSigner(salt=PROXY_TOKEN_SALT)
-    token = signer.sign_object({"user": user.pk, "next": target_path, "nonce": nonce})
-    login_url = request.build_absolute_uri(
-        reverse("node-proxy-login", args=[token])
-    )
-    expires = timezone.now() + timedelta(seconds=PROXY_TOKEN_TIMEOUT)
-
-    return JsonResponse({"login_url": login_url, "expires": expires.isoformat()})
-
-
-@csrf_exempt
-def proxy_login(request, token):
-    """Redeem a proxy login token and redirect to the target path."""
-
-    signer = TimestampSigner(salt=PROXY_TOKEN_SALT)
-    try:
-        payload = signer.unsign_object(token, max_age=PROXY_TOKEN_TIMEOUT)
-    except SignatureExpired:
-        return HttpResponse(status=410)
-    except BadSignature:
-        return HttpResponse(status=400)
-
-    nonce = payload.get("nonce")
-    if not nonce:
-        return HttpResponse(status=400)
-
-    cache_key = f"{PROXY_CACHE_PREFIX}{nonce}"
-    cache_payload = cache.get(cache_key)
-    if not cache_payload:
-        return HttpResponse(status=410)
-    cache.delete(cache_key)
-
-    user_id = cache_payload.get("user_id")
-    if not user_id:
-        return HttpResponse(status=403)
-
-    User = get_user_model()
-    user = User.objects.filter(pk=user_id).first()
-    if not user or not user.is_active:
-        return HttpResponse(status=403)
-
-    backend = getattr(user, "backend", "")
-    if not backend:
-        backends = getattr(settings, "AUTHENTICATION_BACKENDS", None) or ()
-        backend = backends[0] if backends else "django.contrib.auth.backends.ModelBackend"
-    login(request, user, backend=backend)
-
-    next_path = payload.get("next") or reverse("admin:index")
-    if not url_has_allowed_host_and_scheme(
-        next_path,
-        allowed_hosts={request.get_host()},
-        require_https=request.is_secure(),
-    ):
-        next_path = reverse("admin:index")
-
-    return redirect(next_path)
-
-
-def _suite_model_name(meta) -> str:
-    base = str(meta.verbose_name_plural or meta.verbose_name or meta.object_name)
-    normalized = re.sub(r"[^0-9A-Za-z]+", " ", base).title().replace(" ", "")
-    return normalized or meta.object_name
-
-
-@csrf_exempt
-def proxy_execute(request):
-    """Execute model operations on behalf of a remote interface node."""
-
-    if request.method != "POST":
-        return JsonResponse({"detail": "POST required"}, status=405)
-
-    try:
-        payload = json.loads(request.body.decode() or "{}")
-    except json.JSONDecodeError:
-        return JsonResponse({"detail": "invalid json"}, status=400)
-
-    requester = payload.get("requester")
-    if not requester:
-        return JsonResponse({"detail": "requester required"}, status=400)
-
-    requester_mac = _clean_requester_hint(payload.get("requester_mac"))
-    requester_public_key = _clean_requester_hint(
-        payload.get("requester_public_key"), strip=False
-    )
-    node, error_response = _load_signed_node(
-        request,
-        requester,
-        mac_address=requester_mac,
-        public_key=requester_public_key,
-    )
-    if error_response is not None:
-        return error_response
-
-    action = str(payload.get("action", "")).strip().lower()
-    if not action:
-        return JsonResponse({"detail": "action required"}, status=400)
-
-    credentials = payload.get("credentials") or {}
-    username = str(credentials.get("username", "")).strip()
-    password_value = credentials.get("password")
-    password = password_value if isinstance(password_value, str) else str(password_value or "")
-    if not username or not password:
-        return JsonResponse({"detail": "credentials required"}, status=401)
-
-    User = get_user_model()
-    auth_user = authenticate(request=None, username=username, password=password)
-
-    if auth_user is None:
-        return JsonResponse({"detail": "authentication failed"}, status=403)
-
-    if not auth_user.is_active:
-        return JsonResponse({"detail": "user inactive"}, status=403)
-
-    if not auth_user.is_staff and not auth_user.is_superuser:
-        return JsonResponse({"detail": "user is not staff"}, status=403)
-
-    for flag in ("is_staff", "is_superuser"):
-        if flag in credentials:
-            desired = bool(credentials.get(flag))
-            if desired != getattr(auth_user, flag):
-                return JsonResponse({"detail": f"{flag} updates not allowed"}, status=403)
-
-    updates: list[str] = []
-    for field in ("first_name", "last_name", "email"):
-        value = credentials.get(field)
-        if isinstance(value, str) and getattr(auth_user, field) != value:
-            setattr(auth_user, field, value)
-            updates.append(field)
-    if updates:
-        auth_user.save(update_fields=updates)
-
-    _assign_groups_and_permissions(auth_user, credentials)
-
-    model_label = payload.get("model")
-    model = None
-    if action != "schema":
-        if not isinstance(model_label, str) or "." not in model_label:
-            return JsonResponse({"detail": "model required"}, status=400)
-        app_label, model_name = model_label.split(".", 1)
-        model = apps.get_model(app_label, model_name)
-        if model is None:
-            return JsonResponse({"detail": "model not found"}, status=404)
-
-    if action == "schema":
-        models_payload = []
-        for registered_model in apps.get_models():
-            meta = registered_model._meta
-            models_payload.append(
-                {
-                    "app_label": meta.app_label,
-                    "model": meta.model_name,
-                    "object_name": meta.object_name,
-                    "verbose_name": str(meta.verbose_name),
-                    "verbose_name_plural": str(meta.verbose_name_plural),
-                    "suite_name": _suite_model_name(meta),
-                }
-            )
-        return JsonResponse({"models": models_payload})
-
-    action_perm = {
-        "list": "view",
-        "get": "view",
-        "create": "add",
-        "update": "change",
-        "delete": "delete",
-    }.get(action)
-
-    if action_perm and not auth_user.is_superuser:
-        perm_codename = f"{model._meta.app_label}.{action_perm}_{model._meta.model_name}"
-        if not auth_user.has_perm(perm_codename):
-            return JsonResponse({"detail": "forbidden"}, status=403)
-
-    try:
-        if action == "list":
-            filters = payload.get("filters") or {}
-            if filters and not isinstance(filters, Mapping):
-                return JsonResponse({"detail": "filters must be a mapping"}, status=400)
-            queryset = model._default_manager.all()
-            if filters:
-                queryset = queryset.filter(**filters)
-            limit = payload.get("limit")
-            if limit is not None:
-                try:
-                    limit_value = int(limit)
-                    if limit_value > 0:
-                        queryset = queryset[:limit_value]
-                except (TypeError, ValueError):
-                    pass
-            data = serializers.serialize("python", queryset)
-            return JsonResponse({"objects": data})
-
-        if action == "get":
-            filters = payload.get("filters") or {}
-            if filters and not isinstance(filters, Mapping):
-                return JsonResponse({"detail": "filters must be a mapping"}, status=400)
-            lookup = dict(filters)
-            if not lookup and "pk" in payload:
-                lookup = {"pk": payload.get("pk")}
-            if not lookup:
-                return JsonResponse({"detail": "lookup required"}, status=400)
-            obj = model._default_manager.get(**lookup)
-            data = serializers.serialize("python", [obj])[0]
-            return JsonResponse({"object": data})
-    except model.DoesNotExist:
-        return JsonResponse({"detail": "not found"}, status=404)
-    except Exception as exc:
-        return JsonResponse({"detail": str(exc)}, status=400)
-
-    return JsonResponse({"detail": "unsupported action"}, status=400)
 
 
 
