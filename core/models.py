@@ -808,9 +808,11 @@ class OpenPayProfile(Profile):
 
     PROCESSOR_OPENPAY = "openpay"
     PROCESSOR_PAYPAL = "paypal"
+    PROCESSOR_STRIPE = "stripe"
     PROCESSOR_CHOICES = (
         (PROCESSOR_OPENPAY, _("OpenPay")),
         (PROCESSOR_PAYPAL, _("PayPal")),
+        (PROCESSOR_STRIPE, _("Stripe")),
     )
 
     SANDBOX_API_URL = "https://sandbox-api.openpay.mx/v1"
@@ -818,6 +820,8 @@ class OpenPayProfile(Profile):
 
     PAYPAL_SANDBOX_API_URL = "https://api-m.sandbox.paypal.com"
     PAYPAL_PRODUCTION_API_URL = "https://api-m.paypal.com"
+
+    STRIPE_API_URL = "https://api.stripe.com"
 
     profile_fields = (
         "merchant_id",
@@ -829,6 +833,10 @@ class OpenPayProfile(Profile):
         "paypal_client_secret",
         "paypal_webhook_id",
         "paypal_is_production",
+        "stripe_secret_key",
+        "stripe_publishable_key",
+        "stripe_webhook_secret",
+        "stripe_is_production",
     )
 
     default_processor = models.CharField(
@@ -845,6 +853,10 @@ class OpenPayProfile(Profile):
     paypal_client_secret = SigilShortAutoField(max_length=255, blank=True)
     paypal_webhook_id = SigilShortAutoField(max_length=255, blank=True)
     paypal_is_production = models.BooleanField(default=False)
+    stripe_secret_key = SigilShortAutoField(max_length=255, blank=True)
+    stripe_publishable_key = SigilShortAutoField(max_length=255, blank=True)
+    stripe_webhook_secret = SigilShortAutoField(max_length=255, blank=True)
+    stripe_is_production = models.BooleanField(default=False)
     verified_on = models.DateTimeField(null=True, blank=True)
     verification_reference = models.CharField(max_length=255, blank=True, editable=False)
 
@@ -866,6 +878,10 @@ class OpenPayProfile(Profile):
                 or old.paypal_client_secret != self.paypal_client_secret
                 or old.paypal_webhook_id != self.paypal_webhook_id
                 or old.paypal_is_production != self.paypal_is_production
+                or old.stripe_secret_key != self.stripe_secret_key
+                or old.stripe_publishable_key != self.stripe_publishable_key
+                or old.stripe_webhook_secret != self.stripe_webhook_secret
+                or old.stripe_is_production != self.stripe_is_production
             ):
                 self._clear_verification()
         super().save(*args, **kwargs)
@@ -904,6 +920,14 @@ class OpenPayProfile(Profile):
     def get_paypal_auth(self) -> tuple[str, str]:
         return (self.paypal_client_id, self.paypal_client_secret)
 
+    # --- Stripe helpers --------------------------------------------------
+
+    def get_stripe_api_base_url(self) -> str:
+        return self.STRIPE_API_URL
+
+    def get_stripe_headers(self) -> dict[str, str]:
+        return {"Authorization": f"Bearer {self.stripe_secret_key}"}
+
     # --- Processor utilities --------------------------------------------
 
     def has_openpay_credentials(self) -> bool:
@@ -920,18 +944,29 @@ class OpenPayProfile(Profile):
 
     def iter_processors(self):
         preferred = self.default_processor or self.PROCESSOR_OPENPAY
-        ordered = [preferred]
-        other = (
-            self.PROCESSOR_PAYPAL
-            if preferred == self.PROCESSOR_OPENPAY
-            else self.PROCESSOR_OPENPAY
-        )
-        ordered.append(other)
+        ordered = [
+            preferred,
+            self.PROCESSOR_OPENPAY,
+            self.PROCESSOR_PAYPAL,
+            self.PROCESSOR_STRIPE,
+        ]
+        seen = set()
         for processor in ordered:
+            if processor in seen:
+                continue
+            seen.add(processor)
             if processor == self.PROCESSOR_OPENPAY and self.has_openpay_credentials():
                 yield processor
             elif processor == self.PROCESSOR_PAYPAL and self.has_paypal_credentials():
                 yield processor
+            elif processor == self.PROCESSOR_STRIPE and self.has_stripe_credentials():
+                yield processor
+
+    def has_stripe_credentials(self) -> bool:
+        return all(
+            getattr(self, field)
+            for field in ("stripe_secret_key", "stripe_publishable_key")
+        )
 
     def sign_webhook(self, payload: bytes | str, timestamp: str | None = None) -> str:
         if not self.webhook_secret:
@@ -1048,6 +1083,44 @@ class OpenPayProfile(Profile):
         self.save(update_fields=["verification_reference", "verified_on"])
         return True
 
+    def _verify_stripe(self):
+        url = f"{self.get_stripe_api_base_url()}/v1/account"
+        try:
+            response = requests.get(
+                url,
+                headers=self.get_stripe_headers(),
+                timeout=10,
+            )
+        except requests.RequestException as exc:  # pragma: no cover - network failure
+            self._clear_verification()
+            if self.pk:
+                self.save(update_fields=["verification_reference", "verified_on"])
+            raise ValidationError(
+                _("Unable to verify Stripe credentials: %(error)s")
+                % {"error": exc}
+            ) from exc
+        if response.status_code != 200:
+            self._clear_verification()
+            if self.pk:
+                self.save(update_fields=["verification_reference", "verified_on"])
+            raise ValidationError(_("Invalid Stripe credentials"))
+        try:
+            payload = response.json() or {}
+        except ValueError:
+            payload = {}
+        reference = ""
+        if isinstance(payload, dict):
+            reference = (
+                payload.get("id")
+                or payload.get("email")
+                or payload.get("object")
+                or ""
+            )
+        self.verification_reference = f"Stripe: {reference}" if reference else "Stripe"
+        self.verified_on = timezone.now()
+        self.save(update_fields=["verification_reference", "verified_on"])
+        return True
+
     def verify(self):
         errors = []
         for processor in self.iter_processors():
@@ -1056,6 +1129,8 @@ class OpenPayProfile(Profile):
                     return self._verify_openpay()
                 if processor == self.PROCESSOR_PAYPAL:
                     return self._verify_paypal()
+                if processor == self.PROCESSOR_STRIPE:
+                    return self._verify_stripe()
             except ValidationError as exc:
                 errors.append(exc)
         if errors:
@@ -1064,7 +1139,12 @@ class OpenPayProfile(Profile):
 
     def __str__(self):  # pragma: no cover - simple representation
         owner = self.owner_display()
-        identifier = self.merchant_id or self.paypal_client_id or ""
+        identifier = (
+            self.merchant_id
+            or self.paypal_client_id
+            or self.stripe_publishable_key
+            or ""
+        )
         return f"{owner} @ {identifier}" if owner and identifier else (owner or identifier)
 
     class Meta:

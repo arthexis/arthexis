@@ -133,6 +133,7 @@ Terminal nodes can start directly with the scripts below without installing; Con
 - Browse the [admindocs](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/) at [`http://localhost:8888/admindocs/`](http://localhost:8888/admindocs/) for API documentation that is generated from your models.
 - Follow the [Install & Administration Guide](docs/cookbooks/install-start-stop-upgrade-uninstall.md) for deployment, lifecycle tasks, and operational runbooks.
 - Onboard and service chargers with the [EVCS Connectivity & Maintenance Cookbook](docs/cookbooks/evcs-connectivity-maintenance.md).
+- Configure payment gateways with the [Payment Processors Cookbook](docs/cookbooks/payment-processors.md).
 - Reference the [Sigils Cookbook](docs/cookbooks/sigils.md) when configuring tokenized settings across environments.
 - Manage exports, imports, and audit trails with the [User Data Cookbook](docs/cookbooks/user-data.md).
 - Plan feature rollout strategies using the [Node Features Cookbook](docs/cookbooks/node-features.md).

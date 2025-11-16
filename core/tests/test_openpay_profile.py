@@ -236,6 +236,53 @@ class OpenPayProfileTests(TestCase):
             [OpenPayProfile.PROCESSOR_PAYPAL, OpenPayProfile.PROCESSOR_OPENPAY],
         )
 
+        profile.stripe_secret_key = "sk_test_stripe"
+        profile.stripe_publishable_key = "pk_test_stripe"
+        profile.default_processor = OpenPayProfile.PROCESSOR_STRIPE
+        self.assertEqual(
+            list(profile.iter_processors()),
+            [
+                OpenPayProfile.PROCESSOR_STRIPE,
+                OpenPayProfile.PROCESSOR_OPENPAY,
+                OpenPayProfile.PROCESSOR_PAYPAL,
+            ],
+        )
+
+    @mock.patch("core.models.requests.get")
+    def test_verify_uses_stripe_when_default(self, mock_get):
+        profile = self._create_profile(
+            merchant_id="",
+            private_key="",
+            public_key="",
+            webhook_secret="",
+            default_processor=OpenPayProfile.PROCESSOR_STRIPE,
+            stripe_secret_key="sk_test_stripe",
+            stripe_publishable_key="pk_test_stripe",
+            stripe_webhook_secret="whsec_stripe",
+        )
+
+        response = mock.Mock()
+        response.status_code = 200
+        response.json.return_value = {"id": "acct_123"}
+        mock_get.return_value = response
+
+        with mock.patch("core.models.timezone.now") as mock_now:
+            expected_time = timezone.make_aware(datetime(2024, 5, 1, 12, 0, 0))
+            mock_now.return_value = expected_time
+            result = profile.verify()
+
+        self.assertTrue(result)
+        mock_get.assert_called_once()
+        called_url = mock_get.call_args.kwargs.get("url") or mock_get.call_args.args[0]
+        self.assertEqual(called_url, f"{OpenPayProfile.STRIPE_API_URL}/v1/account")
+        self.assertEqual(
+            mock_get.call_args.kwargs["headers"],
+            {"Authorization": f"Bearer {profile.stripe_secret_key}"},
+        )
+        profile.refresh_from_db()
+        self.assertEqual(profile.verification_reference, "Stripe: acct_123")
+        self.assertEqual(profile.verified_on, expected_time)
+
     def test_verify_without_credentials(self):
         profile = self._create_profile(
             merchant_id="",

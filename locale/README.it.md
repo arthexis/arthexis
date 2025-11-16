@@ -132,6 +132,7 @@ I nodi Terminal possono avviarsi direttamente con gli script sottostanti senza i
 - Consulta gli [admindocs](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/) su [`http://localhost:8888/admindocs/`](http://localhost:8888/admindocs/) per leggere la documentazione API generata automaticamente dai tuoi modelli.
 - Segui la [Guida all'installazione e all'amministrazione](docs/cookbooks/install-start-stop-upgrade-uninstall.md) per attività di deployment, ciclo di vita e runbook operativi.
 - Esegui onboarding e manutenzione dei caricabatterie con il [Cookbook Connettività e Manutenzione EVCS](docs/cookbooks/evcs-connectivity-maintenance.md).
+- Configura i gateway di pagamento con il [Cookbook dei processori di pagamento](docs/cookbooks/payment-processors.md).
 - Fai riferimento al [Cookbook dei sigilli](docs/cookbooks/sigils.md) quando configuri impostazioni basate su token tra gli ambienti.
 - Gestisci esportazioni, importazioni e tracciamenti con il [Cookbook sui dati utente](docs/cookbooks/user-data.md).
 - Pianifica le strategie di rilascio delle funzionalità con il [Cookbook sulle funzionalità dei nodi](docs/cookbooks/node-features.md).
