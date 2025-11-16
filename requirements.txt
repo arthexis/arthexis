@@ -3,10 +3,8 @@ amqp==5.3.1
 annotated-types==0.7.0
 anyio==4.9.0
 asgiref==3.10.0
-# Allow newer atproto releases that support future Python versions.
-atproto>=0.0.63,<0.1.0
 attrs==25.3.0
-autobahn==24.4.2
+autobahn==25.10.2
 Automat==25.4.16
 billiard==4.2.2
 bleach==6.3.0
@@ -47,7 +45,6 @@ hyperlink==21.0.0
 idna==3.11
 incremental==24.7.2
 kombu==5.5.4
-libipld==3.2.0
 Markdown==3.9
 mdx_truly_sane_lists==1.3
 mfrc522==0.0.7; sys_platform == "linux"
@@ -98,7 +95,7 @@ wcwidth==0.2.14
 webencodings==0.5.1
 websocket-client==1.8.0
 websockets==15.0.1
-webauthn==1.11.0
+webauthn==1.11.1
 whitenoise==6.11.0
 plyer==2.1.0; sys_platform == "win32"
 wsproto==1.2.0

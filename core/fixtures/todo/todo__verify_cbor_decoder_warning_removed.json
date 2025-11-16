@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Confirm CBOR decoder deprecation warning no longer appears",
+      "created_on": "2025-11-16T00:00:00Z",
+      "url": "/admin/core/todo/",
+      "request_details": "Restart the arthexis web service and clear the latest application log. Load the admin and public login pages that render passkey widgets, then attempt a mock WebAuthn registration using the existing test credential flow. Monitor logs for the session and confirm no warnings mentioning `cbor.decoder` or `cbor2.decoder` are emitted during imports or authentication.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]
