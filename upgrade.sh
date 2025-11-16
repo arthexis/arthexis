@@ -14,6 +14,8 @@ BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$BASE_DIR/scripts/helpers/version_marker.sh"
 # shellcheck source=scripts/helpers/auto-upgrade-service.sh
 . "$BASE_DIR/scripts/helpers/auto-upgrade-service.sh"
+# shellcheck source=scripts/helpers/systemd_locks.sh
+. "$BASE_DIR/scripts/helpers/systemd_locks.sh"
 arthexis_resolve_log_dir "$BASE_DIR" LOG_DIR || exit 1
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 exec > >(tee "$LOG_FILE")
@@ -23,6 +25,20 @@ cd "$BASE_DIR"
 LOCK_DIR="$BASE_DIR/locks"
 SERVICE_NAME=""
 [ -f "$LOCK_DIR/service.lck" ] && SERVICE_NAME="$(cat "$LOCK_DIR/service.lck")"
+if [ -z "$SERVICE_NAME" ]; then
+  while IFS= read -r unit_name; do
+    case "$unit_name" in
+      *-upgrade-guard.service|*-upgrade-guard.timer|celery-*.service|celery-beat-*.service|lcd-*.service)
+        continue
+        ;;
+    esac
+
+    if [[ "$unit_name" == *.service ]]; then
+      SERVICE_NAME="${unit_name%.service}"
+      break
+    fi
+  done < <(arthexis_read_systemd_unit_records "$LOCK_DIR")
+fi
 
 SYSTEMCTL_CMD=()
 if command -v systemctl >/dev/null 2>&1; then
