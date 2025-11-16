@@ -19,8 +19,9 @@ except Exception:  # pragma: no cover - fallback when installer is unavailable
 from .classifiers import run_default_classifiers, suppress_default_classifiers
 from .models import ContentSample
 
+WORK_DIR = Path(settings.BASE_DIR) / "work"
 SCREENSHOT_DIR = settings.LOG_DIR / "screenshots"
-CAMERA_DIR = settings.LOG_DIR / "camera"
+CAMERA_DIR = WORK_DIR / "camera"
 AUDIO_DIR = settings.LOG_DIR / "audio"
 logger = logging.getLogger(__name__)
 
@@ -94,7 +95,11 @@ def capture_screenshot(url: str, cookies=None) -> Path:
 
 
 def capture_rpi_snapshot(timeout: int = 10) -> Path:
-    """Capture a snapshot using the Raspberry Pi camera stack."""
+    """Capture a snapshot using the Raspberry Pi camera stack.
+
+    Snapshots are written under the node's work directory instead of the log
+    directory so binary images do not end up in rotated log files.
+    """
 
     tool_path = shutil.which("rpicam-still")
     if not tool_path:
