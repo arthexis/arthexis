@@ -64,11 +64,18 @@ class HorologiaConfig(BaseBeatConfig):
                 return last_run_at.replace(microsecond=0).isoformat()
 
         class CountdownTimerAdmin(admin.ModelAdmin):
-            list_display = ("title", "scheduled_for", "is_published", "is_upcoming")
+            list_display = (
+                "title",
+                "scheduled_for",
+                "package_release",
+                "is_published",
+                "is_upcoming",
+            )
             search_fields = ("title", "body")
             ordering = ("scheduled_for", "title")
             date_hierarchy = "scheduled_for"
             list_filter = ("scheduled_for", "is_published")
+            autocomplete_fields = ("article", "package_release")
             readonly_fields = (
                 "created_on",
                 "updated_on",
@@ -85,6 +92,7 @@ class HorologiaConfig(BaseBeatConfig):
                             "body",
                             "scheduled_for",
                             "article",
+                            "package_release",
                             "is_published",
                         )
                     },

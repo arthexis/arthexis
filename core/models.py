@@ -4431,9 +4431,12 @@ class PackageRelease(Entity):
 
     def save(self, *args, **kwargs):
         sync_schedule = kwargs.pop("sync_schedule", True)
+        sync_timer = kwargs.pop("sync_timer", True)
         super().save(*args, **kwargs)
         if sync_schedule and self.pk:
             self.sync_scheduled_task()
+        if sync_timer:
+            self.sync_countdown_timer()
 
     def clear_schedule(self, *, save: bool = True) -> None:
         """Remove any scheduled release metadata."""
@@ -4444,6 +4447,7 @@ class PackageRelease(Entity):
             self.save(
                 update_fields=["scheduled_date", "scheduled_time"],
                 sync_schedule=True,
+                sync_timer=True,
             )
 
     @property
@@ -4641,6 +4645,48 @@ class PackageRelease(Entity):
             )
 
         return targets
+
+    def sync_countdown_timer(self) -> None:
+        """Keep the countdown timer aligned with the release schedule."""
+
+        if not self.pk:
+            return
+
+        schedule_at = self.scheduled_datetime
+        try:
+            timer = self.countdown_timer
+        except CountdownTimer.DoesNotExist:
+            timer = None
+
+        if schedule_at is None:
+            if timer:
+                timer.delete()
+            return
+
+        default_title = f"{self.package.name} {self.version} release"
+
+        if timer is None:
+            CountdownTimer.objects.create(
+                title=default_title,
+                scheduled_for=schedule_at,
+                package_release=self,
+                is_published=False,
+            )
+            return
+
+        update_fields: list[str] = []
+        if timer.scheduled_for != schedule_at:
+            timer.scheduled_for = schedule_at
+            update_fields.append("scheduled_for")
+        if timer.package_release_id != self.pk:
+            timer.package_release = self
+            update_fields.append("package_release")
+        if not timer.title:
+            timer.title = default_title
+            update_fields.append("title")
+
+        if update_fields:
+            timer.save(update_fields=update_fields)
 
     def github_package_url(self) -> str | None:
         """Return the GitHub Packages URL for this release if determinable."""
@@ -4845,6 +4891,13 @@ class CountdownTimer(Entity):
         on_delete=models.SET_NULL,
         related_name="countdown_timers",
     )
+    package_release = models.OneToOneField(
+        "core.PackageRelease",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="countdown_timer",
+    )
     is_published = models.BooleanField(default=False)
     created_on = models.DateTimeField(auto_now_add=True)
     updated_on = models.DateTimeField(auto_now=True)
@@ -4886,12 +4939,36 @@ class CountdownTimer(Entity):
     def save(self, *args, **kwargs):
         self.full_clean()
         super().save(*args, **kwargs)
+        self._sync_package_release()
 
     def natural_key(self):  # pragma: no cover - simple representation
         return (self.title, self.scheduled_for.isoformat())
 
     def __str__(self):  # pragma: no cover - human readable
         return self.title
+
+    def _sync_package_release(self) -> None:
+        if not self.package_release_id:
+            return
+
+        release = self.package_release
+        if release is None:
+            return
+
+        scheduled_for = timezone.localtime(self.scheduled_for)
+        scheduled_date = scheduled_for.date()
+        scheduled_time = scheduled_for.timetz().replace(tzinfo=None)
+
+        update_fields: list[str] = []
+        if release.scheduled_date != scheduled_date:
+            release.scheduled_date = scheduled_date
+            update_fields.append("scheduled_date")
+        if release.scheduled_time != scheduled_time:
+            release.scheduled_time = scheduled_time
+            update_fields.append("scheduled_time")
+
+        if update_fields:
+            release.save(update_fields=update_fields, sync_timer=False)
 
 
 class HorologiaCountdownTimer(CountdownTimer):

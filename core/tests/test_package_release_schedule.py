@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import tempfile
-from datetime import time as datetime_time, timedelta
+from datetime import datetime as datetime_datetime, time as datetime_time, timedelta
 from pathlib import Path
 from unittest import mock
 
@@ -24,7 +24,7 @@ if _safe_setup is not None:
 else:  # pragma: no cover - fallback when pytest fixtures are unavailable
     django.setup()
 from core import release_workflow, views as core_views
-from core.models import Package, PackageRelease, ReleaseManager
+from core.models import CountdownTimer, Package, PackageRelease, ReleaseManager
 from core.tasks import execute_scheduled_release
 
 
@@ -84,6 +84,16 @@ class PackageReleaseScheduleTests(TestCase):
         self.assertTrue(task.one_off)
         self.assertTrue(task.enabled)
 
+    def test_schedule_creation_builds_countdown_timer(self):
+        when = timezone.now() + timedelta(days=1)
+        self._set_schedule(when)
+
+        timer = self.release.countdown_timer
+        self.assertEqual(timer.package_release, self.release)
+        self.assertEqual(timer.scheduled_for, self.release.scheduled_datetime)
+        self.assertEqual(timer.title, f"{self.package.name} {self.release.version} release")
+        self.assertFalse(timer.is_published)
+
     def test_schedule_updates_remove_orphaned_clock(self):
         when = timezone.now() + timedelta(days=1)
         self._set_schedule(when)
@@ -98,6 +108,12 @@ class PackageReleaseScheduleTests(TestCase):
             _clocked_schedule_model().objects.filter(pk=old_clock_id).exists()
         )
 
+        self.release.countdown_timer.refresh_from_db()
+        self.assertEqual(
+            self.release.countdown_timer.scheduled_for,
+            self.release.scheduled_datetime,
+        )
+
     def test_clear_schedule_removes_periodic_task(self):
         when = timezone.now() + timedelta(days=1)
         self._set_schedule(when)
@@ -107,6 +123,9 @@ class PackageReleaseScheduleTests(TestCase):
         self.assertIsNone(self.release.scheduled_time)
         self.assertIsNone(self.release.scheduled_task)
         self.assertFalse(_scheduled_release_tasks(self.release.pk).exists())
+
+        with self.assertRaises(CountdownTimer.DoesNotExist):
+            _ = self.release.countdown_timer
 
 
 class ScheduledReleaseTaskTests(TestCase):
@@ -169,3 +188,27 @@ class ReleaseManagerApprovalAutoTests(TestCase):
             self.assertTrue(log_path.exists())
             contents = log_path.read_text(encoding="utf-8")
             self.assertIn("Scheduled release automatically approved", contents)
+
+
+class CountdownTimerReleaseSyncTests(TestCase):
+    def setUp(self) -> None:
+        package = Package.objects.create(name="pkg-timer-sync", is_active=True)
+        self.release = PackageRelease.objects.create(
+            package=package,
+            version="6.6.6",
+            revision="",
+        )
+
+    def test_timer_saves_schedule_on_release(self):
+        scheduled_for = timezone.now() + timedelta(days=2)
+        CountdownTimer.objects.create(
+            title="Release Countdown",
+            scheduled_for=scheduled_for,
+            package_release=self.release,
+        )
+
+        self.release.refresh_from_db()
+        expected = timezone.localtime(
+            scheduled_for, timezone.get_current_timezone()
+        )
+        self.assertEqual(self.release.scheduled_datetime, expected)

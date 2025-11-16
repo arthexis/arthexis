@@ -1,0 +1,15 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "is_seed_data": false,
+      "is_deleted": false,
+      "request": "Validate Package Release countdown timer sync",
+      "created_on": "2024-01-01T00:00:00Z",
+      "url": "/admin/core/packagerelease/",
+      "request_details": "1. Open the Package Release change form for an upcoming build and set a future Scheduled Date and Scheduled Time. Save and verify the release now lists a related Countdown Timer linked to the same schedule in the Horologia Countdown Timers admin.\n2. Adjust the release schedule to a different future time and confirm the linked Countdown Timer updates to the new datetime while remaining unpublished.\n3. Clear the schedule on the release and confirm the associated Countdown Timer is removed from Horologia.",
+      "generated_for_version": "",
+      "generated_for_revision": ""
+    }
+  }
+]
