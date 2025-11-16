@@ -2172,6 +2172,81 @@ def dispatch_action(request, cid, connector=None):
                 "requested_at": timezone.now(),
             },
         )
+    elif action == "send_local_list":
+        entries = data.get("localAuthorizationList")
+        if entries is None:
+            entries = data.get("local_authorization_list")
+        if entries is None:
+            entries = []
+        if not isinstance(entries, list):
+            return JsonResponse({"detail": "localAuthorizationList must be a list"}, status=400)
+        version_candidate = data.get("listVersion")
+        if version_candidate is None:
+            version_candidate = data.get("list_version")
+        if version_candidate is None:
+            list_version = ((charger_obj.local_auth_list_version or 0) + 1) if charger_obj else 1
+        else:
+            try:
+                list_version = int(version_candidate)
+            except (TypeError, ValueError):
+                return JsonResponse({"detail": "invalid listVersion"}, status=400)
+            if list_version <= 0:
+                return JsonResponse({"detail": "invalid listVersion"}, status=400)
+        update_type = (
+            str(data.get("updateType") or data.get("update_type") or "Full").strip()
+            or "Full"
+        )
+        payload = {
+            "listVersion": list_version,
+            "updateType": update_type,
+            "localAuthorizationList": entries,
+        }
+        message_id = uuid.uuid4().hex
+        ocpp_action = "SendLocalList"
+        expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
+        msg = json.dumps([2, message_id, "SendLocalList", payload])
+        async_to_sync(ws.send)(msg)
+        requested_at = timezone.now()
+        store.register_pending_call(
+            message_id,
+            {
+                "action": "SendLocalList",
+                "charger_id": cid,
+                "connector_id": connector_value,
+                "log_key": log_key,
+                "list_version": list_version,
+                "list_size": len(entries),
+                "requested_at": requested_at,
+            },
+        )
+        store.schedule_call_timeout(
+            message_id,
+            action="SendLocalList",
+            log_key=log_key,
+            message="SendLocalList request timed out",
+        )
+    elif action == "get_local_list_version":
+        message_id = uuid.uuid4().hex
+        ocpp_action = "GetLocalListVersion"
+        expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
+        msg = json.dumps([2, message_id, "GetLocalListVersion", {}])
+        async_to_sync(ws.send)(msg)
+        store.register_pending_call(
+            message_id,
+            {
+                "action": "GetLocalListVersion",
+                "charger_id": cid,
+                "connector_id": connector_value,
+                "log_key": log_key,
+                "requested_at": timezone.now(),
+            },
+        )
+        store.schedule_call_timeout(
+            message_id,
+            action="GetLocalListVersion",
+            log_key=log_key,
+            message="GetLocalListVersion request timed out",
+        )
     else:
         return JsonResponse({"detail": "unknown action"}, status=400)
     log_key = store.identity_key(cid, connector_value)

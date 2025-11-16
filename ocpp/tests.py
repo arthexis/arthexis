@@ -210,7 +210,10 @@ class DispatchActionTests(TestCase):
             is_staff=True,
         )
 
-        response = dispatch_action(request, "TRIGGER1")
+        with patch(
+            "ocpp.views._evaluate_pending_call_result", return_value=(True, None, None)
+        ):
+            response = dispatch_action(request, "TRIGGER1")
         self.assertEqual(response.status_code, 200)
         self.assertTrue(dummy.sent)
         frame = json.loads(dummy.sent[-1])
@@ -252,6 +255,97 @@ class DispatchActionTests(TestCase):
         payload = json.loads(response.content.decode("utf-8"))
         self.assertIn("stop the session first", payload.get("detail", "").lower())
         self.assertFalse(dummy.sent)
+
+    def test_send_local_list_registers_version_metadata(self):
+        charger = Charger.objects.create(
+            charger_id="LOCALLIST", local_auth_list_version=2
+        )
+        dummy = DummyWebSocket()
+        connection_key = store.set_connection(
+            charger.charger_id, charger.connector_id, dummy
+        )
+        self.addCleanup(lambda: store.connections.pop(connection_key, None))
+        self.addCleanup(lambda: store.clear_pending_calls(charger.charger_id))
+        log_key = store.identity_key(charger.charger_id, charger.connector_id)
+        store.clear_log(log_key, log_type="charger")
+        self.addCleanup(lambda: store.clear_log(log_key, log_type="charger"))
+
+        request = self.factory.post(
+            "/chargers/LOCALLIST/action/",
+            data=json.dumps(
+                {
+                    "action": "send_local_list",
+                    "localAuthorizationList": [{"idTag": "A1", "idTagInfo": {"status": "Accepted"}}],
+                }
+            ),
+            content_type="application/json",
+        )
+        request.user = SimpleNamespace(
+            is_authenticated=True,
+            is_superuser=True,
+            is_staff=True,
+        )
+
+        with patch(
+            "ocpp.views._evaluate_pending_call_result", return_value=(True, None, None)
+        ):
+            response = dispatch_action(request, charger.charger_id)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(dummy.sent)
+        frame = json.loads(dummy.sent[-1])
+        self.assertEqual(frame[0], 2)
+        self.assertEqual(frame[2], "SendLocalList")
+        payload = frame[3]
+        self.assertEqual(payload.get("listVersion"), 3)
+        self.assertEqual(payload.get("updateType"), "Full")
+        self.assertEqual(len(payload.get("localAuthorizationList", [])), 1)
+        message_id = frame[1]
+        self.assertIn(message_id, store.pending_calls)
+        metadata = store.pending_calls[message_id]
+        self.assertEqual(metadata.get("list_version"), 3)
+        self.assertEqual(metadata.get("list_size"), 1)
+        self.assertEqual(metadata.get("action"), "SendLocalList")
+        self.assertEqual(metadata.get("log_key"), log_key)
+
+    def test_get_local_list_version_dispatches_call(self):
+        charger = Charger.objects.create(charger_id="LISTVERSION")
+        dummy = DummyWebSocket()
+        connection_key = store.set_connection(
+            charger.charger_id, charger.connector_id, dummy
+        )
+        self.addCleanup(lambda: store.connections.pop(connection_key, None))
+        self.addCleanup(lambda: store.clear_pending_calls(charger.charger_id))
+        log_key = store.identity_key(charger.charger_id, charger.connector_id)
+        store.clear_log(log_key, log_type="charger")
+        self.addCleanup(lambda: store.clear_log(log_key, log_type="charger"))
+
+        request = self.factory.post(
+            "/chargers/LISTVERSION/action/",
+            data=json.dumps({"action": "get_local_list_version"}),
+            content_type="application/json",
+        )
+        request.user = SimpleNamespace(
+            is_authenticated=True,
+            is_superuser=True,
+            is_staff=True,
+        )
+
+        with patch(
+            "ocpp.views._evaluate_pending_call_result", return_value=(True, None, None)
+        ):
+            response = dispatch_action(request, charger.charger_id)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(dummy.sent)
+        frame = json.loads(dummy.sent[-1])
+        self.assertEqual(frame[0], 2)
+        self.assertEqual(frame[2], "GetLocalListVersion")
+        self.assertIsInstance(frame[3], dict)
+        self.assertFalse(frame[3])
+        message_id = frame[1]
+        self.assertIn(message_id, store.pending_calls)
+        metadata = store.pending_calls[message_id]
+        self.assertEqual(metadata.get("action"), "GetLocalListVersion")
+        self.assertEqual(metadata.get("log_key"), log_key)
 
 class ChargerFixtureTests(TestCase):
     fixtures = [
