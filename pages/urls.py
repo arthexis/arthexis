@@ -47,6 +47,7 @@ urlpatterns = [
         views.passkey_register_verify,
         name="passkey-register-verify",
     ),
+    path("webhooks/whatsapp/", views.whatsapp_webhook, name="whatsapp-webhook"),
     path("passkeys/<int:pk>/delete/", views.passkey_delete, name="passkey-delete"),
     path("authenticator/setup/", views.authenticator_setup, name="authenticator-setup"),
     path("request-invite/", views.request_invite, name="request-invite"),

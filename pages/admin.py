@@ -38,6 +38,7 @@ from .models import (
     SiteProxy,
     DeveloperArticle,
     OdooChatBridge,
+    WhatsAppChatBridge,
     ChatMessage,
     ChatSession,
     Module,
@@ -819,6 +820,39 @@ class OdooChatBridgeAdmin(EntityModelAdmin):
         return str(obj)
 
 
+@admin.register(WhatsAppChatBridge)
+class WhatsAppChatBridgeAdmin(EntityModelAdmin):
+    list_display = (
+        "bridge_label",
+        "site",
+        "phone_number_id",
+        "is_enabled",
+        "is_default",
+    )
+    list_filter = ("is_enabled", "is_default", "site")
+    search_fields = ("phone_number_id",)
+    ordering = ("site__domain", "phone_number_id")
+    readonly_fields = ("is_seed_data", "is_user_data", "is_deleted")
+    fieldsets = (
+        (None, {"fields": ("site", "is_default", "is_enabled")}),
+        (
+            _("WhatsApp client"),
+            {"fields": ("api_base_url", "phone_number_id", "access_token")},
+        ),
+        (
+            _("Flags"),
+            {
+                "fields": ("is_seed_data", "is_user_data", "is_deleted"),
+                "classes": ("collapse",),
+            },
+        ),
+    )
+
+    @admin.display(description=_("Bridge"))
+    def bridge_label(self, obj):
+        return str(obj)
+
+
 class ChatMessageInline(admin.TabularInline):
     model = ChatMessage
     can_delete = False
@@ -838,6 +872,7 @@ class ChatSessionAdmin(EntityModelAdmin):
     list_display = (
         "uuid",
         "site",
+        "whatsapp_number",
         "status",
         "last_activity_at",
         "last_visitor_activity_at",
@@ -848,6 +883,7 @@ class ChatSessionAdmin(EntityModelAdmin):
     search_fields = (
         "uuid",
         "visitor_key",
+        "whatsapp_number",
         "user__username",
         "messages__body",
     )
@@ -866,7 +902,19 @@ class ChatSessionAdmin(EntityModelAdmin):
         "is_deleted",
     )
     fieldsets = (
-        (None, {"fields": ("uuid", "status", "site", "user", "visitor_key")}),
+        (
+            None,
+            {
+                "fields": (
+                    "uuid",
+                    "status",
+                    "site",
+                    "user",
+                    "visitor_key",
+                    "whatsapp_number",
+                )
+            },
+        ),
         (
             _("Activity"),
             {
