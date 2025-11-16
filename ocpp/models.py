@@ -817,18 +817,20 @@ class Charger(Entity):
         from . import store
 
         for charger in self._target_chargers():
-            has_data = (
-                charger.transactions.exists()
-                or charger.meter_values.exists()
-                or any(
+            has_db_data = charger.transactions.exists() or charger.meter_values.exists()
+            has_store_data = (
+                any(
                     store.get_logs(key, log_type="charger")
                     for key in charger._store_keys()
                 )
                 or any(store.transactions.get(key) for key in charger._store_keys())
                 or any(store.history.get(key) for key in charger._store_keys())
             )
-            if has_data:
+            if has_db_data:
                 raise ProtectedError("Purge data before deleting charger.", [])
+
+            if has_store_data:
+                charger.purge()
         super().delete(*args, **kwargs)
 
 
