@@ -5004,6 +5004,25 @@ class ChatWidgetViewTests(TestCase):
         self.assertNotContains(response, 'id="chat-widget"')
 
 
+class AdminChatWidgetTests(TestCase):
+    @override_settings(PAGES_CHAT_ENABLED=True)
+    def test_admin_chat_widget_renders_custom_controls(self):
+        Site.objects.update_or_create(
+            id=1, defaults={"domain": "example.com", "name": "Example"}
+        )
+        User = get_user_model()
+        user = User.objects.create_superuser(
+            username="chat-admin", email="chat@example.com", password="pwd"
+        )
+        self.client.force_login(user)
+
+        response = self.client.get(reverse("admin:index"))
+
+        self.assertContains(response, "pages/js/chat.js")
+        self.assertContains(response, "chat-close")
+        self.assertContains(response, "data-chat-input")
+
+
 class OdooChatBridgeTests(TestCase):
     def setUp(self):
         self.site = Site(domain="bridge.example.com", name="Bridge")

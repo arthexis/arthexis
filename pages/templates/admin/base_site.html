@@ -308,6 +308,34 @@ document.addEventListener('DOMContentLoaded', function () {
     opacity: 0.8;
 }
 
+.chat-close {
+    border: 0;
+    background: transparent;
+    color: var(--body-fg);
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+
+.chat-close::before {
+    content: "\00d7";
+    font-size: 1.25rem;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.chat-close:hover,
+.chat-close:focus-visible {
+    background: rgba(21, 128, 61, 0.12);
+    color: #15803d;
+    transform: translateY(-1px);
+    outline: none;
+}
+
 .chat-messages {
     flex: 1 1 auto;
     max-height: 18rem;
@@ -363,6 +391,27 @@ document.addEventListener('DOMContentLoaded', function () {
 .chat-form textarea {
     resize: vertical;
     min-height: 3.5rem;
+}
+
+.chat-input {
+    width: 100%;
+    background: var(--body-bg);
+    color: var(--body-fg);
+    border: 1px solid rgba(21, 128, 61, 0.35);
+    border-radius: 0.75rem;
+    padding: 0.75rem 0.9rem;
+    line-height: 1.5;
+    box-shadow: inset 0 0.08rem 0.35rem rgba(15, 23, 42, 0.12);
+}
+
+.chat-input::placeholder {
+    color: rgba(21, 94, 49, 0.7);
+}
+
+.chat-input:focus-visible {
+    outline: 2px solid rgba(22, 163, 74, 0.35);
+    outline-offset: 2px;
+    border-color: rgba(22, 163, 74, 0.6);
 }
 
 .chat-actions {
@@ -1335,7 +1384,7 @@ body.user-story-open {
               <h2 class="mb-0" id="chat-title">{% trans "Support" %}</h2>
               <small data-chat-status>{% trans "Connecting…" %}</small>
             </div>
-            <button type="button" class="btn-close" data-chat-close aria-label="{% trans 'Close chat' %}"></button>
+            <button type="button" class="chat-close" data-chat-close aria-label="{% trans 'Close chat' %}"></button>
           </header>
           <div
             class="chat-messages"
@@ -1348,7 +1397,7 @@ body.user-story-open {
             <label class="visually-hidden" for="chat-message-input">{% trans "Message" %}</label>
             <textarea
               id="chat-message-input"
-              class="vLargeTextField"
+              class="vLargeTextField chat-input"
               name="message"
               rows="3"
               data-chat-input
