@@ -79,6 +79,7 @@ from pages.odoo import forward_chat_message
 from core.models import (
     AdminHistory,
     ClientReport,
+    CustomerAccount,
     InviteLead,
     Package,
     PackageRelease,
@@ -1360,6 +1361,17 @@ class AdminModelRuleTemplateTagTests(TestCase):
 
         self.assertTrue(status["success"])
         self.assertEqual(status["message"], gettext("All rules met."))
+
+
+class RelatedAdminModelsTagTests(TestCase):
+    def test_related_admin_models_include_relationship_indicators(self):
+        related = admin_extras.related_admin_models(CustomerAccount._meta)
+
+        related_map = {entry["label"]: entry for entry in related}
+
+        self.assertEqual(related_map["Users"]["relation_type"], "1:1")
+        self.assertEqual(related_map["Energy Tariffs"]["relation_type"], "N:1")
+        self.assertEqual(related_map["RFIDs"]["relation_type"], "N:N")
 
 
 class AdminProtocolGroupingTests(TestCase):

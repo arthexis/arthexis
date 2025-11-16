@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Validate related models relationship badges",
+      "created_on": "2025-05-11T00:00:00Z",
+      "url": "/admin/core/customeraccount/",
+      "request_details": "1. From the Customer Accounts admin changelist, scroll to the Related Models section below the table.\n2. Confirm each related model pill includes a relationship indicator (for example, 1:1, N:1, N:N).\n3. Verify the indicators align with the relationships: Users shows 1:1, Energy Tariffs shows N:1, and RFIDs shows N:N.\n4. Open a Customer Account change form and confirm the Related Models section renders the same relationship badges.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]

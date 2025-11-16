@@ -485,7 +485,18 @@ def related_admin_models(opts):
             return concrete_model
         return None
 
-    def add_model(model_cls):
+    def describe_relation(field):
+        if getattr(field, "one_to_one", False):
+            return "1:1", _("One-to-one relationship")
+        if getattr(field, "one_to_many", False):
+            return "1:N", _("One-to-many relationship")
+        if getattr(field, "many_to_one", False):
+            return "N:1", _("Many-to-one relationship")
+        if getattr(field, "many_to_many", False):
+            return "N:N", _("Many-to-many relationship")
+        return "—", _("Related model")
+
+    def add_model(model_cls, relation_type: str, relation_title: str):
         registered_model = get_registered(model_cls)
         if registered_model is None:
             return
@@ -505,11 +516,13 @@ def related_admin_models(opts):
         related.append({
             "label": capfirst(model_opts.verbose_name_plural),
             "url": url,
+            "relation_type": relation_type,
+            "relation_title": relation_title,
         })
         seen.add(label_lower)
 
     for parent in opts.get_parent_list():
-        add_model(parent)
+        add_model(parent, "1:1", _("Parent model (multi-table inheritance)"))
 
     for field in opts.get_fields(include_parents=True, include_hidden=True):
         if not getattr(field, "is_relation", False):
@@ -517,7 +530,8 @@ def related_admin_models(opts):
         related_model = getattr(field, "related_model", None)
         if related_model is None:
             continue
-        add_model(related_model)
+        relation_type, relation_title = describe_relation(field)
+        add_model(related_model, relation_type, relation_title)
 
     related.sort(key=lambda item: item["label"])
     return related
