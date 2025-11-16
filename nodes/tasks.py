@@ -573,7 +573,13 @@ def update_all_nodes_information() -> dict:
     }
 
     local_node = Node.get_local()
-    if local_node is None or not local_node.has_feature("celery-queue"):
+    if local_node is None:
+        logger.info("Skipping hourly node refresh; local node not registered")
+        summary["skipped"] = True
+        summary["reason"] = "Local node not registered"
+        return summary
+
+    if not local_node.has_feature("celery-queue"):
         logger.info(
             "Skipping hourly node refresh; local node missing celery-queue feature"
         )

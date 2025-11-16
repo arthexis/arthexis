@@ -2153,6 +2153,20 @@ class NodeRegisterCurrentTests(TestCase):
         resolve_admin.assert_not_called()
         self.assertTrue(summary.get("skipped"))
         self.assertEqual(summary["total"], 0)
+        self.assertEqual(
+            summary["reason"], "Local node missing celery-queue feature"
+        )
+
+    def test_update_all_nodes_information_skips_without_local_node(self):
+        with patch("nodes.tasks.Node.get_local", return_value=None), patch(
+            "nodes.tasks._resolve_node_admin"
+        ) as resolve_admin:
+            summary = update_all_nodes_information()
+
+        resolve_admin.assert_not_called()
+        self.assertTrue(summary.get("skipped"))
+        self.assertEqual(summary["total"], 0)
+        self.assertEqual(summary["reason"], "Local node not registered")
 
     def test_ocpp_session_report_task_syncs_with_feature(self):
         feature, _ = NodeFeature.objects.get_or_create(
