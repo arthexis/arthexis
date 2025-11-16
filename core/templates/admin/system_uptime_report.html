@@ -1,0 +1,222 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:system' %}">{% trans 'System' %}</a>
+  &rsaquo; {% trans "Uptime Report" %}
+</div>
+{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+  .uptime-report h2 {
+    margin: 0;
+  }
+
+  .uptime-report .uptime-report-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .uptime-report .uptime-window {
+    border: 1px solid #e5e7eb;
+    padding: 1rem;
+    border-radius: 6px;
+    margin-bottom: 1rem;
+    background: #fff;
+  }
+
+  .uptime-report .uptime-window h3 {
+    margin: 0;
+  }
+
+  .uptime-report .uptime-window-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .uptime-report .uptime-window-metrics {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .uptime-report .uptime-metric {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    font-weight: 600;
+  }
+
+  .uptime-report .uptime-metric.up {
+    background: #ecfdf3;
+    color: #166534;
+  }
+
+  .uptime-report .uptime-metric.down {
+    background: #fef2f2;
+    color: #b91c1c;
+  }
+
+  .uptime-report .uptime-timeline {
+    display: flex;
+    width: 100%;
+    height: 18px;
+    border-radius: 6px;
+    overflow: hidden;
+    background: #f3f4f6;
+    margin: 0.5rem 0;
+  }
+
+  .uptime-report .uptime-segment {
+    display: block;
+    height: 100%;
+  }
+
+  .uptime-report .uptime-segment.up {
+    background: #22c55e;
+  }
+
+  .uptime-report .uptime-segment.down {
+    background: #ef4444;
+  }
+
+  .uptime-report .uptime-window-details {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 0.5rem 1rem;
+    margin: 0.5rem 0 0.75rem;
+  }
+
+  .uptime-report .uptime-window-details dt {
+    font-weight: 600;
+  }
+
+  .uptime-report .uptime-window-details dd {
+    margin: 0;
+  }
+
+  .uptime-report .uptime-downtime-list {
+    margin-top: 0.5rem;
+  }
+
+  .uptime-report .uptime-downtime-list ul {
+    margin: 0.25rem 0 0;
+  }
+
+  .uptime-report .uptime-downtime-list li {
+    margin: 0.1rem 0;
+  }
+
+  .uptime-report .visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <div class="module uptime-report">
+    <div class="uptime-report-header">
+      <h2>{% trans "Uptime Report" %}</h2>
+      <p class="help">
+        {% trans "Visualize when this node has been online or offline using recent shutdown history." %}
+      </p>
+    </div>
+
+    {% if uptime_report.error %}
+      <p class="errornote">{{ uptime_report.error }}</p>
+    {% endif %}
+
+    {% for window in uptime_report.windows %}
+      <div class="uptime-window">
+        <div class="uptime-window-header">
+          <h3>{{ window.label }}</h3>
+          <div class="uptime-window-metrics">
+            <span class="uptime-metric up">{% trans "Uptime" %}: {{ window.uptime_percent }}%</span>
+            <span class="uptime-metric down">{% trans "Downtime" %}: {{ window.downtime_percent }}%</span>
+          </div>
+        </div>
+
+        <div
+          class="uptime-timeline"
+          role="img"
+          aria-label="{% blocktrans with label=window.label %}Uptime timeline for {{ label }}{% endblocktrans %}"
+        >
+          {% if window.segments %}
+            {% for segment in window.segments %}
+              <span
+                class="uptime-segment {{ segment.status }}"
+                style="flex-basis: {{ segment.width|floatformat:2 }}%"
+                title="{{ segment.label }}"
+              >
+                <span class="visually-hidden">{{ segment.label }}</span>
+              </span>
+            {% endfor %}
+          {% else %}
+            <span class="uptime-segment up" style="flex-basis: 100%"></span>
+          {% endif %}
+        </div>
+
+        <dl class="uptime-window-details">
+          <div>
+            <dt>{% trans "Window start" %}</dt>
+            <dd>{{ window.start|date:"Y-m-d H:i" }}</dd>
+          </div>
+          <div>
+            <dt>{% trans "Window end" %}</dt>
+            <dd>{{ window.end|date:"Y-m-d H:i" }}</dd>
+          </div>
+          <div>
+            <dt>{% trans "Downtime events" %}</dt>
+            <dd>
+              {% if window.downtime_events %}
+                {{ window.downtime_events|length }}
+              {% else %}
+                {% trans "None" %}
+              {% endif %}
+            </dd>
+          </div>
+        </dl>
+
+        <div class="uptime-downtime-list">
+          {% if window.downtime_events %}
+            <h4>{% trans "Downtime details" %}</h4>
+            <ul>
+              {% for event in window.downtime_events %}
+                <li>
+                  <strong>{{ event.duration }}</strong>
+                  — {{ event.start }} → {{ event.end }}
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="help">{% trans "No downtime detected in this window." %}</p>
+          {% endif %}
+        </div>
+      </div>
+    {% empty %}
+      <p>{% trans "No uptime history is available." %}</p>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

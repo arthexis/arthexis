@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate screen Uptime Report",
+      "created_on": "2025-02-20T00:00:00Z",
+      "url": "/admin/system/uptime-report/",
+      "request_details": "1. Generate recent uptime history by restarting the node at least once so `last -x -F` contains both reboot and shutdown entries.\n2. Sign in to the Django admin as a superuser and open System → Uptime Report.\n3. Confirm each timeframe (24 hours, 7 days, 30 days) renders a green/red timeline with uptime and downtime percentages.\n4. Verify the downtime list shows the expected start/end timestamps and durations derived from the system log.\n5. Refresh the page after adding another shutdown/boot cycle and check that the visualization updates without errors.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]
