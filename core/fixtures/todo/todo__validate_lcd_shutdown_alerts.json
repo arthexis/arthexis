@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Validate LCD shutdown and suite alerts",
+      "created_on": "2025-01-01T00:00:00Z",
+      "url": "",
+      "request_details": "1. On a node with the LCD service enabled, note the service name from `cat locks/service.lck`.\n2. Stop the suite service with `sudo systemctl stop ${SERVICE}` and confirm the LCD displays the offline message that includes the service status.\n3. Restart the service with `sudo systemctl start ${SERVICE}` and ensure the LCD returns to the lockfile content once the suite is healthy.\n4. Schedule a system reboot (for example `sudo shutdown -r +1`) and confirm the LCD replaces the normal content with a reboot notice that includes the ETA.\n5. Cancel the reboot with `sudo shutdown -c` (or allow it to complete) and verify the LCD returns to the normal lockfile message once no shutdown is pending.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]
