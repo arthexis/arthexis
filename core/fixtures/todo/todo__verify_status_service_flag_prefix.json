@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Confirm status.sh handles service names that look like flags",
+      "created_on": "2025-01-15T00:00:00Z",
+      "url": "/admin/core/todo/",
+      "request_details": "1. Configure a system install whose service name starts with dashes (for example create locks/service.lck containing `--control`).\n2. Ensure systemd unit files exist for the service, celery worker, beat and LCD timers when applicable (e.g. `--control.service`).\n3. Run `./status.sh` and confirm it no longer prints `grep: unrecognized option` errors when evaluating the guard timer and service states.\n4. Verify the script correctly reports the service status, celery worker/beat states and LCD status without requiring any manual edits.\n5. Document any anomalies in the Release Manager notes if the script still fails with dash-prefixed service names.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]
