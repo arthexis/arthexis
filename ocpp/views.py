@@ -2300,187 +2300,80 @@ def dispatch_action(request, cid, connector=None):
                 "requested_at": timezone.now(),
             },
         )
-    elif action == "update_firmware":
-        deployment_id = (
-            data.get("deployment")
-            or data.get("deploymentId")
-            or data.get("deployment_id")
-        )
-        if not deployment_id:
-            return JsonResponse({"detail": "deployment required"}, status=400)
-        deployment = (
-            CPFirmwareDeployment.objects.select_related("firmware", "charger")
-            .filter(pk=deployment_id)
-            .first()
-        )
-        if deployment is None:
-            return JsonResponse({"detail": "deployment not found"}, status=404)
-        if deployment.charger and deployment.charger.charger_id != cid:
-            return JsonResponse({"detail": "deployment does not match charger"}, status=400)
-
-        message_id = deployment.ocpp_message_id or uuid.uuid4().hex
-        retry_count = data.get("retries", deployment.retry_count)
-        retry_interval = data.get("retryInterval", deployment.retry_interval)
-
-        retrieve_date_value = data.get("retrieveDate") or deployment.retrieve_date
-        if isinstance(retrieve_date_value, str):
-            retrieve_date = parse_datetime(retrieve_date_value)
+    elif action == "send_local_list":
+        entries = data.get("localAuthorizationList")
+        if entries is None:
+            entries = data.get("local_authorization_list")
+        if entries is None:
+            entries = []
+        if not isinstance(entries, list):
+            return JsonResponse({"detail": "localAuthorizationList must be a list"}, status=400)
+        version_candidate = data.get("listVersion")
+        if version_candidate is None:
+            version_candidate = data.get("list_version")
+        if version_candidate is None:
+            list_version = ((charger_obj.local_auth_list_version or 0) + 1) if charger_obj else 1
         else:
-            retrieve_date = retrieve_date_value
-        if retrieve_date is None:
-            retrieve_date = timezone.now() + timedelta(seconds=30)
-        if timezone.is_naive(retrieve_date):
-            retrieve_date = timezone.make_aware(
-                retrieve_date, timezone.get_current_timezone()
-            )
-
-        firmware = deployment.firmware
-        location_value = (
-            data.get("location")
-            or data.get("remoteLocation")
-            or data.get("remoteUrl")
-            or ""
-        ).strip()
-        if not location_value:
-            token = deployment.download_token or deployment.issue_download_token(
-                lifetime=timedelta(hours=4)
-            )
-            location_value = request.build_absolute_uri(
-                reverse("cp-firmware-download", args=[deployment.pk, token])
-            )
-
-        payload: dict[str, object] = {
-            "location": location_value,
-            "retrieveDate": retrieve_date.isoformat(),
-        }
-        if retry_count is not None:
             try:
-                payload["retries"] = int(retry_count)
+                list_version = int(version_candidate)
             except (TypeError, ValueError):
-                pass
-        if retry_interval:
-            try:
-                payload["retryInterval"] = int(retry_interval)
-            except (TypeError, ValueError):
-                pass
-        if firmware and firmware.checksum:
-            payload["checksum"] = firmware.checksum
-
-        updates = {
-            "ocpp_message_id": message_id,
-            "retrieve_date": retrieve_date,
-            "retry_count": int(payload.get("retries", retry_count) or 0),
-            "retry_interval": int(payload.get("retryInterval", retry_interval) or 0),
-            "request_payload": payload,
-            "status": "Pending",
-            "status_info": str(_("Awaiting charge point response.")),
-            "status_timestamp": timezone.now(),
+                return JsonResponse({"detail": "invalid listVersion"}, status=400)
+            if list_version <= 0:
+                return JsonResponse({"detail": "invalid listVersion"}, status=400)
+        update_type = (
+            str(data.get("updateType") or data.get("update_type") or "Full").strip()
+            or "Full"
+        )
+        payload = {
+            "listVersion": list_version,
+            "updateType": update_type,
+            "localAuthorizationList": entries,
         }
-        CPFirmwareDeployment.objects.filter(pk=deployment.pk).update(**updates)
-
-        ocpp_action = "UpdateFirmware"
-        expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
-        msg = json.dumps([2, message_id, "UpdateFirmware", payload])
-        async_to_sync(ws.send)(msg)
-        store.register_pending_call(
-            message_id,
-            {
-                "action": "UpdateFirmware",
-                "charger_id": cid,
-                "connector_id": connector_value,
-                "deployment_pk": deployment.pk,
-                "log_key": log_key,
-                "requested_at": timezone.now(),
-            },
-        )
-        store.schedule_call_timeout(
-            message_id, action="UpdateFirmware", log_key=log_key
-        )
-    elif action == "get_log":
-        log_type_value = str(
-            data.get("logType")
-            or data.get("type")
-            or data.get("log_type")
-            or "Diagnostics"
-        ).strip()
-        request_record = ChargerLogRequest.objects.create(
-            charger=charger_obj,
-            log_type=log_type_value,
-            status="Pending",
-        )
         message_id = uuid.uuid4().hex
-        capture_key = store.start_log_capture(
-            cid, connector_value, request_record.request_id
-        )
-        location_value = (
-            data.get("location")
-            or data.get("remoteLocation")
-            or data.get("remoteUrl")
-            or ""
-        ).strip()
-        updates = {
-            "message_id": message_id,
-            "session_key": capture_key,
-            "status": "Requested",
-        }
-        if location_value:
-            updates["location"] = location_value
-        ChargerLogRequest.objects.filter(pk=request_record.pk).update(**updates)
-        for field, value in updates.items():
-            setattr(request_record, field, value)
-
-        payload: dict[str, object] = {
-            "requestId": request_record.request_id,
-        }
-        if log_type_value:
-            payload["logType"] = log_type_value
-        retries_value = data.get("retries")
-        if retries_value is not None:
-            try:
-                payload["retries"] = int(retries_value)
-            except (TypeError, ValueError):
-                pass
-        retry_interval_value = data.get("retryInterval")
-        if retry_interval_value not in (None, ""):
-            try:
-                payload["retryInterval"] = int(retry_interval_value)
-            except (TypeError, ValueError):
-                payload["retryInterval"] = retry_interval_value
-        log_payload: dict[str, object] = {}
-        if location_value:
-            log_payload["remoteLocation"] = location_value
-        oldest_ts = data.get("oldestTimestamp")
-        if oldest_ts:
-            log_payload["oldestTimestamp"] = oldest_ts
-        latest_ts = data.get("latestTimestamp")
-        if latest_ts:
-            log_payload["latestTimestamp"] = latest_ts
-        if log_payload:
-            payload["log"] = log_payload
-
-        ocpp_action = "GetLog"
+        ocpp_action = "SendLocalList"
         expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
-        msg = json.dumps([2, message_id, "GetLog", payload])
+        msg = json.dumps([2, message_id, "SendLocalList", payload])
+        async_to_sync(ws.send)(msg)
+        requested_at = timezone.now()
+        store.register_pending_call(
+            message_id,
+            {
+                "action": "SendLocalList",
+                "charger_id": cid,
+                "connector_id": connector_value,
+                "log_key": log_key,
+                "list_version": list_version,
+                "list_size": len(entries),
+                "requested_at": requested_at,
+            },
+        )
+        store.schedule_call_timeout(
+            message_id,
+            action="SendLocalList",
+            log_key=log_key,
+            message="SendLocalList request timed out",
+        )
+    elif action == "get_local_list_version":
+        message_id = uuid.uuid4().hex
+        ocpp_action = "GetLocalListVersion"
+        expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
+        msg = json.dumps([2, message_id, "GetLocalListVersion", {}])
         async_to_sync(ws.send)(msg)
         store.register_pending_call(
             message_id,
             {
-                "action": "GetLog",
+                "action": "GetLocalListVersion",
                 "charger_id": cid,
                 "connector_id": connector_value,
                 "log_key": log_key,
-                "log_request_pk": request_record.pk,
-                "capture_key": capture_key,
-                "message_id": message_id,
                 "requested_at": timezone.now(),
             },
         )
         store.schedule_call_timeout(
             message_id,
-            timeout=10.0,
-            action="GetLog",
+            action="GetLocalListVersion",
             log_key=log_key,
-            message="GetLog request timed out",
+            message="GetLocalListVersion request timed out",
         )
     else:
         return JsonResponse({"detail": "unknown action"}, status=400)
