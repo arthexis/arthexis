@@ -1,5 +1,6 @@
 import json
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, time, timedelta, timezone as dt_timezone
 from types import SimpleNamespace
 
@@ -88,6 +89,55 @@ CALL_EXPECTED_STATUSES: dict[str, set[str]] = {
     "UnlockConnector": {"Unlocked", "UnlockFailed", "NotSupported"},
 }
 
+
+@dataclass
+class ActionCall:
+    msg: str
+    message_id: str
+    ocpp_action: str
+    expected_statuses: set[str] | None = None
+    log_key: str | None = None
+
+
+@dataclass
+class ActionContext:
+    cid: str
+    connector_value: int | None
+    charger: Charger | None
+    ws: object
+    log_key: str
+
+
+def _parse_request_body(request) -> dict:
+    try:
+        return json.loads(request.body.decode()) if request.body else {}
+    except json.JSONDecodeError:
+        return {}
+
+
+def _get_or_create_charger(cid: str, connector_value: int | None) -> Charger | None:
+    if connector_value is None:
+        charger_obj = (
+            Charger.objects.filter(charger_id=cid, connector_id__isnull=True)
+            .order_by("pk")
+            .first()
+        )
+    else:
+        charger_obj = (
+            Charger.objects.filter(charger_id=cid, connector_id=connector_value)
+            .order_by("pk")
+            .first()
+        )
+    if charger_obj is None:
+        if connector_value is None:
+            charger_obj, _created = Charger.objects.get_or_create(
+                charger_id=cid, connector_id=None
+            )
+        else:
+            charger_obj, _created = Charger.objects.get_or_create(
+                charger_id=cid, connector_id=connector_value
+            )
+    return charger_obj
 
 def firmware_download(request, deployment_id: int, token: str):
     deployment = get_object_or_404(
@@ -1863,39 +1913,58 @@ def charger_log_page(request, cid, connector=None):
     )
 
 
-@csrf_exempt
-@api_login_required
-def dispatch_action(request, cid, connector=None):
-    connector_value, _normalized_slug = _normalize_connector_slug(connector)
-    log_key = store.identity_key(cid, connector_value)
-    if connector_value is None:
-        charger_obj = (
-            Charger.objects.filter(charger_id=cid, connector_id__isnull=True)
-            .order_by("pk")
-            .first()
-        )
-    else:
-        charger_obj = (
-            Charger.objects.filter(charger_id=cid, connector_id=connector_value)
-            .order_by("pk")
-            .first()
-        )
-    if charger_obj is None:
-        if connector_value is None:
-            charger_obj, _created = Charger.objects.get_or_create(
-                charger_id=cid, connector_id=None
-            )
-        else:
-            charger_obj, _created = Charger.objects.get_or_create(
-                charger_id=cid, connector_id=connector_value
-            )
 
-    access_response = _ensure_charger_access(
-        request.user, charger_obj, request=request
+
+def _handle_get_configuration(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
+    payload: dict[str, object] = {}
+    raw_key = data.get("key")
+    keys: list[str] = []
+    if raw_key not in (None, "", []):
+        if isinstance(raw_key, str):
+            trimmed = raw_key.strip()
+            if trimmed:
+                keys.append(trimmed)
+        elif isinstance(raw_key, (list, tuple)):
+            for entry in raw_key:
+                if not isinstance(entry, str):
+                    return JsonResponse({"detail": "key entries must be strings"}, status=400)
+                entry_text = entry.strip()
+                if entry_text:
+                    keys.append(entry_text)
+        else:
+            return JsonResponse({"detail": "key must be a string or list of strings"}, status=400)
+        if keys:
+            payload["key"] = keys
+    message_id = uuid.uuid4().hex
+    ocpp_action = "GetConfiguration"
+    expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
+    msg = json.dumps([2, message_id, "GetConfiguration", payload])
+    return ActionCall(
+        msg=msg,
+        message_id=message_id,
+        ocpp_action=ocpp_action,
+        expected_statuses=expected_statuses,
     )
-    if access_response is not None:
-        return access_response
-    ws = store.get_connection(cid, connector_value)
+
+
+def _handle_reserve_now(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
+    reservation_pk = data.get("reservation") or data.get("reservationId")
+    if reservation_pk in (None, ""):
+        return JsonResponse({"detail": "reservation required"}, status=400)
+    reservation = CPReservation.objects.filter(pk=reservation_pk).first()
+    if reservation is None:
+        return JsonResponse({"detail": "reservation not found"}, status=404)
+    connector_obj = reservation.connector
+    if connector_obj is None or connector_obj.connector_id is None:
+        detail = _("Unable to determine which connector to reserve.")
+        return JsonResponse({"detail": detail}, status=400)
+    id_tag = reservation.id_tag_value
+    if not id_tag:
+        detail = _("Provide an RFID or idTag before creating the reservation.")
+        return JsonResponse({"detail": detail}, status=400)
+    connector_value = connector_obj.connector_id
+    log_key = store.identity_key(context.cid, connector_value)
+    ws = store.get_connection(context.cid, connector_value)
     if ws is None:
         return JsonResponse({"detail": "no connection"}, status=404)
     try:
@@ -2039,29 +2108,82 @@ def dispatch_action(request, cid, connector=None):
         async_to_sync(ws.send)(msg)
         store.register_pending_call(
             message_id,
-            {
-                "action": "RemoteStopTransaction",
-                "charger_id": cid,
-                "connector_id": connector_value,
-                "log_key": log_key,
-                "transaction_id": tx_obj.pk,
-                "requested_at": timezone.now(),
-            },
-        )
-    elif action == "remote_start":
-        id_tag = data.get("idTag")
-        if not isinstance(id_tag, str) or not id_tag.strip():
-            return JsonResponse({"detail": "idTag required"}, status=400)
-        id_tag = id_tag.strip()
-        payload: dict[str, object] = {"idTag": id_tag}
-        connector_id = data.get("connectorId")
-        if connector_id in ("", None):
-            connector_id = None
-        if connector_id is None and connector_value is not None:
-            connector_id = connector_value
-        if connector_id is not None:
+            "RemoteStopTransaction",
+            {"transactionId": tx_obj.pk},
+        ]
+    )
+    async_to_sync(context.ws.send)(msg)
+    store.register_pending_call(
+        message_id,
+        {
+            "action": "RemoteStopTransaction",
+            "charger_id": context.cid,
+            "connector_id": context.connector_value,
+            "log_key": context.log_key,
+            "transaction_id": tx_obj.pk,
+            "requested_at": timezone.now(),
+        },
+    )
+    return ActionCall(
+        msg=msg,
+        message_id=message_id,
+        ocpp_action=ocpp_action,
+        expected_statuses=expected_statuses,
+    )
+
+
+def _handle_remote_start(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
+    id_tag = data.get("idTag")
+    if not isinstance(id_tag, str) or not id_tag.strip():
+        return JsonResponse({"detail": "idTag required"}, status=400)
+    id_tag = id_tag.strip()
+    payload: dict[str, object] = {"idTag": id_tag}
+    connector_id = data.get("connectorId")
+    if connector_id in ("", None):
+        connector_id = None
+    if connector_id is None and context.connector_value is not None:
+        connector_id = context.connector_value
+    if connector_id is not None:
+        try:
+            payload["connectorId"] = int(connector_id)
+        except (TypeError, ValueError):
+            payload["connectorId"] = connector_id
+    if "chargingProfile" in data and data["chargingProfile"] is not None:
+        payload["chargingProfile"] = data["chargingProfile"]
+    message_id = uuid.uuid4().hex
+    ocpp_action = "RemoteStartTransaction"
+    expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
+    msg = json.dumps([2, message_id, "RemoteStartTransaction", payload])
+    async_to_sync(context.ws.send)(msg)
+    store.register_pending_call(
+        message_id,
+        {
+            "action": "RemoteStartTransaction",
+            "charger_id": context.cid,
+            "connector_id": context.connector_value,
+            "log_key": context.log_key,
+            "id_tag": id_tag,
+            "requested_at": timezone.now(),
+        },
+    )
+    return ActionCall(
+        msg=msg,
+        message_id=message_id,
+        ocpp_action=ocpp_action,
+        expected_statuses=expected_statuses,
+    )
+
+
+def _handle_change_availability(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
+    availability_type = data.get("type")
+    if availability_type not in {"Operative", "Inoperative"}:
+        return JsonResponse({"detail": "invalid availability type"}, status=400)
+    connector_payload = context.connector_value if context.connector_value is not None else 0
+    if "connectorId" in data:
+        candidate = data.get("connectorId")
+        if candidate not in (None, ""):
             try:
-                payload["connectorId"] = int(connector_id)
+                connector_payload = int(candidate)
             except (TypeError, ValueError):
                 payload["connectorId"] = connector_id
         if "chargingProfile" in data and data["chargingProfile"] is not None:
@@ -2549,53 +2671,29 @@ def dispatch_action(request, cid, connector=None):
             "MeterValues",
             "StatusNotification",
         }
-        if trigger_target not in allowed_targets:
-            return JsonResponse({"detail": "invalid target"}, status=400)
-        payload: dict[str, object] = {"requestedMessage": trigger_target}
-        trigger_connector = None
-        connector_field = data.get("connectorId")
-        if connector_field in (None, ""):
-            connector_field = data.get("connector")
-        if connector_field in (None, "") and connector_value is not None:
-            connector_field = connector_value
-        if connector_field not in (None, ""):
-            try:
-                trigger_connector = int(connector_field)
-            except (TypeError, ValueError):
-                return JsonResponse({"detail": "connectorId must be an integer"}, status=400)
-            if trigger_connector <= 0:
-                return JsonResponse({"detail": "connectorId must be positive"}, status=400)
-            payload["connectorId"] = trigger_connector
-        message_id = uuid.uuid4().hex
-        ocpp_action = "TriggerMessage"
-        expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
-        msg = json.dumps([2, message_id, "TriggerMessage", payload])
-        async_to_sync(ws.send)(msg)
-        store.register_pending_call(
-            message_id,
-            {
-                "action": "TriggerMessage",
-                "charger_id": cid,
-                "connector_id": connector_value,
-                "log_key": log_key,
-                "trigger_target": trigger_target,
-                "trigger_connector": trigger_connector,
-                "requested_at": timezone.now(),
-            },
-        )
-    elif action == "send_local_list":
-        entries = data.get("localAuthorizationList")
-        if entries is None:
-            entries = data.get("local_authorization_list")
-        if entries is None:
-            entries = []
-        if not isinstance(entries, list):
-            return JsonResponse({"detail": "localAuthorizationList must be a list"}, status=400)
-        version_candidate = data.get("listVersion")
-        if version_candidate is None:
-            version_candidate = data.get("list_version")
-        if version_candidate is None:
-            list_version = ((charger_obj.local_auth_list_version or 0) + 1) if charger_obj else 1
+        Charger.objects.filter(pk=context.charger.pk).update(**updates)
+        for field, value in updates.items():
+            setattr(context.charger, field, value)
+    return ActionCall(
+        msg=msg,
+        message_id=message_id,
+        ocpp_action=ocpp_action,
+        expected_statuses=expected_statuses,
+    )
+
+
+def _handle_change_configuration(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
+    raw_key = data.get("key")
+    if not isinstance(raw_key, str) or not raw_key.strip():
+        return JsonResponse({"detail": "key required"}, status=400)
+    key_value = raw_key.strip()
+    raw_value = data.get("value", None)
+    value_included = False
+    value_text: str | None = None
+    if raw_value is not None:
+        if isinstance(raw_value, (str, int, float, bool)):
+            value_included = True
+            value_text = raw_value if isinstance(raw_value, str) else str(raw_value)
         else:
             try:
                 list_version = int(version_candidate)
@@ -2637,27 +2735,162 @@ def dispatch_action(request, cid, connector=None):
             log_key=log_key,
             message="SendLocalList request timed out",
         )
-    elif action == "get_local_list_version":
-        message_id = uuid.uuid4().hex
-        ocpp_action = "GetLocalListVersion"
-        expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
-        msg = json.dumps([2, message_id, "GetLocalListVersion", {}])
-        async_to_sync(ws.send)(msg)
-        store.register_pending_call(
-            message_id,
-            {
-                "action": "GetLocalListVersion",
-                "charger_id": cid,
-                "connector_id": connector_value,
-                "log_key": log_key,
-                "requested_at": timezone.now(),
-            },
+    else:
+        change_message = str(
+            _("Requested configuration change for %(key)s") % {"key": key_value}
         )
-        store.schedule_call_timeout(
-            message_id,
-            action="GetLocalListVersion",
-            log_key=log_key,
-            message="GetLocalListVersion request timed out",
+    store.add_log(context.log_key, change_message, log_type="charger")
+    return ActionCall(
+        msg=msg,
+        message_id=message_id,
+        ocpp_action=ocpp_action,
+        expected_statuses=expected_statuses,
+    )
+
+
+def _handle_clear_cache(context: ActionContext, _data: dict) -> JsonResponse | ActionCall:
+    message_id = uuid.uuid4().hex
+    ocpp_action = "ClearCache"
+    expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
+    msg = json.dumps([2, message_id, "ClearCache", {}])
+    async_to_sync(context.ws.send)(msg)
+    store.register_pending_call(
+        message_id,
+        {
+            "action": "ClearCache",
+            "charger_id": context.cid,
+            "connector_id": context.connector_value,
+            "log_key": context.log_key,
+            "requested_at": timezone.now(),
+        },
+    )
+    return ActionCall(
+        msg=msg,
+        message_id=message_id,
+        ocpp_action=ocpp_action,
+        expected_statuses=expected_statuses,
+    )
+
+
+def _handle_cancel_reservation(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
+    reservation_pk = data.get("reservation") or data.get("reservationId")
+    if reservation_pk in (None, ""):
+        return JsonResponse({"detail": "reservation required"}, status=400)
+    reservation = CPReservation.objects.filter(pk=reservation_pk).first()
+    if reservation is None:
+        return JsonResponse({"detail": "reservation not found"}, status=404)
+    connector_obj = reservation.connector
+    if connector_obj is None or connector_obj.connector_id is None:
+        detail = _("Unable to determine which connector to cancel.")
+        return JsonResponse({"detail": detail}, status=400)
+    connector_value = connector_obj.connector_id
+    log_key = store.identity_key(context.cid, connector_value)
+    ws = store.get_connection(context.cid, connector_value)
+    if ws is None:
+        return JsonResponse({"detail": "no connection"}, status=404)
+    message_id = uuid.uuid4().hex
+    ocpp_action = "CancelReservation"
+    expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
+    payload = {"reservationId": reservation.pk}
+    msg = json.dumps([2, message_id, "CancelReservation", payload])
+    store.add_log(
+        log_key,
+        f"CancelReservation request: reservation={reservation.pk}",
+        log_type="charger",
+    )
+    async_to_sync(ws.send)(msg)
+    requested_at = timezone.now()
+    store.register_pending_call(
+        message_id,
+        {
+            "action": "CancelReservation",
+            "charger_id": context.cid,
+            "connector_id": connector_value,
+            "log_key": log_key,
+            "reservation_pk": reservation.pk,
+            "requested_at": requested_at,
+        },
+    )
+    store.schedule_call_timeout(message_id, action="CancelReservation", log_key=log_key)
+    reservation.ocpp_message_id = message_id
+    reservation.evcs_status = ""
+    reservation.evcs_error = ""
+    reservation.evcs_confirmed = False
+    reservation.evcs_confirmed_at = None
+    reservation.save(
+        update_fields=[
+            "ocpp_message_id",
+            "evcs_status",
+            "evcs_error",
+            "evcs_confirmed",
+            "evcs_confirmed_at",
+            "updated_on",
+        ]
+    )
+    return ActionCall(
+        msg=msg,
+        message_id=message_id,
+        ocpp_action=ocpp_action,
+        expected_statuses=expected_statuses,
+        log_key=log_key,
+    )
+
+
+def _handle_data_transfer(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
+    vendor_id = data.get("vendorId")
+    if not isinstance(vendor_id, str) or not vendor_id.strip():
+        return JsonResponse({"detail": "vendorId required"}, status=400)
+    vendor_id = vendor_id.strip()
+    payload: dict[str, object] = {"vendorId": vendor_id}
+    message_identifier = ""
+    if "messageId" in data and data["messageId"] is not None:
+        message_candidate = data["messageId"]
+        if not isinstance(message_candidate, str):
+            return JsonResponse({"detail": "messageId must be a string"}, status=400)
+        message_identifier = message_candidate.strip()
+        if message_identifier:
+            payload["messageId"] = message_identifier
+    if "data" in data:
+        payload["data"] = data["data"]
+    message_id = uuid.uuid4().hex
+    ocpp_action = "DataTransfer"
+    expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
+    msg = json.dumps([2, message_id, "DataTransfer", payload])
+    record = DataTransferMessage.objects.create(
+        charger=context.charger,
+        connector_id=context.connector_value,
+        direction=DataTransferMessage.DIRECTION_CSMS_TO_CP,
+        ocpp_message_id=message_id,
+        vendor_id=vendor_id,
+        message_id=message_identifier,
+        payload=payload,
+        status="Pending",
+    )
+    async_to_sync(context.ws.send)(msg)
+    store.register_pending_call(
+        message_id,
+        {
+            "action": "DataTransfer",
+            "charger_id": context.cid,
+            "connector_id": context.connector_value,
+            "message_pk": record.pk,
+            "log_key": context.log_key,
+        },
+    )
+    return ActionCall(
+        msg=msg,
+        message_id=message_id,
+        ocpp_action=ocpp_action,
+        expected_statuses=expected_statuses,
+    )
+
+
+def _handle_reset(context: ActionContext, _data: dict) -> JsonResponse | ActionCall:
+    tx_obj = store.get_transaction(context.cid, context.connector_value)
+    if tx_obj is not None:
+        detail = _(
+            "Reset is blocked while a charging session is active. "
+            "Stop the session first."
         )
     elif action == "unlock_connector":
         connector_payload = data.get("connectorId") or data.get("connector")
@@ -2697,12 +2930,135 @@ def dispatch_action(request, cid, connector=None):
             message="UnlockConnector request timed out",
         )
     else:
-        return JsonResponse({"detail": "unknown action"}, status=400)
+        try:
+            list_version = int(version_candidate)
+        except (TypeError, ValueError):
+            return JsonResponse({"detail": "invalid listVersion"}, status=400)
+        if list_version <= 0:
+            return JsonResponse({"detail": "invalid listVersion"}, status=400)
+    update_type = (
+        str(data.get("updateType") or data.get("update_type") or "Full").strip() or "Full"
+    )
+    payload = {
+        "listVersion": list_version,
+        "updateType": update_type,
+        "localAuthorizationList": entries,
+    }
+    message_id = uuid.uuid4().hex
+    ocpp_action = "SendLocalList"
+    expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
+    msg = json.dumps([2, message_id, "SendLocalList", payload])
+    async_to_sync(context.ws.send)(msg)
+    requested_at = timezone.now()
+    store.register_pending_call(
+        message_id,
+        {
+            "action": "SendLocalList",
+            "charger_id": context.cid,
+            "connector_id": context.connector_value,
+            "log_key": context.log_key,
+            "list_version": list_version,
+            "list_size": len(entries),
+            "requested_at": requested_at,
+        },
+    )
+    store.schedule_call_timeout(
+        message_id,
+        action="SendLocalList",
+        log_key=context.log_key,
+        message="SendLocalList request timed out",
+    )
+    return ActionCall(
+        msg=msg,
+        message_id=message_id,
+        ocpp_action=ocpp_action,
+        expected_statuses=expected_statuses,
+    )
+
+
+def _handle_get_local_list_version(context: ActionContext, _data: dict) -> JsonResponse | ActionCall:
+    message_id = uuid.uuid4().hex
+    ocpp_action = "GetLocalListVersion"
+    expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
+    msg = json.dumps([2, message_id, "GetLocalListVersion", {}])
+    async_to_sync(context.ws.send)(msg)
+    store.register_pending_call(
+        message_id,
+        {
+            "action": "GetLocalListVersion",
+            "charger_id": context.cid,
+            "connector_id": context.connector_value,
+            "log_key": context.log_key,
+            "requested_at": timezone.now(),
+        },
+    )
+    store.schedule_call_timeout(
+        message_id,
+        action="GetLocalListVersion",
+        log_key=context.log_key,
+        message="GetLocalListVersion request timed out",
+    )
+    return ActionCall(
+        msg=msg,
+        message_id=message_id,
+        ocpp_action=ocpp_action,
+        expected_statuses=expected_statuses,
+    )
+
+
+ACTION_HANDLERS = {
+    "get_configuration": _handle_get_configuration,
+    "reserve_now": _handle_reserve_now,
+    "remote_stop": _handle_remote_stop,
+    "remote_start": _handle_remote_start,
+    "change_availability": _handle_change_availability,
+    "change_configuration": _handle_change_configuration,
+    "clear_cache": _handle_clear_cache,
+    "cancel_reservation": _handle_cancel_reservation,
+    "data_transfer": _handle_data_transfer,
+    "reset": _handle_reset,
+    "trigger_message": _handle_trigger_message,
+    "send_local_list": _handle_send_local_list,
+    "get_local_list_version": _handle_get_local_list_version,
+}
+
+@csrf_exempt
+@api_login_required
+def dispatch_action(request, cid, connector=None):
+    connector_value, _normalized_slug = _normalize_connector_slug(connector)
     log_key = store.identity_key(cid, connector_value)
-    if msg is None or message_id is None or ocpp_action is None:
+    charger_obj = _get_or_create_charger(cid, connector_value)
+    access_response = _ensure_charger_access(
+        request.user, charger_obj, request=request
+    )
+    if access_response is not None:
+        return access_response
+    ws = store.get_connection(cid, connector_value)
+    if ws is None:
+        return JsonResponse({"detail": "no connection"}, status=404)
+    data = _parse_request_body(request)
+    action = data.get("action")
+    handler = ACTION_HANDLERS.get(action)
+    if handler is None:
         return JsonResponse({"detail": "unknown action"}, status=400)
-    store.add_log(log_key, f"< {msg}", log_type="charger")
-    expected_statuses = expected_statuses or CALL_EXPECTED_STATUSES.get(ocpp_action)
+    context = ActionContext(
+        cid=cid,
+        connector_value=connector_value,
+        charger=charger_obj,
+        ws=ws,
+        log_key=log_key,
+    )
+    result = handler(context, data)
+    if isinstance(result, JsonResponse):
+        return result
+    message_id = result.message_id
+    ocpp_action = result.ocpp_action
+    msg = result.msg
+    log_for_action = result.log_key or log_key
+    store.add_log(log_for_action, f"< {msg}", log_type="charger")
+    expected_statuses = result.expected_statuses or CALL_EXPECTED_STATUSES.get(
+        ocpp_action
+    )
     success, detail, status_code = _evaluate_pending_call_result(
         message_id,
         ocpp_action,
