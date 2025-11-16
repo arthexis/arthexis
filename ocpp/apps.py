@@ -1,6 +1,8 @@
-from django.apps import AppConfig
 from pathlib import Path
+
+from django.apps import AppConfig
 from django.conf import settings
+from django.core.signals import request_started
 
 
 class OcppConfig(AppConfig):
@@ -13,7 +15,6 @@ class OcppConfig(AppConfig):
         rfid_lock = Path(settings.BASE_DIR) / "locks" / "rfid.lck"
         if not (control_lock.exists() and rfid_lock.exists()):
             return
-        from .rfid.background_reader import start
         from .rfid.signals import tag_scanned
         from core.notifications import notify
 
@@ -22,4 +23,20 @@ class OcppConfig(AppConfig):
                 notify("RFID", str(rfid))
 
         tag_scanned.connect(_notify, weak=False)
-        start()
+
+        def _start_background_reader(**_kwargs):
+            from .rfid.background_reader import start
+
+            try:
+                start()
+            finally:
+                request_started.disconnect(
+                    receiver=_start_background_reader,
+                    dispatch_uid="ocpp_rfid_start_on_request",
+                )
+
+        request_started.connect(
+            _start_background_reader,
+            dispatch_uid="ocpp_rfid_start_on_request",
+            weak=False,
+        )

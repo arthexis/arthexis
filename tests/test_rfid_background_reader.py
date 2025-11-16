@@ -5,6 +5,7 @@ from django.conf import settings
 from unittest.mock import patch
 
 import pytest
+from django.core.signals import request_started
 
 
 pytestmark = [
@@ -47,4 +48,9 @@ class RFIDBackgroundReaderTests(TestCase):
         self.rfid_lock.touch()
         with patch("ocpp.rfid.background_reader.start") as mock_start:
             self._call_ready()
+            self.assertFalse(mock_start.called)
+            request_started.send(sender=self.__class__)
             self.assertTrue(mock_start.called)
+            mock_start.reset_mock()
+            request_started.send(sender=self.__class__)
+            self.assertFalse(mock_start.called)
