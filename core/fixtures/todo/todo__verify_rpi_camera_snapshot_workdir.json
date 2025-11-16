@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Verify Raspberry Pi snapshots stored in work directory",
+      "created_on": "2025-01-01T00:00:00Z",
+      "url": "/admin/nodes/nodefeature/take-snapshot/",
+      "request_details": "Enable the rpi-camera feature on a local node, trigger Take a Snapshot from the Node Features admin action, and confirm the saved ContentSample points to BASE_DIR/work/camera with no .jpg files written under LOG_DIR.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]
