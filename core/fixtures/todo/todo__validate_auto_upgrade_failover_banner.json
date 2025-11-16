@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Validate auto-upgrade failover banner and dismiss action",
+      "created_on": "2025-11-20T00:00:00Z",
+      "url": "/admin/system/upgrade-report/",
+      "request_details": "1. On a node with auto-upgrade enabled, simulate a failover by creating `locks/auto_upgrade_failover.lck` with a reason and revision.\n2. Open the Upgrade Report (System → Upgrade Report) and confirm the failover banner appears with the provided details.\n3. Use the Dismiss button to clear the alert and verify the banner no longer shows on refresh.\n4. Recreate the failover lock and confirm the failover status and links render correctly after a page reload.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]

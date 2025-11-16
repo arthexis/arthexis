@@ -6,6 +6,7 @@ import sys
 import tempfile
 from unittest import mock
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.sessions.middleware import SessionMiddleware
 from django.contrib.messages.storage.fallback import FallbackStorage
@@ -370,6 +371,25 @@ class UpgradeReportTests(SimpleTestCase):
             stored[0].message,
             gettext("Unable to trigger an upgrade check: %(error)s") % {"error": "oops"},
         )
+
+    def test_system_upgrade_report_view_includes_failover_status(self):
+        request = self.factory.get(reverse("admin:system-upgrade-report"))
+        request.user = mock.Mock(is_staff=True, is_active=True)
+
+        report_stub = {"settings": {}, "schedule": {}, "log_entries": [], "log_error": ""}
+
+        with mock.patch(
+            "core.system._build_auto_upgrade_report", return_value=report_stub
+        ) as mock_report, mock.patch(
+            "core.system.read_failover_status", return_value={"detail": "failover"}
+        ) as mock_failover:
+            response = system._system_upgrade_report_view(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIs(response.context_data["auto_upgrade_report"], report_stub)
+        self.assertEqual(response.context_data["failover_status"], {"detail": "failover"})
+        mock_report.assert_called_once_with()
+        mock_failover.assert_called_once_with(Path(settings.BASE_DIR))
 
     def test_trigger_upgrade_check_view_respects_next_parameter(self):
         request = self.factory.post(
