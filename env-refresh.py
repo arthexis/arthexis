@@ -30,7 +30,7 @@ from django.db.migrations.exceptions import (
     InconsistentMigrationHistory,
     InvalidBasesError,
 )
-from django.db.utils import OperationalError
+from django.db.utils import DatabaseError, OperationalError
 from django.db.migrations.recorder import MigrationRecorder
 from django.db.migrations.loader import MigrationLoader
 from django.core.serializers.base import DeserializationError
@@ -49,7 +49,10 @@ from django.contrib.auth import get_user_model
 from core.models import PackageRelease, Todo
 from core.sigil_builder import generate_model_sigils
 from core.user_data import load_shared_user_fixtures, load_user_fixtures
-from utils.env_refresh import unlink_sqlite_db as _unlink_sqlite_db
+from utils.env_refresh import (
+    is_sqlite_corruption_error,
+    unlink_sqlite_db as _unlink_sqlite_db,
+)
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
@@ -231,10 +234,13 @@ def _remove_integrator_from_auth_migration() -> None:
     path.write_text(patched + ("\n" if not patched.endswith("\n") else ""))
 
 
-def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
+def run_database_tasks(
+    *, latest: bool = False, clean: bool = False, _retry_on_corruption: bool = True
+) -> None:
     """Run all database related maintenance steps."""
     default_db = settings.DATABASES["default"]
     using_sqlite = default_db["ENGINE"] == "django.db.backends.sqlite3"
+    db_path = Path(default_db["NAME"]) if using_sqlite else None
 
     base_dir = Path(settings.BASE_DIR)
     local_apps = _local_app_labels()
@@ -242,340 +248,355 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
     _remove_integrator_from_auth_migration()
 
     try:
-        call_command("makemigrations", *local_apps, interactive=False)
-    except CommandError as exc:
-        call_command("makemigrations", *local_apps, merge=True, interactive=False)
-    except InconsistentMigrationHistory:
-        if using_sqlite:
-            _unlink_sqlite_db(Path(default_db["NAME"]))
-            call_command("makemigrations", *local_apps, interactive=False)
-        else:  # pragma: no cover - unreachable in sqlite
-            raise
-
-    # Compute migrations hash and compare with stored value
-    hash_file = base_dir / "migrations.md5"
-    new_hash = _migration_hash(local_apps)
-    stored_hash = hash_file.read_text().strip() if hash_file.exists() else ""
-
-    if clean:
-        if stored_hash and stored_hash != new_hash:
-            if using_sqlite:
-                _unlink_sqlite_db(Path(default_db["NAME"]))
-            else:  # pragma: no cover - unreachable in sqlite
-                for label in reversed(local_apps):
-                    call_command("migrate", label, "zero", interactive=False)
-        else:
-            try:
-                recorder = MigrationRecorder(connection)
-                loader = MigrationLoader(connection)
-            except OperationalError:
-                recorder = loader = None
-            if recorder and loader:
-                for label in local_apps:
-                    try:
-                        qs = recorder.migration_qs.filter(app=label).order_by(
-                            "-applied"
-                        )
-                        if qs.exists():
-                            last = qs.first().name
-                            node = loader.graph.node_map.get((label, last))
-                            parents = list(node.parents) if node else []
-                            prev = parents[0][1] if parents else "zero"
-                            call_command("migrate", label, prev, interactive=False)
-                    except OperationalError:
-                        continue
-
-    if not connection.in_atomic_block:
         try:
-            call_command("migrate", interactive=False)
+            call_command("makemigrations", *local_apps, interactive=False)
+        except CommandError as exc:
+            call_command("makemigrations", *local_apps, merge=True, interactive=False)
         except InconsistentMigrationHistory:
-            call_command("reset_ocpp_migrations")
-            call_command("migrate", interactive=False)
-        except InvalidBasesError:
-            raise
-        except OperationalError as exc:
             if using_sqlite:
                 _unlink_sqlite_db(Path(default_db["NAME"]))
-                call_command("migrate", interactive=False)
+                call_command("makemigrations", *local_apps, interactive=False)
             else:  # pragma: no cover - unreachable in sqlite
+                raise
+
+        # Compute migrations hash and compare with stored value
+        hash_file = base_dir / "migrations.md5"
+        new_hash = _migration_hash(local_apps)
+        stored_hash = hash_file.read_text().strip() if hash_file.exists() else ""
+
+        if clean:
+            if stored_hash and stored_hash != new_hash:
+                if using_sqlite:
+                    _unlink_sqlite_db(Path(default_db["NAME"]))
+                else:  # pragma: no cover - unreachable in sqlite
+                    for label in reversed(local_apps):
+                        call_command("migrate", label, "zero", interactive=False)
+            else:
                 try:
-                    import psycopg
-                    from psycopg import sql
-
-                    params = {
-                        "dbname": "postgres",
-                        "user": default_db.get("USER", ""),
-                        "password": default_db.get("PASSWORD", ""),
-                        "host": default_db.get("HOST", ""),
-                        "port": default_db.get("PORT", ""),
-                    }
-                    with psycopg.connect(**params, autocommit=True) as conn:
-                        with conn.cursor() as cur:
-                            cur.execute(
-                                sql.SQL("CREATE DATABASE {}").format(
-                                    sql.Identifier(default_db["NAME"])
-                                )
+                    recorder = MigrationRecorder(connection)
+                    loader = MigrationLoader(connection)
+                except OperationalError:
+                    recorder = loader = None
+                if recorder and loader:
+                    for label in local_apps:
+                        try:
+                            qs = recorder.migration_qs.filter(app=label).order_by(
+                                "-applied"
                             )
+                            if qs.exists():
+                                last = qs.first().name
+                                node = loader.graph.node_map.get((label, last))
+                                parents = list(node.parents) if node else []
+                                prev = parents[0][1] if parents else "zero"
+                                call_command("migrate", label, prev, interactive=False)
+                        except OperationalError:
+                            continue
+
+        if not connection.in_atomic_block:
+            try:
+                call_command("migrate", interactive=False)
+            except InconsistentMigrationHistory:
+                call_command("reset_ocpp_migrations")
+                call_command("migrate", interactive=False)
+            except InvalidBasesError:
+                raise
+            except OperationalError as exc:
+                if using_sqlite:
+                    _unlink_sqlite_db(Path(default_db["NAME"]))
                     call_command("migrate", interactive=False)
-                except Exception:
-                    raise exc
-
-    # Remove auto-generated SigilRoot entries so fixtures define prefixes
-    SigilRoot = apps.get_model("core", "SigilRoot")
-    SigilRoot.objects.all().delete()
-
-    # Track Site entries provided via fixtures so we can update them without
-    # disturbing operator-managed records.
-    Site = apps.get_model("sites", "Site")
-
-    fixtures = _fixture_files()
-    if fixtures:
-        fixtures.sort(key=_fixture_sort_key)
-        with tempfile.TemporaryDirectory() as tmpdir:
-            patched: dict[int, list[str]] = {}
-            user_pk_map: dict[int, int] = {}
-            model_counts: dict[str, int] = defaultdict(int)
-            site_fixture_defaults: dict[str, dict] = {}
-            pending_user_m2m: dict[int, list[tuple[str, Any]]] = defaultdict(list)
-            for name in fixtures:
-                priority, _ = _fixture_sort_key(name)
-                source = Path(settings.BASE_DIR, name)
-                with source.open() as f:
-                    data = json.load(f)
-                patched_data: list[dict] = []
-                modified = False
-                for obj in data:
-                    model_label = obj.get("model", "")
+                else:  # pragma: no cover - unreachable in sqlite
                     try:
-                        model = apps.get_model(model_label)
-                    except LookupError:
-                        modified = True
-                        continue
-                    # Update existing users instead of loading duplicates and
-                    # record their primary key mapping for later references.
-                    if model is get_user_model():
-                        username = obj.get("fields", {}).get("username")
-                        existing = None
-                        if username:
-                            existing = (
-                                get_user_model()
-                                .objects.filter(username=username)
-                                .first()
-                            )
-                        if existing:
-                            user_pk_map[obj.get("pk")] = existing.pk
-                            m2m_updates: list[tuple[str, Any]] = []
-                            for field_name, value in obj.get("fields", {}).items():
-                                try:
-                                    field_object = model._meta.get_field(field_name)
-                                except FieldDoesNotExist:
-                                    setattr(existing, field_name, value)
-                                    continue
-                                if field_object.many_to_many:
-                                    m2m_updates.append((field_name, value))
-                                else:
-                                    setattr(existing, field_name, value)
-                            existing.save()
-                            for field_name, value in m2m_updates:
-                                if not _assign_many_to_many(existing, field_name, value):
-                                    pending_user_m2m[existing.pk].append((field_name, value))
+                        import psycopg
+                        from psycopg import sql
+
+                        params = {
+                            "dbname": "postgres",
+                            "user": default_db.get("USER", ""),
+                            "password": default_db.get("PASSWORD", ""),
+                            "host": default_db.get("HOST", ""),
+                            "port": default_db.get("PORT", ""),
+                        }
+                        with psycopg.connect(**params, autocommit=True) as conn:
+                            with conn.cursor() as cur:
+                                cur.execute(
+                                    sql.SQL("CREATE DATABASE {}").format(
+                                        sql.Identifier(default_db["NAME"])
+                                    )
+                                )
+                        call_command("migrate", interactive=False)
+                    except Exception:
+                        raise exc
+
+        # Remove auto-generated SigilRoot entries so fixtures define prefixes
+        SigilRoot = apps.get_model("core", "SigilRoot")
+        SigilRoot.objects.all().delete()
+
+        # Track Site entries provided via fixtures so we can update them without
+        # disturbing operator-managed records.
+        Site = apps.get_model("sites", "Site")
+
+        fixtures = _fixture_files()
+        if fixtures:
+            fixtures.sort(key=_fixture_sort_key)
+            with tempfile.TemporaryDirectory() as tmpdir:
+                patched: dict[int, list[str]] = {}
+                user_pk_map: dict[int, int] = {}
+                model_counts: dict[str, int] = defaultdict(int)
+                site_fixture_defaults: dict[str, dict] = {}
+                pending_user_m2m: dict[int, list[tuple[str, Any]]] = defaultdict(list)
+                for name in fixtures:
+                    priority, _ = _fixture_sort_key(name)
+                    source = Path(settings.BASE_DIR, name)
+                    with source.open() as f:
+                        data = json.load(f)
+                    patched_data: list[dict] = []
+                    modified = False
+                    for obj in data:
+                        model_label = obj.get("model", "")
+                        try:
+                            model = apps.get_model(model_label)
+                        except LookupError:
                             modified = True
                             continue
-                    fields = obj.setdefault("fields", {})
-                    if "user" in fields and isinstance(fields["user"], int):
-                        original_user = fields["user"]
-                        mapped_user = user_pk_map.get(original_user, original_user)
-                        if mapped_user != original_user:
-                            fields["user"] = mapped_user
-                            modified = True
-                    if model_label == "core.sigilroot":
-                        content_type = fields.get("content_type")
-                        app_label: str | None = None
-                        if isinstance(content_type, (list, tuple)) and content_type:
-                            app_label = content_type[0]
-                        elif isinstance(content_type, dict):
-                            app_label = content_type.get("app_label")
-                        if app_label:
-                            try:
-                                apps.get_app_config(app_label)
-                            except LookupError:
-                                prefix = fields.get("prefix", "?")
-                                print(
-                                    f"Skipping SigilRoot '{prefix}' (missing app '{app_label}')"
+                        # Update existing users instead of loading duplicates and
+                        # record their primary key mapping for later references.
+                        if model is get_user_model():
+                            username = obj.get("fields", {}).get("username")
+                            existing = None
+                            if username:
+                                existing = (
+                                    get_user_model()
+                                    .objects.filter(username=username)
+                                    .first()
                                 )
+                            if existing:
+                                user_pk_map[obj.get("pk")] = existing.pk
+                                m2m_updates: list[tuple[str, Any]] = []
+                                for field_name, value in obj.get("fields", {}).items():
+                                    try:
+                                        field_object = model._meta.get_field(field_name)
+                                    except FieldDoesNotExist:
+                                        setattr(existing, field_name, value)
+                                        continue
+                                    if field_object.many_to_many:
+                                        m2m_updates.append((field_name, value))
+                                    else:
+                                        setattr(existing, field_name, value)
+                                existing.save()
+                                for field_name, value in m2m_updates:
+                                    if not _assign_many_to_many(existing, field_name, value):
+                                        pending_user_m2m[existing.pk].append((field_name, value))
                                 modified = True
                                 continue
-                    if model is Site:
-                        domain = fields.get("domain")
-                        if domain:
-                            defaults = dict(fields)
-                            Site.objects.update_or_create(
-                                domain=domain,
-                                defaults=defaults,
-                            )
-                            site_fixture_defaults[domain] = defaults
-                            model_counts[model._meta.label] += 1
-                        modified = True
-                        continue
-                    if model is PackageRelease:
-                        version = obj.get("fields", {}).get("version")
-                        if (
-                            version
-                            and PackageRelease.objects.filter(version=version).exists()
-                        ):
+                        fields = obj.setdefault("fields", {})
+                        if "user" in fields and isinstance(fields["user"], int):
+                            original_user = fields["user"]
+                            mapped_user = user_pk_map.get(original_user, original_user)
+                            if mapped_user != original_user:
+                                fields["user"] = mapped_user
+                                modified = True
+                        if model_label == "core.sigilroot":
+                            content_type = fields.get("content_type")
+                            app_label: str | None = None
+                            if isinstance(content_type, (list, tuple)) and content_type:
+                                app_label = content_type[0]
+                            elif isinstance(content_type, dict):
+                                app_label = content_type.get("app_label")
+                            if app_label:
+                                try:
+                                    apps.get_app_config(app_label)
+                                except LookupError:
+                                    prefix = fields.get("prefix", "?")
+                                    print(
+                                        f"Skipping SigilRoot '{prefix}' (missing app '{app_label}')"
+                                    )
+                                    modified = True
+                                    continue
+                        if model is Site:
+                            domain = fields.get("domain")
+                            if domain:
+                                defaults = dict(fields)
+                                Site.objects.update_or_create(
+                                    domain=domain,
+                                    defaults=defaults,
+                                )
+                                site_fixture_defaults[domain] = defaults
+                                model_counts[model._meta.label] += 1
                             modified = True
                             continue
-                    if model_label == "core.todo":
-                        request_value = fields.get("request")
-                        if isinstance(request_value, str):
-                            existing_todo = Todo.all_objects.filter(
-                                request__iexact=request_value
-                            ).first()
-                            if existing_todo:
-                                if existing_todo.is_deleted:
-                                    modified = True
-                                    model_counts[model._meta.label] += 1
-                                    continue
-
-                                done_on_field = fields.get("done_on")
-                                parsed_done: datetime | None = None
-                                if isinstance(done_on_field, str):
-                                    parsed_done = parse_datetime(done_on_field)
-                                elif isinstance(done_on_field, datetime):
-                                    parsed_done = done_on_field
-                                if parsed_done is not None and timezone.is_naive(parsed_done):
-                                    parsed_done = timezone.make_aware(
-                                        parsed_done, timezone.get_default_timezone()
-                                    )
-
-                                if parsed_done is not None:
-                                    updates: list[str] = []
-                                    if existing_todo.done_on != parsed_done:
-                                        existing_todo.done_on = parsed_done
-                                        updates.append("done_on")
-
-                                    for attr in ("done_version", "done_revision", "done_username"):
-                                        value = fields.get(attr) or ""
-                                        if getattr(existing_todo, attr) != value:
-                                            setattr(existing_todo, attr, value)
-                                            updates.append(attr)
-
-                                    if existing_todo.is_seed_data is not True:
-                                        existing_todo.is_seed_data = True
-                                        updates.append("is_seed_data")
-
+                        if model is PackageRelease:
+                            version = obj.get("fields", {}).get("version")
+                            if (
+                                version
+                                and PackageRelease.objects.filter(version=version).exists()
+                            ):
+                                modified = True
+                                continue
+                        if model_label == "core.todo":
+                            request_value = fields.get("request")
+                            if isinstance(request_value, str):
+                                existing_todo = Todo.all_objects.filter(
+                                    request__iexact=request_value
+                                ).first()
+                                if existing_todo:
                                     if existing_todo.is_deleted:
-                                        existing_todo.is_deleted = False
-                                        updates.append("is_deleted")
+                                        modified = True
+                                        model_counts[model._meta.label] += 1
+                                        continue
 
-                                    if updates:
-                                        existing_todo.save(update_fields=updates)
-                                    modified = True
-                                    model_counts[model._meta.label] += 1
-                                    continue
+                                    done_on_field = fields.get("done_on")
+                                    parsed_done: datetime | None = None
+                                    if isinstance(done_on_field, str):
+                                        parsed_done = parse_datetime(done_on_field)
+                                    elif isinstance(done_on_field, datetime):
+                                        parsed_done = done_on_field
+                                    if parsed_done is not None and timezone.is_naive(parsed_done):
+                                        parsed_done = timezone.make_aware(
+                                            parsed_done, timezone.get_default_timezone()
+                                        )
 
-                                if existing_todo.done_on:
-                                    if existing_todo.is_seed_data is not True:
-                                        existing_todo.is_seed_data = True
-                                        existing_todo.save(update_fields=["is_seed_data"])
-                                    modified = True
-                                    model_counts[model._meta.label] += 1
-                                    continue
-                    defines_seed_flag = _model_defines_seed_flag(model)
-                    has_seed_field = any(
-                        f.name == "is_seed_data" for f in model._meta.fields
-                    )
-                    if (defines_seed_flag or has_seed_field) and fields.get(
-                        "is_seed_data"
-                    ) is not True:
-                        fields["is_seed_data"] = True
-                        modified = True
-                    patched_data.append(obj)
-                    model_counts[model._meta.label] += 1
-                if modified:
-                    dest = Path(tmpdir, Path(name).name)
-                    with dest.open("w") as f:
-                        json.dump(patched_data, f)
-                    target = str(dest)
-                else:
-                    target = str(source)
-                if patched_data:
-                    patched.setdefault(priority, []).append(target)
-            post_save.disconnect(_create_landings, sender=Module)
-            try:
-                for priority in sorted(patched):
-                    for fixture in patched[priority]:
-                        try:
-                            call_command("loaddata", fixture, verbosity=0)
-                        except DeserializationError as exc:
-                            print(f"Skipping fixture {fixture} due to: {exc}")
-                        else:
-                            print(".", end="", flush=True)
-                if pending_user_m2m:
-                    for user_pk, assignments in pending_user_m2m.items():
-                        user = get_user_model().objects.filter(pk=user_pk).first()
-                        if not user:
-                            continue
-                        for field_name, value in assignments:
-                            if not _assign_many_to_many(user, field_name, value):
-                                raise ValueError(
-                                    f"Unable to resolve many-to-many values for user {user_pk}"
+                                    if parsed_done is not None:
+                                        updates: list[str] = []
+                                        if existing_todo.done_on != parsed_done:
+                                            existing_todo.done_on = parsed_done
+                                            updates.append("done_on")
+
+                                        for attr in (
+                                            "done_version",
+                                            "done_revision",
+                                            "done_username",
+                                        ):
+                                            value = fields.get(attr) or ""
+                                            if getattr(existing_todo, attr) != value:
+                                                setattr(existing_todo, attr, value)
+                                                updates.append(attr)
+
+                                        if existing_todo.is_seed_data is not True:
+                                            existing_todo.is_seed_data = True
+                                            updates.append("is_seed_data")
+
+                                        if existing_todo.is_deleted:
+                                            existing_todo.is_deleted = False
+                                            updates.append("is_deleted")
+
+                                        if updates:
+                                            existing_todo.save(update_fields=updates)
+                                        modified = True
+                                        model_counts[model._meta.label] += 1
+                                        continue
+
+                                    if existing_todo.done_on:
+                                        if existing_todo.is_seed_data is not True:
+                                            existing_todo.is_seed_data = True
+                                            existing_todo.save(update_fields=["is_seed_data"])
+                                        modified = True
+                                        model_counts[model._meta.label] += 1
+                                        continue
+                        defines_seed_flag = _model_defines_seed_flag(model)
+                        has_seed_field = any(
+                            f.name == "is_seed_data" for f in model._meta.fields
+                        )
+                        if (defines_seed_flag or has_seed_field) and fields.get(
+                            "is_seed_data"
+                        ) is not True:
+                            fields["is_seed_data"] = True
+                            modified = True
+                        patched_data.append(obj)
+                        model_counts[model._meta.label] += 1
+                    if modified:
+                        dest = Path(tmpdir, Path(name).name)
+                        with dest.open("w") as f:
+                            json.dump(patched_data, f)
+                        target = str(dest)
+                    else:
+                        target = str(source)
+                    if patched_data:
+                        patched.setdefault(priority, []).append(target)
+                post_save.disconnect(_create_landings, sender=Module)
+                try:
+                    for priority in sorted(patched):
+                        for fixture in patched[priority]:
+                            try:
+                                call_command("loaddata", fixture, verbosity=0)
+                            except DeserializationError as exc:
+                                print(f"Skipping fixture {fixture} due to: {exc}")
+                            else:
+                                print(".", end="", flush=True)
+                    if pending_user_m2m:
+                        for user_pk, assignments in pending_user_m2m.items():
+                            user = get_user_model().objects.filter(pk=user_pk).first()
+                            if not user:
+                                continue
+                            for field_name, value in assignments:
+                                if not _assign_many_to_many(user, field_name, value):
+                                    raise ValueError(
+                                        f"Unable to resolve many-to-many values for user {user_pk}"
+                                    )
+                    for module in Module.objects.all():
+                        module.create_landings()
+
+                    if site_fixture_defaults:
+                        preferred = _preferred_site_domain(site_fixture_defaults)
+                        if preferred:
+                            defaults = dict(site_fixture_defaults[preferred])
+                            defaults["domain"] = preferred
+                            site_id = getattr(settings, "SITE_ID", 1)
+                            existing = Site.objects.filter(pk=site_id).first()
+                            Site.objects.filter(domain=preferred).exclude(pk=site_id).delete()
+                            if existing:
+                                for field, value in defaults.items():
+                                    setattr(existing, field, value)
+                                existing.save(update_fields=list(defaults.keys()))
+                            else:
+                                Site.objects.update_or_create(
+                                    pk=site_id,
+                                    defaults=defaults,
                                 )
-                for module in Module.objects.all():
-                    module.create_landings()
+                        Site.objects.clear_cache()
 
-                if site_fixture_defaults:
-                    preferred = _preferred_site_domain(site_fixture_defaults)
-                    if preferred:
-                        defaults = dict(site_fixture_defaults[preferred])
-                        defaults["domain"] = preferred
-                        site_id = getattr(settings, "SITE_ID", 1)
-                        existing = Site.objects.filter(pk=site_id).first()
-                        Site.objects.filter(domain=preferred).exclude(pk=site_id).delete()
-                        if existing:
-                            for field, value in defaults.items():
-                                setattr(existing, field, value)
-                            existing.save(update_fields=list(defaults.keys()))
-                        else:
-                            Site.objects.update_or_create(
-                                pk=site_id,
-                                defaults=defaults,
-                            )
-                    Site.objects.clear_cache()
+                    if model_counts:
+                        print()
+                        for label, count in sorted(model_counts.items()):
+                            print(f"{label}: {count}")
+                finally:
+                    post_save.connect(_create_landings, sender=Module)
 
-                if model_counts:
-                    print()
-                    for label, count in sorted(model_counts.items()):
-                        print(f"{label}: {count}")
-            finally:
-                post_save.connect(_create_landings, sender=Module)
+        # Ensure Application and Module entries exist for local apps
+        call_command("register_site_apps")
+        Landing.objects.update(is_seed_data=True)
 
-    # Ensure Application and Module entries exist for local apps
-    call_command("register_site_apps")
-    Landing.objects.update(is_seed_data=True)
+        # Ensure current node is registered or updated
+        node, _ = Node.register_current(notify_peers=False)
 
-    # Ensure current node is registered or updated
-    node, _ = Node.register_current(notify_peers=False)
+        control_lock = Path(settings.BASE_DIR) / "locks" / "control.lck"
+        if control_lock.exists():
+            Site.objects.update_or_create(
+                domain=node.public_endpoint,
+                defaults={"name": "Control"},
+            )
 
-    control_lock = Path(settings.BASE_DIR) / "locks" / "control.lck"
-    if control_lock.exists():
-        Site.objects.update_or_create(
-            domain=node.public_endpoint,
-            defaults={"name": "Control"},
-        )
+        # Load shared fixtures once before personal data
+        load_shared_user_fixtures(force=True)
 
-    # Load shared fixtures once before personal data
-    load_shared_user_fixtures(force=True)
+        # Load personal user data fixtures last
+        for user in get_user_model().objects.all():
+            load_user_fixtures(user)
 
-    # Load personal user data fixtures last
-    for user in get_user_model().objects.all():
-        load_user_fixtures(user)
+        # Recreate any missing SigilRoots after loading fixtures
+        generate_model_sigils()
 
-    # Recreate any missing SigilRoots after loading fixtures
-    generate_model_sigils()
-
-    # Update the migrations hash file after a successful run.
-    hash_file.write_text(new_hash)
+        # Update the migrations hash file after a successful run.
+        hash_file.write_text(new_hash)
+    except DatabaseError as exc:  # pragma: no cover - defensive runtime recovery
+        if using_sqlite and _retry_on_corruption and db_path and is_sqlite_corruption_error(exc):
+            _unlink_sqlite_db(db_path)
+            print(
+                "\nDetected malformed SQLite database. Rebuilding from fixtures...",
+                flush=True,
+            )
+            run_database_tasks(latest=latest, clean=True, _retry_on_corruption=False)
+            return
+        raise
 
 
 TASKS = {"database": run_database_tasks}

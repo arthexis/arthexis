@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Confirm env-refresh rebuilds SQLite after corruption",
+      "version": "0.1.33",
+      "created_on": "2025-11-17T00:00:00Z",
+      "url": "/admin/core/todo/",
+      "request_details": "1. On a node using SQLite, stop the arthexis service and intentionally corrupt the database with `printf 'broken' > db.sqlite3`.\n2. Run `./env-refresh.sh` (or the systemd prestart hook) and wait for the refresh to finish.\n3. Confirm the log shows the \"Detected malformed SQLite database. Rebuilding from fixtures...\" message and the command exits successfully without manual intervention.\n4. Start the arthexis services and verify admin login works and dashboard data loads normally, confirming the rebuilt database is healthy.",
+      "done_on": null,
+      "is_deleted": false
+    }
+  }
+]

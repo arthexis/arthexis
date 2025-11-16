@@ -10,7 +10,7 @@ from django.conf import settings
 from django.db import connections
 
 
-__all__ = ["unlink_sqlite_db"]
+__all__ = ["is_sqlite_corruption_error", "unlink_sqlite_db"]
 
 
 def unlink_sqlite_db(path: Path) -> None:
@@ -35,3 +35,15 @@ def unlink_sqlite_db(path: Path) -> None:
         except PermissionError:
             time.sleep(0.1)
             connections.close_all()
+
+
+def is_sqlite_corruption_error(exc: BaseException) -> bool:
+    """Return ``True`` when *exc* looks like a SQLite corruption error."""
+
+    message = str(exc).lower()
+    patterns = (
+        "database disk image is malformed",
+        "file is not a database",
+        "file is encrypted or is not a database",
+    )
+    return any(pattern in message for pattern in patterns)
