@@ -12,6 +12,8 @@ BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$BASE_DIR/scripts/helpers/ports.sh"
 # shellcheck source=scripts/helpers/version_marker.sh
 . "$BASE_DIR/scripts/helpers/version_marker.sh"
+# shellcheck source=scripts/helpers/auto-upgrade-service.sh
+. "$BASE_DIR/scripts/helpers/auto-upgrade-service.sh"
 arthexis_resolve_log_dir "$BASE_DIR" LOG_DIR || exit 1
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 exec > >(tee "$LOG_FILE")
@@ -39,12 +41,18 @@ if ! command -v sudo >/dev/null 2>&1; then
   SUDO_CMD=()
 fi
 
+SYSTEMD_DIR="${SYSTEMD_DIR:-/etc/systemd/system}"
+
 UPGRADE_GUARD_SERVICE=""
 UPGRADE_GUARD_ACTIVE=0
 
 BACKUP_DIR="$BASE_DIR/backups"
 
 LAST_FAILOVER_BRANCH=""
+
+if [ -n "$SERVICE_NAME" ]; then
+  arthexis_repair_auto_upgrade_workdir "$BASE_DIR" "$SERVICE_NAME" "$SYSTEMD_DIR"
+fi
 
 ensure_upgrade_guard_units() {
   local service="$1"
@@ -56,8 +64,8 @@ ensure_upgrade_guard_units() {
   fi
 
   local guard_service="${service}-upgrade-guard"
-  local guard_service_file="/etc/systemd/system/${guard_service}.service"
-  local guard_timer_file="/etc/systemd/system/${guard_service}.timer"
+  local guard_service_file="${SYSTEMD_DIR}/${guard_service}.service"
+  local guard_timer_file="${SYSTEMD_DIR}/${guard_service}.timer"
 
   if [ ${#SUDO_CMD[@]} -gt 0 ]; then
     "${SUDO_CMD[@]}" bash -c "cat > '$guard_service_file' <<SERVICEEOF
@@ -881,7 +889,7 @@ FAILOVER_CREATED=1 ./env-refresh.sh $ENV_ARGS
 # Migrate existing systemd unit to dedicated Celery services if needed
 if [ -f "$LOCK_DIR/service.lck" ]; then
   SERVICE_NAME="$(cat "$LOCK_DIR/service.lck")"
-  SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
+  SERVICE_FILE="${SYSTEMD_DIR}/${SERVICE_NAME}.service"
   if [ -f "$SERVICE_FILE" ] && grep -Fq "celery -A" "$SERVICE_FILE"; then
     echo "Migrating service configuration for Celery..."
     MODE="internal"
@@ -911,8 +919,8 @@ SERVICEEOF
     touch "$LOCK_DIR/celery.lck"
     CELERY_SERVICE="celery-$SERVICE_NAME"
     CELERY_BEAT_SERVICE="celery-beat-$SERVICE_NAME"
-    CELERY_SERVICE_FILE="/etc/systemd/system/${CELERY_SERVICE}.service"
-    CELERY_BEAT_SERVICE_FILE="/etc/systemd/system/${CELERY_BEAT_SERVICE}.service"
+    CELERY_SERVICE_FILE="${SYSTEMD_DIR}/${CELERY_SERVICE}.service"
+    CELERY_BEAT_SERVICE_FILE="${SYSTEMD_DIR}/${CELERY_BEAT_SERVICE}.service"
     sudo bash -c "cat > '$CELERY_SERVICE_FILE'" <<CELERYSERVICEEOF
 [Unit]
 Description=Celery Worker for $SERVICE_NAME
