@@ -6,6 +6,10 @@
       "is_deleted": false,
       "name": "GatewaySim Connector 1",
       "cp_path": "GATEWAY-12910",
+      "cp_model": [
+        "SimVendor",
+        "Simulator"
+      ],
       "host": "192.168.129.10",
       "ws_port": 8000,
       "serial_number": "GATEWAY-12910",

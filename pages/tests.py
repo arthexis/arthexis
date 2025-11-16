@@ -92,7 +92,7 @@ from core.models import (
     Todo,
     TOTPDeviceSettings,
 )
-from ocpp.models import Charger, ChargerConfiguration, CPFirmware
+from ocpp.models import CPModel, Charger, ChargerConfiguration, CPFirmware
 from django.utils import timezone
 from django.core.files.uploadedfile import SimpleUploadedFile
 import base64
@@ -1205,6 +1205,22 @@ class AdminDashboardAppListTests(TestCase):
         self.assertContains(
             resp, "Missing EVCS heartbeat within the last hour for EVCS-LATE."
         )
+
+    def test_dashboard_ignores_simulator_cp_for_rules(self):
+        simulator_model, _ = CPModel.objects.get_or_create(
+            vendor="SimVendor",
+            model="Simulator",
+            defaults={"is_simulator": True},
+        )
+        if not simulator_model.is_simulator:
+            simulator_model.is_simulator = True
+            simulator_model.save(update_fields=["is_simulator"])
+        Charger.objects.create(charger_id="SIM-CP", cp_model=simulator_model)
+
+        resp = self.client.get(reverse("admin:index"))
+
+        self.assertContains(resp, "model-rule-status--success")
+        self.assertNotContains(resp, "SIM-CP")
 
 
 class AdminModelRuleTemplateTagTests(TestCase):

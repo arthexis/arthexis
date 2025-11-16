@@ -752,6 +752,8 @@ def test_simulator_as_config_defaults(simulator: Simulator):
     assert isinstance(config, SimulatorConfig)
     assert config.username is None
     assert config.password is None
+    assert config.cp_vendor == "SimVendor"
+    assert config.cp_model == "Simulator"
     assert config.configuration_keys == []
     assert config.configuration_unknown_keys == []
 

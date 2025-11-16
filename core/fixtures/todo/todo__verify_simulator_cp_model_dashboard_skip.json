@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Confirm simulator CP models are skipped in dashboard checks",
+      "created_on": "2025-01-01T00:00:00Z",
+      "url": "/admin/",
+      "request_details": "1. Load the Django admin dashboard.\n2. Ensure at least one Simulator record uses the 'Simulator' CP Model.\n3. Verify the Charge Point row shows green 'All rules met.' status and does not list simulator identifiers even if they have missing heartbeats, firmware, or configuration.\n4. Remove or reset any temporary simulator data after validation.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]

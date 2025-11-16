@@ -39,6 +39,7 @@ from .models import (
     Brand,
     Charger,
     ChargerConfiguration,
+    CPModel,
     ConfigurationKey,
     ElectricVehicle,
     Simulator,
@@ -1513,6 +1514,13 @@ class EVModelAdmin(EntityModelAdmin):
     brand_wmi_codes.short_description = "WMI codes"
 
 
+@admin.register(CPModel)
+class CPModelAdmin(EntityModelAdmin):
+    list_display = ("vendor", "model", "is_simulator")
+    list_filter = ("is_simulator",)
+    search_fields = ("vendor", "model")
+
+
 @admin.register(Charger)
 class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
     _REMOTE_DATETIME_FIELDS = {
@@ -1529,6 +1537,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
                 "fields": (
                     "charger_id",
                     "display_name",
+                    "cp_model",
                     "connector_id",
                     "language",
                     "location",
@@ -3153,6 +3162,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         simulator = Simulator.objects.create(
             name=name,
             cp_path=cp_path,
+            cp_model=charger.cp_model,
             serial_number=charger.charger_id,
             connector_id=connector_id,
             configuration_keys=configuration_keys,
@@ -3386,6 +3396,7 @@ class SimulatorAdmin(SaveBeforeChangeAction, LogViewAdminMixin, EntityModelAdmin
                 "fields": (
                     "name",
                     "cp_path",
+                    "cp_model",
                     ("host", "ws_port"),
                     "rfid",
                     ("duration", "interval", "pre_charge_delay"),

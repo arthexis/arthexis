@@ -177,6 +177,8 @@ async def simulate_cp(
     rfid: str,
     vin: str,
     cp_path: str,
+    cp_vendor: str,
+    cp_model: str,
     serial_number: str,
     connector_id: int,
     duration: int,
@@ -325,17 +327,17 @@ async def simulate_cp(
                     stop_event.set()
 
             await _send(
-                [
-                    2,
-                    "boot",
-                    "BootNotification",
-                    {
-                        "chargePointModel": "Simulator",
-                        "chargePointVendor": "SimVendor",
-                        "serialNumber": serial_number,
-                    },
-                ]
-            )
+                    [
+                        2,
+                        "boot",
+                        "BootNotification",
+                        {
+                            "chargePointModel": cp_model,
+                            "chargePointVendor": cp_vendor,
+                            "serialNumber": serial_number,
+                        },
+                    ]
+                )
             state.last_message = "BootNotification"
             await _recv()
             await _send([2, "auth", "Authorize", {"idTag": rfid}])
@@ -550,6 +552,8 @@ def simulate(
     ws_port: Optional[int] = 8000,
     rfid: str = "FFFFFFFF",
     cp_path: str = "CPX",
+    cp_vendor: str = "SimVendor",
+    cp_model: str = "Simulator",
     vin: str = "",
     serial_number: str = "",
     connector_id: int = 1,
@@ -584,6 +588,8 @@ def simulate(
         "ws_port": ws_port,
         "rfid": rfid,
         "cp_path": cp_path,
+        "cp_vendor": cp_vendor,
+        "cp_model": cp_model,
         "vin": vin,
         "serial_number": serial_number,
         "connector_id": connector_id,
@@ -615,6 +621,8 @@ def simulate(
                 rfid,
                 vin,
                 this_cp_path,
+                cp_vendor,
+                cp_model,
                 serial_number,
                 connector_id,
                 duration,
@@ -638,6 +646,8 @@ def simulate(
                     rfid,
                     vin,
                     this_cp_path,
+                    cp_vendor,
+                    cp_model,
                     serial_number,
                     connector_id,
                     duration,

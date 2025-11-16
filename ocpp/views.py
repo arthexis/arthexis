@@ -1979,6 +1979,10 @@ def dispatch_action(request, cid, connector=None):
             action="GetConfiguration",
             log_key=log_key,
             message=timeout_message,
+        )
+        store.register_pending_call(
+            message_id,
+            {
                 "action": "ReserveNow",
                 "charger_id": cid,
                 "connector_id": connector_value,

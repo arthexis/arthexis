@@ -6,6 +6,10 @@
       "is_deleted": false,
       "name": "ArthexisSim Connector 1",
       "cp_path": "ARTHEXIS-0004",
+      "cp_model": [
+        "SimVendor",
+        "Simulator"
+      ],
       "host": "arthexis.com",
       "ws_port": null,
       "serial_number": "ARTHEXIS-0004",

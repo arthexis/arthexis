@@ -40,6 +40,7 @@ from .models import (
     CPFirmware,
     CPFirmwareDeployment,
     CPFirmwareRequest,
+    CPModel,
     RFIDSessionAttempt,
     SecurityEvent,
     ChargerLogRequest,
@@ -643,6 +644,41 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         )
         self.store_key = new_key
         self.connector_value = connector_value
+
+    async def _update_cp_model(self, payload: dict | None) -> None:
+        """Associate the charger with the reported CP model."""
+
+        if not isinstance(payload, dict):
+            return
+
+        vendor = (payload.get("chargePointVendor") or "").strip()
+        model_name = (payload.get("chargePointModel") or "").strip()
+        if not vendor or not model_name:
+            return
+
+        def _resolve_cp_model() -> CPModel:
+            existing = CPModel.objects.filter(
+                vendor__iexact=vendor, model__iexact=model_name
+            ).first()
+            if existing:
+                return existing
+            return CPModel.objects.create(vendor=vendor, model=model_name)
+
+        cp_model = await database_sync_to_async(_resolve_cp_model)()
+
+        def _assign_cp_model() -> None:
+            chargers = list(Charger.objects.filter(charger_id=self.charger_id))
+            charger_ids = [charger.pk for charger in chargers if charger.pk]
+            if charger_ids:
+                Charger.objects.filter(pk__in=charger_ids).update(cp_model=cp_model)
+            for charger in chargers:
+                charger.cp_model = cp_model
+            if self.charger and self.charger not in chargers:
+                self.charger.cp_model = cp_model
+            if self.aggregate_charger and self.aggregate_charger not in chargers:
+                self.aggregate_charger.cp_model = cp_model
+
+        await database_sync_to_async(_assign_cp_model)()
 
     async def _ensure_forwarding_context(
         self, charger,
@@ -2491,6 +2527,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             await self._assign_connector(payload.get("connectorId"))
             await self._forward_charge_point_message(action, raw)
             if action == "BootNotification":
+                await self._update_cp_model(payload)
                 reply_payload = {
                     "currentTime": datetime.utcnow().isoformat() + "Z",
                     "interval": 300,

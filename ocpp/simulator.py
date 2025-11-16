@@ -29,6 +29,8 @@ class SimulatorConfig:
     vin: str = ""
     # WebSocket path for the charge point. Defaults to just the charger ID at the root.
     cp_path: str = "CPX/"
+    cp_vendor: str = "SimVendor"
+    cp_model: str = "Simulator"
     duration: int = 600
     kw_min: float = 30.0
     kw_max: float = 60.0
@@ -215,8 +217,8 @@ class ChargePointSimulator:
                 await _send_follow_up(
                     "BootNotification",
                     {
-                        "chargePointVendor": "SimVendor",
-                        "chargePointModel": "Simulator",
+                        "chargePointVendor": cfg.cp_vendor,
+                        "chargePointModel": cfg.cp_model,
                         "serialNumber": cfg.serial_number,
                     },
                 )
@@ -491,8 +493,8 @@ class ChargePointSimulator:
                     "boot",
                     "BootNotification",
                     {
-                        "chargePointModel": "Simulator",
-                        "chargePointVendor": "SimVendor",
+                        "chargePointModel": cfg.cp_model,
+                        "chargePointVendor": cfg.cp_vendor,
                         "serialNumber": cfg.serial_number,
                     },
                 ]

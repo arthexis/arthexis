@@ -71,6 +71,7 @@ from .models import (
     Charger,
     ChargerConfiguration,
     ConfigurationKey,
+    CPModel,
     Simulator,
     MeterReading,
     MeterValue,
@@ -1626,6 +1627,27 @@ class CSMSConsumerTests(TransactionTestCase):
         self.assertEqual(charger.availability_state, "Inoperative")
         self.assertEqual(charger.availability_request_status, "Accepted")
         self.assertEqual(charger.availability_requested_state, "Inoperative")
+        await communicator.disconnect()
+
+    async def test_boot_notification_sets_cp_model(self):
+        communicator = WebsocketCommunicator(application, "/MODELCP/")
+        connected, _ = await communicator.connect()
+        self.assertTrue(connected)
+
+        payload = {"chargePointVendor": "Acme", "chargePointModel": "Turbo"}
+
+        await communicator.send_json_to([2, "boot", "BootNotification", payload])
+        await communicator.receive_json_from()
+
+        cp_model = await database_sync_to_async(CPModel.objects.get)(
+            vendor="Acme", model="Turbo"
+        )
+        charger = await database_sync_to_async(Charger.objects.get)(
+            charger_id="MODELCP", connector_id=None
+        )
+
+        self.assertEqual(charger.cp_model_id, cp_model.pk)
+
         await communicator.disconnect()
 
     async def test_clear_cache_result_updates_local_auth_version(self):

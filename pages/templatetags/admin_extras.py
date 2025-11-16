@@ -54,6 +54,7 @@ def _rule_failure(message: str) -> dict[str, object]:
 def _evaluate_cp_configuration_rules() -> dict[str, object] | None:
     chargers = list(
         Charger.objects.filter(connector_id__isnull=True)
+        .exclude(cp_model__is_simulator=True)
         .order_by("charger_id")
         .values_list("charger_id", flat=True)
     )
@@ -81,6 +82,7 @@ def _evaluate_cp_configuration_rules() -> dict[str, object] | None:
 def _evaluate_cp_firmware_rules() -> dict[str, object] | None:
     chargers = list(
         Charger.objects.filter(connector_id__isnull=True)
+        .exclude(cp_model__is_simulator=True)
         .order_by("charger_id")
         .values_list("charger_id", flat=True)
     )
@@ -111,6 +113,7 @@ def _evaluate_evcs_heartbeat_rules() -> dict[str, object] | None:
     cutoff = timezone.now() - timedelta(hours=1)
     chargers = list(
         Charger.objects.filter(connector_id__isnull=True)
+        .exclude(cp_model__is_simulator=True)
         .order_by("charger_id")
         .values_list("charger_id", "last_heartbeat")
     )
@@ -600,7 +603,9 @@ def charger_availability_stats(context):
     if stats is None:
         cached_stats = cache.get(_CHARGER_STATS_CACHE_KEY, _CACHE_MISS)
         if cached_stats is _CACHE_MISS:
-            available = Charger.objects.filter(last_status__iexact="Available")
+            available = Charger.objects.filter(last_status__iexact="Available").exclude(
+                cp_model__is_simulator=True
+            )
             available_with_cp_number = available.filter(
                 connector_id__isnull=False
             ).count()

@@ -1,0 +1,12 @@
+[
+  {
+    "model": "ocpp.cpmodel",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "vendor": "SimVendor",
+      "model": "Simulator",
+      "is_simulator": true
+    }
+  }
+]

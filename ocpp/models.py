@@ -15,6 +15,7 @@ from django.conf import settings
 from django.contrib.sites.models import Site
 from django.db import models
 from django.db.models import DecimalField, OuterRef, Prefetch, Q, Subquery
+from django.db.models.functions import Lower
 from django.core.exceptions import ValidationError
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
@@ -46,6 +47,44 @@ def generate_log_request_id() -> int:
     return secrets.randbits(31) or 1
 
 
+class CPModelManager(EntityManager):
+    def get_by_natural_key(self, vendor: str, model: str):
+        return self.get(vendor=vendor, model=model)
+
+
+class CPModel(Entity):
+    """Charge point make/model metadata."""
+
+    objects = CPModelManager()
+
+    vendor = models.CharField(_("Vendor"), max_length=100)
+    model = models.CharField(_("Model"), max_length=100)
+    is_simulator = models.BooleanField(
+        default=False,
+        help_text=_("Mark this model as a simulator-only entry."),
+    )
+
+    class Meta:
+        verbose_name = _("CP Model")
+        verbose_name_plural = _("CP Models")
+        db_table = "ocpp_cpmodel"
+        ordering = ("vendor", "model")
+        constraints = [
+            models.UniqueConstraint(
+                Lower("vendor"), Lower("model"), name="unique_cpmodel_vendor_model"
+            )
+        ]
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        parts = [self.vendor, self.model]
+        return " ".join(part for part in parts if part)
+
+    def natural_key(self):  # pragma: no cover - serialization helper
+        return (self.vendor, self.model)
+
+    natural_key.dependencies = []
+
+
 class Charger(Entity):
     """Known charge point."""
 
@@ -67,6 +106,14 @@ class Charger(Entity):
         _("Serial Number"),
         max_length=100,
         help_text="Unique identifier reported by the charger.",
+    )
+    cp_model = models.ForeignKey(
+        "CPModel",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="chargers",
+        verbose_name=_("CP Model"),
     )
     display_name = models.CharField(
         _("Display Name"),
@@ -1354,6 +1401,14 @@ class Simulator(Entity):
     cp_path = models.CharField(
         _("Serial Number"), max_length=100, help_text=_("Charge Point WS path")
     )
+    cp_model = models.ForeignKey(
+        CPModel,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="simulators",
+        verbose_name=_("CP Model"),
+    )
     host = models.CharField(max_length=100, default="127.0.0.1")
     ws_port = models.IntegerField(
         _("WS Port"), default=8000, null=True, blank=True
@@ -1401,12 +1456,20 @@ class Simulator(Entity):
     def as_config(self):
         from .simulator import SimulatorConfig
 
+        cp_vendor = "SimVendor"
+        cp_model = "Simulator"
+        if self.cp_model:
+            cp_vendor = self.cp_model.vendor or cp_vendor
+            cp_model = self.cp_model.model or cp_model
+
         return SimulatorConfig(
             host=self.host,
             ws_port=self.ws_port,
             rfid=self.rfid,
             vin=self.vin,
             cp_path=self.cp_path,
+            cp_vendor=cp_vendor,
+            cp_model=cp_model,
             serial_number=self.serial_number,
             connector_id=self.connector_id,
             duration=self.duration,
