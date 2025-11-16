@@ -4210,6 +4210,7 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
     change_actions = ["publish_release_action", "test_pypi_connection_action"]
     changelist_actions = ["refresh_from_pypi", "prepare_next_release"]
     readonly_fields = ("pypi_url", "github_url", "release_on", "is_current", "revision")
+    search_fields = ("version", "package__name")
     fields = (
         "package",
         "release_manager",
