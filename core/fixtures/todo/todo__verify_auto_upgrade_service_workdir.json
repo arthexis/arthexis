@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Confirm auto-upgrade service points to deployment directory",
+      "created_on": "2025-11-15T00:00:00Z",
+      "url": "",
+      "request_details": "1. On a node with systemd-managed auto-upgrade (e.g., service name from `cat locks/service.lck`), ensure `${SERVICE}-auto-upgrade.service` exists under the systemd directory.\n2. Run `./upgrade.sh` from the deployment root to apply the service migration.\n3. Open `${SYSTEMD_DIR:-/etc/systemd/system}/${SERVICE}-auto-upgrade.service` and confirm the WorkingDirectory now matches the deployment root path.\n4. Restart the unit with `sudo systemctl restart ${SERVICE}-auto-upgrade` and verify `systemctl status` reports it active without CHDIR errors in the journal.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]
