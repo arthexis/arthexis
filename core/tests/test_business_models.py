@@ -74,6 +74,20 @@ class CountdownTimerManagerTests(TestCase):
         upcoming = list(CountdownTimer.objects.upcoming())
         self.assertEqual(upcoming, [published])
 
+    def test_visible_includes_completed(self):
+        past_time = timezone.now() - timedelta(hours=1)
+        timer = CountdownTimer.objects.create(
+            title="Launch Party",
+            scheduled_for=timezone.now() + timedelta(hours=1),
+            is_published=True,
+        )
+        CountdownTimer.objects.filter(pk=timer.pk).update(
+            scheduled_for=past_time
+        )
+
+        visible = list(CountdownTimer.objects.visible())
+        self.assertEqual(visible, [CountdownTimer.objects.get(pk=timer.pk)])
+
     def test_rejects_unpublished_article_link(self):
         article = DeveloperArticle.objects.create(
             title="Sneak Peek",
@@ -89,3 +103,19 @@ class CountdownTimerManagerTests(TestCase):
                 article=article,
                 is_published=True,
             )
+
+    def test_soft_delete_allows_past_schedules(self):
+        timer = CountdownTimer.objects.create(
+            title="Seeded",
+            scheduled_for=timezone.now() + timedelta(hours=2),
+            is_published=True,
+            is_seed_data=True,
+        )
+        CountdownTimer.objects.filter(pk=timer.pk).update(
+            scheduled_for=timezone.now() - timedelta(hours=2)
+        )
+
+        timer.delete()
+
+        deleted = CountdownTimer.all_objects.get(pk=timer.pk)
+        self.assertTrue(deleted.is_deleted)

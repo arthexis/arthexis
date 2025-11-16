@@ -4867,6 +4867,11 @@ class CountdownTimerManager(EntityManager):
 
         return super().get_queryset().filter(is_published=True)
 
+    def visible(self):
+        """Return published timers sorted by most recent schedule."""
+
+        return self.published().order_by("-scheduled_for", "pk")
+
     def upcoming(self):
         """Return timers scheduled for the future ordered by start time."""
 
@@ -4913,14 +4918,30 @@ class CountdownTimer(Entity):
         super().clean()
         if self.scheduled_for is None:
             return
+        original_scheduled_for = None
+        if self.pk:
+            try:
+                original_scheduled_for = (
+                    type(self)
+                    .all_objects.only("scheduled_for")
+                    .get(pk=self.pk)
+                    .scheduled_for
+                )
+            except type(self).DoesNotExist:
+                original_scheduled_for = None
+
         if self.scheduled_for <= timezone.now():
-            raise ValidationError(
-                {
-                    "scheduled_for": _(
-                        "Countdown timers must target a future date and time."
-                    )
-                }
-            )
+            if original_scheduled_for is None or (
+                original_scheduled_for is not None
+                and self.scheduled_for != original_scheduled_for
+            ):
+                raise ValidationError(
+                    {
+                        "scheduled_for": _(
+                            "Countdown timers must target a future date and time."
+                        )
+                    }
+                )
         if self.article and not self.article.is_published:
             raise ValidationError(
                 {
@@ -4937,7 +4958,12 @@ class CountdownTimer(Entity):
         return self.scheduled_for >= timezone.now()
 
     def save(self, *args, **kwargs):
-        self.full_clean()
+        update_fields = kwargs.get("update_fields")
+        should_validate = update_fields is None or bool(
+            set(update_fields or []) - {"is_deleted"}
+        )
+        if should_validate:
+            self.full_clean()
         super().save(*args, **kwargs)
         self._sync_package_release()
 
