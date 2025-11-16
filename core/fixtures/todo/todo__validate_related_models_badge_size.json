@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Validate compact related models badges",
+      "created_on": "2025-06-05T00:00:00Z",
+      "url": "/admin/core/customeraccount/",
+      "request_details": "1. Open the Customer Accounts admin changelist and scroll to the Related Models section.\n2. Confirm the relationship badges (1:1, N:1, N:N) render with the compact sizing while remaining legible.\n3. Open a Customer Account change form and verify the Related Models section uses the same compact badges.\n4. Check hover and focus states to ensure the smaller badges do not clip text or misalign with their labels.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]
