@@ -663,13 +663,12 @@ class OdooProfile(Profile):
     def _display_identifier(self) -> str:
         """Return the display label for this profile."""
 
+        if self.name:
+            return self.name
         username = self._resolved_field_value("username")
-        database = self._resolved_field_value("database")
-        if username and database:
-            return f"{username}@{database}"
         if username:
             return username
-        return database or ""
+        return self._resolved_field_value("database")
 
     def _profile_name(self) -> str:
         """Return the stored name for this profile without database suffix."""

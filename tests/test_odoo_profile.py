@@ -166,4 +166,4 @@ def test_profile_string_resolves_sigil_values(monkeypatch):
     )
     profile.refresh_from_db()
     assert profile.name == "resolved-user"
-    assert str(profile) == "resolved-user@resolved-db"
+    assert str(profile) == "resolved-user"
