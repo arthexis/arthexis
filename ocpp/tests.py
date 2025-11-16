@@ -6389,12 +6389,15 @@ class DispatchActionViewTests(TestCase):
     def _wait_success(self, message_id, timeout=5.0):  # noqa: D401 - helper for patch
         metadata = store.pending_calls.pop(message_id, None)
         metadata_copy = dict(metadata or {})
+        status_value = "Accepted"
+        if metadata_copy.get("action") == "UnlockConnector":
+            status_value = "Unlocked"
         self.last_metadata = metadata_copy
         store._pending_call_events.pop(message_id, None)
         store._pending_call_results.pop(message_id, None)
         return {
             "success": True,
-            "payload": {"status": "Accepted"},
+            "payload": {"status": status_value},
             "metadata": metadata_copy,
         }
 
@@ -6698,9 +6701,163 @@ class DispatchActionViewTests(TestCase):
         self.assertEqual(frame[3]["key"], "HeartbeatInterval")
         self.assertEqual(frame[3]["value"], "120")
         self.mock_schedule.assert_called_once()
+
+    def test_get_configuration_dispatches_frame_and_metadata(self):
+        self.mock_schedule.reset_mock()
+        keys = ["ClockAlignedDataInterval", "MeterValueSampleInterval"]
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"action": "get_configuration", "key": keys}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.loop.run_until_complete(asyncio.sleep(0))
+        self.assertEqual(len(self.ws.sent), 1)
+        frame = json.loads(self.ws.sent[0])
+        self.assertEqual(frame[2], "GetConfiguration")
+        self.assertEqual(frame[3]["key"], keys)
+        self.assertEqual(self.last_metadata["action"], "GetConfiguration")
+        self.assertEqual(self.last_metadata["keys"], keys)
+        self.mock_schedule.assert_called_once()
+
+    def test_clear_charging_profile_dispatches_frame_and_metadata(self):
+        self.mock_schedule.reset_mock()
+        response = self.client.post(
+            self.url,
+            data=json.dumps(
+                {
+                    "action": "clear_charging_profile",
+                    "id": 7,
+                    "stackLevel": 3,
+                }
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.loop.run_until_complete(asyncio.sleep(0))
+        frame = json.loads(self.ws.sent[0])
+        self.assertEqual(frame[2], "ClearChargingProfile")
+        self.assertEqual(frame[3]["id"], 7)
+        self.assertEqual(frame[3]["connectorId"], 1)
+        self.assertEqual(frame[3]["stackLevel"], 3)
+        self.assertEqual(self.last_metadata.get("profile_id"), 7)
+        self.assertEqual(self.last_metadata.get("stack_level"), 3)
+        self.assertEqual(self.last_metadata.get("connector_id"), 1)
+        self.mock_schedule.assert_called_once()
+
+    def test_set_charging_profile_requires_payload(self):
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"action": "set_charging_profile"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(self.ws.sent, [])
+
+    def test_set_charging_profile_dispatches_frame_and_metadata(self):
+        profile = {"chargingProfileId": 11, "stackLevel": 2}
+        response = self.client.post(
+            self.url,
+            data=json.dumps(
+                {
+                    "action": "set_charging_profile",
+                    "connectorId": 1,
+                    "csChargingProfiles": profile,
+                }
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.loop.run_until_complete(asyncio.sleep(0))
+        frame = json.loads(self.ws.sent[0])
+        self.assertEqual(frame[2], "SetChargingProfile")
+        self.assertEqual(frame[3]["connectorId"], 1)
+        self.assertEqual(frame[3]["csChargingProfiles"], profile)
+        self.assertEqual(self.last_metadata.get("connector_id"), 1)
+        self.assertEqual(self.last_metadata.get("profile_id"), 11)
+        self.assertEqual(self.last_metadata.get("stack_level"), 2)
+        self.mock_schedule.assert_called_once()
+
+    def test_get_composite_schedule_requires_duration(self):
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"action": "get_composite_schedule"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(self.ws.sent, [])
+
+    def test_get_composite_schedule_dispatches_frame(self):
+        response = self.client.post(
+            self.url,
+            data=json.dumps(
+                {
+                    "action": "get_composite_schedule",
+                    "duration": 900,
+                    "chargingRateUnit": "A",
+                }
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.loop.run_until_complete(asyncio.sleep(0))
+        frame = json.loads(self.ws.sent[0])
+        self.assertEqual(frame[2], "GetCompositeSchedule")
+        self.assertEqual(frame[3]["duration"], 900)
+        self.assertEqual(frame[3]["connectorId"], 1)
+        self.assertEqual(frame[3]["chargingRateUnit"], "A")
+        self.assertEqual(self.last_metadata.get("duration"), 900)
+        self.assertEqual(self.last_metadata.get("connector_id"), 1)
+        self.mock_schedule.assert_called_once()
+
+    def test_get_diagnostics_requires_location(self):
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"action": "get_diagnostics"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(self.ws.sent, [])
+
+    def test_get_diagnostics_dispatches_frame(self):
+        response = self.client.post(
+            self.url,
+            data=json.dumps(
+                {
+                    "action": "get_diagnostics",
+                    "location": "https://example.com/diags.zip",
+                    "retries": 2,
+                }
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.loop.run_until_complete(asyncio.sleep(0))
+        frame = json.loads(self.ws.sent[0])
+        self.assertEqual(frame[2], "GetDiagnostics")
+        self.assertEqual(frame[3]["location"], "https://example.com/diags.zip")
+        self.assertEqual(frame[3]["retries"], 2)
+        self.assertEqual(self.last_metadata.get("action"), "GetDiagnostics")
+        self.assertEqual(self.last_metadata.get("location"), "https://example.com/diags.zip")
+        self.mock_schedule.assert_called_once()
+
+    def test_unlock_connector_dispatches_frame_and_metadata(self):
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"action": "unlock_connector"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.loop.run_until_complete(asyncio.sleep(0))
+        frame = json.loads(self.ws.sent[0])
+        self.assertEqual(frame[2], "UnlockConnector")
+        self.assertEqual(frame[3]["connectorId"], 1)
+        self.assertEqual(self.last_metadata.get("connector_id"), 1)
+        self.assertEqual(self.last_metadata.get("action"), "UnlockConnector")
+        self.mock_schedule.assert_called_once()
         log_entries = store.logs["charger"].get(self.log_key, [])
         self.assertTrue(
-            any("Requested configuration change" in entry for entry in log_entries)
+            any("UnlockConnector" in entry for entry in log_entries)
         )
 
     def test_change_configuration_reports_rejection(self):

@@ -53,12 +53,20 @@ CALL_ACTION_LABELS = {
     "RemoteStopTransaction": _("Remote stop transaction"),
     "ChangeAvailability": _("Change availability"),
     "ChangeConfiguration": _("Change configuration"),
+    "ClearChargingProfile": _("Clear charging profile"),
     "DataTransfer": _("Data transfer"),
+    "GetCompositeSchedule": _("Get composite schedule"),
+    "GetConfiguration": _("Get configuration"),
+    "GetDiagnostics": _("Get diagnostics"),
+    "GetLocalListVersion": _("Get local list version"),
     "Reset": _("Reset"),
+    "SendLocalList": _("Send local list"),
+    "SetChargingProfile": _("Set charging profile"),
     "TriggerMessage": _("Trigger message"),
     "ReserveNow": _("Reserve connector"),
     "CancelReservation": _("Cancel reservation"),
     "ClearCache": _("Clear cache"),
+    "UnlockConnector": _("Unlock connector"),
 }
 
 CALL_EXPECTED_STATUSES: dict[str, set[str]] = {
@@ -67,11 +75,17 @@ CALL_EXPECTED_STATUSES: dict[str, set[str]] = {
     "ChangeAvailability": {"Accepted", "Scheduled"},
     "ChangeConfiguration": {"Accepted", "Rejected", "RebootRequired"},
     "DataTransfer": {"Accepted"},
+    "ClearChargingProfile": {"Accepted", "Unknown", "NotSupported"},
+    "GetCompositeSchedule": {"Accepted", "Rejected"},
+    "GetDiagnostics": {"Accepted", "Rejected"},
     "Reset": {"Accepted"},
+    "SendLocalList": {"Accepted", "Failed", "VersionMismatch"},
+    "SetChargingProfile": {"Accepted", "Rejected", "NotSupported"},
     "TriggerMessage": {"Accepted"},
     "ReserveNow": {"Accepted"},
     "CancelReservation": {"Accepted", "Rejected"},
     "ClearCache": {"Accepted", "Rejected"},
+    "UnlockConnector": {"Unlocked", "UnlockFailed", "NotSupported"},
 }
 
 
@@ -1921,7 +1935,26 @@ def dispatch_action(request, cid, connector=None):
         ocpp_action = "GetConfiguration"
         expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
         msg = json.dumps([2, message_id, "GetConfiguration", payload])
-    if action == "reserve_now":
+        async_to_sync(ws.send)(msg)
+        requested_at = timezone.now()
+        store.register_pending_call(
+            message_id,
+            {
+                "action": "GetConfiguration",
+                "charger_id": cid,
+                "connector_id": connector_value,
+                "log_key": log_key,
+                "keys": keys,
+                "requested_at": requested_at,
+            },
+        )
+        store.schedule_call_timeout(
+            message_id,
+            action="GetConfiguration",
+            log_key=log_key,
+            message="GetConfiguration request timed out",
+        )
+    elif action == "reserve_now":
         reservation_pk = data.get("reservation") or data.get("reservationId")
         if reservation_pk in (None, ""):
             return JsonResponse({"detail": "reservation required"}, status=400)
@@ -1962,23 +1995,6 @@ def dispatch_action(request, cid, connector=None):
         store.register_pending_call(
             message_id,
             {
-                "action": "GetConfiguration",
-                "charger_id": cid,
-                "connector_id": connector_value,
-                "log_key": log_key,
-                "requested_at": requested_at,
-            },
-        )
-        timeout_message = (
-            "GetConfiguration timed out: charger did not respond"
-            " (operation may not be supported)"
-        )
-        store.schedule_call_timeout(
-            message_id,
-            timeout=5.0,
-            action="GetConfiguration",
-            log_key=log_key,
-            message=timeout_message,
                 "action": "ReserveNow",
                 "charger_id": cid,
                 "connector_id": connector_value,
@@ -2140,11 +2156,6 @@ def dispatch_action(request, cid, connector=None):
         ocpp_action = "ChangeConfiguration"
         expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
         msg = json.dumps([2, message_id, "ChangeConfiguration", payload])
-    elif action == "clear_cache":
-        message_id = uuid.uuid4().hex
-        ocpp_action = "ClearCache"
-        expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
-        msg = json.dumps([2, message_id, "ClearCache", {}])
         async_to_sync(ws.send)(msg)
         requested_at = timezone.now()
         store.register_pending_call(
@@ -2175,8 +2186,235 @@ def dispatch_action(request, cid, connector=None):
             change_message = str(
                 _("Requested configuration change for %(key)s")
                 % {"key": key_value}
-        )
+            )
         store.add_log(log_key, change_message, log_type="charger")
+    elif action == "clear_charging_profile":
+        payload: dict[str, object] = {}
+        profile_id = data.get("id") or data.get("chargingProfileId")
+        connector_payload = data.get("connectorId")
+        if connector_payload in (None, "") and connector_value is not None:
+            connector_payload = connector_value
+        if profile_id not in (None, ""):
+            try:
+                payload["id"] = int(profile_id)
+            except (TypeError, ValueError):
+                payload["id"] = profile_id
+        if connector_payload not in (None, ""):
+            try:
+                payload["connectorId"] = int(connector_payload)
+            except (TypeError, ValueError):
+                payload["connectorId"] = connector_payload
+        if "connectorId" in payload:
+            connector_value = payload["connectorId"]
+            log_key = store.identity_key(cid, connector_value)
+        profile_purpose = data.get("chargingProfilePurpose") or data.get(
+            "charging_profile_purpose"
+        )
+        if isinstance(profile_purpose, str) and profile_purpose.strip():
+            payload["chargingProfilePurpose"] = profile_purpose.strip()
+        stack_level = data.get("stackLevel") or data.get("stack_level")
+        if stack_level not in (None, ""):
+            try:
+                payload["stackLevel"] = int(stack_level)
+            except (TypeError, ValueError):
+                return JsonResponse({"detail": "invalid stackLevel"}, status=400)
+        message_id = uuid.uuid4().hex
+        ocpp_action = "ClearChargingProfile"
+        expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
+        msg = json.dumps([2, message_id, "ClearChargingProfile", payload])
+        async_to_sync(ws.send)(msg)
+        requested_at = timezone.now()
+        store.register_pending_call(
+            message_id,
+            {
+                "action": "ClearChargingProfile",
+                "charger_id": cid,
+                "connector_id": payload.get("connectorId"),
+                "log_key": log_key,
+                "profile_id": payload.get("id"),
+                "stack_level": payload.get("stackLevel"),
+                "profile_purpose": payload.get("chargingProfilePurpose"),
+                "requested_at": requested_at,
+            },
+        )
+        store.schedule_call_timeout(
+            message_id,
+            action="ClearChargingProfile",
+            log_key=log_key,
+            message="ClearChargingProfile request timed out",
+        )
+    elif action == "set_charging_profile":
+        connector_payload = data.get("connectorId") or data.get("connector")
+        if connector_payload in (None, "") and connector_value is not None:
+            connector_payload = connector_value
+        if connector_payload in (None, ""):
+            return JsonResponse({"detail": "connectorId required"}, status=400)
+        try:
+            connector_id = int(connector_payload)
+        except (TypeError, ValueError):
+            connector_id = connector_payload
+        connector_value = connector_id
+        log_key = store.identity_key(cid, connector_value)
+        cs_profile = data.get("csChargingProfiles") or data.get("chargingProfile")
+        if cs_profile is None:
+            return JsonResponse({"detail": "csChargingProfiles required"}, status=400)
+        if not isinstance(cs_profile, dict):
+            return JsonResponse(
+                {"detail": "csChargingProfiles must be an object"}, status=400
+            )
+        payload = {"connectorId": connector_id, "csChargingProfiles": cs_profile}
+        message_id = uuid.uuid4().hex
+        ocpp_action = "SetChargingProfile"
+        expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
+        msg = json.dumps([2, message_id, "SetChargingProfile", payload])
+        async_to_sync(ws.send)(msg)
+        profile_id = cs_profile.get("chargingProfileId")
+        stack_level = cs_profile.get("stackLevel")
+        requested_at = timezone.now()
+        store.register_pending_call(
+            message_id,
+            {
+                "action": "SetChargingProfile",
+                "charger_id": cid,
+                "connector_id": connector_id,
+                "log_key": log_key,
+                "profile_id": profile_id,
+                "stack_level": stack_level,
+                "requested_at": requested_at,
+            },
+        )
+        store.schedule_call_timeout(
+            message_id,
+            action="SetChargingProfile",
+            log_key=log_key,
+            message="SetChargingProfile request timed out",
+        )
+    elif action == "get_composite_schedule":
+        duration_value = data.get("duration")
+        if duration_value in (None, ""):
+            return JsonResponse({"detail": "duration required"}, status=400)
+        try:
+            duration = int(duration_value)
+        except (TypeError, ValueError):
+            return JsonResponse({"detail": "invalid duration"}, status=400)
+        if duration <= 0:
+            return JsonResponse({"detail": "invalid duration"}, status=400)
+        connector_payload = data.get("connectorId") or data.get("connector")
+        if connector_payload in (None, "") and connector_value is not None:
+            connector_payload = connector_value
+        if connector_payload in (None, ""):
+            connector_payload = 0
+        try:
+            connector_id = int(connector_payload)
+        except (TypeError, ValueError):
+            return JsonResponse({"detail": "invalid connectorId"}, status=400)
+        connector_value = connector_id
+        log_key = store.identity_key(cid, connector_value)
+        payload: dict[str, object] = {"connectorId": connector_id, "duration": duration}
+        charging_rate_unit = data.get("chargingRateUnit") or data.get(
+            "charging_rate_unit"
+        )
+        if charging_rate_unit not in (None, ""):
+            payload["chargingRateUnit"] = str(charging_rate_unit)
+        message_id = uuid.uuid4().hex
+        ocpp_action = "GetCompositeSchedule"
+        expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
+        msg = json.dumps([2, message_id, "GetCompositeSchedule", payload])
+        async_to_sync(ws.send)(msg)
+        requested_at = timezone.now()
+        store.register_pending_call(
+            message_id,
+            {
+                "action": "GetCompositeSchedule",
+                "charger_id": cid,
+                "connector_id": connector_id,
+                "log_key": log_key,
+                "duration": duration,
+                "charging_rate_unit": payload.get("chargingRateUnit"),
+                "requested_at": requested_at,
+            },
+        )
+        store.schedule_call_timeout(
+            message_id,
+            action="GetCompositeSchedule",
+            log_key=log_key,
+            message="GetCompositeSchedule request timed out",
+        )
+    elif action == "get_diagnostics":
+        location = data.get("location")
+        if not isinstance(location, str) or not location.strip():
+            return JsonResponse({"detail": "location required"}, status=400)
+        payload: dict[str, object] = {"location": location.strip()}
+        retries = data.get("retries")
+        if retries not in (None, ""):
+            try:
+                payload["retries"] = int(retries)
+            except (TypeError, ValueError):
+                return JsonResponse({"detail": "invalid retries"}, status=400)
+        retry_interval = data.get("retryInterval") or data.get("retry_interval")
+        if retry_interval not in (None, ""):
+            try:
+                payload["retryInterval"] = int(retry_interval)
+            except (TypeError, ValueError):
+                return JsonResponse({"detail": "invalid retryInterval"}, status=400)
+        start_time = data.get("startTime") or data.get("start_time")
+        if start_time not in (None, ""):
+            parsed_start = parse_datetime(start_time)
+            if parsed_start is None:
+                return JsonResponse({"detail": "invalid startTime"}, status=400)
+            payload["startTime"] = parsed_start.isoformat()
+        stop_time = data.get("stopTime") or data.get("stop_time")
+        if stop_time not in (None, ""):
+            parsed_stop = parse_datetime(stop_time)
+            if parsed_stop is None:
+                return JsonResponse({"detail": "invalid stopTime"}, status=400)
+            payload["stopTime"] = parsed_stop.isoformat()
+        message_id = uuid.uuid4().hex
+        ocpp_action = "GetDiagnostics"
+        expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
+        msg = json.dumps([2, message_id, "GetDiagnostics", payload])
+        async_to_sync(ws.send)(msg)
+        requested_at = timezone.now()
+        store.register_pending_call(
+            message_id,
+            {
+                "action": "GetDiagnostics",
+                "charger_id": cid,
+                "connector_id": connector_value,
+                "log_key": log_key,
+                "location": payload.get("location"),
+                "requested_at": requested_at,
+            },
+        )
+        store.schedule_call_timeout(
+            message_id,
+            action="GetDiagnostics",
+            log_key=log_key,
+            message="GetDiagnostics request timed out",
+        )
+    elif action == "clear_cache":
+        message_id = uuid.uuid4().hex
+        ocpp_action = "ClearCache"
+        expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
+        msg = json.dumps([2, message_id, "ClearCache", {}])
+        async_to_sync(ws.send)(msg)
+        requested_at = timezone.now()
+        store.register_pending_call(
+            message_id,
+            {
+                "action": "ClearCache",
+                "charger_id": cid,
+                "connector_id": connector_value,
+                "log_key": log_key,
+                "requested_at": requested_at,
+            },
+        )
+        store.schedule_call_timeout(
+            message_id,
+            action="ClearCache",
+            log_key=log_key,
+            message="ClearCache request timed out",
+        )
     elif action == "cancel_reservation":
         reservation_pk = data.get("reservation") or data.get("reservationId")
         if reservation_pk in (None, ""):
@@ -2389,6 +2627,7 @@ def dispatch_action(request, cid, connector=None):
                 "log_key": log_key,
                 "list_version": list_version,
                 "list_size": len(entries),
+                "update_type": update_type,
                 "requested_at": requested_at,
             },
         )
@@ -2419,6 +2658,43 @@ def dispatch_action(request, cid, connector=None):
             action="GetLocalListVersion",
             log_key=log_key,
             message="GetLocalListVersion request timed out",
+        )
+    elif action == "unlock_connector":
+        connector_payload = data.get("connectorId") or data.get("connector")
+        if connector_payload in (None, ""):
+            connector_payload = connector_value
+        if connector_payload in (None, ""):
+            return JsonResponse({"detail": "connectorId required"}, status=400)
+        try:
+            connector_id = int(connector_payload)
+        except (TypeError, ValueError):
+            return JsonResponse({"detail": "connectorId must be an integer"}, status=400)
+        if connector_id <= 0:
+            return JsonResponse({"detail": "connectorId must be positive"}, status=400)
+        connector_value = connector_id
+        log_key = store.identity_key(cid, connector_value)
+        payload = {"connectorId": connector_id}
+        message_id = uuid.uuid4().hex
+        ocpp_action = "UnlockConnector"
+        expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
+        msg = json.dumps([2, message_id, "UnlockConnector", payload])
+        async_to_sync(ws.send)(msg)
+        requested_at = timezone.now()
+        store.register_pending_call(
+            message_id,
+            {
+                "action": "UnlockConnector",
+                "charger_id": cid,
+                "connector_id": connector_id,
+                "log_key": log_key,
+                "requested_at": requested_at,
+            },
+        )
+        store.schedule_call_timeout(
+            message_id,
+            action="UnlockConnector",
+            log_key=log_key,
+            message="UnlockConnector request timed out",
         )
     else:
         return JsonResponse({"detail": "unknown action"}, status=400)

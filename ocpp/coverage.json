@@ -18,23 +18,33 @@
       "total": 10
     },
     "csms_to_cp": {
-      "count": 8,
-      "percent": 42.11,
+      "count": 18,
+      "percent": 94.74,
       "supported": [
+        "CancelReservation",
         "ChangeAvailability",
         "ChangeConfiguration",
         "ClearCache",
+        "ClearChargingProfile",
         "DataTransfer",
+        "GetCompositeSchedule",
+        "GetConfiguration",
+        "GetDiagnostics",
+        "GetLocalListVersion",
         "RemoteStartTransaction",
         "RemoteStopTransaction",
+        "ReserveNow",
         "Reset",
-        "TriggerMessage"
+        "SendLocalList",
+        "SetChargingProfile",
+        "TriggerMessage",
+        "UnlockConnector"
       ],
       "total": 19
     },
     "overall": {
-      "count": 23,
-      "percent": 82.14,
+      "count": 28,
+      "percent": 100.0,
       "supported": [
         "Authorize",
         "BootNotification",
@@ -42,10 +52,13 @@
         "ChangeAvailability",
         "ChangeConfiguration",
         "ClearCache",
+        "ClearChargingProfile",
         "DataTransfer",
         "DiagnosticsStatusNotification",
         "FirmwareStatusNotification",
+        "GetCompositeSchedule",
         "GetConfiguration",
+        "GetDiagnostics",
         "GetLocalListVersion",
         "Heartbeat",
         "MeterValues",
@@ -54,10 +67,12 @@
         "ReserveNow",
         "Reset",
         "SendLocalList",
+        "SetChargingProfile",
         "StartTransaction",
         "StatusNotification",
         "StopTransaction",
         "TriggerMessage",
+        "UnlockConnector",
         "UpdateFirmware"
       ],
       "total": 28
@@ -92,14 +107,24 @@
       "UpdateFirmware"
     ],
     "csms_to_cp": [
+      "CancelReservation",
       "ChangeAvailability",
       "ChangeConfiguration",
       "ClearCache",
+      "ClearChargingProfile",
       "DataTransfer",
+      "GetCompositeSchedule",
+      "GetConfiguration",
+      "GetDiagnostics",
+      "GetLocalListVersion",
       "RemoteStartTransaction",
       "RemoteStopTransaction",
+      "ReserveNow",
       "Reset",
-      "TriggerMessage"
+      "SendLocalList",
+      "SetChargingProfile",
+      "TriggerMessage",
+      "UnlockConnector"
     ]
   },
   "spec": {
