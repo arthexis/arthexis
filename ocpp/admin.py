@@ -38,6 +38,7 @@ from requests import RequestException
 from .models import (
     Brand,
     Charger,
+    ChargingProfile,
     ChargerConfiguration,
     ConfigurationKey,
     ElectricVehicle,
@@ -1296,6 +1297,78 @@ class CPFirmwareDeploymentAdmin(EntityModelAdmin):
         "created_at",
         "updated_at",
     )
+
+
+@admin.register(ChargingProfile)
+class ChargingProfileAdmin(EntityModelAdmin):
+    list_display = (
+        "charger",
+        "connector_id",
+        "charging_profile_id",
+        "purpose",
+        "kind",
+        "stack_level",
+        "last_status",
+        "updated_at",
+    )
+    list_filter = ("purpose", "kind", "recurrency_kind", "last_status")
+    search_fields = ("charger__charger_id", "description")
+    ordering = (
+        "charger__charger_id",
+        "connector_id",
+        "-stack_level",
+        "charging_profile_id",
+    )
+    autocomplete_fields = ("charger",)
+    readonly_fields = (
+        "last_response_payload",
+        "last_response_at",
+        "created_at",
+        "updated_at",
+    )
+    fieldsets = (
+        (None, {"fields": ("charger", "connector_id", "description")}),
+        (
+            _("Profile"),
+            {
+                "fields": (
+                    "charging_profile_id",
+                    "stack_level",
+                    "purpose",
+                    "kind",
+                    "recurrency_kind",
+                    "transaction_id",
+                    "valid_from",
+                    "valid_to",
+                )
+            },
+        ),
+        (
+            _("Schedule"),
+            {
+                "fields": (
+                    "start_schedule",
+                    "duration_seconds",
+                    "charging_rate_unit",
+                    "min_charging_rate",
+                    "charging_schedule_periods",
+                )
+            },
+        ),
+        (
+            _("EVCS response"),
+            {
+                "fields": (
+                    "last_status",
+                    "last_status_info",
+                    "last_response_payload",
+                    "last_response_at",
+                )
+            },
+        ),
+        (_("Tracking"), {"fields": ("created_at", "updated_at")}),
+    )
+
 
 @admin.register(CPReservation)
 class CPReservationAdmin(EntityModelAdmin):
