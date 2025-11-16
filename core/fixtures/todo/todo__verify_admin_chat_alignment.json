@@ -1,0 +1,15 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "is_seed_data": false,
+      "is_deleted": false,
+      "request": "Verify admin chat placement mirrors public site",
+      "created_on": "2025-01-01T00:00:00Z",
+      "url": "/admin/",
+      "request_details": "1. Sign into the admin dashboard and confirm the chat launcher now sits on the bottom-left of the viewport like the public site, using the same green circular button and unread badge styling.\n2. Open the admin chat drawer and verify the header gradient, message bubble colors, and send button match the public chat theme while the overlay anchors to the left.\n3. With a public session open in another browser, start a chat and confirm the admin side connects immediately, shows presence notices, and exchanges messages without needing to reposition or refresh either widget.",
+      "generated_for_version": "",
+      "generated_for_revision": ""
+    }
+  }
+]
