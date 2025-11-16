@@ -572,7 +572,14 @@ def update_all_nodes_information() -> dict:
         "results": [],
     }
 
-    local_node = Node.get_local()
+    try:
+        local_node, _ = Node.register_current(notify_peers=False)
+    except Exception as exc:  # pragma: no cover - unexpected registration failure
+        logger.exception("Skipping hourly node refresh; failed to refresh local node")
+        summary["skipped"] = True
+        summary["reason"] = f"Local node registration failed: {exc}"
+        return summary
+
     if local_node is None:
         logger.info("Skipping hourly node refresh; local node not registered")
         summary["skipped"] = True

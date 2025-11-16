@@ -2121,11 +2121,15 @@ class NodeRegisterCurrentTests(TestCase):
             {"ok": True, "message": "remote updated"},
         ]
 
-        with patch("nodes.tasks.Node.get_local", return_value=local), patch(
+        with patch(
+            "nodes.tasks.Node.register_current",
+            return_value=(local, False),
+        ) as register_current, patch(
             "nodes.tasks._resolve_node_admin", return_value=admin_stub
         ):
             summary = update_all_nodes_information()
 
+        register_current.assert_called_once_with(notify_peers=False)
         self.assertEqual(admin_stub._refresh_local_information.call_count, 2)
         self.assertEqual(admin_stub._push_remote_information.call_count, 2)
         self.assertEqual(summary["total"], 2)
@@ -2145,9 +2149,9 @@ class NodeRegisterCurrentTests(TestCase):
             mac_address=Node.get_current_mac(),
         )
 
-        with patch("nodes.tasks.Node.get_local", return_value=local), patch(
-            "nodes.tasks._resolve_node_admin"
-        ) as resolve_admin:
+        with patch(
+            "nodes.tasks.Node.register_current", return_value=(local, False)
+        ), patch("nodes.tasks._resolve_node_admin") as resolve_admin:
             summary = update_all_nodes_information()
 
         resolve_admin.assert_not_called()
@@ -2157,16 +2161,16 @@ class NodeRegisterCurrentTests(TestCase):
             summary["reason"], "Local node missing celery-queue feature"
         )
 
-    def test_update_all_nodes_information_skips_without_local_node(self):
-        with patch("nodes.tasks.Node.get_local", return_value=None), patch(
-            "nodes.tasks._resolve_node_admin"
-        ) as resolve_admin:
+    def test_update_all_nodes_information_skips_when_local_registration_fails(self):
+        with patch(
+            "nodes.tasks.Node.register_current", side_effect=RuntimeError("boom")
+        ), patch("nodes.tasks._resolve_node_admin") as resolve_admin:
             summary = update_all_nodes_information()
 
         resolve_admin.assert_not_called()
         self.assertTrue(summary.get("skipped"))
         self.assertEqual(summary["total"], 0)
-        self.assertEqual(summary["reason"], "Local node not registered")
+        self.assertIn("Local node registration failed", summary["reason"])
 
     def test_ocpp_session_report_task_syncs_with_feature(self):
         feature, _ = NodeFeature.objects.get_or_create(
