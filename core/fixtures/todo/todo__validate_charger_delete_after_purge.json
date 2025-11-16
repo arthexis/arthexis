@@ -1,0 +1,13 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Delete chargers succeeds after cached data purge",
+      "created_on": "2025-03-01T00:00:00Z",
+      "url": "/admin/ocpp/charger/",
+      "request_details": "1. Create a charger with cached store data but no transactions by visiting the OCPP Charge Points admin and adding a new entry.\n2. Use the Purge data admin action to remove any stored history for the new charger.\n3. Delete the charger and confirm the change list does not show the 'Purge charger data before deleting this charger' message.\n4. Refresh the list and verify the charger record is removed.",
+      "version": "0.1.33",
+      "is_deleted": false
+    }
+  }
+]

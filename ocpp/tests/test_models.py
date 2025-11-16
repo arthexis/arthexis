@@ -292,6 +292,59 @@ class ChargerPurgeTests(TestCase):
 
         self.assertFalse(Charger.objects.filter(pk=charger.pk).exists())
 
+    def test_delete_purges_store_caches_when_no_db_data_remains(self):
+        charger = Charger.objects.create(charger_id="SERIAL-2", connector_id=1)
+
+        serial = charger.charger_id
+        connector_key = store.identity_key(serial, charger.connector_id)
+        aggregate_key = store.identity_key(serial, None)
+        pending_key = store.pending_key(serial)
+        base_key = serial
+
+        fake_logs = {
+            "charger": {
+                connector_key: deque(["connector log"]),
+                aggregate_key: deque(["aggregate log"]),
+                pending_key: deque(["pending log"]),
+                base_key: deque(["base log"]),
+            },
+            "simulator": {},
+        }
+        fake_transactions = {
+            connector_key: object(),
+            aggregate_key: object(),
+            pending_key: object(),
+            base_key: object(),
+        }
+        fake_history = {
+            connector_key: {"value": 1},
+            aggregate_key: {"value": 2},
+            pending_key: {"value": 3},
+            base_key: {"value": 4},
+        }
+        fake_log_names = {
+            "charger": {
+                connector_key: "SERIAL-2-1",
+                aggregate_key: "SERIAL-2",
+            },
+            "simulator": {},
+        }
+
+        with patch.multiple(
+            store,
+            logs=fake_logs,
+            transactions=fake_transactions,
+            history=fake_history,
+            log_names=fake_log_names,
+        ):
+            charger.delete()
+
+            self.assertEqual(fake_logs["charger"], {})
+            self.assertEqual(fake_transactions, {})
+            self.assertEqual(fake_history, {})
+
+        self.assertFalse(Charger.objects.filter(pk=charger.pk).exists())
+
 
 class ChargerManagerNodeTests(TestCase):
     def test_manager_node_refreshed_using_local_lookup(self):
