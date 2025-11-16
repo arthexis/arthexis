@@ -46,7 +46,9 @@ Most flags only tweak configuration files and lock states; they do not persist s
 
 ### 1.2 Role presets
 
-Role flags set opinionated defaults and verify external dependencies before proceeding.
+Role flags set opinionated defaults and verify external dependencies before proceeding. Control and Satellite builds must also
+run on Ubuntu 22.04 or later with an `eth0` interface present before you install or rerun `switch-role.sh` to change into one
+of those roles.
 
 - **`--satellite`** – Requires nginx and Redis to be installed and running. Enables auto-upgrades, internal nginx, Celery, and marks the node as `Satellite`. Redis connection details are written to `redis.env`.【F:install.sh†L116-L146】【F:install.sh†L149-L156】
 - **`--terminal`** – The lightest profile. Leaves auto-upgrades off, keeps nginx internal, targets the latest package set, and enables Celery for background tasks.【F:install.sh†L212-L219】
