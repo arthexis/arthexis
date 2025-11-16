@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import deque
 from contextlib import closing
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone as datetime_timezone
 from functools import lru_cache
 from pathlib import Path
 import json
@@ -534,7 +534,7 @@ def _suite_uptime() -> str:
     if not boot_timestamp:
         return ""
 
-    boot_time = datetime.fromtimestamp(boot_timestamp, tz=timezone.utc)
+    boot_time = datetime.fromtimestamp(boot_timestamp, tz=datetime_timezone.utc)
     now = timezone.now()
     if boot_time > now:
         return ""
