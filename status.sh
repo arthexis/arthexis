@@ -66,6 +66,12 @@ echo "Short Revision: $SHORT_REVISION"
 SERVICE=""
 if [ -f "$LOCK_DIR/service.lck" ]; then
   SERVICE="$(cat "$LOCK_DIR/service.lck")"
+  if [ -n "$SERVICE" ] && ! printf '%s' "$SERVICE" | grep -Eq '^[A-Za-z0-9_.]+$'; then
+    echo "Invalid service name detected: $SERVICE"
+    echo "Service names may only contain letters, numbers, underscores, and dots."
+    echo "Refusing to continue to avoid creating or managing unsafe systemd units."
+    exit 1
+  fi
   echo "Service: $SERVICE"
 else
   echo "Service: not installed"
@@ -106,7 +112,7 @@ UPGRADE_GUARD_DEADLINE=""
 if [ -n "$SERVICE" ] && command -v systemctl >/dev/null 2>&1; then
   GUARD_TIMER="${SERVICE}-upgrade-guard.timer"
   if systemctl list-unit-files | grep -Fq -- "$GUARD_TIMER"; then
-    GUARD_INFO=$(systemctl show "$GUARD_TIMER" --property=ActiveState --property=NextElapseUSecRealtime 2>/dev/null || true)
+    GUARD_INFO=$(systemctl show --property=ActiveState --property=NextElapseUSecRealtime -- "$GUARD_TIMER" 2>/dev/null || true)
     GUARD_STATE=$(printf '%s\n' "$GUARD_INFO" | awk -F= '/^ActiveState=/{print $2}')
     GUARD_DEADLINE=$(printf '%s\n' "$GUARD_INFO" | awk -F= '/^NextElapseUSecRealtime=/{print $2}')
     case "$GUARD_STATE" in
@@ -128,7 +134,7 @@ fi
 echo "Checking running status..."
 RUNNING=false
 if [ -n "$SERVICE" ] && command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files | grep -Fq -- "${SERVICE}.service"; then
-  STATUS=$(systemctl is-active "$SERVICE" || true)
+  STATUS=$(systemctl is-active -- "$SERVICE" || true)
   echo "  Service status: $STATUS"
   [ "$STATUS" = "active" ] && RUNNING=true
 else
@@ -152,8 +158,8 @@ fi
 # Celery status
 if [ "$CELERY_FEATURE" = true ]; then
   if [ -n "$SERVICE" ] && command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files | grep -Fq -- "celery-$SERVICE.service"; then
-    C_STATUS=$(systemctl is-active "celery-$SERVICE" || true)
-    B_STATUS=$(systemctl is-active "celery-beat-$SERVICE" || true)
+    C_STATUS=$(systemctl is-active -- "celery-$SERVICE" || true)
+    B_STATUS=$(systemctl is-active -- "celery-beat-$SERVICE" || true)
     echo "  Celery worker status: $C_STATUS"
     echo "  Celery beat status: $B_STATUS"
   else
@@ -167,7 +173,7 @@ fi
 
 if [ "$LCD_FEATURE" = true ]; then
   if [ -n "$SERVICE" ] && command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files | grep -Fq -- "lcd-$SERVICE.service"; then
-    LCD_STATUS=$(systemctl is-active "lcd-$SERVICE" || true)
+    LCD_STATUS=$(systemctl is-active -- "lcd-$SERVICE" || true)
     echo "  LCD screen service status: $LCD_STATUS"
   fi
 fi
