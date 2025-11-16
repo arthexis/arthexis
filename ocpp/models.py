@@ -969,6 +969,355 @@ class ChargerConfiguration(models.Model):
                 self._prefetched_objects_cache.pop("configuration_entries", None)
 
 
+class ChargingProfile(Entity):
+    """Charging profiles dispatched through SetChargingProfile."""
+
+    class Purpose(models.TextChoices):
+        CHARGE_POINT_MAX_PROFILE = "ChargePointMaxProfile", _(
+            "Charge Point Max Profile"
+        )
+        TX_DEFAULT_PROFILE = "TxDefaultProfile", _("Transaction Default Profile")
+        TX_PROFILE = "TxProfile", _("Transaction Profile")
+
+    class Kind(models.TextChoices):
+        ABSOLUTE = "Absolute", _("Absolute")
+        RECURRING = "Recurring", _("Recurring")
+        RELATIVE = "Relative", _("Relative")
+
+    class RecurrencyKind(models.TextChoices):
+        DAILY = "Daily", _("Daily")
+        WEEKLY = "Weekly", _("Weekly")
+
+    class RateUnit(models.TextChoices):
+        AMP = "A", _("Amperes")
+        WATT = "W", _("Watts")
+
+    charger = models.ForeignKey(
+        Charger,
+        on_delete=models.CASCADE,
+        related_name="charging_profiles",
+        verbose_name=_("Charger"),
+    )
+    connector_id = models.PositiveIntegerField(
+        default=0,
+        verbose_name=_("Connector ID"),
+        help_text=_(
+            "Connector targeted by this profile (0 sends the profile to the EVCS)."
+        ),
+    )
+    charging_profile_id = models.PositiveIntegerField(
+        verbose_name=_("Charging Profile ID"),
+        help_text=_("Identifier sent as chargingProfileId in OCPP payloads."),
+    )
+    stack_level = models.PositiveIntegerField(
+        default=0,
+        verbose_name=_("Stack Level"),
+        help_text=_("Priority applied when multiple profiles overlap."),
+    )
+    purpose = models.CharField(
+        max_length=32,
+        choices=Purpose.choices,
+        verbose_name=_("Purpose"),
+    )
+    kind = models.CharField(
+        max_length=16,
+        choices=Kind.choices,
+        verbose_name=_("Profile Kind"),
+    )
+    recurrency_kind = models.CharField(
+        max_length=16,
+        choices=RecurrencyKind.choices,
+        blank=True,
+        default="",
+        verbose_name=_("Recurrency Kind"),
+    )
+    transaction_id = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        verbose_name=_("Transaction ID"),
+        help_text=_("Required when Purpose is TxProfile."),
+    )
+    valid_from = models.DateTimeField(null=True, blank=True)
+    valid_to = models.DateTimeField(null=True, blank=True)
+    start_schedule = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=_("Optional schedule start time; defaults to immediate execution."),
+    )
+    duration_seconds = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        verbose_name=_("Duration (seconds)"),
+    )
+    charging_rate_unit = models.CharField(
+        max_length=2,
+        choices=RateUnit.choices,
+        verbose_name=_("Charging Rate Unit"),
+    )
+    charging_schedule_periods = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=_(
+            "List of schedule periods including start_period, limit, "
+            "number_phases, and phase_to_use values."
+        ),
+    )
+    min_charging_rate = models.DecimalField(
+        max_digits=10,
+        decimal_places=3,
+        null=True,
+        blank=True,
+        verbose_name=_("Minimum Charging Rate"),
+    )
+    description = models.CharField(max_length=255, blank=True, default="")
+    last_status = models.CharField(max_length=32, blank=True, default="")
+    last_status_info = models.CharField(max_length=255, blank=True, default="")
+    last_response_payload = models.JSONField(default=dict, blank=True)
+    last_response_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = [
+            "charger__charger_id",
+            "connector_id",
+            "-stack_level",
+            "charging_profile_id",
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["charger", "connector_id", "charging_profile_id"],
+                name="unique_charging_profile_per_connector",
+            )
+        ]
+        verbose_name = _("Charging Profile")
+        verbose_name_plural = _("Charging Profiles")
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        connector = self.connector_id or 0
+        return f"{self.charger} | {connector} | {self.charging_profile_id}"
+
+    @staticmethod
+    def _coerce_decimal(value: object) -> Decimal | None:
+        try:
+            return Decimal(str(value))
+        except (InvalidOperation, TypeError, ValueError):
+            return None
+
+    def _normalize_schedule_periods(self) -> tuple[list[dict[str, object]], list[str]]:
+        normalized: list[dict[str, object]] = []
+        errors: list[str] = []
+        raw_periods = self.charging_schedule_periods or []
+
+        for index, period in enumerate(raw_periods, start=1):
+            if not isinstance(period, dict):
+                errors.append(
+                    _("Period %(index)s must be a mapping." % {"index": index})
+                )
+                continue
+
+            start_period = period.get("start_period", period.get("startPeriod"))
+            limit_value = period.get("limit")
+            number_phases = period.get("number_phases", period.get("numberPhases"))
+            phase_to_use = period.get("phase_to_use", period.get("phaseToUse"))
+
+            try:
+                start_int = int(start_period)
+            except (TypeError, ValueError):
+                errors.append(
+                    _(
+                        "Period %(index)s is missing a valid start_period."
+                        % {"index": index}
+                    )
+                )
+                continue
+
+            decimal_limit = self._coerce_decimal(limit_value)
+            if decimal_limit is None or decimal_limit <= 0:
+                errors.append(
+                    _(
+                        "Period %(index)s is missing a positive charging limit."
+                        % {"index": index}
+                    )
+                )
+                continue
+
+            entry: dict[str, object] = {
+                "start_period": start_int,
+                "limit": float(decimal_limit),
+            }
+
+            try:
+                if number_phases not in {None, ""}:
+                    phases_int = int(number_phases)
+                    if phases_int > 0:
+                        entry["number_phases"] = phases_int
+            except (TypeError, ValueError):
+                errors.append(
+                    _(
+                        "Period %(index)s has an invalid number_phases value."
+                        % {"index": index}
+                    )
+                )
+                continue
+
+            try:
+                if phase_to_use not in {None, ""}:
+                    phase_int = int(phase_to_use)
+                    entry["phase_to_use"] = phase_int
+            except (TypeError, ValueError):
+                errors.append(
+                    _(
+                        "Period %(index)s has an invalid phase_to_use value."
+                        % {"index": index}
+                    )
+                )
+                continue
+
+            normalized.append(entry)
+
+        normalized.sort(key=lambda entry: entry["start_period"])
+        return normalized, errors
+
+    def clean_fields(self, exclude=None):
+        exclude = exclude or []
+        normalized_periods, period_errors = self._normalize_schedule_periods()
+        self.charging_schedule_periods = normalized_periods
+
+        try:
+            super().clean_fields(exclude=exclude)
+        except ValidationError as exc:
+            errors = exc.error_dict
+        else:
+            errors: dict[str, list[str]] = {}
+
+        if period_errors:
+            errors.setdefault("charging_schedule_periods", []).extend(period_errors)
+
+        if errors:
+            raise ValidationError(errors)
+
+    def clean(self):
+        super().clean()
+
+        errors: dict[str, list[str]] = {}
+
+        if self.recurrency_kind and self.kind != self.Kind.RECURRING:
+            errors.setdefault("recurrency_kind", []).append(
+                _("Recurrency kind is only valid for recurring profiles.")
+            )
+        if self.kind == self.Kind.RECURRING and not self.recurrency_kind:
+            errors.setdefault("recurrency_kind", []).append(
+                _("Recurring profiles must define a recurrency kind.")
+            )
+        if self.purpose == self.Purpose.TX_PROFILE and not self.transaction_id:
+            errors.setdefault("transaction_id", []).append(
+                _("Transaction ID is required for TxProfile entries.")
+            )
+        if self.duration_seconds is not None and self.duration_seconds <= 0:
+            errors.setdefault("duration_seconds", []).append(
+                _("Duration must be greater than zero when provided.")
+            )
+        if self.min_charging_rate is not None and self.min_charging_rate <= 0:
+            errors.setdefault("min_charging_rate", []).append(
+                _("Minimum charging rate must be positive when provided.")
+            )
+
+        if not self.charging_schedule_periods:
+            errors.setdefault("charging_schedule_periods", []).append(
+                _("Provide at least one charging schedule period.")
+            )
+
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def _format_datetime(self, value: datetime | None) -> str | None:
+        if value is None:
+            return None
+        if timezone.is_naive(value):
+            return value.isoformat()
+        return timezone.localtime(value).isoformat()
+
+    def charging_schedule_payload(self) -> dict[str, object]:
+        schedule: dict[str, object] = {
+            "chargingRateUnit": self.charging_rate_unit,
+            "chargingSchedulePeriod": [
+                {
+                    "startPeriod": period["start_period"],
+                    "limit": period["limit"],
+                    **(
+                        {"numberPhases": period["number_phases"]}
+                        if "number_phases" in period
+                        else {}
+                    ),
+                    **(
+                        {"phaseToUse": period["phase_to_use"]}
+                        if "phase_to_use" in period
+                        else {}
+                    ),
+                }
+                for period in self.charging_schedule_periods
+            ],
+        }
+
+        if self.duration_seconds is not None:
+            schedule["duration"] = self.duration_seconds
+        if self.start_schedule:
+            schedule["startSchedule"] = self._format_datetime(self.start_schedule)
+        if self.min_charging_rate is not None:
+            schedule["minChargingRate"] = float(self.min_charging_rate)
+
+        return schedule
+
+    def as_cs_charging_profile(self) -> dict[str, object]:
+        payload: dict[str, object] = {
+            "chargingProfileId": self.charging_profile_id,
+            "stackLevel": self.stack_level,
+            "chargingProfilePurpose": self.purpose,
+            "chargingProfileKind": self.kind,
+            "chargingSchedule": self.charging_schedule_payload(),
+        }
+
+        if self.transaction_id:
+            payload["transactionId"] = self.transaction_id
+        if self.recurrency_kind:
+            payload["recurrencyKind"] = self.recurrency_kind
+        if self.valid_from:
+            payload["validFrom"] = self._format_datetime(self.valid_from)
+        if self.valid_to:
+            payload["validTo"] = self._format_datetime(self.valid_to)
+
+        return payload
+
+    def as_set_charging_profile_request(self) -> dict[str, object]:
+        return {
+            "connectorId": self.connector_id,
+            "csChargingProfiles": self.as_cs_charging_profile(),
+        }
+
+    def matches_clear_filter(
+        self,
+        *,
+        profile_id: int | None = None,
+        connector_id: int | None = None,
+        purpose: str | None = None,
+        stack_level: int | None = None,
+    ) -> bool:
+        if profile_id is not None and self.charging_profile_id != profile_id:
+            return False
+        if connector_id is not None and self.connector_id != connector_id:
+            return False
+        if purpose is not None and self.purpose != purpose:
+            return False
+        if stack_level is not None and self.stack_level != stack_level:
+            return False
+        return True
+
+
 class Transaction(Entity):
     """Charging session data stored for each charger."""
 
