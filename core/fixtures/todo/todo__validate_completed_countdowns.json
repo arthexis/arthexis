@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Validate completed countdown visibility and admin deletion",
+      "created_on": "2024-01-01T00:00:00Z",
+      "url": "/awg/future-event/",
+      "request_details": "1. Open Horologia » Countdown Timers at /admin/django_celery_beat/horologiacountdowntimer/ and create a published timer scheduled a few minutes in the future with visible text.\n2. Visit /awg/future-event/ and confirm the timer appears in the carousel.\n3. After the scheduled time passes, reload the page and verify the timer remains visible with its countdown stopped at 00 values rather than disappearing.\n4. From the Horologia admin changelist, select the timer and delete it; ensure the action completes without a server error and the timer no longer appears on /awg/future-event/.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]

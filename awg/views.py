@@ -890,7 +890,7 @@ def future_event_calculator(request):
     """Render a live countdown for the next scheduled event."""
 
     events: list[dict[str, object]] = []
-    for timer in CountdownTimer.objects.upcoming()[:3]:
+    for timer in CountdownTimer.objects.visible()[:3]:
         scheduled = timer.scheduled_for
         if timezone.is_naive(scheduled):
             scheduled = timezone.make_aware(

@@ -232,6 +232,21 @@ class FutureEventCalculatorTests(TestCase):
         self.assertNotIn(' data-event-next', html)
         self.assertNotIn(' data-event-prev', html)
 
+    def test_completed_event_remains_visible(self):
+        timer = CountdownTimer.objects.create(
+            title="Completed Event",
+            scheduled_for=timezone.now() + timedelta(hours=1),
+            is_published=True,
+        )
+        CountdownTimer.objects.filter(pk=timer.pk).update(
+            scheduled_for=timezone.now() - timedelta(minutes=30)
+        )
+
+        resp = self.client.get(self.url)
+
+        self.assertContains(resp, "Completed Event")
+        self.assertContains(resp, "data-countdown-days")
+
     def test_limits_display_to_three_events(self):
         base_time = timezone.now()
         for offset in range(4):
@@ -243,10 +258,10 @@ class FutureEventCalculatorTests(TestCase):
 
         resp = self.client.get(self.url)
         html = resp.content.decode()
-        self.assertIn("Event 1", html)
+        self.assertNotIn("Event 1", html)
         self.assertIn("Event 2", html)
         self.assertIn("Event 3", html)
-        self.assertNotIn("Event 4", html)
+        self.assertIn("Event 4", html)
         self.assertIn('data-event-next aria-label="Next event"', html)
         self.assertEqual(html.count('countdown-slide text-center'), 3)
 
