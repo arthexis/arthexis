@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone as datetime_timezone
 from pathlib import Path
+import sys
 import tempfile
 from unittest import mock
 
@@ -86,6 +88,20 @@ class UpgradeReportTests(SimpleTestCase):
         self.assertFalse(report["log_error"])
         self.assertTrue(report["settings"]["log_path"].endswith("auto-upgrade.log"))
         self.assertEqual(report["settings"]["suite_uptime"], "5 hours")
+
+    def test_suite_uptime_uses_datetime_timezone(self):
+        fake_now = datetime(2024, 1, 1, 1, tzinfo=datetime_timezone.utc)
+        boot_timestamp = fake_now.timestamp() - 3600
+
+        fake_psutil = mock.Mock()
+        fake_psutil.boot_time.return_value = boot_timestamp
+
+        with mock.patch.dict(sys.modules, {"psutil": fake_psutil}):
+            with mock.patch("core.system.timezone.now", return_value=fake_now):
+                uptime = system._suite_uptime()
+
+        self.assertEqual(uptime, "1\xa0hour")
+        fake_psutil.boot_time.assert_called_once_with()
 
     def test_load_auto_upgrade_log_entries_limits_and_orders_entries(self):
         with tempfile.TemporaryDirectory() as tmpdir:
