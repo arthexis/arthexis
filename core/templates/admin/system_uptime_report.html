@@ -12,6 +12,33 @@
 {% block extrastyle %}
 {{ block.super }}
 <style>
+  .uptime-report {
+    --uptime-window-bg: #fff;
+    --uptime-window-border: #e5e7eb;
+    --uptime-timeline-bg: #f3f4f6;
+    --uptime-summary-bg: #f9fafb;
+    --uptime-summary-border: #e5e7eb;
+    --uptime-summary-muted: #6b7280;
+    --uptime-metric-up-bg: #ecfdf3;
+    --uptime-metric-up-color: #166534;
+    --uptime-metric-down-bg: #fef2f2;
+    --uptime-metric-down-color: #b91c1c;
+  }
+
+  html[data-theme="dark"] .uptime-report,
+  body.dark-theme .uptime-report {
+    --uptime-window-bg: #0f172a;
+    --uptime-window-border: #1f2937;
+    --uptime-timeline-bg: #1f2937;
+    --uptime-summary-bg: #111827;
+    --uptime-summary-border: #1f2937;
+    --uptime-summary-muted: #9ca3af;
+    --uptime-metric-up-bg: rgba(34, 197, 94, 0.18);
+    --uptime-metric-up-color: #bbf7d0;
+    --uptime-metric-down-bg: rgba(248, 113, 113, 0.18);
+    --uptime-metric-down-color: #fecaca;
+  }
+
   .uptime-report h2 {
     margin: 0;
   }
@@ -25,11 +52,11 @@
   }
 
   .uptime-report .uptime-window {
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--uptime-window-border);
     padding: 1rem;
     border-radius: 6px;
     margin-bottom: 1rem;
-    background: #fff;
+    background: var(--uptime-window-bg);
   }
 
   .uptime-report .uptime-window h3 {
@@ -60,13 +87,13 @@
   }
 
   .uptime-report .uptime-metric.up {
-    background: #ecfdf3;
-    color: #166534;
+    background: var(--uptime-metric-up-bg);
+    color: var(--uptime-metric-up-color);
   }
 
   .uptime-report .uptime-metric.down {
-    background: #fef2f2;
-    color: #b91c1c;
+    background: var(--uptime-metric-down-bg);
+    color: var(--uptime-metric-down-color);
   }
 
   .uptime-report .uptime-timeline {
@@ -75,7 +102,7 @@
     height: 18px;
     border-radius: 6px;
     overflow: hidden;
-    background: #f3f4f6;
+    background: var(--uptime-timeline-bg);
     margin: 0.5rem 0;
   }
 
@@ -130,6 +157,35 @@
     white-space: nowrap;
     border: 0;
   }
+
+  .uptime-report .uptime-report-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .uptime-report .uptime-summary-card {
+    border: 1px solid var(--uptime-summary-border);
+    background: var(--uptime-summary-bg);
+    border-radius: 8px;
+    padding: 1rem;
+  }
+
+  .uptime-report .uptime-summary-card h3 {
+    margin: 0 0 0.35rem;
+  }
+
+  .uptime-report .uptime-summary-value {
+    font-size: 1.4rem;
+    font-weight: 600;
+    margin: 0;
+  }
+
+  .uptime-report .uptime-summary-note {
+    margin: 0.25rem 0 0.75rem;
+    color: var(--uptime-summary-muted);
+  }
 </style>
 {% endblock %}
 
@@ -139,8 +195,36 @@
     <div class="uptime-report-header">
       <h2>{% trans "Uptime Report" %}</h2>
       <p class="help">
-        {% trans "Visualize when this node has been online or offline using recent shutdown history." %}
+        {% trans "Visualize node uptime using shutdown history and review how long the suite has been running." %}
       </p>
+    </div>
+
+    <div class="uptime-report-summary">
+      <section class="uptime-summary-card">
+        <h3>{% trans "Node uptime data" %}</h3>
+        <p class="uptime-summary-value">{{ uptime_report.generated_at|date:"Y-m-d H:i" }}</p>
+        <p class="uptime-summary-note">{% trans "Report generated" %}</p>
+        <p class="help">
+          {% trans "Node uptime percentages come from shutdown events captured on this host." %}
+        </p>
+      </section>
+
+      <section class="uptime-summary-card">
+        <h3>{% trans "Suite uptime" %}</h3>
+        {% if uptime_report.suite.available %}
+          <p class="uptime-summary-value">{{ uptime_report.suite.uptime }}</p>
+          {% if uptime_report.suite.boot_time_label %}
+            <p class="uptime-summary-note">
+              {% blocktrans with boot_time=uptime_report.suite.boot_time_label %}Booted {{ boot_time }}{% endblocktrans %}
+            </p>
+          {% endif %}
+        {% else %}
+          <p class="help">{% trans "Suite uptime data is not available on this node." %}</p>
+        {% endif %}
+        <p class="help">
+          {% trans "Reflects how long the Arthexis suite has been running since the last boot." %}
+        </p>
+      </section>
     </div>
 
     {% if uptime_report.error %}

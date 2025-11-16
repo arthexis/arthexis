@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate Uptime Report suite summary and dark theme",
+      "created_on": "2025-03-01T00:00:00Z",
+      "url": "/admin/system/uptime-report/",
+      "request_details": "1. Sign in to the Django admin as a release manager and browse to System → Uptime Report.\n2. Confirm the new summary cards show the report generation timestamp and the Suite uptime panel with the uptime string and boot timestamp.\n3. Switch the admin interface to the dark theme (use the user-menu theme toggle or append `?_theme=dark` to the URL) and verify the summary cards, timelines, and uptime badges adopt the dark palette with readable text.\n4. Compare the suite uptime text against the output of `python manage.py shell -c \"import core.system as s; print(s._suite_uptime())\"` to confirm both sources match.\n5. Refresh the page after restarting the suite or host and confirm that both node and suite uptime data update without layout issues.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]

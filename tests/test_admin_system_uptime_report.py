@@ -41,9 +41,13 @@ class AdminSystemUptimeReportTests(TestCase):
         self.client.force_login(self.superuser)
         response = self.client.get(reverse("admin:system-uptime-report"))
 
+        context = getattr(response, "context_data", None)
+        if context is None:
+            context = response.context
+        self.assertIsNotNone(context)
+        report = context["uptime_report"]
         self.assertContains(response, "Uptime Report")
         self.assertContains(response, "Last 24 hours")
-        report = response.context["uptime_report"]
         window = report["windows"][0]
         self.assertEqual(window["uptime_percent"], 95.8)
         self.assertEqual(window["downtime_percent"], 4.2)
@@ -62,3 +66,23 @@ class AdminSystemUptimeReportTests(TestCase):
             response,
             "The `last` command is not available on this node.",
         )
+
+    @mock.patch(
+        "core.system._suite_uptime_details",
+        return_value={
+            "uptime": "5 days",
+            "boot_time_label": "2024-07-11 08:00",
+            "available": True,
+        },
+    )
+    @mock.patch("core.system._load_shutdown_periods", return_value=([], None))
+    @mock.patch("core.system.timezone.now")
+    def test_displays_suite_uptime_summary(self, mock_now, mock_load_shutdowns, mock_suite_details):
+        mock_now.return_value = datetime(2024, 7, 16, 12, 0, tzinfo=datetime_timezone.utc)
+
+        self.client.force_login(self.superuser)
+        response = self.client.get(reverse("admin:system-uptime-report"))
+
+        self.assertContains(response, "Suite uptime")
+        self.assertContains(response, "5 days")
+        self.assertContains(response, "2024-07-11 08:00")

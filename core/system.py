@@ -518,28 +518,40 @@ def _load_auto_upgrade_schedule() -> dict[str, object]:
     return info
 
 
-def _suite_uptime() -> str:
-    """Return a human-readable uptime for the running suite when possible."""
+def _suite_uptime_details() -> dict[str, object]:
+    """Return structured uptime information for the running suite if possible."""
 
     try:
         import psutil
     except Exception:
-        return ""
+        return {}
 
     try:
         boot_timestamp = float(psutil.boot_time())
     except Exception:
-        return ""
+        return {}
 
     if not boot_timestamp:
-        return ""
+        return {}
 
     boot_time = datetime.fromtimestamp(boot_timestamp, tz=datetime_timezone.utc)
     now = timezone.now()
     if boot_time > now:
-        return ""
+        return {}
 
-    return timesince(boot_time, now)
+    uptime_label = timesince(boot_time, now)
+    return {
+        "uptime": uptime_label,
+        "boot_time": boot_time,
+        "boot_time_label": _format_datetime(boot_time),
+        "available": True,
+    }
+
+
+def _suite_uptime() -> str:
+    """Return a human-readable uptime for the running suite when possible."""
+
+    return str(_suite_uptime_details().get("uptime", ""))
 
 
 _DAY_NAMES = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"}
@@ -777,10 +789,19 @@ def _build_uptime_report(*, now: datetime | None = None) -> dict[str, object]:
             }
         )
 
+    suite_details = _suite_uptime_details()
+    suite_info = {
+        "uptime": suite_details.get("uptime", ""),
+        "boot_time": suite_details.get("boot_time"),
+        "boot_time_label": suite_details.get("boot_time_label", ""),
+        "available": bool(suite_details.get("available") or suite_details.get("uptime")),
+    }
+
     return {
         "generated_at": current_time,
         "windows": report_windows,
         "error": error,
+        "suite": suite_info,
     }
 
 
