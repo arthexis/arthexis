@@ -184,6 +184,33 @@ stop_upgrade_guard_timer() {
   UPGRADE_GUARD_SERVICE=""
 }
 
+ensure_prestart_env_refresh() {
+  local service="$1"
+
+  if [ -z "$service" ]; then
+    return 0
+  fi
+
+  local service_file="${SYSTEMD_DIR}/${service}.service"
+  local refresh_line="ExecStartPre=${BASE_DIR}/scripts/prestart-refresh.sh"
+
+  if [ ! -f "$service_file" ] || grep -Fq "$refresh_line" "$service_file"; then
+    return 0
+  fi
+
+  if [ ${#SUDO_CMD[@]} -gt 0 ]; then
+    "${SUDO_CMD[@]}" sed -i "/^ExecStart=/i ${refresh_line}" "$service_file"
+  else
+    sed -i "/^ExecStart=/i ${refresh_line}" "$service_file"
+  fi
+
+  if [ ${#SYSTEMCTL_CMD[@]} -gt 0 ]; then
+    "${SYSTEMCTL_CMD[@]}" daemon-reload >/dev/null 2>&1 || true
+  fi
+
+  echo "Ensured ${service}.service refreshes the environment before starting."
+}
+
 determine_node_role() {
   if [ -n "${NODE_ROLE:-}" ]; then
     echo "$NODE_ROLE"
@@ -883,6 +910,17 @@ if [[ $LATEST -eq 1 ]]; then
 fi
 echo "Refreshing environment..."
 FAILOVER_CREATED=1 ./env-refresh.sh $ENV_ARGS
+
+if [ -n "$SERVICE_NAME" ]; then
+  ensure_prestart_env_refresh "$SERVICE_NAME"
+  if [ -f "$LOCK_DIR/celery.lck" ]; then
+    ensure_prestart_env_refresh "celery-$SERVICE_NAME"
+    ensure_prestart_env_refresh "celery-beat-$SERVICE_NAME"
+  fi
+  if [ -f "$LOCK_DIR/lcd_screen.lck" ]; then
+    ensure_prestart_env_refresh "lcd-$SERVICE_NAME"
+  fi
+fi
 
 # Reload personal user data fixtures
 
