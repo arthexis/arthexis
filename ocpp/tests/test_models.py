@@ -292,6 +292,79 @@ class ChargerPurgeTests(TestCase):
 
         self.assertFalse(Charger.objects.filter(pk=charger.pk).exists())
 
+    def test_delete_checks_db_data_before_purging_cached_connectors(self):
+        connector = Charger.objects.create(charger_id="SERIAL-3", connector_id=1)
+        aggregate = Charger.objects.create(
+            charger_id=connector.charger_id, connector_id=None
+        )
+
+        transaction = connector.transactions.create(
+            start_time=timezone.now(),
+            stop_time=timezone.now(),
+            meter_start=1,
+            meter_stop=2,
+        )
+        connector.meter_values.create(
+            transaction=transaction,
+            timestamp=timezone.now(),
+            energy=Decimal("2.5"),
+        )
+
+        serial = connector.charger_id
+        connector_key = store.identity_key(serial, connector.connector_id)
+        aggregate_key = store.identity_key(serial, None)
+        pending_key = store.pending_key(serial)
+        base_key = serial
+
+        fake_logs = {
+            "charger": {
+                aggregate_key: deque(["aggregate log"]),
+                connector_key: deque(["connector log"]),
+                pending_key: deque(["pending log"]),
+                base_key: deque(["base log"]),
+            },
+            "simulator": {},
+        }
+        fake_transactions = {
+            aggregate_key: object(),
+            connector_key: object(),
+            pending_key: object(),
+            base_key: object(),
+        }
+        fake_history = {
+            aggregate_key: {"value": 1},
+            connector_key: {"value": 2},
+            pending_key: {"value": 3},
+            base_key: {"value": 4},
+        }
+        fake_log_names = {
+            "charger": {
+                aggregate_key: "SERIAL-3",
+                connector_key: "SERIAL-3-1",
+            },
+            "simulator": {},
+        }
+
+        with patch.multiple(
+            store,
+            logs=fake_logs,
+            transactions=fake_transactions,
+            history=fake_history,
+            log_names=fake_log_names,
+        ):
+            with self.assertRaises(ProtectedError):
+                aggregate.delete()
+
+            self.assertTrue(connector.transactions.exists())
+            self.assertIn(aggregate_key, fake_logs["charger"])
+            self.assertIn(connector_key, fake_logs["charger"])
+            self.assertIn(aggregate_key, fake_transactions)
+            self.assertIn(connector_key, fake_transactions)
+            self.assertIn(aggregate_key, fake_history)
+            self.assertIn(connector_key, fake_history)
+
+        self.assertTrue(Charger.objects.filter(pk=aggregate.pk).exists())
+
     def test_delete_purges_store_caches_when_no_db_data_remains(self):
         charger = Charger.objects.create(charger_id="SERIAL-2", connector_id=1)
 

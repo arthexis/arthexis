@@ -816,8 +816,16 @@ class Charger(Entity):
         from django.db.models.deletion import ProtectedError
         from . import store
 
-        for charger in self._target_chargers():
-            has_db_data = charger.transactions.exists() or charger.meter_values.exists()
+        target_chargers = list(self._target_chargers())
+
+        has_db_data = any(
+            charger.transactions.exists() or charger.meter_values.exists()
+            for charger in target_chargers
+        )
+        if has_db_data:
+            raise ProtectedError("Purge data before deleting charger.", [])
+
+        for charger in target_chargers:
             has_store_data = (
                 any(
                     store.get_logs(key, log_type="charger")
@@ -826,8 +834,6 @@ class Charger(Entity):
                 or any(store.transactions.get(key) for key in charger._store_keys())
                 or any(store.history.get(key) for key in charger._store_keys())
             )
-            if has_db_data:
-                raise ProtectedError("Purge data before deleting charger.", [])
 
             if has_store_data:
                 charger.purge()
