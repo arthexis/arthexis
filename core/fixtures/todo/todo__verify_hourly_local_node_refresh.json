@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Verify hourly node refresh updates local host",
+      "created_on": "2025-12-15T00:00:00Z",
+      "url": "/admin/nodes/node/",
+      "request_details": "1. Open the Django admin (Nodes → Nodes) on the Watchtower instance and locate the local node record (mac address matching the host). Temporarily change its hostname to a placeholder and save.\n2. From the same host, run `python manage.py shell -c \"from nodes.tasks import update_all_nodes_information; import json; print(json.dumps(update_all_nodes_information(), indent=2))\"` to trigger the hourly refresh task manually.\n3. Confirm the command output lists the local node with a `success` status and no skipped reason.\n4. Reload the local node in the admin and verify its hostname and other metadata (address, port, installed version) have been restored to the current host values, confirming the local entry was refreshed as part of the hourly update.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]
