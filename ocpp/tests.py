@@ -69,6 +69,7 @@ from config.asgi import application
 from .models import (
     Transaction,
     Charger,
+    ChargingProfile,
     ChargerConfiguration,
     ConfigurationKey,
     Simulator,
@@ -81,6 +82,7 @@ from .models import (
     CPFirmwareRequest,
     SecurityEvent,
     ChargerLogRequest,
+    PowerProjection,
 )
 from .admin import (
     ChargerAdmin,
@@ -115,6 +117,8 @@ from .tasks import (
     send_daily_session_report,
     check_charge_point_configuration,
     schedule_daily_charge_point_configuration_checks,
+    request_power_projection,
+    schedule_power_projection_requests,
     request_charge_point_log,
     schedule_connected_log_requests,
     request_charge_point_firmware,
@@ -4715,6 +4719,152 @@ class LogRequestTaskTests(TestCase):
             store.pop_connection(active.charger_id, active.connector_id)
         self.assertEqual(scheduled, 1)
         mock_delay.assert_called_once_with(active.pk, log_type="Diagnostics")
+
+
+class PowerProjectionTaskTests(TestCase):
+    def tearDown(self):
+        store.pending_calls.clear()
+
+    def test_request_power_projection_dispatches_message(self):
+        charger = Charger.objects.create(charger_id="PWRPROJ")
+        ws = DummyWebSocket()
+        log_key = store.identity_key(charger.charger_id, charger.connector_id)
+        pending_key = store.pending_key(charger.charger_id)
+        store.clear_log(log_key, log_type="charger")
+        store.clear_log(pending_key, log_type="charger")
+        store.set_connection(charger.charger_id, charger.connector_id, ws)
+        projection = None
+        try:
+            projection_pk = request_power_projection.run(charger.pk)
+            self.assertTrue(projection_pk)
+            projection = PowerProjection.objects.get(pk=projection_pk)
+            self.assertEqual(projection.connector_id, 0)
+            self.assertEqual(projection.duration_seconds, 3600)
+            self.assertTrue(ws.sent)
+            frame = json.loads(ws.sent[0])
+            self.assertEqual(frame[0], 2)
+            self.assertEqual(frame[2], "GetCompositeSchedule")
+            metadata = store.pending_calls.get(frame[1])
+            self.assertIsNotNone(metadata)
+            self.assertEqual(metadata.get("projection_pk"), projection.pk)
+        finally:
+            store.pop_connection(charger.charger_id, charger.connector_id)
+            store.pending_calls.clear()
+            store.clear_log(log_key, log_type="charger")
+            store.clear_log(pending_key, log_type="charger")
+            if projection:
+                projection.delete()
+
+    def test_schedule_power_projection_targets_root_chargers(self):
+        eligible = Charger.objects.create(charger_id="PWRROOT")
+        Charger.objects.create(charger_id="PWRCHILD", connector_id=1)
+        with patch("ocpp.tasks.request_power_projection.delay") as mock_delay:
+            scheduled = schedule_power_projection_requests.run()
+        self.assertEqual(scheduled, 1)
+        mock_delay.assert_called_once_with(
+            eligible.pk,
+            duration_seconds=3600,
+            charging_rate_unit=ChargingProfile.RateUnit.WATT,
+        )
+
+
+class PowerProjectionConsumerTests(TransactionTestCase):
+    def tearDown(self):
+        store.pending_calls.clear()
+
+    def test_call_result_updates_power_projection(self):
+        charger = Charger.objects.create(charger_id="PWRRST")
+        projection = PowerProjection.objects.create(
+            charger=charger,
+            connector_id=0,
+            duration_seconds=900,
+            charging_rate_unit=ChargingProfile.RateUnit.AMP,
+        )
+        log_key = store.identity_key(charger.charger_id, projection.connector_id)
+        message_id = "projection-result"
+        store.register_pending_call(
+            message_id,
+            {
+                "action": "GetCompositeSchedule",
+                "charger_id": charger.charger_id,
+                "connector_id": projection.connector_id,
+                "log_key": log_key,
+                "projection_pk": projection.pk,
+            },
+        )
+
+        consumer = CSMSConsumer()
+        consumer.scope = {"headers": [], "client": ("127.0.0.1", 1234)}
+        consumer.charger_id = charger.charger_id
+        consumer.store_key = log_key
+        consumer.connector_value = projection.connector_id
+        consumer.charger = charger
+        consumer.aggregate_charger = charger
+        consumer._consumption_task = None
+        consumer._consumption_message_uuid = None
+        consumer.send = AsyncMock()
+
+        schedule_start = timezone.now()
+        payload = {
+            "status": "Accepted",
+            "scheduleStart": schedule_start.isoformat(),
+            "chargingSchedule": {
+                "duration": 1800,
+                "chargingRateUnit": "W",
+                "chargingSchedulePeriod": [
+                    {"startPeriod": 0, "limit": 16},
+                    {"startPeriod": 900, "limit": 32, "numberPhases": 3},
+                ],
+            },
+        }
+
+        async_to_sync(consumer._handle_call_result)(message_id, payload)
+
+        projection.refresh_from_db()
+        self.assertEqual(projection.status, "Accepted")
+        self.assertEqual(projection.duration_seconds, 1800)
+        self.assertEqual(projection.charging_rate_unit, "W")
+        self.assertEqual(len(projection.charging_schedule_periods), 2)
+        self.assertIsNotNone(projection.received_at)
+        self.assertEqual(projection.raw_response.get("status"), "Accepted")
+        self.assertIsNotNone(projection.schedule_start)
+
+    def test_call_error_records_status(self):
+        charger = Charger.objects.create(charger_id="PWRERR")
+        projection = PowerProjection.objects.create(charger=charger, connector_id=0)
+        log_key = store.identity_key(charger.charger_id, projection.connector_id)
+        message_id = "projection-error"
+        store.register_pending_call(
+            message_id,
+            {
+                "action": "GetCompositeSchedule",
+                "charger_id": charger.charger_id,
+                "connector_id": projection.connector_id,
+                "log_key": log_key,
+                "projection_pk": projection.pk,
+            },
+        )
+
+        consumer = CSMSConsumer()
+        consumer.scope = {"headers": [], "client": ("127.0.0.1", 1234)}
+        consumer.charger_id = charger.charger_id
+        consumer.store_key = log_key
+        consumer.connector_value = projection.connector_id
+        consumer.charger = charger
+        consumer.aggregate_charger = charger
+        consumer._consumption_task = None
+        consumer._consumption_message_uuid = None
+        consumer.send = AsyncMock()
+
+        async_to_sync(consumer._handle_call_error)(
+            message_id, "InternalError", "Not supported", {"info": True}
+        )
+
+        projection.refresh_from_db()
+        self.assertEqual(projection.status, "InternalError")
+        self.assertEqual(projection.charging_schedule_periods, [])
+        self.assertIsNotNone(projection.received_at)
+        self.assertEqual(projection.raw_response.get("errorCode"), "InternalError")
 
 
 class LocationAdminTests(TestCase):
