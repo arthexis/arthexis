@@ -132,6 +132,7 @@ Terminal-Knoten können direkt mit den untenstehenden Skripten ohne Installation
 - Durchstöbere die [admindocs](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/) unter [`http://localhost:8888/admindocs/`](http://localhost:8888/admindocs/), um automatisch generierte API-Dokumentation deiner Modelle zu lesen.
 - Folge dem [Installations- und Administrationshandbuch](docs/cookbooks/install-start-stop-upgrade-uninstall.md) für Deployment, Lifecycle-Aufgaben und operative Runbooks.
 - Nimm Ladepunkte mit dem [EVCS-Konnektivitäts- und Wartungs-Cookbook](docs/cookbooks/evcs-connectivity-maintenance.md) in Betrieb und halte sie instand.
+- Konfiguriere Zahlungs-Gateways mit dem [Payment Processors Cookbook](docs/cookbooks/payment-processors.md).
 - Nutze das [Sigil-Cookbook](docs/cookbooks/sigils.md), wenn du tokenbasierte Einstellungen über Umgebungen hinweg konfigurierst.
 - Verwalte Exporte, Importe und Prüfprotokolle mit dem [User-Data-Cookbook](docs/cookbooks/user-data.md).
 - Plane Feature-Rollouts mit dem [Node-Features-Cookbook](docs/cookbooks/node-features.md).

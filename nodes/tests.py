@@ -2958,7 +2958,7 @@ class NodeAdminTests(TestCase):
             slug="rpi-camera", defaults={"display": "Raspberry Pi Camera"}
         )
         NodeFeatureAssignment.objects.get_or_create(node=node, feature=feature)
-        camera_dir = settings.LOG_DIR / "camera"
+        camera_dir = Path(settings.BASE_DIR) / "work" / "camera"
         camera_dir.mkdir(parents=True, exist_ok=True)
         file_path = camera_dir / "snap.jpg"
         file_path.write_bytes(b"camera")

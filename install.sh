@@ -11,6 +11,8 @@ PIP_INSTALL_HELPER="$SCRIPT_DIR/scripts/helpers/pip_install.py"
 . "$SCRIPT_DIR/scripts/helpers/version_marker.sh"
 # shellcheck source=scripts/helpers/ports.sh
 . "$SCRIPT_DIR/scripts/helpers/ports.sh"
+# shellcheck source=scripts/helpers/systemd_locks.sh
+. "$SCRIPT_DIR/scripts/helpers/systemd_locks.sh"
 arthexis_resolve_log_dir "$SCRIPT_DIR" LOG_DIR || exit 1
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 exec > >(tee "$LOG_FILE") 2>&1
@@ -330,6 +332,7 @@ if [ -f "$DB_FILE" ]; then
 fi
 LOCK_DIR="$BASE_DIR/locks"
 mkdir -p "$LOCK_DIR"
+SYSTEMD_UNITS_LOCK="$LOCK_DIR/systemd_services.lck"
 
 if [ "$ENABLE_CONTROL" = true ]; then
     check_nginx_and_redis "$NODE_ROLE"
@@ -476,6 +479,9 @@ Unit=${GUARD_SERVICE}.service
 [Install]
 WantedBy=timers.target
 GUARDTIMEREOF
+    arthexis_record_systemd_unit "$LOCK_DIR" "${SERVICE}.service"
+    arthexis_record_systemd_unit "$LOCK_DIR" "${GUARD_SERVICE}.service"
+    arthexis_record_systemd_unit "$LOCK_DIR" "${GUARD_SERVICE}.timer"
     if [ "$ENABLE_CELERY" = true ]; then
         CELERY_SERVICE="celery-$SERVICE"
         CELERY_SERVICE_FILE="/etc/systemd/system/${CELERY_SERVICE}.service"
@@ -497,6 +503,7 @@ User=$(id -un)
 [Install]
 WantedBy=multi-user.target
 CELERYSERVICEEOF
+        arthexis_record_systemd_unit "$LOCK_DIR" "${CELERY_SERVICE}.service"
         CELERY_BEAT_SERVICE="celery-beat-$SERVICE"
         CELERY_BEAT_SERVICE_FILE="/etc/systemd/system/${CELERY_BEAT_SERVICE}.service"
         sudo bash -c "cat > '$CELERY_BEAT_SERVICE_FILE'" <<BEATSERVICEEOF
@@ -517,6 +524,7 @@ User=$(id -un)
 [Install]
 WantedBy=multi-user.target
 BEATSERVICEEOF
+        arthexis_record_systemd_unit "$LOCK_DIR" "${CELERY_BEAT_SERVICE}.service"
     fi
     sudo systemctl daemon-reload
     sudo systemctl enable "$SERVICE"
@@ -545,6 +553,7 @@ WantedBy=multi-user.target
 SERVICEEOF
     sudo systemctl daemon-reload
     sudo systemctl enable "$LCD_SERVICE"
+    arthexis_record_systemd_unit "$LOCK_DIR" "${LCD_SERVICE}.service"
 elif [ "$DISABLE_LCD_SCREEN" = true ]; then
     if [ -z "$SERVICE" ] && [ -f "$LOCK_DIR/service.lck" ]; then
         SERVICE="$(cat "$LOCK_DIR/service.lck")"
@@ -560,6 +569,7 @@ elif [ "$DISABLE_LCD_SCREEN" = true ]; then
             fi
             sudo systemctl daemon-reload
         fi
+        arthexis_remove_systemd_unit_record "$LOCK_DIR" "${LCD_SERVICE}.service"
     fi
 fi
 

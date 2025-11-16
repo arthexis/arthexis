@@ -4,6 +4,8 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=scripts/helpers/logging.sh
 . "$SCRIPT_DIR/scripts/helpers/logging.sh"
+# shellcheck source=scripts/helpers/systemd_locks.sh
+. "$SCRIPT_DIR/scripts/helpers/systemd_locks.sh"
 arthexis_resolve_log_dir "$SCRIPT_DIR" LOG_DIR || exit 1
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 exec > >(tee "$LOG_FILE") 2>&1
@@ -14,6 +16,32 @@ NO_WARN=0
 usage() {
     echo "Usage: $0 [--service NAME] [--no-warn]" >&2
     exit 1
+}
+
+remove_systemd_unit_if_present() {
+    local unit_name="$1"
+
+    if [ -z "$unit_name" ]; then
+        return 0
+    fi
+
+    local unit_file="/etc/systemd/system/${unit_name}"
+
+    if command -v systemctl >/dev/null 2>&1; then
+        if systemctl list-unit-files | grep -Fq "$unit_name"; then
+            sudo systemctl stop "$unit_name" || true
+            sudo systemctl disable "$unit_name" || true
+        fi
+    fi
+
+    if [ -f "$unit_file" ]; then
+        sudo rm "$unit_file"
+        if command -v systemctl >/dev/null 2>&1; then
+            sudo systemctl daemon-reload
+        fi
+    fi
+
+    arthexis_remove_systemd_unit_record "$LOCK_DIR" "$unit_name"
 }
 
 confirm_database_deletion() {
@@ -63,9 +91,35 @@ done
 BASE_DIR="$SCRIPT_DIR"
 cd "$BASE_DIR"
 LOCK_DIR="$BASE_DIR/locks"
+SYSTEMD_UNITS_LOCK="$LOCK_DIR/systemd_services.lck"
+RECORDED_SYSTEMD_UNITS=()
+if [ -f "$SYSTEMD_UNITS_LOCK" ]; then
+    mapfile -t RECORDED_SYSTEMD_UNITS < "$SYSTEMD_UNITS_LOCK"
+fi
 
 if [ -z "$SERVICE" ] && [ -f "$LOCK_DIR/service.lck" ]; then
     SERVICE="$(cat "$LOCK_DIR/service.lck")"
+fi
+if [ -z "$SERVICE" ] && [ ${#RECORDED_SYSTEMD_UNITS[@]} -gt 0 ]; then
+    for unit in "${RECORDED_SYSTEMD_UNITS[@]}"; do
+        case "$unit" in
+            *-upgrade-guard.service|*-upgrade-guard.timer|celery-*.service|celery-beat-*.service|lcd-*.service)
+                continue
+                ;;
+        esac
+        if [[ "$unit" == *.service ]]; then
+            SERVICE="${unit%.service}"
+            break
+        fi
+    done
+    if [ -z "$SERVICE" ]; then
+        for unit in "${RECORDED_SYSTEMD_UNITS[@]}"; do
+            if [[ "$unit" == *.service ]]; then
+                SERVICE="${unit%.service}"
+                break
+            fi
+        done
+    fi
 fi
 
 read -r -p "This will stop the Arthexis server. Continue? [y/N] " CONFIRM
@@ -79,50 +133,54 @@ if ! confirm_database_deletion "Uninstalling Arthexis"; then
     exit 0
 fi
 
-if [ -n "$SERVICE" ] && systemctl list-unit-files | grep -Fq "${SERVICE}.service"; then
-    sudo systemctl stop "$SERVICE" || true
-    sudo systemctl disable "$SERVICE" || true
-    SERVICE_FILE="/etc/systemd/system/${SERVICE}.service"
-    if [ -f "$SERVICE_FILE" ]; then
-        sudo rm "$SERVICE_FILE"
-        sudo systemctl daemon-reload
-    fi
-    if [ -f "$LOCK_DIR/lcd_screen.lck" ]; then
-        LCD_SERVICE="lcd-$SERVICE"
-        if systemctl list-unit-files | grep -Fq "${LCD_SERVICE}.service"; then
-            sudo systemctl stop "$LCD_SERVICE" || true
-            sudo systemctl disable "$LCD_SERVICE" || true
-            LCD_SERVICE_FILE="/etc/systemd/system/${LCD_SERVICE}.service"
-            if [ -f "$LCD_SERVICE_FILE" ]; then
-                sudo rm "$LCD_SERVICE_FILE"
-            fi
-        fi
+if [ -n "$SERVICE" ]; then
+    remove_systemd_unit_if_present "${SERVICE}.service"
+
+    GUARD_SERVICE="${SERVICE}-upgrade-guard"
+    remove_systemd_unit_if_present "${GUARD_SERVICE}.service"
+    remove_systemd_unit_if_present "${GUARD_SERVICE}.timer"
+
+    LCD_SERVICE="lcd-$SERVICE"
+    if [ -f "$LOCK_DIR/lcd_screen.lck" ] || printf '%s\n' "${RECORDED_SYSTEMD_UNITS[@]}" | grep -Fxq "${LCD_SERVICE}.service"; then
+        remove_systemd_unit_if_present "${LCD_SERVICE}.service"
         rm -f "$LOCK_DIR/lcd_screen.lck"
     fi
+
     if [ -f "$LOCK_DIR/celery.lck" ]; then
         CELERY_SERVICE="celery-$SERVICE"
-        CELERY_SERVICE_FILE="/etc/systemd/system/${CELERY_SERVICE}.service"
-        if systemctl list-unit-files | grep -Fq "${CELERY_SERVICE}.service"; then
-            sudo systemctl stop "$CELERY_SERVICE" || true
-            sudo systemctl disable "$CELERY_SERVICE" || true
-            if [ -f "$CELERY_SERVICE_FILE" ]; then
-                sudo rm "$CELERY_SERVICE_FILE"
-            fi
-        fi
         CELERY_BEAT_SERVICE="celery-beat-$SERVICE"
-        CELERY_BEAT_SERVICE_FILE="/etc/systemd/system/${CELERY_BEAT_SERVICE}.service"
-        if systemctl list-unit-files | grep -Fq "${CELERY_BEAT_SERVICE}.service"; then
-            sudo systemctl stop "$CELERY_BEAT_SERVICE" || true
-            sudo systemctl disable "$CELERY_BEAT_SERVICE" || true
-            if [ -f "$CELERY_BEAT_SERVICE_FILE" ]; then
-                sudo rm "$CELERY_BEAT_SERVICE_FILE"
-            fi
-        fi
-        rm -f "$LOCK_DIR/celery.lck"
+    else
+        CELERY_SERVICE=""
+        CELERY_BEAT_SERVICE=""
+        for unit in "${RECORDED_SYSTEMD_UNITS[@]}"; do
+            case "$unit" in
+                celery-*.service)
+                    CELERY_SERVICE="${unit%.service}"
+                    ;;
+                celery-beat-*.service)
+                    CELERY_BEAT_SERVICE="${unit%.service}"
+                    ;;
+            esac
+        done
     fi
+
+    if [ -n "$CELERY_SERVICE" ]; then
+        remove_systemd_unit_if_present "${CELERY_SERVICE}.service"
+    fi
+    if [ -n "$CELERY_BEAT_SERVICE" ]; then
+        remove_systemd_unit_if_present "${CELERY_BEAT_SERVICE}.service"
+    fi
+
+    rm -f "$LOCK_DIR/celery.lck"
     rm -f "$LOCK_DIR/service.lck"
 else
     pkill -f "manage.py runserver" || true
+fi
+
+if [ ${#RECORDED_SYSTEMD_UNITS[@]} -gt 0 ]; then
+    for unit in "${RECORDED_SYSTEMD_UNITS[@]}"; do
+        remove_systemd_unit_if_present "$unit"
+    done
 fi
 
 # Remove wlan1 refresh service if present (legacy and current names)
