@@ -2150,12 +2150,75 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
 
     location_name.short_description = "Location"
 
-    def purge_data(self, request, queryset):
-        for charger in queryset:
-            charger.purge()
-        self.message_user(request, "Data purged for selected chargers")
+    def _build_purge_summaries(self, queryset):
+        target_chargers: dict[int, Charger] = {}
 
-    purge_data.short_description = "Purge data"
+        for charger in queryset:
+            for target in charger._target_chargers():
+                target_chargers[target.pk] = target
+
+        summaries: dict[str, dict[str, object]] = {}
+        for target in target_chargers.values():
+            key = target.charger_id
+            summary = summaries.get(key)
+            if summary is None:
+                summary = {
+                    "charger": target,
+                    "display_name": self._charger_display_name(target),
+                    "transactions": 0,
+                    "meter_values": 0,
+                }
+                summaries[key] = summary
+            elif summary["charger"].connector_id is not None and target.connector_id is None:
+                summary["charger"] = target
+                summary["display_name"] = self._charger_display_name(target)
+
+            summary["transactions"] += target.transactions.count()
+            summary["meter_values"] += target.meter_values.count()
+
+        for summary in summaries.values():
+            summary["total_rows"] = summary["transactions"] + summary["meter_values"]
+
+        return sorted(
+            summaries.values(), key=lambda item: item["display_name"].lower()
+        )
+
+    @admin.action(description=_("Purge all CP data"))
+    def purge_data(self, request, queryset):
+        purge_summaries = self._build_purge_summaries(queryset)
+
+        if request.POST.get("post"):
+            for charger in queryset:
+                charger.purge()
+
+            total_rows = sum(summary["total_rows"] for summary in purge_summaries)
+            self.message_user(
+                request,
+                _(
+                    "Purged %(rows)s rows across %(count)s charge points."
+                )
+                % {
+                    "rows": total_rows,
+                    "count": len(purge_summaries),
+                },
+            )
+            return None
+
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "title": _("Confirm charge point purge"),
+            "action_checkbox_name": helpers.ACTION_CHECKBOX_NAME,
+            "action_name": request.POST.get("action", "purge_data"),
+            "queryset": queryset,
+            "purge_summaries": purge_summaries,
+            "total_rows": sum(summary["total_rows"] for summary in purge_summaries),
+            "selected_ids": request.POST.getlist(helpers.ACTION_CHECKBOX_NAME),
+            "select_across": request.POST.get("select_across", "0"),
+        }
+        return TemplateResponse(
+            request, "admin/ocpp/charger/purge_confirmation.html", context
+        )
 
     @admin.action(description="Re-check Charger Status")
     def recheck_charger_status(self, request, queryset):
