@@ -60,9 +60,21 @@ ensure_psql() {
 }
 
 install_postgres() {
-    if command -v psql >/dev/null 2>&1; then
+    local server_available=0
+
+    if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files --type=service --all 2>/dev/null | grep -q '^postgresql\.service'; then
+        server_available=1
+    elif id -u postgres >/dev/null 2>&1; then
+        server_available=1
+    fi
+
+    if command -v psql >/dev/null 2>&1 && [[ $server_available -eq 1 ]]; then
         echo "PostgreSQL already installed; skipping installation."
         return
+    fi
+
+    if command -v psql >/dev/null 2>&1 && [[ $server_available -eq 0 ]]; then
+        echo "psql is available but the PostgreSQL server is not installed; proceeding with installation."
     fi
 
     if [[ -r /etc/os-release ]]; then
