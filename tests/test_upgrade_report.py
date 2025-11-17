@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone as datetime_timezone
 from pathlib import Path
 import json
 import os
+import subprocess
 import sys
 import tempfile
 from unittest import mock
@@ -91,6 +92,97 @@ class UpgradeReportTests(SimpleTestCase):
         self.assertFalse(report["log_error"])
         self.assertTrue(report["settings"]["log_path"].endswith("auto-upgrade.log"))
         self.assertEqual(report["settings"]["suite_uptime"], "5 hours")
+        self.assertIn("local_revision", report["settings"])
+        self.assertIn("origin_revision", report["settings"])
+        self.assertIn("origin_revision_error", report["settings"])
+
+    def test_build_auto_upgrade_report_includes_revisions(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            locks_dir = base / "locks"
+            logs_dir = base / "logs"
+            locks_dir.mkdir()
+            logs_dir.mkdir()
+
+            (locks_dir / "auto_upgrade.lck").write_text("latest", encoding="utf-8")
+
+            schedule_stub = {
+                "available": False,
+                "configured": False,
+                "enabled": False,
+                "one_off": False,
+                "queue": "",
+                "schedule": "",
+                "start_time": "",
+                "last_run_at": "",
+                "next_run": "",
+                "total_run_count": 0,
+                "description": "",
+                "expires": "",
+                "task": "",
+                "name": system.AUTO_UPGRADE_TASK_NAME,
+                "error": "",
+                "task_admin_url": "",
+                "config_admin_url": "",
+                "config_type": "",
+            }
+
+            remote_proc = mock.Mock(returncode=0, stdout="git@example.com/repo.git", stderr="")
+            fetch_proc = mock.Mock(returncode=0, stdout="", stderr="")
+
+            with override_settings(BASE_DIR=str(base)):
+                with mock.patch(
+                    "core.system._load_auto_upgrade_schedule",
+                    return_value=schedule_stub,
+                ), mock.patch(
+                    "core.system._suite_uptime",
+                    return_value="5 hours",
+                ), mock.patch(
+                    "core.system.subprocess.run",
+                    side_effect=[remote_proc, fetch_proc],
+                ) as mock_run, mock.patch(
+                    "core.system.subprocess.check_output"
+                ) as mock_check_output:
+                    mock_check_output.side_effect = ["localrev\n", "originrev\n"]
+                    report = system._build_auto_upgrade_report(limit=1)
+
+        self.assertEqual(report["settings"]["local_revision"], "localrev")
+        self.assertEqual(report["settings"]["origin_revision"], "originrev")
+        self.assertFalse(report["settings"]["origin_revision_error"])
+        mock_run.assert_has_calls(
+            [
+                mock.call(
+                    ["git", "remote", "get-url", "origin"],
+                    cwd=base,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                ),
+                mock.call(
+                    ["git", "fetch", "origin", "main"],
+                    cwd=base,
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                ),
+            ]
+        )
+        mock_check_output.assert_has_calls(
+            [
+                mock.call(
+                    ["git", "rev-parse", "HEAD"],
+                    cwd=base,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                ),
+                mock.call(
+                    ["git", "rev-parse", "origin/main"],
+                    cwd=base,
+                    stderr=subprocess.STDOUT,
+                    text=True,
+                ),
+            ]
+        )
 
     def test_suite_uptime_uses_datetime_timezone(self):
         fake_now = datetime(2024, 1, 1, 1, tzinfo=datetime_timezone.utc)

@@ -104,6 +104,25 @@
         </dd>
         <dt>{% trans "Mode" %}</dt>
         <dd><code>{{ report.settings.mode }}</code></dd>
+        <dt>{% trans "Local revision" %}</dt>
+        <dd>
+          {% if report.settings.local_revision %}
+            <code>{{ report.settings.local_revision }}</code>
+          {% else %}
+            <em>{% trans "Unavailable" %}</em>
+          {% endif %}
+        </dd>
+        <dt>{% trans "Origin revision" %}</dt>
+        <dd>
+          {% if report.settings.origin_revision %}
+            <code>{{ report.settings.origin_revision }}</code>
+          {% else %}
+            <em>{% trans "Unavailable" %}</em>
+          {% endif %}
+          {% if report.settings.origin_revision_error %}
+            <p class="errornote">{{ report.settings.origin_revision_error }}</p>
+          {% endif %}
+        </dd>
         <dt>{% trans "Task" %}</dt>
         <dd>
           <code>{{ report.settings.task_name }}</code>

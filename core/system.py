@@ -294,6 +294,108 @@ def _load_auto_upgrade_skip_revisions(base_dir: Path) -> list[str]:
     return sorted(revisions)
 
 
+def _format_revision_error(prefix: str, exc: Exception) -> str:
+    """Return a human-readable revision error string for display."""
+
+    detail = ""
+    if isinstance(exc, subprocess.CalledProcessError):
+        detail = (exc.stderr or exc.stdout or "").strip()
+        if not detail:
+            detail = str(exc)
+    else:
+        detail = str(exc)
+
+    if not detail:
+        return prefix
+    return f"{prefix}: {detail}"
+
+
+def _load_upgrade_revision_info(base_dir: Path, branch: str = "main") -> dict[str, str]:
+    """Return the current local and origin revisions for comparison."""
+
+    local_revision = ""
+    origin_revision = ""
+    origin_revision_error = ""
+
+    try:
+        local_revision = (
+            subprocess.check_output(
+                ["git", "rev-parse", "HEAD"],
+                cwd=base_dir,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+            .strip()
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
+        local_revision = ""
+
+    try:
+        remote_url_proc = subprocess.run(
+            ["git", "remote", "get-url", "origin"],
+            cwd=base_dir,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except (FileNotFoundError, OSError) as exc:
+        origin_revision_error = _format_revision_error(
+            str(_("Origin revision unavailable")), exc
+        )
+        return {
+            "local_revision": local_revision,
+            "origin_revision": origin_revision,
+            "origin_revision_error": origin_revision_error,
+        }
+
+    if remote_url_proc.returncode != 0 or not (remote_url_proc.stdout or "").strip():
+        origin_revision_error = str(_("Origin remote is not configured."))
+        return {
+            "local_revision": local_revision,
+            "origin_revision": origin_revision,
+            "origin_revision_error": origin_revision_error,
+        }
+
+    try:
+        subprocess.run(
+            ["git", "fetch", "origin", branch],
+            cwd=base_dir,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError) as exc:
+        origin_revision_error = _format_revision_error(
+            str(_("Unable to refresh origin revision")), exc
+        )
+        return {
+            "local_revision": local_revision,
+            "origin_revision": origin_revision,
+            "origin_revision_error": origin_revision_error,
+        }
+
+    try:
+        origin_revision = (
+            subprocess.check_output(
+                ["git", "rev-parse", f"origin/{branch}"],
+                cwd=base_dir,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
+            .strip()
+        )
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError) as exc:
+        origin_revision_error = _format_revision_error(
+            str(_("Unable to read origin revision")), exc
+        )
+
+    return {
+        "local_revision": local_revision,
+        "origin_revision": origin_revision,
+        "origin_revision_error": origin_revision_error,
+    }
+
+
 def _parse_log_timestamp(value: str) -> datetime | None:
     """Return a ``datetime`` parsed from ``value`` if it appears ISO formatted."""
 
@@ -896,6 +998,8 @@ def _build_auto_upgrade_report(*, limit: int = AUTO_UPGRADE_LOG_LIMIT) -> dict[s
     mode_value = str(mode_info.get("mode", "version"))
     is_latest = mode_value.lower() == "latest"
 
+    revision_info = _load_upgrade_revision_info(base_dir)
+
     settings_info = {
         "enabled": bool(mode_info.get("enabled", False)),
         "mode": mode_value,
@@ -909,6 +1013,7 @@ def _build_auto_upgrade_report(*, limit: int = AUTO_UPGRADE_LOG_LIMIT) -> dict[s
         "log_path": str(log_info.get("path")),
         "suite_uptime": _suite_uptime(),
     }
+    settings_info.update(revision_info)
 
     return {
         "settings": settings_info,
