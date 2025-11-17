@@ -12,6 +12,11 @@ exec > >(tee "$LOG_FILE") 2>&1
 cd "$BASE_DIR"
 LOCK_DIR="$BASE_DIR/locks"
 SKIP_LOCK="$LOCK_DIR/service-start-skip.lck"
+SYSTEMD_LOCK_FILE="$LOCK_DIR/systemd_services.lck"
+SERVICE_NAME=""
+if [ -f "$LOCK_DIR/service.lck" ]; then
+  SERVICE_NAME=$(tr -d '\r\n' < "$LOCK_DIR/service.lck")
+fi
 
 # Ensure virtual environment is available
 if [ ! -d .venv ]; then
@@ -89,8 +94,18 @@ fi
 DEFAULT_PORT="$(arthexis_detect_backend_port "$BASE_DIR")"
 PORT="$DEFAULT_PORT"
 RELOAD=false
-# Celery workers process Post Office's email queue; enable by default.
+# Celery workers process Post Office's email queue; enable by default unless
+# systemd-managed Celery units are present. Those are installed by install.sh
+# when the service name is provided.
 CELERY=true
+CELERY_FLAG_SET=false
+SYSTEMD_CELERY_UNITS=false
+if [ -n "$SERVICE_NAME" ] && [ -f "$SYSTEMD_LOCK_FILE" ]; then
+  if grep -Fxq "celery-${SERVICE_NAME}.service" "$SYSTEMD_LOCK_FILE" || \
+     grep -Fxq "celery-beat-${SERVICE_NAME}.service" "$SYSTEMD_LOCK_FILE"; then
+    SYSTEMD_CELERY_UNITS=true
+  fi
+fi
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --port)
@@ -103,10 +118,12 @@ while [[ $# -gt 0 ]]; do
       ;;
     --celery)
       CELERY=true
+      CELERY_FLAG_SET=true
       shift
       ;;
     --no-celery)
       CELERY=false
+      CELERY_FLAG_SET=true
       shift
       ;;
     --public)
@@ -123,6 +140,11 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+if [ "$CELERY_FLAG_SET" = false ] && [ "$SYSTEMD_CELERY_UNITS" = true ]; then
+  echo "Skipping embedded Celery processes because systemd-managed units are enabled. Use --celery to override."
+  CELERY=false
+fi
 
 # Start Celery components to handle queued email if enabled
 if [ "$CELERY" = true ]; then
