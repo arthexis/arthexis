@@ -1,0 +1,71 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:system' %}">{% trans 'System' %}</a>
+  &rsaquo; {% trans "Suite Services Report" %}
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <div class="module">
+    <h2>{% trans "Suite Services Report" %}</h2>
+    <p class="help">
+      {% trans "Review the status of systemd-managed services configured for this instance." %}
+    </p>
+
+    {% if not services_report.systemd_available %}
+      <p class="errornote">
+        {% trans "systemctl is not available on this node; service status may be incomplete." %}
+      </p>
+    {% endif %}
+
+    {% if not services_report.services %}
+      <p>{% trans "No managed systemd services are configured for this instance." %}</p>
+    {% else %}
+      <table class="table table-striped">
+        <thead>
+          <tr>
+            <th scope="col">{% trans "Service" %}</th>
+            <th scope="col">{% trans "Unit" %}</th>
+            <th scope="col">{% trans "Active status" %}</th>
+            <th scope="col">{% trans "Enabled" %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for service in services_report.services %}
+            <tr>
+              <th scope="row">{{ service.label }}</th>
+              <td><code>{{ service.unit_display }}</code></td>
+              <td>
+                {% if service.missing %}
+                  <span class="errornote">{% trans "Not found" %}</span>
+                  {% if service.status %}
+                    <div class="help">{{ service.status }}</div>
+                  {% endif %}
+                {% else %}
+                  {{ service.status|default:_('Unknown') }}
+                {% endif %}
+              </td>
+              <td>
+                {% if service.enabled %}
+                  {{ service.enabled }}
+                {% elif service.missing %}
+                  {% trans "Unavailable" %}
+                {% elif services_report.systemd_available %}
+                  {% trans "Unknown" %}
+                {% else %}
+                  &mdash;
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

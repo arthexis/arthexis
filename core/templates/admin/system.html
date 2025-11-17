@@ -32,6 +32,14 @@
         </tr>
         <tr>
           <th scope="row">
+            <a href="{% url 'admin:system-services-report' %}">
+              {% trans "Suite Services Report" %}
+            </a>
+          </th>
+          <td>{% trans "Review statuses for all systemd services configured on this node." %}</td>
+        </tr>
+        <tr>
+          <th scope="row">
             <a href="{% url 'admin:system-changelog-report' %}">
               {% trans "Changelog Report" %}
             </a>

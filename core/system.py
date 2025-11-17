@@ -69,6 +69,32 @@ UPGRADE_CHANNEL_CHOICES: dict[str, dict[str, object]] = {
 logger = logging.getLogger(__name__)
 
 
+def _systemctl_command() -> list[str]:
+    """Return the base systemctl command, preferring sudo when available."""
+
+    if shutil.which("systemctl") is None:
+        return []
+
+    sudo_path = shutil.which("sudo")
+    if sudo_path is None:
+        return ["systemctl"]
+
+    try:
+        sudo_ready = subprocess.run(
+            [sudo_path, "-n", "true"],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except OSError:
+        sudo_ready = None
+
+    if sudo_ready is not None and sudo_ready.returncode == 0:
+        return [sudo_path, "-n", "systemctl"]
+
+    return ["systemctl"]
+
+
 def _github_repo_path(remote_url: str | None) -> str:
     """Return the ``owner/repo`` path for a GitHub *remote_url* if possible."""
 
@@ -1392,6 +1418,130 @@ def _gather_info() -> dict:
     return info
 
 
+def _configured_service_units(base_dir: Path) -> list[dict[str, str]]:
+    """Return service units configured for this instance."""
+
+    lock_dir = base_dir / "locks"
+    service_file = lock_dir / "service.lck"
+    try:
+        service_name = service_file.read_text(encoding="utf-8").strip()
+    except OSError:
+        service_name = ""
+
+    if not service_name:
+        return []
+
+    service_units = [
+        {
+            "label": str(_("Suite service")),
+            "unit": service_name,
+            "unit_display": f"{service_name}.service",
+        }
+    ]
+
+    if (lock_dir / "auto_upgrade.lck").exists():
+        auto_upgrade_unit = f"{service_name}-auto-upgrade"
+        service_units.append(
+            {
+                "label": str(_("Auto-upgrade service")),
+                "unit": auto_upgrade_unit,
+                "unit_display": f"{auto_upgrade_unit}.service",
+            }
+        )
+
+    if (lock_dir / "celery.lck").exists():
+        for prefix, label in [
+            ("celery", _("Celery worker")),
+            ("celery-beat", _("Celery beat")),
+        ]:
+            unit = f"{prefix}-{service_name}"
+            service_units.append(
+                {
+                    "label": str(label),
+                    "unit": unit,
+                    "unit_display": f"{unit}.service",
+                }
+            )
+
+    if (lock_dir / "lcd_screen.lck").exists():
+        lcd_unit = f"lcd-{service_name}"
+        service_units.append(
+            {
+                "label": str(_("LCD screen")),
+                "unit": lcd_unit,
+                "unit_display": f"{lcd_unit}.service",
+            }
+        )
+
+    return service_units
+
+
+def _systemd_unit_status(unit: str, command: list[str] | None = None) -> dict[str, object]:
+    """Return the systemd status for a unit, handling missing commands gracefully."""
+
+    command = command if command is not None else _systemctl_command()
+    if not command:
+        return {
+            "status": str(_("Unavailable")),
+            "enabled": "",
+            "missing": False,
+        }
+
+    try:
+        active_result = subprocess.run(
+            [*command, "is-active", unit],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except Exception:
+        return {
+            "status": str(_("Unknown")),
+            "enabled": "",
+            "missing": False,
+        }
+
+    status_output = (active_result.stdout or active_result.stderr).strip()
+    status = status_output or str(_("unknown"))
+    missing = active_result.returncode == 4
+
+    enabled_state = ""
+    if not missing:
+        try:
+            enabled_result = subprocess.run(
+                [*command, "is-enabled", unit],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            enabled_state = (enabled_result.stdout or enabled_result.stderr).strip()
+        except Exception:
+            enabled_state = ""
+
+    return {
+        "status": status,
+        "enabled": enabled_state,
+        "missing": missing,
+    }
+
+
+def _build_services_report() -> dict[str, object]:
+    base_dir = Path(settings.BASE_DIR)
+    configured_units = _configured_service_units(base_dir)
+    command = _systemctl_command()
+
+    services: list[dict[str, object]] = []
+    for unit in configured_units:
+        status_info = _systemd_unit_status(unit["unit"], command=command)
+        services.append({**unit, **status_info})
+
+    return {
+        "services": services,
+        "systemd_available": bool(command),
+        "has_services": bool(configured_units),
+    }
+
+
 def _system_view(request):
     info = _gather_info()
 
@@ -1415,6 +1565,17 @@ def _system_uptime_report_view(request):
         }
     )
     return TemplateResponse(request, "admin/system_uptime_report.html", context)
+
+
+def _system_services_report_view(request):
+    context = admin.site.each_context(request)
+    context.update(
+        {
+            "title": _("Suite Services Report"),
+            "services_report": _build_services_report(),
+        }
+    )
+    return TemplateResponse(request, "admin/system_services_report.html", context)
 
 
 def _system_upgrade_report_view(request):
@@ -1743,6 +1904,11 @@ def patch_admin_system_view() -> None:
                 "system/uptime-report/",
                 admin.site.admin_view(_system_uptime_report_view),
                 name="system-uptime-report",
+            ),
+            path(
+                "system/services-report/",
+                admin.site.admin_view(_system_services_report_view),
+                name="system-services-report",
             ),
             path(
                 "system/upgrade-report/",
