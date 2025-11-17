@@ -3,8 +3,8 @@
     <form method="post" class="simulator-form">
       {% csrf_token %}
       <input type="hidden" name="cp" value="{{ idx }}">
-      <div class="row g-3 align-items-start">
-        <div class="col-12 col-xl-9">
+      <div class="row g-3 align-items-start simulator-layout">
+        <div class="col-12 col-xl-6">
           <div class="row g-2">
             <div class="col-sm-6 col-md-4">
               <div class="mb-2">
@@ -102,7 +102,7 @@
             </div>
           </div>
         </div>
-        <div class="col-12 col-xl-3">
+        <div class="col-12 col-xl-6">
           <div class="d-flex flex-column gap-3">
             <div class="d-grid gap-2">
               <button type="submit" name="action" value="start" class="btn btn-primary" {% if cp.running %}disabled{% endif %}>Start</button>
