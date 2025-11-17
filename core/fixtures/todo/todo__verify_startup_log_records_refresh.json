@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Verify startup log captures prestart refresh",
+      "created_on": "2025-11-17T00:00:00Z",
+      "url": "/admin/system/upgrade-report/",
+      "request_details": "1. On a node with systemd management enabled, note the service name from `cat locks/service.lck`.\n2. Review the current contents of `logs/startup.log` and record the latest timestamped entry.\n3. Restart the managed service with `sudo systemctl restart $(cat locks/service.lck)` (or trigger an auto-upgrade run) and wait for the unit to report `active`.\n4. Open `logs/startup.log` again and confirm a new `[YYYY-MM-DDTHH:MM:SS] Running prestart environment refresh` entry was appended along with any env-refresh output.\n5. Verify the log does not contain new error lines for the restart and that `logs/env-refresh.sh.log` also completed without creating a failover branch.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]
