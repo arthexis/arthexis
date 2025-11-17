@@ -73,3 +73,11 @@ jobs:
           # Intentionally avoid --clean so migrations run against existing data
           ./env-refresh.sh
 
+  upgrade-script:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check upgrade script syntax
+        run: |
+          bash -n upgrade.sh
+
