@@ -746,8 +746,6 @@ VENV_PRESENT=1
 
 # Stop running instance only if the node is installed
 if [[ $VENV_PRESENT -eq 1 ]]; then
-  if [ -n "$SERVICE_NAME" ]; then
-  fi
   echo "Stopping running instance..."
   STOP_ARGS=(--all)
   if [[ $FORCE_STOP -eq 1 ]]; then
