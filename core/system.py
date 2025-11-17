@@ -55,6 +55,9 @@ AUTO_UPGRADE_SKIP_LOCK_NAME = "auto_upgrade_skip_revisions.lck"
 AUTO_UPGRADE_LOG_NAME = "auto-upgrade.log"
 AUTO_UPGRADE_LOG_LIMIT = 30
 
+SUITE_UPTIME_LOCK_NAME = "suite_uptime.lck"
+SUITE_UPTIME_LOCK_MAX_AGE = timedelta(minutes=10)
+
 
 UPGRADE_CHANNEL_CHOICES: dict[str, dict[str, object]] = {
     "normal": {"override": None, "label": _("Normal")},
@@ -518,8 +521,85 @@ def _load_auto_upgrade_schedule() -> dict[str, object]:
     return info
 
 
+def _suite_uptime_lock_path(base_dir: Path | str | None = None) -> Path:
+    """Return the lockfile path used to store suite uptime metadata."""
+
+    root = Path(base_dir) if base_dir is not None else Path(settings.BASE_DIR)
+    return root / "locks" / SUITE_UPTIME_LOCK_NAME
+
+
+def _parse_suite_uptime_timestamp(value: object) -> datetime | None:
+    """Parse an ISO timestamp from the suite uptime lock file."""
+
+    if not value:
+        return None
+
+    text = str(value).strip()
+    if not text:
+        return None
+
+    if text[-1] in {"Z", "z"}:
+        text = f"{text[:-1]}+00:00"
+
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+
+    if timezone.is_naive(parsed):
+        try:
+            parsed = timezone.make_aware(parsed, timezone.get_current_timezone())
+        except Exception:
+            return None
+
+    return parsed
+
+
+def _suite_uptime_lock_is_fresh(lock_path: Path, now: datetime) -> bool:
+    """Return ``True`` when the lockfile heartbeat is within the freshness window."""
+
+    try:
+        stats = lock_path.stat()
+    except OSError:
+        return False
+
+    heartbeat = datetime.fromtimestamp(stats.st_mtime, tz=datetime_timezone.utc)
+    now_utc = now.astimezone(datetime_timezone.utc)
+    if heartbeat > now_utc:
+        return False
+    return (now_utc - heartbeat) <= SUITE_UPTIME_LOCK_MAX_AGE
+
+
 def _suite_uptime_details() -> dict[str, object]:
     """Return structured uptime information for the running suite if possible."""
+
+    now = timezone.now()
+    lock_path = _suite_uptime_lock_path()
+    try:
+        raw_payload = lock_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        raw_payload = ""
+    except OSError:
+        raw_payload = ""
+    else:
+        try:
+            payload = json.loads(raw_payload)
+        except json.JSONDecodeError:
+            payload = {}
+        start_value = payload.get("started_at") or payload.get("boot_time")
+        boot_time = _parse_suite_uptime_timestamp(start_value)
+        if (
+            boot_time
+            and boot_time <= now
+            and _suite_uptime_lock_is_fresh(lock_path, now)
+        ):
+            uptime_label = timesince(boot_time, now)
+            return {
+                "uptime": uptime_label,
+                "boot_time": boot_time,
+                "boot_time_label": _format_datetime(boot_time),
+                "available": True,
+            }
 
     try:
         import psutil
@@ -535,7 +615,6 @@ def _suite_uptime_details() -> dict[str, object]:
         return {}
 
     boot_time = datetime.fromtimestamp(boot_timestamp, tz=datetime_timezone.utc)
-    now = timezone.now()
     if boot_time > now:
         return {}
 

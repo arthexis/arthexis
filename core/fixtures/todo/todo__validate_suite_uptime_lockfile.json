@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate suite uptime lockfile integration",
+      "created_on": "2025-04-01T00:00:00Z",
+      "url": "/admin/system/uptime-report/",
+      "request_details": "1. Restart the suite service without rebooting the host so only the application uptime resets (for example, `sudo systemctl restart arthexis`).\n2. After the service is healthy, open `locks/suite_uptime.lck` and confirm it contains JSON with a `started_at` timestamp that matches the restart time.\n3. Run `touch locks/suite_uptime.lck` to simulate the periodic heartbeat the uptime task performs.\n4. Visit System → Uptime Report in the Django admin and confirm the Suite uptime card shows a short uptime that matches the `started_at` value.\n5. Compare the displayed uptime to `python manage.py shell -c \"import core.system as s; print(s._suite_uptime())\"` to verify both sources use the lockfile rather than the host boot time.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]

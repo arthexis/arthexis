@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone as datetime_timezone
+from datetime import datetime, timedelta, timezone as datetime_timezone
 from pathlib import Path
+import json
+import os
 import sys
 import tempfile
 from unittest import mock
@@ -102,6 +104,59 @@ class UpgradeReportTests(SimpleTestCase):
                 uptime = system._suite_uptime()
 
         self.assertEqual(uptime, "1\xa0hour")
+        fake_psutil.boot_time.assert_called_once_with()
+
+    def test_suite_uptime_prefers_lockfile(self):
+        fake_now = datetime(2024, 1, 1, 3, tzinfo=datetime_timezone.utc)
+        lock_payload = {"started_at": "2024-01-01T01:00:00+00:00"}
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            locks_dir = base / "locks"
+            locks_dir.mkdir()
+            lock_path = locks_dir / system.SUITE_UPTIME_LOCK_NAME
+            lock_path.write_text(json.dumps(lock_payload), encoding="utf-8")
+            os.utime(lock_path, (fake_now.timestamp(), fake_now.timestamp()))
+
+            with override_settings(BASE_DIR=str(base)):
+                with mock.patch("core.system.timezone.now", return_value=fake_now):
+                    details = system._suite_uptime_details()
+
+        self.assertEqual(details["uptime"], "2\xa0hours")
+        self.assertEqual(
+            details["boot_time"],
+            datetime(2024, 1, 1, 1, tzinfo=datetime_timezone.utc),
+        )
+        self.assertTrue(details["available"])
+
+    def test_suite_uptime_lockfile_must_be_recent(self):
+        fake_now = datetime(2024, 1, 1, 3, tzinfo=datetime_timezone.utc)
+        lock_payload = {"started_at": "2024-01-01T01:00:00+00:00"}
+        boot_timestamp = fake_now.timestamp() - 1800
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            locks_dir = base / "locks"
+            locks_dir.mkdir()
+            lock_path = locks_dir / system.SUITE_UPTIME_LOCK_NAME
+            lock_path.write_text(json.dumps(lock_payload), encoding="utf-8")
+            stale_heartbeat = fake_now - (
+                system.SUITE_UPTIME_LOCK_MAX_AGE + timedelta(minutes=5)
+            )
+            os.utime(lock_path, (stale_heartbeat.timestamp(), stale_heartbeat.timestamp()))
+
+            fake_psutil = mock.Mock()
+            fake_psutil.boot_time.return_value = boot_timestamp
+
+            with override_settings(BASE_DIR=str(base)):
+                with mock.patch.dict(sys.modules, {"psutil": fake_psutil}):
+                    with mock.patch(
+                        "core.system.timezone.now", return_value=fake_now
+                    ):
+                        details = system._suite_uptime_details()
+
+        expected_boot = datetime.fromtimestamp(boot_timestamp, tz=datetime_timezone.utc)
+        self.assertEqual(details["boot_time"], expected_boot)
         fake_psutil.boot_time.assert_called_once_with()
 
     def test_load_auto_upgrade_log_entries_limits_and_orders_entries(self):
