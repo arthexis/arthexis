@@ -291,41 +291,55 @@ def _ensure_managed_service(
         )
         service_is_active = status_result.returncode == 0
 
-    if restart_if_active:
-        if service_is_active and command:
+    def restart_via_systemd(reason: str) -> bool:
+        if not command:
+            return False
+        try:
             subprocess.run(
-                [*command, "kill", "--signal=TERM", service],
+                [*command, "restart", service],
                 cwd=base_dir,
-                check=False,
+                check=True,
             )
+        except subprocess.CalledProcessError:
+            logger.exception("systemd restart failed for %s during %s", service, reason)
+            return False
+        return True
+
+    def handle_restart_failure() -> bool:
+        if revert_on_failure:
+            _revert_after_restart_failure(base_dir, service)
+        return False
+
+    if restart_if_active:
+        restarted = False
+        if restart_via_systemd("post-upgrade restart"):
             _append_auto_upgrade_log(
                 base_dir,
-                f"Waiting for {service} to restart after upgrade",
+                f"Restarting {service} via systemd restart after upgrade",
             )
-            if not _wait_for_service_restart(base_dir, service):
-                if revert_on_failure:
-                    _revert_after_restart_failure(base_dir, service)
-                return False
+            restarted = True
         else:
             _append_auto_upgrade_log(
                 base_dir,
-                (
-                    f"Service {service} not active after upgrade; "
-                    "restarting via start.sh"
-                ),
+                f"Systemd restart unavailable for {service}; restarting via start.sh",
             )
             if not _restart_service_via_start_script(base_dir, service):
-                if revert_on_failure:
-                    _revert_after_restart_failure(base_dir, service)
-                return False
+                return handle_restart_failure()
+            restarted = True
+
+        if not restarted:
+            return handle_restart_failure()
+
+        _append_auto_upgrade_log(
+            base_dir,
+            f"Waiting for {service} to restart after upgrade",
+        )
+        if not _wait_for_service_restart(base_dir, service):
             _append_auto_upgrade_log(
                 base_dir,
-                f"Waiting for {service} to restart after upgrade",
+                f"Service {service} did not report active status after automatic restart",
             )
-            if not _wait_for_service_restart(base_dir, service):
-                if revert_on_failure:
-                    _revert_after_restart_failure(base_dir, service)
-                return False
+            return handle_restart_failure()
 
         _append_auto_upgrade_log(
             base_dir,
@@ -336,28 +350,34 @@ def _ensure_managed_service(
     if service_is_active:
         return True
 
-    restart_message = (
-        f"Service {service} not active after upgrade; restarting via start.sh"
+    base_message = (
+        f"Service {service} not active after upgrade"
         if revert_on_failure
-        else (
-            f"Service {service} inactive during auto-upgrade check; restarting via start.sh"
-        )
+        else f"Service {service} inactive during auto-upgrade check"
     )
-    _append_auto_upgrade_log(
-        base_dir,
-        restart_message,
-    )
-    if not _restart_service_via_start_script(base_dir, service):
+
+    if restart_via_systemd("auto-upgrade recovery"):
         _append_auto_upgrade_log(
             base_dir,
-            (
-                "Automatic restart via start.sh failed for inactive service "
-                f"{service}"
-            ),
+            f"{base_message}; restarting via systemd restart",
         )
-        if revert_on_failure:
-            _revert_after_restart_failure(base_dir, service)
-        return False
+    else:
+        _append_auto_upgrade_log(
+            base_dir,
+            f"{base_message}; restarting via start.sh",
+        )
+        if not _restart_service_via_start_script(base_dir, service):
+            _append_auto_upgrade_log(
+                base_dir,
+                (
+                    "Automatic restart via start.sh failed for inactive service "
+                    f"{service}"
+                ),
+            )
+            if revert_on_failure:
+                _revert_after_restart_failure(base_dir, service)
+            return False
+
     if command:
         _append_auto_upgrade_log(
             base_dir,
@@ -374,6 +394,7 @@ def _ensure_managed_service(
             if revert_on_failure:
                 _revert_after_restart_failure(base_dir, service)
             return False
+
     _append_auto_upgrade_log(
         base_dir,
         f"Service {service} restarted successfully during auto-upgrade check",
