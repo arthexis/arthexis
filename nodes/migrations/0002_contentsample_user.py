@@ -6,6 +6,35 @@ import django.contrib.auth.models
 import core.fields
 
 
+def _add_contentsample_user(apps, schema_editor):
+    """Create ``user`` FK for legacy databases that are missing it."""
+
+    ContentSample = apps.get_model("nodes", "ContentSample")
+    user_app_label, user_model_name = settings.AUTH_USER_MODEL.split(".")
+    UserModel = apps.get_model(user_app_label, user_model_name)
+    table_name = ContentSample._meta.db_table
+
+    with schema_editor.connection.cursor() as cursor:
+        existing_columns = {
+            column.name
+            for column in schema_editor.connection.introspection.get_table_description(
+                cursor, table_name
+            )
+        }
+
+    if "user_id" in existing_columns:
+        return
+
+    field = models.ForeignKey(
+        UserModel,
+        on_delete=django.db.models.deletion.SET_NULL,
+        blank=True,
+        null=True,
+    )
+    field.set_attributes_from_name("user")
+    schema_editor.add_field(ContentSample, field)
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -14,15 +43,24 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AddField(
-            model_name="contentsample",
-            name="user",
-            field=models.ForeignKey(
-                blank=True,
-                null=True,
-                on_delete=django.db.models.deletion.SET_NULL,
-                to=settings.AUTH_USER_MODEL,
-            ),
+        migrations.SeparateDatabaseAndState(
+            database_operations=[
+                migrations.RunPython(
+                    _add_contentsample_user, migrations.RunPython.noop
+                ),
+            ],
+            state_operations=[
+                migrations.AddField(
+                    model_name="contentsample",
+                    name="user",
+                    field=models.ForeignKey(
+                        blank=True,
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        to=settings.AUTH_USER_MODEL,
+                    ),
+                ),
+            ],
         ),
         migrations.CreateModel(
             name="EmailOutbox",
