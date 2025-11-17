@@ -88,61 +88,6 @@ class SystemInfoPortLockTests(SimpleTestCase):
                 lock_dir.rmdir()
 
 
-class SystemInfoUpgradeGuardTests(SimpleTestCase):
-    @patch("core.system.shutil.which", return_value="/bin/systemctl")
-    @patch("core.system.subprocess.run")
-    def test_upgrade_guard_inactive_without_timer(self, mock_run, mock_which):
-        lock_dir = Path(settings.BASE_DIR) / "locks"
-        lock_dir.mkdir(exist_ok=True)
-        service_file = lock_dir / "service.lck"
-        service_file.write_text("arthexis", encoding="utf-8")
-
-        def runner(args, **kwargs):
-            if args[:2] == ["systemctl", "is-active"]:
-                return CompletedProcess(args, 0, "inactive\n", "")
-            if args[:2] == ["systemctl", "show"]:
-                return CompletedProcess(args, 1, "", "not found")
-            return CompletedProcess(args, 0, "", "")
-
-        mock_run.side_effect = runner
-
-        try:
-            info = _gather_info()
-            self.assertFalse(info["upgrade_guard_active"])
-            self.assertEqual(info["upgrade_restart_deadline"], "")
-        finally:
-            service_file.unlink(missing_ok=True)
-            if lock_dir.exists() and not any(lock_dir.iterdir()):
-                lock_dir.rmdir()
-
-    @patch("core.system.shutil.which", return_value="/bin/systemctl")
-    @patch("core.system.subprocess.run")
-    def test_upgrade_guard_active_reports_deadline(self, mock_run, mock_which):
-        lock_dir = Path(settings.BASE_DIR) / "locks"
-        lock_dir.mkdir(exist_ok=True)
-        service_file = lock_dir / "service.lck"
-        service_file.write_text("arthexis", encoding="utf-8")
-
-        def runner(args, **kwargs):
-            if args[:2] == ["systemctl", "is-active"]:
-                return CompletedProcess(args, 0, "active\n", "")
-            if args[:2] == ["systemctl", "show"]:
-                stdout = "ActiveState=active\nNextElapseUSecRealtime=Sat 2025-11-15 15:00:00 UTC\n"
-                return CompletedProcess(args, 0, stdout, "")
-            return CompletedProcess(args, 0, "", "")
-
-        mock_run.side_effect = runner
-
-        try:
-            info = _gather_info()
-            self.assertTrue(info["upgrade_guard_active"])
-            self.assertEqual(info["upgrade_restart_deadline"], "Sat 2025-11-15 15:00:00 UTC")
-        finally:
-            service_file.unlink(missing_ok=True)
-            if lock_dir.exists() and not any(lock_dir.iterdir()):
-                lock_dir.rmdir()
-
-
 class SystemInfoRevisionTests(SimpleTestCase):
     @patch("core.system.revision.get_revision", return_value="abcdef1234567890")
     def test_includes_full_revision(self, mock_revision):

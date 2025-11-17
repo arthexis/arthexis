@@ -114,30 +114,6 @@ echo "Features:"
 echo "  Celery: $CELERY_FEATURE"
 echo "  LCD screen: $LCD_FEATURE"
 
-UPGRADE_GUARD_ACTIVE=false
-UPGRADE_GUARD_DEADLINE=""
-if [ -n "$SERVICE" ] && command -v systemctl >/dev/null 2>&1; then
-  GUARD_TIMER="${SERVICE}-upgrade-guard.timer"
-  if systemctl list-unit-files | grep -Fq -- "$GUARD_TIMER"; then
-    GUARD_INFO=$(systemctl show --property=ActiveState --property=NextElapseUSecRealtime -- "$GUARD_TIMER" 2>/dev/null || true)
-    GUARD_STATE=$(printf '%s\n' "$GUARD_INFO" | awk -F= '/^ActiveState=/{print $2}')
-    GUARD_DEADLINE=$(printf '%s\n' "$GUARD_INFO" | awk -F= '/^NextElapseUSecRealtime=/{print $2}')
-    case "$GUARD_STATE" in
-      active|activating)
-        UPGRADE_GUARD_ACTIVE=true
-        if [ -n "$GUARD_DEADLINE" ] && [ "$GUARD_DEADLINE" != "0" ]; then
-          UPGRADE_GUARD_DEADLINE="$GUARD_DEADLINE"
-        fi
-        ;;
-    esac
-  fi
-fi
-
-echo "Upgrade restart guard active: $UPGRADE_GUARD_ACTIVE"
-if [ "$UPGRADE_GUARD_ACTIVE" = true ] && [ -n "$UPGRADE_GUARD_DEADLINE" ]; then
-  echo "  Restart deadline: $UPGRADE_GUARD_DEADLINE"
-fi
-
 echo "Checking running status..."
 RUNNING=false
 if [ -n "$SERVICE" ] && command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files | grep -Fq -- "${SERVICE}.service"; then
