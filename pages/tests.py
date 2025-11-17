@@ -199,6 +199,15 @@ class LoginViewTests(TestCase):
         resp = self.client.get(reverse("pages:login"))
         self.assertContains(resp, "Use Authenticator app")
 
+    def test_login_page_hides_passkey_button_when_disabled(self):
+        resp = self.client.get(reverse("pages:login"))
+        self.assertNotContains(resp, "Use a passkey")
+
+    @override_settings(PASSKEY_LOGIN_ENABLED=True)
+    def test_login_page_shows_passkey_button_when_enabled(self):
+        resp = self.client.get(reverse("pages:login"))
+        self.assertContains(resp, "Use a passkey")
+
     def test_passkey_login_options_sets_session_challenge(self):
         response = self.client.post(reverse("pages:passkey-login-options"))
         self.assertEqual(response.status_code, 200)
