@@ -393,8 +393,11 @@ document.addEventListener('DOMContentLoaded', function () {
     min-height: 3.5rem;
 }
 
-.chat-input {
+.chat-form .chat-input {
     width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    display: block;
     background: var(--body-bg);
     color: var(--body-fg);
     border: 1px solid rgba(21, 128, 61, 0.35);
