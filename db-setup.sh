@@ -17,20 +17,26 @@ flock -n 200 || { echo "Another instance of $(basename "$0") is running." >&2; e
 
 usage() {
     cat <<USAGE
-Usage: $0 [--clean]
+Usage: $0 [--clean] [--install]
 
 Configure or remove PostgreSQL database settings for this project.
 Without arguments the script will configure the database.
   --clean, --remove   Remove the database configuration and drop the database/user.
+  --install           Install PostgreSQL (Ubuntu 22.x) before configuring.
   -h, --help Show this help message and exit.
 USAGE
 }
 
 CLEAN=0
+INSTALL=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --clean|--remove)
             CLEAN=1
+            shift
+            ;;
+        --install)
+            INSTALL=1
             shift
             ;;
         -h|--help)
@@ -51,6 +57,42 @@ ensure_psql() {
         echo "psql (PostgreSQL client) is required." >&2
         exit 1
     fi
+}
+
+install_postgres() {
+    if command -v psql >/dev/null 2>&1; then
+        echo "PostgreSQL already installed; skipping installation."
+        return
+    fi
+
+    if [[ -r /etc/os-release ]]; then
+        # shellcheck disable=SC1091
+        . /etc/os-release
+    fi
+
+    if [[ ${ID:-} != "ubuntu" || ${VERSION_ID:-} != 22.* ]]; then
+        echo "Automatic PostgreSQL installation is only supported on Ubuntu 22.x. Detected ${PRETTY_NAME:-${ID:-unknown}}." >&2
+        exit 1
+    fi
+
+    if [[ $EUID -ne 0 ]]; then
+        if command -v sudo >/dev/null 2>&1; then
+            INSTALL_SUDO=(sudo)
+        else
+            echo "PostgreSQL installation requires root privileges or sudo." >&2
+            exit 1
+        fi
+    else
+        INSTALL_SUDO=()
+    fi
+
+    echo "Installing PostgreSQL via apt..."
+    "${INSTALL_SUDO[@]}" apt-get update
+    DEBIAN_FRONTEND=noninteractive "${INSTALL_SUDO[@]}" apt-get install -y postgresql postgresql-contrib
+    if command -v systemctl >/dev/null 2>&1; then
+        "${INSTALL_SUDO[@]}" systemctl enable --now postgresql
+    fi
+    echo "PostgreSQL installation completed."
 }
 
 CONFIG_FILE="$BASE_DIR/postgres.env"
@@ -91,6 +133,10 @@ if [[ $CLEAN -eq 1 ]]; then
         echo "Aborted."
     fi
     exit 0
+fi
+
+if [[ $INSTALL -eq 1 ]]; then
+    install_postgres
 fi
 
 ensure_psql
