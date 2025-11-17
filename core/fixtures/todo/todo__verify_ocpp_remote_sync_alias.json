@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Confirm ocpp-remote-sync uses a registered Celery task",
+      "created_on": "2025-11-16T00:00:00Z",
+      "url": "",
+      "request_details": "1. Deploy this release to a node that runs both celery-arthexis.service and celery-beat-arthexis.service.\n2. In a shell, run `python manage.py shell -c \"from ocpp.tasks import sync_remote_chargers; sync_remote_chargers.delay()\"` to enqueue the legacy task name used by the ocpp-remote-sync periodic schedule.\n3. Tail `journalctl -u celery-arthexis.service -n 100 -f` and confirm the worker logs `Task ocpp.tasks.sync_remote_chargers[...] succeeded` without any `Received unregistered task` errors.\n4. Wait for the `ocpp-remote-sync` periodic task to trigger (it runs every ten minutes) and confirm the log again shows a successful dispatch without errors.\n5. Open the forwarding dashboard and confirm forwarded charge points remain connected, indicating the alias still executes push_forwarded_charge_points.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]
