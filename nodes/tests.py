@@ -4797,7 +4797,7 @@ class NotificationManagerTests(TestCase):
         self.assertTrue(result)
         manager._gui_display.assert_called_once_with("hi", "there")
 
-    def test_send_uses_gui_when_lock_missing(self):
+    def test_send_creates_lock_when_missing(self):
         from core.notifications import NotificationManager
 
         with TemporaryDirectory() as tmp:
@@ -4805,8 +4805,13 @@ class NotificationManagerTests(TestCase):
             manager = NotificationManager(lock_file=lock)
             manager._gui_display = MagicMock()
             result = manager.send("hi", "there")
-        self.assertTrue(result)
-        manager._gui_display.assert_called_once_with("hi", "there")
+            self.assertTrue(result)
+            self.assertTrue(lock.exists())
+            self.assertEqual(
+                lock.read_text(encoding="utf-8").splitlines()[:2],
+                ["hi", "there"],
+            )
+        manager._gui_display.assert_not_called()
 
     def test_gui_display_uses_windows_toast(self):
         from core.notifications import NotificationManager
