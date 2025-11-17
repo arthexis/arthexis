@@ -527,7 +527,11 @@ def push_forwarded_charge_points() -> int:
 
 
 # Backwards compatibility alias for legacy schedules
-sync_remote_chargers = push_forwarded_charge_points
+@shared_task(name="ocpp.tasks.sync_remote_chargers")
+def sync_remote_chargers() -> int:
+    """Maintain the legacy task name used by older beat schedules."""
+
+    return push_forwarded_charge_points()
 
 
 def _resolve_report_window() -> tuple[datetime, datetime, date]:
