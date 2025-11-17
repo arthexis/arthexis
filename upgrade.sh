@@ -416,12 +416,32 @@ wait_for_service_active() {
   return 1
 }
 
+env_refresh_in_progress() {
+  if ! command -v pgrep >/dev/null 2>&1; then
+    return 1
+  fi
+
+  local patterns=("env-refresh\\.py" "env-refresh\\.sh" "prestart-refresh.sh")
+  local pattern
+  for pattern in "${patterns[@]}"; do
+    if pgrep -f "$pattern" >/dev/null 2>&1; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
 # Restart core, Celery, and LCD services while respecting systemd when available.
 restart_services() {
   echo "Restarting services..."
   if [ -f "$LOCK_DIR/service.lck" ]; then
     local service_name
     service_name="$(cat "$LOCK_DIR/service.lck")"
+    local env_refresh_running=0
+    if env_refresh_in_progress; then
+      env_refresh_running=1
+    fi
     local restart_via_systemd=0
     if command -v systemctl >/dev/null 2>&1; then
       local -a systemctl_cmd=(systemctl)
@@ -435,15 +455,19 @@ restart_services() {
       echo "Existing services before restart:"
       "${systemctl_cmd[@]}" status "$service_name" --no-pager || true
       if [ -f "$LOCK_DIR/celery.lck" ]; then
-        "${systemctl_cmd[@]}" status "celery-$service_name" --no-pager || true
-        "${systemctl_cmd[@]}" status "celery-beat-$service_name" --no-pager || true
+        if [ "$env_refresh_running" -eq 1 ]; then
+          echo "Environment refresh in progress; skipping Celery restart checks."
+        else
+          "${systemctl_cmd[@]}" status "celery-$service_name" --no-pager || true
+          "${systemctl_cmd[@]}" status "celery-beat-$service_name" --no-pager || true
+        fi
       fi
       if "${systemctl_cmd[@]}" is-active --quiet "$service_name"; then
         echo "Signaling $service_name to restart via systemd..."
         "${systemctl_cmd[@]}" kill --signal=TERM "$service_name" || true
         restart_via_systemd=1
       fi
-      if [ -f "$LOCK_DIR/celery.lck" ]; then
+      if [ -f "$LOCK_DIR/celery.lck" ] && [ "$env_refresh_running" -eq 0 ]; then
         local celery_service="celery-$service_name"
         local celery_beat_service="celery-beat-$service_name"
         if "${systemctl_cmd[@]}" is-active --quiet "$celery_service"; then
@@ -468,7 +492,7 @@ restart_services() {
         echo "Service $service_name did not become active after restart." >&2
         return 1
       fi
-      if [ -f "$LOCK_DIR/celery.lck" ]; then
+      if [ -f "$LOCK_DIR/celery.lck" ] && [ "$env_refresh_running" -eq 0 ]; then
         local celery_service="celery-$service_name"
         local celery_beat_service="celery-beat-$service_name"
         if ! wait_for_service_active "$celery_service" 1; then
@@ -497,7 +521,7 @@ restart_services() {
       echo "Service $service_name did not become active after restart." >&2
       return 1
     fi
-    if [ -f "$LOCK_DIR/celery.lck" ]; then
+    if [ -f "$LOCK_DIR/celery.lck" ] && [ "$env_refresh_running" -eq 0 ]; then
       local celery_service="celery-$service_name"
       local celery_beat_service="celery-beat-$service_name"
       if ! wait_for_service_active "$celery_service" 1; then
