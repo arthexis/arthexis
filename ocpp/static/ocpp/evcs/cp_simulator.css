@@ -1,4 +1,8 @@
-.simulator-card { max-width: 800px; margin: 0 auto; }
+.simulator-card { max-width: 1200px; margin: 0 auto; }
+.simulator-layout { width: 100%; }
+@media (min-width: 1200px) {
+  .simulator-layout { flex-wrap: nowrap; }
+}
 .simulator-status { display: flex; align-items: center; gap: 4px; }
 .state-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
 .state-dot.online { background: #4caf50; }
