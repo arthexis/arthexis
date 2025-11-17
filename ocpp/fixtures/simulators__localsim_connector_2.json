@@ -7,7 +7,7 @@
       "name": "LocalSim Connector 2",
       "cp_path": "LOCALSIM-0001",
       "host": "127.0.0.1",
-      "ws_port": 8000,
+      "ws_port": 8888,
       "serial_number": "LOCALSIM-0001",
       "connector_id": 2
     }

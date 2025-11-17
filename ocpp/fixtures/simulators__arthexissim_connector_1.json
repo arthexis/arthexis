@@ -7,7 +7,7 @@
       "name": "ArthexisSim Connector 1",
       "cp_path": "ARTHEXIS-0004",
       "host": "arthexis.com",
-      "ws_port": null,
+      "ws_port": 8888,
       "serial_number": "ARTHEXIS-0004",
       "connector_id": 1
     }
