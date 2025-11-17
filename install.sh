@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
+# Bootstrap logging and helper utilities used throughout the installation.
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PIP_INSTALL_HELPER="$SCRIPT_DIR/scripts/helpers/pip_install.py"
 # shellcheck source=scripts/helpers/logging.sh
@@ -14,9 +15,11 @@ PIP_INSTALL_HELPER="$SCRIPT_DIR/scripts/helpers/pip_install.py"
 # shellcheck source=scripts/helpers/systemd_locks.sh
 . "$SCRIPT_DIR/scripts/helpers/systemd_locks.sh"
 arthexis_resolve_log_dir "$SCRIPT_DIR" LOG_DIR || exit 1
+# Write a copy of stdout/stderr to a dedicated log file for troubleshooting.
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 exec > >(tee "$LOG_FILE") 2>&1
 
+# Default configuration flags populated by CLI parsing below.
 SERVICE=""
 NGINX_MODE="internal"
 PORT=""
@@ -39,6 +42,7 @@ usage() {
     exit 1
 }
 
+# Service management helpers to avoid lock conflicts during repair operations.
 stop_systemd_unit_if_present() {
     local unit_name="$1"
 
@@ -65,6 +69,7 @@ stop_existing_units_for_repair() {
     fi
 }
 
+# Dependency checks for nginx and redis, populating redis.env when appropriate.
 ensure_nginx_in_path() {
     if command -v nginx >/dev/null 2>&1; then
         return 0
@@ -150,6 +155,7 @@ CELERY_RESULT_BACKEND=redis://localhost:6379/0
 EOF
 }
 
+# Hardware support utilities.
 ensure_i2c_packages() {
     if ! python3 -c 'import smbus' >/dev/null 2>&1 \
         && ! python3 -c 'import smbus2' >/dev/null 2>&1; then
@@ -159,6 +165,7 @@ ensure_i2c_packages() {
     fi
 }
 
+# Parse CLI arguments to configure the installation behavior.
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --service)
@@ -314,6 +321,7 @@ DB_FILE="$BASE_DIR/db.sqlite3"
 # Ensure the VERSION marker reflects the current revision before proceeding.
 arthexis_update_version_marker "$BASE_DIR"
 if [ -f "$DB_FILE" ]; then
+    # Allow callers to purge or reuse an existing database depending on the mode requested.
     if [ "$CLEAN" = true ]; then
         BACKUP_DIR="$BASE_DIR/backups"
         mkdir -p "$BACKUP_DIR"
@@ -334,6 +342,7 @@ LOCK_DIR="$BASE_DIR/locks"
 mkdir -p "$LOCK_DIR"
 SYSTEMD_UNITS_LOCK="$LOCK_DIR/systemd_services.lck"
 
+# Record role-specific prerequisites and capture supporting state for service management.
 if [ "$ENABLE_CONTROL" = true ]; then
     check_nginx_and_redis "$NODE_ROLE"
 elif [ "$REQUIRES_REDIS" = true ]; then
@@ -407,6 +416,7 @@ if [ "$ENABLE_CONTROL" = true ]; then
     fi
 fi
 
+# Apply database migrations for a ready-to-run schema.
 python manage.py migrate --noinput
 
 # Load personal user data fixtures if present

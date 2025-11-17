@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -e
 
+# Initialize logging and helper functions shared across upgrade steps.
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=scripts/helpers/logging.sh
 . "$BASE_DIR/scripts/helpers/logging.sh"
@@ -17,6 +18,7 @@ BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 # shellcheck source=scripts/helpers/systemd_locks.sh
 . "$BASE_DIR/scripts/helpers/systemd_locks.sh"
 arthexis_resolve_log_dir "$BASE_DIR" LOG_DIR || exit 1
+# Capture stdout/stderr to a timestamped log for later review.
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 exec > >(tee "$LOG_FILE")
 exec 2> >(tee "$LOG_FILE" >&2)
@@ -25,6 +27,7 @@ cd "$BASE_DIR"
 LOCK_DIR="$BASE_DIR/locks"
 SERVICE_NAME=""
 [ -f "$LOCK_DIR/service.lck" ] && SERVICE_NAME="$(cat "$LOCK_DIR/service.lck")"
+# Discover managed service if not explicitly recorded.
 if [ -z "$SERVICE_NAME" ]; then
   while IFS= read -r unit_name; do
     case "$unit_name" in
@@ -52,6 +55,7 @@ if command -v systemctl >/dev/null 2>&1; then
   fi
 fi
 
+# Capture sudo/systemd locations for environments where the defaults are missing.
 SUDO_CMD=(sudo)
 if ! command -v sudo >/dev/null 2>&1; then
   SUDO_CMD=()
@@ -63,10 +67,12 @@ BACKUP_DIR="$BASE_DIR/backups"
 
 LAST_FAILOVER_BRANCH=""
 
+# Repair any auto-upgrade working directory to keep services consistent before modifying systemd.
 if [ -n "$SERVICE_NAME" ]; then
   arthexis_repair_auto_upgrade_workdir "$BASE_DIR" "$SERVICE_NAME" "$SYSTEMD_DIR"
 fi
 
+# Ensure systemd services refresh environment variables before starting.
 ensure_prestart_env_refresh() {
   local service="$1"
 
@@ -209,6 +215,7 @@ REVERT=0
 NO_WARN=0
 FAILOVER_BRANCH_CREATED=0
 STABLE=0
+# Parse CLI options controlling the upgrade strategy.
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --latest)
@@ -253,6 +260,7 @@ if [[ $LATEST -eq 1 && $STABLE -eq 1 ]]; then
   exit 1
 fi
 
+# Helpers for creating and cleaning up failover branches and database backups.
 backup_database_for_branch() {
   local branch="$1"
   local source="$BASE_DIR/db.sqlite3"
@@ -352,6 +360,7 @@ cleanup_failover_branches() {
   done
 }
 
+# Wait for systemd services to report healthy before proceeding.
 wait_for_service_active() {
   local service="$1"
   local require_registered="${2:-0}"
@@ -407,6 +416,7 @@ wait_for_service_active() {
   return 1
 }
 
+# Restart core, Celery, and LCD services while respecting systemd when available.
 restart_services() {
   echo "Restarting services..."
   if [ -f "$LOCK_DIR/service.lck" ]; then
