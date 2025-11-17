@@ -13,6 +13,8 @@ cd "$BASE_DIR"
 LOCK_DIR="$BASE_DIR/locks"
 LCD_LOCK="$LOCK_DIR/lcd_screen.lck"
 CHARGING_LOCK="$LOCK_DIR/charging.lck"
+CHARGING_LOCK_MAX_AGE_SECONDS="${CHARGING_LOCK_MAX_AGE_SECONDS:-300}"
+CHARGING_SESSION_STALE_AFTER_SECONDS="${CHARGING_SESSION_STALE_AFTER_SECONDS:-86400}"
 PYTHON="python3"
 if [ -d "$BASE_DIR/.venv" ]; then
   PYTHON="$BASE_DIR/.venv/bin/python"
@@ -46,12 +48,43 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+is_charging_lock_fresh() {
+  local lock_file="$1"
+  local max_age="$2"
+
+  if [ ! -f "$lock_file" ]; then
+    return 1
+  fi
+
+  local mtime
+  if mtime=$(stat -c '%Y' "$lock_file" 2>/dev/null); then
+    :
+  elif mtime=$(stat -f '%m' "$lock_file" 2>/dev/null); then
+    :
+  else
+    return 0
+  fi
+
+  local now
+  now=$(date +%s)
+  local age=$((now - mtime))
+
+  if [ "$age" -le "$max_age" ]; then
+    return 0
+  fi
+
+  return 1
+}
+
 if [ "$FORCE" != true ]; then
   ACTIVE_OUTPUT=$(
     "$PYTHON" "$BASE_DIR/manage.py" shell <<'PY' 2>&1
 import os
+from datetime import timedelta
 from django.conf import settings
 from django.db import connections
+from django.db.models import Q
+from django.utils import timezone
 
 override = os.environ.get("ARTHEXIS_STOP_DB_PATH")
 if override:
@@ -67,7 +100,14 @@ active_sessions = active_sessions.filter(
     charger__connector_id__isnull=False,
 )
 
+cutoff_seconds = int(os.environ.get("CHARGING_SESSION_STALE_AFTER_SECONDS", "86400"))
+cutoff = timezone.now() - timedelta(seconds=cutoff_seconds)
+recent_sessions = active_sessions.filter(
+    Q(start_time__gte=cutoff) | Q(received_start_time__gte=cutoff)
+)
+
 print(active_sessions.count())
+print(recent_sessions.count())
 PY
   )
   ACTIVE_STATUS=$?
@@ -76,16 +116,35 @@ PY
     echo "Unable to verify active charging sessions. Resolve the issue or re-run with --force during a maintenance window." >&2
     exit 1
   fi
-  ACTIVE_SESSIONS=$(printf '%s' "$ACTIVE_OUTPUT" | tail -n 1 | tr -d '\r\n ')
-  if [[ ! "$ACTIVE_SESSIONS" =~ ^[0-9]+$ ]]; then
+  mapfile -t ACTIVE_LINES < <(printf '%s\n' "$ACTIVE_OUTPUT" | tail -n 2)
+  if [ ${#ACTIVE_LINES[@]} -lt 2 ]; then
     printf '%s\n' "$ACTIVE_OUTPUT" >&2
     echo "Unexpected response while checking for active charging sessions. Resolve the issue or re-run with --force during a maintenance window." >&2
     exit 1
   fi
-  if [ "$ACTIVE_SESSIONS" -gt 0 ]; then
+  ACTIVE_SESSIONS_INDEX=$((${#ACTIVE_LINES[@]} - 2))
+  RECENT_SESSIONS_INDEX=$((${#ACTIVE_LINES[@]} - 1))
+  ACTIVE_SESSIONS=$(printf '%s' "${ACTIVE_LINES[$ACTIVE_SESSIONS_INDEX]}" | tr -d '\r\n ')
+  RECENT_ACTIVE_SESSIONS=$(printf '%s' "${ACTIVE_LINES[$RECENT_SESSIONS_INDEX]}" | tr -d '\r\n ')
+  if [[ ! "$ACTIVE_SESSIONS" =~ ^[0-9]+$ ]] || [[ ! "$RECENT_ACTIVE_SESSIONS" =~ ^[0-9]+$ ]]; then
+    printf '%s\n' "$ACTIVE_OUTPUT" >&2
+    echo "Unexpected response while checking for active charging sessions. Resolve the issue or re-run with --force during a maintenance window." >&2
+    exit 1
+  fi
+  if [ "$ACTIVE_SESSIONS" -gt 0 ] && [ "$RECENT_ACTIVE_SESSIONS" -eq 0 ]; then
+    echo "Recorded $ACTIVE_SESSIONS session(s) without recent activity; assuming stale records and continuing shutdown." >&2
     if [ -f "$CHARGING_LOCK" ]; then
-      echo "Active charging sessions detected; aborting stop. Resolve the sessions or pass --force during a maintenance window." >&2
-      exit 1
+      echo "Removing charging lock to clear stale session marker." >&2
+      rm -f "$CHARGING_LOCK"
+    fi
+  elif [ "$RECENT_ACTIVE_SESSIONS" -gt 0 ]; then
+    if [ -f "$CHARGING_LOCK" ]; then
+      if is_charging_lock_fresh "$CHARGING_LOCK" "$CHARGING_LOCK_MAX_AGE_SECONDS"; then
+        echo "Active charging sessions detected; aborting stop. Resolve the sessions or pass --force during a maintenance window." >&2
+        exit 1
+      fi
+      echo "Charging lock appears stale; proceeding with shutdown and removing stale marker." >&2
+      rm -f "$CHARGING_LOCK"
     fi
     echo "Recorded $ACTIVE_SESSIONS active session(s) but no charging lock detected; assuming the sessions are stale and continuing shutdown." >&2
   fi

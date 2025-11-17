@@ -98,3 +98,64 @@ def test_stop_script_allows_stale_sessions_without_lock() -> None:
     assert result.returncode == 0
     combined_output = result.stdout + result.stderr
     assert "assuming the sessions are stale" in combined_output
+
+
+@pytest.mark.django_db
+def test_stop_script_ignores_stale_charging_lock() -> None:
+    charger = Charger.objects.create(charger_id="STALE_LOCK", connector_id=3)
+    Transaction.objects.create(charger=charger, start_time=timezone.now())
+
+    env = os.environ.copy()
+    env["ARTHEXIS_STOP_DB_PATH"] = str(settings.DATABASES["default"]["NAME"])
+    env["CHARGING_LOCK_MAX_AGE_SECONDS"] = "0"
+
+    charging_lock = (REPO_ROOT / "locks" / "charging.lck")
+    charging_lock.unlink(missing_ok=True)
+    charging_lock.touch()
+    old_timestamp = timezone.now() - timezone.timedelta(minutes=10)
+    old_epoch = int(old_timestamp.timestamp())
+    os.utime(charging_lock, (old_epoch, old_epoch))
+
+    result = subprocess.run(
+        ["bash", "stop.sh"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+    assert result.returncode == 0
+    combined_output = result.stdout + result.stderr
+    assert "Charging lock appears stale" in combined_output
+
+
+@pytest.mark.django_db
+def test_stop_script_allows_old_active_sessions_with_fresh_lock() -> None:
+    charger = Charger.objects.create(charger_id="OLD_ACTIVE", connector_id=4)
+    old_time = timezone.now() - timezone.timedelta(days=2)
+    Transaction.objects.create(
+        charger=charger,
+        start_time=old_time,
+        received_start_time=old_time,
+    )
+
+    env = os.environ.copy()
+    env["ARTHEXIS_STOP_DB_PATH"] = str(settings.DATABASES["default"]["NAME"])
+    env["CHARGING_SESSION_STALE_AFTER_SECONDS"] = "0"
+
+    charging_lock = REPO_ROOT / "locks" / "charging.lck"
+    charging_lock.unlink(missing_ok=True)
+    charging_lock.touch()
+
+    result = subprocess.run(
+        ["bash", "stop.sh"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+    assert result.returncode == 0
+    combined_output = result.stdout + result.stderr
+    assert "session(s) without recent activity" in combined_output
+    assert not charging_lock.exists()
