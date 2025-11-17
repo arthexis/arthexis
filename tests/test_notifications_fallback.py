@@ -67,12 +67,16 @@ def test_send_returns_true_on_gui_failure(monkeypatch, tmp_path):
     assert nm.send("subject", "body") is True
 
 
-def test_send_uses_gui_when_lock_file_missing(monkeypatch, tmp_path):
-    monkeypatch.setattr(notifications.sys, "platform", "win32")
+def test_send_creates_missing_lock_file(tmp_path):
     lock = tmp_path / "lcd_screen.lck"  # do not create
     nm = notifications.NotificationManager(lock_file=lock)
     calls = []
     nm._gui_display = lambda s, b: calls.append((s, b))
 
     assert nm.send("subject", "body") is True
-    assert calls == [("subject", "body")]
+    assert lock.exists()
+    assert lock.read_text(encoding="utf-8").splitlines()[:2] == [
+        "subject",
+        "body",
+    ]
+    assert calls == []

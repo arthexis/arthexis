@@ -53,16 +53,13 @@ class NotificationManager:
         retrying in a loop when only the fallback is available.
         """
 
-        if self.lock_file.exists():
-            try:
-                self._write_lock_file(subject[:64], body[:64])
-                return True
-            except Exception as exc:  # pragma: no cover - filesystem dependent
-                logger.warning("LCD lock file write failed: %s", exc)
-        else:
-            logger.debug("LCD lock file missing; using fallback notification")
-        self._gui_display(subject, body)
-        return True
+        try:
+            self._write_lock_file(subject[:64], body[:64])
+            return True
+        except Exception as exc:  # pragma: no cover - filesystem dependent
+            logger.warning("LCD lock file write failed: %s", exc)
+            self._gui_display(subject, body)
+            return True
 
     def send_async(self, subject: str, body: str = "") -> None:
         """Dispatch :meth:`send` on a background thread."""
