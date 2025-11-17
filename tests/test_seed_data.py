@@ -18,6 +18,7 @@ django.setup()
 
 from django.test import TestCase, TransactionTestCase
 from django.db import connection, connections
+from django.db.utils import OperationalError
 from django.conf import settings
 from nodes.models import Node, NodeRole
 from teams.models import OdooProfile, SecurityGroup
@@ -716,6 +717,65 @@ class EnvRefreshUserDataTests(TransactionTestCase):
 
         reloaded = Todo.all_objects.get(request="Personal TODO")
         self.assertTrue(reloaded.is_user_data)
+
+
+class EnvRefreshRetryTests(TestCase):
+    def setUp(self):
+        base_dir = Path(settings.BASE_DIR)
+        spec = importlib.util.spec_from_file_location(
+            "env_refresh_retry", base_dir / "env-refresh.py"
+        )
+        self.env_refresh = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(self.env_refresh)
+
+    def test_retry_handles_sqlite_locks(self):
+        attempts: list[int] = []
+        sleeps: list[float] = []
+        closed: list[bool] = []
+
+        def fake_call_command(*args, **kwargs):
+            attempts.append(1)
+            if len(attempts) == 1:
+                raise OperationalError("database is locked")
+            return None
+
+        self.env_refresh.call_command = fake_call_command
+
+        def fake_close_old_connections():
+            closed.append(True)
+
+        self.env_refresh.close_old_connections = fake_close_old_connections
+
+        original_sleep = self.env_refresh.time.sleep
+
+        def fake_sleep(duration: float) -> None:
+            sleeps.append(duration)
+
+        self.env_refresh.time.sleep = fake_sleep
+        self.addCleanup(lambda: setattr(self.env_refresh.time, "sleep", original_sleep))
+
+        self.env_refresh._load_fixture_with_retry(
+            "core/fixtures/example.json",
+            using_sqlite=True,
+            attempts=3,
+            base_delay=0.05,
+        )
+
+        self.assertEqual(len(attempts), 2)
+        self.assertEqual(sleeps, [0.05])
+        self.assertTrue(closed)
+
+    def test_lock_error_propagates_for_non_sqlite(self):
+        def fake_call_command(*args, **kwargs):
+            raise OperationalError("database is locked")
+
+        self.env_refresh.call_command = fake_call_command
+
+        with self.assertRaises(OperationalError):
+            self.env_refresh._load_fixture_with_retry(
+                "core/fixtures/example.json",
+                using_sqlite=False,
+            )
 
     def _run_clean_env_refresh(self):
         connections.close_all()

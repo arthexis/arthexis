@@ -25,7 +25,7 @@ from django.conf import settings
 from django.core.exceptions import FieldDoesNotExist, ObjectDoesNotExist
 from django.core.management import call_command
 from django.core.management.base import CommandError
-from django.db import connections, connection
+from django.db import connections, connection, close_old_connections
 from django.db.migrations.exceptions import (
     InconsistentMigrationHistory,
     InvalidBasesError,
@@ -97,6 +97,33 @@ def _fixture_files() -> list[str]:
         str(path.relative_to(base_dir)) for path in base_dir.glob("**/fixtures/*.json")
     ]
     return sorted(fixtures)
+
+
+def _load_fixture_with_retry(
+    fixture: str,
+    *,
+    using_sqlite: bool,
+    attempts: int = 5,
+    base_delay: float = 0.2,
+) -> None:
+    """Load *fixture* while retrying sqlite lock conflicts."""
+
+    for attempt in range(1, attempts + 1):
+        try:
+            call_command("loaddata", fixture, verbosity=0)
+            return
+        except OperationalError as exc:
+            if ("database is locked" not in str(exc).lower()) or not using_sqlite:
+                raise
+            if attempt == attempts:
+                raise
+            close_old_connections()
+            delay = base_delay * attempt
+            print(
+                f"Database locked while loading {fixture}; retrying in {delay:.1f}s",
+                flush=True,
+            )
+            time.sleep(delay)
 
 
 def _assign_many_to_many(instance: "Model", field_name: str, value: Any) -> bool:
@@ -506,7 +533,10 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                 for priority in sorted(patched):
                     for fixture in patched[priority]:
                         try:
-                            call_command("loaddata", fixture, verbosity=0)
+                            _load_fixture_with_retry(
+                                fixture,
+                                using_sqlite=using_sqlite,
+                            )
                         except DeserializationError as exc:
                             print(f"Skipping fixture {fixture} due to: {exc}")
                         else:

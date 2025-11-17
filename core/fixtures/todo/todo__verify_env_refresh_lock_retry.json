@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Verify prestart env refresh retries locked sqlite fixtures",
+      "created_on": "2025-11-17T00:00:00Z",
+      "url": "/admin/system/",
+      "request_details": "1. On a gateway node that uses sqlite, note the managed service from `cat locks/service.lck`.\n2. Run `sudo systemctl restart ${SERVICE}` and immediately start a read-only sqlite session against `db.sqlite3` (for example with `sqlite3 db.sqlite3 'BEGIN EXCLUSIVE;'`) to hold the lock.\n3. Watch `sudo journalctl -u ${SERVICE} -f` and `tail -f logs/startup.log` to confirm `scripts/prestart-refresh.sh` records the retry message `Database locked while loading`.\n4. Release the sqlite lock and confirm the prestart refresh finishes successfully and the service reaches the `active (running)` state.\n5. Repeat steps 2-4 for any Celery services if present.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]
