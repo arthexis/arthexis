@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Confirm admin support chat textarea fits drawer",
+      "created_on": "2024-01-01T00:00:00Z",
+      "url": "/admin/",
+      "request_details": "1. Sign in to the Django admin and open any changelist that shows the floating Support widget.\n2. Toggle the Support chat drawer and verify the message textarea stays within the drawer width (no horizontal scroll).\n3. Send a short message to confirm the textarea resizes correctly after submission and remains aligned with the drawer edges.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]
