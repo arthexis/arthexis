@@ -12,9 +12,9 @@ AUTO_UPGRADE_TASK_PATH = "core.tasks.check_github_updates"
 
 DEFAULT_AUTO_UPGRADE_MODE = "version"
 AUTO_UPGRADE_INTERVAL_MINUTES = {
-    "latest": 5,
-    "stable": 60,
-    DEFAULT_AUTO_UPGRADE_MODE: 720,
+    "latest": 10,
+    "stable": 120,
+    DEFAULT_AUTO_UPGRADE_MODE: 1440,
 }
 AUTO_UPGRADE_FALLBACK_INTERVAL = AUTO_UPGRADE_INTERVAL_MINUTES["stable"]
 

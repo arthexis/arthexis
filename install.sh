@@ -60,8 +60,6 @@ stop_existing_units_for_repair() {
     local service_name="$1"
 
     stop_systemd_unit_if_present "${service_name}.service"
-    stop_systemd_unit_if_present "${service_name}-upgrade-guard.timer"
-    stop_systemd_unit_if_present "${service_name}-upgrade-guard.service"
 
     if [ "$ENABLE_CELERY" = true ]; then
         stop_systemd_unit_if_present "celery-${service_name}.service"
@@ -438,11 +436,12 @@ deactivate
 if [ -n "$SERVICE" ]; then
     SERVICE_FILE="/etc/systemd/system/${SERVICE}.service"
     echo "$SERVICE" > "$LOCK_DIR/service.lck"
-    EXEC_CMD="$BASE_DIR/.venv/bin/python manage.py runserver 0.0.0.0:$PORT"
+    EXEC_CMD="$BASE_DIR/service-start.sh"
     sudo bash -c "cat > '$SERVICE_FILE'" <<SERVICEEOF
 [Unit]
 Description=Arthexis Constellation Django service
 After=network.target
+Wants=network.target
 
 [Service]
 Type=simple
@@ -452,53 +451,22 @@ EnvironmentFile=-$BASE_DIR/debug.env
 ExecStartPre=$BASE_DIR/scripts/prestart-refresh.sh
 ExecStart=$EXEC_CMD
 Restart=always
+TimeoutStartSec=300
 User=$(id -un)
 
 [Install]
 WantedBy=multi-user.target
 SERVICEEOF
-    GUARD_SERVICE="${SERVICE}-upgrade-guard"
-    GUARD_SERVICE_FILE="/etc/systemd/system/${GUARD_SERVICE}.service"
-    sudo bash -c "cat > '$GUARD_SERVICE_FILE'" <<GUARDSERVICEEOF
-[Unit]
-Description=Restart guard for ${SERVICE} after upgrades
-After=network.target
-
-[Service]
-Type=oneshot
-WorkingDirectory=$BASE_DIR
-EnvironmentFile=-$BASE_DIR/redis.env
-EnvironmentFile=-$BASE_DIR/debug.env
-ExecStart=$BASE_DIR/start.sh
-User=$(id -un)
-
-[Install]
-WantedBy=multi-user.target
-GUARDSERVICEEOF
-    GUARD_TIMER_FILE="/etc/systemd/system/${GUARD_SERVICE}.timer"
-    sudo bash -c "cat > '$GUARD_TIMER_FILE'" <<GUARDTIMEREOF
-[Unit]
-Description=Automatically restart ${SERVICE} if an upgrade stalls
-
-[Timer]
-OnActiveSec=5min
-AccuracySec=30s
-Persistent=false
-Unit=${GUARD_SERVICE}.service
-
-[Install]
-WantedBy=timers.target
-GUARDTIMEREOF
     arthexis_record_systemd_unit "$LOCK_DIR" "${SERVICE}.service"
-    arthexis_record_systemd_unit "$LOCK_DIR" "${GUARD_SERVICE}.service"
-    arthexis_record_systemd_unit "$LOCK_DIR" "${GUARD_SERVICE}.timer"
     if [ "$ENABLE_CELERY" = true ]; then
         CELERY_SERVICE="celery-$SERVICE"
         CELERY_SERVICE_FILE="/etc/systemd/system/${CELERY_SERVICE}.service"
         sudo bash -c "cat > '$CELERY_SERVICE_FILE'" <<CELERYSERVICEEOF
 [Unit]
 Description=Celery Worker for $SERVICE
-After=network.target redis.service
+After=${SERVICE}.service network.target redis.service
+Requires=${SERVICE}.service
+PartOf=${SERVICE}.service
 
 [Service]
 Type=simple
@@ -519,7 +487,9 @@ CELERYSERVICEEOF
         sudo bash -c "cat > '$CELERY_BEAT_SERVICE_FILE'" <<BEATSERVICEEOF
 [Unit]
 Description=Celery Beat for $SERVICE
-After=network.target redis.service
+After=${SERVICE}.service network.target redis.service
+Requires=${SERVICE}.service
+PartOf=${SERVICE}.service
 
 [Service]
 Type=simple
@@ -549,7 +519,9 @@ if [ "$ENABLE_LCD_SCREEN" = true ] && [ -n "$SERVICE" ]; then
     sudo bash -c "cat > '$LCD_SERVICE_FILE'" <<SERVICEEOF
 [Unit]
 Description=LCD screen updater service for Arthexis
-After=network.target
+After=${SERVICE}.service network.target
+Requires=${SERVICE}.service
+PartOf=${SERVICE}.service
 
 [Service]
 Type=simple
