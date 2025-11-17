@@ -5,7 +5,7 @@
       "request": "Manual QA: Confirm auto-upgrade revives inactive services when already current",
       "created_on": "2025-11-15T00:00:00Z",
       "url": "/admin/system/upgrade-report/",
-      "request_details": "1. Ensure the node repository is already on the latest commit (no upgrade will be applied).\n2. Stop the managed service with `sudo systemctl stop $(cat locks/service.lck)` and verify it reports `inactive`.\n3. Run `python manage.py shell -c \"from core.tasks import check_github_updates; check_github_updates()\"` to trigger the auto-upgrade workflow.\n4. After the task finishes, run `systemctl status $(cat locks/service.lck)` and confirm it reports `active (running)`.\n5. Open System → Upgrade Report and confirm the new entry notes the auto-upgrade detected the inactive service and restarted it via start.sh.",
+      "request_details": "1. Ensure the node repository is already on the latest commit (no upgrade will be applied).\n2. Stop the managed service with `sudo systemctl stop $(cat locks/service.lck)` and verify it reports `inactive`.\n3. Run `python manage.py shell -c \"from core.tasks import check_github_updates; check_github_updates()\"` to trigger the auto-upgrade workflow.\n4. After the task finishes, run `systemctl status $(cat locks/service.lck)` and confirm it reports `active (running)`.\n5. Open System → Upgrade Report and confirm the new entry notes the auto-upgrade detected the inactive service and restarted it via a systemd restart (the log should mention `restarting via systemd restart`).",
       "done_on": null,
       "is_deleted": false,
       "version": "0.1.35"
