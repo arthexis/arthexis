@@ -646,6 +646,24 @@ def test_check_github_updates_logs_fetch_failure_details(monkeypatch, tmp_path):
     assert messages == ["Git fetch failed (exit code 128): fatal: forbidden"]
 
 
+@pytest.mark.parametrize(
+    "stderr",
+    [
+        "fatal: unable to access 'https://github.com/example/repo/': Recv failure: Connection reset by peer",
+        "fatal: unable to access 'https://github.com/example/repo/': Failed to connect to github.com port 443: Couldn't connect to server",
+        "fatal: unable to access 'https://github.com/example/repo/': GnuTLS recv error (-110): The TLS connection was non-properly terminated.",
+    ],
+)
+def test_is_network_failure_handles_tls_resets(stderr):
+    """Network detection should include TLS resets and partial TLS failures."""
+
+    from core import tasks
+
+    error = subprocess.CalledProcessError(128, ["git", "fetch", "origin", "main"], "", stderr)
+
+    assert tasks._is_network_failure(error) is True
+
+
 def test_check_github_updates_network_failures_trigger_reboot(
     monkeypatch, tmp_path
 ):
