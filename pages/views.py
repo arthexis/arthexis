@@ -1165,8 +1165,11 @@ class CustomLoginView(LoginView):
             }
         )
         context["authenticator_check_url"] = reverse("pages:authenticator-login-check")
-        context["passkey_login_options_url"] = reverse("pages:passkey-login-options")
-        context["passkey_login_verify_url"] = reverse("pages:passkey-login-verify")
+        passkey_login_enabled = getattr(settings, "PASSKEY_LOGIN_ENABLED", False)
+        context["passkey_login_enabled"] = passkey_login_enabled
+        if passkey_login_enabled:
+            context["passkey_login_options_url"] = reverse("pages:passkey-login-options")
+            context["passkey_login_verify_url"] = reverse("pages:passkey-login-verify")
         node = Node.get_local()
         has_rfid_scanner = False
         had_rfid_feature = False
