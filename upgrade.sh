@@ -3,6 +3,13 @@ set -e
 
 # Initialize logging and helper functions shared across upgrade steps.
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Track upgrade script changes triggered by git pull so the newer version can be re-run.
+UPGRADE_SCRIPT_PATH="$BASE_DIR/upgrade.sh"
+INITIAL_UPGRADE_HASH=""
+UPGRADE_RERUN_EXIT_CODE=3
+if [ -f "$UPGRADE_SCRIPT_PATH" ]; then
+  INITIAL_UPGRADE_HASH="$(sha256sum "$UPGRADE_SCRIPT_PATH" | awk '{print $1}')"
+fi
 # shellcheck source=scripts/helpers/logging.sh
 . "$BASE_DIR/scripts/helpers/logging.sh"
 # shellcheck source=scripts/helpers/nginx_maintenance.sh
@@ -132,6 +139,26 @@ role_uses_failover_branch() {
   esac
 }
 
+parse_major_minor() {
+  local version="$1"
+  if [[ "$version" =~ ^[[:space:]]*([0-9]+)\.([0-9]+) ]]; then
+    echo "${BASH_REMATCH[1]}.${BASH_REMATCH[2]}"
+  fi
+}
+
+shares_stable_series() {
+  local local_version
+  local remote_version
+  local_version=$(parse_major_minor "$1")
+  remote_version=$(parse_major_minor "$2")
+
+  if [ -z "$local_version" ] || [ -z "$remote_version" ]; then
+    return 1
+  fi
+
+  [[ "$local_version" == "$remote_version" ]]
+}
+
 cleanup_non_terminal_git_state() {
   local role="$1"
 
@@ -254,6 +281,15 @@ while [[ $# -gt 0 ]]; do
 done
 
 mkdir -p "$LOCK_DIR"
+
+UPGRADE_RERUN_LOCK="$LOCK_DIR/upgrade_rerun_required.lck"
+RERUN_AFTER_SELF_UPDATE=0
+RERUN_TARGET_VERSION=""
+if [ -f "$UPGRADE_RERUN_LOCK" ]; then
+  RERUN_AFTER_SELF_UPDATE=1
+  RERUN_TARGET_VERSION=$(tr -d '\r\n' < "$UPGRADE_RERUN_LOCK")
+  rm -f "$UPGRADE_RERUN_LOCK"
+fi
 
 if [[ $LATEST -eq 1 && $STABLE -eq 1 ]]; then
   echo "--stable cannot be used together with --latest." >&2
@@ -416,23 +452,8 @@ wait_for_service_active() {
   return 1
 }
 
-env_refresh_in_progress() {
-  if ! command -v pgrep >/dev/null 2>&1; then
-    return 1
-  fi
-
-  local patterns=("env-refresh\\.py" "env-refresh\\.sh" "prestart-refresh.sh")
-  local pattern
-  for pattern in "${patterns[@]}"; do
-    if pgrep -f "$pattern" >/dev/null 2>&1; then
-      return 0
-    fi
-  done
-
-  return 1
-}
-
-# Restart core, Celery, and LCD services while respecting systemd when available.
+# Restart core and LCD services while respecting systemd when available. Celery is managed by
+# systemd unit dependencies and should not be restarted directly here.
 restart_services() {
   echo "Restarting services..."
   if [ -f "$LOCK_DIR/service.lck" ]; then
@@ -454,30 +475,10 @@ restart_services() {
       fi
       echo "Existing services before restart:"
       "${systemctl_cmd[@]}" status "$service_name" --no-pager || true
-      if [ -f "$LOCK_DIR/celery.lck" ]; then
-        if [ "$env_refresh_running" -eq 1 ]; then
-          echo "Environment refresh in progress; skipping Celery restart checks."
-        else
-          "${systemctl_cmd[@]}" status "celery-$service_name" --no-pager || true
-          "${systemctl_cmd[@]}" status "celery-beat-$service_name" --no-pager || true
-        fi
-      fi
       if "${systemctl_cmd[@]}" is-active --quiet "$service_name"; then
         echo "Signaling $service_name to restart via systemd..."
         "${systemctl_cmd[@]}" kill --signal=TERM "$service_name" || true
         restart_via_systemd=1
-      fi
-      if [ -f "$LOCK_DIR/celery.lck" ] && [ "$env_refresh_running" -eq 0 ]; then
-        local celery_service="celery-$service_name"
-        local celery_beat_service="celery-beat-$service_name"
-        if "${systemctl_cmd[@]}" is-active --quiet "$celery_service"; then
-          echo "Signaling $celery_service for restart via systemd..."
-          "${systemctl_cmd[@]}" kill --signal=TERM "$celery_service" || true
-        fi
-        if "${systemctl_cmd[@]}" is-active --quiet "$celery_beat_service"; then
-          echo "Signaling $celery_beat_service for restart via systemd..."
-          "${systemctl_cmd[@]}" kill --signal=TERM "$celery_beat_service" || true
-        fi
       fi
       if [ -f "$LOCK_DIR/lcd_screen.lck" ]; then
         local lcd_service="lcd-$service_name"
@@ -491,18 +492,6 @@ restart_services() {
       if ! wait_for_service_active "$service_name" 1; then
         echo "Service $service_name did not become active after restart." >&2
         return 1
-      fi
-      if [ -f "$LOCK_DIR/celery.lck" ] && [ "$env_refresh_running" -eq 0 ]; then
-        local celery_service="celery-$service_name"
-        local celery_beat_service="celery-beat-$service_name"
-        if ! wait_for_service_active "$celery_service" 1; then
-          echo "Celery service $celery_service did not become active after restart." >&2
-          return 1
-        fi
-        if ! wait_for_service_active "$celery_beat_service" 1; then
-          echo "Celery beat service $celery_beat_service did not become active after restart." >&2
-          return 1
-        fi
       fi
       if [ -f "$LOCK_DIR/lcd_screen.lck" ]; then
         local lcd_service="lcd-$service_name"
@@ -520,18 +509,6 @@ restart_services() {
     if ! wait_for_service_active "$service_name"; then
       echo "Service $service_name did not become active after restart." >&2
       return 1
-    fi
-    if [ -f "$LOCK_DIR/celery.lck" ] && [ "$env_refresh_running" -eq 0 ]; then
-      local celery_service="celery-$service_name"
-      local celery_beat_service="celery-beat-$service_name"
-      if ! wait_for_service_active "$celery_service" 1; then
-        echo "Celery service $celery_service did not become active after restart." >&2
-        return 1
-      fi
-      if ! wait_for_service_active "$celery_beat_service" 1; then
-        echo "Celery beat service $celery_beat_service did not become active after restart." >&2
-        return 1
-      fi
     fi
     if [ -f "$LOCK_DIR/lcd_screen.lck" ]; then
       local lcd_service="lcd-$service_name"
@@ -736,24 +713,27 @@ if [[ "$BRANCH" == "HEAD" ]]; then
   echo "Switched to branch $BRANCH." >&2
 fi
 LOCAL_VERSION="0"
-[ -f VERSION ] && LOCAL_VERSION=$(cat VERSION)
+[ -f VERSION ] && LOCAL_VERSION=$(tr -d '\r\n' < VERSION)
 
 echo "Checking repository for updates..."
 git fetch origin "$BRANCH"
 REMOTE_VERSION="$LOCAL_VERSION"
 if git cat-file -e "origin/$BRANCH:VERSION" 2>/dev/null; then
-  REMOTE_VERSION=$(git show "origin/$BRANCH:VERSION" | tr -d '\r')
+  REMOTE_VERSION=$(git show "origin/$BRANCH:VERSION" | tr -d '\r\n')
 fi
 
-if [[ $LATEST -ne 1 ]]; then
+if [[ $RERUN_AFTER_SELF_UPDATE -eq 0 ]]; then
   if [[ "$LOCAL_VERSION" == "$REMOTE_VERSION" ]]; then
-    echo "Already up-to-date (version $LOCAL_VERSION)"
+    echo "Already on version $LOCAL_VERSION; skipping upgrade."
     exit 0
   fi
-  if [[ $STABLE -eq 1 ]] && versions_share_minor "$LOCAL_VERSION" "$REMOTE_VERSION"; then
-    echo "No new stable release available (local $LOCAL_VERSION, remote $REMOTE_VERSION)"
+
+  if [[ $STABLE -eq 1 && "$LOCAL_VERSION" != "$REMOTE_VERSION" ]] && shares_stable_series "$LOCAL_VERSION" "$REMOTE_VERSION"; then
+    echo "Stable channel skipping patch-level upgrade from $LOCAL_VERSION to $REMOTE_VERSION."
     exit 0
   fi
+else
+  echo "Detected prior upgrade.sh update; continuing upgrade for $REMOTE_VERSION despite matching versions."
 fi
 
 if role_uses_failover_branch "$NODE_ROLE_NAME"; then
@@ -788,6 +768,18 @@ fi
 # Pull latest changes
 echo "Pulling latest changes..."
 git pull --rebase
+
+# If the upgrade script itself was updated, stop so the new version is executed on the next run.
+POST_PULL_UPGRADE_HASH=""
+if [ -f "$UPGRADE_SCRIPT_PATH" ]; then
+  POST_PULL_UPGRADE_HASH="$(sha256sum "$UPGRADE_SCRIPT_PATH" | awk '{print $1}')"
+fi
+if [ -n "$INITIAL_UPGRADE_HASH" ] && [ -n "$POST_PULL_UPGRADE_HASH" ] && \
+   [ "$POST_PULL_UPGRADE_HASH" != "$INITIAL_UPGRADE_HASH" ]; then
+  printf '%s\n' "$REMOTE_VERSION" > "$UPGRADE_RERUN_LOCK"
+  echo "upgrade.sh was updated during git pull; please run the upgrade again to use the new script." >&2
+  exit "$UPGRADE_RERUN_EXIT_CODE"
+fi
 
 # Update the development marker to reflect the new revision.
 arthexis_update_version_marker "$BASE_DIR"

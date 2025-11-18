@@ -15,7 +15,7 @@ def _make_executable(path: Path, content: str) -> None:
     path.chmod(path.stat().st_mode | 0o111)
 
 
-def test_upgrade_fails_when_celery_units_stay_inactive(tmp_path: Path) -> None:
+def test_upgrade_does_not_manage_celery_units(tmp_path: Path) -> None:
     clone_path = tmp_path / "arthexis-clone"
     subprocess.run(
         ["git", "clone", "--depth", "1", str(REPO_ROOT), str(clone_path)],
@@ -45,11 +45,15 @@ def test_upgrade_fails_when_celery_units_stay_inactive(tmp_path: Path) -> None:
     _make_executable(clone_path / "stop.sh", "#!/usr/bin/env bash\nexit 0\n")
     _make_executable(clone_path / "start.sh", "#!/usr/bin/env bash\nexit 0\n")
 
-    # Provide stub versions of systemctl and sudo to simulate inactive Celery services
+    # Provide stub versions of systemctl and sudo that fail if Celery units are touched
     systemctl_stub = "\n".join(
         [
             "#!/usr/bin/env bash",
             "set -e",
+            "if [[ \"$*\" == *celery* ]]; then",
+            "  echo 'celery units should be managed by systemd dependencies, not upgrade.sh' >&2",
+            "  exit 99",
+            "fi",
             "if [ \"$1\" = \"list-unit-files\" ]; then",
             "  cat <<'EOF'",
             "arthexis.service                                 enabled",
@@ -134,11 +138,11 @@ def test_upgrade_fails_when_celery_units_stay_inactive(tmp_path: Path) -> None:
         env=env,
     )
 
-    assert result.returncode != 0
-    assert "Celery service celery-arthexis did not become active after restart." in result.stderr
+    assert result.returncode == 0
+    assert "celery units should be managed by systemd dependencies" not in result.stderr
 
 
-def test_upgrade_skips_celery_checks_during_env_refresh(tmp_path: Path) -> None:
+def test_upgrade_exits_when_script_changes_mid_run(tmp_path: Path) -> None:
     clone_path = tmp_path / "arthexis-clone"
     subprocess.run(
         ["git", "clone", "--depth", "1", str(REPO_ROOT), str(clone_path)],
@@ -178,40 +182,25 @@ def test_upgrade_skips_celery_checks_during_env_refresh(tmp_path: Path) -> None:
             "EOF",
             "  exit 0",
             "fi",
-            "if [ \"$1\" = \"restart\" ]; then",
-            "  exit 0",
-            "fi",
             "if [ \"$1\" = \"is-active\" ]; then",
             "  shift",
             "  while [ \"$1\" = \"--quiet\" ]; do",
             "    shift",
             "  done",
             "  unit=$1",
-            "  case $unit in",
-            "    arthexis)",
-            "      echo active",
-            "      exit 0",
-            "      ;;",
-            "    celery-arthexis|celery-beat-arthexis)",
-            "      echo inactive",
-            "      exit 3",
-            "      ;;",
-            "  esac",
+            "  if [ \"$unit\" = \"arthexis\" ]; then",
+            "    echo active",
+            "    exit 0",
+            "  fi",
+            "  exit 3",
             "fi",
             "if [ \"$1\" = \"status\" ]; then",
-            "  unit=$2",
-            "  shift 2",
-            "  while [ $# -gt 0 ] && [ \"$1\" = \"--no-pager\" ]; do",
-            "    shift",
-            "  done",
-            "  if [[ $unit == celery-* ]]; then",
-            "    echo \"$unit is inactive\"",
-            "    exit 3",
-            "  fi",
-            "  echo \"$unit is running\"",
+            "  echo \"$2 is running\"",
             "  exit 0",
             "fi",
-            "echo \"systemctl stub: $*\" >&2",
+            "if [ \"$1\" = \"kill\" ]; then",
+            "  exit 0",
+            "fi",
             "exit 0",
         ]
     )
@@ -228,28 +217,27 @@ def test_upgrade_skips_celery_checks_during_env_refresh(tmp_path: Path) -> None:
     )
     _make_executable(clone_path / "sudo", sudo_stub + "\n")
 
-    pgrep_stub = "\n".join(
-        [
-            "#!/usr/bin/env bash",
-            "pattern=$2",
-            "if [[ $pattern =~ env-refresh\\.(py|sh) || $pattern == 'prestart-refresh.sh' ]]; then",
-            "  echo 1234",
-            "  exit 0",
-            "fi",
-            "exit 1",
-        ]
-    )
-    _make_executable(clone_path / "pgrep", pgrep_stub + "\n")
-
     real_git = shutil.which("git")
     assert real_git is not None
     git_stub = "\n".join(
         [
             "#!/usr/bin/env bash",
+            f"REAL_GIT=\"{real_git}\"",
             "if [ \"$1\" = \"pull\" ] && [ \"$2\" = \"--rebase\" ]; then",
+            "  echo '# upgrade script updated' >> upgrade.sh",
             "  exit 0",
             "fi",
-            f"exec {real_git} \"$@\"",
+            "if [ \"$1\" = \"fetch\" ] && [ \"$2\" = \"origin\" ]; then",
+            "  exit 0",
+            "fi",
+            "if [ \"$1\" = \"cat-file\" ]; then",
+            "  exit 0",
+            "fi",
+            "if [ \"$1\" = \"show\" ]; then",
+            "  cat VERSION",
+            "  exit 0",
+            "fi",
+            'exec "$REAL_GIT" "$@"',
         ]
     )
     _make_executable(clone_path / "git", git_stub + "\n")
@@ -267,5 +255,5 @@ def test_upgrade_skips_celery_checks_during_env_refresh(tmp_path: Path) -> None:
         env=env,
     )
 
-    assert result.returncode == 0
-    assert "Environment refresh in progress; skipping Celery restart checks." in result.stdout
+    assert result.returncode == 3
+    assert "upgrade.sh was updated during git pull" in result.stderr
