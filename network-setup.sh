@@ -701,20 +701,19 @@ detect_backend_port() {
 }
 
 collect_managed_site_ports() {
-    local sites_dir="/etc/nginx/sites-enabled/arthexis-sites.d"
-    if [ ! -d "$sites_dir" ]; then
+    local sites_conf
+    sites_conf="$(managed_sites_conf_path)"
+    if [ ! -f "$sites_conf" ]; then
         return 1
     fi
+
     declare -A seen=()
-    local file
-    while IFS= read -r -d '' file; do
-        while IFS= read -r port; do
-            if is_valid_port "$port" && [[ -z "${seen[$port]:-}" ]]; then
-                seen[$port]=1
-                printf '%s\n' "$port"
-            fi
-        done < <(sed -n 's/.*proxy_pass http:\/\/127\.0\.0\.1:\([0-9]\{2,5\}\).*/\1/p' "$file")
-    done < <(find "$sites_dir" -maxdepth 1 -type f -name '*.conf' -print0 2>/dev/null)
+    while IFS= read -r port; do
+        if is_valid_port "$port" && [[ -z "${seen[$port]:-}" ]]; then
+            seen[$port]=1
+            printf '%s\n' "$port"
+        fi
+    done < <(sed -n 's/.*proxy_pass http:\/\/127\.0\.0\.1:\([0-9]\{2,5\}\).*/\1/p' "$sites_conf")
     return 0
 }
 
@@ -766,6 +765,8 @@ report_backend_port_sources() {
         echo "  nginx config: not installed"
     fi
 
+    local managed_conf
+    managed_conf="$(managed_sites_conf_path)"
     local managed_output
     managed_output="$(collect_managed_site_ports 2>/dev/null || true)"
     if [[ -n "$managed_output" ]]; then
@@ -774,9 +775,9 @@ report_backend_port_sources() {
             [[ -n "$port" ]] && managed_ports+=("$port")
         done <<< "$managed_output"
         local joined="$(join_by ', ' "${managed_ports[@]}")"
-        echo "  managed nginx sites (/etc/nginx/sites-enabled/arthexis-sites.d): $joined"
+        echo "  managed nginx sites ($managed_conf): $joined"
     else
-        echo "  managed nginx sites (/etc/nginx/sites-enabled/arthexis-sites.d): none"
+        echo "  managed nginx sites ($managed_conf): none"
     fi
 
     local process_port
@@ -1953,6 +1954,25 @@ slugify() {
     echo "$input" | tr '[:upper:]' '[:lower:]' | sed -e 's/[^a-z0-9]/-/g' -e 's/--*/-/g' -e 's/^-//' -e 's/-$//'
 }
 
+managed_sites_conf_path() {
+    local service_slug="arthexis"
+    local service_lock="$LOCK_DIR/service.lck"
+
+    if [ -f "$service_lock" ]; then
+        local service_name
+        service_name="$(tr -d '\r\n' < "$service_lock" 2>/dev/null || true)"
+        if [[ -n "$service_name" ]]; then
+            local slug
+            slug="$(slugify "$service_name")"
+            if [[ -n "$slug" ]]; then
+                service_slug="$slug"
+            fi
+        fi
+    fi
+
+    printf '/etc/nginx/sites-enabled/%s-sites.conf' "$service_slug"
+}
+
 apply_managed_nginx_sites() {
     local requested_port="${1:-$BACKEND_PORT}"
     local config_json="$BASE_DIR/scripts/generated/nginx-sites.json"
@@ -1964,7 +1984,38 @@ apply_managed_nginx_sites() {
     local port="$requested_port"
 
     local helper="$BASE_DIR/scripts/helpers/render_nginx_sites.py"
-    local dest_dir="/etc/nginx/sites-enabled/arthexis-sites.d"
+    local dest_path
+    dest_path="$(managed_sites_conf_path)"
+    local dest_dir
+    dest_dir="$(dirname "$dest_path")"
+    local legacy_dir="/etc/nginx/sites-enabled/arthexis-sites.d"
+    local legacy_conf_dir="/etc/nginx/conf.d"
+
+    if [ ! -d "$dest_dir" ]; then
+        if command -v sudo >/dev/null 2>&1; then
+            sudo mkdir -p "$dest_dir" || true
+        else
+            mkdir -p "$dest_dir" || true
+        fi
+    fi
+
+    if [ -d "$legacy_dir" ]; then
+        if command -v sudo >/dev/null 2>&1; then
+            sudo rm -rf "$legacy_dir" || true
+        else
+            rm -rf "$legacy_dir" || true
+        fi
+        echo "Removed legacy managed nginx directory at $legacy_dir to avoid nginx include errors."
+    fi
+
+    if compgen -G "$legacy_conf_dir/arthexis-site-*.conf" >/dev/null; then
+        if command -v sudo >/dev/null 2>&1; then
+            sudo rm -f "$legacy_conf_dir"/arthexis-site-*.conf "$legacy_conf_dir"/arthexis-sites.conf 2>/dev/null || true
+        else
+            rm -f "$legacy_conf_dir"/arthexis-site-*.conf "$legacy_conf_dir"/arthexis-sites.conf 2>/dev/null || true
+        fi
+        echo "Removed legacy managed nginx configs from $legacy_conf_dir to avoid conflicts."
+    fi
 
     if [ ! -f "$helper" ]; then
         echo "Managed site helper not found at $helper; skipping." >&2
@@ -1981,7 +2032,7 @@ apply_managed_nginx_sites() {
         return 1
     fi
 
-    local args=("$helper" "--mode" "$mode" "--port" "$port" "--dest" "$dest_dir" "--config" "$config_json")
+    local args=("$helper" "--mode" "$mode" "--port" "$port" "--dest" "$dest_path" "--config" "$config_json")
     python3 "${args[@]}"
     local status=$?
 
