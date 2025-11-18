@@ -103,7 +103,9 @@ if [ "$REMOVE_SITE" = true ]; then
     if [ "$RELOAD" = true ]; then
         if arthexis_ensure_nginx_in_path && command -v nginx >/dev/null 2>&1; then
             sudo nginx -t
-            sudo systemctl reload nginx || echo "Warning: nginx reload failed"
+            if ! arthexis_reload_or_start_nginx; then
+                echo "Warning: nginx could not be reloaded or started automatically. Ask an administrator to review the service status." >&2
+            fi
         else
             echo "nginx not installed; skipping nginx test and reload"
         fi
@@ -193,7 +195,9 @@ fi
 if [ "$RELOAD" = true ]; then
     if arthexis_ensure_nginx_in_path && command -v nginx >/dev/null 2>&1; then
         sudo nginx -t
-        sudo systemctl reload nginx || echo "Warning: nginx reload failed"
+        if ! arthexis_reload_or_start_nginx; then
+            echo "Warning: nginx could not be reloaded or started automatically. Ask an administrator to review the service status." >&2
+        fi
     else
         echo "nginx not installed; skipping nginx test and reload"
     fi
