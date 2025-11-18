@@ -116,14 +116,13 @@ Both upgrade scripts prioritise recoverability before applying new code:
 | `--stable` | Locks to the designated stable channel instead of tracking the bleeding edge. Mutually exclusive with `--latest`.【F:upgrade.sh†L150-L159】 |
 | `--clean` | Removes untracked files (except `data/`), resets local changes, and keeps git history aligned—useful for appliance roles where local edits should be discarded.【F:upgrade.sh†L60-L94】【F:upgrade.sh†L146-L159】 |
 | `--no-restart` | Skips restarting services after migration so you can review changes manually before bringing the node back online.【F:upgrade.sh†L123-L152】【F:upgrade.sh†L340-L363】 |
-| `--revert` | Restores the latest failover branch and, when available, copies the associated SQLite backup over the live database.【F:upgrade.sh†L160-L201】【F:upgrade.sh†L217-L292】 |
 | `--no-warn` | Suppresses interactive warnings when an action would remove databases without creating a new backup (used together with `--clean` or manual purges).【F:upgrade.sh†L160-L201】 |
 
-During a normal upgrade the script determines the node role, ensures no interrupted git operations are pending, optionally prunes outdated failover branches, updates dependencies when `requirements.txt` changes, applies Django migrations, and restarts services unless `--no-restart` was passed.【F:upgrade.sh†L18-L216】【F:upgrade.sh†L293-L401】
+During a normal upgrade the script determines the node role, ensures no interrupted git operations are pending, updates dependencies when `requirements.txt` changes, applies Django migrations, and restarts services unless `--no-restart` was passed.【F:upgrade.sh†L33-L205】【F:upgrade.sh†L332-L419】
 
 ### 3.3 Windows upgrade workflow
 
-`upgrade.bat` implements the same safety guarantees: it creates a `failover-*` branch, copies `db.sqlite3` into `backups/`, pulls the latest changes, and refreshes Python dependencies only when the MD5 hash of `requirements.txt` changes. Passing `--revert` resets to the last failover branch and restores the preserved database snapshot (prompting for confirmation when sizes differ).【F:upgrade.bat†L1-L89】
+`upgrade.bat` pulls the latest changes and refreshes Python dependencies when the MD5 hash of `requirements.txt` changes, using `scripts/helpers/pip_install.py` when present.【F:upgrade.bat†L1-L28】
 
 ## 4. Uninstalling (`uninstall.sh`)
 

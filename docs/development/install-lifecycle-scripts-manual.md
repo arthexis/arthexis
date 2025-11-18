@@ -79,7 +79,7 @@ The Windows starter mirrors the Linux workflow without service management: it va
 
 ### 3.1 Linux: `upgrade.sh`
 
-`upgrade.sh` keeps nodes current while protecting local changes. Every run can create a failover branch with a matching SQLite backup so you can roll back using `--revert`. The script infers the node role from `locks/role.lck` to decide whether local commits should be discarded (Control/Watchtower nodes auto-align to the remote branch).【F:upgrade.sh†L15-L118】【F:upgrade.sh†L360-L404】
+`upgrade.sh` keeps nodes current while protecting local changes. It infers the node role from `locks/role.lck` to decide whether local commits should be discarded (Control/Constellation/Watchtower nodes auto-align to the remote branch).【F:upgrade.sh†L123-L205】
 
 Supported options:
 
@@ -89,20 +89,18 @@ Supported options:
 | `--stable` | Skips upgrades unless the remote release changes the major/minor version, mirroring the stable track used during installation. Incompatible with `--latest`.【F:upgrade.sh†L123-L158】 |
 | `--clean` | Deletes `db.sqlite3` (and any `db_*.sqlite3` snapshots) after confirmation so migrations start from a blank database.【F:upgrade.sh†L122-L167】【F:upgrade.sh†L420-L444】 |
 | `--no-restart` | Prevents the helper from stopping services or relaunching them afterwards. Handy when you only want to refresh the working tree.【F:upgrade.sh†L123-L144】【F:upgrade.sh†L404-L419】【F:upgrade.sh†L514-L551】 |
-| `--revert` | Restores the latest failover branch and database backup, prompting if the database sizes differ significantly.【F:upgrade.sh†L118-L218】【F:upgrade.sh†L360-L404】 |
 | `--no-warn` | Skips interactive confirmation before destructive database operations (used with `--clean` or uninstall flows).【F:upgrade.sh†L122-L167】 |
 
 Additional behaviour:
 
-- `upgrade.sh` aborts when it detects interrupted Git operations (rebase/merge/cherry-pick) so you do not lose work, then realigns Control/Watchtower branches by discarding local commits and untracked files.【F:upgrade.sh†L33-L118】【F:upgrade.sh†L203-L315】
-- Failover branches follow the `failover-YYYYMMDD-N` naming scheme, preserving both code and database snapshots. Older failover branches are pruned after a successful run to avoid clutter.【F:upgrade.sh†L168-L315】
+- `upgrade.sh` aborts when it detects interrupted Git operations (rebase/merge/cherry-pick) so you do not lose work, then realigns Control/Constellation/Watchtower branches by discarding local commits and untracked files.【F:upgrade.sh†L33-L118】【F:upgrade.sh†L203-L315】
 - The script fetches origin, compares `VERSION`, and exits early when already up to date unless `--latest` overrides. Stable mode only upgrades when the remote release leaves the current minor version.【F:upgrade.sh†L332-L404】
 - Before applying migrations it refreshes Nginx maintenance assets, optionally clears the database, reruns `env-refresh.sh`, migrates legacy systemd configurations, and restarts services unless `--no-restart` was requested.【F:upgrade.sh†L404-L551】
 - After restarting, it updates desktop shortcuts so GUI launchers stay current.【F:upgrade.sh†L552-L555】
 
 ### 3.2 Windows: `upgrade.bat`
 
-The Windows upgrade helper focuses on Git safety and dependency refreshes. Every run creates a `failover-YYYYMMDD-N` branch (and copies `db.sqlite3` when present) before pulling with rebase. Requirement hashes are stored in `requirements.md5` so pip only runs when the dependency list changes.【F:upgrade.bat†L1-L48】 Use `upgrade.bat --revert` to reset to the newest failover branch and restore the saved database, with an interactive size check mirroring the Linux workflow.【F:upgrade.bat†L8-L71】
+The Windows upgrade helper focuses on Git safety and dependency refreshes. It pulls with rebase and reinstalls dependencies when the `requirements.txt` hash changes, using `scripts/helpers/pip_install.py` when available.【F:upgrade.bat†L1-L28】
 
 ## 4. Uninstallation
 

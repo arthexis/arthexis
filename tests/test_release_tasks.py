@@ -270,9 +270,7 @@ def test_stable_mode_triggers_minor_upgrade(monkeypatch, tmp_path):
 
 
 @pytest.mark.role("Watchtower")
-def test_verify_auto_upgrade_health_reverts_and_records_revision(
-    monkeypatch, tmp_path
-):
+def test_verify_auto_upgrade_health_records_failure(monkeypatch, tmp_path):
     base = _setup_tmp(monkeypatch, tmp_path)
     locks = base / "locks"
     locks.mkdir()
@@ -307,18 +305,28 @@ def test_verify_auto_upgrade_health_reverts_and_records_revision(
         lambda *a, **k: "deadbeef",
     )
 
+    recorded_failover: dict[str, object] = {}
+
+    def capture_failover(base_dir, *, reason, detail=None, revision=None):
+        recorded_failover["base_dir"] = base_dir
+        recorded_failover["reason"] = reason
+        recorded_failover["detail"] = detail
+        recorded_failover["revision"] = revision
+
+    monkeypatch.setattr(tasks, "write_failover_lock", capture_failover)
+
     result = tasks.verify_auto_upgrade_health.run(attempt=1)
     assert result is False
     assert not scheduled
-    assert run_calls
-    final_call = run_calls[-1]
-    assert final_call["args"] == ["./upgrade.sh", "--revert"]
-    assert final_call["cwd"] == base
-    assert final_call["check"] is True
+    assert not run_calls
 
     skip_file = locks / tasks.AUTO_UPGRADE_SKIP_LOCK_NAME
     assert skip_file.exists()
     assert skip_file.read_text().strip() == "deadbeef"
+
+    assert recorded_failover["base_dir"] == base
+    assert "failed" in str(recorded_failover["detail"])
+    assert recorded_failover["revision"] == "deadbeef"
 
 
 @pytest.mark.role("Watchtower")

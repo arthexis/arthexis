@@ -269,7 +269,7 @@ def test_check_github_updates_treats_latest_mode_case_insensitively(
 
     tasks.check_github_updates()
 
-    assert ["./upgrade.sh", "--latest"] in run_commands
+    assert ["./upgrade.sh", "--latest", "--no-restart"] in run_commands
 
 
 @pytest.mark.parametrize(
@@ -279,11 +279,16 @@ def test_check_github_updates_treats_latest_mode_case_insensitively(
         "override_message",
         "severity_name",
     ),
-    [
-        ("latest", ["./upgrade.sh", "--latest"], "latest", "NORMAL"),
-        ("stable", ["./upgrade.sh", "--stable"], "stable", "CRITICAL"),
-        ("normal", ["./upgrade.sh"], None, "NORMAL"),
-    ],
+        [
+            ("latest", ["./upgrade.sh", "--latest", "--no-restart"], "latest", "NORMAL"),
+            (
+                "stable",
+                ["./upgrade.sh", "--stable", "--no-restart"],
+                "stable",
+                "CRITICAL",
+            ),
+            ("normal", ["./upgrade.sh", "--no-restart"], None, "NORMAL"),
+        ],
 )
 def test_check_github_updates_respects_channel_override(
     monkeypatch,
@@ -452,7 +457,7 @@ def test_check_github_updates_allows_stable_critical_patch(monkeypatch, tmp_path
 
     tasks.check_github_updates()
 
-    assert ["./upgrade.sh", "--stable"] in run_commands
+    assert ["./upgrade.sh", "--stable", "--no-restart"] in run_commands
 
 
 def test_check_github_updates_restarts_dev_server(monkeypatch, tmp_path):
@@ -932,17 +937,17 @@ def test_check_github_updates_reverts_when_service_restart_fails(
         lambda base, service, timeout=30: False,
     )
 
-    revert_calls: list[tuple[Path, str]] = []
+    restart_failures: list[tuple[Path, str]] = []
 
-    def record_revert(base: Path, service: str) -> None:
-        revert_calls.append((base, service))
+    def record_restart_failure(base: Path, service: str) -> None:
+        restart_failures.append((base, service))
 
-    monkeypatch.setattr(tasks, "_revert_after_restart_failure", record_revert)
+    monkeypatch.setattr(tasks, "_record_restart_failure", record_restart_failure)
 
     with override_settings(BASE_DIR=base_dir):
         tasks.check_github_updates()
 
-    assert revert_calls == [(base_dir, "arthexis")]
+    assert restart_failures == [(base_dir, "arthexis")]
     assert schedule_calls == []
 
 
@@ -1242,8 +1247,8 @@ def test_handle_failed_health_check_records_failover_lock(monkeypatch, tmp_path)
     assert recorded["revision"] == "rev123456"
 
 
-def test_revert_after_restart_failure_sets_failover_lock(monkeypatch, tmp_path):
-    """Restart failures should schedule the failover alert after reverting."""
+def test_record_restart_failure_sets_failover_lock(monkeypatch, tmp_path):
+    """Restart failures should surface a failover alert without reverting."""
 
     from core import tasks
 
@@ -1267,11 +1272,11 @@ def test_revert_after_restart_failure_sets_failover_lock(monkeypatch, tmp_path):
 
     monkeypatch.setattr(tasks, "write_failover_lock", capture_write)
 
-    tasks._revert_after_restart_failure(tmp_path, "django")
+    tasks._record_restart_failure(tmp_path, "django")
 
     assert recorded["base_dir"] == tmp_path
     assert "django" in str(recorded["reason"])
-    assert "failover" in str(recorded["detail"])
+    assert "manual intervention" in str(recorded["detail"])
     assert recorded["revision"] == "cafebabe"
 
 
