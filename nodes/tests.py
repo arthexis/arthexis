@@ -1961,7 +1961,7 @@ class NodeRegisterCurrentTests(TestCase):
         self.assertEqual(existing_role.description, "updated via attachment")
 
     @pytest.mark.feature("clipboard-poll")
-    def test_clipboard_polling_creates_task(self):
+    def test_clipboard_polling_task_is_not_scheduled(self):
         feature, _ = NodeFeature.objects.get_or_create(
             slug="clipboard-poll", defaults={"display": "Clipboard Poll"}
         )
@@ -1973,13 +1973,24 @@ class NodeRegisterCurrentTests(TestCase):
         )
         raw_name = f"poll_clipboard_node_{node.pk}"
         task_name = slugify_task_name(raw_name)
-        PeriodicTask.objects.filter(
-            name__in=periodic_task_name_variants(raw_name)
-        ).delete()
+        schedule, _ = IntervalSchedule.objects.get_or_create(
+            every=10, period=IntervalSchedule.SECONDS
+        )
+        PeriodicTask.objects.update_or_create(
+            name=task_name,
+            defaults={
+                "interval": schedule,
+                "task": "nodes.tasks.sample_clipboard",
+            },
+        )
+
         NodeFeatureAssignment.objects.create(node=node, feature=feature)
-        self.assertTrue(PeriodicTask.objects.filter(name=task_name).exists())
-        NodeFeatureAssignment.objects.filter(node=node, feature=feature).delete()
-        self.assertFalse(PeriodicTask.objects.filter(name=task_name).exists())
+
+        self.assertFalse(
+            PeriodicTask.objects.filter(
+                name__in=periodic_task_name_variants(raw_name)
+            ).exists()
+        )
 
     @pytest.mark.feature("screenshot-poll")
     def test_screenshot_polling_creates_task(self):

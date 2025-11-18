@@ -1533,10 +1533,9 @@ class Node(Entity):
                 delattr(self, "_skip_role_configuration_enqueue")
 
     def sync_feature_tasks(self):
-        clipboard_enabled = self.has_feature("clipboard-poll")
         screenshot_enabled = self.has_feature("screenshot-poll")
         celery_enabled = self.is_local and self.has_feature("celery-queue")
-        self._sync_clipboard_task(clipboard_enabled)
+        self._remove_clipboard_task()
         self._sync_screenshot_task(screenshot_enabled)
         self._sync_landing_lead_task(celery_enabled)
         self._sync_ocpp_session_report_task(celery_enabled)
@@ -1548,28 +1547,13 @@ class Node(Entity):
         if not skip_requested and not skip_for_node:
             self._queue_role_configuration()
 
-    def _sync_clipboard_task(self, enabled: bool):
-        from django_celery_beat.models import IntervalSchedule, PeriodicTask
+    def _remove_clipboard_task(self):
+        from django_celery_beat.models import PeriodicTask
 
         raw_task_name = f"poll_clipboard_node_{self.pk}"
-        if enabled:
-            schedule, _ = IntervalSchedule.objects.get_or_create(
-                every=10, period=IntervalSchedule.SECONDS
-            )
-            task_name = normalize_periodic_task_name(
-                PeriodicTask.objects, raw_task_name
-            )
-            PeriodicTask.objects.update_or_create(
-                name=task_name,
-                defaults={
-                    "interval": schedule,
-                    "task": "nodes.tasks.sample_clipboard",
-                },
-            )
-        else:
-            PeriodicTask.objects.filter(
-                name__in=periodic_task_name_variants(raw_task_name)
-            ).delete()
+        PeriodicTask.objects.filter(
+            name__in=periodic_task_name_variants(raw_task_name)
+        ).delete()
 
     def _sync_screenshot_task(self, enabled: bool):
         from django_celery_beat.models import IntervalSchedule, PeriodicTask
