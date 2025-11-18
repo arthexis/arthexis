@@ -701,7 +701,7 @@ detect_backend_port() {
 }
 
 collect_managed_site_ports() {
-    local sites_dir="/etc/nginx/sites-enabled/arthexis-sites.d"
+    local sites_dir="/etc/nginx/conf.d"
     if [ ! -d "$sites_dir" ]; then
         return 1
     fi
@@ -714,7 +714,7 @@ collect_managed_site_ports() {
                 printf '%s\n' "$port"
             fi
         done < <(sed -n 's/.*proxy_pass http:\/\/127\.0\.0\.1:\([0-9]\{2,5\}\).*/\1/p' "$file")
-    done < <(find "$sites_dir" -maxdepth 1 -type f -name '*.conf' -print0 2>/dev/null)
+    done < <(find "$sites_dir" -maxdepth 1 -type f -name 'arthexis-site-*.conf' -print0 2>/dev/null)
     return 0
 }
 
@@ -774,9 +774,9 @@ report_backend_port_sources() {
             [[ -n "$port" ]] && managed_ports+=("$port")
         done <<< "$managed_output"
         local joined="$(join_by ', ' "${managed_ports[@]}")"
-        echo "  managed nginx sites (/etc/nginx/sites-enabled/arthexis-sites.d): $joined"
+        echo "  managed nginx sites (/etc/nginx/conf.d): $joined"
     else
-        echo "  managed nginx sites (/etc/nginx/sites-enabled/arthexis-sites.d): none"
+        echo "  managed nginx sites (/etc/nginx/conf.d): none"
     fi
 
     local process_port
@@ -1964,7 +1964,17 @@ apply_managed_nginx_sites() {
     local port="$requested_port"
 
     local helper="$BASE_DIR/scripts/helpers/render_nginx_sites.py"
-    local dest_dir="/etc/nginx/sites-enabled/arthexis-sites.d"
+    local dest_dir="/etc/nginx/conf.d"
+    local legacy_dir="/etc/nginx/sites-enabled/arthexis-sites.d"
+
+    if [ -d "$legacy_dir" ]; then
+        if command -v sudo >/dev/null 2>&1; then
+            sudo rm -rf "$legacy_dir" || true
+        else
+            rm -rf "$legacy_dir" || true
+        fi
+        echo "Removed legacy managed nginx directory at $legacy_dir to avoid nginx include errors."
+    fi
 
     if [ ! -f "$helper" ]; then
         echo "Managed site helper not found at $helper; skipping." >&2

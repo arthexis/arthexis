@@ -100,7 +100,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--dest",
         type=Path,
-        default=Path("/etc/nginx/sites-enabled/arthexis-sites.d"),
+        default=Path("/etc/nginx/conf.d"),
         help="Destination directory for generated nginx configs.",
     )
 
