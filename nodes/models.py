@@ -316,6 +316,10 @@ class Node(Entity):
     )
     mac_address = models.CharField(max_length=17, blank=True)
     port = models.PositiveIntegerField(default=8888)
+    trusted = models.BooleanField(
+        default=False,
+        help_text="Mark the node as trusted for network interactions.",
+    )
     message_queue_length = models.PositiveSmallIntegerField(
         default=10,
         help_text="Maximum queued NetMessages to retain for this peer.",
@@ -925,6 +929,7 @@ class Node(Entity):
             "ipv6_address": ipv6_address,
             "address": preferred_contact,
             "port": port,
+            "trusted": True,
             "base_path": base_path,
             "installed_version": installed_version,
             "installed_revision": installed_revision,

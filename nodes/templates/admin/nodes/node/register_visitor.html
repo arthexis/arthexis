@@ -319,6 +319,7 @@
             public_key: info.public_key,
             features: info.features || [],
         };
+        payload.trusted = true;
         const relationValue = relation || info.current_relation;
         if (relationValue) {
             payload.current_relation = relationValue;
