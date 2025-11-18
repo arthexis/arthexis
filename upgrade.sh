@@ -139,6 +139,26 @@ role_uses_failover_branch() {
   esac
 }
 
+parse_major_minor() {
+  local version="$1"
+  if [[ "$version" =~ ^[[:space:]]*([0-9]+)\.([0-9]+) ]]; then
+    echo "${BASH_REMATCH[1]}.${BASH_REMATCH[2]}"
+  fi
+}
+
+shares_stable_series() {
+  local local_version
+  local remote_version
+  local_version=$(parse_major_minor "$1")
+  remote_version=$(parse_major_minor "$2")
+
+  if [ -z "$local_version" ] || [ -z "$remote_version" ]; then
+    return 1
+  fi
+
+  [[ "$local_version" == "$remote_version" ]]
+}
+
 cleanup_non_terminal_git_state() {
   local role="$1"
 
@@ -261,6 +281,15 @@ while [[ $# -gt 0 ]]; do
 done
 
 mkdir -p "$LOCK_DIR"
+
+UPGRADE_RERUN_LOCK="$LOCK_DIR/upgrade_rerun_required.lck"
+RERUN_AFTER_SELF_UPDATE=0
+RERUN_TARGET_VERSION=""
+if [ -f "$UPGRADE_RERUN_LOCK" ]; then
+  RERUN_AFTER_SELF_UPDATE=1
+  RERUN_TARGET_VERSION=$(tr -d '\r\n' < "$UPGRADE_RERUN_LOCK")
+  rm -f "$UPGRADE_RERUN_LOCK"
+fi
 
 if [[ $LATEST -eq 1 && $STABLE -eq 1 ]]; then
   echo "--stable cannot be used together with --latest." >&2
@@ -684,13 +713,27 @@ if [[ "$BRANCH" == "HEAD" ]]; then
   echo "Switched to branch $BRANCH." >&2
 fi
 LOCAL_VERSION="0"
-[ -f VERSION ] && LOCAL_VERSION=$(cat VERSION)
+[ -f VERSION ] && LOCAL_VERSION=$(tr -d '\r\n' < VERSION)
 
 echo "Checking repository for updates..."
 git fetch origin "$BRANCH"
 REMOTE_VERSION="$LOCAL_VERSION"
 if git cat-file -e "origin/$BRANCH:VERSION" 2>/dev/null; then
-  REMOTE_VERSION=$(git show "origin/$BRANCH:VERSION" | tr -d '\r')
+  REMOTE_VERSION=$(git show "origin/$BRANCH:VERSION" | tr -d '\r\n')
+fi
+
+if [[ $RERUN_AFTER_SELF_UPDATE -eq 0 ]]; then
+  if [[ "$LOCAL_VERSION" == "$REMOTE_VERSION" ]]; then
+    echo "Already on version $LOCAL_VERSION; skipping upgrade."
+    exit 0
+  fi
+
+  if [[ $STABLE -eq 1 && "$LOCAL_VERSION" != "$REMOTE_VERSION" ]] && shares_stable_series "$LOCAL_VERSION" "$REMOTE_VERSION"; then
+    echo "Stable channel skipping patch-level upgrade from $LOCAL_VERSION to $REMOTE_VERSION."
+    exit 0
+  fi
+else
+  echo "Detected prior upgrade.sh update; continuing upgrade for $REMOTE_VERSION despite matching versions."
 fi
 
 if role_uses_failover_branch "$NODE_ROLE_NAME"; then
@@ -733,6 +776,7 @@ if [ -f "$UPGRADE_SCRIPT_PATH" ]; then
 fi
 if [ -n "$INITIAL_UPGRADE_HASH" ] && [ -n "$POST_PULL_UPGRADE_HASH" ] && \
    [ "$POST_PULL_UPGRADE_HASH" != "$INITIAL_UPGRADE_HASH" ]; then
+  printf '%s\n' "$REMOTE_VERSION" > "$UPGRADE_RERUN_LOCK"
   echo "upgrade.sh was updated during git pull; please run the upgrade again to use the new script." >&2
   exit "$UPGRADE_RERUN_EXIT_CODE"
 fi
