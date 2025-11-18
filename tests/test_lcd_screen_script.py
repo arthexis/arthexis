@@ -89,3 +89,19 @@ def test_resolve_payload_uses_lock_when_no_alerts(monkeypatch):
     payload = lcd_screen._resolve_display_payload(("lock", "file", 500))
 
     assert payload == ("lock", "file", 500, "lock-file")
+
+
+def test_lock_file_matches_detects_updated_payload(monkeypatch, tmp_path):
+    lock_file = tmp_path / "locks" / "lcd_screen.lck"
+    lock_file.parent.mkdir(parents=True)
+    monkeypatch.setattr(lcd_screen, "LOCK_FILE", lock_file)
+
+    payload = ("hello", "world", 750)
+    lock_file.write_text("hello\nworld\n750\n", encoding="utf-8")
+    original_mtime = lock_file.stat().st_mtime
+
+    assert lcd_screen._lock_file_matches(payload, original_mtime)
+
+    lock_file.write_text("new\nmessage\n", encoding="utf-8")
+
+    assert not lcd_screen._lock_file_matches(payload, original_mtime)
