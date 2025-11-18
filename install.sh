@@ -449,7 +449,7 @@ EnvironmentFile=-$BASE_DIR/debug.env
 ExecStartPre=$BASE_DIR/scripts/prestart-refresh.sh
 ExecStart=$EXEC_CMD
 Restart=always
-TimeoutStartSec=300
+TimeoutStartSec=500
 User=$(id -un)
 
 [Install]
@@ -472,10 +472,10 @@ WorkingDirectory=$BASE_DIR
 EnvironmentFile=-$BASE_DIR/redis.env
 EnvironmentFile=-$BASE_DIR/debug.env
 ExecStartPre=$BASE_DIR/scripts/prestart-refresh.sh
-ExecStart=$BASE_DIR/.venv/bin/celery -A config worker -l info --concurrency=2
-Restart=always
-TimeoutStartSec=300
-User=$(id -un)
+        ExecStart=$BASE_DIR/.venv/bin/celery -A config worker -l info --concurrency=1
+        Restart=always
+        TimeoutStartSec=500
+        User=$(id -un)
 
 [Install]
 WantedBy=multi-user.target
@@ -498,7 +498,7 @@ EnvironmentFile=-$BASE_DIR/debug.env
 ExecStartPre=$BASE_DIR/scripts/prestart-refresh.sh
 ExecStart=$BASE_DIR/.venv/bin/celery -A config beat -l info
 Restart=always
-TimeoutStartSec=300
+TimeoutStartSec=500
 User=$(id -un)
 
 [Install]
@@ -528,6 +528,9 @@ Type=simple
 WorkingDirectory=$BASE_DIR
 ExecStart=$BASE_DIR/.venv/bin/python -m core.lcd_screen
 Restart=always
+TimeoutStartSec=500
+StandardOutput=journal
+StandardError=journal
 User=$(id -un)
 
 [Install]
