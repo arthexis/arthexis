@@ -60,9 +60,11 @@ SUITE_UPTIME_LOCK_MAX_AGE = timedelta(minutes=10)
 
 
 UPGRADE_CHANNEL_CHOICES: dict[str, dict[str, object]] = {
-    "normal": {"override": None, "label": _("Normal")},
-    "latest": {"override": "latest", "label": _("Latest")},
     "stable": {"override": "stable", "label": _("Stable")},
+    "unstable": {"override": "unstable", "label": _("Unstable")},
+    # Legacy aliases
+    "normal": {"override": "stable", "label": _("Stable")},
+    "latest": {"override": "unstable", "label": _("Unstable")},
 }
 
 
@@ -1021,15 +1023,28 @@ def _build_auto_upgrade_report(*, limit: int = AUTO_UPGRADE_LOG_LIMIT) -> dict[s
     skip_revisions = _load_auto_upgrade_skip_revisions(base_dir)
     schedule_info = _load_auto_upgrade_schedule()
 
-    mode_value = str(mode_info.get("mode", "version"))
-    is_latest = mode_value.lower() == "latest"
+    raw_mode_value = str(mode_info.get("mode", "stable"))
+    normalized_mode = raw_mode_value.lower() or "stable"
+    resolved_mode = {
+        "latest": "unstable",
+        "version": "stable",
+        "normal": "stable",
+        "regular": "stable",
+    }.get(normalized_mode, normalized_mode)
+    if not resolved_mode:
+        resolved_mode = "stable"
+    is_unstable_mode = resolved_mode == "unstable"
+    is_stable_mode = resolved_mode == "stable"
 
     revision_info = _load_upgrade_revision_info(base_dir)
 
     settings_info = {
         "enabled": bool(mode_info.get("enabled", False)),
-        "mode": mode_value,
-        "is_latest": is_latest,
+        "mode": resolved_mode,
+        "raw_mode": raw_mode_value,
+        "channel": resolved_mode,
+        "is_unstable_mode": is_unstable_mode,
+        "is_stable_mode": is_stable_mode,
         "lock_exists": bool(mode_info.get("lock_exists", False)),
         "read_error": bool(mode_info.get("read_error", False)),
         "mode_file": str(_auto_upgrade_mode_file(base_dir)),
@@ -1819,9 +1834,9 @@ def _system_trigger_upgrade_check_view(request):
     if request.method != "POST":
         return HttpResponseRedirect(reverse("admin:system-upgrade-report"))
 
-    requested_channel = (request.POST.get("channel") or "normal").lower()
+    requested_channel = (request.POST.get("channel") or "stable").lower()
     channel_choice = UPGRADE_CHANNEL_CHOICES.get(
-        requested_channel, UPGRADE_CHANNEL_CHOICES["normal"]
+        requested_channel, UPGRADE_CHANNEL_CHOICES["stable"]
     )
     override_value = channel_choice.get("override")
     channel_override = override_value if isinstance(override_value, str) else None

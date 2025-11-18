@@ -54,22 +54,22 @@
       <h2>{% trans "Upgrade Report" %}</h2>
       <form method="post" action="{% url 'admin:system-upgrade-run-check' %}" class="upgrade-report-trigger">
         {% csrf_token %}
+        {% if report.settings.is_stable_mode %}
+        {% blocktrans trimmed asvar unstable_confirm_message %}
+          This node is configured for stable updates. Continue with an unstable upgrade?
+        {% endblocktrans %}
+        {% endif %}
         <div class="upgrade-report-actions">
           <button
             type="submit"
             name="channel"
-            value="normal"
+            value="unstable"
             class="button default upgrade-action-button"
+            {% if report.settings.is_stable_mode %}
+            onclick="return confirm('{{ unstable_confirm_message|escapejs }}');"
+            {% endif %}
           >
-            {% trans "Upgrade as Normal" %}
-          </button>
-          <button
-            type="submit"
-            name="channel"
-            value="latest"
-            class="button upgrade-action-button"
-          >
-            {% trans "Upgrade as Latest" %}
+            {% trans "Upgrade Immediately (Unstable)" %}
           </button>
           <button
             type="submit"
@@ -77,7 +77,7 @@
             value="stable"
             class="button upgrade-action-button"
           >
-            {% trans "Upgrade as Stable" %}
+            {% trans "Upgrade on Next Release (Stable)" %}
           </button>
         </div>
       </form>
@@ -89,10 +89,12 @@
         <dt>{% trans "Auto-upgrade status" %}</dt>
         <dd>
           {% if report.settings.enabled %}
-            {% if report.settings.is_latest %}
-              {% trans "Enabled (tracking the latest available revision)" %}
+            {% if report.settings.is_unstable_mode %}
+              {% trans "Enabled (tracking the unstable channel)" %}
+            {% elif report.settings.is_stable_mode %}
+              {% trans "Enabled (tracking the stable release channel)" %}
             {% else %}
-              {% trans "Enabled (tracking release versions)" %}
+              {% blocktrans %}Enabled (mode "{{ report.settings.mode }}"){% endblocktrans %}
             {% endif %}
           {% else %}
             {% if report.settings.lock_exists %}
@@ -102,8 +104,13 @@
             {% endif %}
           {% endif %}
         </dd>
-        <dt>{% trans "Mode" %}</dt>
-        <dd><code>{{ report.settings.mode }}</code></dd>
+        <dt>{% trans "Channel" %}</dt>
+        <dd>
+          <code>{{ report.settings.channel }}</code>
+          {% if report.settings.raw_mode and report.settings.raw_mode|lower != report.settings.channel %}
+            <p class="help">{% blocktrans %}Legacy mode value: {{ report.settings.raw_mode }}{% endblocktrans %}</p>
+          {% endif %}
+        </dd>
         <dt>{% trans "Local revision" %}</dt>
         <dd>
           {% if report.settings.local_revision %}
