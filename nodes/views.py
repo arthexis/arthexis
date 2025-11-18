@@ -877,6 +877,11 @@ def register_node(request):
         response = JsonResponse({"detail": "authentication required"}, status=401)
         return _add_cors_headers(request, response)
 
+    trusted_requested = data.get("trusted")
+    trusted_allowed = bool(trusted_requested) and (
+        verified or request.user.is_authenticated
+    )
+
     mac_address = mac_address.lower()
     address_value = address or ""
     ipv6_value = ipv6_address or ""
@@ -913,6 +918,8 @@ def register_node(request):
         "ipv6_address": ipv6_value,
         "port": port,
     }
+    if trusted_allowed:
+        defaults["trusted"] = True
     defaults["constellation_ip"] = constellation_value
     role_name = str(data.get("role") or data.get("role_name") or "").strip()
     desired_role = None
@@ -970,6 +977,9 @@ def register_node(request):
         if desired_role and node.role_id != desired_role.id:
             node.role = desired_role
             update_fields.append("role")
+        if trusted_allowed and not node.trusted:
+            node.trusted = True
+            update_fields.append("trusted")
         timestamp = timezone.now()
         node.last_seen = timestamp
         if "last_seen" not in update_fields:

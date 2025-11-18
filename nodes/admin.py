@@ -330,6 +330,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         "mac_address_display",
         "role",
         "relation",
+        "trusted",
         "version_display",
         "last_seen",
         "visit_link",
@@ -357,6 +358,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
                     "port",
                     "message_queue_length",
                     "current_relation",
+                    "trusted",
                 )
             },
         ),

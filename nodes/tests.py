@@ -237,6 +237,28 @@ class NodeGetLocalTests(TestCase):
         self.assertTrue(created)
         self.assertEqual(node.current_relation, Node.Relation.SELF)
 
+    def test_register_current_marks_node_trusted(self):
+        with TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            with override_settings(BASE_DIR=base):
+                with (
+                    patch(
+                        "nodes.models.Node.get_current_mac",
+                        return_value="00:ff:ee:dd:cc:bc",
+                    ),
+                    patch("nodes.models.socket.gethostname", return_value="trusthost"),
+                    patch("nodes.models.socket.gethostbyname", return_value="127.0.0.1"),
+                    patch.object(Node, "_resolve_ip_addresses", return_value=([], [])),
+                    patch("nodes.models.revision.get_revision", return_value="rev"),
+                    patch.object(Node, "ensure_keys"),
+                    patch.object(Node, "notify_peers_of_update"),
+                ):
+                    node, created = Node.register_current()
+
+        self.assertTrue(created)
+        self.assertTrue(node.trusted)
+        self.assertEqual(node.current_relation, Node.Relation.SELF)
+
     def test_register_current_updates_role_from_lock_file(self):
         NodeRole.objects.get_or_create(name="Terminal")
         NodeRole.objects.get_or_create(name="Watchtower")
@@ -365,6 +387,7 @@ class NodeGetLocalTests(TestCase):
         self.assertEqual(Node.objects.count(), 1)
         node = Node.objects.get(mac_address="00:11:22:33:44:55")
         self.assertEqual(node.current_relation, Node.Relation.PEER)
+        self.assertFalse(node.trusted)
 
         # allow same IP with different MAC
         self.client.post(
@@ -908,7 +931,46 @@ class NodeGetLocalTests(TestCase):
         self.assertEqual(response["Access-Control-Allow-Origin"], "http://example.com")
         node = Node.objects.get(mac_address="aa:bb:cc:dd:ee:11")
         self.assertEqual(node.public_key, public_bytes)
+        self.assertFalse(node.trusted)
         self.assertTrue(node.has_feature("clipboard-poll"))
+
+    def test_register_node_marks_visitor_payload_trusted(self):
+        self.client.logout()
+        private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        public_bytes = private_key.public_key().public_bytes(
+            encoding=serialization.Encoding.PEM,
+            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+        ).decode()
+        token = "visitor-token"
+        signature = base64.b64encode(
+            private_key.sign(
+                token.encode(),
+                padding.PSS(
+                    mgf=padding.MGF1(hashes.SHA256()),
+                    salt_length=padding.PSS.MAX_LENGTH,
+                ),
+                hashes.SHA256(),
+            )
+        ).decode()
+        payload = {
+            "hostname": "visitor", 
+            "address": "127.0.0.1",
+            "port": 8888,
+            "mac_address": "aa:bb:cc:dd:ee:12",
+            "public_key": public_bytes,
+            "token": token,
+            "signature": signature,
+            "trusted": True,
+        }
+        response = self.client.post(
+            reverse("register-node"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            HTTP_ORIGIN="http://example.com",
+        )
+        self.assertEqual(response.status_code, 200)
+        node = Node.objects.get(mac_address="aa:bb:cc:dd:ee:12")
+        self.assertTrue(node.trusted)
 
     def test_register_node_accepts_text_plain_payload(self):
         payload = {
