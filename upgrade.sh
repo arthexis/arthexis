@@ -430,6 +430,10 @@ restart_services() {
   if [ -f "$LOCK_DIR/service.lck" ]; then
     local service_name
     service_name="$(cat "$LOCK_DIR/service.lck")"
+    local env_refresh_running=0
+    if env_refresh_in_progress; then
+      env_refresh_running=1
+    fi
     local restart_via_systemd=0
     if command -v systemctl >/dev/null 2>&1; then
       local -a systemctl_cmd=(systemctl)
