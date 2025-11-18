@@ -2,6 +2,7 @@ import ast
 import inspect
 import textwrap
 from datetime import timedelta
+import ipaddress
 from pathlib import Path
 
 from django import template
@@ -151,8 +152,17 @@ def _evaluate_node_rules() -> dict[str, object]:
         return _rule_failure(_("Local node is missing an assigned role."))
 
     is_watchtower = (local_node.role.name or "").lower() == "watchtower"
+    network_hostname = (local_node.network_hostname or "").strip()
+    has_domain_hostname = False
+    if network_hostname:
+        try:
+            ipaddress.ip_address(network_hostname.strip("[]"))
+        except ValueError:
+            has_domain_hostname = True
 
-    if not is_watchtower:
+    requires_upstream = is_watchtower and has_domain_hostname
+
+    if requires_upstream:
         upstream_nodes = Node.objects.filter(current_relation=Node.Relation.UPSTREAM)
         if not upstream_nodes.exists():
             return _rule_failure(_("At least one upstream node is required."))
