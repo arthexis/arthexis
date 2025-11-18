@@ -70,10 +70,6 @@ fi
 
 SYSTEMD_DIR="${SYSTEMD_DIR:-/etc/systemd/system}"
 
-BACKUP_DIR="$BASE_DIR/backups"
-
-LAST_FAILOVER_BRANCH=""
-
 # Repair any auto-upgrade working directory to keep services consistent before modifying systemd.
 if [ -n "$SERVICE_NAME" ]; then
   arthexis_repair_auto_upgrade_workdir "$BASE_DIR" "$SERVICE_NAME" "$SYSTEMD_DIR"
@@ -143,17 +139,20 @@ determine_node_role() {
   echo "Terminal"
 }
 
-role_uses_failover_branch() {
-  local role="$1"
+env_refresh_in_progress() {
+  if ! command -v pgrep >/dev/null 2>&1; then
+    return 1
+  fi
 
-  case "$role" in
-    Control|Satellite|Watchtower|Constellation)
-      return 0
-      ;;
-    *)
-      return 1
-      ;;
-  esac
+  if pgrep -f "env-refresh.sh" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if pgrep -f "env-refresh.py" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  return 1
 }
 
 parse_major_minor() {
@@ -245,19 +244,13 @@ auto_realign_branch_for_role() {
     echo "Removing untracked files for $role node before pulling updates (preserving data/)..."
     git clean -fd -e data/
   fi
-
-  if (( ahead > 0 )) && [ -n "$LAST_FAILOVER_BRANCH" ]; then
-    echo "The discarded commits are preserved on $LAST_FAILOVER_BRANCH."
-  fi
 }
 
 LATEST=0
 FORCE_STOP=0
 CLEAN=0
 NO_RESTART=0
-REVERT=0
 NO_WARN=0
-FAILOVER_BRANCH_CREATED=0
 STABLE=0
 # Parse CLI options controlling the upgrade strategy.
 while [[ $# -gt 0 ]]; do
@@ -276,10 +269,6 @@ while [[ $# -gt 0 ]]; do
       ;;
     --no-restart)
       NO_RESTART=1
-      shift
-      ;;
-    --revert)
-      REVERT=1
       shift
       ;;
     --no-warn)
@@ -312,106 +301,6 @@ if [[ $LATEST -eq 1 && $STABLE -eq 1 ]]; then
   echo "--stable cannot be used together with --latest." >&2
   exit 1
 fi
-
-# Helpers for creating and cleaning up failover branches and database backups.
-backup_database_for_branch() {
-  local branch="$1"
-  local source="$BASE_DIR/db.sqlite3"
-  local backup_path="$BACKUP_DIR/${branch}.sqlite3"
-
-  if [ ! -f "$source" ]; then
-    return
-  fi
-
-  if ! mkdir -p "$BACKUP_DIR"; then
-    echo "Failed to create backup directory at $BACKUP_DIR" >&2
-    return
-  fi
-
-  if cp -p "$source" "$backup_path"; then
-    echo "Saved database backup to backups/${branch}.sqlite3"
-  else
-    echo "Failed to create database backup at $backup_path" >&2
-  fi
-}
-
-remove_backup_for_branch() {
-  local branch="$1"
-  local backup_path="$BACKUP_DIR/${branch}.sqlite3"
-
-  if [ -f "$backup_path" ]; then
-    if rm -f "$backup_path"; then
-      echo "Removed database backup backups/${branch}.sqlite3"
-    else
-      echo "Failed to remove database backup at $backup_path" >&2
-    fi
-  fi
-}
-
-create_failover_branch() {
-  local date
-  date=$(date +%Y%m%d)
-  local i=1
-  while git rev-parse --verify "failover-$date-$i" >/dev/null 2>&1; do
-    i=$((i+1))
-  done
-  local branch="failover-$date-$i"
-  if ! git diff --quiet || ! git diff --cached --quiet || [ -n "$(git ls-files --others --exclude-standard)" ]; then
-    git add -A
-    local tree
-    tree=$(git write-tree)
-    local commit
-    commit=$(printf "Failover backup %s" "$(date -Is)" | git commit-tree "$tree" -p HEAD)
-    git branch "$branch" "$commit"
-    git reset --hard HEAD
-  else
-    git branch "$branch"
-  fi
-  echo "Created failover branch $branch"
-  LAST_FAILOVER_BRANCH="$branch"
-  backup_database_for_branch "$branch"
-  FAILOVER_BRANCH_CREATED=1
-}
-
-cleanup_failover_branches() {
-  if [[ $FAILOVER_BRANCH_CREATED -ne 1 ]]; then
-    return
-  fi
-
-  local -a failover_branches
-  if ! readarray -t failover_branches < <(git for-each-ref --format='%(refname:short)' refs/heads/failover-* | sort); then
-    echo "Failed to enumerate failover branches for cleanup." >&2
-    return
-  fi
-
-  local total=${#failover_branches[@]}
-  if (( total <= 1 )); then
-    return
-  fi
-
-  local current_branch
-  current_branch=$(git rev-parse --abbrev-ref HEAD)
-  local keep_branch
-  if [[ $current_branch == failover-* ]]; then
-    keep_branch="$current_branch"
-  else
-    keep_branch="${failover_branches[$((total-1))]}"
-  fi
-
-  echo "Pruning older failover branches (keeping $keep_branch)..."
-  local branch
-  for branch in "${failover_branches[@]}"; do
-    if [[ $branch == "$keep_branch" ]]; then
-      continue
-    fi
-    if git branch -D "$branch" >/dev/null 2>&1; then
-      echo "Deleted failover branch $branch"
-      remove_backup_for_branch "$branch"
-    else
-      echo "Failed to delete failover branch $branch" >&2
-    fi
-  done
-}
 
 # Wait for systemd services to report healthy before proceeding.
 wait_for_service_active() {
@@ -542,39 +431,6 @@ restart_services() {
   return 0
 }
 
-revert_after_failed_restart() {
-  local branch="$LAST_FAILOVER_BRANCH"
-
-  if [ -z "$branch" ]; then
-    echo "No failover branch recorded; cannot revert automatically." >&2
-    return 1
-  fi
-
-  echo "Reverting to failover branch $branch after failed restart..."
-  if ! git reset --hard "$branch"; then
-    echo "Failed to reset repository to $branch." >&2
-    return 1
-  fi
-  arthexis_update_version_marker "$BASE_DIR"
-
-  local backup_path="$BACKUP_DIR/${branch}.sqlite3"
-  if [ -f "$backup_path" ]; then
-    if cp "$backup_path" db.sqlite3; then
-      echo "Restored database from backups/${branch}.sqlite3"
-    else
-      echo "Failed to restore database from $backup_path" >&2
-    fi
-  fi
-
-  if ! restart_services; then
-    echo "Restart after reverting to failover branch failed; manual intervention required." >&2
-    return 1
-  fi
-
-  echo "Services restarted from failover branch $branch"
-  return 0
-}
-
 versions_share_minor() {
   local first="$1"
   local second="$2"
@@ -625,7 +481,6 @@ confirm_database_deletion() {
   for target in "${targets[@]}"; do
     echo "  - $target"
   done
-  echo "You can use --revert later to restore from the most recent failover backup."
   echo "Use --no-warn to bypass this prompt."
   local response
   read -r -p "Continue? [y/N] " response
@@ -636,64 +491,9 @@ confirm_database_deletion() {
   return 0
 }
 
-trap 'status=$?; if [[ $status -eq 0 ]]; then cleanup_failover_branches; fi' EXIT
-
 NODE_ROLE_NAME=$(determine_node_role)
 
 cleanup_non_terminal_git_state "$NODE_ROLE_NAME"
-
-if [[ $REVERT -eq 1 ]]; then
-  latest=$(git for-each-ref --format='%(refname:short)' refs/heads/failover-* | sort | tail -n 1)
-  if [ -z "$latest" ]; then
-    echo "No failover branches found." >&2
-    exit 1
-  fi
-  backup_file="$BACKUP_DIR/${latest}.sqlite3"
-  revert_source=""
-  revert_temp=""
-  if [ -f "$backup_file" ]; then
-    revert_source="$backup_file"
-  elif git cat-file -e "$latest:db.sqlite3" 2>/dev/null; then
-    revert_temp=$(mktemp)
-    if git show "$latest:db.sqlite3" > "$revert_temp"; then
-      revert_source="$revert_temp"
-    else
-      rm -f "$revert_temp"
-      revert_temp=""
-    fi
-  fi
-  if [ -n "$revert_source" ]; then
-    current_kb=0
-    [ -f db.sqlite3 ] && current_kb=$(du -k db.sqlite3 | cut -f1)
-    prev_kb=$(du -k "$revert_source" | cut -f1)
-    if [ "$current_kb" -ne "$prev_kb" ]; then
-      diff=$((current_kb - prev_kb))
-      [ $diff -lt 0 ] && diff=$(( -diff ))
-      echo "Warning: reverting will replace database (current ${current_kb}KB vs failover ${prev_kb}KB; diff ${diff}KB)"
-      read -r -p "Proceed? [y/N]: " resp
-      if [[ ! $resp =~ ^[Yy]$ ]]; then
-        echo "Revert cancelled."
-        [ -n "$revert_temp" ] && rm -f "$revert_temp"
-        exit 1
-      fi
-    fi
-  else
-    echo "No database backup found for $latest. The database will not be modified." >&2
-  fi
-  echo "Stashing current changes..." >&2
-  git stash push -u -m "upgrade-revert $(date -Is)" >/dev/null || true
-  echo "Reverting to $latest"
-  git reset --hard "$latest"
-  if [ -n "$revert_source" ]; then
-    if cp "$revert_source" db.sqlite3; then
-      echo "Restored database from ${revert_source##*/}"
-    else
-      echo "Failed to restore database from $revert_source" >&2
-    fi
-  fi
-  [ -n "$revert_temp" ] && rm -f "$revert_temp"
-  exit 0
-fi
 
 # Determine current and remote versions
 BRANCH=$(git rev-parse --abbrev-ref HEAD)
@@ -751,12 +551,6 @@ if [[ $RERUN_AFTER_SELF_UPDATE -eq 0 ]]; then
   fi
 else
   echo "Detected prior upgrade.sh update; continuing upgrade for $REMOTE_VERSION despite matching versions."
-fi
-
-if role_uses_failover_branch "$NODE_ROLE_NAME"; then
-  create_failover_branch
-else
-  echo "Skipping failover branch creation for $NODE_ROLE_NAME node."
 fi
 
 auto_realign_branch_for_role "$NODE_ROLE_NAME" "$BRANCH"
@@ -922,11 +716,7 @@ fi
 if [[ $NO_RESTART -eq 0 ]]; then
   if ! restart_services; then
     echo "Detected failed restart after upgrade." >&2
-    if revert_after_failed_restart; then
-      echo "Upgrade reverted after restart failure. Manual verification recommended." >&2
-    else
-      echo "Automatic revert after restart failure was unsuccessful; manual intervention required." >&2
-    fi
+    echo "Manual intervention required to restore services." >&2
     exit 1
   fi
 fi

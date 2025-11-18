@@ -216,67 +216,26 @@ def _restart_service_via_start_script(base_dir: Path, service: str) -> bool:
     return True
 
 
-def _revert_after_restart_failure(base_dir: Path, service: str) -> None:
-    """Revert the latest upgrade when ``service`` fails to restart."""
+def _record_restart_failure(base_dir: Path, service: str) -> None:
+    """Record restart failures and surface a failover alert."""
 
     _append_auto_upgrade_log(
         base_dir,
         (
             f"Service {service or 'unknown'} failed to restart after upgrade; "
-            "reverting to failover branch"
+            "manual intervention required"
         ),
     )
-    try:
-        subprocess.run(["./upgrade.sh", "--revert"], cwd=base_dir, check=True)
-    except subprocess.CalledProcessError:
-        logger.exception("Automatic revert failed after restart failure")
-        _append_auto_upgrade_log(
-            base_dir,
-            "Automatic revert after restart failure was unsuccessful; manual intervention required",
-        )
-        return
 
     revision = _current_revision(base_dir)
     write_failover_lock(
         base_dir,
         reason=f"Service {service or 'unknown'} failed to restart after upgrade",
         detail=(
-            "Restart verification did not succeed; the node was returned to the "
-            "failover snapshot."
+            "Restart verification did not succeed; manual intervention required"
         ),
         revision=revision or None,
     )
-
-    command = _systemctl_command()
-    if not command or not service:
-        return
-
-    try:
-        subprocess.run([*command, "restart", service], cwd=base_dir, check=True)
-    except subprocess.CalledProcessError:
-        logger.exception("Failed to restart %s after reverting to failover branch", service)
-        _append_auto_upgrade_log(
-            base_dir,
-            (
-                f"Restart after reverting to failover branch failed for {service}; "
-                "manual intervention required"
-            ),
-        )
-        return
-
-    if _wait_for_service_restart(base_dir, service):
-        _append_auto_upgrade_log(
-            base_dir,
-            f"Service {service} restarted successfully from failover branch",
-        )
-    else:
-        _append_auto_upgrade_log(
-            base_dir,
-            (
-                f"Service {service} is still inactive after reverting; "
-                "manual intervention required"
-            ),
-        )
 
 
 def _ensure_managed_service(
@@ -312,7 +271,7 @@ def _ensure_managed_service(
 
     def handle_restart_failure() -> bool:
         if revert_on_failure:
-            _revert_after_restart_failure(base_dir, service)
+            _record_restart_failure(base_dir, service)
         return False
 
     if restart_if_active:
@@ -380,7 +339,7 @@ def _ensure_managed_service(
                 ),
             )
             if revert_on_failure:
-                _revert_after_restart_failure(base_dir, service)
+                _record_restart_failure(base_dir, service)
             return False
 
     if command:
@@ -397,7 +356,7 @@ def _ensure_managed_service(
                 ),
             )
             if revert_on_failure:
-                _revert_after_restart_failure(base_dir, service)
+                _record_restart_failure(base_dir, service)
             return False
 
     _append_auto_upgrade_log(
@@ -804,17 +763,18 @@ def check_github_updates(channel_override: str | None = None) -> None:
     mode = "version"
     reset_network_failures = True
     try:
-        if mode_file.exists():
-            try:
-                raw_mode = mode_file.read_text().strip()
-            except (OSError, UnicodeDecodeError):
-                logger.warning(
-                    "Failed to read auto-upgrade mode lockfile", exc_info=True
-                )
-            else:
-                cleaned_mode = raw_mode.lower()
-                if cleaned_mode:
-                    mode = cleaned_mode
+        try:
+            raw_mode = mode_file.read_text().strip()
+        except FileNotFoundError:
+            raw_mode = ""
+        except (OSError, UnicodeDecodeError):
+            logger.warning(
+                "Failed to read auto-upgrade mode lockfile", exc_info=True
+            )
+        else:
+            cleaned_mode = raw_mode.lower()
+            if cleaned_mode:
+                mode = cleaned_mode
 
         override_mode = None
         if channel_override:
@@ -978,7 +938,6 @@ def check_github_updates(channel_override: str | None = None) -> None:
                 if startup:
                     startup()
                 return
-
             if notify:
                 notify("Upgrading...", upgrade_stamp)
             if mode == "stable":
@@ -986,6 +945,9 @@ def check_github_updates(channel_override: str | None = None) -> None:
             else:
                 args = ["./upgrade.sh"]
             upgrade_was_applied = True
+
+        if upgrade_was_applied:
+            args.append("--no-restart")
 
         with log_file.open("a") as fh:
             fh.write(
@@ -1090,11 +1052,14 @@ def _current_revision(base_dir: Path) -> str:
 def _handle_failed_health_check(base_dir: Path, detail: str) -> None:
     revision = _current_revision(base_dir)
     if not revision:
-        logger.warning("Failed to determine revision during auto-upgrade revert")
+        logger.warning(
+            "Failed to determine revision during auto-upgrade health check failure"
+        )
 
     _add_skipped_revision(base_dir, revision)
-    _append_auto_upgrade_log(base_dir, "Health check failed; reverting upgrade")
-    subprocess.run(["./upgrade.sh", "--revert"], cwd=base_dir, check=True)
+    _append_auto_upgrade_log(
+        base_dir, "Health check failed; manual intervention required"
+    )
     write_failover_lock(
         base_dir,
         reason="Auto-upgrade health check failed",
