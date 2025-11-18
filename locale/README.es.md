@@ -7,9 +7,9 @@
 
 Constelación Arthexis es una [suite de software](https://es.wikipedia.org/wiki/Suite_de_software) basada en [Django](https://www.djangoproject.com/) que centraliza herramientas para gestionar la [infraestructura de carga de vehículos eléctricos](https://es.wikipedia.org/wiki/Punto_de_recarga) y orquestar [productos](https://es.wikipedia.org/wiki/Producto_(econom%C3%ADa)) y [servicios](https://es.wikipedia.org/wiki/Servicio_(econom%C3%ADa)) relacionados con la [energía](https://es.wikipedia.org/wiki/Energ%C3%ADa).
 
-Visita el [Informe de cambios](http://localhost:8888/changelog/) público para explorar actualizaciones inéditas e históricas generadas directamente desde los commits de git.
+Visita el [Informe de cambios](https://arthexis.com/changelog/) público para explorar actualizaciones inéditas e históricas generadas directamente desde los commits de git.
 
-Consulta el nuevo [artículo para desarrolladores](http://localhost:8888/articles/protoline-integration/) con los aspectos destacados del próximo lanzamiento y los detalles del despliegue.
+Consulta el nuevo [artículo para desarrolladores](https://arthexis.com/articles/protoline-integration/) con los aspectos destacados del próximo lanzamiento y los detalles del despliegue.
 
 ## Características actuales
 

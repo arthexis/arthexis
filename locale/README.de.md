@@ -7,9 +7,9 @@
 
 Die Arthexis-Konstellation ist eine auf [Django](https://www.djangoproject.com/) basierende [Softwaresuite](https://de.wikipedia.org/wiki/Softwarepaket), die Werkzeuge zur Verwaltung der [Ladeinfrastruktur für Elektrofahrzeuge](https://de.wikipedia.org/wiki/Lades%C3%A4ule) sowie zur Orchestrierung von [energiebezogenen Produkten](https://de.wikipedia.org/wiki/Produkt) und [Dienstleistungen](https://de.wikipedia.org/wiki/Dienstleistung) zentralisiert.
 
-Besuche den öffentlichen [Changelog-Bericht](http://localhost:8888/changelog/), um unveröffentlichte und historische Aktualisierungen direkt aus Git-Commits nachzuvollziehen.
+Besuche den öffentlichen [Changelog-Bericht](https://arthexis.com/changelog/), um unveröffentlichte und historische Aktualisierungen direkt aus Git-Commits nachzuvollziehen.
 
-Lies den aktuellen [Developer-Artikel](http://localhost:8888/articles/protoline-integration/) mit den wichtigsten Informationen zum kommenden Release und zum Rollout.
+Lies den aktuellen [Developer-Artikel](https://arthexis.com/articles/protoline-integration/) mit den wichtigsten Informationen zum kommenden Release und zum Rollout.
 
 ## Aktuelle Funktionen
 
