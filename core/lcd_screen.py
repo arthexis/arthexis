@@ -45,6 +45,19 @@ def _read_lock_file() -> tuple[str, str, int]:
     return line1, line2, speed
 
 
+def _clear_lock_file() -> None:
+    """Remove the LCD lock file after the payload has been consumed."""
+
+    try:
+        LOCK_FILE.unlink()
+    except FileNotFoundError:
+        return
+    except OSError:
+        # The updater should continue running even if the lock file cannot be
+        # removed (for example, due to transient filesystem issues).
+        logger.debug("Failed to clear LCD lock file", exc_info=True)
+
+
 def _read_service_name() -> str | None:
     try:
         raw = SERVICE_LOCK_FILE.read_text(encoding="utf-8").strip()
@@ -183,6 +196,8 @@ def main() -> None:  # pragma: no cover - hardware dependent
                 lcd.clear()
                 _display(lcd, line1, line2, speed)
                 last_display = current_display
+                if source == "lock-file":
+                    _clear_lock_file()
         except LCDUnavailableError as exc:
             logger.warning("LCD unavailable: %s", exc)
             lcd = None
