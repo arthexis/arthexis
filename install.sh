@@ -476,6 +476,7 @@ EnvironmentFile=-$BASE_DIR/debug.env
 ExecStartPre=$BASE_DIR/scripts/prestart-refresh.sh
 ExecStart=$BASE_DIR/.venv/bin/celery -A config worker -l info --concurrency=2
 Restart=always
+TimeoutStartSec=300
 User=$(id -un)
 
 [Install]
@@ -499,6 +500,7 @@ EnvironmentFile=-$BASE_DIR/debug.env
 ExecStartPre=$BASE_DIR/scripts/prestart-refresh.sh
 ExecStart=$BASE_DIR/.venv/bin/celery -A config beat -l info
 Restart=always
+TimeoutStartSec=300
 User=$(id -un)
 
 [Install]

@@ -89,22 +89,39 @@ ensure_prestart_env_refresh() {
 
   local service_file="${SYSTEMD_DIR}/${service}.service"
   local refresh_line="ExecStartPre=${BASE_DIR}/scripts/prestart-refresh.sh"
+  local timeout_line="TimeoutStartSec=300"
 
-  if [ ! -f "$service_file" ] || grep -Fq "$refresh_line" "$service_file"; then
+  if [ ! -f "$service_file" ]; then
     return 0
   fi
 
-  if [ ${#SUDO_CMD[@]} -gt 0 ]; then
-    "${SUDO_CMD[@]}" sed -i "/^ExecStart=/i ${refresh_line}" "$service_file"
-  else
-    sed -i "/^ExecStart=/i ${refresh_line}" "$service_file"
+  if ! grep -Fq "$refresh_line" "$service_file"; then
+    if [ ${#SUDO_CMD[@]} -gt 0 ]; then
+      "${SUDO_CMD[@]}" sed -i "/^ExecStart=/i ${refresh_line}" "$service_file"
+    else
+      sed -i "/^ExecStart=/i ${refresh_line}" "$service_file"
+    fi
+
+    if [ ${#SYSTEMCTL_CMD[@]} -gt 0 ]; then
+      "${SYSTEMCTL_CMD[@]}" daemon-reload >/dev/null 2>&1 || true
+    fi
+
+    echo "Ensured ${service}.service refreshes the environment before starting."
   fi
 
-  if [ ${#SYSTEMCTL_CMD[@]} -gt 0 ]; then
-    "${SYSTEMCTL_CMD[@]}" daemon-reload >/dev/null 2>&1 || true
-  fi
+  if ! grep -Fq "$timeout_line" "$service_file"; then
+    if [ ${#SUDO_CMD[@]} -gt 0 ]; then
+      "${SUDO_CMD[@]}" sed -i "/^\\[Service\\]/a ${timeout_line}" "$service_file"
+    else
+      sed -i "/^\\[Service\\]/a ${timeout_line}" "$service_file"
+    fi
 
-  echo "Ensured ${service}.service refreshes the environment before starting."
+    if [ ${#SYSTEMCTL_CMD[@]} -gt 0 ]; then
+      "${SYSTEMCTL_CMD[@]}" daemon-reload >/dev/null 2>&1 || true
+    fi
+
+    echo "Ensured ${service}.service waits up to 300s for startup hooks."
+  fi
 }
 
 determine_node_role() {
