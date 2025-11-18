@@ -282,7 +282,7 @@ def _read_auto_upgrade_mode(base_dir: Path) -> dict[str, object]:
 
     mode_file = _auto_upgrade_mode_file(base_dir)
     info: dict[str, object] = {
-        "mode": "version",
+        "mode": "stable",
         "enabled": False,
         "lock_exists": mode_file.exists(),
         "read_error": False,
@@ -299,7 +299,7 @@ def _read_auto_upgrade_mode(base_dir: Path) -> dict[str, object]:
         info["read_error"] = True
         return info
 
-    mode = raw_value or "version"
+    mode = raw_value or "stable"
     info["mode"] = mode
     info["enabled"] = True
     return info

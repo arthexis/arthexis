@@ -10,13 +10,15 @@ from django.conf import settings
 AUTO_UPGRADE_TASK_NAME = "auto-upgrade-check"
 AUTO_UPGRADE_TASK_PATH = "core.tasks.check_github_updates"
 
-DEFAULT_AUTO_UPGRADE_MODE = "version"
+DEFAULT_AUTO_UPGRADE_MODE = "stable"
 AUTO_UPGRADE_INTERVAL_MINUTES = {
     "latest": 10,
-    "stable": 120,
-    DEFAULT_AUTO_UPGRADE_MODE: 1440,
+    "unstable": 10,
+    "stable": 1440,
+    "regular": 1440,
+    "normal": 1440,
 }
-AUTO_UPGRADE_FALLBACK_INTERVAL = AUTO_UPGRADE_INTERVAL_MINUTES["stable"]
+AUTO_UPGRADE_FALLBACK_INTERVAL = AUTO_UPGRADE_INTERVAL_MINUTES[DEFAULT_AUTO_UPGRADE_MODE]
 
 
 def ensure_auto_upgrade_periodic_task(
@@ -53,6 +55,8 @@ def ensure_auto_upgrade_periodic_task(
         return
 
     _mode = mode_file.read_text().strip().lower() or DEFAULT_AUTO_UPGRADE_MODE
+    if _mode == "version":
+        _mode = DEFAULT_AUTO_UPGRADE_MODE
     interval_minutes = AUTO_UPGRADE_INTERVAL_MINUTES.get(
         _mode, AUTO_UPGRADE_FALLBACK_INTERVAL
     )

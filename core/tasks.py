@@ -529,31 +529,26 @@ def _ensure_runtime_services(
     )
 
 
-def _resolve_release_severity(version: str | None) -> str:
-    """Return the stored severity for *version*, defaulting to normal."""
-
-    if not version:
-        return SEVERITY_NORMAL
+def _latest_release() -> tuple[str | None, str | None]:
+    """Return the latest release version and revision when available."""
 
     model = _get_package_release_model()
     if model is None:
-        return SEVERITY_NORMAL
+        return None, None
 
     try:
-        queryset = model.objects.filter(version=version)
-        release = (
-            queryset.filter(package__is_active=True).first() or queryset.first()
-        )
+        release = model.latest()
     except DatabaseError:  # pragma: no cover - depends on DB availability
-        return SEVERITY_NORMAL
+        return None, None
+    except Exception:  # pragma: no cover - defensive catch-all
+        return None, None
 
     if not release:
-        return SEVERITY_NORMAL
+        return None, None
 
-    severity = getattr(release, "severity", None)
-    if not severity:
-        return SEVERITY_NORMAL
-    return severity
+    version = getattr(release, "version", None)
+    revision = getattr(release, "revision", None)
+    return version, revision
 
 
 def _read_local_version(base_dir: Path) -> str | None:
@@ -801,7 +796,7 @@ def check_github_updates(channel_override: str | None = None) -> None:
     """Check the GitHub repo for updates and upgrade if needed."""
     base_dir = _project_base_dir()
     mode_file = base_dir / "locks" / "auto_upgrade.lck"
-    mode = "version"
+    mode = "stable"
     reset_network_failures = True
     try:
         if mode_file.exists():
@@ -819,12 +814,19 @@ def check_github_updates(channel_override: str | None = None) -> None:
         override_mode = None
         if channel_override:
             requested = channel_override.strip().lower()
-            if requested in {"latest", "stable"}:
-                override_mode = requested
-            elif requested == "normal":
-                override_mode = None
+            if requested in {"latest", "unstable"}:
+                override_mode = "unstable"
+            elif requested in {"stable", "normal", "regular"}:
+                override_mode = "stable"
         if override_mode:
             mode = override_mode
+
+        mode = {
+            "latest": "unstable",
+            "version": "stable",
+            "normal": "stable",
+            "regular": "stable",
+        }.get(mode, mode)
 
         branch = "main"
         try:
@@ -895,46 +897,18 @@ def check_github_updates(channel_override: str | None = None) -> None:
                 startup()
             return
 
-        remote_version = _read_remote_version(base_dir, branch)
+        release_version, release_revision = _latest_release()
+        remote_version = release_version or _read_remote_version(base_dir, branch)
         local_version = _read_local_version(base_dir)
-        remote_severity = _resolve_release_severity(remote_version)
+        local_revision = _current_revision(base_dir)
 
         local_timestamp = timezone.localtime(timezone.now())
         upgrade_stamp = local_timestamp.strftime("@ %Y%m%d %H:%M")
 
         upgrade_was_applied = False
 
-        if mode == "latest":
-            local_revision = (
-                subprocess.check_output(
-                    ["git", "rev-parse", branch],
-                    cwd=base_dir,
-                    stderr=subprocess.STDOUT,
-                    text=True,
-                )
-                .strip()
-            )
-            if local_revision == remote_revision:
-                _ensure_runtime_services(
-                    base_dir,
-                    restart_if_active=False,
-                    revert_on_failure=False,
-                )
-                if startup:
-                    startup()
-                return
-
-            if (
-                remote_version
-                and local_version
-                and remote_version != local_version
-                and remote_severity == SEVERITY_LOW
-                and _shares_stable_series(local_version, remote_version)
-            ):
-                _append_auto_upgrade_log(
-                    base_dir,
-                    f"Skipping auto-upgrade for low severity patch {remote_version}",
-                )
+        if mode == "unstable":
+            if local_revision == remote_revision and local_revision:
                 _ensure_runtime_services(
                     base_dir,
                     restart_if_active=False,
@@ -949,10 +923,9 @@ def check_github_updates(channel_override: str | None = None) -> None:
             args = ["./upgrade.sh", "--latest"]
             upgrade_was_applied = True
         else:
-            local_value = local_version or "0"
-            remote_value = remote_version or local_value
+            target_version = remote_version or local_version or "0"
 
-            if local_value == remote_value:
+            if local_version == target_version:
                 _ensure_runtime_services(
                     base_dir,
                     restart_if_active=False,
@@ -962,29 +935,35 @@ def check_github_updates(channel_override: str | None = None) -> None:
                     startup()
                 return
 
-            if (
-                mode == "stable"
-                and local_version
-                and remote_version
-                and remote_version != local_version
-                and _shares_stable_series(local_version, remote_version)
-                and remote_severity != SEVERITY_CRITICAL
-            ):
-                _ensure_runtime_services(
-                    base_dir,
-                    restart_if_active=False,
-                    revert_on_failure=False,
-                )
-                if startup:
-                    startup()
-                return
+            if release_version and release_revision:
+                matches_revision = False
+                model = _get_package_release_model()
+                if model is None:
+                    matches_revision = True
+                else:
+                    matches_revision = model.matches_revision(
+                        release_version, remote_revision
+                    )
+                if not matches_revision:
+                    _append_auto_upgrade_log(
+                        base_dir,
+                        (
+                            "Skipping stable auto-upgrade; release revision does not "
+                            "match origin/main"
+                        ),
+                    )
+                    _ensure_runtime_services(
+                        base_dir,
+                        restart_if_active=False,
+                        revert_on_failure=False,
+                    )
+                    if startup:
+                        startup()
+                    return
 
             if notify:
                 notify("Upgrading...", upgrade_stamp)
-            if mode == "stable":
-                args = ["./upgrade.sh", "--stable"]
-            else:
-                args = ["./upgrade.sh"]
+            args = ["./upgrade.sh", "--stable"]
             upgrade_was_applied = True
 
         with log_file.open("a") as fh:

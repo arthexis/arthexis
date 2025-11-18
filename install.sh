@@ -23,9 +23,8 @@ exec > >(tee "$LOG_FILE") 2>&1
 SERVICE=""
 NGINX_MODE="internal"
 PORT=""
-AUTO_UPGRADE=false
-LATEST=false
-STABLE=false
+AUTO_UPGRADE=true
+CHANNEL="stable"
 UPGRADE=false
 ENABLE_CELERY=false
 ENABLE_LCD_SCREEN=false
@@ -38,7 +37,7 @@ START_SERVICES=false
 REPAIR=false
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--public|--internal] [--port PORT] [--upgrade] [--auto-upgrade] [--latest|--stable] [--satellite] [--terminal] [--control] [--watchtower] [--celery] [--lcd-screen|--no-lcd-screen] [--clean] [--start] [--repair]" >&2
+    echo "Usage: $0 [--service NAME] [--public|--internal] [--port PORT] [--upgrade] [--fixed] [--stable|--regular|--normal|--unstable|--latest] [--satellite] [--terminal] [--control] [--watchtower] [--celery] [--lcd-screen|--no-lcd-screen] [--clean] [--start] [--repair]" >&2
     exit 1
 }
 
@@ -192,12 +191,16 @@ while [[ $# -gt 0 ]]; do
             AUTO_UPGRADE=true
             shift
             ;;
-        --latest)
-            LATEST=true
+        --fixed)
+            AUTO_UPGRADE=false
             shift
             ;;
-        --stable)
-            STABLE=true
+        --latest|--unstable)
+            CHANNEL="unstable"
+            shift
+            ;;
+        --stable|--regular|--normal)
+            CHANNEL="stable"
             shift
             ;;
         --celery)
@@ -231,17 +234,17 @@ while [[ $# -gt 0 ]]; do
             AUTO_UPGRADE=true
             NGINX_MODE="internal"
             SERVICE="arthexis"
-            LATEST=false
+            CHANNEL="stable"
             ENABLE_CELERY=true
             NODE_ROLE="Satellite"
             REQUIRES_REDIS=true
             shift
             ;;
         --terminal)
-            AUTO_UPGRADE=false
+            AUTO_UPGRADE=true
             NGINX_MODE="internal"
             SERVICE="arthexis"
-            LATEST=true
+            CHANNEL="unstable"
             ENABLE_CELERY=true
             NODE_ROLE="Terminal"
             shift
@@ -251,7 +254,7 @@ while [[ $# -gt 0 ]]; do
             AUTO_UPGRADE=true
             NGINX_MODE="internal"
             SERVICE="arthexis"
-            LATEST=true
+            CHANNEL="unstable"
             ENABLE_CELERY=true
             ENABLE_LCD_SCREEN=true
             DISABLE_LCD_SCREEN=false
@@ -266,7 +269,7 @@ while [[ $# -gt 0 ]]; do
             NGINX_MODE="public"
             SERVICE="arthexis"
             ENABLE_CELERY=true
-            LATEST=false
+            CHANNEL="stable"
             NODE_ROLE="Watchtower"
             REQUIRES_REDIS=true
             shift
@@ -296,11 +299,6 @@ if [ "$REPAIR" = true ]; then
     if [ "$ENABLE_CONTROL" = false ] && [ -f "$LOCK_DIR_PATH/control.lck" ]; then
         ENABLE_CONTROL=true
     fi
-fi
-
-if [ "$LATEST" = true ] && [ "$STABLE" = true ]; then
-    echo "--stable cannot be used together with --latest." >&2
-    exit 1
 fi
 
 if [ -z "$PORT" ]; then
@@ -423,7 +421,7 @@ if ls data/*.json >/dev/null 2>&1; then
 fi
 
 # Refresh environment data and register this node
-if [ "$LATEST" = true ]; then
+if [ "$CHANNEL" = "unstable" ]; then
     ./env-refresh.sh --latest
 else
     ./env-refresh.sh
@@ -560,20 +558,12 @@ fi
 
 if [ "$AUTO_UPGRADE" = true ]; then
     rm -f AUTO_UPGRADE
-    AUTO_UPGRADE_MODE="version"
-    if [ "$LATEST" = true ]; then
-        AUTO_UPGRADE_MODE="latest"
-    elif [ "$STABLE" = true ]; then
-        AUTO_UPGRADE_MODE="stable"
-    fi
-    echo "$AUTO_UPGRADE_MODE" > "$LOCK_DIR/auto_upgrade.lck"
+    echo "$CHANNEL" > "$LOCK_DIR/auto_upgrade.lck"
     if [ "$UPGRADE" = true ]; then
-        if [ "$LATEST" = true ]; then
+        if [ "$CHANNEL" = "unstable" ]; then
             ./upgrade.sh --latest
-        elif [ "$STABLE" = true ]; then
-            ./upgrade.sh --stable
         else
-            ./upgrade.sh
+            ./upgrade.sh --stable
         fi
     fi
     source .venv/bin/activate
@@ -584,13 +574,13 @@ ensure_auto_upgrade_periodic_task()
 PYCODE
     deactivate
 elif [ "$UPGRADE" = true ]; then
-    if [ "$LATEST" = true ]; then
+    if [ "$CHANNEL" = "unstable" ]; then
         ./upgrade.sh --latest
-    elif [ "$STABLE" = true ]; then
-        ./upgrade.sh --stable
     else
-        ./upgrade.sh
+        ./upgrade.sh --stable
     fi
+elif [ "$AUTO_UPGRADE" = false ]; then
+    rm -f "$LOCK_DIR/auto_upgrade.lck"
 elif [ -n "$SERVICE" ]; then
     sudo systemctl restart "$SERVICE"
     if [ "$ENABLE_CELERY" = true ]; then

@@ -246,17 +246,16 @@ auto_realign_branch_for_role() {
   fi
 }
 
-LATEST=0
+CHANNEL="stable"
 FORCE_STOP=0
 CLEAN=0
 NO_RESTART=0
 NO_WARN=0
-STABLE=0
 # Parse CLI options controlling the upgrade strategy.
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --latest)
-      LATEST=1
+    --latest|--unstable)
+      CHANNEL="unstable"
       shift
       ;;
     --force)
@@ -275,8 +274,8 @@ while [[ $# -gt 0 ]]; do
       NO_WARN=1
       shift
       ;;
-    --stable)
-      STABLE=1
+    --stable|--normal|--regular)
+      CHANNEL="stable"
       shift
       ;;
     *)
@@ -295,11 +294,6 @@ if [ -f "$UPGRADE_RERUN_LOCK" ]; then
   RERUN_AFTER_SELF_UPDATE=1
   RERUN_TARGET_VERSION=$(tr -d '\r\n' < "$UPGRADE_RERUN_LOCK")
   rm -f "$UPGRADE_RERUN_LOCK"
-fi
-
-if [[ $LATEST -eq 1 && $STABLE -eq 1 ]]; then
-  echo "--stable cannot be used together with --latest." >&2
-  exit 1
 fi
 
 # Wait for systemd services to report healthy before proceeding.
@@ -539,14 +533,9 @@ if git cat-file -e "origin/$BRANCH:VERSION" 2>/dev/null; then
   REMOTE_VERSION=$(git show "origin/$BRANCH:VERSION" | tr -d '\r\n')
 fi
 
-if [[ $RERUN_AFTER_SELF_UPDATE -eq 0 ]]; then
+if [[ $RERUN_AFTER_SELF_UPDATE -eq 0 && "$CHANNEL" != "unstable" ]]; then
   if [[ "$LOCAL_VERSION" == "$REMOTE_VERSION" ]]; then
     echo "Already on version $LOCAL_VERSION; skipping upgrade."
-    exit 0
-  fi
-
-  if [[ $STABLE -eq 1 && "$LOCAL_VERSION" != "$REMOTE_VERSION" ]] && shares_stable_series "$LOCAL_VERSION" "$REMOTE_VERSION"; then
-    echo "Stable channel skipping patch-level upgrade from $LOCAL_VERSION to $REMOTE_VERSION."
     exit 0
   fi
 else
@@ -620,7 +609,7 @@ fi
 
 # Refresh environment and restart service
 ENV_ARGS=""
-if [[ $LATEST -eq 1 ]]; then
+if [[ "$CHANNEL" == "unstable" ]]; then
   ENV_ARGS="--latest"
 fi
 echo "Refreshing environment..."
