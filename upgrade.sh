@@ -297,6 +297,31 @@ if [ -f "$UPGRADE_RERUN_LOCK" ]; then
 fi
 
 # Wait for systemd services to report healthy before proceeding.
+print_service_diagnostics() {
+  local service="$1"
+  shift
+  local -a systemctl_cmd=("$@")
+
+  if [ -z "$service" ] || ! command -v systemctl >/dev/null 2>&1; then
+    return
+  fi
+
+  local -a journalctl_cmd=(journalctl)
+  if command -v sudo >/dev/null 2>&1; then
+    if sudo -n true 2>/dev/null; then
+      journalctl_cmd=(sudo -n journalctl)
+    fi
+  fi
+
+  echo "Diagnostics for $service:"
+  "${systemctl_cmd[@]}" status "$service" --no-pager || true
+  echo "Recent logs for $service:" >&2
+  "${journalctl_cmd[@]}" -u "$service" -n 50 --no-pager || true
+  echo "For more details, run:" >&2
+  echo "  ${systemctl_cmd[*]} status $service" >&2
+  echo "  ${journalctl_cmd[*]} -u $service -n 200 --since \"1 hour ago\"" >&2
+}
+
 wait_for_service_active() {
   local service="$1"
   local require_registered="${2:-0}"
@@ -340,7 +365,7 @@ wait_for_service_active() {
         ;;
       failed)
         echo "Service $service reported failed status." >&2
-        "${systemctl_cmd[@]}" status "$service" --no-pager || true
+        print_service_diagnostics "$service" "${systemctl_cmd[@]}"
         return 1
         ;;
     esac
@@ -348,7 +373,7 @@ wait_for_service_active() {
   done
 
   echo "Timed out waiting for service $service to become active." >&2
-  "${systemctl_cmd[@]}" status "$service" --no-pager || true
+  print_service_diagnostics "$service" "${systemctl_cmd[@]}"
   return 1
 }
 
