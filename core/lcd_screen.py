@@ -58,6 +58,24 @@ def _clear_lock_file() -> None:
         logger.debug("Failed to clear LCD lock file", exc_info=True)
 
 
+def _lock_file_matches(
+    payload: tuple[str, str, int], expected_mtime: float
+) -> bool:
+    """Return True when the lock file still matches the consumed payload."""
+
+    try:
+        current_mtime = LOCK_FILE.stat().st_mtime
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return False
+
+    if current_mtime != expected_mtime:
+        return False
+
+    return _read_lock_file() == payload
+
+
 def _read_service_name() -> str | None:
     try:
         raw = SERVICE_LOCK_FILE.read_text(encoding="utf-8").strip()
@@ -196,7 +214,7 @@ def main() -> None:  # pragma: no cover - hardware dependent
                 lcd.clear()
                 _display(lcd, line1, line2, speed)
                 last_display = current_display
-                if source == "lock-file":
+                if source == "lock-file" and _lock_file_matches(lock_payload, last_lock_mtime):
                     _clear_lock_file()
         except LCDUnavailableError as exc:
             logger.warning("LCD unavailable: %s", exc)
