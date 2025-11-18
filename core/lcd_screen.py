@@ -18,11 +18,12 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+from core.notifications import get_base_dir
 from nodes.lcd import CharLCD1602, LCDUnavailableError
 
 logger = logging.getLogger(__name__)
 
-BASE_DIR = Path(__file__).resolve().parents[1]
+BASE_DIR = get_base_dir()
 LOCK_DIR = BASE_DIR / "locks"
 LOCK_FILE = LOCK_DIR / "lcd_screen.lck"
 SERVICE_LOCK_FILE = LOCK_DIR / "service.lck"

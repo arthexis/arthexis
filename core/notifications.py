@@ -9,6 +9,7 @@ to 64 characters; scrolling is handled by the LCD service.
 from __future__ import annotations
 
 import logging
+import os
 import sys
 import threading
 from pathlib import Path
@@ -19,6 +20,29 @@ except Exception:  # pragma: no cover - plyer may not be installed
     plyer_notification = None
 
 logger = logging.getLogger(__name__)
+
+
+def get_base_dir() -> Path:
+    """Return the project base directory used for shared lock files."""
+
+    env_base = os.environ.get("ARTHEXIS_BASE_DIR")
+    if env_base:
+        return Path(env_base)
+
+    try:  # pragma: no cover - depends on Django settings availability
+        from django.conf import settings
+
+        base_dir = getattr(settings, "BASE_DIR", None)
+        if base_dir:
+            return Path(base_dir)
+    except Exception:
+        pass
+
+    cwd = Path.cwd()
+    if (cwd / "locks").exists():
+        return cwd
+
+    return Path(__file__).resolve().parents[1]
 
 
 def supports_gui_toast() -> bool:
@@ -34,7 +58,7 @@ class NotificationManager:
     """Write notifications to a lock file or fall back to GUI/log output."""
 
     def __init__(self, lock_file: Path | None = None) -> None:
-        base_dir = Path(__file__).resolve().parents[1]
+        base_dir = get_base_dir()
         self.lock_file = lock_file or base_dir / "locks" / "lcd_screen.lck"
         self.lock_file.parent.mkdir(parents=True, exist_ok=True)
         # ``plyer`` is only available on Windows and can fail when used in
