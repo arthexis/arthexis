@@ -34,8 +34,9 @@ Run the installer from the project root. Every installer writes a timestamped lo
 | `--internal` / `--public` | Chooses the nginx topology. `--internal` listens on ports 8000/8080 for LAN-only access, while `--public` provisions TLS-forwarding on 80/443. Both modes proxy to the configured backend port (default 8888).【F:install.sh†L33-L52】【F:install.sh†L200-L296】 |
 | `--port PORT` | Overrides the backend port used by Django when nginx proxies traffic. Defaults to 8888 for every role unless explicitly overridden.【F:install.sh†L57-L74】 |
 | `--upgrade` | Runs the installer in upgrade mode, preserving state while refreshing configuration. Often paired with role flags to recompute dependencies.【F:install.sh†L75-L79】 |
-| `--auto-upgrade` | Enables unattended upgrades for supported roles by toggling automation locks under `locks/`. Role presets may turn this on automatically.【F:install.sh†L80-L83】【F:install.sh†L116-L148】 |
-| `--latest` / `--stable` | Pin package versions. These switches are mutually exclusive and the script exits when both are present.【F:install.sh†L84-L86】【F:install.sh†L163-L169】 |
+| `--auto-upgrade` | Keeps unattended upgrades on (the default) and writes `locks/auto_upgrade.lck` so Celery schedules the checks.【F:install.sh†L190-L205】【F:install.sh†L559-L589】 |
+| `--fixed` | Disables auto-upgrade and removes any existing automation lock so upgrades stay manual.【F:install.sh†L194-L205】【F:install.sh†L582-L589】 |
+| `--unstable` / `--latest` / `--stable` / `--regular` / `--normal` | Selects the upgrade channel: unstable follows mainline revisions every 10 minutes; stable polls releases every 24 hours.【F:install.sh†L198-L205】【F:install.sh†L232-L275】【F:core/auto_upgrade.py†L10-L20】 |
 | `--celery` | Forces Celery worker support even when the chosen role would normally skip it. The installer writes `locks/celery.lck` so later scripts manage the worker lifecycle.【F:install.sh†L87-L89】【F:install.sh†L170-L182】 |
 | `--lcd-screen` / `--no-lcd-screen` | Controls LCD support. `--lcd-screen` installs required I²C packages (if missing) and records the feature lock, while `--no-lcd-screen` removes the lock so the display stays off.【F:install.sh†L90-L110】【F:install.sh†L183-L199】 |
 | `--clean` | Deletes an existing SQLite database after first backing it up with a timestamp that includes the git revision. Use this when reinstalling on a development machine and you do not need existing data.【F:install.sh†L111-L152】 |
@@ -50,10 +51,10 @@ Role flags set opinionated defaults and verify external dependencies before proc
 run on Ubuntu 22.04 or later with an `eth0` interface present before you install or rerun `switch-role.sh` to change into one
 of those roles.
 
-- **`--satellite`** – Requires nginx and Redis to be installed and running. Enables auto-upgrades, internal nginx, Celery, and marks the node as `Satellite`. Redis connection details are written to `redis.env`.【F:install.sh†L116-L146】【F:install.sh†L149-L156】
-- **`--terminal`** – The lightest profile. Leaves auto-upgrades off, keeps nginx internal, targets the latest package set, and enables Celery for background tasks.【F:install.sh†L212-L219】
-- **`--control`** – For lab control stations. Requires nginx and Redis, enables auto-upgrades, Celery, LCD control, and writes the `control.lck` flag so future scripts manage the accessory services.【F:install.sh†L220-L234】
-- **`--watchtower`** – Cloud-oriented role. Requires nginx, flips nginx into public mode, enables auto-upgrades and Celery, and records the `Watchtower` role for downstream tooling.【F:install.sh†L225-L233】
+- **`--satellite`** – Requires nginx and Redis to be installed and running. Enables auto-upgrades on the stable channel, internal nginx, Celery, and marks the node as `Satellite`. Redis connection details are written to `redis.env`.【F:install.sh†L232-L240】【F:install.sh†L320-L373】
+- **`--terminal`** – The lightest profile. Keeps nginx internal, targets the unstable channel, and enables Celery for background tasks while leaving auto-upgrade enabled by default.【F:install.sh†L243-L250】【F:install.sh†L320-L373】
+- **`--control`** – For lab control stations. Requires nginx and Redis, enables auto-upgrades on the unstable channel, Celery, LCD control, and writes the `control.lck` flag so future scripts manage the accessory services.【F:install.sh†L252-L265】【F:install.sh†L320-L373】
+- **`--watchtower`** – Cloud-oriented role. Requires nginx, flips nginx into public mode, enables auto-upgrades and Celery on the stable track, and records the `Watchtower` role for downstream tooling.【F:install.sh†L266-L275】【F:install.sh†L320-L373】
 
 During installation, the script ensures the Python virtual environment exists, seeds nginx fallback assets, and writes fully rendered nginx vhosts (public or internal) with the correct upstream port substitution.【F:install.sh†L170-L309】 System prompts appear when prerequisites (nginx or Redis) are missing, explaining how to install them on Debian/Ubuntu systems.【F:install.sh†L33-L74】【F:install.sh†L124-L156】
 
@@ -112,8 +113,8 @@ Both upgrade scripts prioritise recoverability before applying new code:
 
 | Flag | Purpose |
 | --- | --- |
-| `--latest` | Forces a pull of the latest commits from origin even when the local branch is ahead. It cannot be combined with `--stable`.【F:upgrade.sh†L123-L152】【F:upgrade.sh†L153-L159】 |
-| `--stable` | Locks to the designated stable channel instead of tracking the bleeding edge. Mutually exclusive with `--latest`.【F:upgrade.sh†L150-L159】 |
+| `--latest` / `--unstable` | Follows origin/main revisions even when the recorded `VERSION` matches, matching the 10-minute unstable cadence.【F:upgrade.sh†L249-L285】【F:upgrade.sh†L520-L550】 |
+| `--stable` / `--regular` / `--normal` | Uses the release-driven stable channel with 24-hour polling and revision matching.【F:upgrade.sh†L249-L285】【F:upgrade.sh†L520-L550】 |
 | `--clean` | Removes untracked files (except `data/`), resets local changes, and keeps git history aligned—useful for appliance roles where local edits should be discarded.【F:upgrade.sh†L60-L94】【F:upgrade.sh†L146-L159】 |
 | `--no-restart` | Skips restarting services after migration so you can review changes manually before bringing the node back online.【F:upgrade.sh†L123-L152】【F:upgrade.sh†L340-L363】 |
 | `--no-warn` | Suppresses interactive warnings when an action would remove databases without creating a new backup (used together with `--clean` or manual purges).【F:upgrade.sh†L160-L201】 |

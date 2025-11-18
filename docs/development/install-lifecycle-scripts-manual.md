@@ -14,10 +14,10 @@ Passing a role flag applies a curated bundle of options. Each preset still honou
 
 | Flag | Description |
 | --- | --- |
-| `--terminal` (default) | Local workstation profile. Leaves auto-upgrade disabled, uses the internal Nginx template, reserves port 8888 unless overridden, and enables Celery for email delivery.【F:install.sh†L198-L205】 |
-| `--control` | Appliance profile. Requires Nginx and Redis, enables Celery, LCD, Control-specific locks, auto-upgrade (latest track), internal Nginx, and writes the `Control` role lock. Sets default service name `arthexis`.【F:install.sh†L207-L222】【F:install.sh†L270-L306】 |
-| `--satellite` | Edge node profile. Requires Nginx and Redis, enables Celery, sets auto-upgrade to latest, and configures the internal Nginx template.【F:install.sh†L183-L194】 |
-| `--watchtower` | Multi-tenant profile. Requires Nginx and Redis, keeps Celery on, switches to the public Nginx proxy with HTTPS expectations, and tracks stable releases unless overridden.【F:install.sh†L225-L233】 |
+| `--terminal` (default) | Local workstation profile. Enables auto-upgrades on the unstable channel, uses the internal Nginx template, reserves port 8888 unless overridden, and enables Celery for email delivery.【F:install.sh†L243-L250】 |
+| `--control` | Appliance profile. Requires Nginx and Redis, enables Celery, LCD, Control-specific locks, auto-upgrade on the unstable channel, internal Nginx, and writes the `Control` role lock. Sets default service name `arthexis`.【F:install.sh†L252-L265】【F:install.sh†L320-L373】 |
+| `--satellite` | Edge node profile. Requires Nginx and Redis, enables Celery, tracks the stable release channel, and configures the internal Nginx template.【F:install.sh†L232-L240】 |
+| `--watchtower` | Multi-tenant profile. Requires Nginx and Redis, keeps Celery on, switches to the public Nginx proxy with HTTPS expectations, and follows the stable channel unless overridden.【F:install.sh†L266-L275】 |
 
 **General options**
 
@@ -27,10 +27,11 @@ Passing a role flag applies a curated bundle of options. Each preset still honou
 | `--internal` | Forces the internal Nginx template (ports 8000/8080). This is the default unless a role preset changes it.【F:install.sh†L30-L36】【F:install.sh†L320-L373】 |
 | `--public` | Enables the public HTTPS reverse proxy template while continuing to proxy to the backend on port 8888 unless overridden.【F:install.sh†L37-L44】【F:install.sh†L305-L373】 |
 | `--port PORT` | Overrides the backend Django port used in generated systemd units and the stored lock. If omitted, every mode defaults to `8888`.【F:install.sh†L45-L60】 |
-| `--upgrade` | Immediately runs `upgrade.sh` after installation (respecting the `--latest` / `--stable` track selection).【F:install.sh†L61-L68】【F:install.sh†L526-L551】 |
-| `--auto-upgrade` | Schedules automatic upgrades via Celery, writes `locks/auto_upgrade.lck`, and optionally performs a first upgrade run.【F:install.sh†L20-L28】【F:install.sh†L526-L551】 |
-| `--latest` | Switches the upgrade track to latest commits; conflicts with `--stable`. Used by presets that prioritise new features (Terminal/Satellite).【F:install.sh†L69-L76】【F:install.sh†L526-L551】 |
-| `--stable` | Pins auto-upgrade and manual upgrade to the latest stable release on the current branch; incompatible with `--latest`.【F:install.sh†L69-L76】【F:install.sh†L524-L551】 |
+| `--upgrade` | Immediately runs `upgrade.sh` after installation, using the selected channel (stable by default, unstable when requested).【F:install.sh†L186-L205】【F:install.sh†L559-L589】 |
+| `--auto-upgrade` | Explicitly keeps unattended upgrades enabled (now the default) and refreshes the Celery schedule when locks exist.【F:install.sh†L190-L205】【F:install.sh†L559-L589】 |
+| `--fixed` | Disables unattended upgrades and removes the auto-upgrade lock so future runs stay manual-only.【F:install.sh†L194-L205】【F:install.sh†L582-L589】 |
+| `--unstable` / `--latest` | Switches the upgrade track to the unstable channel that follows origin/main revisions immediately.【F:install.sh†L198-L203】【F:install.sh†L243-L250】【F:install.sh†L559-L589】 |
+| `--stable` / `--regular` / `--normal` | Pins auto-upgrade and manual upgrade to the stable release channel with 24-hour checks.【F:install.sh†L202-L205】【F:install.sh†L232-L240】【F:install.sh†L559-L589】 |
 | `--celery` | Forces Celery services on even if the preset would leave them disabled. Rarely needed because all presets already enable Celery.【F:install.sh†L162-L170】 |
 | `--lcd-screen` / `--no-lcd-screen` | Adds or removes the LCD updater service and lock. Control preset enables it automatically; `--no-lcd-screen` removes an existing unit after reading `locks/service.lck`.【F:install.sh†L171-L189】【F:install.sh†L516-L563】 |
 | `--clean` | Deletes `db.sqlite3` before installing, after first backing it up into `backups/` with version and Git metadata.【F:install.sh†L90-L120】 |
@@ -85,16 +86,13 @@ Supported options:
 
 | Flag | Purpose |
 | --- | --- |
-| `--latest` | Forces an upgrade even when `VERSION` matches origin (useful when you track nightly commits). Cannot be combined with `--stable`.【F:upgrade.sh†L123-L158】 |
-| `--stable` | Skips upgrades unless the remote release changes the major/minor version, mirroring the stable track used during installation. Incompatible with `--latest`.【F:upgrade.sh†L123-L158】 |
+| `--latest` / `--unstable` | Follows the unstable channel, upgrading whenever the origin/main revision changes even if `VERSION` remains the same.【F:upgrade.sh†L249-L285】【F:upgrade.sh†L520-L550】 |
+| `--stable` / `--regular` / `--normal` | Uses the stable channel, aligning with release revisions and the 24-hour auto-upgrade cadence.【F:upgrade.sh†L249-L285】【F:upgrade.sh†L520-L550】 |
 | `--clean` | Deletes `db.sqlite3` (and any `db_*.sqlite3` snapshots) after confirmation so migrations start from a blank database.【F:upgrade.sh†L122-L167】【F:upgrade.sh†L420-L444】 |
 | `--no-restart` | Prevents the helper from stopping services or relaunching them afterwards. Handy when you only want to refresh the working tree.【F:upgrade.sh†L123-L144】【F:upgrade.sh†L404-L419】【F:upgrade.sh†L514-L551】 |
 | `--no-warn` | Skips interactive confirmation before destructive database operations (used with `--clean` or uninstall flows).【F:upgrade.sh†L122-L167】 |
 
 Additional behaviour:
-
-- `upgrade.sh` aborts when it detects interrupted Git operations (rebase/merge/cherry-pick) so you do not lose work, then realigns Control/Constellation/Watchtower branches by discarding local commits and untracked files.【F:upgrade.sh†L33-L118】【F:upgrade.sh†L203-L315】
-- The script fetches origin, compares `VERSION`, and exits early when already up to date unless `--latest` overrides. Stable mode only upgrades when the remote release leaves the current minor version.【F:upgrade.sh†L332-L404】
 - Before applying migrations it refreshes Nginx maintenance assets, optionally clears the database, reruns `env-refresh.sh`, migrates legacy systemd configurations, and restarts services unless `--no-restart` was requested.【F:upgrade.sh†L404-L551】
 - After restarting, it updates desktop shortcuts so GUI launchers stay current.【F:upgrade.sh†L552-L555】
 
