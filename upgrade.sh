@@ -248,6 +248,7 @@ auto_realign_branch_for_role() {
 
 CHANNEL="stable"
 FORCE_STOP=0
+FORCE_UPGRADE=0
 CLEAN=0
 NO_RESTART=0
 NO_WARN=0
@@ -260,6 +261,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     --force)
       FORCE_STOP=1
+      FORCE_UPGRADE=1
       shift
       ;;
     --clean)
@@ -558,13 +560,17 @@ if git cat-file -e "origin/$BRANCH:VERSION" 2>/dev/null; then
   REMOTE_VERSION=$(git show "origin/$BRANCH:VERSION" | tr -d '\r\n')
 fi
 
-if [[ $RERUN_AFTER_SELF_UPDATE -eq 0 && "$CHANNEL" != "unstable" ]]; then
-  if [[ "$LOCAL_VERSION" == "$REMOTE_VERSION" ]]; then
+if [[ "$LOCAL_VERSION" == "$REMOTE_VERSION" ]]; then
+  if [[ $RERUN_AFTER_SELF_UPDATE -eq 1 ]]; then
+    echo "Detected prior upgrade.sh update; continuing upgrade for $REMOTE_VERSION despite matching versions."
+  elif [[ "$CHANNEL" == "unstable" ]]; then
+    echo "Unstable channel requested; continuing upgrade despite matching version $REMOTE_VERSION."
+  elif [[ $FORCE_UPGRADE -eq 1 ]]; then
+    echo "Forcing upgrade despite matching version $LOCAL_VERSION."
+  else
     echo "Already on version $LOCAL_VERSION; skipping upgrade."
     exit 0
   fi
-else
-  echo "Detected prior upgrade.sh update; continuing upgrade for $REMOTE_VERSION despite matching versions."
 fi
 
 auto_realign_branch_for_role "$NODE_ROLE_NAME" "$BRANCH"
