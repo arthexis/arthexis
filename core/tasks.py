@@ -935,6 +935,10 @@ def check_github_updates(channel_override: str | None = None) -> None:
             )
 
         subprocess.run(args, cwd=base_dir, check=True)
+        _append_auto_upgrade_log(
+            base_dir,
+            f"Upgrade script completed successfully: {' '.join(args)}",
+        )
 
         if not _ensure_runtime_services(
             base_dir,
@@ -942,6 +946,11 @@ def check_github_updates(channel_override: str | None = None) -> None:
             revert_on_failure=True,
         ):
             return
+
+        _append_auto_upgrade_log(
+            base_dir,
+            "Auto-upgrade verification complete; runtime services are healthy",
+        )
 
         if upgrade_was_applied:
             _append_auto_upgrade_log(
