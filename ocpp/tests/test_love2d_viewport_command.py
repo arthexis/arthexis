@@ -1,0 +1,72 @@
+from __future__ import annotations
+
+import json
+import shutil
+import tempfile
+from pathlib import Path
+
+from django.core.management import CommandError, call_command
+from django.test import TestCase
+from django.utils import timezone
+
+from ocpp.models import Charger, Transaction
+from ocpp.status_display import STATUS_BADGE_MAP
+
+
+class Love2DViewportCommandTests(TestCase):
+    def test_builds_connector_snapshot(self):
+        connector = Charger.objects.create(
+            charger_id="LOV-01",
+            connector_id=1,
+            display_name="Garage",
+            last_status="Charging",
+        )
+        Transaction.objects.create(
+            charger=connector,
+            connector_id=1,
+            start_time=timezone.now(),
+        )
+
+        output_dir = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, output_dir, ignore_errors=True)
+
+        call_command("love2d_viewport", "--output-dir", str(output_dir), "--skip-launch")
+
+        data_path = output_dir / "data" / "connectors.json"
+        self.assertTrue(data_path.exists())
+
+        payload = json.loads(data_path.read_text())
+        self.assertEqual(len(payload["connectors"]), 1)
+        entry = payload["connectors"][0]
+        self.assertEqual(entry["serial"], "LOV-01")
+        self.assertEqual(entry["connector_id"], 1)
+        self.assertEqual(entry["status_color"], STATUS_BADGE_MAP["charging"][1])
+        self.assertTrue(entry["is_charging"])
+
+    def test_requires_empty_output_directory(self):
+        output_dir = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, output_dir, ignore_errors=True)
+        (output_dir / "occupied.txt").write_text("busy")
+
+        with self.assertRaises(CommandError):
+            call_command("love2d_viewport", "--output-dir", str(output_dir), "--skip-launch")
+
+    def test_errors_when_love_binary_missing(self):
+        connector = Charger.objects.create(
+            charger_id="LOV-02",
+            connector_id=2,
+            last_status="Available",
+        )
+        Transaction.objects.create(
+            charger=connector,
+            connector_id=2,
+            start_time=timezone.now(),
+            stop_time=timezone.now(),
+        )
+
+        with self.assertRaises(CommandError):
+            call_command(
+                "love2d_viewport",
+                "--love-binary",
+                "love-binary-that-does-not-exist",
+            )

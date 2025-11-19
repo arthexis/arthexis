@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate Love2D connector viewport widget",
+      "created_on": "2024-01-01T00:00:00Z",
+      "url": "",
+      "request_details": "1. Run `python manage.py love2d_viewport --skip-launch --output-dir /tmp/love2d_test` to stage the Love2D assets.\n2. Launch the viewport with `love /tmp/love2d_test` and confirm a window opens showing one card per connector with connector label, display name or serial, and status label.\n3. Use a connector in Charging status and confirm the car battery fill animates; set a connector to Available and confirm the fill is static.\n4. Press `R` while the window is open to reload updated connector data and confirm the view refreshes without closing.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]
