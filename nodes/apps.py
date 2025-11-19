@@ -94,5 +94,6 @@ class NodesConfig(AppConfig):
         from django.db.models.signals import post_migrate
 
         post_migrate.connect(_trigger_startup_notification, sender=self)
+        _trigger_startup_notification()
         # Import signal handlers for content classifiers
         from . import signals  # noqa: F401
