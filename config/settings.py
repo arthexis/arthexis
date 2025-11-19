@@ -719,18 +719,10 @@ CELERY_WORKER_SOFT_SHUTDOWN_TIMEOUT = resolve_celery_shutdown_timeout()
 # Legacy alias retained for fixture references and admin guidance.
 CELERY_WORKER_SHUTDOWN_TIMEOUT = CELERY_WORKER_SOFT_SHUTDOWN_TIMEOUT
 
-CONSTELLATION_UDP_PROBE_INTERVAL_SECONDS = int(
-    os.environ.get("CONSTELLATION_UDP_PROBE_INTERVAL_SECONDS", "30")
-)
-
 CELERY_BEAT_SCHEDULE = {
     "heartbeat": {
         "task": "core.tasks.heartbeat",
         "schedule": crontab(minute="*/5"),
-    },
-    "constellation_udp_probe": {
-        "task": "nodes.tasks.kickstart_constellation_udp",
-        "schedule": timedelta(seconds=CONSTELLATION_UDP_PROBE_INTERVAL_SECONDS),
     },
     "ocpp_configuration_check": {
         "task": "ocpp.tasks.schedule_daily_charge_point_configuration_checks",
