@@ -2,6 +2,8 @@
 
 ARTHEXIS_SERVICE_MODE_EMBEDDED="embedded"
 ARTHEXIS_SERVICE_MODE_SYSTEMD="systemd"
+ARTHEXIS_LCD_FEATURE_LOCK="lcd_screen_enabled.lck"
+ARTHEXIS_LCD_RUNTIME_LOCK="lcd_screen.lck"
 
 _arthexis_service_mode_lock_file() {
   local lock_dir="$1"
@@ -136,4 +138,47 @@ arthexis_remove_celery_unit_stack() {
 
   arthexis_remove_systemd_unit_if_present "$lock_dir" "celery-${service_name}.service"
   arthexis_remove_systemd_unit_if_present "$lock_dir" "celery-beat-${service_name}.service"
+}
+
+_arthexis_lcd_feature_lock_file() {
+  local lock_dir="$1"
+
+  printf "%s/%s" "$lock_dir" "$ARTHEXIS_LCD_FEATURE_LOCK"
+}
+
+arthexis_lcd_feature_enabled() {
+  local lock_dir="$1"
+  if [ -z "$lock_dir" ]; then
+    return 1
+  fi
+
+  local feature_lock
+  feature_lock="$(_arthexis_lcd_feature_lock_file "$lock_dir")"
+
+  if [ -f "$feature_lock" ]; then
+    return 0
+  fi
+
+  local runtime_lock
+  runtime_lock="$lock_dir/$ARTHEXIS_LCD_RUNTIME_LOCK"
+  [ -f "$runtime_lock" ]
+}
+
+arthexis_enable_lcd_feature_flag() {
+  local lock_dir="$1"
+  if [ -z "$lock_dir" ]; then
+    return 0
+  fi
+
+  mkdir -p "$lock_dir"
+  touch "$(_arthexis_lcd_feature_lock_file "$lock_dir")"
+}
+
+arthexis_disable_lcd_feature_flag() {
+  local lock_dir="$1"
+  if [ -z "$lock_dir" ]; then
+    return 0
+  fi
+
+  rm -f "$(_arthexis_lcd_feature_lock_file "$lock_dir")"
 }

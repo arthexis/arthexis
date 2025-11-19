@@ -357,7 +357,7 @@ if [ "$REPAIR" = true ]; then
     if [ "$SERVICE_MANAGEMENT_MODE_FLAG" = false ]; then
         SERVICE_MANAGEMENT_MODE="$(arthexis_detect_service_mode "$LOCK_DIR_PATH")"
     fi
-    if [ "$ENABLE_LCD_SCREEN" = false ] && [ -f "$LOCK_DIR_PATH/lcd_screen.lck" ]; then
+    if [ "$ENABLE_LCD_SCREEN" = false ] && arthexis_lcd_feature_enabled "$LOCK_DIR_PATH"; then
         ENABLE_LCD_SCREEN=true
         DISABLE_LCD_SCREEN=false
     fi
@@ -431,12 +431,14 @@ else
     rm -f "$LOCK_DIR/celery.lck"
 fi
 
-LCD_LOCK="$LOCK_DIR/lcd_screen.lck"
+LCD_LOCK="$LOCK_DIR/$ARTHEXIS_LCD_RUNTIME_LOCK"
 if [ "$ENABLE_LCD_SCREEN" = true ]; then
     touch "$LCD_LOCK"
+    arthexis_enable_lcd_feature_flag "$LOCK_DIR"
     ensure_i2c_packages
 else
     rm -f "$LCD_LOCK"
+    arthexis_disable_lcd_feature_flag "$LOCK_DIR"
 fi
 
 CONTROL_LOCK="$LOCK_DIR/control.lck"
@@ -519,8 +521,9 @@ fi
 
 if [ "$ENABLE_LCD_SCREEN" = true ] && [ -n "$SERVICE" ]; then
     LCD_SERVICE="lcd-$SERVICE"
-    LCD_SERVICE_FILE="/etc/systemd/system/${LCD_SERVICE}.service"
-    sudo bash -c "cat > '$LCD_SERVICE_FILE'" <<SERVICEEOF
+    if [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
+        LCD_SERVICE_FILE="/etc/systemd/system/${LCD_SERVICE}.service"
+        sudo bash -c "cat > '$LCD_SERVICE_FILE'" <<SERVICEEOF
 [Unit]
 Description=LCD screen updater service for Arthexis
 After=${SERVICE}.service network.target
@@ -540,9 +543,12 @@ User=$(id -un)
 [Install]
 WantedBy=multi-user.target
 SERVICEEOF
-    sudo systemctl daemon-reload
-    sudo systemctl enable "$LCD_SERVICE"
-    arthexis_record_systemd_unit "$LOCK_DIR" "${LCD_SERVICE}.service"
+        sudo systemctl daemon-reload
+        sudo systemctl enable "$LCD_SERVICE"
+        arthexis_record_systemd_unit "$LOCK_DIR" "${LCD_SERVICE}.service"
+    else
+        arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${LCD_SERVICE}.service"
+    fi
 elif [ "$DISABLE_LCD_SCREEN" = true ]; then
     if [ -z "$SERVICE" ] && [ -f "$LOCK_DIR/service.lck" ]; then
         SERVICE="$(cat "$LOCK_DIR/service.lck")"
@@ -560,6 +566,7 @@ elif [ "$DISABLE_LCD_SCREEN" = true ]; then
         fi
         arthexis_remove_systemd_unit_record "$LOCK_DIR" "${LCD_SERVICE}.service"
     fi
+    arthexis_disable_lcd_feature_flag "$LOCK_DIR"
 fi
 
 

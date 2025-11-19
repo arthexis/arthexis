@@ -58,11 +58,15 @@ fi
 if [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_EMBEDDED" ]; then
   if [ -n "$SERVICE_NAME" ]; then
     arthexis_remove_celery_unit_stack "$LOCK_DIR" "$SERVICE_NAME"
+    arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "lcd-${SERVICE_NAME}.service"
   fi
   if [ -f "$SYSTEMD_UNITS_LOCK" ]; then
     while IFS= read -r recorded_unit; do
       case "$recorded_unit" in
         celery-*.service|celery-beat-*.service)
+          arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "$recorded_unit"
+          ;;
+        lcd-*.service)
           arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "$recorded_unit"
           ;;
       esac
@@ -457,7 +461,7 @@ restart_services() {
         "${systemctl_cmd[@]}" kill --signal=TERM "$service_name" || true
         restart_via_systemd=1
       fi
-      if [ -f "$LOCK_DIR/lcd_screen.lck" ]; then
+      if arthexis_lcd_feature_enabled "$LOCK_DIR" && [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
         local lcd_service="lcd-$service_name"
         if "${systemctl_cmd[@]}" is-active --quiet "$lcd_service"; then
           echo "Signaling $lcd_service for restart via systemd..."
@@ -470,7 +474,7 @@ restart_services() {
         echo "Service $service_name did not become active after restart." >&2
         return 1
       fi
-      if [ -f "$LOCK_DIR/lcd_screen.lck" ]; then
+      if arthexis_lcd_feature_enabled "$LOCK_DIR" && [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
         local lcd_service="lcd-$service_name"
         if ! wait_for_service_active "$lcd_service" 1; then
           if [ "$systemctl_available" -eq 1 ]; then
@@ -540,7 +544,7 @@ restart_services() {
       echo "Service $service_name did not become active after restart." >&2
       return 1
     fi
-    if [ -f "$LOCK_DIR/lcd_screen.lck" ]; then
+    if arthexis_lcd_feature_enabled "$LOCK_DIR" && [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
       local lcd_service="lcd-$service_name"
       if ! wait_for_service_active "$lcd_service" 1; then
         echo "LCD service $lcd_service did not become active after restart." >&2
@@ -769,7 +773,7 @@ if [ -n "$SERVICE_NAME" ]; then
     ensure_prestart_env_refresh "celery-$SERVICE_NAME"
     ensure_prestart_env_refresh "celery-beat-$SERVICE_NAME"
   fi
-  if [ -f "$LOCK_DIR/lcd_screen.lck" ]; then
+  if arthexis_lcd_feature_enabled "$LOCK_DIR" && [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
     ensure_prestart_env_refresh "lcd-$SERVICE_NAME"
   fi
 fi

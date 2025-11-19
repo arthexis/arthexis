@@ -5438,16 +5438,24 @@ class NodeFeatureTests(TestCase):
     def test_lcd_screen_enabled(self):
         feature = NodeFeature.objects.create(slug="lcd-screen", display="LCD")
         feature.roles.add(self.role)
-        NodeFeatureAssignment.objects.create(node=self.node, feature=feature)
-        with patch(
-            "nodes.models.Node.get_current_mac", return_value="00:11:22:33:44:55"
-        ):
-            self.assertTrue(feature.is_enabled)
-        NodeFeatureAssignment.objects.filter(node=self.node, feature=feature).delete()
-        with patch(
-            "nodes.models.Node.get_current_mac", return_value="00:11:22:33:44:55"
-        ):
-            self.assertFalse(feature.is_enabled)
+        original_base = self.node.base_path
+        with TemporaryDirectory() as tmp:
+            locks_dir = Path(tmp) / "locks"
+            locks_dir.mkdir()
+            self.node.base_path = tmp
+            self.node.save(update_fields=["base_path"])
+            NodeFeatureAssignment.objects.create(node=self.node, feature=feature)
+            with patch(
+                "nodes.models.Node.get_current_mac", return_value="00:11:22:33:44:55"
+            ):
+                self.assertTrue(feature.is_enabled)
+            NodeFeatureAssignment.objects.filter(node=self.node, feature=feature).delete()
+            with patch(
+                "nodes.models.Node.get_current_mac", return_value="00:11:22:33:44:55"
+            ):
+                self.assertFalse(feature.is_enabled)
+        self.node.base_path = original_base
+        self.node.save(update_fields=["base_path"])
 
     def test_feature_disabled_when_local_node_missing(self):
         feature = NodeFeature.objects.create(slug="lcd-screen", display="LCD")

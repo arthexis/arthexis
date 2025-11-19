@@ -120,6 +120,7 @@ if [ -n "$SERVICE" ]; then
     if [ -f "$LOCK_DIR/lcd_screen.lck" ] || printf '%s\n' "${RECORDED_SYSTEMD_UNITS[@]}" | grep -Fxq "${LCD_SERVICE}.service"; then
         arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${LCD_SERVICE}.service"
         rm -f "$LOCK_DIR/lcd_screen.lck"
+        arthexis_disable_lcd_feature_flag "$LOCK_DIR"
     fi
 
     if [ -f "$LOCK_DIR/celery.lck" ]; then

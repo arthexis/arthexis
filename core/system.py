@@ -1478,7 +1478,10 @@ def _configured_service_units(base_dir: Path) -> list[dict[str, str]]:
                 }
             )
 
-    if (lock_dir / "lcd_screen.lck").exists():
+    lcd_enabled = (lock_dir / "lcd_screen_enabled.lck").exists() or (
+        lock_dir / "lcd_screen.lck"
+    ).exists()
+    if lcd_enabled:
         lcd_unit = f"lcd-{service_name}"
         service_units.append(
             {

@@ -108,7 +108,7 @@ if [ -f "$LOCK_DIR/celery.lck" ]; then
 else
   CELERY_FEATURE=false
 fi
-if [ -f "$LOCK_DIR/lcd_screen.lck" ]; then
+if arthexis_lcd_feature_enabled "$LOCK_DIR"; then
   LCD_FEATURE=true
 else
   LCD_FEATURE=false
@@ -159,9 +159,16 @@ if [ "$CELERY_FEATURE" = true ]; then
 fi
 
 if [ "$LCD_FEATURE" = true ]; then
-  if [ -n "$SERVICE" ] && command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files | grep -Fq -- "lcd-$SERVICE.service"; then
+  if [ -n "$SERVICE" ] && [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ] && \
+     command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files | grep -Fq -- "lcd-$SERVICE.service"; then
     LCD_STATUS=$(systemctl is-active -- "lcd-$SERVICE" || true)
     echo "  LCD screen service status: $LCD_STATUS"
+  else
+    if pgrep -f "core\.lcd_screen" >/dev/null 2>&1; then
+      echo "  LCD screen process: running"
+    else
+      echo "  LCD screen process: not running"
+    fi
   fi
 fi
 

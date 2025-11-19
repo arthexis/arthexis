@@ -14,7 +14,6 @@ exec > >(tee "$LOG_FILE") 2>&1
 cd "$BASE_DIR"
 
 LOCK_DIR="$BASE_DIR/locks"
-LCD_LOCK="$LOCK_DIR/lcd_screen.lck"
 SERVICE_MANAGEMENT_MODE="$(arthexis_detect_service_mode "$LOCK_DIR")"
 
 # Use non-interactive sudo if available
@@ -60,7 +59,7 @@ if [ -f "$LOCK_DIR/service.lck" ]; then
       fi
     fi
 
-    if [ -f "$LCD_LOCK" ]; then
+    if arthexis_lcd_feature_enabled "$LOCK_DIR"; then
       LCD_SERVICE="lcd-$SERVICE_NAME"
       if systemctl list-unit-files | grep -Fq "${LCD_SERVICE}.service"; then
         $SUDO systemctl stop "$LCD_SERVICE" || true
@@ -81,3 +80,8 @@ else
 fi
 # Also stop any Celery components started by start.sh
 pkill -f "celery -A config" || true
+if arthexis_lcd_feature_enabled "$LOCK_DIR"; then
+  if [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_EMBEDDED" ] || ! command -v systemctl >/dev/null 2>&1; then
+    pkill -f "python -m core\.lcd_screen" || true
+  fi
+fi

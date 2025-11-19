@@ -101,11 +101,35 @@ RELOAD=false
 CELERY_MANAGEMENT_MODE="$SERVICE_MANAGEMENT_MODE"
 CELERY_FLAG_SET=false
 SYSTEMD_CELERY_UNITS=false
+LCD_FEATURE=false
+LCD_SYSTEMD_UNIT=false
+LCD_EMBEDDED=false
+CELERY_WORKER_PID=""
+CELERY_BEAT_PID=""
+LCD_PROCESS_PID=""
+cleanup_background_processes() {
+  if [ -n "$CELERY_WORKER_PID" ]; then
+    kill "$CELERY_WORKER_PID" 2>/dev/null || true
+  fi
+  if [ -n "$CELERY_BEAT_PID" ]; then
+    kill "$CELERY_BEAT_PID" 2>/dev/null || true
+  fi
+  if [ -n "$LCD_PROCESS_PID" ]; then
+    kill "$LCD_PROCESS_PID" 2>/dev/null || true
+  fi
+}
+trap cleanup_background_processes EXIT
 if [ -n "$SERVICE_NAME" ] && [ -f "$SYSTEMD_LOCK_FILE" ]; then
   if grep -Fxq "celery-${SERVICE_NAME}.service" "$SYSTEMD_LOCK_FILE" || \
      grep -Fxq "celery-beat-${SERVICE_NAME}.service" "$SYSTEMD_LOCK_FILE"; then
     SYSTEMD_CELERY_UNITS=true
   fi
+  if grep -Fxq "lcd-${SERVICE_NAME}.service" "$SYSTEMD_LOCK_FILE"; then
+    LCD_SYSTEMD_UNIT=true
+  fi
+fi
+if arthexis_lcd_feature_enabled "$LOCK_DIR"; then
+  LCD_FEATURE=true
 fi
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -163,13 +187,28 @@ case "$CELERY_MANAGEMENT_MODE" in
     ;;
 esac
 
+if [ "$LCD_FEATURE" = true ]; then
+  if [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ] && [ "$LCD_SYSTEMD_UNIT" = true ]; then
+    LCD_EMBEDDED=false
+  else
+    LCD_EMBEDDED=true
+    if [ "$LCD_SYSTEMD_UNIT" = true ]; then
+      echo "Skipping systemd-managed LCD service because embedded mode is enabled. Reinstall with --systemd to manage the LCD via systemd."
+    fi
+  fi
+fi
+
 # Start Celery components to handle queued email if enabled
 if [ "$CELERY" = true ]; then
   celery -A config worker -l info --concurrency=2 &
   CELERY_WORKER_PID=$!
   celery -A config beat -l info &
   CELERY_BEAT_PID=$!
-  trap 'kill "$CELERY_WORKER_PID" "$CELERY_BEAT_PID"' EXIT
+fi
+
+if [ "$LCD_EMBEDDED" = true ]; then
+  python -m core.lcd_screen &
+  LCD_PROCESS_PID=$!
 fi
 
 # Start the Django development server
