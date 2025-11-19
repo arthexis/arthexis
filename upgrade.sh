@@ -112,8 +112,8 @@ if [ -n "$SERVICE_NAME" ]; then
   arthexis_repair_auto_upgrade_workdir "$BASE_DIR" "$SERVICE_NAME" "$SYSTEMD_DIR"
 fi
 
-# Ensure systemd services refresh environment variables before starting.
-ensure_prestart_env_refresh() {
+# Remove deprecated systemd prestart environment refresh hooks before starting services.
+remove_prestart_env_refresh() {
   local service="$1"
 
   if [ -z "$service" ]; then
@@ -121,39 +121,24 @@ ensure_prestart_env_refresh() {
   fi
 
   local service_file="${SYSTEMD_DIR}/${service}.service"
-  local refresh_line="ExecStartPre=${BASE_DIR}/scripts/prestart-refresh.sh"
-  local timeout_line="TimeoutStartSec=300"
+  local refresh_pattern="^ExecStartPre=.*/scripts/prestart-refresh\\.sh$"
 
   if [ ! -f "$service_file" ]; then
     return 0
   fi
 
-  if ! grep -Fq "$refresh_line" "$service_file"; then
+  if grep -Eq "$refresh_pattern" "$service_file"; then
     if [ ${#SUDO_CMD[@]} -gt 0 ]; then
-      "${SUDO_CMD[@]}" sed -i "/^ExecStart=/i ${refresh_line}" "$service_file"
+      "${SUDO_CMD[@]}" sed -i "\~${refresh_pattern}~d" "$service_file"
     else
-      sed -i "/^ExecStart=/i ${refresh_line}" "$service_file"
+      sed -i "\~${refresh_pattern}~d" "$service_file"
     fi
 
     if [ ${#SYSTEMCTL_CMD[@]} -gt 0 ]; then
       "${SYSTEMCTL_CMD[@]}" daemon-reload >/dev/null 2>&1 || true
     fi
 
-    echo "Ensured ${service}.service refreshes the environment before starting."
-  fi
-
-  if ! grep -Fq "$timeout_line" "$service_file"; then
-    if [ ${#SUDO_CMD[@]} -gt 0 ]; then
-      "${SUDO_CMD[@]}" sed -i "/^\\[Service\\]/a ${timeout_line}" "$service_file"
-    else
-      sed -i "/^\\[Service\\]/a ${timeout_line}" "$service_file"
-    fi
-
-    if [ ${#SYSTEMCTL_CMD[@]} -gt 0 ]; then
-      "${SYSTEMCTL_CMD[@]}" daemon-reload >/dev/null 2>&1 || true
-    fi
-
-    echo "Ensured ${service}.service waits up to 300s for startup hooks."
+    echo "Removed deprecated prestart environment refresh from ${service}.service."
   fi
 }
 
@@ -803,13 +788,13 @@ echo "Refreshing environment..."
 FAILOVER_CREATED=1 ./env-refresh.sh $ENV_ARGS
 
 if [ -n "$SERVICE_NAME" ]; then
-  ensure_prestart_env_refresh "$SERVICE_NAME"
+  remove_prestart_env_refresh "$SERVICE_NAME"
   if [ -f "$LOCK_DIR/celery.lck" ] && [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
-    ensure_prestart_env_refresh "celery-$SERVICE_NAME"
-    ensure_prestart_env_refresh "celery-beat-$SERVICE_NAME"
+    remove_prestart_env_refresh "celery-$SERVICE_NAME"
+    remove_prestart_env_refresh "celery-beat-$SERVICE_NAME"
   fi
   if arthexis_lcd_feature_enabled "$LOCK_DIR" && [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
-    ensure_prestart_env_refresh "lcd-$SERVICE_NAME"
+    remove_prestart_env_refresh "lcd-$SERVICE_NAME"
   fi
 fi
 
