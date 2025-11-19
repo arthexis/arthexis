@@ -11,6 +11,7 @@ import uuid
 from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
 
+from django.apps import apps
 from django.conf import settings
 from django.contrib.sites.models import Site
 from django.db import models
@@ -208,6 +209,14 @@ class Charger(Entity):
         blank=True,
         help_text="Location or URI reported for the latest diagnostics upload.",
     )
+    diagnostics_bucket = models.ForeignKey(
+        "protocols.MediaBucket",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="chargers",
+        help_text=_("Media bucket where this charge point should upload diagnostics."),
+    )
     reference = models.OneToOneField(
         Reference, null=True, blank=True, on_delete=models.SET_NULL
     )
@@ -386,10 +395,10 @@ class Charger(Entity):
         """Return ``True`` when this charger originates from the local node."""
 
         local = Node.get_local()
-        if not local:
-            return False
         if self.node_origin_id is None:
             return True
+        if not local:
+            return False
         return self.node_origin_id == local.pk
 
     def save(self, *args, **kwargs):
@@ -398,6 +407,28 @@ class Charger(Entity):
             if local:
                 self.node_origin = local
         super().save(*args, **kwargs)
+
+    def ensure_diagnostics_bucket(self, *, expires_at: datetime | None = None):
+        """Return an active diagnostics bucket, creating one if necessary."""
+
+        MediaBucket = apps.get_model("protocols", "MediaBucket")
+        bucket = self.diagnostics_bucket
+        now = timezone.now()
+        if bucket and bucket.is_expired(reference=now):
+            bucket = None
+        if bucket is None:
+            patterns = "\n".join(["*.log", "*.txt", "*.zip", "*.tar", "*.tar.gz"])
+            bucket = MediaBucket.objects.create(
+                name=f"{self.charger_id} diagnostics".strip(),
+                allowed_patterns=patterns,
+                expires_at=expires_at,
+            )
+            Charger.objects.filter(pk=self.pk).update(diagnostics_bucket=bucket)
+            self.diagnostics_bucket = bucket
+        elif expires_at and (bucket.expires_at is None or bucket.expires_at < expires_at):
+            MediaBucket.objects.filter(pk=bucket.pk).update(expires_at=expires_at)
+            bucket.expires_at = expires_at
+        return bucket
 
     class Meta:
         verbose_name = _("Charge Point")
