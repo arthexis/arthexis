@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Validate auto-upgrade frequency override",
+      "created_on": "2025-12-01T00:00:00Z",
+      "url": "/admin/django_celery_beat/periodictask/",
+      "request_details": "1. Export `ARTHEXIS_UPGRADE_FREQ=30` in the shell and ensure `locks/auto_upgrade.lck` contains `unstable`.\n2. Run `python manage.py shell -c \"from core.auto_upgrade import ensure_auto_upgrade_periodic_task; ensure_auto_upgrade_periodic_task()\"` to refresh the schedule.\n3. In the Django admin (Periodic tasks), open the `auto-upgrade-check` task and confirm the interval is 30 minutes.\n4. Unset `ARTHEXIS_UPGRADE_FREQ`, rerun the helper, and verify the interval returns to the 15-minute unstable default.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]

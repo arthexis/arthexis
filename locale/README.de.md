@@ -130,7 +130,7 @@ Terminal-Knoten können direkt mit den untenstehenden Skripten ohne Installation
 ### 4. Administration
 - Greife über [`http://localhost:8888/admin/`](http://localhost:8888/admin/) auf den [Django-Admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) zu, um Live-Daten zu prüfen und zu pflegen. Verwende `--port` mit den Startskripten oder dem Installer, wenn du einen anderen Port freigeben musst.
 - Durchstöbere die [admindocs](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/) unter [`http://localhost:8888/admindocs/`](http://localhost:8888/admindocs/), um automatisch generierte API-Dokumentation deiner Modelle zu lesen.
-- Upgrade-Kanäle: Auto-Upgrade ist standardmäßig auf dem stabilen Kanal aktiv (24-Stunden-Prüfungen, Installation nur bei passender Index-Revision). Wechsle mit `--unstable`/`--latest` in den instabilen Kanal, um alle 10 Minuten Hauptzweig-Revisionen zu verfolgen, oder nutze `--fixed`, um die Automatisierung abzuschalten.
+- Upgrade-Kanäle: Auto-Upgrade ist standardmäßig auf dem stabilen Kanal aktiv (24-Stunden-Prüfungen, Installation nur bei passender Index-Revision). Wechsle mit `--unstable`/`--latest` in den instabilen Kanal, um alle 15 Minuten Hauptzweig-Revisionen zu verfolgen, oder nutze `--fixed`, um die Automatisierung abzuschalten.
 - Folge dem [Installations- und Administrationshandbuch](docs/cookbooks/install-start-stop-upgrade-uninstall.md) für Deployment, Lifecycle-Aufgaben und operative Runbooks.
 - Nimm Ladepunkte mit dem [EVCS-Konnektivitäts- und Wartungs-Cookbook](docs/cookbooks/evcs-connectivity-maintenance.md) in Betrieb und halte sie instand.
 - Konfiguriere Zahlungs-Gateways mit dem [Payment Processors Cookbook](docs/cookbooks/payment-processors.md).
