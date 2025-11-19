@@ -1,7 +1,7 @@
 import os
 import sys
 from pathlib import Path
-from datetime import timedelta
+from datetime import date, timedelta
 
 import pytest
 
@@ -107,6 +107,54 @@ class ClientReportScheduleRunTests(TestCase):
                 periodicity=ClientReportSchedule.PERIODICITY_DAILY,
                 title="Problematic\nTitle",
             )
+
+    def test_calculate_period_supports_multi_month_intervals(self):
+        monthly_schedule = ClientReportSchedule(
+            periodicity=ClientReportSchedule.PERIODICITY_MONTHLY
+        )
+        start, end = monthly_schedule.calculate_period(reference=date(2024, 7, 15))
+        self.assertEqual(start, date(2024, 6, 1))
+        self.assertEqual(end, date(2024, 6, 30))
+
+        bimonthly_schedule = ClientReportSchedule(
+            periodicity=ClientReportSchedule.PERIODICITY_BIMONTHLY
+        )
+        start, end = bimonthly_schedule.calculate_period(reference=date(2024, 8, 15))
+        self.assertEqual(start, date(2024, 5, 1))
+        self.assertEqual(end, date(2024, 6, 30))
+
+        quarterly_schedule = ClientReportSchedule(
+            periodicity=ClientReportSchedule.PERIODICITY_QUARTERLY
+        )
+        start, end = quarterly_schedule.calculate_period(reference=date(2024, 7, 15))
+        self.assertEqual(start, date(2024, 4, 1))
+        self.assertEqual(end, date(2024, 6, 30))
+
+        yearly_schedule = ClientReportSchedule(
+            periodicity=ClientReportSchedule.PERIODICITY_YEARLY
+        )
+        start, end = yearly_schedule.calculate_period(reference=date(2025, 2, 1))
+        self.assertEqual(start, date(2024, 1, 1))
+        self.assertEqual(end, date(2024, 12, 31))
+
+    def test_advance_period_moves_through_multi_month_cycles(self):
+        schedule = ClientReportSchedule(
+            periodicity=ClientReportSchedule.PERIODICITY_BIMONTHLY
+        )
+        next_start, next_end = schedule._advance_period(
+            date(2024, 5, 1), date(2024, 6, 30)
+        )
+        self.assertEqual(next_start, date(2024, 7, 1))
+        self.assertEqual(next_end, date(2024, 8, 31))
+
+        quarterly_schedule = ClientReportSchedule(
+            periodicity=ClientReportSchedule.PERIODICITY_QUARTERLY
+        )
+        q_start, q_end = quarterly_schedule._advance_period(
+            date(2024, 4, 1), date(2024, 6, 30)
+        )
+        self.assertEqual(q_start, date(2024, 7, 1))
+        self.assertEqual(q_end, date(2024, 9, 30))
 
     def test_daily_task_generates_missing_reports(self):
         schedule = ClientReportSchedule.objects.create(
