@@ -5,7 +5,7 @@
       "request": "Manual QA: Confirm startup Net Message appears on LCD",
       "created_on": "2025-01-15T00:00:00Z",
       "url": "/admin/nodes/netmessage/",
-      "request_details": "1. Restart a control node with the LCD screen enabled and wait for services to come up.\n2. Check Nodes → Net Messages in the admin and confirm a new entry with the hostname:port subject and version body was created at startup.\n3. Inspect the physical LCD and verify the same subject/body is rendered after boot.\n4. Clear the Net Message and restart again to ensure the startup notification is re-created and displayed.",
+      "request_details": "1. Restart a control node with the LCD screen enabled and wait for services to come up.\n2. Check Nodes → Net Messages in the admin and confirm a new entry with the hostname:port subject and version body was created after the service start or upgrade.\n3. Inspect the physical LCD and verify the same subject/body is rendered after boot.\n4. Clear the Net Message and restart again to ensure the startup notification is re-created and displayed.\n5. Run a management command such as `python manage.py check` without restarting the service and confirm no additional Net Message entries are created.",
       "done_on": null,
       "is_deleted": false,
       "version": "0.1.33"

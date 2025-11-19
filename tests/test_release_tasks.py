@@ -54,16 +54,8 @@ def test_no_upgrade_triggers_startup(monkeypatch, tmp_path):
         fake_apply_async,
     )
 
-    called = {}
-    import nodes.apps as nodes_apps
-
-    monkeypatch.setattr(
-        nodes_apps, "_startup_notification", lambda: called.setdefault("x", True)
-    )
-
     tasks.check_github_updates()
 
-    assert called.get("x")
     assert scheduled == []
     assert run_recorder.calls
     fetch_args, fetch_kwargs = run_recorder.calls[0]
@@ -127,7 +119,8 @@ def test_upgrade_shows_message(monkeypatch, tmp_path):
     upgrade_call = run_recorder.find("./upgrade.sh")
     assert upgrade_call is not None
     upgrade_args, upgrade_kwargs = upgrade_call
-    assert upgrade_args[0] == ["./upgrade.sh", "--no-restart"]
+    assert upgrade_args[0][:2] == ["./upgrade.sh", "--stable"]
+    assert upgrade_args[0][-1] == "--no-restart"
     assert upgrade_kwargs.get("cwd") == base
     assert upgrade_kwargs.get("check") is True
     fetch_call = run_recorder.calls[0]
@@ -263,16 +256,8 @@ def test_stable_mode_skips_patch_upgrade(monkeypatch, tmp_path):
         fake_apply_async,
     )
 
-    called = {}
-    import nodes.apps as nodes_apps
-
-    monkeypatch.setattr(
-        nodes_apps, "_startup_notification", lambda: called.setdefault("x", True)
-    )
-
     tasks.check_github_updates()
 
-    assert called.get("x")
     assert scheduled == []
     fetch_call = run_recorder.calls[0]
     fetch_args, fetch_kwargs = fetch_call
@@ -454,16 +439,8 @@ def test_check_github_updates_skips_blocked_revision(monkeypatch, tmp_path):
         fake_apply_async,
     )
 
-    called = {}
-    import nodes.apps as nodes_apps
-
-    monkeypatch.setattr(
-        nodes_apps, "_startup_notification", lambda: called.setdefault("x", True)
-    )
-
     tasks.check_github_updates()
 
-    assert called.get("x")
     assert scheduled == []
     assert run_recorder.calls
     fetch_args, fetch_kwargs = run_recorder.calls[0]

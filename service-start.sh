@@ -131,6 +131,20 @@ fi
 if arthexis_lcd_feature_enabled "$LOCK_DIR"; then
   LCD_FEATURE=true
 fi
+
+queue_startup_net_message() {
+  python - "$BASE_DIR" "$PORT" <<'PY'
+import sys
+from pathlib import Path
+
+from nodes.startup_notifications import queue_startup_message
+
+base_dir = Path(sys.argv[1])
+port_value = sys.argv[2]
+
+queue_startup_message(base_dir=base_dir, port=port_value)
+PY
+}
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --port)
@@ -195,6 +209,12 @@ if [ "$LCD_FEATURE" = true ]; then
     if [ "$LCD_SYSTEMD_UNIT" = true ]; then
       echo "Skipping systemd-managed LCD service because embedded mode is enabled. Reinstall with --systemd to manage the LCD via systemd."
     fi
+  fi
+fi
+
+if [ "$LCD_FEATURE" = true ]; then
+  if ! queue_startup_net_message; then
+    echo "Failed to queue startup Net Message" >&2
   fi
 fi
 

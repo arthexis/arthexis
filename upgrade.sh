@@ -38,6 +38,18 @@ LOCK_DIR="$BASE_DIR/locks"
 SYSTEMD_UNITS_LOCK="$LOCK_DIR/systemd_services.lck"
 SERVICE_NAME=""
 [ -f "$LOCK_DIR/service.lck" ] && SERVICE_NAME="$(cat "$LOCK_DIR/service.lck")"
+
+queue_startup_net_message() {
+  python - "$BASE_DIR" <<'PY'
+import sys
+from pathlib import Path
+
+from nodes.startup_notifications import queue_startup_message
+
+base_dir = Path(sys.argv[1])
+queue_startup_message(base_dir=base_dir)
+PY
+}
 SERVICE_MANAGEMENT_MODE="$(arthexis_detect_service_mode "$LOCK_DIR")"
 UPGRADE_IN_PROGRESS_LOCK="$LOCK_DIR/upgrade_in_progress.lck"
 # Discover managed service if not explicitly recorded.
@@ -819,6 +831,12 @@ if [[ $NO_RESTART -eq 0 ]]; then
     echo "Detected failed restart after upgrade." >&2
     echo "Manual intervention required to restore services." >&2
     exit 1
+  fi
+fi
+
+if arthexis_lcd_feature_enabled "$LOCK_DIR"; then
+  if ! queue_startup_net_message; then
+    echo "Failed to queue startup Net Message" >&2
   fi
 fi
 
