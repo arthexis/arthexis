@@ -304,6 +304,7 @@ FORCE_UPGRADE=0
 CLEAN=0
 NO_RESTART=0
 NO_WARN=0
+LOCAL_ONLY=0
 # Parse CLI options controlling the upgrade strategy.
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -326,6 +327,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --no-warn)
       NO_WARN=1
+      shift
+      ;;
+    --local)
+      LOCAL_ONLY=1
       shift
       ;;
     --stable|--normal|--regular)
@@ -660,15 +665,21 @@ fi
 LOCAL_VERSION="0"
 [ -f VERSION ] && LOCAL_VERSION=$(tr -d '\r\n' < VERSION)
 
-echo "Checking repository for updates..."
-git fetch origin "$BRANCH"
 REMOTE_VERSION="$LOCAL_VERSION"
-if git cat-file -e "origin/$BRANCH:VERSION" 2>/dev/null; then
-  REMOTE_VERSION=$(git show "origin/$BRANCH:VERSION" | tr -d '\r\n')
+if [[ $LOCAL_ONLY -eq 1 ]]; then
+  echo "Local refresh requested; skipping remote update check."
+else
+  echo "Checking repository for updates..."
+  git fetch origin "$BRANCH"
+  if git cat-file -e "origin/$BRANCH:VERSION" 2>/dev/null; then
+    REMOTE_VERSION=$(git show "origin/$BRANCH:VERSION" | tr -d '\r\n')
+  fi
 fi
 
 if [[ "$LOCAL_VERSION" == "$REMOTE_VERSION" ]]; then
-  if [[ $RERUN_AFTER_SELF_UPDATE -eq 1 ]]; then
+  if [[ $LOCAL_ONLY -eq 1 ]]; then
+    echo "Proceeding with local refresh despite matching version $LOCAL_VERSION."
+  elif [[ $RERUN_AFTER_SELF_UPDATE -eq 1 ]]; then
     echo "Detected prior upgrade.sh update; continuing upgrade for $REMOTE_VERSION despite matching versions."
   elif [[ "$CHANNEL" == "unstable" ]]; then
     echo "Unstable channel requested; continuing upgrade despite matching version $REMOTE_VERSION."
@@ -704,19 +715,23 @@ if [[ $VENV_PRESENT -eq 1 ]]; then
 fi
 
 # Pull latest changes
-echo "Pulling latest changes..."
-git pull --rebase
+if [[ $LOCAL_ONLY -eq 1 ]]; then
+  echo "Skipping git pull for local refresh."
+else
+  echo "Pulling latest changes..."
+  git pull --rebase
 
-# If the upgrade script itself was updated, stop so the new version is executed on the next run.
-POST_PULL_UPGRADE_HASH=""
-if [ -f "$UPGRADE_SCRIPT_PATH" ]; then
-  POST_PULL_UPGRADE_HASH="$(sha256sum "$UPGRADE_SCRIPT_PATH" | awk '{print $1}')"
-fi
-if [ -n "$INITIAL_UPGRADE_HASH" ] && [ -n "$POST_PULL_UPGRADE_HASH" ] && \
-   [ "$POST_PULL_UPGRADE_HASH" != "$INITIAL_UPGRADE_HASH" ]; then
-  printf '%s\n' "$REMOTE_VERSION" > "$UPGRADE_RERUN_LOCK"
-  echo "upgrade.sh was updated during git pull; please run the upgrade again to use the new script." >&2
-  exit "$UPGRADE_RERUN_EXIT_CODE"
+  # If the upgrade script itself was updated, stop so the new version is executed on the next run.
+  POST_PULL_UPGRADE_HASH=""
+  if [ -f "$UPGRADE_SCRIPT_PATH" ]; then
+    POST_PULL_UPGRADE_HASH="$(sha256sum "$UPGRADE_SCRIPT_PATH" | awk '{print $1}')"
+  fi
+  if [ -n "$INITIAL_UPGRADE_HASH" ] && [ -n "$POST_PULL_UPGRADE_HASH" ] && \
+     [ "$POST_PULL_UPGRADE_HASH" != "$INITIAL_UPGRADE_HASH" ]; then
+    printf '%s\n' "$REMOTE_VERSION" > "$UPGRADE_RERUN_LOCK"
+    echo "upgrade.sh was updated during git pull; please run the upgrade again to use the new script." >&2
+    exit "$UPGRADE_RERUN_EXIT_CODE"
+  fi
 fi
 
 # Update the development marker to reflect the new revision.
