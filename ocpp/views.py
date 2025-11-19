@@ -817,6 +817,7 @@ def _landing_page_translations() -> dict[str, dict[str, str]]:
                 "status_updated_label": gettext("Last status update"),
                 "status_vendor_label": gettext("Vendor"),
                 "status_info_label": gettext("Info"),
+                "latest_status_label": gettext("Latest report"),
             }
     return catalog
 
