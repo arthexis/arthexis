@@ -4841,6 +4841,21 @@ class StartupHandlerTests(TestCase):
         mock_start.assert_not_called()
 
 
+class NodesConfigReadyTests(TestCase):
+    def test_ready_triggers_startup_notification(self):
+        import importlib
+
+        from nodes.apps import NodesConfig
+
+        with patch("django.db.models.signals.post_migrate.connect") as mock_connect:
+            with patch("nodes.apps._trigger_startup_notification") as mock_trigger:
+                config = NodesConfig("nodes", importlib.import_module("nodes"))
+                config.ready()
+
+        mock_trigger.assert_called_once_with()
+        mock_connect.assert_called_once_with(mock_trigger, sender=config)
+
+
 class NotificationManagerTests(TestCase):
     def test_send_writes_trimmed_lines(self):
         from core.notifications import NotificationManager
