@@ -38,11 +38,11 @@ def test_ensure_auto_upgrade_task_is_removed_when_lock_deleted(tmp_path):
 @pytest.mark.parametrize(
     ("mode", "expected_minutes"),
     [
-        ("latest", 5),
-        ("stable", 60),
-        ("version", 720),
-        ("", 720),
-        ("UNSUPPORTED", 60),
+        ("latest", 15),
+        ("stable", 1440),
+        ("version", 1440),
+        ("", 1440),
+        ("UNSUPPORTED", 1440),
     ],
     ids=[
         "latest-mode",
@@ -77,14 +77,30 @@ def test_ensure_auto_upgrade_task_updates_interval_when_mode_changes(tmp_path):
     mode_file.write_text("latest")
     ensure_auto_upgrade_periodic_task(base_dir=tmp_path)
     task = PeriodicTask.objects.get(name=AUTO_UPGRADE_TASK_NAME)
-    assert task.interval.every == 5
+    assert task.interval.every == 15
 
     mode_file.write_text("stable")
     ensure_auto_upgrade_periodic_task(base_dir=tmp_path)
     task.refresh_from_db()
-    assert task.interval.every == 60
+    assert task.interval.every == 1440
 
     mode_file.write_text("version")
     ensure_auto_upgrade_periodic_task(base_dir=tmp_path)
     task.refresh_from_db()
-    assert task.interval.every == 720
+    assert task.interval.every == 1440
+
+
+def test_auto_upgrade_interval_respects_env_override(tmp_path, monkeypatch):
+    PeriodicTask.objects.filter(name=AUTO_UPGRADE_TASK_NAME).delete()
+
+    locks_dir = tmp_path / "locks"
+    locks_dir.mkdir()
+    (locks_dir / "auto_upgrade.lck").write_text("stable")
+
+    monkeypatch.setenv("ARTHEXIS_UPGRADE_FREQ", "30")
+
+    ensure_auto_upgrade_periodic_task(base_dir=tmp_path)
+
+    task = PeriodicTask.objects.get(name=AUTO_UPGRADE_TASK_NAME)
+    assert task.interval.every == 30
+    assert task.interval.period == IntervalSchedule.MINUTES

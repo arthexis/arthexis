@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from os import environ
 from pathlib import Path
 
 from django.conf import settings
@@ -12,8 +13,8 @@ AUTO_UPGRADE_TASK_PATH = "core.tasks.check_github_updates"
 
 DEFAULT_AUTO_UPGRADE_MODE = "stable"
 AUTO_UPGRADE_INTERVAL_MINUTES = {
-    "latest": 10,
-    "unstable": 10,
+    "latest": 15,
+    "unstable": 15,
     "stable": 1440,
     "regular": 1440,
     "normal": 1440,
@@ -54,12 +55,23 @@ def ensure_auto_upgrade_periodic_task(
             return
         return
 
+    override_interval = environ.get("ARTHEXIS_UPGRADE_FREQ")
+
     _mode = mode_file.read_text().strip().lower() or DEFAULT_AUTO_UPGRADE_MODE
     if _mode == "version":
         _mode = DEFAULT_AUTO_UPGRADE_MODE
     interval_minutes = AUTO_UPGRADE_INTERVAL_MINUTES.get(
         _mode, AUTO_UPGRADE_FALLBACK_INTERVAL
     )
+
+    if override_interval:
+        try:
+            parsed_interval = int(override_interval)
+        except ValueError:
+            parsed_interval = None
+        else:
+            if parsed_interval > 0:
+                interval_minutes = parsed_interval
 
     try:
         schedule, _ = IntervalSchedule.objects.get_or_create(
