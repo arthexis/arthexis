@@ -403,17 +403,26 @@ def _configure_lock_dependent_tasks(config):
 
 
 def _connect_sqlite_wal():
+    from django.db import DEFAULT_DB_ALIAS, connections
     from django.db.backends.signals import connection_created
 
     def enable_sqlite_wal(**kwargs):
         connection = kwargs.get("connection")
-        if connection.vendor == "sqlite":
+        if connection and connection.vendor == "sqlite":
             cursor = connection.cursor()
             cursor.execute("PRAGMA journal_mode=WAL;")
             cursor.execute("PRAGMA busy_timeout=60000;")
             cursor.close()
 
-    connection_created.connect(enable_sqlite_wal)
+    connection_created.connect(
+        enable_sqlite_wal,
+        dispatch_uid="core.enable_sqlite_wal",
+        weak=False,
+    )
+
+    default_connection = connections[DEFAULT_DB_ALIAS]
+    if default_connection.connection is not None:
+        enable_sqlite_wal(connection=default_connection)
 
 
 def _configure_github_issue_reporting():
