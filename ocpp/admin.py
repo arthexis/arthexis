@@ -1646,6 +1646,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
                     "display_name",
                     "connector_id",
                     "language",
+                    "energy_unit",
                     "location",
                     "last_path",
                     "last_heartbeat",

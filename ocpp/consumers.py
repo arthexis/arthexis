@@ -838,11 +838,11 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 context = sv.get("context", context or "")
                 measurand = sv.get("measurand", "")
                 unit = sv.get("unit", "")
+                effective_unit = unit or self.charger.energy_unit
                 field = None
                 if measurand in ("", "Energy.Active.Import.Register"):
                     field = "energy"
-                    if unit == "Wh":
-                        val = val / Decimal("1000")
+                    val = self.charger.convert_energy_to_kwh(val, effective_unit)
                 elif measurand == "Voltage":
                     field = "voltage"
                 elif measurand == "Current.Import":
@@ -859,8 +859,8 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                     if tx_obj and context in ("Transaction.Begin", "Transaction.End"):
                         suffix = "start" if context == "Transaction.Begin" else "stop"
                         if field == "energy":
-                            mult = 1000 if unit in ("kW", "kWh") else 1
-                            setattr(tx_obj, f"meter_{suffix}", int(val * mult))
+                            meter_value_wh = int(val * Decimal("1000"))
+                            setattr(tx_obj, f"meter_{suffix}", meter_value_wh)
                             updated_fields.add(f"meter_{suffix}")
                         else:
                             setattr(tx_obj, f"{field}_{suffix}", val)
@@ -868,9 +868,8 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                     else:
                         values[field] = val
                         if tx_obj and field == "energy" and tx_obj.meter_start is None:
-                            mult = 1000 if unit in ("kW", "kWh") else 1
                             try:
-                                tx_obj.meter_start = int(val * mult)
+                                tx_obj.meter_start = int(val * Decimal("1000"))
                             except (TypeError, ValueError):
                                 pass
                             else:
