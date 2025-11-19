@@ -1428,12 +1428,31 @@ def charger_page(request, cid, connector=None):
         if str(code).strip()
     ]
     supported_languages = set(available_languages)
-    charger_language = (charger.language or "es").strip()
-    if charger_language not in supported_languages:
-        fallback = "es" if "es" in supported_languages else ""
-        if not fallback and available_languages:
-            fallback = available_languages[0]
-        charger_language = fallback
+    language_candidates: list[str] = []
+    connector_language = (charger.language or "").strip()
+    if connector_language:
+        language_candidates.append(connector_language)
+    if charger.connector_id is not None:
+        parent_language = (
+            Charger.objects.filter(
+                charger_id=charger.charger_id, connector_id=None
+            )
+            .values_list("language", flat=True)
+            .first()
+            or ""
+        ).strip()
+        if parent_language:
+            language_candidates.append(parent_language)
+    fallback_language = "es" if "es" in supported_languages else ""
+    if not fallback_language and available_languages:
+        fallback_language = available_languages[0]
+    if fallback_language:
+        language_candidates.append(fallback_language)
+    charger_language = ""
+    for code in language_candidates:
+        if code in supported_languages:
+            charger_language = code
+            break
     if (
         charger_language
         and (

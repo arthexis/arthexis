@@ -93,7 +93,8 @@ class Charger(Entity):
         _("Language"),
         max_length=12,
         choices=settings.LANGUAGES,
-        default="es",
+        default="",
+        blank=True,
         help_text=_("Preferred language for the public landing page."),
     )
     energy_unit = models.CharField(
