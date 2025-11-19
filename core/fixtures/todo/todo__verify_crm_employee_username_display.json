@@ -1,0 +1,15 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "is_seed_data": false,
+      "is_deleted": false,
+      "request": "Confirm CRM Employee string uses username",
+      "created_on": "2025-02-15T00:00:00Z",
+      "url": "/admin/core/odooprofile/",
+      "request_details": "1. Open the CRM Employees list in the Django admin.\n2. Identify a profile where the CRM engine label previously included host information.\n3. Confirm the list entry now matches the configured username exactly.\n4. Edit and save the profile to ensure the displayed label remains the username after refresh.",
+      "generated_for_version": "",
+      "generated_for_revision": ""
+    }
+  }
+]
