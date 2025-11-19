@@ -4840,6 +4840,17 @@ class StartupHandlerTests(TestCase):
 
         mock_start.assert_not_called()
 
+    def test_handler_skips_during_test_command(self):
+        import sys
+
+        from nodes.apps import _trigger_startup_notification
+
+        with patch("nodes.apps._startup_notification") as mock_start:
+            with patch.object(sys, "argv", ["manage.py", "test"]):
+                _trigger_startup_notification()
+
+        mock_start.assert_not_called()
+
 
 class NodesConfigReadyTests(TestCase):
     def test_ready_triggers_startup_notification(self):

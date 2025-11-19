@@ -71,6 +71,10 @@ def _trigger_startup_notification(**_: object) -> None:
         logger.debug("Startup notification skipped: running migration command")
         return
 
+    if _is_running_test_command():
+        logger.debug("Startup notification skipped: running test command")
+        return
+
     try:
         connections["default"].ensure_connection()
     except OperationalError:
@@ -83,6 +87,12 @@ def _is_running_migration_command() -> bool:
     """Return ``True`` when Django's ``migrate`` command is executing."""
 
     return len(sys.argv) > 1 and sys.argv[1] == "migrate"
+
+
+def _is_running_test_command() -> bool:
+    """Return ``True`` when Django's ``test`` command is executing."""
+
+    return len(sys.argv) > 1 and sys.argv[1] == "test"
 
 
 class NodesConfig(AppConfig):
