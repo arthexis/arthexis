@@ -5,31 +5,40 @@
 
 {% block content %}
 {% with charger.display_name|default:charger.name|default:charger.charger_id as charger_label %}
-<div class="container px-0 px-sm-4" data-language-container data-preferred-language="{{ preferred_language }}">
+<div class="container px-3 px-sm-4" data-language-container data-preferred-language="{{ preferred_language }}">
   <div class="row justify-content-center mt-2 mt-sm-4">
     <div class="col-12 col-lg-8 col-xl-6">
       <div class="card shadow-sm border-0 overflow-hidden">
-        <div class="card-header d-flex flex-column flex-sm-row align-items-sm-center justify-content-between gap-2">
-          <div>
-            <h1 class="h5 mb-1 text-break">{{ charger_label }}</h1>
-            <p class="text-muted mb-0 small text-break">
-              <span data-i18n="serial_number_label">{% trans "Serial Number" %}</span>: {{ charger.charger_id }}
-              &middot;
-              <span data-i18n="connector_label">{% trans "Connector" %}</span>: {{ charger.connector_label }}
-            </p>
-            <div class="mt-2">
+        <div class="card-header">
+          <div class="d-flex flex-column flex-sm-row gap-3 align-items-stretch align-items-sm-start justify-content-between">
+            <div class="flex-grow-1">
+              <h1 class="h4 mb-2 text-break">{{ charger_label }}</h1>
+              <dl class="landing-meta-list">
+                <div>
+                  <dt data-i18n="serial_number_label">{% trans "Serial Number" %}</dt>
+                  <dd class="text-break">{{ charger.charger_id }}</dd>
+                </div>
+                <div>
+                  <dt data-i18n="connector_label">{% trans "Connector" %}</dt>
+                  <dd class="text-break">{{ charger.connector_label }}</dd>
+                </div>
+              </dl>
+            </div>
+            <div class="d-flex flex-column align-items-stretch align-items-sm-end gap-2">
               <span class="badge text-uppercase fw-semibold px-3 py-2 shadow-sm" style="background-color: {{ color }}; color: #fff;">{{ state }}</span>
+              {% if request.user.is_authenticated %}
+              <a class="btn btn-outline-primary w-100 w-sm-auto" href="{{ status_url }}" data-i18n="advanced_view_label">
+                {% trans "Advanced View" %}
+              </a>
+              {% endif %}
             </div>
           </div>
-          {% if request.user.is_authenticated %}
-          <a class="btn btn-outline-primary" href="{{ status_url }}" data-i18n="advanced_view_label">
-            {% trans "Advanced View" %}
-          </a>
-          {% endif %}
         </div>
         <div class="card-body">
           {% if charger.last_status or charger_error_code or charger.last_status_timestamp or charger.last_status_vendor_info %}
-          <div class="mb-3 text-muted small">
+          <div class="landing-card-section">
+            <p class="landing-card-section-title mb-1" data-i18n="latest_status_label">{% trans "Latest report" %}</p>
+            <div class="text-muted small">
             {% if charger.last_status %}
             <p class="mb-1"><span data-i18n="status_reported_label">{% trans "Reported status" %}</span>: {{ charger.last_status }}</p>
             {% endif %}
@@ -47,6 +56,7 @@
               <p class="mb-1"><span data-i18n="status_info_label">{% trans "Info" %}</span>: {{ charger.last_status_vendor_info.info }}</p>
               {% endif %}
             {% endif %}
+            </div>
           </div>
           {% endif %}
           {% if charger.require_rfid %}
@@ -55,34 +65,36 @@
           </div>
           {% endif %}
           {% if tx %}
-          <p class="text-muted" data-i18n="charging_label">{% trans "Charging" %}</p>
+          <div class="landing-card-section">
+            <p class="text-muted mb-3" data-i18n="charging_label">{% trans "Charging" %}</p>
           {% if charger.connector_id is None and active_connector_count %}
           <p class="small text-muted" data-i18n="connectors_active_message" data-count="{{ active_connector_count }}">
             {% blocktrans count active=active_connector_count %}{{ active }} connector active{% plural %}{{ active }} connectors active{% endblocktrans %}
           </p>
           {% endif %}
           <div class="progress bg-body-secondary mb-3" role="progressbar" aria-valuenow="{{ tx.kw|default:0|floatformat:0 }}" aria-valuemin="0" aria-valuemax="100">
-            <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: {{ tx.kw|default:0|floatformat:0 }}%;"></div>
+            <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: {{ tx.kw|default:0|floatformat:0}}%;"></div>
           </div>
-          <div class="row text-center text-sm-start gy-3">
-            <div class="col-12 col-sm-6">
-              <h2 class="h6 text-uppercase text-muted mb-1" data-i18n="energy_label">{% trans "Energy" %}</h2>
-              <p class="fs-4 fw-semibold mb-0">{{ tx.kw|floatformat:2 }} kW</p>
+          <div class="landing-stat-grid text-center text-sm-start">
+            <div>
+              <p class="stat-label" data-i18n="energy_label">{% trans "Energy" %}</p>
+              <p class="stat-value">{{ tx.kw|floatformat:2 }} kW</p>
             </div>
-            <div class="col-12 col-sm-6">
-              <h2 class="h6 text-uppercase text-muted mb-1" data-i18n="started_label">{% trans "Started" %}</h2>
-              <p class="fs-5 mb-0">{{ tx.start_time|date:"SHORT_DATETIME_FORMAT" }}</p>
+            <div>
+              <p class="stat-label" data-i18n="started_label">{% trans "Started" %}</p>
+              <p class="stat-value fs-5">{{ tx.start_time|date:"SHORT_DATETIME_FORMAT" }}</p>
             </div>
+          </div>
           </div>
           {% if tx_rfid_details %}
-          <div class="mt-3 text-center text-sm-start">
-          <h2 class="h6 text-uppercase text-muted mb-1" data-i18n="rfid_label">
+          <div class="landing-card-section text-center text-sm-start">
+            <p class="stat-label mb-1" data-i18n="rfid_label">
             {% if tx_rfid_details.display_label %}
               {{ tx_rfid_details.display_label }}
             {% else %}
               {% trans "RFID" %}
             {% endif %}
-          </h2>
+            </p>
             {% if tx_rfid_details.url %}
             <p class="mb-0"><a href="{{ tx_rfid_details.url }}">{{ tx_rfid_details.value }}</a></p>
             {% else %}
@@ -91,7 +103,7 @@
           </div>
           {% endif %}
           {% else %}
-          <div class="py-4 text-center">
+          <div class="landing-card-section py-3 text-center">
             <p class="lead mb-0" data-i18n="instruction_text">
               {% trans "Plug in your vehicle and slide your RFID card over the reader to begin charging." %}
             </p>
@@ -108,7 +120,7 @@
       <div class="row gy-3">
         {% for item in connector_overview %}
         <div class="col-12 col-md-6">
-          <div class="border rounded-3 p-3 h-100 position-relative bg-body">
+          <div class="landing-connector-card h-100 position-relative">
             <div class="d-flex justify-content-between align-items-center mb-2">
               <span class="fw-semibold">{{ item.label }}</span>
               <span class="badge" style="background-color: {{ item.color }};">{{ item.status }}</span>
