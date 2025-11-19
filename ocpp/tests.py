@@ -1,7 +1,7 @@
 import inspect
 import os
 import sys
-import time
+import time as time_module
 import tempfile
 import base64
 from collections import deque
@@ -4250,7 +4250,7 @@ class ChargerAdminTests(TestCase):
                 )
                 self.assertEqual(response.status_code, 200)
                 mock_schedule.assert_called_once()
-            time.sleep(0.1)
+            time_module.sleep(0.1)
             log_entries = store.get_logs(log_key, log_type="charger")
             self.assertTrue(
                 any("GetConfiguration timed out" in entry for entry in log_entries)
@@ -4344,6 +4344,52 @@ class ChargerAdminTests(TestCase):
             self.assertEqual(metadata.get("log_key"), log_key)
             log_entries = store.get_logs(log_key, log_type="charger")
             self.assertTrue(any("Reset" in entry for entry in log_entries))
+        finally:
+            store.pop_connection(charger.charger_id, charger.connector_id)
+            store.pending_calls.clear()
+            store.clear_log(log_key, log_type="charger")
+            store.clear_log(pending_key, log_type="charger")
+
+    def test_request_cp_diagnostics_creates_bucket_and_requests_upload(self):
+        charger = Charger.objects.create(charger_id="DIAGREQ", connector_id=1)
+        ws = DummyWebSocket()
+        log_key = store.identity_key(charger.charger_id, charger.connector_id)
+        pending_key = store.pending_key(charger.charger_id)
+        store.clear_log(log_key, log_type="charger")
+        store.clear_log(pending_key, log_type="charger")
+        store.pending_calls.clear()
+        store.set_connection(charger.charger_id, charger.connector_id, ws)
+
+        try:
+            fixed_now = datetime(2024, 1, 2, 3, 4, 5, tzinfo=dt_timezone.utc)
+            with patch("ocpp.admin.timezone.now", return_value=fixed_now):
+                response = self.client.post(
+                    reverse("admin:ocpp_charger_changelist"),
+                    {
+                        "action": "request_cp_diagnostics",
+                        "_selected_action": [charger.pk],
+                    },
+                    follow=True,
+                )
+            self.assertEqual(response.status_code, 200)
+            charger.refresh_from_db()
+            bucket = charger.diagnostics_bucket
+            self.assertIsNotNone(bucket)
+            self.assertIsNotNone(bucket.expires_at)
+            self.assertGreater(bucket.expires_at, fixed_now)
+            expected_location = "http://testserver" + reverse(
+                "protocols:media-bucket-upload", kwargs={"slug": bucket.slug}
+            )
+            self.assertEqual(len(ws.sent), 1)
+            frame = json.loads(ws.sent[0])
+            self.assertEqual(frame[0], 2)
+            self.assertEqual(frame[2], "GetDiagnostics")
+            payload = frame[3]
+            self.assertEqual(payload.get("location"), expected_location)
+            self.assertEqual(payload.get("stopTime"), bucket.expires_at.isoformat())
+            pending = store.pending_calls.get(frame[1])
+            self.assertIsNotNone(pending)
+            self.assertEqual(pending.get("action"), "GetDiagnostics")
         finally:
             store.pop_connection(charger.charger_id, charger.connector_id)
             store.pending_calls.clear()

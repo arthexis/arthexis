@@ -1671,6 +1671,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
                     "diagnostics_status",
                     "diagnostics_timestamp",
                     "diagnostics_location",
+                    "diagnostics_bucket",
                 )
             },
         ),
@@ -1759,6 +1760,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         "configuration",
         "local_auth_list_version",
         "local_auth_list_updated_at",
+        "diagnostics_bucket",
         "forwarded_to",
         "forwarding_watermark",
         "last_online_at",
@@ -1787,6 +1789,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         "send_rfid_list_to_evcs",
         "update_rfids_from_evcs",
         "recheck_charger_status",
+        "request_cp_diagnostics",
         "get_diagnostics",
         "change_availability_operative",
         "change_availability_inoperative",
@@ -2072,6 +2075,104 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         for field, value in applied.items():
             setattr(charger, field, value)
 
+    @admin.action(description="Request CP diagnostics")
+    def request_cp_diagnostics(self, request, queryset):
+        requested = 0
+        local_node = None
+        private_key = None
+        remote_unavailable = False
+        expiration = timezone.now() + timedelta(days=30)
+
+        for charger in queryset:
+            bucket = charger.ensure_diagnostics_bucket(expires_at=expiration)
+            upload_path = reverse(
+                "protocols:media-bucket-upload", kwargs={"slug": bucket.slug}
+            )
+            location = request.build_absolute_uri(upload_path)
+            stop_time = bucket.expires_at.isoformat() if bucket.expires_at else None
+            payload = {"location": location}
+            if stop_time:
+                payload["stopTime"] = stop_time
+            Charger.objects.filter(pk=charger.pk).update(
+                diagnostics_bucket=bucket, diagnostics_location=location
+            )
+            charger.diagnostics_bucket = bucket
+            charger.diagnostics_location = location
+
+            if charger.is_local:
+                connector_value = charger.connector_id
+                ws = store.get_connection(charger.charger_id, connector_value)
+                if ws is None:
+                    self.message_user(
+                        request,
+                        f"{charger}: no active connection",
+                        level=messages.ERROR,
+                    )
+                    continue
+                message_id = uuid.uuid4().hex
+                msg = json.dumps([2, message_id, "GetDiagnostics", payload])
+                try:
+                    async_to_sync(ws.send)(msg)
+                except Exception as exc:  # pragma: no cover - network error
+                    self.message_user(
+                        request,
+                        f"{charger}: failed to send GetDiagnostics ({exc})",
+                        level=messages.ERROR,
+                    )
+                    continue
+                log_key = store.identity_key(charger.charger_id, connector_value)
+                store.add_log(log_key, f"< {msg}", log_type="charger")
+                store.register_pending_call(
+                    message_id,
+                    {
+                        "action": "GetDiagnostics",
+                        "charger_id": charger.charger_id,
+                        "connector_id": connector_value,
+                        "log_key": log_key,
+                        "location": location,
+                        "requested_at": timezone.now(),
+                    },
+                )
+                requested += 1
+                continue
+
+            if not charger.allow_remote:
+                self.message_user(
+                    request,
+                    f"{charger}: remote administration is disabled.",
+                    level=messages.ERROR,
+                )
+                continue
+            if remote_unavailable:
+                continue
+            if local_node is None:
+                local_node, private_key = self._prepare_remote_credentials(request)
+                if not local_node or not private_key:
+                    remote_unavailable = True
+                    continue
+            success, updates = self._call_remote_action(
+                request,
+                local_node,
+                private_key,
+                charger,
+                "request-diagnostics",
+                payload,
+            )
+            if success:
+                self._apply_remote_updates(charger, updates)
+                requested += 1
+
+        if requested:
+            self.message_user(
+                request,
+                ngettext(
+                    "Requested diagnostics from %(count)d charger.",
+                    "Requested diagnostics from %(count)d chargers.",
+                    requested,
+                )
+                % {"count": requested},
+            )
+
     @admin.action(description="Get diagnostics")
     def get_diagnostics(self, request, queryset):
         diagnostics_dir, user_dir = self._diagnostics_directory_for(request.user)
@@ -2303,38 +2404,16 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
     def purge_data(self, request, queryset):
         purge_summaries = self._build_purge_summaries(queryset)
 
-        if request.POST.get("post"):
-            for charger in queryset:
-                charger.purge()
+        for charger in queryset:
+            charger.purge()
 
-            total_rows = sum(summary["total_rows"] for summary in purge_summaries)
-            self.message_user(
-                request,
-                _(
-                    "Purged %(rows)s rows across %(count)s charge points."
-                )
-                % {
-                    "rows": total_rows,
-                    "count": len(purge_summaries),
-                },
-            )
-            return None
-
-        context = {
-            **self.admin_site.each_context(request),
-            "opts": self.model._meta,
-            "title": _("Confirm charge point purge"),
-            "action_checkbox_name": helpers.ACTION_CHECKBOX_NAME,
-            "action_name": request.POST.get("action", "purge_data"),
-            "queryset": queryset,
-            "purge_summaries": purge_summaries,
-            "total_rows": sum(summary["total_rows"] for summary in purge_summaries),
-            "selected_ids": request.POST.getlist(helpers.ACTION_CHECKBOX_NAME),
-            "select_across": request.POST.get("select_across", "0"),
-        }
-        return TemplateResponse(
-            request, "admin/ocpp/charger/purge_confirmation.html", context
+        total_rows = sum(summary["total_rows"] for summary in purge_summaries)
+        self.message_user(
+            request,
+            _("Purged %(rows)s rows across %(count)s charge points.")
+            % {"rows": total_rows, "count": len(purge_summaries)},
         )
+        return None
 
     @admin.action(description="Re-check Charger Status")
     def recheck_charger_status(self, request, queryset):

@@ -1701,6 +1701,48 @@ def _remote_stop_transaction_remote(
     return True, "remote stop requested", {}
 
 
+def _request_diagnostics_remote(
+    charger: Charger, payload: Mapping | None = None
+) -> tuple[bool, str, dict[str, object]]:
+    location = ""
+    stop_time_raw = None
+    if isinstance(payload, Mapping):
+        location = str(payload.get("location") or "").strip()
+        stop_time_raw = payload.get("stopTime")
+    if not location:
+        return False, "missing upload location", {}
+
+    connector_value = charger.connector_id
+    ws = store.get_connection(charger.charger_id, connector_value)
+    if ws is None:
+        return False, "no active connection", {}
+
+    stop_time_value = _parse_remote_datetime(stop_time_raw)
+    message_id = uuid.uuid4().hex
+    request_payload: dict[str, object] = {"location": location}
+    if stop_time_value:
+        request_payload["stopTime"] = stop_time_value.isoformat()
+    msg = json.dumps([2, message_id, "GetDiagnostics", request_payload])
+    try:
+        async_to_sync(ws.send)(msg)
+    except Exception as exc:
+        return False, f"failed to send GetDiagnostics ({exc})", {}
+    log_key = store.identity_key(charger.charger_id, connector_value)
+    store.add_log(log_key, f"< {msg}", log_type="charger")
+    store.register_pending_call(
+        message_id,
+        {
+            "action": "GetDiagnostics",
+            "charger_id": charger.charger_id,
+            "connector_id": connector_value,
+            "log_key": log_key,
+            "location": location,
+            "requested_at": timezone.now(),
+        },
+    )
+    return True, "diagnostics requested", {}
+
+
 REMOTE_ACTIONS = {
     "trigger-status": _send_trigger_status,
     "get-configuration": _send_get_configuration,
@@ -1713,6 +1755,7 @@ REMOTE_ACTIONS = {
     "unlock-connector": _unlock_connector_remote,
     "set-availability-state": _set_availability_state_remote,
     "remote-stop": _remote_stop_transaction_remote,
+    "request-diagnostics": _request_diagnostics_remote,
 }
 
 
