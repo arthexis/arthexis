@@ -1,3 +1,4 @@
+import subprocess
 import types
 from datetime import datetime
 from urllib.error import URLError
@@ -138,6 +139,97 @@ def test_upgrade_shows_message(monkeypatch, tmp_path):
     first_call = scheduled[0]
     assert first_call["kwargs"].get("countdown") == tasks.AUTO_UPGRADE_HEALTH_DELAY_SECONDS
     assert first_call["kwargs"].get("kwargs") == {"attempt": 1}
+
+
+@pytest.mark.role("Watchtower")
+def test_upgrade_detaches_when_running_under_systemd(monkeypatch, tmp_path):
+    base = _setup_tmp(monkeypatch, tmp_path)
+    (base / "VERSION").write_text("1.0")
+
+    monkeypatch.setenv("INVOCATION_ID", "auto-upgrade-test")
+
+    def fake_which(name):
+        if name == "systemd-run":
+            return "/bin/systemd-run"
+        if name == "systemctl":
+            return "/bin/systemctl"
+        if name == "sudo":
+            return None
+        return None
+
+    monkeypatch.setattr(tasks.shutil, "which", fake_which)
+    monkeypatch.setattr(tasks.subprocess, "check_output", lambda *a, **k: "2.0")
+
+    run_recorder = CommandRecorder()
+    monkeypatch.setattr(tasks.subprocess, "run", run_recorder)
+
+    scheduled = []
+
+    def fake_apply_async(*args, **kwargs):
+        scheduled.append({"args": args, "kwargs": kwargs})
+
+    monkeypatch.setattr(
+        tasks.verify_auto_upgrade_health,
+        "apply_async",
+        fake_apply_async,
+    )
+
+    tasks.check_github_updates()
+
+    upgrade_calls = [
+        args for args, _ in run_recorder.calls if args and args[0][0] == "systemd-run"
+    ]
+    assert upgrade_calls, run_recorder.calls
+    assert "./upgrade.sh" in upgrade_calls[0][0]
+    assert scheduled
+
+
+@pytest.mark.role("Watchtower")
+def test_upgrade_detach_falls_back_when_systemd_run_fails(monkeypatch, tmp_path):
+    base = _setup_tmp(monkeypatch, tmp_path)
+    (base / "VERSION").write_text("1.0")
+
+    monkeypatch.setenv("INVOCATION_ID", "auto-upgrade-test")
+
+    def fake_which(name):
+        if name == "systemd-run":
+            return "/bin/systemd-run"
+        if name == "systemctl":
+            return "/bin/systemctl"
+        if name == "sudo":
+            return None
+        return None
+
+    monkeypatch.setattr(tasks.shutil, "which", fake_which)
+    monkeypatch.setattr(tasks.subprocess, "check_output", lambda *a, **k: "2.0")
+
+    class FailingSystemdRun(CommandRecorder):
+        def __call__(self, *args, **kwargs):
+            if args and args[0] and args[0][0] == "systemd-run":
+                raise subprocess.CalledProcessError(1, args[0])
+            return super().__call__(*args, **kwargs)
+
+    run_recorder = FailingSystemdRun()
+    monkeypatch.setattr(tasks.subprocess, "run", run_recorder)
+
+    scheduled = []
+
+    def fake_apply_async(*args, **kwargs):
+        scheduled.append({"args": args, "kwargs": kwargs})
+
+    monkeypatch.setattr(
+        tasks.verify_auto_upgrade_health,
+        "apply_async",
+        fake_apply_async,
+    )
+
+    tasks.check_github_updates()
+
+    upgrade_calls = [
+        args for args, _ in run_recorder.calls if args and args[0][0] == "./upgrade.sh"
+    ]
+    assert upgrade_calls
+    assert scheduled
 
 
 @pytest.mark.role("Watchtower")
