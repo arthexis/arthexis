@@ -8,6 +8,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/scripts/helpers/nginx_maintenance.sh"
 # shellcheck source=scripts/helpers/ports.sh
 . "$SCRIPT_DIR/scripts/helpers/ports.sh"
+# shellcheck source=scripts/helpers/service_manager.sh
+. "$SCRIPT_DIR/scripts/helpers/service_manager.sh"
 arthexis_resolve_log_dir "$SCRIPT_DIR" LOG_DIR || exit 1
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 exec > >(tee "$LOG_FILE") 2>&1
@@ -123,7 +125,7 @@ resolve_role_from_value() {
 }
 
 detect_role_from_environment() {
-    if [ -f "$LOCK_DIR/control.lck" ] || [ -f "$LOCK_DIR/lcd_screen.lck" ]; then
+    if [ -f "$LOCK_DIR/control.lck" ] || arthexis_lcd_feature_enabled "$LOCK_DIR"; then
         echo "Control"
         return 0
     fi
@@ -612,7 +614,7 @@ if [ "$SKIP_SERVICE_RESTART" != true ] && [ -n "$SERVICE" ] && systemctl list-un
     fi
 fi
 
-for lock_name in celery.lck lcd_screen.lck control.lck nginx_mode.lck role.lck service.lck; do
+for lock_name in celery.lck lcd_screen.lck lcd_screen_enabled.lck control.lck nginx_mode.lck role.lck service.lck; do
     rm -f "$LOCK_DIR/$lock_name"
 done
 rm -f "$BASE_DIR"/*.role "$BASE_DIR"/.*.role 2>/dev/null || true
@@ -622,6 +624,7 @@ if [ "$ENABLE_CELERY" = true ]; then
 fi
 if [ "$ENABLE_LCD_SCREEN" = true ]; then
     touch "$LOCK_DIR/lcd_screen.lck"
+    arthexis_enable_lcd_feature_flag "$LOCK_DIR"
 fi
 if [ "$ENABLE_CONTROL" = true ]; then
     touch "$LOCK_DIR/control.lck"

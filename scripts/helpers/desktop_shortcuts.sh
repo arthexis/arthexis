@@ -249,7 +249,7 @@ arthexis_desktop_shortcut_launch() {
                 arthexis_desktop_shortcut_start_unit "celery-$service_name" || true
                 arthexis_desktop_shortcut_start_unit "celery-beat-$service_name" || true
             fi
-            if [ -f "$locks_dir/lcd_screen.lck" ]; then
+            if [ -f "$locks_dir/lcd_screen.lck" ] || [ -f "$locks_dir/lcd_screen_enabled.lck" ]; then
                 arthexis_desktop_shortcut_start_unit "lcd-$service_name" || true
             fi
         fi

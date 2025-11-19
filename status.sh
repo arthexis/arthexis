@@ -6,11 +6,14 @@ BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$BASE_DIR/scripts/helpers/logging.sh"
 # shellcheck source=scripts/helpers/ports.sh
 . "$BASE_DIR/scripts/helpers/ports.sh"
+# shellcheck source=scripts/helpers/service_manager.sh
+. "$BASE_DIR/scripts/helpers/service_manager.sh"
 arthexis_resolve_log_dir "$BASE_DIR" LOG_DIR || exit 1
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 exec > >(tee "$LOG_FILE") 2>&1
 
 LOCK_DIR="$BASE_DIR/locks"
+SERVICE_MANAGEMENT_MODE="$(arthexis_detect_service_mode "$LOCK_DIR")"
 
 # Determine installation status
 if [ -d "$BASE_DIR/.venv" ]; then
@@ -105,7 +108,7 @@ if [ -f "$LOCK_DIR/celery.lck" ]; then
 else
   CELERY_FEATURE=false
 fi
-if [ -f "$LOCK_DIR/lcd_screen.lck" ]; then
+if arthexis_lcd_feature_enabled "$LOCK_DIR"; then
   LCD_FEATURE=true
 else
   LCD_FEATURE=false
@@ -140,7 +143,8 @@ fi
 
 # Celery status
 if [ "$CELERY_FEATURE" = true ]; then
-  if [ -n "$SERVICE" ] && command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files | grep -Fq -- "celery-$SERVICE.service"; then
+  if [ -n "$SERVICE" ] && [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ] && \
+     command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files | grep -Fq -- "celery-$SERVICE.service"; then
     C_STATUS=$(systemctl is-active -- "celery-$SERVICE" || true)
     B_STATUS=$(systemctl is-active -- "celery-beat-$SERVICE" || true)
     echo "  Celery worker status: $C_STATUS"
@@ -155,9 +159,16 @@ if [ "$CELERY_FEATURE" = true ]; then
 fi
 
 if [ "$LCD_FEATURE" = true ]; then
-  if [ -n "$SERVICE" ] && command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files | grep -Fq -- "lcd-$SERVICE.service"; then
+  if [ -n "$SERVICE" ] && [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ] && \
+     command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files | grep -Fq -- "lcd-$SERVICE.service"; then
     LCD_STATUS=$(systemctl is-active -- "lcd-$SERVICE" || true)
     echo "  LCD screen service status: $LCD_STATUS"
+  else
+    if pgrep -f "core\.lcd_screen" >/dev/null 2>&1; then
+      echo "  LCD screen process: running"
+    else
+      echo "  LCD screen process: not running"
+    fi
   fi
 fi
 

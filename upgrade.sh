@@ -25,6 +25,8 @@ fi
 . "$BASE_DIR/scripts/helpers/auto-upgrade-service.sh"
 # shellcheck source=scripts/helpers/systemd_locks.sh
 . "$BASE_DIR/scripts/helpers/systemd_locks.sh"
+# shellcheck source=scripts/helpers/service_manager.sh
+. "$BASE_DIR/scripts/helpers/service_manager.sh"
 arthexis_resolve_log_dir "$BASE_DIR" LOG_DIR || exit 1
 # Capture stdout/stderr to a timestamped log for later review.
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
@@ -33,8 +35,10 @@ exec 2> >(tee "$LOG_FILE" >&2)
 cd "$BASE_DIR"
 
 LOCK_DIR="$BASE_DIR/locks"
+SYSTEMD_UNITS_LOCK="$LOCK_DIR/systemd_services.lck"
 SERVICE_NAME=""
 [ -f "$LOCK_DIR/service.lck" ] && SERVICE_NAME="$(cat "$LOCK_DIR/service.lck")"
+SERVICE_MANAGEMENT_MODE="$(arthexis_detect_service_mode "$LOCK_DIR")"
 # Discover managed service if not explicitly recorded.
 if [ -z "$SERVICE_NAME" ]; then
   while IFS= read -r unit_name; do
@@ -49,6 +53,25 @@ if [ -z "$SERVICE_NAME" ]; then
       break
     fi
   done < <(arthexis_read_systemd_unit_records "$LOCK_DIR")
+fi
+
+if [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_EMBEDDED" ]; then
+  if [ -n "$SERVICE_NAME" ]; then
+    arthexis_remove_celery_unit_stack "$LOCK_DIR" "$SERVICE_NAME"
+    arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "lcd-${SERVICE_NAME}.service"
+  fi
+  if [ -f "$SYSTEMD_UNITS_LOCK" ]; then
+    while IFS= read -r recorded_unit; do
+      case "$recorded_unit" in
+        celery-*.service|celery-beat-*.service)
+          arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "$recorded_unit"
+          ;;
+        lcd-*.service)
+          arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "$recorded_unit"
+          ;;
+      esac
+    done < "$SYSTEMD_UNITS_LOCK"
+  fi
 fi
 
 SYSTEMCTL_CMD=()
@@ -438,7 +461,7 @@ restart_services() {
         "${systemctl_cmd[@]}" kill --signal=TERM "$service_name" || true
         restart_via_systemd=1
       fi
-      if [ -f "$LOCK_DIR/lcd_screen.lck" ]; then
+      if arthexis_lcd_feature_enabled "$LOCK_DIR" && [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
         local lcd_service="lcd-$service_name"
         if "${systemctl_cmd[@]}" is-active --quiet "$lcd_service"; then
           echo "Signaling $lcd_service for restart via systemd..."
@@ -451,7 +474,7 @@ restart_services() {
         echo "Service $service_name did not become active after restart." >&2
         return 1
       fi
-      if [ -f "$LOCK_DIR/lcd_screen.lck" ]; then
+      if arthexis_lcd_feature_enabled "$LOCK_DIR" && [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
         local lcd_service="lcd-$service_name"
         if ! wait_for_service_active "$lcd_service" 1; then
           if [ "$systemctl_available" -eq 1 ]; then
@@ -471,7 +494,7 @@ restart_services() {
           fi
         fi
       fi
-      if [ -f "$LOCK_DIR/celery.lck" ]; then
+      if [ -f "$LOCK_DIR/celery.lck" ] && [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
         local celery_service="celery-$service_name"
         local celery_beat_service="celery-beat-$service_name"
 
@@ -521,7 +544,7 @@ restart_services() {
       echo "Service $service_name did not become active after restart." >&2
       return 1
     fi
-    if [ -f "$LOCK_DIR/lcd_screen.lck" ]; then
+    if arthexis_lcd_feature_enabled "$LOCK_DIR" && [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
       local lcd_service="lcd-$service_name"
       if ! wait_for_service_active "$lcd_service" 1; then
         echo "LCD service $lcd_service did not become active after restart." >&2
@@ -746,11 +769,11 @@ FAILOVER_CREATED=1 ./env-refresh.sh $ENV_ARGS
 
 if [ -n "$SERVICE_NAME" ]; then
   ensure_prestart_env_refresh "$SERVICE_NAME"
-  if [ -f "$LOCK_DIR/celery.lck" ]; then
+  if [ -f "$LOCK_DIR/celery.lck" ] && [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
     ensure_prestart_env_refresh "celery-$SERVICE_NAME"
     ensure_prestart_env_refresh "celery-beat-$SERVICE_NAME"
   fi
-  if [ -f "$LOCK_DIR/lcd_screen.lck" ]; then
+  if arthexis_lcd_feature_enabled "$LOCK_DIR" && [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
     ensure_prestart_env_refresh "lcd-$SERVICE_NAME"
   fi
 fi
@@ -764,7 +787,7 @@ if [ -f "$LOCK_DIR/service.lck" ]; then
   if [ -f "$SERVICE_FILE" ] && grep -Fq "celery -A" "$SERVICE_FILE"; then
     echo "Migrating service configuration for Celery..."
     touch "$LOCK_DIR/celery.lck"
-    arthexis_install_service_stack "$BASE_DIR" "$LOCK_DIR" "$SERVICE_NAME" true "$BASE_DIR/service-start.sh"
+    arthexis_install_service_stack "$BASE_DIR" "$LOCK_DIR" "$SERVICE_NAME" true "$BASE_DIR/service-start.sh" "$SERVICE_MANAGEMENT_MODE"
   fi
 fi
 

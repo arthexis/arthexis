@@ -78,6 +78,7 @@ arthexis_install_service_stack() {
   local service_name="$3"
   local enable_celery="${4:-false}"
   local exec_cmd="$5"
+  local service_mode="${6:-embedded}"
 
   if [ -z "$base_dir" ] || [ -z "$lock_dir" ] || [ -z "$service_name" ]; then
     return 0
@@ -85,6 +86,11 @@ arthexis_install_service_stack() {
 
   if [ -z "$exec_cmd" ]; then
     exec_cmd="$base_dir/service-start.sh"
+  fi
+
+  local manage_celery="$enable_celery"
+  if [ "${service_mode}" != "systemd" ]; then
+    manage_celery=false
   fi
 
   local systemd_dir="${SYSTEMD_DIR:-/etc/systemd/system}"
@@ -120,7 +126,7 @@ SERVICEEOF
   local celery_beat_service=""
   local celery_beat_service_file=""
 
-  if [ "$enable_celery" = true ]; then
+  if [ "$manage_celery" = true ]; then
     celery_service="celery-${service_name}"
     celery_service_file="${systemd_dir}/${celery_service}.service"
     sudo bash -c "cat > '$celery_service_file'" <<CELERYSERVICEEOF
@@ -174,7 +180,7 @@ BEATSERVICEEOF
 
   sudo systemctl daemon-reload
   sudo systemctl enable "$service_name"
-  if [ "$enable_celery" = true ]; then
+  if [ "$manage_celery" = true ]; then
     sudo systemctl enable "$celery_service" "$celery_beat_service"
   fi
 }

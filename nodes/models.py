@@ -255,7 +255,14 @@ class NodeFeature(Entity):
         lock = lock_map.get(self.slug)
         if lock:
             base_path = Path(node.base_path or settings.BASE_DIR)
-            return (base_path / "locks" / lock).exists()
+            lock_path = base_path / "locks" / lock
+            if lock_path.exists():
+                return True
+            if self.slug == "lcd-screen":
+                feature_lock = base_path / "locks" / "lcd_screen_enabled.lck"
+                if feature_lock.exists():
+                    return True
+            return False
         return False
 
     def get_default_actions(self) -> tuple[NodeFeatureDefaultAction, ...]:
