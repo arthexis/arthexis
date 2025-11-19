@@ -2751,11 +2751,17 @@ class ClientReportSchedule(Entity):
     PERIODICITY_DAILY = "daily"
     PERIODICITY_WEEKLY = "weekly"
     PERIODICITY_MONTHLY = "monthly"
+    PERIODICITY_BIMONTHLY = "bimonthly"
+    PERIODICITY_QUARTERLY = "quarterly"
+    PERIODICITY_YEARLY = "yearly"
     PERIODICITY_CHOICES = [
         (PERIODICITY_NONE, "One-time"),
         (PERIODICITY_DAILY, "Daily"),
         (PERIODICITY_WEEKLY, "Weekly"),
         (PERIODICITY_MONTHLY, "Monthly"),
+        (PERIODICITY_BIMONTHLY, "Bi-monthly (2 months)"),
+        (PERIODICITY_QUARTERLY, "Quarterly"),
+        (PERIODICITY_YEARLY, "Yearly"),
     ]
 
     owner = models.ForeignKey(
@@ -2861,13 +2867,37 @@ class ClientReportSchedule(Entity):
                 day_of_month="*",
                 month_of_year="*",
             )
-        else:
+        elif self.periodicity == self.PERIODICITY_MONTHLY:
             schedule, _ = CrontabSchedule.objects.get_or_create(
                 minute="0",
                 hour="4",
                 day_of_week="*",
                 day_of_month="1",
                 month_of_year="*",
+            )
+        elif self.periodicity == self.PERIODICITY_BIMONTHLY:
+            schedule, _ = CrontabSchedule.objects.get_or_create(
+                minute="0",
+                hour="4",
+                day_of_week="*",
+                day_of_month="1",
+                month_of_year="1,3,5,7,9,11",
+            )
+        elif self.periodicity == self.PERIODICITY_QUARTERLY:
+            schedule, _ = CrontabSchedule.objects.get_or_create(
+                minute="0",
+                hour="4",
+                day_of_week="*",
+                day_of_month="1",
+                month_of_year="1,4,7,10",
+            )
+        else:
+            schedule, _ = CrontabSchedule.objects.get_or_create(
+                minute="0",
+                hour="4",
+                day_of_week="*",
+                day_of_month="1",
+                month_of_year="1",
             )
 
         raw_name = f"client_report_schedule_{self.pk}"
@@ -2902,12 +2932,12 @@ class ClientReportSchedule(Entity):
             start_of_week = ref_date - _datetime.timedelta(days=ref_date.weekday())
             end = start_of_week - _datetime.timedelta(days=1)
             start = end - _datetime.timedelta(days=6)
-        elif self.periodicity == self.PERIODICITY_MONTHLY:
-            first_of_month = ref_date.replace(day=1)
-            end = first_of_month - _datetime.timedelta(days=1)
-            start = end.replace(day=1)
         else:
-            raise ValueError("calculate_period called for non-recurring schedule")
+            period_months = self._period_months()
+            if period_months:
+                start, end = self._calculate_month_period(ref_date, period_months)
+            else:
+                raise ValueError("calculate_period called for non-recurring schedule")
 
         return start, end
 
@@ -2923,21 +2953,52 @@ class ClientReportSchedule(Entity):
         if self.periodicity == self.PERIODICITY_WEEKLY:
             delta = _datetime.timedelta(days=7)
             return start + delta, end + delta
-        if self.periodicity == self.PERIODICITY_MONTHLY:
+        period_months = self._period_months()
+        if period_months:
             base_start = start.replace(day=1)
-            year = base_start.year
-            month = base_start.month
-            if month == 12:
-                next_year = year + 1
-                next_month = 1
-            else:
-                next_year = year
-                next_month = month + 1
-            next_start = base_start.replace(year=next_year, month=next_month, day=1)
-            last_day = _calendar.monthrange(next_year, next_month)[1]
-            next_end = next_start.replace(day=last_day)
+            next_start = self._add_months(base_start, period_months)
+            next_end_start = self._add_months(next_start, period_months)
+            next_end = next_end_start - _datetime.timedelta(days=1)
             return next_start, next_end
         raise ValueError("advance_period called for non-recurring schedule")
+
+    def _period_months(self) -> int | None:
+        return {
+            self.PERIODICITY_MONTHLY: 1,
+            self.PERIODICITY_BIMONTHLY: 2,
+            self.PERIODICITY_QUARTERLY: 3,
+            self.PERIODICITY_YEARLY: 12,
+        }.get(self.periodicity)
+
+    def _calculate_month_period(
+        self, ref_date: datetime_date, months: int
+    ) -> tuple[datetime_date, datetime_date]:
+        import calendar as _calendar
+        import datetime as _datetime
+
+        first_of_month = ref_date.replace(day=1)
+        end = first_of_month - _datetime.timedelta(days=1)
+
+        months_into_block = (end.month - 1) % months + 1
+        if months_into_block < months:
+            end_anchor = self._add_months(end.replace(day=1), -months_into_block)
+            end_day = _calendar.monthrange(end_anchor.year, end_anchor.month)[1]
+            end = end_anchor.replace(day=end_day)
+
+        start_anchor = self._add_months(end.replace(day=1), -(months - 1))
+        start = start_anchor.replace(day=1)
+        return start, end
+
+    @staticmethod
+    def _add_months(base: datetime_date, months: int) -> datetime_date:
+        import calendar as _calendar
+
+        month_index = base.month - 1 + months
+        year = base.year + month_index // 12
+        month = month_index % 12 + 1
+        last_day = _calendar.monthrange(year, month)[1]
+        day = min(base.day, last_day)
+        return base.replace(year=year, month=month, day=day)
 
     def iter_pending_periods(self, reference=None):
         from django.utils import timezone

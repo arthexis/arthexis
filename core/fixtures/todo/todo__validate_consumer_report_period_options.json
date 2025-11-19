@@ -1,0 +1,15 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "is_seed_data": false,
+      "is_deleted": false,
+      "request": "Validate Consumer Report scheduler supports bi-monthly, quarterly, and yearly options",
+      "created_on": "2024-01-01T00:00:00Z",
+      "url": "/admin/core/clientreport/generate/",
+      "request_details": "Open the Consumer Reports admin page and confirm the action button reads 'Configure New Report'. Start a new report and verify the recurrence options include Bi-monthly (2 months), Quarterly, and Yearly values. Save a schedule with each option to ensure they persist and trigger generation without errors.",
+      "generated_for_version": "",
+      "generated_for_revision": ""
+    }
+  }
+]

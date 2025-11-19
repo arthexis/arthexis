@@ -1166,6 +1166,9 @@ def ensure_recurring_client_reports() -> None:
             ClientReportSchedule.PERIODICITY_DAILY,
             ClientReportSchedule.PERIODICITY_WEEKLY,
             ClientReportSchedule.PERIODICITY_MONTHLY,
+            ClientReportSchedule.PERIODICITY_BIMONTHLY,
+            ClientReportSchedule.PERIODICITY_QUARTERLY,
+            ClientReportSchedule.PERIODICITY_YEARLY,
         ]
     ).prefetch_related("chargers")
 
