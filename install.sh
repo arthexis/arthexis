@@ -513,85 +513,9 @@ deactivate
 
 # If a service name was provided, install a systemd unit and persist its name
 if [ -n "$SERVICE" ]; then
-    SERVICE_FILE="/etc/systemd/system/${SERVICE}.service"
     echo "$SERVICE" > "$LOCK_DIR/service.lck"
     EXEC_CMD="$BASE_DIR/service-start.sh"
-    sudo bash -c "cat > '$SERVICE_FILE'" <<SERVICEEOF
-[Unit]
-Description=Arthexis Constellation Django service
-After=network.target
-Wants=network.target
-
-[Service]
-Type=simple
-WorkingDirectory=$BASE_DIR
-EnvironmentFile=-$BASE_DIR/redis.env
-EnvironmentFile=-$BASE_DIR/debug.env
-ExecStartPre=$BASE_DIR/scripts/prestart-refresh.sh
-ExecStart=$EXEC_CMD
-Restart=always
-TimeoutStartSec=500
-User=$(id -un)
-
-[Install]
-WantedBy=multi-user.target
-SERVICEEOF
-    arthexis_record_systemd_unit "$LOCK_DIR" "${SERVICE}.service"
-    if [ "$ENABLE_CELERY" = true ]; then
-        CELERY_SERVICE="celery-$SERVICE"
-        CELERY_SERVICE_FILE="/etc/systemd/system/${CELERY_SERVICE}.service"
-        sudo bash -c "cat > '$CELERY_SERVICE_FILE'" <<CELERYSERVICEEOF
-[Unit]
-Description=Celery Worker for $SERVICE
-After=${SERVICE}.service network.target redis.service
-Requires=${SERVICE}.service
-PartOf=${SERVICE}.service
-
-[Service]
-Type=simple
-WorkingDirectory=$BASE_DIR
-EnvironmentFile=-$BASE_DIR/redis.env
-EnvironmentFile=-$BASE_DIR/debug.env
-ExecStartPre=$BASE_DIR/scripts/prestart-refresh.sh
-        ExecStart=$BASE_DIR/.venv/bin/celery -A config worker -l info --concurrency=1
-        Restart=always
-        TimeoutStartSec=500
-        User=$(id -un)
-
-[Install]
-WantedBy=multi-user.target
-CELERYSERVICEEOF
-        arthexis_record_systemd_unit "$LOCK_DIR" "${CELERY_SERVICE}.service"
-        CELERY_BEAT_SERVICE="celery-beat-$SERVICE"
-        CELERY_BEAT_SERVICE_FILE="/etc/systemd/system/${CELERY_BEAT_SERVICE}.service"
-        sudo bash -c "cat > '$CELERY_BEAT_SERVICE_FILE'" <<BEATSERVICEEOF
-[Unit]
-Description=Celery Beat for $SERVICE
-After=${SERVICE}.service network.target redis.service
-Requires=${SERVICE}.service
-PartOf=${SERVICE}.service
-
-[Service]
-Type=simple
-WorkingDirectory=$BASE_DIR
-EnvironmentFile=-$BASE_DIR/redis.env
-EnvironmentFile=-$BASE_DIR/debug.env
-ExecStartPre=$BASE_DIR/scripts/prestart-refresh.sh
-ExecStart=$BASE_DIR/.venv/bin/celery -A config beat -l info
-Restart=always
-TimeoutStartSec=500
-User=$(id -un)
-
-[Install]
-WantedBy=multi-user.target
-BEATSERVICEEOF
-        arthexis_record_systemd_unit "$LOCK_DIR" "${CELERY_BEAT_SERVICE}.service"
-    fi
-    sudo systemctl daemon-reload
-    sudo systemctl enable "$SERVICE"
-    if [ "$ENABLE_CELERY" = true ]; then
-        sudo systemctl enable "$CELERY_SERVICE" "$CELERY_BEAT_SERVICE"
-    fi
+    arthexis_install_service_stack "$BASE_DIR" "$LOCK_DIR" "$SERVICE" "$ENABLE_CELERY" "$EXEC_CMD"
 fi
 
 if [ "$ENABLE_LCD_SCREEN" = true ] && [ -n "$SERVICE" ]; then
