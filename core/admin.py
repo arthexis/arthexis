@@ -3120,6 +3120,7 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
         "toggle_selected_user_data",
         "toggle_selected_released",
         "toggle_selected_allowed",
+        "create_account_from_rfid",
     ]
     readonly_fields = ("added_on", "last_seen_on", "reversed_uid")
     form = RFIDForm
@@ -3175,6 +3176,77 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
         return redirect("admin:core_rfid_scan")
 
     scan_rfids.short_description = "Scan RFIDs"
+
+    @staticmethod
+    def _build_unique_account_name(base: str) -> str:
+        base_name = (base or "").strip().upper() or "RFID ACCOUNT"
+        candidate = base_name
+        suffix = 1
+        while CustomerAccount.objects.filter(name=candidate).exists():
+            suffix += 1
+            candidate = f"{base_name}-{suffix}"
+        return candidate
+
+    @admin.action(description=_("Create Account from RFID"))
+    def create_account_from_rfid(self, request, queryset):
+        created = 0
+        reassigned = 0
+        skipped = 0
+
+        for tag in queryset.select_related():
+            if tag.energy_accounts.exists():
+                skipped += 1
+                continue
+
+            account_name = self._build_unique_account_name(
+                tag.custom_label or tag.rfid
+            )
+            with transaction.atomic():
+                account = CustomerAccount.objects.create(name=account_name)
+                account.rfids.add(tag)
+
+                updated = Transaction.objects.filter(
+                    rfid__iexact=tag.rfid, account__isnull=True
+                ).update(account=account)
+                reassigned += updated
+
+            created += 1
+
+        if created:
+            self.message_user(
+                request,
+                ngettext(
+                    "Created %(count)d account from RFID selection.",
+                    "Created %(count)d accounts from RFID selection.",
+                    created,
+                )
+                % {"count": created},
+                level=messages.SUCCESS,
+            )
+
+        if reassigned:
+            self.message_user(
+                request,
+                ngettext(
+                    "Linked %(count)d past transaction to the new account.",
+                    "Linked %(count)d past transactions to the new accounts.",
+                    reassigned,
+                )
+                % {"count": reassigned},
+                level=messages.SUCCESS,
+            )
+
+        if skipped:
+            self.message_user(
+                request,
+                ngettext(
+                    "Skipped %(count)d RFID because it is already linked to an account.",
+                    "Skipped %(count)d RFIDs because they are already linked to accounts.",
+                    skipped,
+                )
+                % {"count": skipped},
+                level=messages.WARNING,
+            )
 
     @admin.action(description=_("Toggle selected User Data"))
     def toggle_selected_user_data(self, request, queryset):
