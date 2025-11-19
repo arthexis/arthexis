@@ -12,14 +12,17 @@ alert directly on the display.
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 import subprocess
 import time
 from datetime import datetime
 from pathlib import Path
+from typing import NamedTuple
 
 from core.notifications import get_base_dir
 from nodes.lcd import CharLCD1602, LCDUnavailableError
+from nodes.startup_notifications import STARTUP_NET_MESSAGE_FLAG
 
 logger = logging.getLogger(__name__)
 
@@ -31,18 +34,29 @@ SHUTDOWN_SCHEDULE_FILE = Path("/run/systemd/shutdown/scheduled")
 DEFAULT_SCROLL_MS = 1000
 
 
-def _read_lock_file() -> tuple[str, str, int]:
+class LockPayload(NamedTuple):
+    line1: str
+    line2: str
+    scroll_ms: int
+    net_message: bool
+
+
+def _read_lock_file() -> LockPayload:
     try:
         lines = LOCK_FILE.read_text(encoding="utf-8").splitlines()
     except FileNotFoundError:
-        return "", "", DEFAULT_SCROLL_MS
+        return LockPayload("", "", DEFAULT_SCROLL_MS, False)
     line1 = lines[0][:64] if len(lines) > 0 else ""
     line2 = lines[1][:64] if len(lines) > 1 else ""
+
+    raw_speed = lines[2] if len(lines) > 2 else ""
+    net_message = raw_speed.strip().lower() == STARTUP_NET_MESSAGE_FLAG
+    speed_hint = lines[3] if net_message and len(lines) > 3 else raw_speed
     try:
-        speed = int(lines[2]) if len(lines) > 2 else DEFAULT_SCROLL_MS
+        speed = int(speed_hint) if speed_hint else DEFAULT_SCROLL_MS
     except ValueError:
         speed = DEFAULT_SCROLL_MS
-    return line1, line2, speed
+    return LockPayload(line1, line2, speed, net_message)
 
 
 def _clear_lock_file() -> None:
@@ -58,9 +72,7 @@ def _clear_lock_file() -> None:
         logger.debug("Failed to clear LCD lock file", exc_info=True)
 
 
-def _lock_file_matches(
-    payload: tuple[str, str, int], expected_mtime: float
-) -> bool:
+def _lock_file_matches(payload: LockPayload, expected_mtime: float) -> bool:
     """Return True when the lock file still matches the consumed payload."""
 
     try:
@@ -157,7 +169,7 @@ def _system_shutdown_notice() -> tuple[str, str] | None:
 
 
 def _resolve_display_payload(
-    lock_payload: tuple[str, str, int]
+    lock_payload: LockPayload,
 ) -> tuple[str, str, int, str]:
     shutdown_notice = _system_shutdown_notice()
     if shutdown_notice:
@@ -169,8 +181,67 @@ def _resolve_display_payload(
         line1, line2 = suite_notice
         return line1, line2, DEFAULT_SCROLL_MS, "suite-down"
 
-    line1, line2, speed = lock_payload
+    line1, line2, speed, _ = lock_payload
     return line1, line2, speed, "lock-file"
+
+
+_DJANGO_READY = False
+
+
+def _ensure_django() -> bool:
+    global _DJANGO_READY
+    if _DJANGO_READY:
+        return True
+
+    try:
+        import django
+    except Exception:
+        logger.debug("Django import failed for Net Message broadcast", exc_info=True)
+        return False
+
+    try:
+        os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+        django.setup()
+    except Exception:
+        logger.debug("Django setup failed for Net Message broadcast", exc_info=True)
+        return False
+
+    _DJANGO_READY = True
+    return True
+
+
+def _broadcast_net_message(subject: str, body: str) -> bool:
+    if not _ensure_django():
+        return False
+
+    try:
+        from nodes.models import NetMessage
+    except Exception:
+        logger.debug("Net Message model unavailable", exc_info=True)
+        return False
+
+    try:
+        NetMessage.broadcast(subject=subject, body=body)
+        return True
+    except Exception:
+        logger.warning("Failed to broadcast Net Message", exc_info=True)
+        return False
+
+
+def _send_net_message_from_lock(
+    lock_payload: LockPayload, last_sent: tuple[str, str] | None
+) -> tuple[str, str] | None:
+    if not lock_payload.net_message:
+        return last_sent
+
+    current = (lock_payload.line1, lock_payload.line2)
+    if last_sent == current:
+        return last_sent
+
+    if _broadcast_net_message(*current):
+        return current
+
+    return last_sent
 
 
 def _display(lcd: CharLCD1602, line1: str, line2: str, scroll_ms: int) -> None:
@@ -191,8 +262,9 @@ def _display(lcd: CharLCD1602, line1: str, line2: str, scroll_ms: int) -> None:
 def main() -> None:  # pragma: no cover - hardware dependent
     lcd = None
     last_lock_mtime = 0.0
-    lock_payload: tuple[str, str, int] = ("", "", DEFAULT_SCROLL_MS)
+    lock_payload: LockPayload = LockPayload("", "", DEFAULT_SCROLL_MS, False)
     last_display: tuple[str, str, int, str] | None = None
+    last_net_message: tuple[str, str] | None = None
     while True:
         try:
             if LOCK_FILE.exists():
@@ -202,8 +274,12 @@ def main() -> None:  # pragma: no cover - hardware dependent
                     last_lock_mtime = mtime
             else:
                 if last_lock_mtime != 0:
-                    lock_payload = ("", "", DEFAULT_SCROLL_MS)
+                    lock_payload = LockPayload("", "", DEFAULT_SCROLL_MS, False)
                 last_lock_mtime = 0.0
+
+            last_net_message = _send_net_message_from_lock(
+                lock_payload, last_net_message
+            )
 
             line1, line2, speed, source = _resolve_display_payload(lock_payload)
             current_display = (line1, line2, speed, source)

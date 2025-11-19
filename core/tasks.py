@@ -864,15 +864,10 @@ def check_github_updates(channel_override: str | None = None) -> None:
             )
 
         notify = None
-        startup = None
         try:  # pragma: no cover - optional dependency
             from core.notifications import notify  # type: ignore
         except Exception:
             notify = None
-        try:  # pragma: no cover - optional dependency
-            from nodes.apps import _startup_notification as startup  # type: ignore
-        except Exception:
-            startup = None
 
         try:
             remote_revision = subprocess.check_output(
@@ -897,8 +892,6 @@ def check_github_updates(channel_override: str | None = None) -> None:
                 restart_if_active=False,
                 revert_on_failure=False,
             )
-            if startup:
-                startup()
             return
 
         release_version, release_revision = _latest_release()
@@ -918,8 +911,6 @@ def check_github_updates(channel_override: str | None = None) -> None:
                     restart_if_active=False,
                     revert_on_failure=False,
                 )
-                if startup:
-                    startup()
                 return
 
             if notify:
@@ -961,8 +952,6 @@ def check_github_updates(channel_override: str | None = None) -> None:
                         restart_if_active=False,
                         revert_on_failure=False,
                     )
-                    if startup:
-                        startup()
                     return
 
             if notify:

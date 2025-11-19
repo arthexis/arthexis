@@ -68,7 +68,9 @@ def test_resolve_payload_prioritizes_shutdown(monkeypatch):
     monkeypatch.setattr(lcd_screen, "_system_shutdown_notice", lambda: ("sys", "down"))
     monkeypatch.setattr(lcd_screen, "_suite_down_notice", lambda: ("suite", "down"))
 
-    payload = lcd_screen._resolve_display_payload(("lock", "file", 500))
+    payload = lcd_screen._resolve_display_payload(
+        lcd_screen.LockPayload("lock", "file", 500, False)
+    )
 
     assert payload == ("sys", "down", lcd_screen.DEFAULT_SCROLL_MS, "system-shutdown")
 
@@ -77,7 +79,9 @@ def test_resolve_payload_falls_back_to_suite(monkeypatch):
     monkeypatch.setattr(lcd_screen, "_system_shutdown_notice", lambda: None)
     monkeypatch.setattr(lcd_screen, "_suite_down_notice", lambda: ("suite", "down"))
 
-    payload = lcd_screen._resolve_display_payload(("lock", "file", 500))
+    payload = lcd_screen._resolve_display_payload(
+        lcd_screen.LockPayload("lock", "file", 500, False)
+    )
 
     assert payload == ("suite", "down", lcd_screen.DEFAULT_SCROLL_MS, "suite-down")
 
@@ -86,7 +90,9 @@ def test_resolve_payload_uses_lock_when_no_alerts(monkeypatch):
     monkeypatch.setattr(lcd_screen, "_system_shutdown_notice", lambda: None)
     monkeypatch.setattr(lcd_screen, "_suite_down_notice", lambda: None)
 
-    payload = lcd_screen._resolve_display_payload(("lock", "file", 500))
+    payload = lcd_screen._resolve_display_payload(
+        lcd_screen.LockPayload("lock", "file", 500, False)
+    )
 
     assert payload == ("lock", "file", 500, "lock-file")
 
@@ -96,7 +102,7 @@ def test_lock_file_matches_detects_updated_payload(monkeypatch, tmp_path):
     lock_file.parent.mkdir(parents=True)
     monkeypatch.setattr(lcd_screen, "LOCK_FILE", lock_file)
 
-    payload = ("hello", "world", 750)
+    payload = lcd_screen.LockPayload("hello", "world", 750, False)
     lock_file.write_text("hello\nworld\n750\n", encoding="utf-8")
     original_mtime = lock_file.stat().st_mtime
 
@@ -105,3 +111,33 @@ def test_lock_file_matches_detects_updated_payload(monkeypatch, tmp_path):
     lock_file.write_text("new\nmessage\n", encoding="utf-8")
 
     assert not lcd_screen._lock_file_matches(payload, original_mtime)
+
+
+def test_read_lock_file_sets_net_message_flag(monkeypatch, tmp_path):
+    lock_file = tmp_path / "locks" / "lcd_screen.lck"
+    lock_file.parent.mkdir(parents=True)
+    lock_file.write_text("hello\nworld\nnet-message\n500\n", encoding="utf-8")
+    monkeypatch.setattr(lcd_screen, "LOCK_FILE", lock_file)
+
+    payload = lcd_screen._read_lock_file()
+
+    assert payload == lcd_screen.LockPayload("hello", "world", 500, True)
+
+
+def test_net_message_broadcasts_once(monkeypatch):
+    calls: list[tuple[str, str]] = []
+
+    monkeypatch.setattr(
+        lcd_screen,
+        "_broadcast_net_message",
+        lambda subject, body: calls.append((subject, body)) or True,
+    )
+
+    payload = lcd_screen.LockPayload("hello", "world", 1000, True)
+
+    last_sent = lcd_screen._send_net_message_from_lock(payload, None)
+    assert calls == [("hello", "world")]
+
+    repeat_sent = lcd_screen._send_net_message_from_lock(payload, last_sent)
+    assert calls == [("hello", "world")]
+    assert repeat_sent == ("hello", "world")

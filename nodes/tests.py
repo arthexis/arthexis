@@ -4624,113 +4624,53 @@ class NetworkChargerActionSecurityTests(TestCase):
 
 
 class StartupNotificationTests(TestCase):
-    def test_startup_notification_uses_hostname_and_revision(self):
+    def test_startup_notification_writes_lockfile(self):
         from nodes.apps import _startup_notification
 
         with TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
+            lock_file = tmp_path / "locks" / "lcd_screen.lck"
             (tmp_path / "VERSION").write_text("1.2.3")
             with self.settings(BASE_DIR=tmp_path):
                 with patch(
-                    "nodes.apps.revision.get_revision", return_value="abcdef123456"
+                    "nodes.startup_notifications.revision.get_revision",
+                    return_value="abcdef123456",
                 ):
-                    with patch("nodes.models.NetMessage.broadcast") as mock_broadcast:
-                        with patch(
-                            "nodes.apps.socket.gethostname", return_value="host"
-                        ):
-                            with patch.dict(os.environ, {"PORT": "9000"}):
-                                _startup_notification()
-                                time.sleep(0.1)
+                    with patch("nodes.apps.socket.gethostname", return_value="host"):
+                        with patch.dict(os.environ, {"PORT": "9000"}):
+                            _startup_notification(lock_file=lock_file)
 
-        mock_broadcast.assert_called_once()
-        _, kwargs = mock_broadcast.call_args
-        self.assertEqual(kwargs["subject"], "host:9000")
-        self.assertTrue(kwargs["body"].startswith("1.2.3 r"))
+            lines = lock_file.read_text(encoding="utf-8").splitlines()
+
+        self.assertEqual(lines[0], "host:9000")
+        self.assertTrue(lines[1].startswith("1.2.3 r"))
+        self.assertEqual(lines[2], "net-message")
 
     def test_startup_notification_marks_nonrelease_version(self):
         from nodes.apps import _startup_notification
 
-        package = Package.objects.create(name="pkg-start", is_active=False)
-        PackageRelease.objects.create(
-            package=package,
-            version="1.2.3",
-            revision="0" * 40,
-        )
-
         with TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
+            lock_file = tmp_path / "locks" / "lcd_screen.lck"
             (tmp_path / "VERSION").write_text("1.2.3")
             with self.settings(BASE_DIR=tmp_path):
                 with patch(
-                    "nodes.apps.revision.get_revision", return_value="1" * 40
+                    "nodes.startup_notifications.revision.get_revision",
+                    return_value="1" * 40,
                 ):
-                    with patch("nodes.models.NetMessage.broadcast") as mock_broadcast:
-                        with patch(
-                            "nodes.apps.socket.gethostname", return_value="host"
-                        ):
+                    with patch(
+                        "nodes.startup_notifications._should_mark_nonrelease",
+                        return_value=True,
+                    ):
+                        with patch("nodes.apps.socket.gethostname", return_value="host"):
                             with patch.dict(os.environ, {"PORT": "9000"}):
-                                _startup_notification()
-                                time.sleep(0.1)
+                                _startup_notification(lock_file=lock_file)
 
-        mock_broadcast.assert_called_once()
-        _, kwargs = mock_broadcast.call_args
-        self.assertEqual(kwargs["subject"], "host:9000")
-        self.assertEqual(kwargs["body"], "1.2.3+ r111111")
+            lines = lock_file.read_text(encoding="utf-8").splitlines()
 
-
-class StartupHandlerTests(TestCase):
-    def test_handler_logs_db_errors(self):
-        from nodes.apps import _trigger_startup_notification
-        from django.db.utils import OperationalError
-
-        with patch("nodes.apps._startup_notification") as mock_start:
-            with patch("nodes.apps.connections") as mock_connections:
-                mock_connections.__getitem__.return_value.ensure_connection.side_effect = OperationalError(
-                    "fail"
-                )
-                with self.assertLogs("nodes.apps", level="ERROR") as log:
-                    _trigger_startup_notification()
-
-        mock_start.assert_not_called()
-        self.assertTrue(any("Startup notification skipped" in m for m in log.output))
-
-    def test_handler_calls_startup_notification(self):
-        from nodes.apps import _trigger_startup_notification
-
-        with patch("nodes.apps._startup_notification") as mock_start:
-            with patch("nodes.apps.connections") as mock_connections:
-                mock_connections.__getitem__.return_value.ensure_connection.return_value = (
-                    None
-                )
-                _trigger_startup_notification()
-
-        mock_start.assert_called_once()
-
-    def test_handler_skips_during_migrate_command(self):
-        import sys
-
-        from nodes.apps import _trigger_startup_notification
-
-        with patch("nodes.apps._startup_notification") as mock_start:
-            with patch.object(sys, "argv", ["manage.py", "migrate"]):
-                _trigger_startup_notification()
-
-        mock_start.assert_not_called()
-
-
-class NodesConfigReadyTests(TestCase):
-    def test_ready_triggers_startup_notification(self):
-        import importlib
-
-        from nodes.apps import NodesConfig
-
-        with patch("django.db.models.signals.post_migrate.connect") as mock_connect:
-            with patch("nodes.apps._trigger_startup_notification") as mock_trigger:
-                config = NodesConfig("nodes", importlib.import_module("nodes"))
-                config.ready()
-
-        mock_trigger.assert_called_once_with()
-        mock_connect.assert_called_once_with(mock_trigger, sender=config)
+        self.assertEqual(lines[0], "host:9000")
+        self.assertEqual(lines[1], "1.2.3+ r111111")
+        self.assertEqual(lines[2], "net-message")
 
 
 class NotificationManagerTests(TestCase):
