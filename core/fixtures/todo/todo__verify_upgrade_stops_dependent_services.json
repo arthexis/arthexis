@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Regression: Verify upgrades stop Celery and LCD services", 
+      "created_on": "2024-10-01T00:00:00Z",
+      "url": "/admin/system/upgrade-report/",
+      "request_details": "1. Use a systemd-managed node with Celery and the LCD screen enabled (locks/service.lck, locks/celery.lck, and the LCD feature lock present).\n2. Ensure ${SERVICE}, celery-${SERVICE}, celery-beat-${SERVICE}, and lcd-${SERVICE} are running with `systemctl status` before testing.\n3. Run `./upgrade.sh --stable --no-restart` and wait for the service shutdown step to complete.\n4. While the upgrade is stopping services, confirm `systemctl is-active celery-${SERVICE}` and `systemctl is-active lcd-${SERVICE}` report `inactive` within the same window that ${SERVICE} is stopped.\n5. Check `ps -ef | grep -E \"celery -A config|core\\.lcd_screen\"` and confirm no stray Celery or LCD processes remain while the upgrade is running.\n6. After the upgrade finishes, allow services to restart and confirm status checks succeed before removing any temporary test data.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]

@@ -46,30 +46,28 @@ if [ -f "$LOCK_DIR/service.lck" ]; then
     $SUDO systemctl stop "$SERVICE_NAME" || true
     $SUDO systemctl status "$SERVICE_NAME" --no-pager || true
 
-    if [ -f "$LOCK_DIR/celery.lck" ]; then
-      CELERY_SERVICE="celery-$SERVICE_NAME"
-      CELERY_BEAT_SERVICE="celery-beat-$SERVICE_NAME"
-      CELERY_UNITS_FOUND=false
-      if systemctl list-unit-files | grep -Fq "${CELERY_BEAT_SERVICE}.service"; then
-        CELERY_UNITS_FOUND=true
-        $SUDO systemctl stop "$CELERY_BEAT_SERVICE" || true
-        $SUDO systemctl status "$CELERY_BEAT_SERVICE" --no-pager || true
-      fi
-      if systemctl list-unit-files | grep -Fq "${CELERY_SERVICE}.service"; then
-        CELERY_UNITS_FOUND=true
-        $SUDO systemctl stop "$CELERY_SERVICE" || true
-        $SUDO systemctl status "$CELERY_SERVICE" --no-pager || true
-      fi
+    CELERY_SERVICE="celery-$SERVICE_NAME"
+    CELERY_BEAT_SERVICE="celery-beat-$SERVICE_NAME"
+    CELERY_UNITS_FOUND=false
+    if systemctl list-unit-files | awk '{print $1}' | grep -Fxq "${CELERY_BEAT_SERVICE}.service"; then
+      CELERY_UNITS_FOUND=true
+      $SUDO systemctl stop "$CELERY_BEAT_SERVICE" || true
+      $SUDO systemctl status "$CELERY_BEAT_SERVICE" --no-pager || true
+    fi
+    if systemctl list-unit-files | awk '{print $1}' | grep -Fxq "${CELERY_SERVICE}.service"; then
+      CELERY_UNITS_FOUND=true
+      $SUDO systemctl stop "$CELERY_SERVICE" || true
+      $SUDO systemctl status "$CELERY_SERVICE" --no-pager || true
+    fi
 
-      if [ "$CELERY_UNITS_FOUND" = false ]; then
-        # Fall back to pkill when Celery services exist but aren't managed via systemd.
-        pkill -f "celery -A config" || true
-      fi
+    if [ "$CELERY_UNITS_FOUND" = false ]; then
+      # Fall back to pkill when Celery services exist but aren't managed via systemd.
+      pkill -f "celery -A config" || true
     fi
 
     if arthexis_lcd_feature_enabled "$LOCK_DIR"; then
       LCD_SERVICE="lcd-$SERVICE_NAME"
-      if systemctl list-unit-files | grep -Fq "${LCD_SERVICE}.service"; then
+      if systemctl list-unit-files | awk '{print $1}' | grep -Fxq "${LCD_SERVICE}.service"; then
         $SUDO systemctl stop "$LCD_SERVICE" || true
         $SUDO systemctl status "$LCD_SERVICE" --no-pager || true
       fi
