@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Confirm clean upgrades reload personal fixture data",
+      "version": "0.1.33",
+      "created_on": "2025-02-15T00:00:00Z",
+      "url": "/admin/core/todo/",
+      "request_details": "1. On a staging node, create a personal fixture by running `python manage.py dumpdata core.userdata --indent 2 --output data/userdata.json` after ensuring at least one UserData row exists.\n2. Remove that row from the live database with `python manage.py shell -c \"from core.models import UserData; UserData.objects.all().delete()\"`.\n3. Execute `./upgrade.sh --clean --no-restart` and allow it to finish, confirming that the confirmation prompt is accepted.\n4. Verify `python manage.py shell -c \"from core.models import UserData; print(UserData.objects.exists())\"` returns True, showing data/userdata.json was reloaded after the clean upgrade.",
+      "done_on": null,
+      "is_deleted": false
+    }
+  }
+]

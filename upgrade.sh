@@ -756,6 +756,16 @@ if [ -n "$SERVICE_NAME" ]; then
 fi
 
 # Reload personal user data fixtures
+if [ "$CLEAN" -eq 1 ] && [ $VENV_PRESENT -eq 1 ]; then
+  if ls data/*.json >/dev/null 2>&1; then
+    # Reload personal fixtures so --clean upgrades preserve optional data
+    # after the databases are rebuilt.
+    # shellcheck disable=SC1091
+    source .venv/bin/activate
+    python manage.py loaddata data/*.json
+    deactivate
+  fi
+fi
 
 # Migrate existing systemd unit to dedicated Celery services if needed
 if [ -f "$LOCK_DIR/service.lck" ]; then
