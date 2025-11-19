@@ -720,71 +720,8 @@ if [ -f "$LOCK_DIR/service.lck" ]; then
   SERVICE_FILE="${SYSTEMD_DIR}/${SERVICE_NAME}.service"
   if [ -f "$SERVICE_FILE" ] && grep -Fq "celery -A" "$SERVICE_FILE"; then
     echo "Migrating service configuration for Celery..."
-    MODE="internal"
-    if [ -f "$LOCK_DIR/nginx_mode.lck" ]; then
-      MODE="$(cat "$LOCK_DIR/nginx_mode.lck")"
-    fi
-    PORT="$(arthexis_detect_backend_port "$BASE_DIR")"
-    EXEC_CMD="$BASE_DIR/.venv/bin/python manage.py runserver 0.0.0.0:$PORT"
-    sudo bash -c "cat > '$SERVICE_FILE'" <<SERVICEEOF
-[Unit]
-Description=Arthexis Constellation Django service
-After=network.target
-
-[Service]
-Type=simple
-WorkingDirectory=$BASE_DIR
-EnvironmentFile=-$BASE_DIR/redis.env
-EnvironmentFile=-$BASE_DIR/debug.env
-ExecStart=$EXEC_CMD
-Restart=always
-User=$(id -un)
-
-[Install]
-WantedBy=multi-user.target
-SERVICEEOF
-    # Ensure Celery units exist and are enabled
     touch "$LOCK_DIR/celery.lck"
-    CELERY_SERVICE="celery-$SERVICE_NAME"
-    CELERY_BEAT_SERVICE="celery-beat-$SERVICE_NAME"
-    CELERY_SERVICE_FILE="${SYSTEMD_DIR}/${CELERY_SERVICE}.service"
-    CELERY_BEAT_SERVICE_FILE="${SYSTEMD_DIR}/${CELERY_BEAT_SERVICE}.service"
-    sudo bash -c "cat > '$CELERY_SERVICE_FILE'" <<CELERYSERVICEEOF
-[Unit]
-Description=Celery Worker for $SERVICE_NAME
-After=network.target redis.service
-
-[Service]
-Type=simple
-WorkingDirectory=$BASE_DIR
-EnvironmentFile=-$BASE_DIR/redis.env
-EnvironmentFile=-$BASE_DIR/debug.env
-ExecStart=$BASE_DIR/.venv/bin/celery -A config worker -l info --concurrency=2
-Restart=always
-User=$(id -un)
-
-[Install]
-WantedBy=multi-user.target
-CELERYSERVICEEOF
-    sudo bash -c "cat > '$CELERY_BEAT_SERVICE_FILE'" <<BEATSERVICEEOF
-[Unit]
-Description=Celery Beat for $SERVICE_NAME
-After=network.target redis.service
-
-[Service]
-Type=simple
-WorkingDirectory=$BASE_DIR
-EnvironmentFile=-$BASE_DIR/redis.env
-EnvironmentFile=-$BASE_DIR/debug.env
-ExecStart=$BASE_DIR/.venv/bin/celery -A config beat -l info
-Restart=always
-User=$(id -un)
-
-[Install]
-WantedBy=multi-user.target
-BEATSERVICEEOF
-    sudo systemctl daemon-reload
-  sudo systemctl enable "$SERVICE_NAME" "$CELERY_SERVICE" "$CELERY_BEAT_SERVICE"
+    arthexis_install_service_stack "$BASE_DIR" "$LOCK_DIR" "$SERVICE_NAME" true "$BASE_DIR/service-start.sh"
   fi
 fi
 
