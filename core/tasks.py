@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 import re
 import shlex
 import subprocess
 import time
+import uuid
 from pathlib import Path
 import urllib.error
 import urllib.request
@@ -127,6 +129,55 @@ def _append_auto_upgrade_log(base_dir: Path, message: str) -> None:
             fh.write(f"{timestamp} {message}\n")
     except Exception:  # pragma: no cover - best effort logging only
         logger.warning("Failed to append auto-upgrade log entry: %s", message)
+
+
+def _run_upgrade_command(base_dir: Path, args: list[str]) -> None:
+    """Run the upgrade script, detaching from system services when possible."""
+
+    systemd_run = shutil.which("systemd-run")
+    running_in_service = bool(os.environ.get("INVOCATION_ID"))
+    if systemd_run:
+        unit_name = f"arthexis-auto-upgrade-{uuid.uuid4().hex}"
+        detached_args = [
+            systemd_run,
+            "--unit",
+            unit_name,
+            "--same-dir",
+            "--collect",
+            "--property",
+            "KillMode=process",
+            "--wait",
+            *args,
+        ]
+        try:
+            reason = (
+                "to avoid stopping the running worker"
+                if running_in_service
+                else "to survive service restarts during the upgrade"
+            )
+            _append_auto_upgrade_log(
+                base_dir,
+                (
+                    "Starting detached auto-upgrade in transient systemd unit "
+                    f"{unit_name} {reason}"
+                ),
+            )
+            subprocess.run(detached_args, cwd=base_dir, check=True)
+            return
+        except Exception:
+            logger.warning(
+                "Detached auto-upgrade launch failed; falling back to inline execution",
+                exc_info=True,
+            )
+            _append_auto_upgrade_log(
+                base_dir,
+                (
+                    "Detached auto-upgrade launch failed; falling back to inline "
+                    "execution"
+                ),
+            )
+
+    subprocess.run(args, cwd=base_dir, check=True)
 
 
 def _systemctl_command() -> list[str]:
@@ -934,7 +985,7 @@ def check_github_updates(channel_override: str | None = None) -> None:
                 f"{timezone.now().isoformat()} running: {' '.join(args)}\n"
             )
 
-        subprocess.run(args, cwd=base_dir, check=True)
+        _run_upgrade_command(base_dir, args)
         _append_auto_upgrade_log(
             base_dir,
             f"Upgrade script completed successfully: {' '.join(args)}",
