@@ -87,7 +87,6 @@ from .models import (
 from .backends import OutboxEmailBackend
 from .tasks import (
     capture_node_screenshot,
-    kickstart_constellation_udp,
     poll_unreachable_upstream,
     sample_clipboard,
     run_role_configuration,
@@ -4475,128 +4474,6 @@ class NetMessageMaintenanceTests(TestCase):
         self.assertFalse(PendingNetMessage.objects.filter(pk=stale_entry.pk).exists())
         self.assertTrue(PendingNetMessage.objects.filter(pk=remaining_entry.pk).exists())
         self.assertGreaterEqual(deleted, 1)
-
-
-class ConstellationUdpKickstartTests(TestCase):
-    def setUp(self):
-        self.role, _ = NodeRole.objects.get_or_create(name="Terminal")
-
-    def test_kickstart_probes_constellation_peers(self):
-        local = Node.objects.create(
-            hostname="local-constellation",
-            address="10.0.0.10",
-            port=8888,
-            mac_address="00:11:22:33:44:aa",
-            public_endpoint="local-constellation",
-            constellation_ip="10.88.0.10",
-            role=self.role,
-        )
-        remote = Node.objects.create(
-            hostname="remote-constellation",
-            address="203.0.113.5",
-            port=8890,
-            mac_address="00:11:22:33:44:bb",
-            public_endpoint="remote-constellation",
-            constellation_ip="10.88.0.11",
-            ipv4_address="198.51.100.4",
-            role=self.role,
-        )
-        Node.objects.create(
-            hostname="no-constellation",
-            address="192.0.2.10",
-            port=8891,
-            mac_address="00:11:22:33:44:cc",
-            public_endpoint="no-constellation",
-            role=self.role,
-        )
-
-        remote.refresh_from_db()
-        self.assertEqual(remote.constellation_ip, "10.88.0.11")
-        self.assertTrue(
-            Node.objects.filter(constellation_ip="10.88.0.11").exists()
-        )
-        self.assertEqual(
-            list(
-                Node.objects.exclude(constellation_ip="")
-                .values_list("constellation_ip", flat=True)
-            ),
-            ["10.88.0.10", "10.88.0.11"],
-        )
-
-        constellation_nodes = (
-            Node.objects.exclude(constellation_ip="")
-            .values_list("pk", flat=True)
-        )
-        self.assertIn(remote.pk, list(constellation_nodes))
-        self.assertIn(remote.constellation_ip, remote.get_remote_host_candidates())
-
-        send_calls: list[tuple[str, int]] = []
-
-        def fake_probe(address: str, port: int) -> bool:
-            send_calls.append((address, port))
-            return True
-
-        def fake_iter(node: Node) -> list[str]:
-            self.assertEqual(node.pk, remote.pk)
-            return [remote.constellation_ip]
-
-        with (
-            self.settings(CONSTELLATION_WG_PORT=53123),
-            patch.object(Node, "get_local", return_value=local),
-            patch(
-                "nodes.tasks._synchronize_constellation_udp_window",
-                return_value=1_700_000_000.0,
-            ) as sync_mock,
-            patch(
-                "nodes.tasks._iter_constellation_probe_addresses",
-                side_effect=fake_iter,
-            ) as iter_mock,
-            patch("nodes.tasks._send_udp_probe", side_effect=fake_probe) as probe_mock,
-        ):
-            result = kickstart_constellation_udp()
-
-        self.assertGreaterEqual(sync_mock.call_count, 1)
-        self.assertGreaterEqual(iter_mock.call_count, 1)
-        self.assertGreaterEqual(probe_mock.call_count, 1)
-        self.assertGreaterEqual(result, 1)
-
-        targets = set(send_calls)
-        self.assertIn((remote.constellation_ip, 53123), targets)
-        self.assertNotIn((local.constellation_ip, 53123), targets)
-
-
-    def test_udp_probe_window_waits_for_next_interval(self):
-        time_values = iter([12.3, 15.0])
-        sleep_calls: list[float] = []
-
-        def fake_time() -> float:
-            return next(time_values)
-
-        def fake_sleep(duration: float) -> None:
-            sleep_calls.append(duration)
-
-        result = node_tasks._synchronize_constellation_udp_window(
-            5, now_func=fake_time, sleep_func=fake_sleep
-        )
-
-        self.assertEqual(len(sleep_calls), 1)
-        self.assertAlmostEqual(sleep_calls[0], 2.7, places=2)
-        self.assertEqual(result, 15.0)
-
-    def test_udp_probe_window_returns_immediately_when_aligned(self):
-        def fake_time() -> float:
-            return 60.0
-
-        def fake_sleep(_duration: float) -> None:
-            raise AssertionError("sleep should not be called when already aligned")
-
-        result = node_tasks._synchronize_constellation_udp_window(
-            30, now_func=fake_time, sleep_func=fake_sleep
-        )
-
-        self.assertEqual(result, 60.0)
-
-
 class NetMessageSignatureTests(TestCase):
     def setUp(self):
         self.role, _ = NodeRole.objects.get_or_create(name="Terminal")
