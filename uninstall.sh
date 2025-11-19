@@ -6,6 +6,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$SCRIPT_DIR/scripts/helpers/logging.sh"
 # shellcheck source=scripts/helpers/systemd_locks.sh
 . "$SCRIPT_DIR/scripts/helpers/systemd_locks.sh"
+# shellcheck source=scripts/helpers/service_manager.sh
+. "$SCRIPT_DIR/scripts/helpers/service_manager.sh"
 arthexis_resolve_log_dir "$SCRIPT_DIR" LOG_DIR || exit 1
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 exec > >(tee "$LOG_FILE") 2>&1
@@ -16,32 +18,6 @@ NO_WARN=0
 usage() {
     echo "Usage: $0 [--service NAME] [--no-warn]" >&2
     exit 1
-}
-
-remove_systemd_unit_if_present() {
-    local unit_name="$1"
-
-    if [ -z "$unit_name" ]; then
-        return 0
-    fi
-
-    local unit_file="/etc/systemd/system/${unit_name}"
-
-    if command -v systemctl >/dev/null 2>&1; then
-        if systemctl list-unit-files | grep -Fq "$unit_name"; then
-            sudo systemctl stop "$unit_name" || true
-            sudo systemctl disable "$unit_name" || true
-        fi
-    fi
-
-    if [ -f "$unit_file" ]; then
-        sudo rm "$unit_file"
-        if command -v systemctl >/dev/null 2>&1; then
-            sudo systemctl daemon-reload
-        fi
-    fi
-
-    arthexis_remove_systemd_unit_record "$LOCK_DIR" "$unit_name"
 }
 
 confirm_database_deletion() {
@@ -134,15 +110,15 @@ if ! confirm_database_deletion "Uninstalling Arthexis"; then
 fi
 
 if [ -n "$SERVICE" ]; then
-    remove_systemd_unit_if_present "${SERVICE}.service"
+    arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${SERVICE}.service"
 
     GUARD_SERVICE="${SERVICE}-upgrade-guard"
-    remove_systemd_unit_if_present "${GUARD_SERVICE}.service"
-    remove_systemd_unit_if_present "${GUARD_SERVICE}.timer"
+    arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${GUARD_SERVICE}.service"
+    arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${GUARD_SERVICE}.timer"
 
     LCD_SERVICE="lcd-$SERVICE"
     if [ -f "$LOCK_DIR/lcd_screen.lck" ] || printf '%s\n' "${RECORDED_SYSTEMD_UNITS[@]}" | grep -Fxq "${LCD_SERVICE}.service"; then
-        remove_systemd_unit_if_present "${LCD_SERVICE}.service"
+        arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${LCD_SERVICE}.service"
         rm -f "$LOCK_DIR/lcd_screen.lck"
     fi
 
@@ -165,21 +141,22 @@ if [ -n "$SERVICE" ]; then
     fi
 
     if [ -n "$CELERY_SERVICE" ]; then
-        remove_systemd_unit_if_present "${CELERY_SERVICE}.service"
+        arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${CELERY_SERVICE}.service"
     fi
     if [ -n "$CELERY_BEAT_SERVICE" ]; then
-        remove_systemd_unit_if_present "${CELERY_BEAT_SERVICE}.service"
+        arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${CELERY_BEAT_SERVICE}.service"
     fi
 
     rm -f "$LOCK_DIR/celery.lck"
     rm -f "$LOCK_DIR/service.lck"
+    rm -f "$LOCK_DIR/service_mode.lck"
 else
     pkill -f "manage.py runserver" || true
 fi
 
 if [ ${#RECORDED_SYSTEMD_UNITS[@]} -gt 0 ]; then
     for unit in "${RECORDED_SYSTEMD_UNITS[@]}"; do
-        remove_systemd_unit_if_present "$unit"
+        arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "$unit"
     done
 fi
 

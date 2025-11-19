@@ -6,6 +6,8 @@ BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$BASE_DIR/scripts/helpers/logging.sh"
 # shellcheck source=scripts/helpers/ports.sh
 . "$BASE_DIR/scripts/helpers/ports.sh"
+# shellcheck source=scripts/helpers/service_manager.sh
+. "$BASE_DIR/scripts/helpers/service_manager.sh"
 arthexis_resolve_log_dir "$BASE_DIR" LOG_DIR || exit 1
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 exec > >(tee "$LOG_FILE") 2>&1
@@ -13,6 +15,7 @@ cd "$BASE_DIR"
 LOCK_DIR="$BASE_DIR/locks"
 SKIP_LOCK="$LOCK_DIR/service-start-skip.lck"
 SYSTEMD_LOCK_FILE="$LOCK_DIR/systemd_services.lck"
+SERVICE_MANAGEMENT_MODE="$(arthexis_detect_service_mode "$LOCK_DIR")"
 SERVICE_NAME=""
 if [ -f "$LOCK_DIR/service.lck" ]; then
   SERVICE_NAME=$(tr -d '\r\n' < "$LOCK_DIR/service.lck")
@@ -94,10 +97,8 @@ fi
 DEFAULT_PORT="$(arthexis_detect_backend_port "$BASE_DIR")"
 PORT="$DEFAULT_PORT"
 RELOAD=false
-# Celery workers process Post Office's email queue; enable by default unless
-# systemd-managed Celery units are present. Those are installed by install.sh
-# when the service name is provided.
-CELERY=true
+# Celery workers process Post Office's email queue; prefer embedded mode.
+CELERY_MANAGEMENT_MODE="$SERVICE_MANAGEMENT_MODE"
 CELERY_FLAG_SET=false
 SYSTEMD_CELERY_UNITS=false
 if [ -n "$SERVICE_NAME" ] && [ -f "$SYSTEMD_LOCK_FILE" ]; then
@@ -116,13 +117,18 @@ while [[ $# -gt 0 ]]; do
       RELOAD=true
       shift
       ;;
-    --celery)
-      CELERY=true
+    --embedded|--celery)
+      CELERY_MANAGEMENT_MODE="$ARTHEXIS_SERVICE_MODE_EMBEDDED"
+      CELERY_FLAG_SET=true
+      shift
+      ;;
+    --systemd)
+      CELERY_MANAGEMENT_MODE="$ARTHEXIS_SERVICE_MODE_SYSTEMD"
       CELERY_FLAG_SET=true
       shift
       ;;
     --no-celery)
-      CELERY=false
+      CELERY_MANAGEMENT_MODE="disabled"
       CELERY_FLAG_SET=true
       shift
       ;;
@@ -135,16 +141,27 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     *)
-      echo "Usage: $0 [--port PORT] [--reload] [--public|--internal] [--celery|--no-celery]" >&2
+      echo "Usage: $0 [--port PORT] [--reload] [--public|--internal] [--embedded|--systemd|--no-celery]" >&2
       exit 1
       ;;
   esac
 done
 
-if [ "$CELERY_FLAG_SET" = false ] && [ "$SYSTEMD_CELERY_UNITS" = true ]; then
-  echo "Skipping embedded Celery processes because systemd-managed units are enabled. Use --celery to override."
-  CELERY=false
-fi
+CELERY=true
+case "$CELERY_MANAGEMENT_MODE" in
+  "$ARTHEXIS_SERVICE_MODE_SYSTEMD")
+    CELERY=false
+    ;;
+  disabled)
+    CELERY=false
+    ;;
+  *)
+    CELERY=true
+    if [ "$CELERY_FLAG_SET" = false ] && [ "$SYSTEMD_CELERY_UNITS" = true ]; then
+      echo "Skipping systemd-managed Celery units because embedded workers are enabled. Use --systemd to override."
+    fi
+    ;;
+esac
 
 # Start Celery components to handle queued email if enabled
 if [ "$CELERY" = true ]; then

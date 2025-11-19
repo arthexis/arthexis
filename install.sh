@@ -14,6 +14,8 @@ PIP_INSTALL_HELPER="$SCRIPT_DIR/scripts/helpers/pip_install.py"
 . "$SCRIPT_DIR/scripts/helpers/ports.sh"
 # shellcheck source=scripts/helpers/systemd_locks.sh
 . "$SCRIPT_DIR/scripts/helpers/systemd_locks.sh"
+# shellcheck source=scripts/helpers/service_manager.sh
+. "$SCRIPT_DIR/scripts/helpers/service_manager.sh"
 arthexis_resolve_log_dir "$SCRIPT_DIR" LOG_DIR || exit 1
 # Write a copy of stdout/stderr to a dedicated log file for troubleshooting.
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
@@ -27,6 +29,8 @@ AUTO_UPGRADE=true
 CHANNEL="stable"
 UPGRADE=false
 ENABLE_CELERY=false
+SERVICE_MANAGEMENT_MODE="$ARTHEXIS_SERVICE_MODE_EMBEDDED"
+SERVICE_MANAGEMENT_MODE_FLAG=false
 ENABLE_LCD_SCREEN=false
 DISABLE_LCD_SCREEN=false
 CLEAN=false
@@ -37,59 +41,20 @@ START_SERVICES=false
 REPAIR=false
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--public|--internal] [--port PORT] [--upgrade] [--fixed] [--stable|--regular|--normal|--unstable|--latest] [--satellite] [--terminal] [--control] [--watchtower] [--celery] [--lcd-screen|--no-lcd-screen] [--clean] [--start] [--repair]" >&2
+    echo "Usage: $0 [--service NAME] [--public|--internal] [--port PORT] [--upgrade] [--fixed] [--stable|--regular|--normal|--unstable|--latest] [--satellite] [--terminal] [--control] [--watchtower] [--celery] [--embedded|--systemd] [--lcd-screen|--no-lcd-screen] [--clean] [--start] [--repair]" >&2
     exit 1
 }
 
 # Service management helpers to avoid lock conflicts during repair operations.
-stop_systemd_unit_if_present() {
-    local unit_name="$1"
-
-    if ! command -v systemctl >/dev/null 2>&1; then
-        return 0
-    fi
-
-    if systemctl list-unit-files | awk '{print $1}' | grep -Fxq "$unit_name"; then
-        echo "Stopping ${unit_name} before repair to avoid database locks."
-        sudo systemctl stop "$unit_name" || true
-    fi
-}
-
 stop_existing_units_for_repair() {
     local service_name="$1"
 
-    stop_systemd_unit_if_present "${service_name}.service"
+    arthexis_stop_systemd_unit_if_present "${service_name}.service"
 
     if [ "$ENABLE_CELERY" = true ]; then
-        stop_systemd_unit_if_present "celery-${service_name}.service"
-        stop_systemd_unit_if_present "celery-beat-${service_name}.service"
+        arthexis_stop_systemd_unit_if_present "celery-${service_name}.service"
+        arthexis_stop_systemd_unit_if_present "celery-beat-${service_name}.service"
     fi
-}
-
-remove_systemd_unit_if_present() {
-    local unit_name="$1"
-
-    if [ -z "$unit_name" ]; then
-        return 0
-    fi
-
-    local unit_file="/etc/systemd/system/${unit_name}"
-
-    if command -v systemctl >/dev/null 2>&1; then
-        if systemctl list-unit-files | grep -Fq "$unit_name"; then
-            sudo systemctl stop "$unit_name" || true
-            sudo systemctl disable "$unit_name" || true
-        fi
-    fi
-
-    if [ -f "$unit_file" ]; then
-        sudo rm "$unit_file"
-        if command -v systemctl >/dev/null 2>&1; then
-            sudo systemctl daemon-reload
-        fi
-    fi
-
-    arthexis_remove_systemd_unit_record "$LOCK_DIR" "$unit_name"
 }
 
 clean_previous_installation_state() {
@@ -117,17 +82,16 @@ clean_previous_installation_state() {
     fi
 
     if [ -n "$service_name" ]; then
-        remove_systemd_unit_if_present "${service_name}.service"
-        remove_systemd_unit_if_present "${service_name}-upgrade-guard.service"
-        remove_systemd_unit_if_present "${service_name}-upgrade-guard.timer"
-        remove_systemd_unit_if_present "celery-${service_name}.service"
-        remove_systemd_unit_if_present "celery-beat-${service_name}.service"
-        remove_systemd_unit_if_present "lcd-${service_name}.service"
+        arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${service_name}.service"
+        arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${service_name}-upgrade-guard.service"
+        arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${service_name}-upgrade-guard.timer"
+        arthexis_remove_celery_unit_stack "$LOCK_DIR" "$service_name"
+        arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "lcd-${service_name}.service"
     fi
 
     if [ ${#recorded_units[@]} -gt 0 ]; then
         for unit in "${recorded_units[@]}"; do
-            remove_systemd_unit_if_present "$unit"
+            arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "$unit"
         done
     fi
 
@@ -295,6 +259,16 @@ while [[ $# -gt 0 ]]; do
             ENABLE_CELERY=true
             shift
             ;;
+        --embedded)
+            SERVICE_MANAGEMENT_MODE="$ARTHEXIS_SERVICE_MODE_EMBEDDED"
+            SERVICE_MANAGEMENT_MODE_FLAG=true
+            shift
+            ;;
+        --systemd)
+            SERVICE_MANAGEMENT_MODE="$ARTHEXIS_SERVICE_MODE_SYSTEMD"
+            SERVICE_MANAGEMENT_MODE_FLAG=true
+            shift
+            ;;
         --lcd-screen)
             ENABLE_LCD_SCREEN=true
             DISABLE_LCD_SCREEN=false
@@ -380,6 +354,9 @@ if [ "$REPAIR" = true ]; then
     if [ "$ENABLE_CELERY" = false ] && [ -f "$LOCK_DIR_PATH/celery.lck" ]; then
         ENABLE_CELERY=true
     fi
+    if [ "$SERVICE_MANAGEMENT_MODE_FLAG" = false ]; then
+        SERVICE_MANAGEMENT_MODE="$(arthexis_detect_service_mode "$LOCK_DIR_PATH")"
+    fi
     if [ "$ENABLE_LCD_SCREEN" = false ] && [ -f "$LOCK_DIR_PATH/lcd_screen.lck" ]; then
         ENABLE_LCD_SCREEN=true
         DISABLE_LCD_SCREEN=false
@@ -418,6 +395,28 @@ elif [ -f "$DB_FILE" ]; then
     fi
 fi
 mkdir -p "$LOCK_DIR"
+arthexis_record_service_mode "$LOCK_DIR" "$SERVICE_MANAGEMENT_MODE"
+
+if [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_EMBEDDED" ]; then
+    if [ -n "$SERVICE" ]; then
+        arthexis_remove_celery_unit_stack "$LOCK_DIR" "$SERVICE"
+    fi
+    if [ -f "$LOCK_DIR/service.lck" ] && [ -z "$SERVICE" ]; then
+        EXISTING_SERVICE="$(cat "$LOCK_DIR/service.lck")"
+        if [ -n "$EXISTING_SERVICE" ]; then
+            arthexis_remove_celery_unit_stack "$LOCK_DIR" "$EXISTING_SERVICE"
+        fi
+    fi
+    if [ -f "$SYSTEMD_UNITS_LOCK" ]; then
+        while IFS= read -r recorded_unit; do
+            case "$recorded_unit" in
+                celery-*.service|celery-beat-*.service)
+                    arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "$recorded_unit"
+                    ;;
+            esac
+        done < "$SYSTEMD_UNITS_LOCK"
+    fi
+fi
 
 # Record role-specific prerequisites and capture supporting state for service management.
 if [ "$ENABLE_CONTROL" = true ]; then
@@ -515,7 +514,7 @@ deactivate
 if [ -n "$SERVICE" ]; then
     echo "$SERVICE" > "$LOCK_DIR/service.lck"
     EXEC_CMD="$BASE_DIR/service-start.sh"
-    arthexis_install_service_stack "$BASE_DIR" "$LOCK_DIR" "$SERVICE" "$ENABLE_CELERY" "$EXEC_CMD"
+    arthexis_install_service_stack "$BASE_DIR" "$LOCK_DIR" "$SERVICE" "$ENABLE_CELERY" "$EXEC_CMD" "$SERVICE_MANAGEMENT_MODE"
 fi
 
 if [ "$ENABLE_LCD_SCREEN" = true ] && [ -n "$SERVICE" ]; then
@@ -591,7 +590,7 @@ elif [ "$AUTO_UPGRADE" = false ]; then
     rm -f "$LOCK_DIR/auto_upgrade.lck"
 elif [ -n "$SERVICE" ]; then
     sudo systemctl restart "$SERVICE"
-    if [ "$ENABLE_CELERY" = true ]; then
+    if [ "$ENABLE_CELERY" = true ] && [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
         sudo systemctl restart "celery-$SERVICE"
         sudo systemctl restart "celery-beat-$SERVICE"
     fi

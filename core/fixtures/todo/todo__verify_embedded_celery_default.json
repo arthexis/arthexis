@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Verify embedded Celery is the default service mode",
+      "created_on": "2025-11-14T00:00:00Z",
+      "url": "",
+      "request_details": "1. Install or upgrade a node that previously installed the celery-<service> and celery-beat-<service> units.\n2. Run `journalctl -u <service> -n 40 --no-pager` after the restart completes and confirm service-start.sh logs `Skipping systemd-managed Celery units because embedded workers are enabled. Use --systemd to override.`\n3. Run `systemctl list-unit-files | grep celery-<service>` and confirm no Celery units remain enabled when the default embedded mode is active.\n4. Execute `ps aux | grep 'celery -A config'` and verify that exactly one worker and one beat process are running under the service account.\n5. Optionally rerun `service-start.sh --systemd` and confirm the embedded processes do not start while the log explains systemd-managed units are being used.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]
