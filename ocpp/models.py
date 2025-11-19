@@ -52,6 +52,10 @@ class Charger(Entity):
     _PLACEHOLDER_SERIAL_RE = re.compile(r"^<[^>]+>$")
     _AUTO_LOCATION_SANITIZE_RE = re.compile(r"[^0-9A-Za-z_-]+")
 
+    class EnergyUnit(models.TextChoices):
+        KWH = "kWh", _("kWh")
+        WH = "Wh", _("Wh")
+
     OPERATIVE_STATUSES = {
         "Available",
         "Preparing",
@@ -91,6 +95,13 @@ class Charger(Entity):
         choices=settings.LANGUAGES,
         default="es",
         help_text=_("Preferred language for the public landing page."),
+    )
+    energy_unit = models.CharField(
+        _("Charger Units"),
+        max_length=4,
+        choices=EnergyUnit.choices,
+        default=EnergyUnit.KWH,
+        help_text=_("Energy unit expected from this charger."),
     )
     require_rfid = models.BooleanField(
         _("Require RFID Authorization"),
@@ -452,6 +463,22 @@ class Charger(Entity):
         if not sanitized:
             return "Charger"
         return sanitized
+
+    @staticmethod
+    def normalize_energy_value(
+        energy: Decimal, unit: str | None, *, default_unit: str | None = None
+    ) -> Decimal:
+        """Return ``energy`` converted to kWh using the provided units."""
+
+        unit_normalized = (unit or default_unit or Charger.EnergyUnit.KWH).lower()
+        if unit_normalized in {"w", "wh"}:
+            return energy / Decimal("1000")
+        return energy
+
+    def convert_energy_to_kwh(self, energy: Decimal, unit: str | None = None) -> Decimal:
+        return self.normalize_energy_value(
+            energy, unit, default_unit=self.energy_unit
+        )
 
     AGGREGATE_CONNECTOR_SLUG = "all"
 
@@ -1689,6 +1716,8 @@ class MeterReadingManager(EntityManager):
         normalized = dict(kwargs)
         value = normalized.pop("value", None)
         unit = normalized.pop("unit", None)
+        charger = normalized.get("charger")
+        charger_unit = getattr(charger, "energy_unit", None)
         if value is not None:
             energy = value
             try:
@@ -1696,10 +1725,12 @@ class MeterReadingManager(EntityManager):
             except (InvalidOperation, TypeError, ValueError):
                 energy = None
             if energy is not None:
-                unit_normalized = (unit or "").lower()
-                if unit_normalized in {"w", "wh"}:
-                    energy = energy / Decimal("1000")
-                normalized.setdefault("energy", energy)
+                normalized.setdefault(
+                    "energy",
+                    Charger.normalize_energy_value(
+                        energy, unit, default_unit=charger_unit
+                    ),
+                )
         normalized.pop("measurand", None)
         return normalized
 

@@ -28,6 +28,7 @@ from ocpp.models import (
     Charger,
     ChargerConfiguration,
     ConfigurationKey,
+    MeterReading,
     generate_log_request_id,
 )
 from nodes.models import Node
@@ -166,6 +167,41 @@ class ChargerAutoLocationNameTests(TestCase):
         self.assertEqual(charger.location.name, "Charger")
         self.assertEqual(
             Charger.sanitize_auto_location_name(charger.charger_id), "Charger"
+        )
+
+
+class ChargerEnergyUnitTests(TestCase):
+    def test_charger_energy_conversion_defaults_to_configured_unit(self):
+        charger = Charger.objects.create(
+            charger_id="UNIT-WH", energy_unit=Charger.EnergyUnit.WH
+        )
+
+        self.assertEqual(
+            charger.convert_energy_to_kwh(Decimal("1200")), Decimal("1.2")
+        )
+
+    def test_meter_reading_manager_uses_charger_unit_when_missing(self):
+        charger = Charger.objects.create(
+            charger_id="UNIT-MV", energy_unit=Charger.EnergyUnit.WH
+        )
+
+        reading = MeterReading.objects.create(
+            charger=charger,
+            timestamp=timezone.now(),
+            measurand="Energy.Active.Import.Register",
+            value=Decimal("500"),
+        )
+
+        self.assertEqual(reading.energy, Decimal("0.5"))
+
+    def test_provided_unit_overrides_charger_default(self):
+        charger = Charger.objects.create(
+            charger_id="UNIT-KWH", energy_unit=Charger.EnergyUnit.WH
+        )
+
+        self.assertEqual(
+            charger.convert_energy_to_kwh(Decimal("2.5"), unit="kWh"),
+            Decimal("2.5"),
         )
 
 
