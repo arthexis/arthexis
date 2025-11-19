@@ -66,6 +66,94 @@ stop_existing_units_for_repair() {
     fi
 }
 
+remove_systemd_unit_if_present() {
+    local unit_name="$1"
+
+    if [ -z "$unit_name" ]; then
+        return 0
+    fi
+
+    local unit_file="/etc/systemd/system/${unit_name}"
+
+    if command -v systemctl >/dev/null 2>&1; then
+        if systemctl list-unit-files | grep -Fq "$unit_name"; then
+            sudo systemctl stop "$unit_name" || true
+            sudo systemctl disable "$unit_name" || true
+        fi
+    fi
+
+    if [ -f "$unit_file" ]; then
+        sudo rm "$unit_file"
+        if command -v systemctl >/dev/null 2>&1; then
+            sudo systemctl daemon-reload
+        fi
+    fi
+
+    arthexis_remove_systemd_unit_record "$LOCK_DIR" "$unit_name"
+}
+
+clean_previous_installation_state() {
+    local service_name="$1"
+    local backup_dir="$BASE_DIR/backups"
+    local -a recorded_units=()
+
+    mkdir -p "$LOCK_DIR"
+
+    if [ -f "$SYSTEMD_UNITS_LOCK" ]; then
+        mapfile -t recorded_units < "$SYSTEMD_UNITS_LOCK"
+    fi
+
+    if [ -z "$service_name" ] && [ -f "$LOCK_DIR/service.lck" ]; then
+        service_name="$(cat "$LOCK_DIR/service.lck")"
+    fi
+
+    if [ -z "$service_name" ] && [ ${#recorded_units[@]} -gt 0 ]; then
+        for unit in "${recorded_units[@]}"; do
+            if [[ "$unit" == *.service ]]; then
+                service_name="${unit%.service}"
+                break
+            fi
+        done
+    fi
+
+    if [ -n "$service_name" ]; then
+        remove_systemd_unit_if_present "${service_name}.service"
+        remove_systemd_unit_if_present "${service_name}-upgrade-guard.service"
+        remove_systemd_unit_if_present "${service_name}-upgrade-guard.timer"
+        remove_systemd_unit_if_present "celery-${service_name}.service"
+        remove_systemd_unit_if_present "celery-beat-${service_name}.service"
+        remove_systemd_unit_if_present "lcd-${service_name}.service"
+    fi
+
+    if [ ${#recorded_units[@]} -gt 0 ]; then
+        for unit in "${recorded_units[@]}"; do
+            remove_systemd_unit_if_present "$unit"
+        done
+    fi
+
+    if [ -d "$LOG_DIR" ]; then
+        if [ -f "$LOG_FILE" ]; then
+            find "$LOG_DIR" -type f ! -samefile "$LOG_FILE" -delete
+        else
+            find "$LOG_DIR" -type f -delete
+        fi
+    fi
+
+    if [ -f "$DB_FILE" ]; then
+        mkdir -p "$backup_dir"
+        VERSION="unknown"
+        [ -f "$BASE_DIR/VERSION" ] && VERSION="$(cat "$BASE_DIR/VERSION")"
+        REVISION="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
+        STAMP="$(date +%Y%m%d%H%M%S)"
+        cp "$DB_FILE" "$backup_dir/db.sqlite3.${VERSION}.${REVISION}.${STAMP}.bak"
+        rm "$DB_FILE"
+    fi
+
+    rm -f "$LOCK_DIR"/*.lck "$LOCK_DIR"/*.lock "$LOCK_DIR"/*.tmp "$LOCK_DIR"/service.lck
+    rm -f "$SYSTEMD_UNITS_LOCK"
+    rm -f "$BASE_DIR/requirements.md5" "$BASE_DIR/redis.env" "$BASE_DIR/debug.env"
+}
+
 # Dependency checks for nginx and redis, populating redis.env when appropriate.
 ensure_nginx_in_path() {
     if command -v nginx >/dev/null 2>&1; then
@@ -312,31 +400,24 @@ fi
 
 BASE_DIR="$SCRIPT_DIR"
 cd "$BASE_DIR"
+LOCK_DIR="$BASE_DIR/locks"
+SYSTEMD_UNITS_LOCK="$LOCK_DIR/systemd_services.lck"
 DB_FILE="$BASE_DIR/db.sqlite3"
 
 # Ensure the VERSION marker reflects the current revision before proceeding.
 arthexis_update_version_marker "$BASE_DIR"
-if [ -f "$DB_FILE" ]; then
+if [ "$CLEAN" = true ]; then
+    clean_previous_installation_state "$SERVICE"
+elif [ -f "$DB_FILE" ]; then
     # Allow callers to purge or reuse an existing database depending on the mode requested.
-    if [ "$CLEAN" = true ]; then
-        BACKUP_DIR="$BASE_DIR/backups"
-        mkdir -p "$BACKUP_DIR"
-        VERSION="unknown"
-        [ -f "$BASE_DIR/VERSION" ] && VERSION="$(cat "$BASE_DIR/VERSION")"
-        REVISION="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
-        STAMP="$(date +%Y%m%d%H%M%S)"
-        cp "$DB_FILE" "$BACKUP_DIR/db.sqlite3.${VERSION}.${REVISION}.${STAMP}.bak"
-        rm "$DB_FILE"
-    elif [ "$REPAIR" = true ]; then
+    if [ "$REPAIR" = true ]; then
         echo "Repair mode: reusing existing database at $DB_FILE."
     else
         echo "Database file $DB_FILE exists. Use --clean to remove it before installing." >&2
         exit 1
     fi
 fi
-LOCK_DIR="$BASE_DIR/locks"
 mkdir -p "$LOCK_DIR"
-SYSTEMD_UNITS_LOCK="$LOCK_DIR/systemd_services.lck"
 
 # Record role-specific prerequisites and capture supporting state for service management.
 if [ "$ENABLE_CONTROL" = true ]; then
