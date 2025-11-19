@@ -113,7 +113,7 @@ def _connector_snapshot(connectors: Iterable[Charger]) -> dict:
             {
                 "serial": connector.charger_id,
                 "connector_id": connector.connector_id,
-                "connector_label": connector.connector_label,
+                "connector_label": str(connector.connector_label),
                 "display_name": connector.display_name or "",
                 "status_label": status_label,
                 "status_color": status_color,
