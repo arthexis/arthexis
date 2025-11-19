@@ -379,8 +379,7 @@ wait_for_service_active() {
   return 1
 }
 
-# Restart core and LCD services while respecting systemd when available. Celery is managed by
-# systemd unit dependencies and should not be restarted directly here.
+# Restart core, LCD, and Celery services while respecting systemd when available.
 restart_services() {
   echo "Restarting services..."
   if [ -f "$LOCK_DIR/service.lck" ]; then
@@ -391,8 +390,11 @@ restart_services() {
       env_refresh_running=1
     fi
     local restart_via_systemd=0
+    local systemctl_available=0
+    local -a systemctl_cmd=()
     if command -v systemctl >/dev/null 2>&1; then
-      local -a systemctl_cmd=(systemctl)
+      systemctl_available=1
+      systemctl_cmd=(systemctl)
       if command -v sudo >/dev/null 2>&1; then
         if sudo -n true 2>/dev/null; then
           systemctl_cmd=(sudo -n systemctl)
@@ -423,8 +425,61 @@ restart_services() {
       if [ -f "$LOCK_DIR/lcd_screen.lck" ]; then
         local lcd_service="lcd-$service_name"
         if ! wait_for_service_active "$lcd_service" 1; then
-          echo "LCD service $lcd_service did not become active after restart." >&2
-          return 1
+          if [ "$systemctl_available" -eq 1 ]; then
+            echo "LCD service $lcd_service did not become active after restart. Attempting manual start..." >&2
+            if "${systemctl_cmd[@]}" start "$lcd_service"; then
+              if ! wait_for_service_active "$lcd_service" 1; then
+                echo "LCD service $lcd_service did not become active after manual start." >&2
+                return 1
+              fi
+            else
+              echo "LCD service $lcd_service failed to start manually." >&2
+              return 1
+            fi
+          else
+            echo "LCD service $lcd_service did not become active after restart, and systemctl is unavailable for manual start." >&2
+            return 1
+          fi
+        fi
+      fi
+      if [ -f "$LOCK_DIR/celery.lck" ]; then
+        local celery_service="celery-$service_name"
+        local celery_beat_service="celery-beat-$service_name"
+
+        if ! wait_for_service_active "$celery_service" 1; then
+          if [ "$systemctl_available" -eq 1 ]; then
+            echo "Celery service $celery_service did not become active after restart. Attempting manual start..." >&2
+            if "${systemctl_cmd[@]}" start "$celery_service"; then
+              if ! wait_for_service_active "$celery_service" 1; then
+                echo "Celery service $celery_service did not become active after manual start." >&2
+                return 1
+              fi
+            else
+              echo "Celery service $celery_service failed to start manually." >&2
+              return 1
+            fi
+          else
+            echo "Celery service $celery_service did not become active after restart, and systemctl is unavailable for manual start." >&2
+            return 1
+          fi
+        fi
+
+        if ! wait_for_service_active "$celery_beat_service" 1; then
+          if [ "$systemctl_available" -eq 1 ]; then
+            echo "Celery beat service $celery_beat_service did not become active after restart. Attempting manual start..." >&2
+            if "${systemctl_cmd[@]}" start "$celery_beat_service"; then
+              if ! wait_for_service_active "$celery_beat_service" 1; then
+                echo "Celery beat service $celery_beat_service did not become active after manual start." >&2
+                return 1
+              fi
+            else
+              echo "Celery beat service $celery_beat_service failed to start manually." >&2
+              return 1
+            fi
+          else
+            echo "Celery beat service $celery_beat_service did not become active after restart, and systemctl is unavailable for manual start." >&2
+            return 1
+          fi
         fi
       fi
       return 0
