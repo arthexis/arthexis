@@ -783,6 +783,9 @@ class OdooProfile(Profile):
             raise
 
     def __str__(self):  # pragma: no cover - simple representation
+        username = self._resolved_field_value("username")
+        if username:
+            return username
         label = self._display_identifier()
         if label:
             return label

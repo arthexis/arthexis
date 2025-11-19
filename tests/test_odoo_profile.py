@@ -167,3 +167,18 @@ def test_profile_string_resolves_sigil_values(monkeypatch):
     profile.refresh_from_db()
     assert profile.name == "resolved-user"
     assert str(profile) == "resolved-user"
+
+
+def test_profile_string_uses_username_over_display_name():
+    user = User.objects.create(username="crm-user")
+    profile = OdooProfile.objects.create(
+        user=user,
+        host="http://test",
+        database="db",
+        username="crm-user",
+        password="secret",
+    )
+    OdooProfile.all_objects.filter(pk=profile.pk).update(name="CRM Agent")
+    profile.refresh_from_db()
+
+    assert str(profile) == "crm-user"

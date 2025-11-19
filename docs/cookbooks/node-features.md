@@ -4,6 +4,7 @@ Coordinate capabilities across nodes by managing `nodes.NodeFeature` records in 
 
 - [Accessing node features](#accessing-node-features)
 - [Reviewing feature metadata](#reviewing-feature-metadata)
+- [Current feature catalog](#current-feature-catalog)
 - [Assigning features to roles and nodes](#assigning-features-to-roles-and-nodes)
 - [Running eligibility checks](#running-eligibility-checks)
 - [Enabling features manually](#enabling-features-manually)
@@ -26,6 +27,24 @@ Each feature encapsulates a capability that nodes can expose. The admin form pro
 - **Default actions** – Optional links that appear in the `Actions` column when a feature is enabled (`NodeFeature.get_default_actions`).
 
 Use the search field to find features by slug or display string. The queryset prefetches role relations, keeping list navigation fast even with many records.
+
+## Current feature catalog
+
+| Feature | Slug | Default roles | Key actions / notes |
+| --- | --- | --- | --- |
+| AP Router | `ap-router` | Satellite | Auto-managed network access point capability for satellites. |
+| Audio Capture | `audio-capture` | Control | Manual feature with a **Test Microphone** admin action for verification. |
+| Celery Queue | `celery-queue` | Satellite, Control, Watchtower | Auto-managed feature with a **Celery Report** admin action. |
+| Clipboard Poll | `clipboard-poll` | Terminal | Manual feature that polls clipboard content on terminal devices. |
+| GraphQL API | `graphql` | Control, Interface, Satellite, Watchtower | Exposes the GraphQL API entry point for eligible roles. |
+| GUI Toast | `gui-toast` | Terminal, Control | Auto-managed feature that surfaces GUI toast notifications when supported. |
+| LCD Screen | `lcd-screen` | Control | Auto-managed flag for nodes driving an attached LCD panel. |
+| NGINX Server | `nginx-server` | Satellite, Control, Watchtower | Auto-managed flag for nodes running the bundled NGINX front end. |
+| RFID Scanner | `rfid-scanner` | Control, Satellite | Auto-managed feature with a **Scan RFIDs** admin action. |
+| Raspberry Pi Camera | `rpi-camera` | (manual enablement) | Auto-managed hardware detection with **Take a Snapshot** and **View stream** actions. |
+| Screenshot Poll | `screenshot-poll` | (manual enablement) | Manual feature providing a **Take Screenshot** admin action. |
+
+Manual features (those without default roles) still appear in the changelist and can be enabled through the admin action once local hardware or environment checks pass.
 
 ## Assigning features to roles and nodes
 
