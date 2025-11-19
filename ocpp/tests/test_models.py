@@ -173,7 +173,7 @@ class ChargerAutoLocationNameTests(TestCase):
 class ChargerEnergyUnitTests(TestCase):
     def test_charger_energy_conversion_defaults_to_configured_unit(self):
         charger = Charger.objects.create(
-            charger_id="UNIT-WH", energy_unit=Charger.EnergyUnit.WH
+            charger_id="UNIT-W", energy_unit=Charger.EnergyUnit.W
         )
 
         self.assertEqual(
@@ -182,7 +182,7 @@ class ChargerEnergyUnitTests(TestCase):
 
     def test_meter_reading_manager_uses_charger_unit_when_missing(self):
         charger = Charger.objects.create(
-            charger_id="UNIT-MV", energy_unit=Charger.EnergyUnit.WH
+            charger_id="UNIT-MV", energy_unit=Charger.EnergyUnit.W
         )
 
         reading = MeterReading.objects.create(
@@ -196,7 +196,7 @@ class ChargerEnergyUnitTests(TestCase):
 
     def test_provided_unit_overrides_charger_default(self):
         charger = Charger.objects.create(
-            charger_id="UNIT-KWH", energy_unit=Charger.EnergyUnit.WH
+            charger_id="UNIT-KW", energy_unit=Charger.EnergyUnit.W
         )
 
         self.assertEqual(
