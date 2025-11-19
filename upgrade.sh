@@ -3,6 +3,7 @@ set -e
 
 # Initialize logging and helper functions shared across upgrade steps.
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
+PIP_INSTALL_HELPER="$BASE_DIR/scripts/helpers/pip_install.py"
 # Track upgrade script changes triggered by git pull so the newer version can be re-run.
 UPGRADE_SCRIPT_PATH="$BASE_DIR/upgrade.sh"
 INITIAL_UPGRADE_HASH=""
@@ -199,6 +200,34 @@ cleanup_non_terminal_git_state() {
   if [ -f .git/CHERRY_PICK_HEAD ]; then
     echo "Detected interrupted cherry-pick; aborting before continuing upgrade..."
     git cherry-pick --abort >/dev/null 2>&1 || true
+  fi
+}
+
+install_requirements_if_changed() {
+  local req_file="$BASE_DIR/requirements.txt"
+  local md5_file="$BASE_DIR/requirements.md5"
+  local new_hash=""
+  local stored_hash=""
+
+  if [ ! -f "$req_file" ]; then
+    echo "requirements.txt not found; skipping dependency sync."
+    return
+  fi
+
+  new_hash=$(md5sum "$req_file" | awk '{print $1}')
+  if [ -f "$md5_file" ]; then
+    stored_hash=$(cat "$md5_file")
+  fi
+
+  if [ "$new_hash" != "$stored_hash" ]; then
+    if [ -f "$PIP_INSTALL_HELPER" ] && command -v python >/dev/null 2>&1; then
+      python "$PIP_INSTALL_HELPER" -r "$req_file"
+    else
+      pip install -r "$req_file"
+    fi
+    echo "$new_hash" > "$md5_file"
+  else
+    echo "Requirements unchanged. Skipping installation."
   fi
 }
 
@@ -681,6 +710,20 @@ if arthexis_can_manage_nginx; then
     "/etc/nginx/sites-enabled/arthexis.conf" \
     "/etc/nginx/conf.d/arthexis-internal.conf" \
     "/etc/nginx/conf.d/arthexis-public.conf"
+fi
+
+# Ensure Python dependencies and database schema stay aligned with the
+# freshly-pulled code before refreshing runtime data.
+if [ $VENV_PRESENT -eq 1 ]; then
+  # shellcheck disable=SC1091
+  source .venv/bin/activate
+  pip install --upgrade pip
+  install_requirements_if_changed
+  python manage.py migrate --noinput
+  if ls data/*.json >/dev/null 2>&1; then
+    python manage.py loaddata data/*.json
+  fi
+  deactivate
 fi
 
 # Remove existing database if requested
