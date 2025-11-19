@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Ensure upgrade.sh syncs dependencies and migrations",
+      "version": "0.1.33",
+      "created_on": "2025-02-15T00:00:00Z",
+      "url": "",
+      "request_details": "In a node with an existing installation, modify requirements.txt (for example add a new dependency) and create a schema migration. Run ./upgrade.sh --no-restart and confirm it upgrades pip, reinstalls requirements when the hash changes, applies the pending migrations, and reloads optional data/*.json fixtures without errors. Restore the requirements file afterwards.",
+      "done_on": null,
+      "is_deleted": false
+    }
+  }
+]
