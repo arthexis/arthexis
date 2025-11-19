@@ -90,9 +90,20 @@ def _is_running_migration_command() -> bool:
 
 
 def _is_running_test_command() -> bool:
-    """Return ``True`` when Django's ``test`` command is executing."""
+    """Return ``True`` when a test runner is executing."""
 
-    return len(sys.argv) > 1 and sys.argv[1] == "test"
+    if len(sys.argv) > 1 and sys.argv[1] == "test":
+        return True
+
+    if os.environ.get("PYTEST_CURRENT_TEST"):
+        return True
+
+    if sys.argv:
+        executable = os.path.basename(sys.argv[0])
+        if "pytest" in executable:
+            return True
+
+    return any(arg == "pytest" or arg.endswith(".pytest") or ".pytest" in arg for arg in sys.argv)
 
 
 class NodesConfig(AppConfig):

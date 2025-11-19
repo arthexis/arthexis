@@ -4807,12 +4807,13 @@ class StartupHandlerTests(TestCase):
         from django.db.utils import OperationalError
 
         with patch("nodes.apps._startup_notification") as mock_start:
-            with patch("nodes.apps.connections") as mock_connections:
-                mock_connections.__getitem__.return_value.ensure_connection.side_effect = OperationalError(
-                    "fail"
-                )
-                with self.assertLogs("nodes.apps", level="ERROR") as log:
-                    _trigger_startup_notification()
+            with patch.dict(os.environ, {"PYTEST_CURRENT_TEST": ""}, clear=False):
+                with patch("nodes.apps.connections") as mock_connections:
+                    mock_connections.__getitem__.return_value.ensure_connection.side_effect = OperationalError(
+                        "fail"
+                    )
+                    with self.assertLogs("nodes.apps", level="ERROR") as log:
+                        _trigger_startup_notification()
 
         mock_start.assert_not_called()
         self.assertTrue(any("Startup notification skipped" in m for m in log.output))
@@ -4821,11 +4822,12 @@ class StartupHandlerTests(TestCase):
         from nodes.apps import _trigger_startup_notification
 
         with patch("nodes.apps._startup_notification") as mock_start:
-            with patch("nodes.apps.connections") as mock_connections:
-                mock_connections.__getitem__.return_value.ensure_connection.return_value = (
-                    None
-                )
-                _trigger_startup_notification()
+            with patch.dict(os.environ, {"PYTEST_CURRENT_TEST": ""}, clear=False):
+                with patch("nodes.apps.connections") as mock_connections:
+                    mock_connections.__getitem__.return_value.ensure_connection.return_value = (
+                        None
+                    )
+                    _trigger_startup_notification()
 
         mock_start.assert_called_once()
 
@@ -4848,6 +4850,22 @@ class StartupHandlerTests(TestCase):
         with patch("nodes.apps._startup_notification") as mock_start:
             with patch.object(sys, "argv", ["manage.py", "test"]):
                 _trigger_startup_notification()
+
+        mock_start.assert_not_called()
+
+    def test_handler_skips_during_pytest_execution(self):
+        import sys
+
+        from nodes.apps import _trigger_startup_notification
+
+        with patch("nodes.apps._startup_notification") as mock_start:
+            with patch.dict(os.environ, {}, clear=False):
+                with patch.object(
+                    sys,
+                    "argv",
+                    ["python", "-m", "pytest", "nodes/tests.py", "-k", "startup"],
+                ):
+                    _trigger_startup_notification()
 
         mock_start.assert_not_called()
 
