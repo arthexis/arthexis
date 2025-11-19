@@ -14,6 +14,7 @@ exec > >(tee "$LOG_FILE") 2>&1
 
 LOCK_DIR="$BASE_DIR/locks"
 SERVICE_MANAGEMENT_MODE="$(arthexis_detect_service_mode "$LOCK_DIR")"
+UPGRADE_IN_PROGRESS_LOCK="$LOCK_DIR/upgrade_in_progress.lck"
 
 # Determine installation status
 if [ -d "$BASE_DIR/.venv" ]; then
@@ -65,6 +66,17 @@ if [ -n "$REVISION" ]; then
   SHORT_REVISION="${REVISION:0:7}"
 fi
 echo "Short Revision: $SHORT_REVISION"
+
+if [ -f "$UPGRADE_IN_PROGRESS_LOCK" ]; then
+  STARTED_AT=$(tr -d '\r' < "$UPGRADE_IN_PROGRESS_LOCK" | head -n1)
+  if [ -n "$STARTED_AT" ]; then
+    echo "Upgrade status: in progress (started at $STARTED_AT)"
+  else
+    echo "Upgrade status: in progress"
+  fi
+else
+  echo "Upgrade status: idle"
+fi
 
 SERVICE=""
 if [ -f "$LOCK_DIR/service.lck" ]; then

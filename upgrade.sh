@@ -39,6 +39,7 @@ SYSTEMD_UNITS_LOCK="$LOCK_DIR/systemd_services.lck"
 SERVICE_NAME=""
 [ -f "$LOCK_DIR/service.lck" ] && SERVICE_NAME="$(cat "$LOCK_DIR/service.lck")"
 SERVICE_MANAGEMENT_MODE="$(arthexis_detect_service_mode "$LOCK_DIR")"
+UPGRADE_IN_PROGRESS_LOCK="$LOCK_DIR/upgrade_in_progress.lck"
 # Discover managed service if not explicitly recorded.
 if [ -z "$SERVICE_NAME" ]; then
   while IFS= read -r unit_name; do
@@ -345,6 +346,13 @@ while [[ $# -gt 0 ]]; do
 done
 
 mkdir -p "$LOCK_DIR"
+
+# Mark upgrade progress so status.sh can surface active runs.
+printf "%s\n" "$(date -Iseconds)" > "$UPGRADE_IN_PROGRESS_LOCK"
+cleanup_upgrade_progress_lock() {
+  rm -f "$UPGRADE_IN_PROGRESS_LOCK"
+}
+trap cleanup_upgrade_progress_lock EXIT INT TERM
 
 UPGRADE_RERUN_LOCK="$LOCK_DIR/upgrade_rerun_required.lck"
 RERUN_AFTER_SELF_UPDATE=0

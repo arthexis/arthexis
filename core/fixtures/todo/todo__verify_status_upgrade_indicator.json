@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Confirm status.sh reports upgrades in progress",
+      "created_on": "2025-01-15T00:00:00Z",
+      "url": "/admin/core/todo/",
+      "request_details": "1. Start an upgrade on a system install (for example `./upgrade.sh --no-restart`) and keep the process running.\n2. While the upgrade is running, check `locks/upgrade_in_progress.lck` and confirm the timestamp updates when the upgrade starts.\n3. Run `./status.sh` during the upgrade and verify it prints `Upgrade status: in progress` along with the start time from the lock file.\n4. Let the upgrade finish and confirm `locks/upgrade_in_progress.lck` is removed automatically and `./status.sh` reports `Upgrade status: idle`.\n5. Document any discrepancies in the release notes.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]
