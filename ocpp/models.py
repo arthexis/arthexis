@@ -53,8 +53,8 @@ class Charger(Entity):
     _AUTO_LOCATION_SANITIZE_RE = re.compile(r"[^0-9A-Za-z_-]+")
 
     class EnergyUnit(models.TextChoices):
-        KWH = "kWh", _("kWh")
-        WH = "Wh", _("Wh")
+        KW = "kW", _("kW")
+        W = "W", _("W")
 
     OPERATIVE_STATUSES = {
         "Available",
@@ -100,7 +100,7 @@ class Charger(Entity):
         _("Charger Units"),
         max_length=4,
         choices=EnergyUnit.choices,
-        default=EnergyUnit.KWH,
+        default=EnergyUnit.KW,
         help_text=_("Energy unit expected from this charger."),
     )
     require_rfid = models.BooleanField(
@@ -470,7 +470,7 @@ class Charger(Entity):
     ) -> Decimal:
         """Return ``energy`` converted to kWh using the provided units."""
 
-        unit_normalized = (unit or default_unit or Charger.EnergyUnit.KWH).lower()
+        unit_normalized = (unit or default_unit or Charger.EnergyUnit.KW).lower()
         if unit_normalized in {"w", "wh"}:
             return energy / Decimal("1000")
         return energy
