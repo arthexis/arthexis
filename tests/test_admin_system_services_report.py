@@ -93,3 +93,45 @@ class AdminSystemServicesReportTests(TestCase):
         )
         self.assertContains(response, "demo.service")
         self.assertContains(response, "Unavailable")
+
+    def test_uses_recorded_systemd_units_when_present(self):
+        self.client.force_login(self.superuser)
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            locks = base_dir / "locks"
+            locks.mkdir()
+            locks.joinpath("service.lck").write_text("demo", encoding="utf-8")
+            locks.joinpath("systemd_services.lck").write_text(
+                "demo.service\nextra-worker.service\n", encoding="utf-8"
+            )
+
+            def run_side_effect(args, **kwargs):
+                action = args[1]
+                unit = args[2] if len(args) > 2 else ""
+                if action == "is-active":
+                    state, code, stderr = {
+                        "demo.service": ("active\n", 0, ""),
+                        "extra-worker.service": ("failed\n", 3, ""),
+                    }.get(unit, ("unknown\n", 3, ""))
+                    return subprocess.CompletedProcess(
+                        args, code, stdout=state, stderr=stderr
+                    )
+                if action == "is-enabled":
+                    return subprocess.CompletedProcess(
+                        args, 0, stdout="enabled\n", stderr=""
+                    )
+                return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+
+            with self.settings(BASE_DIR=str(base_dir)):
+                with mock.patch("core.system._systemctl_command", return_value=["systemctl"]):
+                    with mock.patch("core.system.subprocess.run") as mock_run:
+                        mock_run.side_effect = run_side_effect
+                        response = self.client.get(
+                            reverse("admin:system-services-report")
+                        )
+
+        self.assertContains(response, "Suite service")
+        self.assertContains(response, "demo.service")
+        self.assertContains(response, "extra-worker.service")
+        self.assertContains(response, "failed")

@@ -1576,6 +1576,46 @@ def _configured_service_units(base_dir: Path) -> list[dict[str, str]]:
     if not service_name:
         return []
 
+    def _unit_label(unit: str) -> str:
+        unit_name = unit[:-len(".service")] if unit.endswith(".service") else unit
+
+        if unit_name == service_name:
+            return str(_("Suite service"))
+        if unit_name == f"{service_name}-auto-upgrade":
+            return str(_("Auto-upgrade service"))
+        if unit_name == f"celery-{service_name}":
+            return str(_("Celery worker"))
+        if unit_name == f"celery-beat-{service_name}":
+            return str(_("Celery beat"))
+        if unit_name == f"lcd-{service_name}":
+            return str(_("LCD screen"))
+
+        return unit
+
+    systemd_units_file = lock_dir / "systemd_services.lck"
+    recorded_units = []
+    try:
+        raw_units = systemd_units_file.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        raw_units = []
+
+    seen_units: set[str] = set()
+    for raw_unit in raw_units:
+        unit_name = raw_unit.strip()
+        if not unit_name or unit_name in seen_units:
+            continue
+        seen_units.add(unit_name)
+        recorded_units.append(
+            {
+                "label": _unit_label(unit_name),
+                "unit": unit_name,
+                "unit_display": unit_name,
+            }
+        )
+
+    if recorded_units:
+        return recorded_units
+
     service_units = [
         {
             "label": str(_("Suite service")),
