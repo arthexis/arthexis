@@ -381,7 +381,7 @@ class Node(Entity):
         "rpi-camera",
         "ap-router",
     }
-    MANUAL_FEATURE_SLUGS = {"clipboard-poll", "screenshot-poll", "audio-capture"}
+    MANUAL_FEATURE_SLUGS = {"screenshot-poll", "audio-capture"}
 
     class Meta:
         constraints = [
@@ -1547,7 +1547,6 @@ class Node(Entity):
     def sync_feature_tasks(self):
         screenshot_enabled = self.has_feature("screenshot-poll")
         celery_enabled = self.is_local and self.has_feature("celery-queue")
-        self._remove_clipboard_task()
         self._sync_screenshot_task(screenshot_enabled)
         self._sync_landing_lead_task(celery_enabled)
         self._sync_ocpp_session_report_task(celery_enabled)
@@ -1558,14 +1557,6 @@ class Node(Entity):
         skip_for_node = self.pk in ROLE_CONFIGURATION_SKIP_IDS if self.pk else False
         if not skip_requested and not skip_for_node:
             self._queue_role_configuration()
-
-    def _remove_clipboard_task(self):
-        from django_celery_beat.models import PeriodicTask
-
-        raw_task_name = f"poll_clipboard_node_{self.pk}"
-        PeriodicTask.objects.filter(
-            name__in=periodic_task_name_variants(raw_task_name)
-        ).delete()
 
     def _sync_screenshot_task(self, enabled: bool):
         from django_celery_beat.models import IntervalSchedule, PeriodicTask

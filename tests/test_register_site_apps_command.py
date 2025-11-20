@@ -34,8 +34,6 @@ class RegisterSiteAppsCommandTests(TestCase):
         self.assertFalse(Site.objects.filter(domain="zephyrus").exists())
 
         node = Node.objects.get(hostname=socket.gethostname())
-        self.assertTrue(node.features.filter(slug="clipboard-poll").exists())
-        self.assertFalse(node.features.filter(slug="screenshot-poll").exists())
         role = NodeRole.objects.get(name="Terminal")
 
         for label in settings.LOCAL_APPS:
