@@ -29,9 +29,16 @@ from ocpp.models import (
     ChargerConfiguration,
     ConfigurationKey,
     MeterReading,
+    Simulator,
     generate_log_request_id,
 )
+from ocpp.simulator import SimulatorConfig
 from nodes.models import Node
+
+
+@pytest.fixture
+def simulator(db):
+    return Simulator.objects.create(name="Simulator", cp_path="SIM")
 
 
 class GenerateLogRequestIdTests(TestCase):
@@ -804,3 +811,15 @@ def test_simulator_ws_url_port_and_slash_handling(simulator: Simulator):
     simulator.save(update_fields=["ws_port"])
 
     assert simulator.ws_url == "ws://localhost/SIM/"
+
+
+def test_simulator_allows_single_default(simulator: Simulator):
+    simulator.default = True
+    simulator.full_clean()
+    simulator.save(update_fields=["default"])
+
+    another = Simulator.objects.create(name="Simulator 2", cp_path="SIM-2")
+    another.default = True
+
+    with pytest.raises(ValidationError):
+        another.full_clean()
