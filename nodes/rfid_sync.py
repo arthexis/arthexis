@@ -7,7 +7,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any, TYPE_CHECKING
 
-from django.utils.dateparse import parse_datetime
+from django.utils.dateparse import parse_date, parse_datetime
 
 from core.models import CustomerAccount, RFID
 
@@ -49,6 +49,7 @@ def serialize_rfid(tag: RFID) -> dict[str, Any]:
         "released": tag.released,
         "external_command": tag.external_command,
         "post_auth_command": tag.post_auth_command,
+        "expiry_date": tag.expiry_date.isoformat() if tag.expiry_date else None,
         "last_seen_on": tag.last_seen_on.isoformat() if tag.last_seen_on else None,
         "customer_accounts": id_values,
         "customer_account_names": name_values,
@@ -97,6 +98,13 @@ def apply_rfid_payload(
 
     if origin_node is not None:
         defaults["origin_node"] = origin_node
+
+    if "expiry_date" in entry:
+        expiry_value = entry.get("expiry_date")
+        if isinstance(expiry_value, str):
+            defaults["expiry_date"] = parse_date(expiry_value)
+        else:
+            defaults["expiry_date"] = expiry_value if expiry_value else None
 
     if "last_seen_on" in entry:
         last_seen = entry.get("last_seen_on")

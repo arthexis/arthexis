@@ -3020,6 +3020,7 @@ class RFIDResource(resources.ModelResource):
             "endianness",
             "kind",
             "released",
+            "expiry_date",
             "last_seen_on",
         )
         export_order = (
@@ -3035,6 +3036,7 @@ class RFIDResource(resources.ModelResource):
             "endianness",
             "kind",
             "released",
+            "expiry_date",
             "last_seen_on",
         )
         import_id_fields = ("label_id",)
@@ -3105,6 +3107,7 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
         "endianness_short",
         "released",
         "allowed",
+        "expiry_date",
         "last_seen_on",
     )
     list_filter = ("color", "endianness", "released", "allowed")
