@@ -44,6 +44,18 @@
     min-height: 2.5rem;
     flex: 1 1 8rem;
   }
+
+  .upgrade-report .upgrade-report-check {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+    margin: 0.25rem 0 0;
+  }
+
+  .upgrade-report .upgrade-report-check .button {
+    width: auto;
+  }
 </style>
 {% endblock %}
 
@@ -129,6 +141,20 @@
           {% if report.settings.origin_revision_error %}
             <p class="errornote">{{ report.settings.origin_revision_error }}</p>
           {% endif %}
+        </dd>
+        <dt>{% trans "Revision checks" %}</dt>
+        <dd>
+          <form method="post" action="{% url 'admin:system-upgrade-check-revision' %}" class="upgrade-report-check">
+            {% csrf_token %}
+            <button type="submit" class="button upgrade-action-button">
+              {% trans "Check Last Revision" %}
+            </button>
+            {% if report.settings.revision_checked_label %}
+              <p class="help">{% blocktrans %}Last checked {{ report.settings.revision_checked_label }}.{% endblocktrans %}</p>
+            {% else %}
+              <p class="help">{% trans "Revision details are retrieved on demand." %}</p>
+            {% endif %}
+          </form>
         </dd>
         <dt>{% trans "Task" %}</dt>
         <dd>
