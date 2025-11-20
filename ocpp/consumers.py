@@ -1529,534 +1529,17 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         store.add_log(self.store_key, f"Closed (code={close_code})", log_type="charger")
 
     async def receive(self, text_data=None, bytes_data=None):
-        raw = text_data
-        if raw is None and bytes_data is not None:
-            raw = base64.b64encode(bytes_data).decode("ascii")
+        raw = self._normalize_raw_message(text_data, bytes_data)
         if raw is None:
             return
         store.add_log(self.store_key, raw, log_type="charger")
         store.add_session_message(self.store_key, raw)
-        try:
-            msg = json.loads(raw)
-        except json.JSONDecodeError:
-            return
-        if not isinstance(msg, list) or not msg:
+        msg = self._parse_message(raw)
+        if msg is None:
             return
         message_type = msg[0]
         if message_type == 2:
-            msg_id, action = msg[1], msg[2]
-            payload = msg[3] if len(msg) > 3 else {}
-            reply_payload = {}
-            connector_hint = None
-            if isinstance(payload, dict):
-                connector_hint = payload.get("connectorId")
-            follow_up = store.consume_triggered_followup(
-                self.charger_id, action, connector_hint
-            )
-            if follow_up:
-                follow_up_log_key = follow_up.get("log_key") or self.store_key
-                target_label = follow_up.get("target") or action
-                connector_slug_value = follow_up.get("connector")
-                suffix = ""
-                if (
-                    connector_slug_value
-                    and connector_slug_value != store.AGGREGATE_SLUG
-                ):
-                    connector_letter = Charger.connector_letter_from_slug(
-                        connector_slug_value
-                    )
-                    if connector_letter:
-                        suffix = f" (connector {connector_letter})"
-                    else:
-                        suffix = f" (connector {connector_slug_value})"
-                store.add_log(
-                    follow_up_log_key,
-                    f"TriggerMessage follow-up received: {target_label}{suffix}",
-                    log_type="charger",
-                )
-            await self._assign_connector(payload.get("connectorId"))
-            await self._forward_charge_point_message(action, raw)
-            if action == "BootNotification":
-                reply_payload = {
-                    "currentTime": datetime.utcnow().isoformat() + "Z",
-                    "interval": 300,
-                    "status": "Accepted",
-                }
-            elif action == "DataTransfer":
-                reply_payload = await self._handle_data_transfer(msg_id, payload)
-            elif action == "Heartbeat":
-                reply_payload = {"currentTime": datetime.utcnow().isoformat() + "Z"}
-                now = timezone.now()
-                self.charger.last_heartbeat = now
-                if (
-                    self.aggregate_charger
-                    and self.aggregate_charger is not self.charger
-                ):
-                    self.aggregate_charger.last_heartbeat = now
-                await database_sync_to_async(
-                    Charger.objects.filter(charger_id=self.charger_id).update
-                )(last_heartbeat=now)
-            elif action == "StatusNotification":
-                await self._assign_connector(payload.get("connectorId"))
-                status = (payload.get("status") or "").strip()
-                error_code = (payload.get("errorCode") or "").strip()
-                vendor_info = {
-                    key: value
-                    for key, value in (
-                        ("info", payload.get("info")),
-                        ("vendorId", payload.get("vendorId")),
-                    )
-                    if value
-                }
-                vendor_value = vendor_info or None
-                timestamp_raw = payload.get("timestamp")
-                status_timestamp = (
-                    parse_datetime(timestamp_raw) if timestamp_raw else None
-                )
-                if status_timestamp is None:
-                    status_timestamp = timezone.now()
-                elif timezone.is_naive(status_timestamp):
-                    status_timestamp = timezone.make_aware(status_timestamp)
-                update_kwargs = {
-                    "last_status": status,
-                    "last_error_code": error_code,
-                    "last_status_vendor_info": vendor_value,
-                    "last_status_timestamp": status_timestamp,
-                }
-
-                def _update_instance(instance: Charger | None) -> None:
-                    if not instance:
-                        return
-                    instance.last_status = status
-                    instance.last_error_code = error_code
-                    instance.last_status_vendor_info = vendor_value
-                    instance.last_status_timestamp = status_timestamp
-
-                await database_sync_to_async(
-                    Charger.objects.filter(
-                        charger_id=self.charger_id, connector_id=None
-                    ).update
-                )(**update_kwargs)
-                connector_value = self.connector_value
-                if connector_value is not None:
-                    await database_sync_to_async(
-                        Charger.objects.filter(
-                            charger_id=self.charger_id,
-                            connector_id=connector_value,
-                        ).update
-                    )(**update_kwargs)
-                _update_instance(self.aggregate_charger)
-                _update_instance(self.charger)
-                if connector_value is not None and status.lower() == "available":
-                    tx_obj = store.transactions.pop(self.store_key, None)
-                    if tx_obj:
-                        await self._cancel_consumption_message()
-                        store.end_session_log(self.store_key)
-                        store.stop_session_lock()
-                store.add_log(
-                    self.store_key,
-                    f"StatusNotification processed: {json.dumps(payload, sort_keys=True)}",
-                    log_type="charger",
-                )
-                availability_state = Charger.availability_state_from_status(status)
-                if availability_state:
-                    await self._update_availability_state(
-                        availability_state, status_timestamp, self.connector_value
-                    )
-                reply_payload = {}
-            elif action == "Authorize":
-                id_tag = payload.get("idTag")
-                account = await self._get_account(id_tag)
-                status = "Invalid"
-                if self.charger.require_rfid:
-                    tag = None
-                    tag_created = False
-                    if id_tag:
-                        tag, tag_created = await database_sync_to_async(
-                            CoreRFID.register_scan
-                        )(id_tag)
-                    if account:
-                        if await database_sync_to_async(account.can_authorize)():
-                            status = "Accepted"
-                    elif (
-                        id_tag
-                        and tag
-                        and not tag_created
-                        and tag.allowed
-                    ):
-                        status = "Accepted"
-                        self._log_unlinked_rfid(tag.rfid)
-                else:
-                    await self._ensure_rfid_seen(id_tag)
-                    status = "Accepted"
-                reply_payload = {"idTagInfo": {"status": status}}
-            elif action == "MeterValues":
-                await self._store_meter_values(payload, text_data)
-                self.charger.last_meter_values = payload
-                await database_sync_to_async(
-                    Charger.objects.filter(pk=self.charger.pk).update
-                )(last_meter_values=payload)
-                reply_payload = {}
-            elif action == "SecurityEventNotification":
-                event_type = str(
-                    payload.get("type")
-                    or payload.get("eventType")
-                    or ""
-                ).strip()
-                trigger_value = str(payload.get("trigger") or "").strip()
-                timestamp_value = _parse_ocpp_timestamp(payload.get("timestamp"))
-                if timestamp_value is None:
-                    timestamp_value = timezone.now()
-                tech_raw = (
-                    payload.get("techInfo")
-                    or payload.get("techinfo")
-                    or payload.get("tech_info")
-                )
-                if isinstance(tech_raw, (dict, list)):
-                    tech_info = json.dumps(tech_raw, ensure_ascii=False)
-                elif tech_raw is None:
-                    tech_info = ""
-                else:
-                    tech_info = str(tech_raw)
-
-                def _persist_security_event() -> None:
-                    connector_hint = payload.get("connectorId")
-                    target = None
-                    if connector_hint is not None:
-                        target = Charger.objects.filter(
-                            charger_id=self.charger_id,
-                            connector_id=connector_hint,
-                        ).first()
-                    if target is None:
-                        target = self.aggregate_charger or self.charger
-                    if target is None:
-                        return
-                    seq_raw = payload.get("seqNo") or payload.get("sequenceNumber")
-                    try:
-                        sequence_number = int(seq_raw) if seq_raw is not None else None
-                    except (TypeError, ValueError):
-                        sequence_number = None
-                    snapshot: dict[str, object]
-                    try:
-                        snapshot = json.loads(json.dumps(payload, ensure_ascii=False))
-                    except (TypeError, ValueError):
-                        snapshot = {
-                            str(key): (str(value) if value is not None else None)
-                            for key, value in payload.items()
-                        }
-                    SecurityEvent.objects.create(
-                        charger=target,
-                        event_type=event_type or "Unknown",
-                        event_timestamp=timestamp_value,
-                        trigger=trigger_value,
-                        tech_info=tech_info,
-                        sequence_number=sequence_number,
-                        raw_payload=snapshot,
-                    )
-
-                await database_sync_to_async(_persist_security_event)()
-                label = event_type or "unknown"
-                log_message = f"SecurityEventNotification: type={label}"
-                if trigger_value:
-                    log_message += f", trigger={trigger_value}"
-                store.add_log(self.store_key, log_message, log_type="charger")
-                reply_payload = {}
-            elif action == "DiagnosticsStatusNotification":
-                status_value = payload.get("status")
-                location_value = (
-                    payload.get("uploadLocation")
-                    or payload.get("location")
-                    or payload.get("uri")
-                )
-                timestamp_value = payload.get("timestamp")
-                diagnostics_timestamp = None
-                if timestamp_value:
-                    diagnostics_timestamp = parse_datetime(timestamp_value)
-                    if diagnostics_timestamp and timezone.is_naive(
-                        diagnostics_timestamp
-                    ):
-                        diagnostics_timestamp = timezone.make_aware(
-                            diagnostics_timestamp, timezone=timezone.utc
-                        )
-
-                updates = {
-                    "diagnostics_status": status_value or None,
-                    "diagnostics_timestamp": diagnostics_timestamp,
-                    "diagnostics_location": location_value or None,
-                }
-
-                def _persist_diagnostics():
-                    targets: list[Charger] = []
-                    if self.charger:
-                        targets.append(self.charger)
-                    aggregate = self.aggregate_charger
-                    if (
-                        aggregate
-                        and not any(
-                            target.pk == aggregate.pk for target in targets if target.pk
-                        )
-                    ):
-                        targets.append(aggregate)
-                    for target in targets:
-                        for field, value in updates.items():
-                            setattr(target, field, value)
-                        if target.pk:
-                            Charger.objects.filter(pk=target.pk).update(**updates)
-
-                await database_sync_to_async(_persist_diagnostics)()
-
-                status_label = updates["diagnostics_status"] or "unknown"
-                log_message = "DiagnosticsStatusNotification: status=%s" % (
-                    status_label,
-                )
-                if updates["diagnostics_timestamp"]:
-                    log_message += ", timestamp=%s" % (
-                        updates["diagnostics_timestamp"].isoformat()
-                    )
-                if updates["diagnostics_location"]:
-                    log_message += ", location=%s" % updates["diagnostics_location"]
-                store.add_log(self.store_key, log_message, log_type="charger")
-                if self.aggregate_charger and self.aggregate_charger.connector_id is None:
-                    aggregate_key = store.identity_key(self.charger_id, None)
-                    if aggregate_key != self.store_key:
-                        store.add_log(aggregate_key, log_message, log_type="charger")
-                reply_payload = {}
-            elif action == "LogStatusNotification":
-                status_value = str(payload.get("status") or "").strip()
-                log_type_value = str(payload.get("logType") or "").strip()
-                request_identifier = payload.get("requestId")
-                timestamp_value = _parse_ocpp_timestamp(payload.get("timestamp"))
-                if timestamp_value is None:
-                    timestamp_value = timezone.now()
-                location_value = str(
-                    payload.get("location")
-                    or payload.get("remoteLocation")
-                    or ""
-                ).strip()
-                filename_value = str(payload.get("filename") or "").strip()
-
-                def _persist_log_status() -> str:
-                    qs = ChargerLogRequest.objects.filter(
-                        charger__charger_id=self.charger_id
-                    )
-                    request = None
-                    if request_identifier is not None:
-                        request = qs.filter(request_id=request_identifier).first()
-                    if request is None:
-                        request = qs.order_by("-requested_at").first()
-                    if request is None:
-                        charger = Charger.objects.filter(
-                            charger_id=self.charger_id,
-                            connector_id=None,
-                        ).first()
-                        if charger is None:
-                            return ""
-                        creation_kwargs: dict[str, object] = {
-                            "charger": charger,
-                            "status": status_value or "",
-                        }
-                        if log_type_value:
-                            creation_kwargs["log_type"] = log_type_value
-                        if request_identifier is not None:
-                            creation_kwargs["request_id"] = request_identifier
-                        request = ChargerLogRequest.objects.create(**creation_kwargs)
-                        if timestamp_value is not None:
-                            request.requested_at = timestamp_value
-                            request.save(update_fields=["requested_at"])
-                    updates: dict[str, object] = {
-                        "last_status_at": timestamp_value,
-                        "last_status_payload": payload,
-                    }
-                    if status_value:
-                        updates["status"] = status_value
-                    if location_value:
-                        updates["location"] = location_value
-                    if filename_value:
-                        updates["filename"] = filename_value
-                    if log_type_value and not request.log_type:
-                        updates["log_type"] = log_type_value
-                    ChargerLogRequest.objects.filter(pk=request.pk).update(**updates)
-                    if updates.get("status"):
-                        request.status = str(updates["status"])
-                    if updates.get("location"):
-                        request.location = str(updates["location"])
-                    if updates.get("filename"):
-                        request.filename = str(updates["filename"])
-                    request.last_status_at = timestamp_value
-                    request.last_status_payload = payload
-                    if updates.get("log_type"):
-                        request.log_type = str(updates["log_type"])
-                    return request.session_key or ""
-
-                session_capture = await database_sync_to_async(_persist_log_status)()
-                status_label = status_value or "unknown"
-                message = f"LogStatusNotification: status={status_label}"
-                if request_identifier is not None:
-                    message += f", requestId={request_identifier}"
-                if log_type_value:
-                    message += f", logType={log_type_value}"
-                store.add_log(self.store_key, message, log_type="charger")
-                if session_capture and status_value.lower() in {
-                    "uploaded",
-                    "uploadfailure",
-                    "rejected",
-                    "idle",
-                }:
-                    store.finalize_log_capture(session_capture)
-                reply_payload = {}
-            elif action == "StartTransaction":
-                id_tag = payload.get("idTag")
-                tag = None
-                tag_created = False
-                if id_tag:
-                    tag, tag_created = await database_sync_to_async(
-                        CoreRFID.register_scan
-                    )(id_tag)
-                account = await self._get_account(id_tag)
-                if id_tag and not self.charger.require_rfid:
-                    seen_tag = await self._ensure_rfid_seen(id_tag)
-                    if seen_tag:
-                        tag = seen_tag
-                await self._assign_connector(payload.get("connectorId"))
-                authorized = True
-                authorized_via_tag = False
-                if self.charger.require_rfid:
-                    if account is not None:
-                        authorized = await database_sync_to_async(
-                            account.can_authorize
-                        )()
-                    elif (
-                        id_tag
-                        and tag
-                        and not tag_created
-                        and getattr(tag, "allowed", False)
-                    ):
-                        authorized = True
-                        authorized_via_tag = True
-                    else:
-                        authorized = False
-                if authorized:
-                    if authorized_via_tag and tag:
-                        self._log_unlinked_rfid(tag.rfid)
-                    start_timestamp = _parse_ocpp_timestamp(payload.get("timestamp"))
-                    received_start = timezone.now()
-                    vid_value, vin_value = _extract_vehicle_identifier(payload)
-                    tx_obj = await database_sync_to_async(Transaction.objects.create)(
-                        charger=self.charger,
-                        account=account,
-                        rfid=(id_tag or ""),
-                        vid=vid_value,
-                        vin=vin_value,
-                        connector_id=payload.get("connectorId"),
-                        meter_start=payload.get("meterStart"),
-                        start_time=start_timestamp or received_start,
-                        received_start_time=received_start,
-                    )
-                    store.transactions[self.store_key] = tx_obj
-                    store.start_session_log(self.store_key, tx_obj.pk)
-                    store.start_session_lock()
-                    store.add_session_message(self.store_key, text_data)
-                    await self._start_consumption_updates(tx_obj)
-                    await self._record_rfid_attempt(
-                        rfid=id_tag or "",
-                        status=RFIDSessionAttempt.Status.ACCEPTED,
-                        account=account,
-                        transaction=tx_obj,
-                    )
-                    reply_payload = {
-                        "transactionId": tx_obj.pk,
-                        "idTagInfo": {"status": "Accepted"},
-                    }
-                else:
-                    reply_payload = {"idTagInfo": {"status": "Invalid"}}
-                    await self._record_rfid_attempt(
-                        rfid=id_tag or "",
-                        status=RFIDSessionAttempt.Status.REJECTED,
-                        account=account,
-                    )
-            elif action == "StopTransaction":
-                tx_id = payload.get("transactionId")
-                tx_obj = store.transactions.pop(self.store_key, None)
-                if not tx_obj and tx_id is not None:
-                    tx_obj = await database_sync_to_async(
-                        Transaction.objects.filter(pk=tx_id, charger=self.charger).first
-                    )()
-                if not tx_obj and tx_id is not None:
-                    received_start = timezone.now()
-                    vid_value, vin_value = _extract_vehicle_identifier(payload)
-                    tx_obj = await database_sync_to_async(Transaction.objects.create)(
-                        pk=tx_id,
-                        charger=self.charger,
-                        start_time=received_start,
-                        received_start_time=received_start,
-                        meter_start=payload.get("meterStart")
-                        or payload.get("meterStop"),
-                        vid=vid_value,
-                        vin=vin_value,
-                    )
-                if tx_obj:
-                    stop_timestamp = _parse_ocpp_timestamp(payload.get("timestamp"))
-                    received_stop = timezone.now()
-                    tx_obj.meter_stop = payload.get("meterStop")
-                    vid_value, vin_value = _extract_vehicle_identifier(payload)
-                    if vid_value:
-                        tx_obj.vid = vid_value
-                    if vin_value:
-                        tx_obj.vin = vin_value
-                    tx_obj.stop_time = stop_timestamp or received_stop
-                    tx_obj.received_stop_time = received_stop
-                    await database_sync_to_async(tx_obj.save)()
-                    await self._update_consumption_message(tx_obj.pk)
-                await self._cancel_consumption_message()
-                reply_payload = {"idTagInfo": {"status": "Accepted"}}
-                store.end_session_log(self.store_key)
-                store.stop_session_lock()
-            elif action == "FirmwareStatusNotification":
-                status_raw = payload.get("status")
-                status = str(status_raw or "").strip()
-                info_value = payload.get("statusInfo")
-                if not isinstance(info_value, str):
-                    info_value = payload.get("info")
-                status_info = str(info_value or "").strip()
-                timestamp_raw = payload.get("timestamp")
-                timestamp_value = None
-                if timestamp_raw:
-                    timestamp_value = parse_datetime(str(timestamp_raw))
-                    if timestamp_value and timezone.is_naive(timestamp_value):
-                        timestamp_value = timezone.make_aware(
-                            timestamp_value, timezone.get_current_timezone()
-                        )
-                if timestamp_value is None:
-                    timestamp_value = timezone.now()
-                await self._update_firmware_state(
-                    status, status_info, timestamp_value
-                )
-                store.add_log(
-                    self.store_key,
-                    "FirmwareStatusNotification: "
-                    + json.dumps(payload, separators=(",", ":")),
-                    log_type="charger",
-                )
-                if (
-                    self.aggregate_charger
-                    and self.aggregate_charger.connector_id is None
-                ):
-                    aggregate_key = store.identity_key(
-                        self.charger_id, self.aggregate_charger.connector_id
-                    )
-                    if aggregate_key != self.store_key:
-                        store.add_log(
-                            aggregate_key,
-                            "FirmwareStatusNotification: "
-                            + json.dumps(payload, separators=(",", ":")),
-                            log_type="charger",
-                        )
-                reply_payload = {}
-            response = [3, msg_id, reply_payload]
-            await self.send(json.dumps(response))
-            store.add_log(
-                self.store_key, f"< {json.dumps(response)}", log_type="charger"
-            )
+            await self._handle_call_message(msg, raw, text_data)
         elif message_type == 3:
             msg_id = msg[1] if len(msg) > 1 else ""
             payload = msg[2] if len(msg) > 2 else {}
@@ -2067,3 +1550,560 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             description = msg[3] if len(msg) > 3 else ""
             details = msg[4] if len(msg) > 4 else {}
             await self._handle_call_error(msg_id, error_code, description, details)
+
+    def _normalize_raw_message(self, text_data, bytes_data):
+        raw = text_data
+        if raw is None and bytes_data is not None:
+            raw = base64.b64encode(bytes_data).decode("ascii")
+        return raw
+
+    def _parse_message(self, raw: str):
+        try:
+            msg = json.loads(raw)
+        except json.JSONDecodeError:
+            return None
+        if not isinstance(msg, list) or not msg:
+            return None
+        return msg
+
+    async def _handle_call_message(self, msg, raw, text_data):
+        msg_id, action = msg[1], msg[2]
+        payload = msg[3] if len(msg) > 3 else {}
+        connector_hint = payload.get("connectorId") if isinstance(payload, dict) else None
+        self._log_triggered_follow_up(action, connector_hint)
+        await self._assign_connector(payload.get("connectorId"))
+        await self._forward_charge_point_message(action, raw)
+        action_handlers = {
+            "BootNotification": self._handle_boot_notification_action,
+            "DataTransfer": self._handle_data_transfer_action,
+            "Heartbeat": self._handle_heartbeat_action,
+            "StatusNotification": self._handle_status_notification_action,
+            "Authorize": self._handle_authorize_action,
+            "MeterValues": self._handle_meter_values_action,
+            "SecurityEventNotification": self._handle_security_event_notification_action,
+            "DiagnosticsStatusNotification": self._handle_diagnostics_status_notification_action,
+            "LogStatusNotification": self._handle_log_status_notification_action,
+            "StartTransaction": self._handle_start_transaction_action,
+            "StopTransaction": self._handle_stop_transaction_action,
+            "FirmwareStatusNotification": self._handle_firmware_status_notification_action,
+        }
+        reply_payload = {}
+        handler = action_handlers.get(action)
+        if handler:
+            reply_payload = await handler(payload, msg_id, raw, text_data)
+        response = [3, msg_id, reply_payload]
+        await self.send(json.dumps(response))
+        store.add_log(
+            self.store_key, f"< {json.dumps(response)}", log_type="charger"
+        )
+
+    def _log_triggered_follow_up(self, action: str, connector_hint):
+        follow_up = store.consume_triggered_followup(
+            self.charger_id, action, connector_hint
+        )
+        if not follow_up:
+            return
+        follow_up_log_key = follow_up.get("log_key") or self.store_key
+        target_label = follow_up.get("target") or action
+        connector_slug_value = follow_up.get("connector")
+        suffix = ""
+        if connector_slug_value and connector_slug_value != store.AGGREGATE_SLUG:
+            connector_letter = Charger.connector_letter_from_slug(connector_slug_value)
+            if connector_letter:
+                suffix = f" (connector {connector_letter})"
+            else:
+                suffix = f" (connector {connector_slug_value})"
+        store.add_log(
+            follow_up_log_key,
+            f"TriggerMessage follow-up received: {target_label}{suffix}",
+            log_type="charger",
+        )
+
+    async def _handle_boot_notification_action(self, payload, msg_id, raw, text_data):
+        return {
+            "currentTime": datetime.utcnow().isoformat() + "Z",
+            "interval": 300,
+            "status": "Accepted",
+        }
+
+    async def _handle_data_transfer_action(self, payload, msg_id, raw, text_data):
+        return await self._handle_data_transfer(msg_id, payload)
+
+    async def _handle_heartbeat_action(self, payload, msg_id, raw, text_data):
+        reply_payload = {"currentTime": datetime.utcnow().isoformat() + "Z"}
+        now = timezone.now()
+        self.charger.last_heartbeat = now
+        if self.aggregate_charger and self.aggregate_charger is not self.charger:
+            self.aggregate_charger.last_heartbeat = now
+        await database_sync_to_async(
+            Charger.objects.filter(charger_id=self.charger_id).update
+        )(last_heartbeat=now)
+        return reply_payload
+
+    async def _handle_status_notification_action(
+        self, payload, msg_id, raw, text_data
+    ):
+        await self._assign_connector(payload.get("connectorId"))
+        status = (payload.get("status") or "").strip()
+        error_code = (payload.get("errorCode") or "").strip()
+        vendor_info = {
+            key: value
+            for key, value in (
+                ("info", payload.get("info")),
+                ("vendorId", payload.get("vendorId")),
+            )
+            if value
+        }
+        vendor_value = vendor_info or None
+        timestamp_raw = payload.get("timestamp")
+        status_timestamp = parse_datetime(timestamp_raw) if timestamp_raw else None
+        if status_timestamp is None:
+            status_timestamp = timezone.now()
+        elif timezone.is_naive(status_timestamp):
+            status_timestamp = timezone.make_aware(status_timestamp)
+        update_kwargs = {
+            "last_status": status,
+            "last_error_code": error_code,
+            "last_status_vendor_info": vendor_value,
+            "last_status_timestamp": status_timestamp,
+        }
+        connector_value = payload.get("connectorId")
+
+        def _update_status():
+            target = None
+            if self.aggregate_charger:
+                target = self.aggregate_charger
+            if connector_value is not None:
+                target = Charger.objects.filter(
+                    charger_id=self.charger_id,
+                    connector_id=connector_value,
+                ).first()
+            if not target and not self.charger.connector_id:
+                target = self.charger
+            if target:
+                for field, value in update_kwargs.items():
+                    setattr(target, field, value)
+                if target.pk:
+                    Charger.objects.filter(pk=target.pk).update(**update_kwargs)
+            connector = (
+                Charger.objects.filter(
+                    charger_id=self.charger_id,
+                    connector_id=payload.get("connectorId"),
+                )
+                .exclude(pk=self.charger.pk)
+                .first()
+            )
+            if connector:
+                connector.last_status = status
+                connector.last_error_code = error_code
+                connector.last_status_vendor_info = vendor_value
+                connector.last_status_timestamp = status_timestamp
+                connector.save(update_fields=update_kwargs.keys())
+
+        await database_sync_to_async(_update_status)()
+        if connector_value is not None and status.lower() == "available":
+            tx_obj = store.transactions.pop(self.store_key, None)
+            if tx_obj:
+                await self._cancel_consumption_message()
+                store.end_session_log(self.store_key)
+                store.stop_session_lock()
+        store.add_log(
+            self.store_key,
+            f"StatusNotification processed: {json.dumps(payload, sort_keys=True)}",
+            log_type="charger",
+        )
+        availability_state = Charger.availability_state_from_status(status)
+        if availability_state:
+            await self._update_availability_state(
+                availability_state, status_timestamp, self.connector_value
+            )
+        return {}
+
+    async def _handle_authorize_action(self, payload, msg_id, raw, text_data):
+        id_tag = payload.get("idTag")
+        account = await self._get_account(id_tag)
+        status = "Invalid"
+        if self.charger.require_rfid:
+            tag = None
+            tag_created = False
+            if id_tag:
+                tag, tag_created = await database_sync_to_async(
+                    CoreRFID.register_scan
+                )(id_tag)
+            if account:
+                if await database_sync_to_async(account.can_authorize)():
+                    status = "Accepted"
+            elif id_tag and tag and not tag_created and tag.allowed:
+                status = "Accepted"
+                self._log_unlinked_rfid(tag.rfid)
+        else:
+            await self._ensure_rfid_seen(id_tag)
+            status = "Accepted"
+        return {"idTagInfo": {"status": status}}
+
+    async def _handle_meter_values_action(self, payload, msg_id, raw, text_data):
+        await self._store_meter_values(payload, text_data)
+        self.charger.last_meter_values = payload
+        await database_sync_to_async(
+            Charger.objects.filter(pk=self.charger.pk).update
+        )(last_meter_values=payload)
+        return {}
+
+    async def _handle_security_event_notification_action(
+        self, payload, msg_id, raw, text_data
+    ):
+        event_type = str(
+            payload.get("type")
+            or payload.get("eventType")
+            or ""
+        ).strip()
+        trigger_value = str(payload.get("trigger") or "").strip()
+        timestamp_value = _parse_ocpp_timestamp(payload.get("timestamp"))
+        if timestamp_value is None:
+            timestamp_value = timezone.now()
+        tech_raw = (
+            payload.get("techInfo")
+            or payload.get("techinfo")
+            or payload.get("tech_info")
+        )
+        if isinstance(tech_raw, (dict, list)):
+            tech_info = json.dumps(tech_raw, ensure_ascii=False)
+        elif tech_raw is None:
+            tech_info = ""
+        else:
+            tech_info = str(tech_raw)
+
+        def _persist_security_event() -> None:
+            connector_hint = payload.get("connectorId")
+            target = None
+            if connector_hint is not None:
+                target = Charger.objects.filter(
+                    charger_id=self.charger_id,
+                    connector_id=connector_hint,
+                ).first()
+            if target is None:
+                target = self.aggregate_charger or self.charger
+            if target is None:
+                return
+            seq_raw = payload.get("seqNo") or payload.get("sequenceNumber")
+            try:
+                sequence_number = int(seq_raw) if seq_raw is not None else None
+            except (TypeError, ValueError):
+                sequence_number = None
+            snapshot: dict[str, object]
+            try:
+                snapshot = json.loads(json.dumps(payload, ensure_ascii=False))
+            except (TypeError, ValueError):
+                snapshot = {
+                    str(key): (str(value) if value is not None else None),
+                    for key, value in payload.items(),
+                }
+            SecurityEvent.objects.create(
+                charger=target,
+                event_type=event_type or "Unknown",
+                event_timestamp=timestamp_value,
+                trigger=trigger_value,
+                tech_info=tech_info,
+                sequence_number=sequence_number,
+                raw_payload=snapshot,
+            )
+
+        await database_sync_to_async(_persist_security_event)()
+        label = event_type or "unknown"
+        log_message = f"SecurityEventNotification: type={label}"
+        if trigger_value:
+            log_message += f", trigger={trigger_value}"
+        store.add_log(self.store_key, log_message, log_type="charger")
+        return {}
+
+    async def _handle_diagnostics_status_notification_action(
+        self, payload, msg_id, raw, text_data
+    ):
+        status_value = payload.get("status")
+        location_value = (
+            payload.get("uploadLocation")
+            or payload.get("location")
+            or payload.get("uri")
+        )
+        timestamp_value = payload.get("timestamp")
+        diagnostics_timestamp = None
+        if timestamp_value:
+            try:
+                diagnostics_timestamp = parse_datetime(timestamp_value)
+            except ValueError:
+                pass
+            if diagnostics_timestamp and timezone.is_naive(diagnostics_timestamp):
+                diagnostics_timestamp = timezone.make_aware(
+                    diagnostics_timestamp, timezone=timezone.utc
+                )
+
+        updates = {
+            "diagnostics_status": status_value or None,
+            "diagnostics_timestamp": diagnostics_timestamp,
+            "diagnostics_location": location_value or None,
+        }
+
+        def _persist_diagnostics():
+            targets: list[Charger] = []
+            if self.charger:
+                targets.append(self.charger)
+            aggregate = self.aggregate_charger
+            if (
+                aggregate
+                and not any(target.pk == aggregate.pk for target in targets if target.pk)
+            ):
+                targets.append(aggregate)
+            for target in targets:
+                for field, value in updates.items():
+                    setattr(target, field, value)
+                if target.pk:
+                    Charger.objects.filter(pk=target.pk).update(**updates)
+
+        await database_sync_to_async(_persist_diagnostics)()
+
+        status_label = updates["diagnostics_status"] or "unknown"
+        log_message = "DiagnosticsStatusNotification: status=%s" % (
+            status_label,
+        )
+        if updates["diagnostics_timestamp"]:
+            log_message += ", timestamp=%s" % (
+                updates["diagnostics_timestamp"].isoformat()
+            )
+        if updates["diagnostics_location"]:
+            log_message += ", location=%s" % updates["diagnostics_location"]
+        store.add_log(self.store_key, log_message, log_type="charger")
+        if self.aggregate_charger and self.aggregate_charger.connector_id is None:
+            aggregate_key = store.identity_key(self.charger_id, None)
+            if aggregate_key != self.store_key:
+                store.add_log(aggregate_key, log_message, log_type="charger")
+        return {}
+
+    async def _handle_log_status_notification_action(
+        self, payload, msg_id, raw, text_data
+    ):
+        status_value = str(payload.get("status") or "").strip()
+        log_type_value = str(payload.get("logType") or "").strip()
+        request_identifier = payload.get("requestId")
+        timestamp_value = _parse_ocpp_timestamp(payload.get("timestamp"))
+        if timestamp_value is None:
+            timestamp_value = timezone.now()
+        location_value = str(
+            payload.get("location")
+            or payload.get("remoteLocation")
+            or ""
+        ).strip()
+        filename_value = str(payload.get("filename") or "").strip()
+
+        def _persist_log_status() -> str:
+            qs = ChargerLogRequest.objects.filter(
+                charger__charger_id=self.charger_id
+            )
+            request = None
+            if request_identifier is not None:
+                request = qs.filter(request_id=request_identifier).first()
+            if request is None:
+                request = qs.order_by("-requested_at").first()
+            if request is None:
+                charger = Charger.objects.filter(
+                    charger_id=self.charger_id,
+                    connector_id=None,
+                ).first()
+                if charger is None:
+                    return ""
+                creation_kwargs: dict[str, object] = {
+                    "charger": charger,
+                    "status": status_value or "",
+                }
+                if log_type_value:
+                    creation_kwargs["log_type"] = log_type_value
+                if request_identifier is not None:
+                    creation_kwargs["request_id"] = request_identifier
+                request = ChargerLogRequest.objects.create(**creation_kwargs)
+                if timestamp_value is not None:
+                    request.requested_at = timestamp_value
+                    request.save(update_fields=["requested_at"])
+            updates: dict[str, object] = {
+                "last_status_at": timestamp_value,
+                "last_status_payload": payload,
+            }
+            if status_value:
+                updates["status"] = status_value
+            if location_value:
+                updates["location"] = location_value
+            if filename_value:
+                updates["filename"] = filename_value
+            if log_type_value and not request.log_type:
+                updates["log_type"] = log_type_value
+            ChargerLogRequest.objects.filter(pk=request.pk).update(**updates)
+            if updates.get("status"):
+                request.status = str(updates["status"])
+            if updates.get("location"):
+                request.location = str(updates["location"])
+            if updates.get("filename"):
+                request.filename = str(updates["filename"])
+            request.last_status_at = timestamp_value
+            request.last_status_payload = payload
+            if updates.get("log_type"):
+                request.log_type = str(updates["log_type"])
+            return request.session_key or ""
+
+        session_capture = await database_sync_to_async(_persist_log_status)()
+        status_label = status_value or "unknown"
+        message = f"LogStatusNotification: status={status_label}"
+        if request_identifier is not None:
+            message += f", requestId={request_identifier}"
+        if log_type_value:
+            message += f", logType={log_type_value}"
+        store.add_log(self.store_key, message, log_type="charger")
+        if session_capture and status_value.lower() in {
+            "uploaded",
+            "uploadfailure",
+            "rejected",
+            "idle",
+        }:
+            store.finalize_log_capture(session_capture)
+        return {}
+
+    async def _handle_start_transaction_action(
+        self, payload, msg_id, raw, text_data
+    ):
+        id_tag = payload.get("idTag")
+        tag = None
+        tag_created = False
+        if id_tag:
+            tag, tag_created = await database_sync_to_async(CoreRFID.register_scan)(
+                id_tag
+            )
+        account = await self._get_account(id_tag)
+        if id_tag and not self.charger.require_rfid:
+            seen_tag = await self._ensure_rfid_seen(id_tag)
+            if seen_tag:
+                tag = seen_tag
+        await self._assign_connector(payload.get("connectorId"))
+        authorized = True
+        authorized_via_tag = False
+        if self.charger.require_rfid:
+            if account is not None:
+                authorized = await database_sync_to_async(account.can_authorize)()
+            elif id_tag and tag and not tag_created and getattr(tag, "allowed", False):
+                authorized = True
+                authorized_via_tag = True
+            else:
+                authorized = False
+        if authorized:
+            if authorized_via_tag and tag:
+                self._log_unlinked_rfid(tag.rfid)
+            start_timestamp = _parse_ocpp_timestamp(payload.get("timestamp"))
+            received_start = timezone.now()
+            vid_value, vin_value = _extract_vehicle_identifier(payload)
+            tx_obj = await database_sync_to_async(Transaction.objects.create)(
+                charger=self.charger,
+                account=account,
+                rfid=(id_tag or ""),
+                vid=vid_value,
+                vin=vin_value,
+                connector_id=payload.get("connectorId"),
+                meter_start=payload.get("meterStart"),
+                start_time=start_timestamp or received_start,
+                received_start_time=received_start,
+            )
+            store.transactions[self.store_key] = tx_obj
+            store.start_session_log(self.store_key, tx_obj.pk)
+            store.start_session_lock()
+            store.add_session_message(self.store_key, text_data)
+            await self._start_consumption_updates(tx_obj)
+            await self._record_rfid_attempt(
+                rfid=id_tag or "",
+                status=RFIDSessionAttempt.Status.ACCEPTED,
+                account=account,
+                transaction=tx_obj,
+            )
+            return {
+                "transactionId": tx_obj.pk,
+                "idTagInfo": {"status": "Accepted"},
+            }
+        await self._record_rfid_attempt(
+            rfid=id_tag or "",
+            status=RFIDSessionAttempt.Status.REJECTED,
+            account=account,
+        )
+        return {"idTagInfo": {"status": "Invalid"}}
+
+    async def _handle_stop_transaction_action(
+        self, payload, msg_id, raw, text_data
+    ):
+        tx_id = payload.get("transactionId")
+        tx_obj = store.transactions.pop(self.store_key, None)
+        if not tx_obj and tx_id is not None:
+            tx_obj = await database_sync_to_async(
+                Transaction.objects.filter(pk=tx_id, charger=self.charger).first
+            )()
+        if not tx_obj and tx_id is not None:
+            received_start = timezone.now()
+            vid_value, vin_value = _extract_vehicle_identifier(payload)
+            tx_obj = await database_sync_to_async(Transaction.objects.create)(
+                pk=tx_id,
+                charger=self.charger,
+                start_time=received_start,
+                received_start_time=received_start,
+                meter_start=payload.get("meterStart") or payload.get("meterStop"),
+                vid=vid_value,
+                vin=vin_value,
+            )
+        if tx_obj:
+            stop_timestamp = _parse_ocpp_timestamp(payload.get("timestamp"))
+            received_stop = timezone.now()
+            tx_obj.meter_stop = payload.get("meterStop")
+            vid_value, vin_value = _extract_vehicle_identifier(payload)
+            if vid_value:
+                tx_obj.vid = vid_value
+            if vin_value:
+                tx_obj.vin = vin_value
+            tx_obj.stop_time = stop_timestamp or received_stop
+            tx_obj.received_stop_time = received_stop
+            await database_sync_to_async(tx_obj.save)()
+            await self._update_consumption_message(tx_obj.pk)
+        await self._cancel_consumption_message()
+        store.end_session_log(self.store_key)
+        store.stop_session_lock()
+        return {"idTagInfo": {"status": "Accepted"}}
+
+    async def _handle_firmware_status_notification_action(
+        self, payload, msg_id, raw, text_data
+    ):
+        status_raw = payload.get("status")
+        status = str(status_raw or "").strip()
+        info_value = payload.get("statusInfo")
+        if not isinstance(info_value, str):
+            info_value = payload.get("info")
+        status_info = str(info_value or "").strip()
+        timestamp_raw = payload.get("timestamp")
+        timestamp_value = None
+        if timestamp_raw:
+            timestamp_value = parse_datetime(str(timestamp_raw))
+            if timestamp_value and timezone.is_naive(timestamp_value):
+                timestamp_value = timezone.make_aware(
+                    timestamp_value, timezone.get_current_timezone()
+                )
+        if timestamp_value is None:
+            timestamp_value = timezone.now()
+        await self._update_firmware_state(status, status_info, timestamp_value)
+        store.add_log(
+            self.store_key,
+            "FirmwareStatusNotification: "
+            + json.dumps(payload, separators=(",", ":")),
+            log_type="charger",
+        )
+        if self.aggregate_charger and self.aggregate_charger.connector_id is None:
+            aggregate_key = store.identity_key(
+                self.charger_id, self.aggregate_charger.connector_id
+            )
+            if aggregate_key != self.store_key:
+                store.add_log(
+                    aggregate_key,
+                    "FirmwareStatusNotification: "
+                    + json.dumps(payload, separators=(",", ":")),
+                    log_type="charger",
+                )
+        return {}
+
