@@ -1641,13 +1641,16 @@ def _system_services_report_view(request):
 
 
 def _system_upgrade_report_view(request):
-    revision_info = request.session.pop(UPGRADE_REVISION_SESSION_KEY, None)
+    revision_info = None
+    session = getattr(request, "session", None)
+    if session is not None:
+        revision_info = session.pop(UPGRADE_REVISION_SESSION_KEY, None)
     context = admin.site.each_context(request)
     context.update(
         {
             "title": _("Upgrade Report"),
             "auto_upgrade_report": _build_auto_upgrade_report(
-                revision_info=revision_info
+                **({"revision_info": revision_info} if revision_info is not None else {})
             ),
             "failover_status": read_failover_status(Path(settings.BASE_DIR)),
         }
