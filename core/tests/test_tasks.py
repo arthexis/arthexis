@@ -88,6 +88,53 @@ def test_systemctl_command_falls_back_without_sudo(monkeypatch):
     assert tasks._systemctl_command() == ["systemctl"]
 
 
+def test_run_upgrade_command_logs_detached_failure(monkeypatch, tmp_path):
+    """Detached auto-upgrade failures should capture systemd-run output."""
+
+    from core import tasks
+
+    base_dir = tmp_path
+    locks_dir = base_dir / "locks"
+    locks_dir.mkdir()
+    (locks_dir / "service.lck").write_text("gway\n", encoding="utf-8")
+
+    log_entries: list[str] = []
+    monkeypatch.setattr(tasks, "_append_auto_upgrade_log", lambda base, message: log_entries.append(message))
+
+    watch_binary = base_dir / "watch-upgrade"
+    watch_binary.write_text("#!/bin/true", encoding="utf-8")
+    monkeypatch.setattr(tasks, "WATCH_UPGRADE_BINARY", watch_binary)
+
+    monkeypatch.setenv("INVOCATION_ID", "auto-upgrade-test")
+
+    monkeypatch.setattr(
+        tasks.shutil,
+        "which",
+        lambda command: "/bin/systemd-run" if command == "systemd-run" else None,
+    )
+
+    run_calls: list[tuple[list[str], dict]] = []
+
+    def fake_run(command, **kwargs):
+        run_calls.append((command, kwargs))
+        if command and command[0].endswith("systemd-run"):
+            raise subprocess.CalledProcessError(
+                1, command, output="unit failed", stderr="permission denied"
+            )
+        return CompletedProcess(command, 0)
+
+    monkeypatch.setattr(tasks.subprocess, "run", fake_run)
+
+    tasks._run_upgrade_command(base_dir, ["upgrade.sh", "--latest"])
+
+    assert any("exit code 1" in entry for entry in log_entries)
+    assert any("permission denied" in entry for entry in log_entries)
+
+    systemd_call = run_calls[0]
+    assert systemd_call[1].get("capture_output") is True
+    assert systemd_call[1].get("text") is True
+
+
 def test_check_github_updates_uses_project_base_dir(monkeypatch, tmp_path):
     """The auto-upgrade task should honor ``settings.BASE_DIR`` for log writes."""
 
