@@ -10,6 +10,7 @@ from .utils import convert_endianness_value, normalize_endianness
 
 def scan_sources(request=None, *, endianness: str | None = None):
     """Read the next RFID tag from the local scanner."""
+    start()
     if not is_configured():
         return {"rfid": None, "label_id": None}
     result = get_next_tag()
@@ -80,6 +81,7 @@ def test_sources():
 
 def enable_deep_read_mode(duration: float = 60) -> dict:
     """Toggle the RFID reader deep read mode and report the new state."""
+    start()
     if not is_configured():
         return {"error": "no scanner available"}
     enabled = toggle_deep_read()

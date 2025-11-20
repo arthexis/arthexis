@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Verify RFID scanner initializes on scan views only",
+      "created_on": "2025-11-20T00:00:00Z",
+      "url": "/admin/core/rfid/scan/",
+      "request_details": "1. Restart the application and monitor the logs; before visiting RFID scan pages there should be no new 'RFID hardware setup failed' errors.\n2. Sign in as a staff user and open the admin Scan RFIDs page at /admin/core/rfid/scan/. Confirm the page loads and that RFID hardware initialization only appears in the logs once you access this view.\n3. Visit the public RFID Tag Validator at /ocpp/rfid/reader/ and confirm the page loads without additional startup errors.\n4. If hardware is available, scan a tag from either page to verify normal operation.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]
