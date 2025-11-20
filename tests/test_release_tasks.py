@@ -1,6 +1,7 @@
 import subprocess
 import types
 from datetime import datetime
+import os
 from urllib.error import URLError
 from zoneinfo import ZoneInfo
 
@@ -139,6 +140,15 @@ def test_upgrade_detaches_when_running_under_systemd(monkeypatch, tmp_path):
     base = _setup_tmp(monkeypatch, tmp_path)
     (base / "VERSION").write_text("1.0")
 
+    locks = base / "locks"
+    locks.mkdir()
+    (locks / "service.lck").write_text("myapp")
+
+    watcher = tmp_path / "watch-upgrade"
+    watcher.write_text("#!/bin/true")
+    watcher.chmod(0o755)
+    monkeypatch.setattr(tasks, "WATCH_UPGRADE_BINARY", watcher)
+
     monkeypatch.setenv("INVOCATION_ID", "auto-upgrade-test")
 
     def fake_which(name):
@@ -170,10 +180,12 @@ def test_upgrade_detaches_when_running_under_systemd(monkeypatch, tmp_path):
     tasks.check_github_updates()
 
     upgrade_calls = [
-        args for args, _ in run_recorder.calls if args and args[0][0] == "systemd-run"
+        args
+        for args, _ in run_recorder.calls
+        if args and args[0] and os.path.basename(args[0][0]) == "systemd-run"
     ]
     assert upgrade_calls, run_recorder.calls
-    assert "./upgrade.sh" in upgrade_calls[0][0]
+    assert str(watcher) in upgrade_calls[0][0]
     assert scheduled
 
 
@@ -181,6 +193,15 @@ def test_upgrade_detaches_when_running_under_systemd(monkeypatch, tmp_path):
 def test_upgrade_detach_falls_back_when_systemd_run_fails(monkeypatch, tmp_path):
     base = _setup_tmp(monkeypatch, tmp_path)
     (base / "VERSION").write_text("1.0")
+
+    locks = base / "locks"
+    locks.mkdir()
+    (locks / "service.lck").write_text("myapp")
+
+    watcher = tmp_path / "watch-upgrade"
+    watcher.write_text("#!/bin/true")
+    watcher.chmod(0o755)
+    monkeypatch.setattr(tasks, "WATCH_UPGRADE_BINARY", watcher)
 
     monkeypatch.setenv("INVOCATION_ID", "auto-upgrade-test")
 
@@ -198,7 +219,7 @@ def test_upgrade_detach_falls_back_when_systemd_run_fails(monkeypatch, tmp_path)
 
     class FailingSystemdRun(CommandRecorder):
         def __call__(self, *args, **kwargs):
-            if args and args[0] and args[0][0] == "systemd-run":
+            if args and args[0] and os.path.basename(args[0][0]) == "systemd-run":
                 raise subprocess.CalledProcessError(1, args[0])
             return super().__call__(*args, **kwargs)
 
