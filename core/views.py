@@ -518,6 +518,329 @@ def _ensure_template_name(template, name: str):
     return template
 
 
+def _get_release_or_response(request, pk: int, action: str):
+    try:
+        release = PackageRelease.objects.get(pk=pk)
+    except PackageRelease.DoesNotExist:
+        return None, _render_release_progress_error(
+            request,
+            None,
+            action,
+            _("The requested release could not be found."),
+            status=404,
+            debug_info={"pk": pk, "action": action},
+        )
+
+    if action != "publish":
+        return None, _render_release_progress_error(
+            request,
+            release,
+            action,
+            _("Unknown release action."),
+            status=404,
+            debug_info={"action": action},
+        )
+
+    return release, None
+
+
+def _handle_release_sync(
+    request,
+    release: PackageRelease,
+    action: str,
+    session_key: str,
+    lock_path: Path,
+    restart_path: Path,
+    log_dir: Path,
+    repo_version_before_sync: str,
+):
+    if release.is_current:
+        return None
+
+    if release.is_published:
+        return _render_release_progress_error(
+            request,
+            release,
+            action,
+            _("This release was already published and no longer matches the repository version."),
+            status=409,
+            debug_info={
+                "release_version": release.version,
+                "repository_version": repo_version_before_sync,
+                "pypi_url": release.pypi_url,
+            },
+        )
+
+    updated, previous_version = _sync_release_with_revision(release)
+    if updated:
+        request.session.pop(session_key, None)
+        if lock_path.exists():
+            lock_path.unlink()
+        if restart_path.exists():
+            restart_path.unlink()
+        pattern = f"pr.{release.package.name}.v{previous_version}*.log"
+        for log_file in log_dir.glob(pattern):
+            log_file.unlink()
+
+    if not release.is_current:
+        return _render_release_progress_error(
+            request,
+            release,
+            action,
+            _("The repository VERSION file does not match this release."),
+            status=409,
+            debug_info={
+                "release_version": release.version,
+                "repository_version": repo_version_before_sync,
+            },
+        )
+
+    return None
+
+
+def _handle_release_restart(
+    request,
+    release: PackageRelease,
+    session_key: str,
+    lock_path: Path,
+    restart_path: Path,
+    log_dir: Path,
+):
+    if not request.GET.get("restart"):
+        return None
+
+    count = 0
+    if restart_path.exists():
+        try:
+            count = int(restart_path.read_text(encoding="utf-8"))
+        except Exception:
+            count = 0
+    restart_path.parent.mkdir(parents=True, exist_ok=True)
+    restart_path.write_text(str(count + 1), encoding="utf-8")
+    _clean_repo()
+    release.pypi_url = ""
+    release.release_on = None
+    release.save(update_fields=["pypi_url", "release_on"])
+    request.session.pop(session_key, None)
+    if lock_path.exists():
+        lock_path.unlink()
+    pattern = f"pr.{release.package.name}.v{release.version}*.log"
+    for f in log_dir.glob(pattern):
+        f.unlink()
+    return redirect(request.path)
+
+
+def _load_release_context(
+    request,
+    session_key: str,
+    lock_path: Path,
+    restart_path: Path,
+    log_dir_warning_message: str | None,
+):
+    ctx = request.session.get(session_key)
+    if ctx is None and lock_path.exists():
+        try:
+            ctx = json.loads(lock_path.read_text(encoding="utf-8"))
+        except Exception:
+            ctx = {"step": 0}
+    if ctx is None:
+        ctx = {"step": 0}
+        if restart_path.exists():
+            restart_path.unlink()
+    if log_dir_warning_message:
+        ctx["log_dir_warning_message"] = log_dir_warning_message
+    else:
+        log_dir_warning_message = ctx.get("log_dir_warning_message")
+
+    return ctx, log_dir_warning_message
+
+
+def _update_publish_controls(
+    request,
+    ctx: dict,
+    start_enabled: bool,
+    session_key: str,
+    credentials_ready: bool,
+):
+    ctx["dry_run"] = bool(ctx.get("dry_run"))
+
+    if request.GET.get("set_dry_run") is not None:
+        if start_enabled:
+            ctx["dry_run"] = bool(request.GET.get("dry_run"))
+            request.session[session_key] = ctx
+        return ctx, False, redirect(request.path)
+
+    if request.GET.get("start"):
+        if start_enabled:
+            ctx["dry_run"] = bool(request.GET.get("dry_run"))
+        ctx["started"] = True
+        ctx["paused"] = False
+
+    if (
+        ctx.get("awaiting_approval")
+        and not ctx.get("approval_credentials_missing")
+        and credentials_ready
+    ):
+        if request.GET.get("approve"):
+            ctx["release_approval"] = "approved"
+        if request.GET.get("reject"):
+            ctx["release_approval"] = "rejected"
+
+    resume_requested = bool(request.GET.get("resume"))
+
+    if request.GET.get("pause") and ctx.get("started"):
+        ctx["paused"] = True
+
+    if resume_requested:
+        if not ctx.get("started"):
+            ctx["started"] = True
+        if ctx.get("paused"):
+            ctx["paused"] = False
+
+    return ctx, resume_requested, None
+
+
+def _prepare_step_progress(
+    request,
+    ctx: dict,
+    restart_path: Path,
+    resume_requested: bool,
+):
+    restart_count = 0
+    if restart_path.exists():
+        try:
+            restart_count = int(restart_path.read_text(encoding="utf-8"))
+        except Exception:
+            restart_count = 0
+    step_count = ctx.get("step", 0)
+    step_param = request.GET.get("step")
+    if resume_requested and step_param is None:
+        step_param = str(step_count)
+    return restart_count, step_param
+
+
+def _prepare_logging(
+    ctx: dict,
+    release: PackageRelease,
+    log_dir: Path,
+    log_dir_warning_message: str | None,
+    step_param: str | None,
+    step_count: int,
+):
+    log_name = _release_log_name(release.package.name, release.version)
+    if ctx.get("log") != log_name:
+        ctx = {
+            "step": 0,
+            "log": log_name,
+            "started": ctx.get("started", False),
+        }
+        step_count = 0
+    log_path = log_dir / log_name
+    ctx.setdefault("log", log_name)
+    ctx.setdefault("paused", False)
+    ctx.setdefault("dirty_commit_message", DIRTY_COMMIT_DEFAULT_MESSAGE)
+
+    if (
+        ctx.get("started")
+        and step_count == 0
+        and (step_param is None or step_param == "0")
+    ):
+        if log_path.exists():
+            log_path.unlink()
+        ctx.pop("log_dir_warning_logged", None)
+
+    if log_dir_warning_message and not ctx.get("log_dir_warning_logged"):
+        _append_log(log_path, log_dir_warning_message)
+        ctx["log_dir_warning_logged"] = True
+
+    return ctx, log_path, step_count
+
+
+def _handle_dirty_repository_action(request, ctx: dict, log_path: Path):
+    dirty_action = request.GET.get("dirty_action")
+    if dirty_action and ctx.get("dirty_files"):
+        if dirty_action == "discard":
+            _clean_repo()
+            remaining = _collect_dirty_files()
+            if remaining:
+                ctx["dirty_files"] = remaining
+                ctx.pop("dirty_commit_error", None)
+            else:
+                ctx.pop("dirty_files", None)
+                ctx.pop("dirty_commit_error", None)
+                ctx.pop("dirty_log_message", None)
+                _append_log(log_path, "Discarded local changes before publish")
+        elif dirty_action == "commit":
+            message = request.GET.get("dirty_message", "").strip()
+            if not message:
+                message = ctx.get("dirty_commit_message") or DIRTY_COMMIT_DEFAULT_MESSAGE
+            ctx["dirty_commit_message"] = message
+            try:
+                subprocess.run(["git", "add", "--all"], check=True)
+                subprocess.run(["git", "commit", "-m", message], check=True)
+            except subprocess.CalledProcessError as exc:
+                ctx["dirty_commit_error"] = _format_subprocess_error(exc)
+            else:
+                ctx.pop("dirty_commit_error", None)
+                remaining = _collect_dirty_files()
+                if remaining:
+                    ctx["dirty_files"] = remaining
+                else:
+                    ctx.pop("dirty_files", None)
+                    ctx.pop("dirty_log_message", None)
+                _append_log(
+                    log_path,
+                    _("Committed pending changes: %(message)s")
+                    % {"message": message},
+                )
+    return ctx
+
+
+def _run_release_step(
+    request,
+    steps,
+    ctx: dict,
+    step_param: str | None,
+    step_count: int,
+    release: PackageRelease,
+    log_path: Path,
+    session_key: str,
+    lock_path: Path,
+):
+    error = ctx.get("error")
+
+    if (
+        ctx.get("started")
+        and not ctx.get("paused")
+        and step_param is not None
+        and not error
+        and step_count < len(steps)
+    ):
+        to_run = int(step_param)
+        if to_run == step_count:
+            name, func = steps[to_run]
+            try:
+                func(release, ctx, log_path, user=request.user)
+            except ApprovalRequired:
+                pass
+            except DirtyRepository:
+                pass
+            except Exception as exc:  # pragma: no cover - best effort logging
+                _append_log(log_path, f"{name} failed: {exc}")
+                ctx["error"] = str(exc)
+                request.session[session_key] = ctx
+                lock_path.parent.mkdir(parents=True, exist_ok=True)
+                lock_path.write_text(json.dumps(ctx), encoding="utf-8")
+            else:
+                step_count += 1
+                ctx["step"] = step_count
+                request.session[session_key] = ctx
+                lock_path.parent.mkdir(parents=True, exist_ok=True)
+                lock_path.write_text(json.dumps(ctx), encoding="utf-8")
+
+    return ctx, step_count
+
+
 def _sync_with_origin_main(log_path: Path) -> None:
     """Ensure the current branch is rebased onto ``origin/main``."""
 
@@ -1535,27 +1858,9 @@ def rfid_batch(request):
 
 @staff_member_required
 def release_progress(request, pk: int, action: str):
-    try:
-        release = PackageRelease.objects.get(pk=pk)
-    except PackageRelease.DoesNotExist:
-        return _render_release_progress_error(
-            request,
-            None,
-            action,
-            _("The requested release could not be found."),
-            status=404,
-            debug_info={"pk": pk, "action": action},
-        )
-
-    if action != "publish":
-        return _render_release_progress_error(
-            request,
-            release,
-            action,
-            _("Unknown release action."),
-            status=404,
-            debug_info={"action": action},
-        )
+    release, error_response = _get_release_or_response(request, pk, action)
+    if error_response:
+        return error_response
     session_key = f"release_publish_{pk}"
     lock_path = Path("locks") / f"release_publish_{pk}.json"
     restart_path = Path("locks") / f"release_publish_{pk}.restarts"
@@ -1568,78 +1873,38 @@ def release_progress(request, pk: int, action: str):
         repo_version_before_sync = version_path.read_text(encoding="utf-8").strip()
     setattr(release, "_repo_version_before_sync", repo_version_before_sync)
 
-    if not release.is_current:
-        if release.is_published:
-            return _render_release_progress_error(
-                request,
-                release,
-                action,
-                _("This release was already published and no longer matches the repository version."),
-                status=409,
-                debug_info={
-                    "release_version": release.version,
-                    "repository_version": repo_version_before_sync,
-                    "pypi_url": release.pypi_url,
-                },
-            )
-        updated, previous_version = _sync_release_with_revision(release)
-        if updated:
-            request.session.pop(session_key, None)
-            if lock_path.exists():
-                lock_path.unlink()
-            if restart_path.exists():
-                restart_path.unlink()
-            pattern = f"pr.{release.package.name}.v{previous_version}*.log"
-            for log_file in log_dir.glob(pattern):
-                log_file.unlink()
-        if not release.is_current:
-            return _render_release_progress_error(
-                request,
-                release,
-                action,
-                _("The repository VERSION file does not match this release."),
-                status=409,
-                debug_info={
-                    "release_version": release.version,
-                    "repository_version": repo_version_before_sync,
-                },
-            )
+    sync_response = _handle_release_sync(
+        request,
+        release,
+        action,
+        session_key,
+        lock_path,
+        restart_path,
+        log_dir,
+        repo_version_before_sync,
+    )
+    if sync_response:
+        return sync_response
 
-    if request.GET.get("restart"):
-        count = 0
-        if restart_path.exists():
-            try:
-                count = int(restart_path.read_text(encoding="utf-8"))
-            except Exception:
-                count = 0
-        restart_path.parent.mkdir(parents=True, exist_ok=True)
-        restart_path.write_text(str(count + 1), encoding="utf-8")
-        _clean_repo()
-        release.pypi_url = ""
-        release.release_on = None
-        release.save(update_fields=["pypi_url", "release_on"])
-        request.session.pop(session_key, None)
-        if lock_path.exists():
-            lock_path.unlink()
-        pattern = f"pr.{release.package.name}.v{release.version}*.log"
-        for f in log_dir.glob(pattern):
-            f.unlink()
-        return redirect(request.path)
-    ctx = request.session.get(session_key)
-    if ctx is None and lock_path.exists():
-        try:
-            ctx = json.loads(lock_path.read_text(encoding="utf-8"))
-        except Exception:
-            ctx = {"step": 0}
-    if ctx is None:
-        ctx = {"step": 0}
-        if restart_path.exists():
-            restart_path.unlink()
-    if log_dir_warning_message:
-        ctx["log_dir_warning_message"] = log_dir_warning_message
-    else:
-        log_dir_warning_message = ctx.get("log_dir_warning_message")
+    restart_response = _handle_release_restart(
+        request,
+        release,
+        session_key,
+        lock_path,
+        restart_path,
+        log_dir,
+    )
+    if restart_response:
+        return restart_response
 
+    ctx, log_dir_warning_message = _load_release_context(
+        request,
+        session_key,
+        lock_path,
+        restart_path,
+        log_dir_warning_message,
+    )
+    
     steps = PUBLISH_STEPS
     total_steps = len(steps)
     step_count = ctx.get("step", 0)
@@ -1649,116 +1914,34 @@ def release_progress(request, pk: int, action: str):
     done_flag = step_count >= total_steps and not error_flag
     start_enabled = (not started_flag or paused_flag) and not done_flag and not error_flag
 
-    ctx["dry_run"] = bool(ctx.get("dry_run"))
-
-    if request.GET.get("set_dry_run") is not None:
-        if start_enabled:
-            ctx["dry_run"] = bool(request.GET.get("dry_run"))
-            request.session[session_key] = ctx
-        return redirect(request.path)
-
     manager = release.release_manager or release.package.release_manager
     credentials_ready = bool(release.to_credentials(user=request.user))
     if credentials_ready and ctx.get("approval_credentials_missing"):
         ctx.pop("approval_credentials_missing", None)
 
-    if request.GET.get("start"):
-        if start_enabled:
-            ctx["dry_run"] = bool(request.GET.get("dry_run"))
-        ctx["started"] = True
-        ctx["paused"] = False
-    if (
-        ctx.get("awaiting_approval")
-        and not ctx.get("approval_credentials_missing")
-        and credentials_ready
-    ):
-        if request.GET.get("approve"):
-            ctx["release_approval"] = "approved"
-        if request.GET.get("reject"):
-            ctx["release_approval"] = "rejected"
-    resume_requested = bool(request.GET.get("resume"))
+    ctx, resume_requested, redirect_response = _update_publish_controls(
+        request,
+        ctx,
+        start_enabled,
+        session_key,
+        credentials_ready,
+    )
+    if redirect_response:
+        return redirect_response
+    restart_count, step_param = _prepare_step_progress(
+        request, ctx, restart_path, resume_requested
+    )
 
-    if request.GET.get("pause") and ctx.get("started"):
-        ctx["paused"] = True
+    ctx, log_path, step_count = _prepare_logging(
+        ctx,
+        release,
+        log_dir,
+        log_dir_warning_message,
+        step_param,
+        step_count,
+    )
 
-    if resume_requested:
-        if not ctx.get("started"):
-            ctx["started"] = True
-        if ctx.get("paused"):
-            ctx["paused"] = False
-    restart_count = 0
-    if restart_path.exists():
-        try:
-            restart_count = int(restart_path.read_text(encoding="utf-8"))
-        except Exception:
-            restart_count = 0
-    step_count = ctx.get("step", 0)
-    step_param = request.GET.get("step")
-    if resume_requested and step_param is None:
-        step_param = str(step_count)
-
-    log_name = _release_log_name(release.package.name, release.version)
-    if ctx.get("log") != log_name:
-        ctx = {
-            "step": 0,
-            "log": log_name,
-            "started": ctx.get("started", False),
-        }
-        step_count = 0
-    log_path = log_dir / log_name
-    ctx.setdefault("log", log_name)
-    ctx.setdefault("paused", False)
-    ctx.setdefault("dirty_commit_message", DIRTY_COMMIT_DEFAULT_MESSAGE)
-
-    dirty_action = request.GET.get("dirty_action")
-    if dirty_action and ctx.get("dirty_files"):
-        if dirty_action == "discard":
-            _clean_repo()
-            remaining = _collect_dirty_files()
-            if remaining:
-                ctx["dirty_files"] = remaining
-                ctx.pop("dirty_commit_error", None)
-            else:
-                ctx.pop("dirty_files", None)
-                ctx.pop("dirty_commit_error", None)
-                ctx.pop("dirty_log_message", None)
-                _append_log(log_path, "Discarded local changes before publish")
-        elif dirty_action == "commit":
-            message = request.GET.get("dirty_message", "").strip()
-            if not message:
-                message = ctx.get("dirty_commit_message") or DIRTY_COMMIT_DEFAULT_MESSAGE
-            ctx["dirty_commit_message"] = message
-            try:
-                subprocess.run(["git", "add", "--all"], check=True)
-                subprocess.run(["git", "commit", "-m", message], check=True)
-            except subprocess.CalledProcessError as exc:
-                ctx["dirty_commit_error"] = _format_subprocess_error(exc)
-            else:
-                ctx.pop("dirty_commit_error", None)
-                remaining = _collect_dirty_files()
-                if remaining:
-                    ctx["dirty_files"] = remaining
-                else:
-                    ctx.pop("dirty_files", None)
-                    ctx.pop("dirty_log_message", None)
-                _append_log(
-                    log_path,
-                    _("Committed pending changes: %(message)s")
-                    % {"message": message},
-                )
-
-    if (
-        ctx.get("started")
-        and step_count == 0
-        and (step_param is None or step_param == "0")
-    ):
-        if log_path.exists():
-            log_path.unlink()
-        ctx.pop("log_dir_warning_logged", None)
-
-    if log_dir_warning_message and not ctx.get("log_dir_warning_logged"):
-        _append_log(log_path, log_dir_warning_message)
-        ctx["log_dir_warning_logged"] = True
+    ctx = _handle_dirty_repository_action(request, ctx, log_path)
 
     fixtures_step_index = next(
         (
@@ -1768,38 +1951,21 @@ def release_progress(request, pk: int, action: str):
         ),
         None,
     )
+
+    ctx, step_count = _run_release_step(
+        request,
+        steps,
+        ctx,
+        step_param,
+        step_count,
+        release,
+        log_path,
+        session_key,
+        lock_path,
+    )
+
     error = ctx.get("error")
-
-    if (
-        ctx.get("started")
-        and not ctx.get("paused")
-        and step_param is not None
-        and not error
-        and step_count < len(steps)
-    ):
-        to_run = int(step_param)
-        if to_run == step_count:
-            name, func = steps[to_run]
-            try:
-                func(release, ctx, log_path, user=request.user)
-            except ApprovalRequired:
-                pass
-            except DirtyRepository:
-                pass
-            except Exception as exc:  # pragma: no cover - best effort logging
-                _append_log(log_path, f"{name} failed: {exc}")
-                ctx["error"] = str(exc)
-                request.session[session_key] = ctx
-                lock_path.parent.mkdir(parents=True, exist_ok=True)
-                lock_path.write_text(json.dumps(ctx), encoding="utf-8")
-            else:
-                step_count += 1
-                ctx["step"] = step_count
-                request.session[session_key] = ctx
-                lock_path.parent.mkdir(parents=True, exist_ok=True)
-                lock_path.write_text(json.dumps(ctx), encoding="utf-8")
-
-    done = step_count >= len(steps) and not ctx.get("error")
+    done = step_count >= len(steps) and not error
 
     show_log = ctx.get("started") or step_count > 0 or done or ctx.get("error")
     if show_log and log_path.exists():
