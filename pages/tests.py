@@ -3731,11 +3731,32 @@ class FavoriteTests(TestCase):
         self.assertEqual(fav.custom_label, "Apps")
         self.assertTrue(fav.user_data)
 
-    def test_add_favorite_defaults_user_data_checked(self):
+    def test_add_favorite_get_returns_not_allowed(self):
         ct = ContentType.objects.get_by_natural_key("pages", "application")
-        url = reverse("admin:favorite_toggle", args=[ct.id])
+        next_url = reverse("admin:pages_application_changelist")
+        url = (
+            reverse("admin:favorite_toggle", args=[ct.id]) + f"?next={quote(next_url)}"
+        )
+
         resp = self.client.get(url)
-        self.assertContains(resp, 'name="user_data" checked')
+
+        self.assertEqual(resp.status_code, 405)
+        self.assertFalse(
+            Favorite.objects.filter(user=self.user, content_type=ct).exists()
+        )
+
+    def test_add_favorite_post_sets_defaults_and_redirects(self):
+        ct = ContentType.objects.get_by_natural_key("pages", "application")
+        next_url = reverse("admin:pages_application_changelist")
+        url = reverse("admin:favorite_toggle", args=[ct.id])
+
+        resp = self.client.post(url, {"next": next_url, "user_data": "on"})
+
+        self.assertRedirects(resp, next_url)
+        fav = Favorite.objects.get(user=self.user, content_type=ct)
+        self.assertTrue(fav.user_data)
+        self.assertEqual(fav.priority, 0)
+        self.assertEqual(fav.custom_label, "")
 
     def test_add_favorite_with_priority(self):
         ct = ContentType.objects.get_by_natural_key("pages", "application")
@@ -3748,6 +3769,7 @@ class FavoriteTests(TestCase):
     def test_cancel_link_uses_next(self):
         ct = ContentType.objects.get_by_natural_key("pages", "application")
         next_url = reverse("admin:pages_application_changelist")
+        Favorite.objects.create(user=self.user, content_type=ct)
         url = (
             reverse("admin:favorite_toggle", args=[ct.id]) + f"?next={quote(next_url)}"
         )
@@ -3766,8 +3788,10 @@ class FavoriteTests(TestCase):
         resp = self.client.post(url, {"custom_label": "Apps"})
         self.assertRedirects(resp, admin_index)
 
+        Favorite.objects.filter(user=self.user, content_type=ct).delete()
+
         resp = self.client.get(url)
-        self.assertContains(resp, f'href="{admin_index}"')
+        self.assertRedirects(resp, admin_index)
 
     def test_existing_favorite_shows_update_form(self):
         ct = ContentType.objects.get_by_natural_key("pages", "application")

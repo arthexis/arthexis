@@ -11,7 +11,7 @@ from django.urls import NoReverseMatch, path, reverse
 from django.utils.html import format_html
 
 from django.template.response import TemplateResponse
-from django.http import FileResponse, JsonResponse
+from django.http import FileResponse, JsonResponse, HttpResponseNotAllowed
 from django.utils import timezone
 from django.db.models import Count
 from django.core.exceptions import FieldError
@@ -1184,18 +1184,21 @@ def favorite_toggle(request, ct_id):
                 priority=priority,
             )
         return redirect(next_url or "admin:index")
-    return render(
-        request,
-        "admin/favorite_confirm.html",
-        {
-            "content_type": ct,
-            "favorite": fav,
-            "next": next_url,
-            "initial_label": fav.custom_label if fav else "",
-            "initial_priority": fav.priority if fav else 0,
-            "is_checked": fav.user_data if fav else True,
-        },
-    )
+    if fav:
+        return render(
+            request,
+            "admin/favorite_confirm.html",
+            {
+                "content_type": ct,
+                "favorite": fav,
+                "next": next_url,
+                "initial_label": fav.custom_label if fav else "",
+                "initial_priority": fav.priority if fav else 0,
+                "is_checked": fav.user_data if fav else True,
+            },
+        )
+
+    return HttpResponseNotAllowed(["POST"])
 
 
 def favorite_list(request):
