@@ -15,8 +15,10 @@ manual runs of `env-refresh.sh` or calls made as part of an upgrade.
   with any additional arguments.
 
 ## Main service launcher (`service-start.sh`)
-1. Resolve the log directory, tee output into `logs/service-start.log`, and load
-   helper functions.
+1. Resolve the log directory, tee output into `logs/service-start.log`, mirror
+   stderr into `logs/error.log`, and load helper functions. The error log is
+   truncated at the start of every boot so it only contains messages from the
+   current attempt.
 2. Ensure the virtual environment exists, activate it, and load any `*.env`
    files into the environment for downstream commands.
 3. Check for a recent `service-start-skip.lck` lock to decide whether to skip a
@@ -31,6 +33,8 @@ manual runs of `env-refresh.sh` or calls made as part of an upgrade.
 6. Detect the backend port, parse CLI flags (reload mode, port overrides, and
    Celery management preferences), and evaluate whether systemd-managed Celery
    or LCD units are present so embedded workers are enabled only when needed.
+   Record the startup timestamp and chosen port in
+   `locks/startup_started_at.lck` for status reporting.
 7. When the LCD feature flag is enabled, queue a startup Net Message via
    `nodes.startup_notifications.queue_startup_message` to record the hostname
    and port for the boot cycle.

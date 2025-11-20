@@ -11,8 +11,52 @@ BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 arthexis_resolve_log_dir "$BASE_DIR" LOG_DIR || exit 1
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 exec > >(tee "$LOG_FILE") 2>&1
+ERROR_LOG="$LOG_DIR/error.log"
+STARTUP_TIMEOUT=300
+exit_code=0
+
+arthexis_suite_reachable() {
+  local port="$1"
+  if [ -z "$port" ]; then
+    return 1
+  fi
+
+  python - "$port" <<'PY'
+import socket
+import sys
+
+try:
+    port_value = int(sys.argv[1])
+except (IndexError, ValueError):
+    sys.exit(1)
+
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+    sock.settimeout(2)
+    try:
+        sock.connect(("127.0.0.1", port_value))
+    except OSError:
+        sys.exit(1)
+
+sys.exit(0)
+PY
+}
+
+arthexis_read_startup_timestamp() {
+  if [ ! -f "$STARTUP_LOCK" ]; then
+    return 1
+  fi
+
+  local started_at
+  started_at=$(tr -d '\r' < "$STARTUP_LOCK" | head -n1)
+  if ! printf '%s' "$started_at" | grep -Eq '^[0-9]+$'; then
+    return 1
+  fi
+
+  printf '%s' "$started_at"
+}
 
 LOCK_DIR="$BASE_DIR/locks"
+STARTUP_LOCK="$LOCK_DIR/startup_started_at.lck"
 SERVICE_MANAGEMENT_MODE="$(arthexis_detect_service_mode "$LOCK_DIR")"
 UPGRADE_IN_PROGRESS_LOCK="$LOCK_DIR/upgrade_in_progress.lck"
 
@@ -147,10 +191,40 @@ else
   echo "  Process running: $RUNNING"
 fi
 
-if [ "$RUNNING" = true ]; then
+SUITE_REACHABLE=false
+if arthexis_suite_reachable "$PORT"; then
+  SUITE_REACHABLE=true
+fi
+
+if [ "$SUITE_REACHABLE" = true ]; then
   echo "Application reachable at: http://localhost:$PORT"
+elif [ "$RUNNING" = true ]; then
+  echo "Application process running but port $PORT is not reachable yet"
 else
   echo "Application is not running"
+fi
+
+if STARTED_AT=$(arthexis_read_startup_timestamp); then
+  NOW=$(date +%s)
+  ELAPSED=$((NOW - STARTED_AT))
+
+  if [ "$SUITE_REACHABLE" = true ]; then
+    echo "Startup completed after ${ELAPSED}s; clearing startup lock."
+    rm -f "$STARTUP_LOCK"
+  elif [ "$ELAPSED" -lt "$STARTUP_TIMEOUT" ]; then
+    echo "Startup in progress: suite not reachable yet (${ELAPSED}s elapsed, waiting up to ${STARTUP_TIMEOUT}s)."
+  else
+    echo "Startup failed: suite not reachable after ${STARTUP_TIMEOUT}s."
+    if [ -s "$ERROR_LOG" ]; then
+      echo "Recent errors from $ERROR_LOG:"
+      tail -n 40 "$ERROR_LOG"
+    elif [ -f "$ERROR_LOG" ]; then
+      echo "No errors captured in $ERROR_LOG."
+    else
+      echo "Error log not found at $ERROR_LOG."
+    fi
+    exit_code=1
+  fi
 fi
 
 # Celery status
@@ -189,3 +263,5 @@ if command -v hostname >/dev/null 2>&1; then
   echo "Hostname: $(hostname)"
   echo "IP addresses: $(hostname -I 2>/dev/null || echo 'N/A')"
 fi
+
+exit "$exit_code"
