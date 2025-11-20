@@ -6,6 +6,7 @@ import subprocess
 import sys
 import types
 from datetime import datetime, timezone as dt_timezone
+import tempfile
 from pathlib import Path
 from unittest.mock import patch, MagicMock, call
 
@@ -73,6 +74,18 @@ class BackgroundReaderConfigurationTests(SimpleTestCase):
             ),
         ):
             self.assertFalse(background_reader.is_configured())
+
+    def test_worker_removes_lock_when_setup_fails(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            lock = Path(temp_dir) / "rfid.lck"
+            lock.touch()
+            with (
+                patch("ocpp.rfid.background_reader.lock_file_path", return_value=lock),
+                patch("ocpp.rfid.background_reader._setup_hardware", return_value=False),
+            ):
+                background_reader._worker()
+
+            self.assertFalse(lock.exists())
 
 
 class ScanNextViewTests(TestCase):

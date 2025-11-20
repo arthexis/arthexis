@@ -200,6 +200,15 @@ def _setup_hardware():  # pragma: no cover - hardware dependent
 def _worker():  # pragma: no cover - background thread
     if not _setup_hardware():
         logger.error("RFID hardware setup failed; background reader not running")
+        lock = lock_file_path()
+        if lock.exists():
+            try:
+                lock.unlink()
+                logger.info("Removed stale RFID lock file after setup failure: %s", lock)
+            except Exception as exc:
+                logger.debug(
+                    "Unable to remove RFID lock file %s after setup failure: %s", lock, exc
+                )
         return
     # Wait indefinitely until a stop is requested, relying solely on IRQ
     # callbacks to populate the tag queue. This avoids periodic polling and
