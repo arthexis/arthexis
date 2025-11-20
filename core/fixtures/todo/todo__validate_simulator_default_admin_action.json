@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate CP Simulator default admin action",
+      "created_on": "2024-01-01T00:00:00Z",
+      "url": "/admin/ocpp/simulator/",
+      "request_details": "1. Open the CP Simulator admin and edit a simulator.\n2. Confirm the Default toggle appears at the top of the form and only one simulator can be saved as default.\n3. From the simulator changelist, choose the 'Start Default Simulator' action without selecting any rows and verify it starts the default simulator.\n4. Confirm a helpful error appears when no default simulator is configured.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]

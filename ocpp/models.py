@@ -1814,6 +1814,9 @@ class Simulator(Entity):
     """Preconfigured simulator that can be started from the admin."""
 
     name = models.CharField(max_length=100, unique=True)
+    default = models.BooleanField(
+        default=False, help_text=_("Mark this simulator as the default option.")
+    )
     cp_path = models.CharField(
         _("Serial Number"), max_length=100, help_text=_("Charge Point WS path")
     )
@@ -1857,9 +1860,23 @@ class Simulator(Entity):
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.name
 
+    def clean(self):
+        super().clean()
+        if self.default and type(self).objects.filter(
+            default=True, is_deleted=False
+        ).exclude(pk=self.pk).exists():
+            raise ValidationError({"default": _("Only one simulator can be the default.")})
+
     class Meta:
         verbose_name = _("CP Simulator")
         verbose_name_plural = _("CP Simulators")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["default"],
+                condition=Q(default=True, is_deleted=False),
+                name="unique_default_simulator",
+            )
+        ]
 
     def as_config(self):
         from .simulator import SimulatorConfig

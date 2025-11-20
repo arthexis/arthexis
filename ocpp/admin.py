@@ -3642,6 +3642,7 @@ class SimulatorAdmin(SaveBeforeChangeAction, LogViewAdminMixin, EntityModelAdmin
             None,
             {
                 "fields": (
+                    "default",
                     "name",
                     "cp_path",
                     ("host", "ws_port"),
@@ -3668,7 +3669,12 @@ class SimulatorAdmin(SaveBeforeChangeAction, LogViewAdminMixin, EntityModelAdmin
             },
         ),
     )
-    actions = ("start_simulator", "stop_simulator", "send_open_door")
+    actions = (
+        "start_simulator",
+        "start_default_simulator",
+        "stop_simulator",
+        "send_open_door",
+    )
     change_actions = ["start_simulator_action", "stop_simulator_action"]
 
     log_type = "simulator"
@@ -3755,7 +3761,7 @@ class SimulatorAdmin(SaveBeforeChangeAction, LogViewAdminMixin, EntityModelAdmin
         for obj in queryset:
             self._queue_door_open(request, obj)
 
-    def start_simulator(self, request, queryset):
+    def _start_simulators(self, request, queryset):
         from django.urls import reverse
         from django.utils.html import format_html
 
@@ -3782,7 +3788,24 @@ class SimulatorAdmin(SaveBeforeChangeAction, LogViewAdminMixin, EntityModelAdmin
                 ),
             )
 
-    start_simulator.short_description = "Start selected simulators"
+    @admin.action(description="Start selected simulators")
+    def start_simulator(self, request, queryset):
+        self._start_simulators(request, queryset)
+
+    @admin.action(description="Start Default Simulator")
+    def start_default_simulator(self, request, queryset=None):
+        default_simulator = (
+            Simulator.objects.filter(default=True, is_deleted=False).order_by("pk").first()
+        )
+        if default_simulator is None:
+            self.message_user(
+                request,
+                "No default simulator is configured.",
+                level=messages.ERROR,
+            )
+            return None
+
+        self._start_simulators(request, [default_simulator])
 
     def stop_simulator(self, request, queryset):
         async def _stop(objs):
@@ -3809,6 +3832,11 @@ class SimulatorAdmin(SaveBeforeChangeAction, LogViewAdminMixin, EntityModelAdmin
     def stop_simulator_action(self, request, obj):
         queryset = type(obj).objects.filter(pk=obj.pk)
         self.stop_simulator(request, queryset)
+
+    def response_action(self, request, queryset):
+        if request.POST.get("action") == "start_default_simulator":
+            return self.start_default_simulator(request)
+        return super().response_action(request, queryset)
 
     def log_link(self, obj):
         from django.utils.html import format_html
