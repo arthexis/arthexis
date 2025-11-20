@@ -189,7 +189,7 @@ def _run_upgrade_command(
     if not systemd_run_command:
         missing_prereqs.append("systemd-run missing")
     if not WATCH_UPGRADE_BINARY.exists():
-        missing_prereqs.append("watch-upgrade helper missing")
+        missing_prereqs.append("watch-upgrade helper missing (run ./env-refresh.sh)")
 
     if require_detached and missing_prereqs:
         reason = "; ".join(missing_prereqs)
@@ -215,8 +215,11 @@ def _run_upgrade_command(
             unit_name,
             "--description",
             f"Watch {service_name} upgrade",
+            "--setenv",
+            f"ARTHEXIS_BASE_DIR={base_dir}",
             str(WATCH_UPGRADE_BINARY),
             service_name,
+            *args,
         ]
 
         def _format_detached_failure(
