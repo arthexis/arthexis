@@ -469,6 +469,58 @@ def _resolve_release_log_dir(preferred: Path) -> tuple[Path, str | None]:
     return fallback, warning
 
 
+def _render_release_progress_error(
+    request,
+    release: PackageRelease | None,
+    action: str,
+    message: str,
+    *,
+    status: int = 400,
+    debug_info: dict | None = None,
+) -> HttpResponse:
+    """Return a simple error response for the release progress view."""
+
+    debug_info = debug_info or {}
+    logger.error(
+        "Release progress error for %s (%s): %s; debug=%s",
+        release or "unknown release",
+        action,
+        message,
+        debug_info,
+    )
+    content = str(message)
+    if settings.DEBUG and debug_info:
+        content = f"{content}\n{json.dumps(debug_info, indent=2, sort_keys=True)}"
+    return HttpResponse(content, status=status)
+
+
+def _sync_release_with_revision(release: PackageRelease) -> tuple[bool, str]:
+    """Align the release metadata with the current repository revision.
+
+    Returns a tuple of (updated, previous_version).
+    """
+
+    version_path = Path("VERSION")
+    previous_version = release.version
+    updated = False
+    if version_path.exists():
+        current_version = version_path.read_text(encoding="utf-8").strip()
+        if current_version and current_version != release.version:
+            release.version = current_version
+            release.revision = revision.get_revision()
+            release.save(update_fields=["version", "revision"])
+            updated = True
+    return updated, previous_version
+
+
+def _ensure_template_name(template, name: str):
+    """Ensure the template has a name attribute for debugging hooks."""
+
+    if not getattr(template, "name", None):
+        template.name = name
+    return template
+
+
 def _sync_with_origin_main(log_path: Path) -> None:
     """Ensure the current branch is rebased onto ``origin/main``."""
 
