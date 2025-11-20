@@ -21,7 +21,7 @@ from django.db import DatabaseError
 from django.utils import timezone
 
 
-AUTO_UPGRADE_HEALTH_DELAY_SECONDS = 60
+AUTO_UPGRADE_HEALTH_DELAY_SECONDS = 300
 AUTO_UPGRADE_SKIP_LOCK_NAME = "auto_upgrade_skip_revisions.lck"
 AUTO_UPGRADE_NETWORK_FAILURE_LOCK_NAME = "auto_upgrade_network_failures.lck"
 AUTO_UPGRADE_NETWORK_FAILURE_THRESHOLD = 3
