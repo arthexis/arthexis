@@ -526,9 +526,10 @@ if [ "$ENABLE_LCD_SCREEN" = true ] && [ -n "$SERVICE" ]; then
         sudo bash -c "cat > '$LCD_SERVICE_FILE'" <<SERVICEEOF
 [Unit]
 Description=LCD screen updater service for Arthexis
-After=${SERVICE}.service network.target
+After=${SERVICE}.service network-online.target
 Requires=${SERVICE}.service
 PartOf=${SERVICE}.service
+Wants=network-online.target
 
 [Service]
 Type=simple

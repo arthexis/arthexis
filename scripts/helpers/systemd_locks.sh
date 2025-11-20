@@ -101,8 +101,8 @@ arthexis_install_service_stack() {
   sudo bash -c "cat > '$service_file'" <<SERVICEEOF
 [Unit]
 Description=Arthexis Constellation Django service
-After=network.target
-Wants=network.target
+After=network-online.target
+Wants=network-online.target
 
 [Service]
 Type=simple
@@ -131,9 +131,10 @@ SERVICEEOF
     sudo bash -c "cat > '$celery_service_file'" <<CELERYSERVICEEOF
 [Unit]
 Description=Celery Worker for $service_name
-After=${service_name}.service network.target redis.service
+After=${service_name}.service network-online.target redis.service
 Requires=${service_name}.service
 PartOf=${service_name}.service
+Wants=network-online.target
 
 [Service]
 Type=simple
@@ -155,9 +156,10 @@ CELERYSERVICEEOF
     sudo bash -c "cat > '$celery_beat_service_file'" <<BEATSERVICEEOF
 [Unit]
 Description=Celery Beat for $service_name
-After=${service_name}.service network.target redis.service
+After=${service_name}.service network-online.target redis.service
 Requires=${service_name}.service
 PartOf=${service_name}.service
+Wants=network-online.target
 
 [Service]
 Type=simple
