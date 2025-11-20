@@ -53,6 +53,7 @@ AUTO_UPGRADE_LOCK_NAME = "auto_upgrade.lck"
 AUTO_UPGRADE_SKIP_LOCK_NAME = "auto_upgrade_skip_revisions.lck"
 AUTO_UPGRADE_LOG_NAME = "auto-upgrade.log"
 AUTO_UPGRADE_LOG_LIMIT = 30
+UPGRADE_REVISION_SESSION_KEY = "system_upgrade_revision_info"
 
 SUITE_UPTIME_LOCK_NAME = "suite_uptime.lck"
 SUITE_UPTIME_LOCK_MAX_AGE = timedelta(minutes=10)
@@ -421,6 +422,48 @@ def _load_upgrade_revision_info(base_dir: Path, branch: str = "main") -> dict[st
         "origin_revision": origin_revision,
         "origin_revision_error": origin_revision_error,
     }
+
+
+def _prepare_revision_info(
+    revision_info: dict[str, object] | None,
+) -> dict[str, object]:
+    """Return revision metadata with optional last-checked timestamp."""
+
+    details: dict[str, object] = {
+        "local_revision": "",
+        "origin_revision": "",
+        "origin_revision_error": "",
+        "revision_checked_at": None,
+        "revision_checked_label": "",
+    }
+
+    if not revision_info:
+        return details
+
+    details.update({
+        "local_revision": str(revision_info.get("local_revision", "")),
+        "origin_revision": str(revision_info.get("origin_revision", "")),
+        "origin_revision_error": str(
+            revision_info.get("origin_revision_error", "")
+        ),
+    })
+
+    checked_value = revision_info.get("revision_checked_at") or revision_info.get(
+        "checked_at"
+    )
+    parsed_checked_at: datetime | None = None
+    if isinstance(checked_value, datetime):
+        parsed_checked_at = checked_value
+    elif checked_value:
+        parsed_checked_at = _parse_log_timestamp(str(checked_value))
+
+    if parsed_checked_at:
+        details["revision_checked_at"] = parsed_checked_at
+        details["revision_checked_label"] = _format_timestamp(parsed_checked_at)
+    elif checked_value:
+        details["revision_checked_label"] = str(checked_value)
+
+    return details
 
 
 def _parse_log_timestamp(value: str) -> datetime | None:
@@ -1013,7 +1056,9 @@ def _build_uptime_report(*, now: datetime | None = None) -> dict[str, object]:
     }
 
 
-def _build_auto_upgrade_report(*, limit: int = AUTO_UPGRADE_LOG_LIMIT) -> dict[str, object]:
+def _build_auto_upgrade_report(
+    *, limit: int = AUTO_UPGRADE_LOG_LIMIT, revision_info: dict[str, object] | None = None
+) -> dict[str, object]:
     """Assemble the composite auto-upgrade report for the admin view."""
 
     base_dir = Path(settings.BASE_DIR)
@@ -1035,7 +1080,7 @@ def _build_auto_upgrade_report(*, limit: int = AUTO_UPGRADE_LOG_LIMIT) -> dict[s
     is_unstable_mode = resolved_mode == "unstable"
     is_stable_mode = resolved_mode == "stable"
 
-    revision_info = _load_upgrade_revision_info(base_dir)
+    revision_details = _prepare_revision_info(revision_info)
 
     settings_info = {
         "enabled": bool(mode_info.get("enabled", False)),
@@ -1053,7 +1098,7 @@ def _build_auto_upgrade_report(*, limit: int = AUTO_UPGRADE_LOG_LIMIT) -> dict[s
         "log_path": str(log_info.get("path")),
         "suite_uptime": _suite_uptime(),
     }
-    settings_info.update(revision_info)
+    settings_info.update(revision_details)
 
     return {
         "settings": settings_info,
@@ -1596,11 +1641,14 @@ def _system_services_report_view(request):
 
 
 def _system_upgrade_report_view(request):
+    revision_info = request.session.pop(UPGRADE_REVISION_SESSION_KEY, None)
     context = admin.site.each_context(request)
     context.update(
         {
             "title": _("Upgrade Report"),
-            "auto_upgrade_report": _build_auto_upgrade_report(),
+            "auto_upgrade_report": _build_auto_upgrade_report(
+                revision_info=revision_info
+            ),
             "failover_status": read_failover_status(Path(settings.BASE_DIR)),
         }
     )
@@ -1751,6 +1799,22 @@ def _system_trigger_upgrade_check_view(request):
     return _upgrade_redirect(request, reverse("admin:system-upgrade-report"))
 
 
+def _system_upgrade_revision_check_view(request):
+    if request.method != "POST":
+        return HttpResponseRedirect(reverse("admin:system-upgrade-report"))
+
+    base_dir = Path(settings.BASE_DIR)
+    revision_info = _load_upgrade_revision_info(base_dir)
+    revision_info["revision_checked_at"] = timezone.now().isoformat()
+
+    if hasattr(request, "session"):
+        request.session[UPGRADE_REVISION_SESSION_KEY] = revision_info
+
+    messages.success(request, _("Revision information refreshed."))
+
+    return _upgrade_redirect(request, reverse("admin:system-upgrade-report"))
+
+
 def _system_clear_failover_lock_view(request):
     if request.method != "POST":
         return HttpResponseRedirect(reverse("admin:index"))
@@ -1796,6 +1860,11 @@ def patch_admin_system_view() -> None:
                 "system/upgrade-report/",
                 admin.site.admin_view(_system_upgrade_report_view),
                 name="system-upgrade-report",
+            ),
+            path(
+                "system/upgrade-report/check-revision/",
+                admin.site.admin_view(_system_upgrade_revision_check_view),
+                name="system-upgrade-check-revision",
             ),
             path(
                 "system/upgrade-report/run-check/",

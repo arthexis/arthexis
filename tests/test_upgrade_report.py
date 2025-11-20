@@ -28,6 +28,13 @@ class UpgradeReportTests(SimpleTestCase):
     def setUp(self):
         self.factory = RequestFactory()
 
+    def _prepare_request(self, request):
+        middleware = SessionMiddleware(lambda r: None)
+        middleware.process_request(request)
+        request.session.save()
+        messages_storage = FallbackStorage(request)
+        setattr(request, "_messages", messages_storage)
+
     def test_build_auto_upgrade_report_reads_files(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             base = Path(tmpdir)
@@ -144,7 +151,10 @@ class UpgradeReportTests(SimpleTestCase):
                     "core.system.subprocess.check_output"
                 ) as mock_check_output:
                     mock_check_output.side_effect = ["localrev\n", "originrev\n"]
-                    report = system._build_auto_upgrade_report(limit=1)
+                    revision_info = system._load_upgrade_revision_info(base)
+                    report = system._build_auto_upgrade_report(
+                        limit=1, revision_info=revision_info
+                    )
 
         self.assertEqual(report["settings"]["local_revision"], "localrev")
         self.assertEqual(report["settings"]["origin_revision"], "originrev")
@@ -183,6 +193,76 @@ class UpgradeReportTests(SimpleTestCase):
                 ),
             ]
         )
+
+    def test_build_auto_upgrade_report_skips_revision_check_by_default(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            locks_dir = base / "locks"
+            logs_dir = base / "logs"
+            locks_dir.mkdir()
+            logs_dir.mkdir()
+
+            (locks_dir / "auto_upgrade.lck").write_text("latest", encoding="utf-8")
+
+            schedule_stub = {
+                "available": False,
+                "configured": False,
+                "enabled": False,
+                "one_off": False,
+                "queue": "",
+                "schedule": "",
+                "start_time": "",
+                "last_run_at": "",
+                "next_run": "",
+                "total_run_count": 0,
+                "description": "",
+                "expires": "",
+                "task": "",
+                "name": system.AUTO_UPGRADE_TASK_NAME,
+                "error": "",
+                "task_admin_url": "",
+                "config_admin_url": "",
+                "config_type": "",
+            }
+
+            with override_settings(BASE_DIR=str(base)):
+                with mock.patch(
+                    "core.system._load_auto_upgrade_schedule",
+                    return_value=schedule_stub,
+                ), mock.patch(
+                    "core.system._suite_uptime",
+                    return_value="5 hours",
+                ), mock.patch(
+                    "core.system._load_upgrade_revision_info"
+                ) as revision_loader:
+                    report = system._build_auto_upgrade_report(limit=5)
+
+        revision_loader.assert_not_called()
+        self.assertEqual(report["settings"]["local_revision"], "")
+        self.assertEqual(report["settings"]["origin_revision"], "")
+
+    def test_revision_check_view_stores_session_data(self):
+        request = self.factory.post(reverse("admin:system-upgrade-check-revision"))
+        self._prepare_request(request)
+
+        revision_payload = {
+            "local_revision": "abc",
+            "origin_revision": "def",
+            "origin_revision_error": "",
+        }
+
+        with override_settings(BASE_DIR="/tmp"):
+            with mock.patch(
+                "core.system._load_upgrade_revision_info",
+                return_value=revision_payload,
+            ) as loader:
+                response = system._system_upgrade_revision_check_view(request)
+
+        loader.assert_called_once()
+        stored = request.session.get(system.UPGRADE_REVISION_SESSION_KEY)
+        self.assertEqual(stored["local_revision"], "abc")
+        self.assertIn("revision_checked_at", stored)
+        self.assertEqual(response.status_code, 302)
 
     def test_suite_uptime_uses_datetime_timezone(self):
         fake_now = datetime(2024, 1, 1, 1, tzinfo=datetime_timezone.utc)
