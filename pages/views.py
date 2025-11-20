@@ -2362,6 +2362,17 @@ def _render_admin_template(
     return response
 
 
+@staff_member_required
+@never_cache
+def admin_user_tools(request):
+    return_url = request.META.get("HTTP_HX_CURRENT_URL", request.get_full_path())
+    return _render_admin_template(
+        request,
+        "admin/includes/user_tools.html",
+        {"user_tools_return_url": return_url},
+    )
+
+
 def admin_manual_list(request):
     manuals = UserManual.objects.order_by("title")
     return _render_admin_template(
