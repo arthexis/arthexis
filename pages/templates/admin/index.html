@@ -41,6 +41,14 @@
         color: var(--body-quiet-color);
         white-space: nowrap;
     }
+    .admin-home-net-message__link {
+        color: inherit;
+        text-decoration: none;
+    }
+    .admin-home-net-message__link:focus-visible {
+        outline: 2px solid var(--body-fg);
+        outline-offset: 2px;
+    }
     .admin-home-net-message__content {
         font-family: var(
             --font-family-monospace,
@@ -589,7 +597,7 @@
 <div id="admin-home-header">
   <h1>Home</h1>
   <div class="admin-home-net-message" role="status" aria-live="polite">
-    <span class="admin-home-net-message__label">{% translate 'Net message' %}</span>
+    <a class="admin-home-net-message__label admin-home-net-message__link" href="{% url 'admin:nodes_netmessage_send' %}">{% translate 'Net message' %}</a>
     <span class="admin-home-net-message__content{% if not admin_last_net_message.has_content %} admin-home-net-message__content--empty{% endif %}" title="{% if admin_last_net_message.has_content %}{{ admin_last_net_message.text }}{% else %}{% translate 'No net messages available' %}{% endif %}">{% if admin_last_net_message.has_content %}{{ admin_last_net_message.text }}{% else %}{% translate 'No net messages available' %}{% endif %}</span>
   </div>
   <div class="admin-home-actions">
