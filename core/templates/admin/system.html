@@ -16,6 +16,14 @@
       <tbody>
         <tr>
           <th scope="row">
+            <a href="{% url 'admin:system-startup-report' %}">
+              {% trans "Startup Report" %}
+            </a>
+          </th>
+          <td>{% trans "Review start and upgrade script activity with timestamps." %}</td>
+        </tr>
+        <tr>
+          <th scope="row">
             <a href="{% url 'admin:system-upgrade-report' %}">
               {% trans "Upgrade Report" %}
             </a>

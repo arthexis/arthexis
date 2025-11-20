@@ -83,3 +83,23 @@ arthexis_resolve_log_dir() {
     printf -v "$__resultvar" '%s' "$chosen"
     return 0
 }
+
+arthexis_log_startup_event() {
+    local base_dir="$1"
+    local script_name="$2"
+    local event="$3"
+    local detail="$4"
+
+    if [ -z "$base_dir" ] || [ -z "$script_name" ] || [ -z "$event" ]; then
+        return 0
+    fi
+
+    local log_file="$base_dir/logs/startup-report.log"
+    mkdir -p "$(dirname "$log_file")" >/dev/null 2>&1 || true
+
+    local timestamp
+    timestamp=$(date -Iseconds)
+    printf '%s\t%s\t%s\t%s\n' \
+        "$timestamp" "$script_name" "$event" "${detail:-}" \
+        >>"$log_file" 2>/dev/null || true
+}
