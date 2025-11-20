@@ -25,6 +25,7 @@ AUTO_UPGRADE_HEALTH_DELAY_SECONDS = 60
 AUTO_UPGRADE_SKIP_LOCK_NAME = "auto_upgrade_skip_revisions.lck"
 AUTO_UPGRADE_NETWORK_FAILURE_LOCK_NAME = "auto_upgrade_network_failures.lck"
 AUTO_UPGRADE_NETWORK_FAILURE_THRESHOLD = 3
+WATCH_UPGRADE_BINARY = Path("/usr/local/bin/watch-upgrade")
 
 _NETWORK_FAILURE_PATTERNS = (
     "could not resolve host",
@@ -131,32 +132,67 @@ def _append_auto_upgrade_log(base_dir: Path, message: str) -> None:
         logger.warning("Failed to append auto-upgrade log entry: %s", message)
 
 
-def _run_upgrade_command(base_dir: Path, args: list[str]) -> None:
+def _run_upgrade_command(base_dir: Path, args: list[str]) -> str | None:
     """Run the upgrade script, detaching from system services when possible."""
 
-    systemd_run = shutil.which("systemd-run")
+    def _systemd_run_command() -> list[str]:
+        binary = shutil.which("systemd-run")
+        if not binary:
+            return []
+
+        sudo_path = shutil.which("sudo")
+        if not sudo_path:
+            return [binary]
+
+        try:
+            sudo_ready = subprocess.run(
+                [sudo_path, "-n", "true"],
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        except OSError:
+            sudo_ready = None
+
+        if sudo_ready is not None and sudo_ready.returncode == 0:
+            return [sudo_path, "-n", binary]
+
+        return [binary]
+
+    def _read_service_name() -> str:
+        lock_path = base_dir / "locks" / "service.lck"
+        try:
+            value = lock_path.read_text().strip()
+        except OSError:
+            return ""
+        return value
+
+    systemd_run_command = _systemd_run_command()
     running_in_service = bool(os.environ.get("INVOCATION_ID"))
-    if systemd_run and running_in_service:
-        unit_name = f"arthexis-auto-upgrade-{uuid.uuid4().hex}"
+    service_name = _read_service_name()
+
+    if systemd_run_command and running_in_service and service_name and WATCH_UPGRADE_BINARY.exists():
+        unit_name = f"upgrade-watcher-{uuid.uuid4().hex}"
         detached_args = [
-            systemd_run,
+            *systemd_run_command,
             "--unit",
             unit_name,
-            "--same-dir",
-            "--collect",
-            "--wait",
-            *args,
+            "--description",
+            f"Watch {service_name} upgrade",
+            str(WATCH_UPGRADE_BINARY),
+            service_name,
         ]
+
         try:
             _append_auto_upgrade_log(
                 base_dir,
                 (
-                    "Starting detached auto-upgrade in transient systemd unit "
-                    f"{unit_name} to avoid stopping the running worker"
+                    "Delegating auto-upgrade to transient unit "
+                    f"{unit_name}; inspect with journalctl -u {unit_name}"
                 ),
             )
             subprocess.run(detached_args, cwd=base_dir, check=True)
-            return
+            return unit_name
         except Exception:
             logger.warning(
                 "Detached auto-upgrade launch failed; falling back to inline execution",
@@ -967,7 +1003,26 @@ def check_github_updates(channel_override: str | None = None) -> None:
                 f"{timezone.now().isoformat()} running: {' '.join(args)}\n"
             )
 
-        _run_upgrade_command(base_dir, args)
+        watcher_unit = _run_upgrade_command(base_dir, args)
+        if watcher_unit:
+            _append_auto_upgrade_log(
+                base_dir,
+                (
+                    "Auto-upgrade delegated to systemd; review "
+                    f"journalctl -u {watcher_unit} for progress"
+                ),
+            )
+            if upgrade_was_applied:
+                _append_auto_upgrade_log(
+                    base_dir,
+                    (
+                        "Scheduled post-upgrade health check in %s seconds"
+                        % AUTO_UPGRADE_HEALTH_DELAY_SECONDS
+                    ),
+                )
+                _schedule_health_check(1)
+            return
+
         _append_auto_upgrade_log(
             base_dir,
             f"Upgrade script completed successfully: {' '.join(args)}",
