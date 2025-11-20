@@ -96,7 +96,7 @@ After onboarding, schedule the following recurring activities to keep the EVCS f
 - Use **Fetch configuration from EVCS** periodically to detect drift between expected and actual device settings.
 
 ### 6.4 Keep RFID and reservation data fresh
-- Synchronise whitelists through the **Send RFID list to EVCS** action whenever new cards are approved.
+- Synchronise whitelists through the **Send Local RFIDs to CP** action whenever new cards are approved.
 - Pull local updates from the field with **Update RFIDs from EVCS** if the site allows local enrolment.
 - Manage scheduled access via **Admin → OCPP → Reservations**. Cancel unused reservations and review the EVCS confirmation status to ensure the device acknowledged each booking.
 
