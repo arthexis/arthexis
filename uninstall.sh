@@ -176,6 +176,16 @@ done
 # Ensure any Celery workers or beats are also stopped
 pkill -f "celery -A config" || true
 
+# Preserve user data fixtures; do not remove user data exported under data/
+DATA_DIR="$BASE_DIR/data"
+if [ -d "$DATA_DIR" ]; then
+    if ls "$DATA_DIR"/*.json >/dev/null 2>&1; then
+        echo "Preserving user data fixtures in $DATA_DIR. Remove manually if you want to clear personal fixtures."
+    else
+        echo "Preserving user data directory at $DATA_DIR (no user data fixtures detected)."
+    fi
+fi
+
 # Remove the local SQLite database if it exists
 DB_FILE="$BASE_DIR/db.sqlite3"
 if [ -f "$DB_FILE" ]; then
