@@ -10,9 +10,12 @@ BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$BASE_DIR/scripts/helpers/service_manager.sh"
 arthexis_resolve_log_dir "$BASE_DIR" LOG_DIR || exit 1
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
-exec > >(tee "$LOG_FILE") 2>&1
+ERROR_LOG="$LOG_DIR/error.log"
+: > "$ERROR_LOG"
+exec > >(tee "$LOG_FILE") 2> >(tee -a "$ERROR_LOG" >&2)
 cd "$BASE_DIR"
 LOCK_DIR="$BASE_DIR/locks"
+STARTUP_LOCK="$LOCK_DIR/startup_started_at.lck"
 SKIP_LOCK="$LOCK_DIR/service-start-skip.lck"
 SYSTEMD_LOCK_FILE="$LOCK_DIR/systemd_services.lck"
 SERVICE_MANAGEMENT_MODE="$(arthexis_detect_service_mode "$LOCK_DIR")"
@@ -20,6 +23,8 @@ SERVICE_NAME=""
 if [ -f "$LOCK_DIR/service.lck" ]; then
   SERVICE_NAME=$(tr -d '\r\n' < "$LOCK_DIR/service.lck")
 fi
+
+mkdir -p "$LOCK_DIR"
 
 # Ensure virtual environment is available
 if [ ! -d .venv ]; then
@@ -184,6 +189,12 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+STARTUP_STARTED_AT=$(date +%s)
+{
+  printf '%s\n' "$STARTUP_STARTED_AT"
+  printf 'port=%s\n' "$PORT"
+} > "$STARTUP_LOCK"
 
 CELERY=true
 case "$CELERY_MANAGEMENT_MODE" in
