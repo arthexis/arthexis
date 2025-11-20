@@ -13,7 +13,7 @@ from ocpp.models import Charger, Transaction
 from ocpp.status_display import STATUS_BADGE_MAP
 
 
-class Love2DViewportCommandTests(TestCase):
+class PyxelViewportCommandTests(TestCase):
     def test_builds_connector_snapshot(self):
         connector = Charger.objects.create(
             charger_id="LOV-01",
@@ -30,7 +30,7 @@ class Love2DViewportCommandTests(TestCase):
         output_dir = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, output_dir, ignore_errors=True)
 
-        call_command("love2d_viewport", "--output-dir", str(output_dir), "--skip-launch")
+        call_command("pyxel_viewport", "--output-dir", str(output_dir), "--skip-launch")
 
         data_path = output_dir / "data" / "connectors.json"
         self.assertTrue(data_path.exists())
@@ -49,9 +49,9 @@ class Love2DViewportCommandTests(TestCase):
         (output_dir / "occupied.txt").write_text("busy")
 
         with self.assertRaises(CommandError):
-            call_command("love2d_viewport", "--output-dir", str(output_dir), "--skip-launch")
+            call_command("pyxel_viewport", "--output-dir", str(output_dir), "--skip-launch")
 
-    def test_errors_when_love_binary_missing(self):
+    def test_errors_when_pyxel_runner_missing(self):
         connector = Charger.objects.create(
             charger_id="LOV-02",
             connector_id=2,
@@ -66,7 +66,7 @@ class Love2DViewportCommandTests(TestCase):
 
         with self.assertRaises(CommandError):
             call_command(
-                "love2d_viewport",
-                "--love-binary",
-                "love-binary-that-does-not-exist",
+                "pyxel_viewport",
+                "--pyxel-runner",
+                "pyxel-runner-that-does-not-exist",
             )
