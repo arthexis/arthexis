@@ -1664,7 +1664,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         update_kwargs = {
             "last_status": status,
             "last_error_code": error_code,
-            "last_status_vendor": vendor_value,
+            "last_status_vendor_info": vendor_value,
             "last_status_timestamp": status_timestamp,
         }
         connector_value = payload.get("connectorId")
@@ -1696,7 +1696,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             if connector:
                 connector.last_status = status
                 connector.last_error_code = error_code
-                connector.last_status_vendor = vendor_value
+                connector.last_status_vendor_info = vendor_value
                 connector.last_status_timestamp = status_timestamp
                 connector.save(update_fields=update_kwargs.keys())
 
