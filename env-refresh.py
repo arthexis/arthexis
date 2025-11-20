@@ -46,7 +46,7 @@ from nodes.models import Node
 from django.contrib.sites.models import Site
 from django.contrib.auth import get_user_model
 
-from core.models import PackageRelease, Todo
+from core.models import PackageRelease
 from core.sigil_builder import generate_model_sigils
 from core.user_data import load_shared_user_fixtures, load_user_fixtures
 from utils.env_refresh import unlink_sqlite_db as _unlink_sqlite_db
@@ -452,62 +452,6 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                         ):
                             modified = True
                             continue
-                    if model_label == "core.todo":
-                        request_value = fields.get("request")
-                        if isinstance(request_value, str):
-                            existing_todo = Todo.all_objects.filter(
-                                request__iexact=request_value
-                            ).first()
-                            if existing_todo:
-                                if existing_todo.is_deleted:
-                                    modified = True
-                                    model_counts[model._meta.label] += 1
-                                    continue
-
-                                done_on_field = fields.get("done_on")
-                                parsed_done: datetime | None = None
-                                if isinstance(done_on_field, str):
-                                    parsed_done = parse_datetime(done_on_field)
-                                elif isinstance(done_on_field, datetime):
-                                    parsed_done = done_on_field
-                                if parsed_done is not None and timezone.is_naive(parsed_done):
-                                    parsed_done = timezone.make_aware(
-                                        parsed_done, timezone.get_default_timezone()
-                                    )
-
-                                if parsed_done is not None:
-                                    updates: list[str] = []
-                                    if existing_todo.done_on != parsed_done:
-                                        existing_todo.done_on = parsed_done
-                                        updates.append("done_on")
-
-                                    for attr in ("done_version", "done_revision", "done_username"):
-                                        value = fields.get(attr) or ""
-                                        if getattr(existing_todo, attr) != value:
-                                            setattr(existing_todo, attr, value)
-                                            updates.append(attr)
-
-                                    if existing_todo.is_seed_data is not True:
-                                        existing_todo.is_seed_data = True
-                                        updates.append("is_seed_data")
-
-                                    if existing_todo.is_deleted:
-                                        existing_todo.is_deleted = False
-                                        updates.append("is_deleted")
-
-                                    if updates:
-                                        existing_todo.save(update_fields=updates)
-                                    modified = True
-                                    model_counts[model._meta.label] += 1
-                                    continue
-
-                                if existing_todo.done_on:
-                                    if existing_todo.is_seed_data is not True:
-                                        existing_todo.is_seed_data = True
-                                        existing_todo.save(update_fields=["is_seed_data"])
-                                    modified = True
-                                    model_counts[model._meta.label] += 1
-                                    continue
                     defines_seed_flag = _model_defines_seed_flag(model)
                     has_seed_field = any(
                         f.name == "is_seed_data" for f in model._meta.fields

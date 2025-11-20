@@ -13,7 +13,6 @@ from .views import (
     DirtyRepository,
     PUBLISH_STEPS,
     ApprovalRequired,
-    PendingTodos,
     _append_log,
     _release_log_name,
     _resolve_release_log_dir,
@@ -72,13 +71,6 @@ def run_headless_publish(release, *, auto_release: bool = False) -> Path:
     for index, (name, func) in enumerate(PUBLISH_STEPS):
         try:
             func(release, ctx, log_path, user=None)
-        except PendingTodos as exc:
-            message = "Scheduled release blocked by pending TODO items"
-            _append_log(log_path, message)
-            ctx["error"] = message
-            logger.warning("%s: %s", release, message)
-            _persist_state(lock_path, ctx, final=True)
-            raise ReleaseWorkflowBlocked(message, log_path=log_path) from exc
         except ApprovalRequired as exc:
             message = "Scheduled release requires manual approval"
             _append_log(log_path, message)

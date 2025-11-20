@@ -93,7 +93,6 @@ from core.models import (
     ReleaseManager,
     SecurityGroup,
     GoogleCalendarProfile,
-    Todo,
     TOTPDeviceSettings,
 )
 from ocpp.models import Charger, ChargerConfiguration, CPFirmware
@@ -3996,27 +3995,6 @@ class FavoriteTests(TestCase):
         self.assertNotContains(resp, "lead-open-badge")
         self.assertNotContains(resp, "rfid-release-badge")
 
-    def test_dashboard_shows_empty_pending_todos_widget(self):
-        Todo.objects.all().delete()
-        resp = self.client.get(reverse("admin:index"))
-        self.assertContains(resp, "Pending TODOs")
-        self.assertContains(resp, "No pending TODOs require approval.")
-
-    def test_dashboard_shows_release_manager_tasks(self):
-        Todo.objects.all().delete()
-        todo = Todo.objects.create(
-            request="Review release checklist",
-            request_details="Open the release checklist and confirm items are ready.",
-            url="/admin/core/packagerelease/",
-        )
-
-        resp = self.client.get(reverse("admin:index"))
-
-        self.assertContains(resp, "Pending TODOs")
-        self.assertContains(resp, "Review release checklist")
-        focus_prefix = f"{reverse('todo-focus', args=[todo.pk])}?next="
-        self.assertContains(resp, focus_prefix)
-
     def test_dashboard_includes_google_calendar_module(self):
         GoogleCalendarProfile.objects.create(
             user=self.user,
@@ -4368,41 +4346,6 @@ class UserStorySubmissionTests(TestCase):
         self.assertEqual(response.status_code, 200)
         story = UserStory.objects.get()
         self.assertEqual(story.referer, "https://ads.example/original")
-
-    def test_superuser_submission_creates_triage_todo(self):
-        Todo.objects.all().delete()
-        superuser = get_user_model().objects.create_superuser(
-            username="overseer", email="overseer@example.com", password="pwd"
-        )
-        Node.objects.update_or_create(
-            mac_address=Node.get_current_mac(),
-            defaults={
-                "hostname": "local-node",
-                "address": "127.0.0.1",
-                "port": 8888,
-                "public_endpoint": "local-node",
-            },
-        )
-        self.client.force_login(superuser)
-        comments = "Review analytics dashboard flow"
-        response = self.client.post(
-            self.url,
-            {
-                "rating": 5,
-                "comments": comments,
-                "path": "/reports/analytics/",
-                "take_screenshot": "0",
-            },
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(Todo.objects.count(), 1)
-        todo = Todo.objects.get()
-        self.assertEqual(todo.request, f"Triage {comments}")
-        self.assertTrue(todo.is_user_data)
-        self.assertEqual(todo.original_user, superuser)
-        self.assertTrue(todo.original_user_is_authenticated)
-        self.assertEqual(todo.origin_node, Node.get_local())
-
     def test_screenshot_request_links_saved_sample(self):
         self.client.force_login(self.user)
         screenshot_file = Path("/tmp/fake.png")

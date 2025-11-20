@@ -42,7 +42,7 @@ logger = logging.getLogger(__name__)
 PYPI_REQUEST_TIMEOUT = 10
 
 from . import temp_passwords
-from .models import OdooProfile, Product, CustomerAccount, PackageRelease, Todo
+from .models import OdooProfile, Product, CustomerAccount, PackageRelease
 from .models import RFID
 
 
@@ -469,59 +469,60 @@ def _resolve_release_log_dir(preferred: Path) -> tuple[Path, str | None]:
     return fallback, warning
 
 
-def _commit_todo_fixtures_if_needed(log_path: Path) -> None:
-    """Stage and commit modified TODO fixtures before syncing with origin/main."""
+def _render_release_progress_error(
+    request,
+    release: PackageRelease | None,
+    action: str,
+    message: str,
+    *,
+    status: int = 400,
+    debug_info: dict | None = None,
+) -> HttpResponse:
+    """Return a simple error response for the release progress view."""
 
-    try:
-        status = subprocess.run(
-            ["git", "status", "--porcelain"],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-    except subprocess.CalledProcessError:
-        return
-
-    todo_paths: set[Path] = set()
-    for line in (status.stdout or "").splitlines():
-        if not line:
-            continue
-        path_fragment = line[3:].strip()
-        if "->" in path_fragment:
-            path_fragment = path_fragment.split("->", 1)[1].strip()
-        path = Path(path_fragment)
-        if path.suffix == ".json" and path.parent == Path("core/fixtures"):
-            if path.name.startswith("todo__"):
-                todo_paths.add(path)
-
-    if not todo_paths:
-        return
-
-    sorted_paths = sorted(todo_paths)
-    subprocess.run(
-        ["git", "add", *[str(path) for path in sorted_paths]],
-        check=True,
+    debug_info = debug_info or {}
+    logger.error(
+        "Release progress error for %s (%s): %s; debug=%s",
+        release or "unknown release",
+        action,
+        message,
+        debug_info,
     )
-    formatted = ", ".join(_format_path(path) for path in sorted_paths)
-    _append_log(log_path, f"Staged TODO fixtures {formatted}")
+    content = str(message)
+    if settings.DEBUG and debug_info:
+        content = f"{content}\n{json.dumps(debug_info, indent=2, sort_keys=True)}"
+    return HttpResponse(content, status=status)
 
-    diff = subprocess.run(
-        ["git", "diff", "--cached", "--name-only", "--", *[str(path) for path in sorted_paths]],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
 
-    if (diff.stdout or "").strip():
-        message = "chore: update TODO fixtures"
-        subprocess.run(["git", "commit", "-m", message], check=True)
-        _append_log(log_path, f"Committed TODO fixtures ({message})")
+def _sync_release_with_revision(release: PackageRelease) -> tuple[bool, str]:
+    """Align the release metadata with the current repository revision.
+
+    Returns a tuple of (updated, previous_version).
+    """
+
+    version_path = Path("VERSION")
+    previous_version = release.version
+    updated = False
+    if version_path.exists():
+        current_version = version_path.read_text(encoding="utf-8").strip()
+        if current_version and current_version != release.version:
+            release.version = current_version
+            release.revision = revision.get_revision()
+            release.save(update_fields=["version", "revision"])
+            updated = True
+    return updated, previous_version
+
+
+def _ensure_template_name(template, name: str):
+    """Ensure the template has a name attribute for debugging hooks."""
+
+    if not getattr(template, "name", None):
+        template.name = name
+    return template
 
 
 def _sync_with_origin_main(log_path: Path) -> None:
     """Ensure the current branch is rebased onto ``origin/main``."""
-
-    _commit_todo_fixtures_if_needed(log_path)
 
     if not _has_remote("origin"):
         _append_log(log_path, "No git remote configured; skipping sync with origin/main")
@@ -751,297 +752,12 @@ def _next_patch_version(version: str) -> str:
     return f"{parsed.major}.{parsed.minor}.{parsed.micro + 1}"
 
 
-def _todo_blocks_publish(todo: Todo, release: PackageRelease) -> bool:
-    """Return ``True`` when ``todo`` should block the release workflow."""
-
-    if getattr(todo, "is_stale", False):
-        return False
-
-    request = (todo.request or "").strip()
-    release_name = (release.package.name or "").strip()
-    if not request or not release_name:
-        return True
-
-    prefix = f"create release {release_name.lower()} "
-    if not request.lower().startswith(prefix):
-        return True
-
-    release_version = (release.version or "").strip()
-    generated_version = (todo.generated_for_version or "").strip()
-    if not release_version or release_version != generated_version:
-        return True
-
-    generated_revision = (todo.generated_for_revision or "").strip()
-    release_revision = (release.revision or "").strip()
-    if generated_revision and release_revision and generated_revision != release_revision:
-        return True
-
-    if not todo.is_seed_data:
-        return True
-
-    return False
-
-
-def _ensure_template_name(template, default_name: str):
-    """Ensure debug tooling can access a template ``name`` attribute."""
-
-    if getattr(template, "name", None):
-        return template
-
-    origin = getattr(template, "origin", None)
-    for attr in ("template_name", "name"):
-        if origin is not None:
-            value = getattr(origin, attr, None)
-            if value:
-                break
-    else:
-        value = None
-
-    if not value:
-        value = default_name
-
-    try:
-        setattr(template, "name", value)
-    except Exception:  # pragma: no cover - attribute assignment guard
-        pass
-
-    return template
-
-
-def _render_release_progress_error(
-    request,
-    release: "PackageRelease | None",
-    action: str,
-    message: str,
-    *,
-    status: int = 200,
-    debug_info: dict[str, object] | None = None,
-):
-    """Render a lightweight error response for the release progress view."""
-
-    if settings.DEBUG and debug_info:
-        debug_items = [
-            {"name": str(name), "value": str(value)}
-            for name, value in debug_info.items()
-        ]
-    else:
-        debug_items = []
-
-    release_url = ""
-    if release is not None:
-        try:
-            release_url = reverse("admin:core_packagerelease_change", args=[release.pk])
-        except NoReverseMatch:  # pragma: no cover - defensive fallback
-            release_url = ""
-
-    template = _ensure_template_name(
-        get_template("core/release_progress_error.html"),
-        "core/release_progress_error.html",
-    )
-    context = {
-        "release": release,
-        "action": action,
-        "message": message,
-        "debug_items": debug_items,
-        "show_debug": bool(debug_items),
-        "release_url": release_url,
-    }
-    content = template.render(context, request)
-    signals.template_rendered.send(
-        sender=template.__class__,
-        template=template,
-        context=context,
-        using=getattr(getattr(template, "engine", None), "name", None),
-    )
-    response = HttpResponse(content, status=status)
-    response.context = context
-    response.templates = [template]
-    return response
-
-
-def _sync_release_with_revision(release: PackageRelease) -> tuple[bool, str]:
-    """Ensure ``release`` matches the repository revision and version.
-
-    Returns a tuple ``(updated, previous_version)`` where ``updated`` is
-    ``True`` when any field changed and ``previous_version`` is the version
-    before synchronization.
-    """
-
-    from packaging.version import InvalidVersion, Version
-
-    previous_version = release.version
-    updated_fields: set[str] = set()
-
-    repo_version: Version | None = None
-    version_path = Path("VERSION")
-    if version_path.exists():
-        try:
-            raw_version = version_path.read_text(encoding="utf-8").strip()
-            cleaned_version = raw_version.rstrip("+") or "0.0.0"
-            repo_version = Version(cleaned_version)
-        except InvalidVersion:
-            repo_version = None
-
-    try:
-        release_version = Version(release.version)
-    except InvalidVersion:
-        release_version = None
-
-    if repo_version is not None:
-        bumped_repo_version = Version(
-            f"{repo_version.major}.{repo_version.minor}.{repo_version.micro + 1}"
-        )
-        if release_version is None or release_version < bumped_repo_version:
-            release.version = str(bumped_repo_version)
-            release_version = bumped_repo_version
-            updated_fields.add("version")
-
-    current_revision = revision.get_revision()
-    if current_revision and current_revision != release.revision:
-        release.revision = current_revision
-        updated_fields.add("revision")
-
-    if updated_fields:
-        release.save(update_fields=list(updated_fields))
-        PackageRelease.dump_fixture()
-
-    package_updated = False
-    if release.package_id and not release.package.is_active:
-        release.package.is_active = True
-        release.package.save(update_fields=["is_active"])
-        package_updated = True
-
-    version_updated = False
-    if release.version:
-        current = ""
-        if version_path.exists():
-            current = version_path.read_text(encoding="utf-8").strip()
-        if current != release.version:
-            version_path.write_text(f"{release.version}\n", encoding="utf-8")
-            version_updated = True
-
-    return bool(updated_fields or version_updated or package_updated), previous_version
-
-class PendingTodos(Exception):
-    """Raised when TODO items require acknowledgment before proceeding."""
-
-
 class ApprovalRequired(Exception):
     """Raised when release manager approval is required before continuing."""
 
 
 class DirtyRepository(Exception):
     """Raised when the Git workspace has uncommitted changes."""
-
-
-def _format_condition_failure(todo: Todo, result) -> str:
-    """Return a localized error message for a failed TODO condition."""
-
-    if result.error and result.resolved:
-        detail = _("%(condition)s (error: %(error)s)") % {
-            "condition": result.resolved,
-            "error": result.error,
-        }
-    elif result.error:
-        detail = _("Error: %(error)s") % {"error": result.error}
-    elif result.resolved:
-        detail = result.resolved
-    else:
-        detail = _("Condition evaluated to False")
-    return _("Condition failed for %(todo)s: %(detail)s") % {
-        "todo": todo.request,
-        "detail": detail,
-    }
-
-
-def _get_return_url(request) -> str:
-    """Return a safe URL to redirect back to after completing a TODO."""
-
-    candidates = [request.GET.get("next"), request.POST.get("next")]
-    referer = request.META.get("HTTP_REFERER")
-    if referer:
-        candidates.append(referer)
-
-    for candidate in candidates:
-        if not candidate:
-            continue
-        if url_has_allowed_host_and_scheme(
-            candidate,
-            allowed_hosts={request.get_host()},
-            require_https=request.is_secure(),
-        ):
-            return candidate
-    return resolve_url("admin:index")
-
-
-def _purge_release_todos(log_path: Path, *, reason: str | None = None) -> int:
-    """Delete active TODOs and remove generated fixture files."""
-
-    removed = list(Todo.objects.filter(is_deleted=False))
-    removed_count = len(removed)
-    for todo in removed:
-        todo.delete()
-
-    if removed_count:
-        summary = f"Removed {removed_count} TODO"
-        if removed_count != 1:
-            summary += "s"
-        if reason:
-            summary += f" ({reason})"
-        _append_log(log_path, summary)
-    elif reason:
-        _append_log(log_path, f"No TODOs required removal ({reason})")
-
-    removed_fixtures: list[Path] = []
-    for path in TODO_FIXTURE_DIR.glob("todos__*.json"):
-        removed_fixtures.append(path)
-        path.unlink()
-
-    if removed_fixtures:
-        formatted = ", ".join(_format_path(path) for path in removed_fixtures)
-        subprocess.run(
-            ["git", "add", *[str(path) for path in removed_fixtures]],
-            check=False,
-        )
-        subprocess.run(
-            ["git", "commit", "-m", "chore: remove TODO fixtures"],
-            check=False,
-        )
-        _append_log(log_path, f"Removed TODO fixtures {formatted}")
-
-    return removed_count
-
-
-def _step_check_todos(release, ctx, log_path: Path, *, user=None) -> None:
-    pending_items = Todo.refresh_active()
-    pending_values = [
-        {
-            "id": todo.pk,
-            "request": todo.request,
-            "url": todo.url,
-            "request_details": todo.request_details,
-        }
-        for todo in pending_items
-    ]
-    if not pending_values:
-        ctx["todos_ack"] = True
-
-    if not ctx.get("todos_ack"):
-        if not ctx.get("todos_block_logged"):
-            _append_log(
-                log_path,
-                "Release checklist requires acknowledgment before continuing. "
-                "Review outstanding TODO items and confirm the checklist; "
-                "publishing will resume automatically afterward.",
-            )
-            ctx["todos_block_logged"] = True
-        ctx["todos"] = pending_values
-        ctx["todos_required"] = True
-        raise PendingTodos()
-    _purge_release_todos(log_path, reason="release checklist acknowledged")
-    ctx.pop("todos", None)
-    ctx.pop("todos_required", None)
-    ctx["todos_ack"] = True
 
 
 def _major_minor_version_changed(previous: str, current: str) -> bool:
@@ -1184,23 +900,6 @@ def _step_check_version(release, ctx, log_path: Path, *, user=None) -> None:
 
     if sync_error is not None:
         raise sync_error
-
-    dropped_versions: list[str] = ctx.setdefault("todo_purged_versions", [])
-    if (
-        release.version not in dropped_versions
-        and _major_minor_version_changed(previous_repo_version, release.version)
-    ):
-        _purge_release_todos(
-            log_path,
-            reason=(
-                f"version change from {previous_repo_version or 'unknown'} "
-                f"to {release.version}"
-            ),
-        )
-        dropped_versions.append(release.version)
-        ctx.pop("todos", None)
-        ctx.pop("todos_required", None)
-        ctx.setdefault("todos_ack", True)
 
     version_path = Path("VERSION")
     if version_path.exists():
@@ -1592,7 +1291,6 @@ FIXTURE_REVIEW_STEP_NAME = "Freeze, squash and approve migrations"
 
 PUBLISH_STEPS = [
     ("Check version number availability", _step_check_version),
-    ("Confirm release TODO completion", _step_check_todos),
     (FIXTURE_REVIEW_STEP_NAME, _step_handle_migrations),
     ("Execute pre-release actions", _step_pre_release_actions),
     ("Build release artifacts", _step_promote_build),
@@ -1967,8 +1665,6 @@ def release_progress(request, pk: int, action: str):
     if credentials_ready and ctx.get("approval_credentials_missing"):
         ctx.pop("approval_credentials_missing", None)
 
-    ack_todos_requested = bool(request.GET.get("ack_todos"))
-
     if request.GET.get("start"):
         if start_enabled:
             ctx["dry_run"] = bool(request.GET.get("dry_run"))
@@ -2004,48 +1700,9 @@ def release_progress(request, pk: int, action: str):
     if resume_requested and step_param is None:
         step_param = str(step_count)
 
-    pending_items = Todo.refresh_active()
-    blocking_todos = [
-        todo for todo in pending_items if _todo_blocks_publish(todo, release)
-    ]
-    if not blocking_todos:
-        ctx["todos_ack"] = True
-        ctx["todos_ack_auto"] = True
-    elif ack_todos_requested:
-        failures = []
-        for todo in blocking_todos:
-            result = todo.check_on_done_condition()
-            if not result.passed:
-                failures.append((todo, result))
-        if failures:
-            ctx["todos_ack"] = False
-            ctx.pop("todos_ack_auto", None)
-            for todo, result in failures:
-                messages.error(request, _format_condition_failure(todo, result))
-        else:
-            ctx["todos_ack"] = True
-            ctx.pop("todos_ack_auto", None)
-    else:
-        if ctx.pop("todos_ack_auto", None):
-            ctx["todos_ack"] = False
-        else:
-            ctx.setdefault("todos_ack", False)
-
-    if ctx.get("todos_ack"):
-        ctx.pop("todos_block_logged", None)
-        ctx.pop("todos", None)
-        ctx.pop("todos_required", None)
-    else:
-        ctx["todos"] = [
-            {
-                "id": todo.pk,
-                "request": todo.request,
-                "url": todo.url,
-                "request_details": todo.request_details,
-            }
-            for todo in blocking_todos
-        ]
-        ctx["todos_required"] = True
+    ctx.pop("todos", None)
+    ctx.pop("todos_required", None)
+    ctx.pop("todos_ack", None)
 
     log_name = _release_log_name(release.package.name, release.version)
     if ctx.get("log") != log_name:
@@ -2055,8 +1712,6 @@ def release_progress(request, pk: int, action: str):
             "started": ctx.get("started", False),
         }
         step_count = 0
-        if not blocking_todos:
-            ctx["todos_ack"] = True
     log_path = log_dir / log_name
     ctx.setdefault("log", log_name)
     ctx.setdefault("paused", False)
@@ -2134,8 +1789,6 @@ def release_progress(request, pk: int, action: str):
             name, func = steps[to_run]
             try:
                 func(release, ctx, log_path, user=request.user)
-            except PendingTodos:
-                pass
             except ApprovalRequired:
                 pass
             except DirtyRepository:
@@ -2168,11 +1821,6 @@ def release_progress(request, pk: int, action: str):
         and not ctx.get("error")
         else None
     )
-    has_pending_todos = bool(
-        ctx.get("todos_required") and not ctx.get("todos_ack")
-    )
-    if has_pending_todos:
-        next_step = None
     dirty_files = ctx.get("dirty_files")
     if dirty_files:
         next_step = None
@@ -2203,15 +1851,6 @@ def release_progress(request, pk: int, action: str):
             status = "paused"
             icon = "⏸️"
             label = _("Paused")
-        elif (
-            has_pending_todos
-            and ctx.get("started")
-            and index == step_count
-            and not done
-        ):
-            status = "blocked"
-            icon = "📝"
-            label = _("Awaiting checklist")
         elif (
             credentials_blocking
             and ctx.get("started")
@@ -2277,8 +1916,6 @@ def release_progress(request, pk: int, action: str):
     ):
         fixtures_summary = None
 
-    todos_display = ctx.get("todos") if has_pending_todos else None
-
     dry_run_active = bool(ctx.get("dry_run"))
     dry_run_toggle_enabled = not is_running and not done and not ctx.get("error")
 
@@ -2294,7 +1931,6 @@ def release_progress(request, pk: int, action: str):
         "log_path": str(log_path),
         "cert_log": ctx.get("cert_log"),
         "fixtures": fixtures_summary,
-        "todos": todos_display,
         "dirty_files": dirty_files,
         "dirty_commit_message": ctx.get("dirty_commit_message", DIRTY_COMMIT_DEFAULT_MESSAGE),
         "dirty_commit_error": ctx.get("dirty_commit_error"),
@@ -2303,7 +1939,6 @@ def release_progress(request, pk: int, action: str):
         "paused": paused,
         "show_log": show_log,
         "step_states": step_states,
-        "has_pending_todos": has_pending_todos,
         "awaiting_approval": awaiting_approval,
         "approval_credentials_missing": approval_credentials_missing,
         "approval_credentials_ready": approval_credentials_ready,
@@ -2352,274 +1987,3 @@ def _dedupe_preserve_order(values):
     return result
 
 
-def _parse_todo_auth_directives(query: str):
-    directives = {
-        "require_logout": False,
-        "users": [],
-        "permissions": [],
-        "notes": [],
-    }
-    if not query:
-        return "", directives
-
-    remaining = []
-    for key, value in parse_qsl(query, keep_blank_values=True):
-        if key != "_todo_auth":
-            remaining.append((key, value))
-            continue
-        token = (value or "").strip()
-        if not token:
-            continue
-        kind, _, payload = token.partition(":")
-        kind = kind.strip().lower()
-        payload = payload.strip()
-        if kind in {"logout", "anonymous", "anon"}:
-            directives["require_logout"] = True
-        elif kind in {"user", "username"} and payload:
-            directives["users"].append(payload)
-        elif kind in {"perm", "permission"} and payload:
-            directives["permissions"].append(payload)
-        else:
-            directives["notes"].append(token)
-
-    sanitized_query = urlencode(remaining, doseq=True)
-    return sanitized_query, directives
-
-
-def _todo_iframe_url(request, todo: Todo):
-    """Return a safe iframe URL and auth context for ``todo``."""
-
-    fallback = reverse("admin:core_todo_change", args=[todo.pk])
-    raw_url = (todo.url or "").strip()
-
-    auth_context = {
-        "require_logout": False,
-        "users": [],
-        "permissions": [],
-        "notes": [],
-    }
-
-    def _final_context(target_url: str):
-        return {
-            "target_url": target_url or fallback,
-            "require_logout": auth_context["require_logout"],
-            "users": _dedupe_preserve_order(auth_context["users"]),
-            "permissions": _dedupe_preserve_order(auth_context["permissions"]),
-            "notes": _dedupe_preserve_order(auth_context["notes"]),
-            "has_requirements": bool(
-                auth_context["require_logout"]
-                or auth_context["users"]
-                or auth_context["permissions"]
-                or auth_context["notes"]
-            ),
-        }
-
-    if not raw_url:
-        return fallback, _final_context(fallback)
-
-    focus_path = reverse("todo-focus", args=[todo.pk])
-    focus_norm = focus_path.strip("/").lower()
-
-    def _is_focus_target(target: str) -> bool:
-        if not target:
-            return False
-        parsed_target = urlsplit(target)
-        path = parsed_target.path
-        if not path and not parsed_target.scheme and not parsed_target.netloc:
-            path = target.split("?", 1)[0].split("#", 1)[0]
-        normalized = path.strip("/").lower()
-        return normalized == focus_norm if normalized else False
-
-    if _is_focus_target(raw_url):
-        return fallback, _final_context(fallback)
-
-    parsed = urlsplit(raw_url)
-
-    def _merge_directives(parsed_result):
-        sanitized_query, directives = _parse_todo_auth_directives(parsed_result.query)
-        if directives["require_logout"]:
-            auth_context["require_logout"] = True
-        auth_context["users"].extend(directives["users"])
-        auth_context["permissions"].extend(directives["permissions"])
-        auth_context["notes"].extend(directives["notes"])
-        return parsed_result._replace(query=sanitized_query)
-
-    if not parsed.scheme and not parsed.netloc:
-        sanitized = _merge_directives(parsed)
-        path = sanitized.path or "/"
-        if not path.startswith("/"):
-            path = f"/{path}"
-        relative_url = urlunsplit(("", "", path, sanitized.query, sanitized.fragment))
-        if _is_focus_target(relative_url):
-            return fallback, _final_context(fallback)
-        return relative_url or fallback, _final_context(relative_url)
-
-    if parsed.scheme and parsed.scheme.lower() not in {"http", "https"}:
-        return fallback, _final_context(fallback)
-
-    request_host = request.get_host().strip().lower()
-    host_without_port = request_host.split(":", 1)[0]
-    allowed_hosts = {
-        request_host,
-        host_without_port,
-        "localhost",
-        "127.0.0.1",
-        "0.0.0.0",
-        "::1",
-    }
-
-    site_domain = ""
-    try:
-        site_domain = Site.objects.get_current().domain.strip().lower()
-    except Site.DoesNotExist:
-        site_domain = ""
-    if site_domain:
-        allowed_hosts.add(site_domain)
-        allowed_hosts.add(site_domain.split(":", 1)[0])
-
-    for host in getattr(settings, "ALLOWED_HOSTS", []):
-        if not isinstance(host, str):
-            continue
-        normalized = host.strip().lower()
-        if not normalized or normalized.startswith("*"):
-            continue
-        allowed_hosts.add(normalized)
-        allowed_hosts.add(normalized.split(":", 1)[0])
-
-    hostname = (parsed.hostname or "").strip().lower()
-    netloc = parsed.netloc.strip().lower()
-    if hostname in allowed_hosts or netloc in allowed_hosts:
-        sanitized = _merge_directives(parsed)
-        path = sanitized.path or "/"
-        if not path.startswith("/"):
-            path = f"/{path}"
-        relative_url = urlunsplit(("", "", path, sanitized.query, sanitized.fragment))
-        if _is_focus_target(relative_url):
-            return fallback, _final_context(fallback)
-        return relative_url or fallback, _final_context(relative_url)
-
-    return fallback, _final_context(fallback)
-
-
-@staff_member_required
-def todo_focus(request, pk: int):
-    todo = get_object_or_404(Todo, pk=pk, is_deleted=False)
-    if todo.done_on:
-        return redirect(_get_return_url(request))
-
-    iframe_url, focus_auth = _todo_iframe_url(request, todo)
-    focus_target_url = focus_auth.get("target_url", iframe_url) if focus_auth else iframe_url
-    context = {
-        "todo": todo,
-        "iframe_url": iframe_url,
-        "focus_target_url": focus_target_url,
-        "focus_auth": focus_auth,
-        "next_url": _get_return_url(request),
-        "done_url": reverse("todo-done", args=[todo.pk]),
-        "delete_url": reverse("todo-delete", args=[todo.pk]),
-        "snapshot_url": reverse("todo-snapshot", args=[todo.pk]),
-    }
-    return render(request, "core/todo_focus.html", context)
-
-
-@staff_member_required
-@require_POST
-def todo_done(request, pk: int):
-    redirect_to = _get_return_url(request)
-    try:
-        todo = Todo.objects.get(pk=pk, is_deleted=False, done_on__isnull=True)
-    except Todo.DoesNotExist:
-        return redirect(redirect_to)
-    result = todo.check_on_done_condition()
-    if not result.passed:
-        messages.error(request, _format_condition_failure(todo, result))
-        return redirect(redirect_to)
-    todo.done_on = timezone.now()
-    todo.populate_done_metadata(request.user)
-    todo.save(
-        update_fields=[
-            "done_on",
-            "done_node",
-            "done_version",
-            "done_revision",
-            "done_username",
-        ]
-    )
-    return redirect(redirect_to)
-
-
-@staff_member_required
-@require_POST
-def todo_delete(request, pk: int):
-    redirect_to = reverse("admin:index")
-    try:
-        todo = Todo.objects.get(pk=pk, is_deleted=False)
-    except Todo.DoesNotExist:
-        return redirect(redirect_to)
-    todo.is_deleted = True
-    todo.save(update_fields=["is_deleted"])
-    return redirect(redirect_to)
-
-
-@staff_member_required
-@require_POST
-def todo_snapshot(request, pk: int):
-    todo = get_object_or_404(Todo, pk=pk, is_deleted=False)
-    if todo.done_on:
-        return JsonResponse({"detail": _("This TODO has already been completed.")}, status=400)
-
-    try:
-        payload = json.loads(request.body.decode("utf-8") or "{}")
-    except json.JSONDecodeError:
-        return JsonResponse({"detail": _("Invalid JSON payload.")}, status=400)
-
-    image_data = payload.get("image", "") if isinstance(payload, dict) else ""
-    if not isinstance(image_data, str) or not image_data.startswith("data:image/png;base64,"):
-        return JsonResponse({"detail": _("A PNG data URL is required.")}, status=400)
-
-    try:
-        encoded = image_data.split(",", 1)[1]
-    except IndexError:
-        return JsonResponse({"detail": _("Screenshot data is incomplete.")}, status=400)
-
-    try:
-        image_bytes = base64.b64decode(encoded, validate=True)
-    except (ValueError, binascii.Error):
-        return JsonResponse({"detail": _("Unable to decode screenshot data.")}, status=400)
-
-    if not image_bytes:
-        return JsonResponse({"detail": _("Screenshot data is empty.")}, status=400)
-
-    max_size = 5 * 1024 * 1024
-    if len(image_bytes) > max_size:
-        return JsonResponse({"detail": _("Screenshot is too large to store.")}, status=400)
-
-    relative_path = Path("screenshots") / f"todo-{todo.pk}-{uuid.uuid4().hex}.png"
-    full_path = settings.LOG_DIR / relative_path
-    full_path.parent.mkdir(parents=True, exist_ok=True)
-    with full_path.open("wb") as fh:
-        fh.write(image_bytes)
-
-    primary_text = strip_tags(todo.request or "").strip()
-    details_text = strip_tags(todo.request_details or "").strip()
-    alt_parts = [part for part in (primary_text, details_text) if part]
-    if alt_parts:
-        alt_text = " — ".join(alt_parts)
-    else:
-        alt_text = _("TODO %(id)s snapshot") % {"id": todo.pk}
-
-    sample = save_screenshot(
-        relative_path,
-        method="TODO_QA",
-        content=alt_text,
-        user=request.user if request.user.is_authenticated else None,
-    )
-
-    if sample is None:
-        try:
-            full_path.unlink()
-        except FileNotFoundError:
-            pass
-        return JsonResponse({"detail": _("Duplicate snapshot ignored.")})
-
-    return JsonResponse({"detail": _("Snapshot saved."), "sample": str(sample.pk)})
