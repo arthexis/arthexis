@@ -3760,6 +3760,29 @@ class NetMessageAdminTests(TransactionTestCase):
         self.assertEqual(response.status_code, 302)
         mock_propagate.assert_called_once()
 
+    def test_resend_toolbar_action_calls_propagate(self):
+        net_message = NetMessage.objects.create(subject="Ping", body="Hello")
+        resend_url = reverse("admin:nodes_netmessage_resend", args=[net_message.pk])
+
+        with patch.object(NetMessage, "propagate") as mock_propagate:
+            response = self.client.post(resend_url)
+
+        self.assertRedirects(
+            response,
+            reverse("admin:nodes_netmessage_change", args=[net_message.pk]),
+        )
+        mock_propagate.assert_called_once_with()
+
+    def test_resend_toolbar_action_rejects_get(self):
+        net_message = NetMessage.objects.create(subject="Ping", body="Hello")
+        resend_url = reverse("admin:nodes_netmessage_resend", args=[net_message.pk])
+
+        with patch.object(NetMessage, "propagate") as mock_propagate:
+            response = self.client.get(resend_url)
+
+        self.assertEqual(response.status_code, 405)
+        mock_propagate.assert_not_called()
+
     def test_reply_action_prefills_initial_data(self):
         role = NodeRole.objects.get(name="Terminal")
         node = Node.objects.create(
