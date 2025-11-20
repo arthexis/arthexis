@@ -2,7 +2,6 @@ from pathlib import Path
 
 from django.apps import AppConfig
 from django.conf import settings
-from django.core.signals import request_started
 
 
 class OcppConfig(AppConfig):
@@ -24,19 +23,3 @@ class OcppConfig(AppConfig):
 
         tag_scanned.connect(_notify, weak=False)
 
-        def _start_background_reader(**_kwargs):
-            from .rfid.background_reader import start
-
-            try:
-                start()
-            finally:
-                request_started.disconnect(
-                    receiver=_start_background_reader,
-                    dispatch_uid="ocpp_rfid_start_on_request",
-                )
-
-        request_started.connect(
-            _start_background_reader,
-            dispatch_uid="ocpp_rfid_start_on_request",
-            weak=False,
-        )

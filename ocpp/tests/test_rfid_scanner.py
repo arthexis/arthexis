@@ -27,10 +27,11 @@ from core.models import RFID
     ],
 )
 def test_scan_sources_returns_expected_payload(configured, queued_tag, expected):
-    with patch("ocpp.rfid.scanner.is_configured", return_value=configured), patch(
-        "ocpp.rfid.scanner.get_next_tag", return_value=queued_tag
-    ):
+    with patch("ocpp.rfid.scanner.start") as mock_start, patch(
+        "ocpp.rfid.scanner.is_configured", return_value=configured
+    ), patch("ocpp.rfid.scanner.get_next_tag", return_value=queued_tag):
         assert scanner.scan_sources() == expected
+        mock_start.assert_called_once_with()
 
 
 def test_restart_sources_success_path():
@@ -98,12 +99,13 @@ def test_test_sources_handles_configuration(configured):
     ],
 )
 def test_enable_deep_read_mode(configured, toggled, queued_tag, expected):
-    with patch("ocpp.rfid.scanner.is_configured", return_value=configured), patch(
-        "ocpp.rfid.scanner.toggle_deep_read", return_value=toggled
-    ) as mock_toggle, patch(
+    with patch("ocpp.rfid.scanner.start") as mock_start, patch(
+        "ocpp.rfid.scanner.is_configured", return_value=configured
+    ), patch("ocpp.rfid.scanner.toggle_deep_read", return_value=toggled) as mock_toggle, patch(
         "ocpp.rfid.scanner.get_next_tag", return_value=queued_tag
     ) as mock_get_next:
         result = scanner.enable_deep_read_mode()
+    mock_start.assert_called_once_with()
     if not configured:
         mock_toggle.assert_not_called()
         mock_get_next.assert_not_called()
