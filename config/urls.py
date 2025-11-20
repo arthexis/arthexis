@@ -117,6 +117,11 @@ urlpatterns = [
         name="django-admindocs-manuals",
     ),
     path(
+        "admin/user-tools/",
+        pages_views.admin_user_tools,
+        name="admin-user-tools",
+    ),
+    path(
         "admin/doc/manuals/<slug:slug>/",
         pages_views.admin_manual_detail,
         name="django-admindocs-manual-detail",

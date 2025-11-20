@@ -31,6 +31,12 @@
 {% block title %}{% if title %}{{ title }} | {% endif %}{{ site_title|default:_('Django site admin') }}{% endblock %}
 {% block extrahead %}
 {{ block.super }}
+<script
+  src="https://unpkg.com/htmx.org@1.9.12/dist/htmx.min.js"
+  integrity="sha384-OLBgp1GsljhM2TJ+sbHjaiH9txEUvgdDTAzHv2P24donTt6/529l+9Ua0vFImLlb"
+  crossorigin="anonymous"
+  defer
+></script>
 {% if badge_node and badge_node.role %}
   {% if badge_node.role.name == "Control" %}
 <link rel="icon" href="data:image/png;base64,{% include 'admin/favicon_control.txt' %}">
@@ -645,6 +651,33 @@ body.login .badge-unknown {background-color:#6c757d;}
     font-size: 0.9rem;
 }
 
+.user-tools-placeholder {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: var(--body-quiet-color, #6b7280);
+    font-size: 0.9rem;
+}
+
+.user-tools-spinner {
+    width: 0.85rem;
+    height: 0.85rem;
+    border: 2px solid var(--border-color, rgba(15, 23, 42, 0.2));
+    border-top-color: var(--link-fg, #2563eb);
+    border-radius: 999px;
+    display: inline-flex;
+    animation: user-tools-spin 0.9s linear infinite;
+}
+
+@keyframes user-tools-spin {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+}
+
 body:not(.login) #header {
     display: flex;
     align-items: center;
@@ -1244,39 +1277,51 @@ body.user-story-open {
 </div>
 {% endblock %}
 {% block userlinks %}
-  {% if site_url %}
-    <a href="{{ site_url }}">{% trans 'View site' %}</a> /
-  {% endif %}
-  {% if user.is_active and user.is_staff %}
-    {% url 'django-admindocs-docroot' as docsroot %}
-    {% if docsroot %}
-      <a href="{{ docsroot }}">{% trans 'Documentation' %}</a> /
-    {% endif %}
-    {% if user.pk %}
-      {% admin_profile_url user as profile_url %}
-      {% if profile_url %}
-        <a href="{{ profile_url }}">{% trans 'My User' %}</a> /
-      {% endif %}
-    {% endif %}
-  {% endif %}
-  {% if user.has_usable_password %}
-    <a href="{% url 'admin:password_change' %}">{% trans 'Change password' %}</a> /
-  {% endif %}
-  <form id="logout-form" method="post" action="{% url 'admin:logout' %}" style="display: inline;">
-    {% csrf_token %}
-    <button type="submit">{% trans 'Log out' %}</button>
-  </form>
-  /
-  <form action="{% url 'set_language' %}" method="post" style="display: inline;">
-    {% csrf_token %}
-    <input name="next" type="hidden" value="{{ request.get_full_path }}">
-    <select name="language" class="language-select" onchange="this.form.submit()">
-      {% for lang_code, lang_name in LANGUAGES %}
-        <option value="{{ lang_code }}" {% if lang_code == LANGUAGE_CODE %}selected{% endif %}>{{ lang_name }}</option>
-      {% endfor %}
-    </select>
-  </form>
-  {% include "admin/color_theme_toggle.html" %}
+  <div
+    id="user-tools-loader"
+    hx-get="{% url 'admin-user-tools' %}"
+    hx-target="#user-tools"
+    hx-trigger="load"
+    hx-swap="innerHTML"
+  >
+    <div class="user-tools-placeholder" aria-live="polite" aria-busy="true">
+      <span class="user-tools-spinner" aria-hidden="true"></span>
+      <span>{% trans "Loading account tools…" %}</span>
+    </div>
+    <div id="user-tools-inline-fallback" hidden>
+      {% include "admin/includes/user_tools.html" %}
+    </div>
+  </div>
+  <noscript>
+    {% include "admin/includes/user_tools.html" %}
+  </noscript>
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      const loader = document.getElementById("user-tools-loader");
+      const fallback = document.getElementById("user-tools-inline-fallback");
+
+      function renderFallback() {
+        if (!loader || !fallback) {
+          return;
+        }
+        fallback.hidden = false;
+        loader.replaceChildren(fallback);
+      }
+
+      if (!window.htmx) {
+        renderFallback();
+        return;
+      }
+
+      if (!loader) {
+        return;
+      }
+
+      htmx.on(loader, "htmx:responseError", renderFallback);
+      htmx.on(loader, "htmx:sendError", renderFallback);
+      htmx.on(loader, "htmx:timeout", renderFallback);
+    });
+  </script>
 {% endblock %}
 {% block nav-global %}{% endblock %}
 {% block nav-sidebar %}

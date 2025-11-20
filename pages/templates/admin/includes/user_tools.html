@@ -1,0 +1,34 @@
+{% load i18n admin_urls admin_extras %}
+{% if site_url %}
+  <a href="{{ site_url }}">{% trans 'View site' %}</a> /
+{% endif %}
+{% if user.is_active and user.is_staff %}
+  {% url 'django-admindocs-docroot' as docsroot %}
+  {% if docsroot %}
+    <a href="{{ docsroot }}">{% trans 'Documentation' %}</a> /
+  {% endif %}
+  {% if user.pk %}
+    {% admin_profile_url user as profile_url %}
+    {% if profile_url %}
+      <a href="{{ profile_url }}">{% trans 'My User' %}</a> /
+    {% endif %}
+  {% endif %}
+{% endif %}
+{% if user.has_usable_password %}
+  <a href="{% url 'admin:password_change' %}">{% trans 'Change password' %}</a> /
+{% endif %}
+<form id="logout-form" method="post" action="{% url 'admin:logout' %}" style="display: inline;">
+  {% csrf_token %}
+  <button type="submit">{% trans 'Log out' %}</button>
+</form>
+/
+<form action="{% url 'set_language' %}" method="post" style="display: inline;">
+  {% csrf_token %}
+  <input name="next" type="hidden" value="{{ user_tools_return_url|default:request.get_full_path }}">
+  <select name="language" class="language-select" onchange="this.form.submit()">
+    {% for lang_code, lang_name in LANGUAGES %}
+      <option value="{{ lang_code }}" {% if lang_code == LANGUAGE_CODE %}selected{% endif %}>{{ lang_name }}</option>
+    {% endfor %}
+  </select>
+</form>
+{% include "admin/color_theme_toggle.html" %}
