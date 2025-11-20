@@ -5105,6 +5105,21 @@ class NodeFeatureFixtureTests(TestCase):
             {"Control", "Interface", "Satellite", "Watchtower"},
         )
 
+    def test_chat_bridge_fixture_defaults_to_core_roles(self):
+        for name in ("Control", "Interface", "Watchtower"):
+            NodeRole.objects.get_or_create(name=name)
+
+        fixture_path = (
+            Path(__file__).resolve().parent
+            / "fixtures"
+            / "node_features__nodefeature_chat_bridge.json"
+        )
+        call_command("loaddata", str(fixture_path), verbosity=0)
+
+        feature = NodeFeature.objects.get(slug="chat-bridge")
+        role_names = set(feature.roles.values_list("name", flat=True))
+        self.assertEqual(role_names, {"Control", "Interface", "Watchtower"})
+
 
 class NodeFeatureTests(TestCase):
     def setUp(self):
