@@ -120,8 +120,7 @@ def test_upgrade_shows_message(monkeypatch, tmp_path):
     upgrade_call = run_recorder.find("./upgrade.sh")
     assert upgrade_call is not None
     upgrade_args, upgrade_kwargs = upgrade_call
-    assert upgrade_args[0][:2] == ["./upgrade.sh", "--stable"]
-    assert upgrade_args[0][-1] == "--no-restart"
+    assert upgrade_args[0] == ["./upgrade.sh", "--stable"]
     assert upgrade_kwargs.get("cwd") == base
     assert upgrade_kwargs.get("check") is True
     fetch_call = run_recorder.calls[0]
@@ -360,7 +359,7 @@ def test_stable_mode_triggers_minor_upgrade(monkeypatch, tmp_path):
     upgrade_call = run_recorder.find("./upgrade.sh")
     assert upgrade_call is not None
     upgrade_args, upgrade_kwargs = upgrade_call
-    assert upgrade_args[0] == ["./upgrade.sh", "--stable", "--no-restart"]
+    assert upgrade_args[0] == ["./upgrade.sh", "--stable"]
     assert upgrade_kwargs.get("cwd") == base
     assert upgrade_kwargs.get("check") is True
     fetch_call = run_recorder.calls[0]

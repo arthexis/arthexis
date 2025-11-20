@@ -322,7 +322,7 @@ def test_check_github_updates_treats_latest_mode_case_insensitively(
 
     tasks.check_github_updates()
 
-    assert ["./upgrade.sh", "--latest", "--no-restart"] in run_commands
+    assert ["./upgrade.sh", "--latest"] in run_commands
 
 
 @pytest.mark.parametrize(
@@ -333,14 +333,14 @@ def test_check_github_updates_treats_latest_mode_case_insensitively(
         "severity_name",
     ),
         [
-            ("latest", ["./upgrade.sh", "--latest", "--no-restart"], "latest", "NORMAL"),
+            ("latest", ["./upgrade.sh", "--latest"], "latest", "NORMAL"),
             (
                 "stable",
-                ["./upgrade.sh", "--stable", "--no-restart"],
+                ["./upgrade.sh", "--stable"],
                 "stable",
                 "CRITICAL",
             ),
-            ("normal", ["./upgrade.sh", "--no-restart"], None, "NORMAL"),
+            ("normal", ["./upgrade.sh", "--stable"], None, "NORMAL"),
         ],
 )
 def test_check_github_updates_respects_channel_override(
@@ -510,7 +510,7 @@ def test_check_github_updates_allows_stable_critical_patch(monkeypatch, tmp_path
 
     tasks.check_github_updates()
 
-    assert ["./upgrade.sh", "--stable", "--no-restart"] in run_commands
+    assert ["./upgrade.sh", "--stable"] in run_commands
 
 
 def test_check_github_updates_restarts_dev_server(monkeypatch, tmp_path):
