@@ -1875,6 +1875,11 @@ class RFID(Entity):
         blank=True,
         help_text="Optional command executed after successful validation.",
     )
+    expiry_date = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Optional expiration date for this RFID card.",
+    )
     BLACK = "B"
     WHITE = "W"
     BLUE = "U"

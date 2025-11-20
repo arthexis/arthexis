@@ -3287,6 +3287,7 @@ class NodeAdminTests(TestCase):
                     "color": RFID.BLACK,
                     "kind": RFID.CLASSIC,
                     "released": False,
+                    "expiry_date": "2026-12-31",
                     "last_seen_on": None,
                 }
             ]
@@ -3310,6 +3311,7 @@ class NodeAdminTests(TestCase):
         self.assertEqual(tag.custom_label, "Remote tag")
         self.assertEqual(tag.origin_node, remote)
         self.assertEqual(tag.data, ["sector"])
+        self.assertEqual(tag.expiry_date.isoformat(), "2026-12-31")
 
         results = response.context_data["results"]
         self.assertEqual(len(results), 1)
@@ -3664,6 +3666,7 @@ class NodeRFIDAPITests(TestCase):
                     "custom_label": "Remote",
                     "customer_accounts": [existing.pk, 777],
                     "customer_account_names": ["known", "missing"],
+                    "expiry_date": "2030-01-01",
                 }
             ],
         }
@@ -3696,6 +3699,7 @@ class NodeRFIDAPITests(TestCase):
         tag = RFID.objects.get(rfid="DEADFACE")
         self.assertEqual(tag.custom_label, "Remote")
         self.assertEqual(list(tag.energy_accounts.all()), [existing])
+        self.assertEqual(tag.expiry_date.isoformat(), "2030-01-01")
         self.assertEqual(
             CustomerAccount.objects.filter(name__iexact="missing").count(), 0
         )
@@ -3771,6 +3775,8 @@ class RFIDExportViewTests(TestCase):
         tag_data = body["rfids"][0]
         self.assertEqual(tag_data["rfid"], "ABCDEF")
         self.assertIn("custom_label", tag_data)
+        self.assertIn("expiry_date", tag_data)
+        self.assertIsNone(tag_data["expiry_date"])
 
 
 class NetMessageAdminTests(TransactionTestCase):
