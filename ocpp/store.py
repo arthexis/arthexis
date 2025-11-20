@@ -607,16 +607,15 @@ def start_session_log(cid: str, tx_id: int) -> None:
     date = start.strftime("%Y%m%d")
     filename = f"{date}_{tx_id}.json"
     path = folder / filename
-    handle = path.open("w", encoding="utf-8")
-    handle.write("[")
     history[cid] = {
         "transaction": tx_id,
         "start": start,
         "path": path,
-        "handle": handle,
         "buffer": [],
         "first": True,
     }
+    with path.open("w", encoding="utf-8") as handle:
+        handle.write("[")
 
 
 def add_session_message(cid: str, message: str) -> None:
@@ -650,38 +649,36 @@ def end_session_log(cid: str) -> None:
 
 
 def _flush_session_buffer(sess: dict[str, object]) -> None:
-    handle = sess.get("handle")
+    path: Path | None = sess.get("path") if isinstance(sess.get("path"), Path) else None
     buffer = sess.get("buffer")
-    if not handle or not buffer:
+    if path is None or not buffer:
         return
     first = bool(sess.get("first", True))
-    for raw in list(buffer):
-        if not first:
-            handle.write(",")
-        handle.write("\n  ")
-        handle.write(raw)
-        first = False
-    handle.flush()
+    with path.open("a", encoding="utf-8") as handle:
+        for raw in list(buffer):
+            if not first:
+                handle.write(",")
+            handle.write("\n  ")
+            handle.write(raw)
+            first = False
+        handle.flush()
     buffer.clear()
     sess["first"] = first
 
 
 def _finalize_session(sess: dict[str, object]) -> None:
-    handle = sess.get("handle")
     try:
         _flush_session_buffer(sess)
-        if handle:
-            if sess.get("first", True):
-                handle.write("]\n")
-            else:
-                handle.write("\n]\n")
-            handle.flush()
+        path: Path | None = sess.get("path") if isinstance(sess.get("path"), Path) else None
+        if path:
+            with path.open("a", encoding="utf-8") as handle:
+                if sess.get("first", True):
+                    handle.write("]\n")
+                else:
+                    handle.write("\n]\n")
+                handle.flush()
     finally:
-        if handle:
-            try:
-                handle.close()
-            except Exception:
-                pass
+        sess["first"] = True
 
 
 def _log_key_candidates(cid: str, log_type: str) -> list[str]:
