@@ -4361,8 +4361,6 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         "severity",
         "is_current",
         "pypi_url",
-        "github_url",
-        "scheduled_for",
         "release_on",
         "revision_short",
         "published_status",
