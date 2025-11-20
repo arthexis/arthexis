@@ -46,14 +46,6 @@
           </th>
           <td>{% trans "Review git commits grouped by release with on-demand loading." %}</td>
         </tr>
-        <tr>
-          <th scope="row">
-            <a href="{% url 'admin:system-pending-todos-report' %}">
-              {% trans "Pending TODOs Report" %}
-            </a>
-          </th>
-          <td>{% trans "Edit release TODOs, review details, and approve items in bulk." %}</td>
-        </tr>
         {% if celery_enabled %}
           <tr>
             <th scope="row">

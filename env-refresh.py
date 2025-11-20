@@ -46,7 +46,7 @@ from nodes.models import Node
 from django.contrib.sites.models import Site
 from django.contrib.auth import get_user_model
 
-from core.models import PackageRelease, Todo
+from core.models import PackageRelease
 from core.sigil_builder import generate_model_sigils
 from core.user_data import load_shared_user_fixtures, load_user_fixtures
 from utils.env_refresh import unlink_sqlite_db as _unlink_sqlite_db
@@ -452,22 +452,6 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                         ):
                             modified = True
                             continue
-                    if model_label == "core.todo":
-                        request_value = fields.get("request")
-                        if isinstance(request_value, str):
-                            existing_todo = Todo.all_objects.filter(
-                                request__iexact=request_value
-                            ).first()
-                            if existing_todo:
-                                if existing_todo.is_deleted:
-                                    modified = True
-                                    model_counts[model._meta.label] += 1
-                                    continue
-
-                                done_on_field = fields.get("done_on")
-                                parsed_done: datetime | None = None
-                                if isinstance(done_on_field, str):
-                                    parsed_done = parse_datetime(done_on_field)
                                 elif isinstance(done_on_field, datetime):
                                     parsed_done = done_on_field
                                 if parsed_done is not None and timezone.is_naive(parsed_done):

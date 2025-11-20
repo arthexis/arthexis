@@ -227,37 +227,6 @@
       </tbody>
     </table>
     {% endif %}
-    {% if todos %}
-    <h2>{% trans 'Pending TODOs' %}</h2>
-    <form method="get">
-      <input type="hidden" name="step" value="{{ current_step }}">
-      <ul>
-      {% for todo in todos %}
-      <li class="todo-item">
-        <label>
-          <input type="checkbox" class="todo-check">
-          {% if todo.url %}
-          <a href="{% url 'todo-focus' todo.id %}?next={{ request.get_full_path|urlencode }}" class="todo-link">{{ todo.request }}</a>
-          {% else %}
-          {{ todo.request }}
-          {% endif %}
-        </label>
-        {% if todo.request_details %}
-        <div class="todo-details">{{ todo.request_details }}</div>
-        {% endif %}
-      </li>
-      {% endfor %}
-      </ul>
-      <button type="submit" name="ack_todos" value="1" id="continue-btn" disabled>{% trans 'Continue' %}</button>
-    </form>
-    <script>
-      const btn = document.getElementById('continue-btn');
-      const checks = document.querySelectorAll('.todo-check');
-      function updateBtn(){ btn.disabled = !Array.from(checks).every(c=>c.checked); }
-      checks.forEach(c=>c.addEventListener('change', updateBtn));
-      updateBtn();
-    </script>
-    {% endif %}
     {% if awaiting_approval %}
     <div class="approval-actions">
       {% if approval_credentials_ready %}

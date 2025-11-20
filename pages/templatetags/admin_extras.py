@@ -19,7 +19,7 @@ from django.utils import timezone
 from django.utils.text import capfirst
 from django.utils.translation import gettext_lazy as _, ngettext
 from core import mailer
-from core.models import Lead, RFID, GoogleCalendarProfile, Todo
+from core.models import Lead, RFID, GoogleCalendarProfile
 from core.entity import Entity
 from ocpp.models import Charger, ChargerConfiguration, CPFirmware
 from nodes.models import NetMessage, Node
@@ -674,21 +674,6 @@ def charger_availability_stats(context):
         stats = dict(cached_stats)
         context[cache_key] = stats
     return stats
-
-
-@register.simple_tag
-def release_manager_todos(limit: int = 5) -> list[Todo]:
-    """Return active Release Manager TODOs for the admin dashboard."""
-
-    try:
-        todos = Todo.refresh_active()
-    except DatabaseError:
-        return []
-
-    if limit is None or limit <= 0:
-        return todos
-
-    return todos[:limit]
 
 
 @register.simple_tag(takes_context=True)

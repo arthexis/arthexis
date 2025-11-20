@@ -613,40 +613,6 @@
     {% include "admin/dashboard_app_list.html" with app_list=app_list %}
   </div>
 <div class="dashboard-side" id="recent-boxes">
-    {% release_manager_todos as release_manager_tasks %}
-    <div class="module" id="release-manager-module">
-        <h2>{% translate 'Pending TODOs' %}</h2>
-        {% if release_manager_tasks %}
-        <ul class="release-manager-task-list">
-            {% for todo in release_manager_tasks %}
-            <li class="release-manager-task">
-                <div class="release-manager-task__title">
-                    <a class="release-manager-task__link" href="{% url 'todo-focus' todo.pk %}?next={{ request.get_full_path|urlencode }}">{{ todo.request }}</a>
-                </div>
-                {% if todo.version %}
-                <p class="release-manager-task__meta">
-                    <span class="release-manager-task__label">{% translate 'Target version' %}</span>
-                    <span class="release-manager-task__value">{{ todo.version }}</span>
-                </p>
-                {% endif %}
-                {% if todo.request_details %}
-                <p class="release-manager-task__details">{{ todo.request_details|linebreaksbr }}</p>
-                {% endif %}
-                <p class="release-manager-task__actions">
-                    <a class="release-manager-task__action" href="{% url 'todo-focus' todo.pk %}?next={{ request.get_full_path|urlencode }}">{% translate 'Check' %}</a>
-                    <a class="release-manager-task__action release-manager-task__action--secondary" href="{% url 'admin:core_todo_change' todo.pk %}">{% translate 'Config' %}</a>
-                    {% if todo.url %}
-                    <a class="release-manager-task__action release-manager-task__action--secondary" href="{{ todo.url }}">{{ todo.url }}</a>
-                    {% endif %}
-                </p>
-            </li>
-            {% endfor %}
-        </ul>
-        {% else %}
-        <p class="release-manager-module__empty">{% translate 'No pending TODOs require approval.' %}</p>
-        {% endif %}
-        <p class="release-manager-module__footer"><a href="{% url 'admin:core_todo_changelist' %}">{% translate 'View all tasks' %}</a></p>
-    </div>
     {% user_google_calendar as google_calendar %}
     {% if google_calendar %}
     <div class="module" id="google-calendar-module">

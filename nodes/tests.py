@@ -96,7 +96,7 @@ from ocpp.models import Charger
 from protocols.models import CPForwarder
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import serialization, hashes
-from core.models import Package, PackageRelease, SecurityGroup, RFID, CustomerAccount, Todo
+from core.models import Package, PackageRelease, SecurityGroup, RFID, CustomerAccount
 from requests.exceptions import SSLError
 from teams.models import EmailOutbox
 from nodes.ansible import render_inventory_host

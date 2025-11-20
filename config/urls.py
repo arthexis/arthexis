@@ -166,26 +166,6 @@ urlpatterns = [
         name="release-progress",
     ),
     path(
-        "admin/core/todos/<int:pk>/focus/",
-        core_views.todo_focus,
-        name="todo-focus",
-    ),
-    path(
-        "admin/core/todos/<int:pk>/done/",
-        core_views.todo_done,
-        name="todo-done",
-    ),
-    path(
-        "admin/core/todos/<int:pk>/delete/",
-        core_views.todo_delete,
-        name="todo-delete",
-    ),
-    path(
-        "admin/core/todos/<int:pk>/snapshot/",
-        core_views.todo_snapshot,
-        name="todo-snapshot",
-    ),
-    path(
         "admin/core/odoo-products/",
         core_views.odoo_products,
         name="odoo-products",
