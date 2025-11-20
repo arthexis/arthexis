@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-set -e
+set -eE
 
 # Initialize logging and helper functions shared across upgrade steps.
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -568,6 +568,28 @@ restart_services() {
   echo "Services restart triggered"
   return 0
 }
+
+upgrade_failure_recovery() {
+  local exit_code=$?
+
+  trap - ERR
+  set +e
+
+  echo "Upgrade failed with exit code ${exit_code}; attempting to restore services..." >&2
+
+  if [[ $NO_RESTART -eq 1 ]]; then
+    echo "Automatic recovery skipped because --no-restart was provided." >&2
+    exit "$exit_code"
+  fi
+
+  if ! restart_services; then
+    echo "Automatic recovery could not restore services; manual intervention required." >&2
+  fi
+
+  exit "$exit_code"
+}
+
+trap 'upgrade_failure_recovery' ERR
 
 versions_share_minor() {
   local first="$1"

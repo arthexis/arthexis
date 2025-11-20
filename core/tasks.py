@@ -132,12 +132,17 @@ def _append_auto_upgrade_log(base_dir: Path, message: str) -> None:
         logger.warning("Failed to append auto-upgrade log entry: %s", message)
 
 
-def _run_upgrade_command(base_dir: Path, args: list[str]) -> tuple[str | None, bool]:
+def _run_upgrade_command(
+    base_dir: Path, args: list[str], *, require_detached: bool = False
+) -> tuple[str | None, bool]:
     """Run the upgrade script, detaching from system services when possible.
 
     Returns a tuple of ``(unit_name, ran_inline)`` where ``unit_name`` is set
     when the upgrade was delegated to a transient systemd unit and
     ``ran_inline`` indicates whether the upgrade script was executed inline.
+    When ``require_detached`` is ``True`` the command will only execute when
+    the transient systemd unit launch succeeds; otherwise the function will
+    return without running the upgrade inline.
     """
 
     def _systemd_run_command() -> list[str]:
@@ -176,7 +181,33 @@ def _run_upgrade_command(base_dir: Path, args: list[str]) -> tuple[str | None, b
     running_in_service = bool(os.environ.get("INVOCATION_ID"))
     service_name = _read_service_name()
 
-    if systemd_run_command and running_in_service and service_name and WATCH_UPGRADE_BINARY.exists():
+    missing_prereqs: list[str] = []
+    if require_detached and not running_in_service:
+        missing_prereqs.append("systemd context unavailable")
+    if not service_name:
+        missing_prereqs.append("service name unknown")
+    if not systemd_run_command:
+        missing_prereqs.append("systemd-run missing")
+    if not WATCH_UPGRADE_BINARY.exists():
+        missing_prereqs.append("watch-upgrade helper missing")
+
+    if require_detached and missing_prereqs:
+        reason = "; ".join(missing_prereqs)
+        _append_auto_upgrade_log(
+            base_dir,
+            (
+                "Detached auto-upgrade unavailable; "
+                f"skipping inline execution ({reason})"
+            ),
+        )
+        return None, False
+
+    if (
+        systemd_run_command
+        and service_name
+        and WATCH_UPGRADE_BINARY.exists()
+        and (running_in_service or require_detached)
+    ):
         unit_name = f"upgrade-watcher-{uuid.uuid4().hex}"
         detached_args = [
             *systemd_run_command,
@@ -1047,7 +1078,9 @@ def check_github_updates(channel_override: str | None = None) -> None:
                 f"{timezone.now().isoformat()} running: {' '.join(args)}\n"
             )
 
-        watcher_unit, ran_inline = _run_upgrade_command(base_dir, args)
+        watcher_unit, ran_inline = _run_upgrade_command(
+            base_dir, args, require_detached=True
+        )
         if watcher_unit:
             _append_auto_upgrade_log(
                 base_dir,
