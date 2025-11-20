@@ -50,6 +50,7 @@ from .models import (
     RFID,
     CPReservation,
     CPFirmwareDeployment,
+    annotate_transaction_energy_bounds,
 )
 from .evcs import (
     _start_simulator,
