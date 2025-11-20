@@ -1,0 +1,85 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:system' %}">{% trans 'System' %}</a>
+  &rsaquo; {% trans "Startup Report" %}
+</div>
+{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+  .startup-report-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+
+  .startup-report-controls label {
+    font-weight: 600;
+  }
+
+  .startup-report-meta {
+    margin: 0 0 12px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <div class="module startup-report">
+    <h2>{% trans "Startup Report" %}</h2>
+    <p class="help">
+      {% trans "Review timestamps recorded when start.sh or upgrade.sh begin and end." %}
+    </p>
+
+    <form method="get" class="startup-report-controls" aria-label="{% trans 'Filter startup report' %}">
+      <label for="id_limit">{% trans "Entries to show" %}</label>
+      <select name="limit" id="id_limit">
+        {% for option in startup_report_options %}
+          <option value="{{ option }}"{% if option == startup_report_limit %} selected{% endif %}>{{ option }}</option>
+        {% endfor %}
+      </select>
+      <button type="submit" class="button">{% trans "Refresh" %}</button>
+    </form>
+
+    <p class="startup-report-meta help">
+      {% blocktrans with path=startup_report.log_path %}Log file: {{ path }}{% endblocktrans %}
+    </p>
+
+    {% if startup_report.error %}
+      <p class="errornote">{{ startup_report.error }}</p>
+    {% endif %}
+
+    {% if not startup_report.entries %}
+      <p>{% trans "No startup activity has been recorded yet." %}</p>
+    {% else %}
+      <table class="table table-striped">
+        <thead>
+          <tr>
+            <th scope="col">{% trans "Timestamp" %}</th>
+            <th scope="col">{% trans "Script" %}</th>
+            <th scope="col">{% trans "Event" %}</th>
+            <th scope="col">{% trans "Details" %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for entry in startup_report.entries %}
+            <tr>
+              <td>{{ entry.timestamp_label|default:entry.timestamp_raw|default:"" }}</td>
+              <td><code>{{ entry.script|default:_("Unknown") }}</code></td>
+              <td>{{ entry.event|capfirst|default:_("Unknown") }}</td>
+              <td>{{ entry.detail|default:"—" }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

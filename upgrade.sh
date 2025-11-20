@@ -13,6 +13,15 @@ if [ -f "$UPGRADE_SCRIPT_PATH" ]; then
 fi
 # shellcheck source=scripts/helpers/logging.sh
 . "$BASE_DIR/scripts/helpers/logging.sh"
+# Record upgrade lifecycle in the startup report for visibility in admin reports.
+UPGRADE_SCRIPT_NAME="$(basename "$0")"
+arthexis_log_startup_event "$BASE_DIR" "$UPGRADE_SCRIPT_NAME" "start" "invoked"
+
+log_upgrade_exit() {
+  local status=$?
+  arthexis_log_startup_event "$BASE_DIR" "$UPGRADE_SCRIPT_NAME" "finish" "status=$status"
+}
+trap log_upgrade_exit EXIT
 # shellcheck source=scripts/helpers/nginx_maintenance.sh
 . "$BASE_DIR/scripts/helpers/nginx_maintenance.sh"
 # shellcheck source=scripts/helpers/desktop_shortcuts.sh

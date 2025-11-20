@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections import deque
+from collections import deque
 from contextlib import closing
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone as datetime_timezone
@@ -57,6 +58,9 @@ UPGRADE_REVISION_SESSION_KEY = "system_upgrade_revision_info"
 
 SUITE_UPTIME_LOCK_NAME = "suite_uptime.lck"
 SUITE_UPTIME_LOCK_MAX_AGE = timedelta(minutes=10)
+
+STARTUP_REPORT_LOG_NAME = "startup-report.log"
+STARTUP_REPORT_DEFAULT_LIMIT = 50
 
 
 UPGRADE_CHANNEL_CHOICES: dict[str, dict[str, object]] = {
@@ -884,6 +888,88 @@ def _format_datetime(dt: datetime | None) -> str:
     return date_format(timezone.localtime(dt), "Y-m-d H:i")
 
 
+def _startup_report_log_path(base_dir: Path | None = None) -> Path:
+    root = Path(settings.BASE_DIR) if base_dir is None else Path(base_dir)
+    return root / "logs" / STARTUP_REPORT_LOG_NAME
+
+
+def _parse_startup_report_entry(line: str) -> dict[str, object] | None:
+    text = line.strip()
+    if not text:
+        return None
+
+    parts = text.split("\t")
+    timestamp_raw = parts[0] if parts else ""
+    script = parts[1] if len(parts) > 1 else ""
+    event = parts[2] if len(parts) > 2 else ""
+    detail = parts[3] if len(parts) > 3 else ""
+
+    parsed_timestamp = None
+    if timestamp_raw:
+        try:
+            parsed_timestamp = datetime.fromisoformat(timestamp_raw)
+            if timezone.is_naive(parsed_timestamp):
+                parsed_timestamp = timezone.make_aware(
+                    parsed_timestamp, timezone.get_current_timezone()
+                )
+        except ValueError:
+            parsed_timestamp = None
+
+    timestamp_label = _format_datetime(parsed_timestamp) if parsed_timestamp else timestamp_raw
+
+    return {
+        "timestamp": parsed_timestamp,
+        "timestamp_raw": timestamp_raw,
+        "timestamp_label": timestamp_label or timestamp_raw,
+        "script": script,
+        "event": event,
+        "detail": detail,
+        "raw": text,
+    }
+
+
+def _read_startup_report(
+    *, limit: int | None = None, base_dir: Path | None = None
+) -> dict[str, object]:
+    normalized_limit = limit if limit is None or limit > 0 else None
+    log_path = _startup_report_log_path(base_dir)
+    lines: deque[str] = deque(maxlen=normalized_limit)
+
+    try:
+        with log_path.open(encoding="utf-8") as handle:
+            for raw_line in handle:
+                lines.append(raw_line.rstrip("\n"))
+    except FileNotFoundError:
+        return {
+            "entries": [],
+            "log_path": log_path,
+            "missing": True,
+            "error": _("Startup report log does not exist yet."),
+            "limit": normalized_limit,
+        }
+    except OSError as exc:
+        return {
+            "entries": [],
+            "log_path": log_path,
+            "missing": False,
+            "error": str(exc),
+            "limit": normalized_limit,
+        }
+
+    parsed_entries = [
+        entry for raw_line in lines if (entry := _parse_startup_report_entry(raw_line))
+    ]
+    parsed_entries.reverse()
+
+    return {
+        "entries": parsed_entries,
+        "log_path": log_path,
+        "missing": False,
+        "error": None,
+        "limit": normalized_limit,
+    }
+
+
 def _merge_shutdown_periods(periods: Iterable[tuple[datetime, datetime]]) -> list[tuple[datetime, datetime]]:
     normalized: list[tuple[datetime, datetime]] = []
     for start, end in periods:
@@ -1618,6 +1704,27 @@ def _system_view(request):
     return TemplateResponse(request, "admin/system.html", context)
 
 
+def _system_startup_report_view(request):
+    try:
+        limit = int(request.GET.get("limit", STARTUP_REPORT_DEFAULT_LIMIT))
+    except (TypeError, ValueError):
+        limit = STARTUP_REPORT_DEFAULT_LIMIT
+
+    if limit < 1:
+        limit = STARTUP_REPORT_DEFAULT_LIMIT
+
+    context = admin.site.each_context(request)
+    context.update(
+        {
+            "title": _("Startup Report"),
+            "startup_report": _read_startup_report(limit=limit),
+            "startup_report_limit": limit,
+            "startup_report_options": (10, 25, 50, 100, 200),
+        }
+    )
+    return TemplateResponse(request, "admin/system_startup_report.html", context)
+
+
 def _system_uptime_report_view(request):
     context = admin.site.each_context(request)
     context.update(
@@ -1839,6 +1946,11 @@ def patch_admin_system_view() -> None:
         urls = original_get_urls()
         custom = [
             path("system/", admin.site.admin_view(_system_view), name="system"),
+            path(
+                "system/startup-report/",
+                admin.site.admin_view(_system_startup_report_view),
+                name="system-startup-report",
+            ),
             path(
                 "system/changelog/",
                 admin.site.admin_view(_system_changelog_report_view),

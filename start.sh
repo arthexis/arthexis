@@ -6,6 +6,17 @@ LOCK_DIR="$BASE_DIR/locks"
 SKIP_LOCK="$LOCK_DIR/service-start-skip.lck"
 mkdir -p "$LOCK_DIR"
 
+# shellcheck source=scripts/helpers/logging.sh
+. "$BASE_DIR/scripts/helpers/logging.sh"
+STARTUP_SCRIPT_NAME="$(basename "$0")"
+arthexis_log_startup_event "$BASE_DIR" "$STARTUP_SCRIPT_NAME" "start" "invoked"
+
+log_startup_exit() {
+  local status=$?
+  arthexis_log_startup_event "$BASE_DIR" "$STARTUP_SCRIPT_NAME" "finish" "status=$status"
+}
+trap log_startup_exit EXIT
+
 SILENT=false
 SERVICE_ARGS=()
 while [[ $# -gt 0 ]]; do
@@ -104,4 +115,4 @@ if [ -n "$SERVICE_NAME" ] && [ ${#SYSTEMCTL_CMD[@]} -gt 0 ] \
   fi
 fi
 
-exec "$BASE_DIR/service-start.sh" "${SERVICE_ARGS[@]}"
+"$BASE_DIR/service-start.sh" "${SERVICE_ARGS[@]}"
