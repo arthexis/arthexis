@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -80,22 +81,22 @@ def _normalize_output_dir(value: str | None) -> tuple[Path, bool]:
         output_dir = Path(value).expanduser().resolve()
         if output_dir.exists() and any(output_dir.iterdir()):
             raise CommandError(
-                "--output-dir must be empty so the Love2D project can be staged safely."
+                "--output-dir must be empty so the Pyxel viewport can be staged safely."
             )
         output_dir.mkdir(parents=True, exist_ok=True)
         return output_dir, False
 
-    temp_dir = Path(tempfile.mkdtemp(prefix="love2d_viewport_"))
+    temp_dir = Path(tempfile.mkdtemp(prefix="pyxel_viewport_"))
     return temp_dir, True
 
 
 def _copy_project_assets(target_dir: Path) -> None:
-    """Copy the Love2D viewport assets into ``target_dir``."""
+    """Copy the Pyxel viewport assets into ``target_dir``."""
 
-    project_root = Path(__file__).resolve().parents[2] / "love2d_viewport"
+    project_root = Path(__file__).resolve().parents[2] / "pyxel_viewport"
     if not project_root.exists():
         raise CommandError(
-            "Love2D viewport assets are missing. Expected to find ocpp/love2d_viewport."
+            "Pyxel viewport assets are missing. Expected to find ocpp/pyxel_viewport."
         )
     shutil.copytree(project_root, target_dir, dirs_exist_ok=True)
 
@@ -134,32 +135,40 @@ def _write_snapshot(target_dir: Path, snapshot: dict) -> Path:
     return json_path
 
 
-def _resolve_love_binary(binary: str) -> str:
-    """Return a usable Love2D binary path or raise when it cannot be found."""
+def _resolve_pyxel_runner(runner: str) -> list[str]:
+    """Return a usable Pyxel runner command or raise when it cannot be found."""
 
-    candidate_path = Path(binary).expanduser()
-    if candidate_path.exists():
-        return str(candidate_path)
+    parts = shlex.split(runner)
+    if not parts:
+        raise CommandError(
+            "Pyxel runner not found. Install Pyxel or provide the path with --pyxel-runner."
+        )
 
-    discovered = shutil.which(binary)
+    executable = Path(parts[0]).expanduser()
+    if executable.exists():
+        parts[0] = str(executable)
+        return parts
+
+    discovered = shutil.which(parts[0])
     if discovered:
-        return discovered
+        parts[0] = discovered
+        return parts
 
     raise CommandError(
-        "Love2D binary not found. Install Love2D or provide the path with --love-binary."
+        "Pyxel runner not found. Install Pyxel or provide the path with --pyxel-runner."
     )
 
 
-def _launch_love(binary: str, runtime_dir: Path) -> None:
-    """Start the Love2D viewport using the provided runtime directory."""
+def _launch_pyxel(runner_parts: list[str], runtime_dir: Path) -> None:
+    """Start the Pyxel viewport using the provided runtime directory."""
 
-    command = [binary, str(runtime_dir)]
-    subprocess.run(command, check=True)
+    command = runner_parts + ["run", "main.py"]
+    subprocess.run(command, cwd=runtime_dir, check=True)
 
 
 class Command(BaseCommand):
     help = (
-        "Prepare connector data and launch a Love2D viewport that renders a "
+        "Prepare connector data and launch a Pyxel viewport that renders a "
         "charging animation for each configured connector."
     )
 
@@ -168,28 +177,28 @@ class Command(BaseCommand):
             "--output-dir",
             dest="output_dir",
             help=(
-                "Directory used to stage the Love2D project. Defaults to a temporary "
-                "folder that is cleaned up after Love2D exits."
+                "Directory used to stage the Pyxel project. Defaults to a temporary "
+                "folder that is cleaned up after the viewport exits."
             ),
         )
         parser.add_argument(
-            "--love-binary",
-            dest="love_binary",
-            default="love",
-            help="Love2D executable to invoke when launching the viewport.",
+            "--pyxel-runner",
+            dest="pyxel_runner",
+            default="pyxel",
+            help="Pyxel executable or command to invoke when launching the viewport.",
         )
         parser.add_argument(
             "--skip-launch",
             action="store_true",
             help=(
-                "Prepare the Love2D project without launching the window. Use this "
+                "Prepare the Pyxel project without launching the window. Use this "
                 "flag in CI environments or when you only need the staged assets."
             ),
         )
 
     def handle(self, *args, **options):
         output_dir_option = options.get("output_dir")
-        love_binary = options.get("love_binary")
+        pyxel_runner = options.get("pyxel_runner")
         skip_launch = options.get("skip_launch")
 
         connectors = (
@@ -212,14 +221,14 @@ class Command(BaseCommand):
 
         if skip_launch:
             self.stdout.write(
-                "Skipping Love2D launch; run `love %s` to open the viewport." % runtime_dir
+                "Skipping Pyxel launch; run `pyxel run main.py` from %s to open the viewport." % runtime_dir
             )
             return
 
         cleanup_required = is_temp_dir
         try:
-            binary_path = _resolve_love_binary(love_binary)
-            _launch_love(binary_path, runtime_dir)
+            runner_parts = _resolve_pyxel_runner(pyxel_runner)
+            _launch_pyxel(runner_parts, runtime_dir)
         finally:
             if cleanup_required:
                 shutil.rmtree(runtime_dir, ignore_errors=True)
