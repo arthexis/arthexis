@@ -25,8 +25,8 @@ manual runs of `env-refresh.sh` or calls made as part of an upgrade.
    one-time auto-upgrade during this start; stale locks older than five minutes
    are ignored and removed.
 4. If `locks/auto_upgrade.lck` is present and not skipped, run `upgrade.sh`
-   (`--latest`/`--stable` when specified) with `--no-restart` so the start
-   continues.
+   (`--latest`/`--stable` when specified) before continuing with the rest of
+   the startup.
 5. Compute the static assets hash with `scripts/staticfiles_md5.py`; when the
    hash changes or cannot be computed, run `manage.py collectstatic --noinput`
    and cache the new hash in `staticfiles.md5`.

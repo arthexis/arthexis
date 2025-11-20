@@ -63,7 +63,9 @@ fi
 if [ "$SKIP_UPGRADE" != true ] && [ -f "$LOCK_DIR/auto_upgrade.lck" ]; then
   MODE=$(tr -d '\r\n' < "$LOCK_DIR/auto_upgrade.lck" | tr 'A-Z' 'a-z')
   [ -n "$MODE" ] || MODE="version"
-  UPGRADE_ARGS=("$BASE_DIR/upgrade.sh" "--no-restart")
+  UPGRADE_ARGS=("$BASE_DIR/upgrade.sh")
+  # Prevent upgrade.sh from restarting services here; service-start.sh will continue with startup
+  UPGRADE_ARGS+=("--no-restart")
   case "$MODE" in
     latest)
       UPGRADE_ARGS+=("--latest")
