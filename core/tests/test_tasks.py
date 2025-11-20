@@ -118,15 +118,21 @@ def test_run_upgrade_command_logs_detached_failure(monkeypatch, tmp_path):
     def fake_run(command, **kwargs):
         run_calls.append((command, kwargs))
         if command and command[0].endswith("systemd-run"):
-            raise subprocess.CalledProcessError(
-                1, command, output="unit failed", stderr="permission denied"
+            return CompletedProcess(
+                command,
+                1,
+                stdout="unit failed",
+                stderr="permission denied",
             )
         return CompletedProcess(command, 0)
 
     monkeypatch.setattr(tasks.subprocess, "run", fake_run)
 
-    tasks._run_upgrade_command(base_dir, ["upgrade.sh", "--latest"])
+    unit, ran_inline = tasks._run_upgrade_command(base_dir, ["upgrade.sh", "--latest"])
 
+    assert unit is None
+    assert ran_inline is False
+    assert len(run_calls) == 1
     assert any("exit code 1" in entry for entry in log_entries)
     assert any("permission denied" in entry for entry in log_entries)
 

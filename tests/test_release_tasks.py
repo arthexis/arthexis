@@ -220,7 +220,7 @@ def test_upgrade_detach_falls_back_when_systemd_run_fails(monkeypatch, tmp_path)
     class FailingSystemdRun(CommandRecorder):
         def __call__(self, *args, **kwargs):
             if args and args[0] and os.path.basename(args[0][0]) == "systemd-run":
-                raise subprocess.CalledProcessError(1, args[0])
+                return subprocess.CompletedProcess(args[0], 1, stdout="", stderr="")
             return super().__call__(*args, **kwargs)
 
     run_recorder = FailingSystemdRun()
@@ -239,11 +239,18 @@ def test_upgrade_detach_falls_back_when_systemd_run_fails(monkeypatch, tmp_path)
 
     tasks.check_github_updates()
 
-    upgrade_calls = [
+    systemd_calls = [
+        args
+        for args, _ in run_recorder.calls
+        if args and os.path.basename(args[0][0]) == "systemd-run"
+    ]
+    inline_upgrade_calls = [
         args for args, _ in run_recorder.calls if args and args[0][0] == "./upgrade.sh"
     ]
-    assert upgrade_calls
-    assert scheduled
+
+    assert systemd_calls
+    assert not inline_upgrade_calls
+    assert not scheduled
 
 
 @pytest.mark.role("Watchtower")

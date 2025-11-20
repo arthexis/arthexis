@@ -132,8 +132,13 @@ def _append_auto_upgrade_log(base_dir: Path, message: str) -> None:
         logger.warning("Failed to append auto-upgrade log entry: %s", message)
 
 
-def _run_upgrade_command(base_dir: Path, args: list[str]) -> str | None:
-    """Run the upgrade script, detaching from system services when possible."""
+def _run_upgrade_command(base_dir: Path, args: list[str]) -> tuple[str | None, bool]:
+    """Run the upgrade script, detaching from system services when possible.
+
+    Returns a tuple of ``(unit_name, ran_inline)`` where ``unit_name`` is set
+    when the upgrade was delegated to a transient systemd unit and
+    ``ran_inline`` indicates whether the upgrade script was executed inline.
+    """
 
     def _systemd_run_command() -> list[str]:
         binary = shutil.which("systemd-run")
@@ -183,6 +188,27 @@ def _run_upgrade_command(base_dir: Path, args: list[str]) -> str | None:
             service_name,
         ]
 
+        def _format_detached_failure(
+            result: Exception | subprocess.CompletedProcess[str],
+        ) -> str:
+            if isinstance(result, subprocess.CompletedProcess):
+                stderr = (result.stderr or "").strip()
+                stdout = (result.stdout or "").strip()
+                output = stderr or stdout
+                if output:
+                    return f"exit code {result.returncode}; {output}"
+                return f"exit code {result.returncode}; no output captured"
+
+            if isinstance(result, subprocess.CalledProcessError):
+                stderr = (result.stderr or "").strip()
+                stdout = (result.stdout or "").strip()
+                output = stderr or stdout
+                if output:
+                    return f"exit code {result.returncode}; {output}"
+                return f"exit code {result.returncode}; no output captured"
+
+            return str(result)
+
         try:
             _append_auto_upgrade_log(
                 base_dir,
@@ -191,38 +217,43 @@ def _run_upgrade_command(base_dir: Path, args: list[str]) -> str | None:
                     f"{unit_name}; inspect with journalctl -u {unit_name}"
                 ),
             )
-            subprocess.run(
+            result = subprocess.run(
                 detached_args,
                 cwd=base_dir,
-                check=True,
                 capture_output=True,
                 text=True,
             )
-            return unit_name
-        except Exception as exc:
-            def _format_detached_failure(error: Exception) -> str:
-                if isinstance(error, subprocess.CalledProcessError):
-                    stderr = (error.stderr or "").strip()
-                    stdout = (error.stdout or "").strip()
-                    output = stderr or stdout
-                    if output:
-                        return f"exit code {error.returncode}; {output}"
-                    return f"exit code {error.returncode}; no output captured"
-                return str(error)
+            if result.returncode == 0:
+                return unit_name, False
 
             logger.warning(
-                "Detached auto-upgrade launch failed; falling back to inline execution",
+                "Detached auto-upgrade launch failed; keeping current service running",
+                extra={"stdout": (result.stdout or "").strip(), "stderr": (result.stderr or "").strip()},
+            )
+            _append_auto_upgrade_log(
+                base_dir,
+                (
+                    "Detached auto-upgrade launch failed "
+                    f"({_format_detached_failure(result)}); keeping current service running"
+                ),
+            )
+            return None, False
+        except Exception as exc:
+            logger.warning(
+                "Detached auto-upgrade launch failed; keeping current service running",
                 exc_info=True,
             )
             _append_auto_upgrade_log(
                 base_dir,
                 (
                     "Detached auto-upgrade launch failed "
-                    f"({_format_detached_failure(exc)}); falling back to inline execution"
+                    f"({_format_detached_failure(exc)}); keeping current service running"
                 ),
             )
+            return None, False
 
     subprocess.run(args, cwd=base_dir, check=True)
+    return None, True
 
 
 def _systemctl_command() -> list[str]:
@@ -1019,7 +1050,7 @@ def check_github_updates(channel_override: str | None = None) -> None:
                 f"{timezone.now().isoformat()} running: {' '.join(args)}\n"
             )
 
-        watcher_unit = _run_upgrade_command(base_dir, args)
+        watcher_unit, ran_inline = _run_upgrade_command(base_dir, args)
         if watcher_unit:
             _append_auto_upgrade_log(
                 base_dir,
@@ -1037,6 +1068,16 @@ def check_github_updates(channel_override: str | None = None) -> None:
                     ),
                 )
                 _schedule_health_check(1)
+            return
+
+        if not ran_inline:
+            _append_auto_upgrade_log(
+                base_dir,
+                (
+                    "Inline upgrade skipped because detached launch failed; "
+                    "will retry on next cycle"
+                ),
+            )
             return
 
         _append_auto_upgrade_log(
