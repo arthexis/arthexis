@@ -34,7 +34,17 @@ class AdminSystemServicesReportTests(TestCase):
             locks.joinpath("service.lck").write_text("demo", encoding="utf-8")
             locks.joinpath("celery.lck").write_text("enabled", encoding="utf-8")
             locks.joinpath("lcd_screen.lck").write_text("1", encoding="utf-8")
-            locks.joinpath("auto_upgrade.lck").write_text("latest", encoding="utf-8")
+            locks.joinpath("systemd_services.lck").write_text(
+                "\n".join(
+                    (
+                        "demo.service",
+                        "celery-demo.service",
+                        "celery-beat-demo.service",
+                        "lcd-demo.service",
+                    )
+                ),
+                encoding="utf-8",
+            )
 
             def run_side_effect(args, **kwargs):
                 action = args[1]
@@ -42,7 +52,6 @@ class AdminSystemServicesReportTests(TestCase):
                 if action == "is-active":
                     state, code, stderr = {
                         "demo": ("active\n", 0, ""),
-                        "demo-auto-upgrade": ("inactive\n", 3, ""),
                         "celery-demo": ("active\n", 0, ""),
                         "celery-beat-demo": ("failed\n", 3, ""),
                         "lcd-demo": ("", 4, "Unit lcd-demo.service could not be found."),
@@ -66,11 +75,9 @@ class AdminSystemServicesReportTests(TestCase):
 
         self.assertContains(response, "Suite Services Report")
         self.assertContains(response, "demo.service")
-        self.assertContains(response, "demo-auto-upgrade.service")
         self.assertContains(response, "celery-demo.service")
         self.assertContains(response, "celery-beat-demo.service")
         self.assertContains(response, "LCD screen")
-        self.assertContains(response, "inactive")
         self.assertContains(response, "failed")
         self.assertContains(response, "Not found")
 
@@ -83,6 +90,9 @@ class AdminSystemServicesReportTests(TestCase):
             locks = base_dir / "locks"
             locks.mkdir()
             locks.joinpath("service.lck").write_text("demo", encoding="utf-8")
+            locks.joinpath("systemd_services.lck").write_text(
+                "demo.service\n", encoding="utf-8"
+            )
 
             with self.settings(BASE_DIR=str(base_dir)):
                 response = self.client.get(reverse("admin:system-services-report"))
