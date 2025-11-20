@@ -1568,58 +1568,75 @@ def _configured_service_units(base_dir: Path) -> list[dict[str, str]]:
 
     lock_dir = base_dir / "locks"
     service_file = lock_dir / "service.lck"
+    systemd_services_file = lock_dir / "systemd_services.lck"
+
     try:
         service_name = service_file.read_text(encoding="utf-8").strip()
     except OSError:
         service_name = ""
 
+    try:
+        systemd_units = systemd_services_file.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        systemd_units = []
+
+    service_units: list[dict[str, str]] = []
+    seen_units: set[str] = set()
+
+    def _add_unit(unit_name: str, *, label: str | None = None) -> None:
+        normalized = unit_name.strip()
+        if not normalized or normalized in seen_units:
+            return
+
+        seen_units.add(normalized)
+        unit_display = normalized
+        unit = normalized
+        if normalized.endswith(".service"):
+            unit = normalized.removesuffix(".service")
+        else:
+            unit_display = f"{normalized}.service"
+
+        service_units.append(
+            {
+                "label": label or normalized,
+                "unit": unit,
+                "unit_display": unit_display,
+            }
+        )
+
+    for unit_name in systemd_units:
+        label = None
+        if service_name:
+            base_label_map = {
+                f"{service_name}.service": str(_("Suite service")),
+                f"celery-{service_name}.service": str(_("Celery worker")),
+                f"celery-beat-{service_name}.service": str(_("Celery beat")),
+                f"lcd-{service_name}.service": str(_("LCD screen")),
+            }
+            label = base_label_map.get(unit_name.strip())
+
+        _add_unit(unit_name, label=label)
+
+    if service_units:
+        return service_units
+
     if not service_name:
         return []
 
-    service_units = [
-        {
-            "label": str(_("Suite service")),
-            "unit": service_name,
-            "unit_display": f"{service_name}.service",
-        }
-    ]
-
-    if (lock_dir / "auto_upgrade.lck").exists():
-        auto_upgrade_unit = f"{service_name}-auto-upgrade"
-        service_units.append(
-            {
-                "label": str(_("Auto-upgrade service")),
-                "unit": auto_upgrade_unit,
-                "unit_display": f"{auto_upgrade_unit}.service",
-            }
-        )
+    _add_unit(service_name, label=str(_("Suite service")))
 
     if (lock_dir / "celery.lck").exists():
         for prefix, label in [
             ("celery", _("Celery worker")),
             ("celery-beat", _("Celery beat")),
         ]:
-            unit = f"{prefix}-{service_name}"
-            service_units.append(
-                {
-                    "label": str(label),
-                    "unit": unit,
-                    "unit_display": f"{unit}.service",
-                }
-            )
+            _add_unit(f"{prefix}-{service_name}", label=str(label))
 
     lcd_enabled = (lock_dir / "lcd_screen_enabled.lck").exists() or (
         lock_dir / "lcd_screen.lck"
     ).exists()
     if lcd_enabled:
-        lcd_unit = f"lcd-{service_name}"
-        service_units.append(
-            {
-                "label": str(_("LCD screen")),
-                "unit": lcd_unit,
-                "unit_display": f"{lcd_unit}.service",
-            }
-        )
+        _add_unit(f"lcd-{service_name}", label=str(_("LCD screen")))
 
     return service_units
 
