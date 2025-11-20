@@ -2239,10 +2239,13 @@ class NetMessage(Entity):
         blank=True,
     )
     target_limit = models.PositiveSmallIntegerField(
-        default=6,
+        default=15,
         blank=True,
         null=True,
-        help_text="Maximum number of peers to contact when propagating.",
+        help_text=(
+            "Minimum seconds this message should remain visible before receivers "
+            "rotate to the next one."
+        ),
     )
     propagated_to = models.ManyToManyField(
         Node, blank=True, related_name="received_net_messages"
@@ -2645,7 +2648,7 @@ class NetMessage(Entity):
             self.save(update_fields=["complete"])
             return
 
-        limit = self.target_limit or 6
+        limit = self.target_limit or 15
         target_limit = min(limit, len(remaining))
 
         reach_source = self.filter_node_role or self.reach
