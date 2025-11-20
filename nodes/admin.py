@@ -10,7 +10,13 @@ from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db import models
 from django.db.models import Count, Q
-from django.http import Http404, HttpResponse, HttpResponseRedirect, JsonResponse
+from django.http import (
+    Http404,
+    HttpResponse,
+    HttpResponseNotAllowed,
+    HttpResponseRedirect,
+    JsonResponse,
+)
 from django.shortcuts import redirect, render
 from django.template.response import TemplateResponse
 from django.test import signals
@@ -2711,6 +2717,9 @@ class NetMessageAdmin(EntityModelAdmin):
         return custom_urls + urls
 
     def resend_message(self, request, object_id):
+        if request.method != "POST":
+            return HttpResponseNotAllowed(["POST"])
+
         if not self.has_change_permission(request):
             raise PermissionDenied
 

@@ -4,7 +4,10 @@
 {% block object-tools-items %}
   {% if resend_url %}
     <li>
-      <a class="historylink" href="{{ resend_url }}">{% trans "Resend Message" %}</a>
+      <form method="post" action="{{ resend_url }}" style="display: inline;">
+        {% csrf_token %}
+        <button type="submit" class="historylink">{% trans "Resend Message" %}</button>
+      </form>
     </li>
   {% endif %}
   {% if original %}
