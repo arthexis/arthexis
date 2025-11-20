@@ -1,0 +1,22 @@
+[
+  {
+    "model": "nodes.nodefeature",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "slug": "chat-bridge",
+      "display": "Chat Bridge",
+      "roles": [
+        [
+          "Control"
+        ],
+        [
+          "Interface"
+        ],
+        [
+          "Watchtower"
+        ]
+      ]
+    }
+  }
+]

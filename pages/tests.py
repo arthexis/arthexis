@@ -5040,19 +5040,41 @@ class ChatConsumerTests(TransactionTestCase):
 
 
 class ChatWidgetViewTests(TestCase):
-    @override_settings(PAGES_CHAT_ENABLED=True)
-    def test_chat_widget_present_when_enabled(self):
+    def setUp(self):
         Site.objects.update_or_create(
             id=1, defaults={"domain": "example.com", "name": "Example"}
         )
+        self.role, _ = NodeRole.objects.get_or_create(name="Interface")
+
+    def _enable_chat_feature(self):
+        node, _ = Node.objects.get_or_create(
+            mac_address=Node.get_current_mac(),
+            defaults={
+                "hostname": "local",
+                "address": "127.0.0.1",
+                "port": 8000,
+                "role": self.role,
+            },
+        )
+        feature, _ = NodeFeature.objects.get_or_create(
+            slug="chat-bridge", defaults={"display": "Chat Bridge"}
+        )
+        NodeFeatureAssignment.objects.get_or_create(node=node, feature=feature)
+
+    @override_settings(PAGES_CHAT_ENABLED=True)
+    def test_chat_widget_present_when_enabled(self):
+        self._enable_chat_feature()
         response = self.client.get(reverse("pages:index"))
         self.assertContains(response, 'id="chat-widget"')
 
     @override_settings(PAGES_CHAT_ENABLED=False)
     def test_chat_widget_hidden_when_disabled(self):
-        Site.objects.update_or_create(
-            id=1, defaults={"domain": "example.com", "name": "Example"}
-        )
+        self._enable_chat_feature()
+        response = self.client.get(reverse("pages:index"))
+        self.assertNotContains(response, 'id="chat-widget"')
+
+    @override_settings(PAGES_CHAT_ENABLED=True)
+    def test_chat_widget_hidden_when_feature_disabled(self):
         response = self.client.get(reverse("pages:index"))
         self.assertNotContains(response, 'id="chat-widget"')
 
@@ -5063,6 +5085,20 @@ class AdminChatWidgetTests(TestCase):
         Site.objects.update_or_create(
             id=1, defaults={"domain": "example.com", "name": "Example"}
         )
+        role, _ = NodeRole.objects.get_or_create(name="Interface")
+        node, _ = Node.objects.get_or_create(
+            mac_address=Node.get_current_mac(),
+            defaults={
+                "hostname": "local",
+                "address": "127.0.0.1",
+                "port": 8000,
+                "role": role,
+            },
+        )
+        feature, _ = NodeFeature.objects.get_or_create(
+            slug="chat-bridge", defaults={"display": "Chat Bridge"}
+        )
+        NodeFeatureAssignment.objects.get_or_create(node=node, feature=feature)
         User = get_user_model()
         user = User.objects.create_superuser(
             username="chat-admin", email="chat@example.com", password="pwd"
@@ -5074,6 +5110,22 @@ class AdminChatWidgetTests(TestCase):
         self.assertContains(response, "pages/js/chat.js")
         self.assertContains(response, "chat-close")
         self.assertContains(response, "data-chat-input")
+
+    @override_settings(PAGES_CHAT_ENABLED=True)
+    def test_admin_chat_widget_hidden_without_feature(self):
+        Site.objects.update_or_create(
+            id=1, defaults={"domain": "example.com", "name": "Example"}
+        )
+        User = get_user_model()
+        user = User.objects.create_superuser(
+            username="chat-admin", email="chat@example.com", password="pwd"
+        )
+        self.client.force_login(user)
+
+        response = self.client.get(reverse("admin:index"))
+
+        self.assertNotContains(response, "pages/js/chat.js")
+        self.assertNotContains(response, 'id="chat-widget"')
 
 
 class OdooChatBridgeTests(TestCase):

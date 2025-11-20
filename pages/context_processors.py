@@ -3,7 +3,7 @@ from django.urls import Resolver404, resolve
 from django.shortcuts import resolve_url
 from django.conf import settings
 from pathlib import Path
-from nodes.models import Node
+from nodes.models import Node, NodeFeature
 from core.models import Reference
 from core.reference_utils import filter_visible_references
 from .models import Module
@@ -145,7 +145,12 @@ def nav_links(request):
         node=node,
     )
 
-    chat_enabled = getattr(settings, "PAGES_CHAT_ENABLED", False)
+    chat_feature = NodeFeature.objects.filter(slug="chat-bridge").first()
+    chat_enabled = bool(
+        getattr(settings, "PAGES_CHAT_ENABLED", False)
+        and chat_feature
+        and chat_feature.is_enabled
+    )
     chat_socket_path = getattr(settings, "PAGES_CHAT_SOCKET_PATH", "/ws/pages/chat/")
 
     return {
