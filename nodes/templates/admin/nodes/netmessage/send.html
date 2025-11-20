@@ -5,42 +5,20 @@
   {{ block.super }}
   {{ media }}
   <style>
-    .send-net-message-layout {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-      column-gap: 2.5rem;
-      row-gap: 2rem;
-      align-items: start;
-    }
-
-    .send-net-message-column {
-      padding-inline: 1rem;
-    }
-
-    .send-net-message-column .module {
+    .send-net-message-fields .module {
       width: 100%;
     }
 
-    .send-net-message-column .module .form-row {
+    .send-net-message-fields .module .form-row {
       align-items: center;
     }
 
-    .send-net-message-column .module .form-row .flex-container {
+    .send-net-message-fields .module .form-row .flex-container {
       width: 100%;
     }
 
-    .send-net-message-column .module .form-row .flex-container:not(.checkbox-row) > label {
+    .send-net-message-fields .module .form-row .flex-container:not(.checkbox-row) > label {
       min-width: 12rem;
-    }
-
-    @media (max-width: 960px) {
-      .send-net-message-layout {
-        grid-template-columns: 1fr;
-      }
-
-      .send-net-message-column {
-        padding-inline: 0;
-      }
     }
 
     .send-net-message-submit {
@@ -63,21 +41,10 @@
   <form method="post" action="">
     {% csrf_token %}
     {{ adminform.form.non_field_errors }}
-    <div class="send-net-message-layout">
-      <div class="send-net-message-column send-net-message-column--message">
-        {% for fieldset in adminform %}
-          {% if forloop.counter0 == 0 %}
-            {% include "admin/includes/fieldset.html" with heading_level=2 prefix="fieldset" id_prefix=0 id_suffix=forloop.counter0 %}
-          {% endif %}
-        {% endfor %}
-      </div>
-      <div class="send-net-message-column send-net-message-column--filters">
-        {% for fieldset in adminform %}
-          {% if forloop.counter0 > 0 %}
-            {% include "admin/includes/fieldset.html" with heading_level=2 prefix="fieldset" id_prefix=0 id_suffix=forloop.counter0 %}
-          {% endif %}
-        {% endfor %}
-      </div>
+    <div class="send-net-message-fields">
+      {% for fieldset in adminform %}
+        {% include "admin/includes/fieldset.html" with heading_level=2 prefix="fieldset" id_prefix=0 id_suffix=forloop.counter0 %}
+      {% endfor %}
     </div>
     <div class="submit-row">
       <a href="{% url opts|admin_urlname:'changelist' %}" class="button cancel-link">{% trans 'Cancel' %}</a>
