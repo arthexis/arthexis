@@ -63,7 +63,7 @@ fi
 if [ "$SKIP_UPGRADE" != true ] && [ -f "$LOCK_DIR/auto_upgrade.lck" ]; then
   MODE=$(tr -d '\r\n' < "$LOCK_DIR/auto_upgrade.lck" | tr 'A-Z' 'a-z')
   [ -n "$MODE" ] || MODE="version"
-  UPGRADE_ARGS=("$BASE_DIR/upgrade.sh" "--no-restart")
+  UPGRADE_ARGS=("$BASE_DIR/upgrade.sh")
   case "$MODE" in
     latest)
       UPGRADE_ARGS+=("--latest")
