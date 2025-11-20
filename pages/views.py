@@ -78,7 +78,6 @@ from core.models import (
     ClientReportSchedule,
     PasskeyCredential,
     SecurityGroup,
-    Todo,
 )
 from ocpp.models import Charger
 from .utils import get_original_referer, get_request_language_code
@@ -2283,54 +2282,6 @@ def submit_user_story(request):
         if language_code:
             story.language_code = language_code
         story.save()
-        if request.user.is_authenticated and request.user.is_superuser:
-            comment_text = (story.comments or "").strip()
-            prefix = "Triage "
-            request_field = Todo._meta.get_field("request")
-            available_length = max(request_field.max_length - len(prefix), 0)
-            if available_length > 0 and comment_text:
-                summary = Truncator(comment_text).chars(
-                    available_length, truncate="…"
-                )
-            else:
-                summary = comment_text[:available_length]
-            todo_request = f"{prefix}{summary}".strip()
-            user_is_authenticated = request.user.is_authenticated
-            node = Node.get_local()
-            existing_todo = (
-                Todo.objects.filter(request__iexact=todo_request, is_deleted=False)
-                .order_by("pk")
-                .first()
-            )
-            if existing_todo:
-                update_fields: set[str] = set()
-                if node and existing_todo.origin_node_id != node.pk:
-                    existing_todo.origin_node = node
-                    update_fields.add("origin_node")
-                if existing_todo.original_user_id != request.user.pk:
-                    existing_todo.original_user = request.user
-                    update_fields.add("original_user")
-                if (
-                    existing_todo.original_user_is_authenticated
-                    != user_is_authenticated
-                ):
-                    existing_todo.original_user_is_authenticated = (
-                        user_is_authenticated
-                    )
-                    update_fields.add("original_user_is_authenticated")
-                if not existing_todo.is_user_data:
-                    existing_todo.is_user_data = True
-                    update_fields.add("is_user_data")
-                if update_fields:
-                    existing_todo.save(update_fields=tuple(update_fields))
-            else:
-                Todo.objects.create(
-                    request=todo_request,
-                    origin_node=node,
-                    original_user=request.user,
-                    original_user_is_authenticated=user_is_authenticated,
-                    is_user_data=True,
-                )
         if story.take_screenshot:
             screenshot_url = request.META.get("HTTP_REFERER", "")
             parsed = urlparse(screenshot_url)

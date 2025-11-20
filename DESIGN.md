@@ -2,7 +2,6 @@
 
 ## General UI Principles
 - Treat `DESIGN.md` as the canonical reference for interface expectations. Any UI change should be cross-checked here before submitting a patch.
-- After modifying a view or any part of the GUI, add a `Todo` fixture titled `Validate screen [Screen]` and set its `url` to the screen needing manual validation.
 
 ## Favicons
 - All favicon assets must share the same rendered radius. When exporting favicons, keep the artwork centered on a square canvas and scale it so it fills the entire available area.

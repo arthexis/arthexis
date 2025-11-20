@@ -72,7 +72,6 @@ class OrderedModelIndexView(BaseAdminDocsView):
         "protocols.cpforwarder": "ocpp",
         "core.package": "teams",
         "core.packagerelease": "teams",
-        "core.todo": "teams",
         "pages.usermanual": USER_MANUALS_APP,
     }
 
