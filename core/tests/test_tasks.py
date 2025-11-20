@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 from subprocess import CompletedProcess
 from types import SimpleNamespace
@@ -760,6 +761,46 @@ def test_is_network_failure_handles_tls_resets(stderr):
     assert tasks._is_network_failure(error) is True
 
 
+def test_record_auto_upgrade_failure_broadcasts_net_message(
+    monkeypatch, tmp_path
+):
+    """Auto-upgrade failures should broadcast Net Messages with counts."""
+
+    from core import tasks
+
+    messages: list[tuple[str, str]] = []
+    fake_nodes = SimpleNamespace()
+
+    class FakeNode:
+        hostname = "alpha"
+
+        @classmethod
+        def get_local(cls):
+            return cls()
+
+    class FakeNetMessage:
+        @staticmethod
+        def broadcast(subject: str, body: str):
+            messages.append((subject, body))
+
+    fake_nodes.NetMessage = FakeNetMessage
+    fake_nodes.Node = FakeNode
+
+    monkeypatch.setitem(sys.modules, "nodes.models", fake_nodes)
+    monkeypatch.setattr(tasks, "_append_auto_upgrade_log", lambda *_args, **_kwargs: None)
+
+    fixed_time = tasks.timezone.make_aware(datetime(2024, 1, 2, 3, 4))
+    monkeypatch.setattr(tasks.timezone, "now", lambda: fixed_time)
+
+    count = tasks._record_auto_upgrade_failure(tmp_path, "Git fetch failed")
+
+    assert count == 1
+    assert (
+        tmp_path / "locks" / tasks.AUTO_UPGRADE_FAILURE_LOCK_NAME
+    ).read_text(encoding="utf-8") == "1"
+    assert messages == [("alpha 2024-01-02 03:04", "GIT-FETCH-FAILED x1")]
+
+
 def test_check_github_updates_network_failures_trigger_reboot(
     monkeypatch, tmp_path
 ):
@@ -831,6 +872,55 @@ def test_check_github_updates_network_failures_trigger_reboot(
         for message in messages
     )
     assert any("Rebooting due to repeated auto-upgrade network failures" in msg for msg in messages)
+
+
+def test_check_github_updates_records_failures(monkeypatch, tmp_path):
+    """Upgrade errors should record auto-upgrade failures and notify."""
+
+    from core import tasks
+
+    failure_reasons: list[str] = []
+
+    monkeypatch.setattr(tasks, "_project_base_dir", lambda: tmp_path)
+    monkeypatch.setattr(tasks, "_append_auto_upgrade_log", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        tasks, "_record_auto_upgrade_failure", lambda _base, reason: failure_reasons.append(reason)
+    )
+    monkeypatch.setattr(tasks, "_auto_upgrade_log_path", lambda _base: tmp_path / "auto-upgrade.log")
+    monkeypatch.setattr(tasks, "_schedule_health_check", lambda *args, **kwargs: None)
+    monkeypatch.setattr(tasks, "_load_skipped_revisions", lambda base: set())
+    monkeypatch.setattr(tasks, "_resolve_release_severity", lambda version: tasks.SEVERITY_NORMAL)
+    monkeypatch.setattr(tasks, "_read_remote_version", lambda base, branch: "0.0.1")
+    monkeypatch.setattr(tasks, "_read_local_version", lambda base: "0.0.0")
+    monkeypatch.setattr(tasks, "_network_failure_lock_path", lambda _base: tmp_path / "auto_upgrade_network_failures.lck")
+
+    monkeypatch.setitem(
+        sys.modules,
+        "core.notifications",
+        SimpleNamespace(notify=lambda *args, **kwargs: None),
+    )
+
+    import nodes.apps as nodes_apps
+
+    monkeypatch.setattr(nodes_apps, "_startup_notification", lambda: None)
+
+    def fake_run(command, *args, **kwargs):
+        if command[:2] == ["git", "fetch"]:
+            raise subprocess.CalledProcessError(
+                1,
+                command,
+                None,
+                "fatal: unable to access 'https://example.com': Could not resolve host: example.com",
+            )
+        return CompletedProcess(command, 0)
+
+    monkeypatch.setattr(tasks.subprocess, "run", fake_run)
+    monkeypatch.setattr(tasks.subprocess, "check_output", lambda *args, **kwargs: "unused")
+
+    with pytest.raises(subprocess.CalledProcessError):
+        tasks.check_github_updates()
+
+    assert failure_reasons == ["NETWORK"]
 
 
 def test_check_github_updates_skips_reboot_when_charge_point_active(

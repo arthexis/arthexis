@@ -5,6 +5,7 @@ import os
 import shutil
 import re
 import shlex
+import socket
 import subprocess
 import time
 import uuid
@@ -25,6 +26,7 @@ AUTO_UPGRADE_HEALTH_DELAY_SECONDS = 300
 AUTO_UPGRADE_SKIP_LOCK_NAME = "auto_upgrade_skip_revisions.lck"
 AUTO_UPGRADE_NETWORK_FAILURE_LOCK_NAME = "auto_upgrade_network_failures.lck"
 AUTO_UPGRADE_NETWORK_FAILURE_THRESHOLD = 3
+AUTO_UPGRADE_FAILURE_LOCK_NAME = "auto_upgrade_failures.lck"
 WATCH_UPGRADE_BINARY = Path("/usr/local/bin/watch-upgrade")
 
 _NETWORK_FAILURE_PATTERNS = (
@@ -76,6 +78,14 @@ if model is not None:  # pragma: no branch - runtime constant setup
 
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_release_severity(version: str | None) -> str:
+    try:
+        return release_workflow.resolve_release_severity(version)
+    except Exception:  # pragma: no cover - protective fallback
+        logger.exception("Failed to resolve release severity")
+        return SEVERITY_NORMAL
 
 
 @shared_task
@@ -879,6 +889,111 @@ def _handle_network_failure_if_applicable(
     return True
 
 
+def _auto_upgrade_failure_lock_path(base_dir: Path) -> Path:
+    return base_dir / "locks" / AUTO_UPGRADE_FAILURE_LOCK_NAME
+
+
+def _read_auto_upgrade_failure_count(base_dir: Path) -> int:
+    lock_path = _auto_upgrade_failure_lock_path(base_dir)
+    try:
+        raw_value = lock_path.read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        return 0
+    except OSError:
+        logger.warning("Failed to read auto-upgrade failure lockfile")
+        return 0
+    if not raw_value:
+        return 0
+    try:
+        return int(raw_value)
+    except ValueError:
+        logger.warning(
+            "Invalid auto-upgrade failure lockfile contents: %s", raw_value
+        )
+        return 0
+
+
+def _write_auto_upgrade_failure_count(base_dir: Path, count: int) -> None:
+    lock_path = _auto_upgrade_failure_lock_path(base_dir)
+    try:
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        lock_path.write_text(str(count), encoding="utf-8")
+    except OSError:
+        logger.warning("Failed to update auto-upgrade failure lockfile")
+
+
+def _reset_auto_upgrade_failure_count(base_dir: Path) -> None:
+    lock_path = _auto_upgrade_failure_lock_path(base_dir)
+    try:
+        if lock_path.exists():
+            lock_path.unlink()
+    except OSError:
+        logger.warning("Failed to remove auto-upgrade failure lockfile")
+
+
+def _normalize_failure_reason(reason: str) -> str:
+    tokens = re.findall(r"[A-Z0-9]+", reason.upper())
+    if not tokens:
+        return "AUTO-UPGRADE-FAIL"
+    return "-".join(tokens[:5])
+
+
+def _send_auto_upgrade_failure_message(
+    base_dir: Path, reason: str, failure_count: int
+) -> None:
+    from nodes.models import NetMessage, Node
+
+    try:
+        node = Node.get_local()
+    except Exception:
+        logger.warning(
+            "Auto-upgrade failure Net Message skipped: local node unavailable",
+            exc_info=True,
+        )
+        return
+
+    node_name = getattr(node, "hostname", None) or socket.gethostname() or "node"
+    timestamp = timezone.localtime(timezone.now()).strftime("%Y-%m-%d %H:%M")
+    subject = f"{node_name} {timestamp}"
+    body = f"{reason} x{failure_count}"
+
+    try:
+        NetMessage.broadcast(subject=subject, body=body)
+    except Exception:
+        logger.warning(
+            "Failed to broadcast auto-upgrade failure Net Message", exc_info=True
+        )
+
+
+def _record_auto_upgrade_failure(base_dir: Path, reason: str) -> int:
+    normalized_reason = _normalize_failure_reason(reason)
+    count = _read_auto_upgrade_failure_count(base_dir) + 1
+    _write_auto_upgrade_failure_count(base_dir, count)
+    _append_auto_upgrade_log(
+        base_dir,
+        f"Auto-upgrade failure {count}: {normalized_reason}",
+    )
+    _send_auto_upgrade_failure_message(base_dir, normalized_reason, count)
+    return count
+
+
+def _classify_auto_upgrade_failure(exc: Exception) -> str:
+    if isinstance(exc, subprocess.CalledProcessError):
+        if _is_network_failure(exc):
+            return "NETWORK"
+        command = exc.cmd
+        if isinstance(command, (list, tuple)):
+            command_text = " ".join(str(item) for item in command)
+        else:
+            command_text = str(command)
+        if "git" in command_text:
+            return "GIT-ERROR"
+        if "upgrade.sh" in command_text:
+            return "UPGRADE-SCRIPT"
+        return "SUBPROCESS"
+    return exc.__class__.__name__
+
+
 def _resolve_service_url(base_dir: Path) -> str:
     """Return the local URL used to probe the Django suite."""
 
@@ -918,6 +1033,7 @@ def check_github_updates(channel_override: str | None = None) -> None:
     mode_file = base_dir / "locks" / "auto_upgrade.lck"
     mode = "stable"
     reset_network_failures = True
+    failure_recorded = False
     try:
         try:
             raw_mode = mode_file.read_text().strip()
@@ -1111,6 +1227,8 @@ def check_github_updates(channel_override: str | None = None) -> None:
                     "will retry on next cycle"
                 ),
             )
+            _record_auto_upgrade_failure(base_dir, "UPGRADE-LAUNCH")
+            failure_recorded = True
             return
 
         _append_auto_upgrade_log(
@@ -1123,6 +1241,8 @@ def check_github_updates(channel_override: str | None = None) -> None:
             restart_if_active=True,
             revert_on_failure=True,
         ):
+            _record_auto_upgrade_failure(base_dir, "SERVICE-RESTART")
+            failure_recorded = True
             return
 
         _append_auto_upgrade_log(
@@ -1139,9 +1259,15 @@ def check_github_updates(channel_override: str | None = None) -> None:
                 ),
             )
             _schedule_health_check(1)
+    except Exception as exc:
+        failure_recorded = True
+        _record_auto_upgrade_failure(base_dir, _classify_auto_upgrade_failure(exc))
+        raise
     finally:
         if reset_network_failures:
             _reset_network_failure_count(base_dir)
+        if not failure_recorded:
+            _reset_auto_upgrade_failure_count(base_dir)
 
 
 @shared_task
@@ -1233,6 +1359,7 @@ def _handle_failed_health_check(base_dir: Path, detail: str) -> None:
         detail=detail,
         revision=revision or None,
     )
+    _record_auto_upgrade_failure(base_dir, detail or "Health check failed")
 
 
 @shared_task
