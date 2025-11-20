@@ -8,8 +8,13 @@
     .send-net-message-layout {
       display: grid;
       grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-      gap: 2rem;
+      column-gap: 2.5rem;
+      row-gap: 2rem;
       align-items: start;
+    }
+
+    .send-net-message-column {
+      padding-inline: 1rem;
     }
 
     .send-net-message-column .module {
@@ -32,6 +37,15 @@
       .send-net-message-layout {
         grid-template-columns: 1fr;
       }
+
+      .send-net-message-column {
+        padding-inline: 0;
+      }
+    }
+
+    .send-net-message-submit {
+      padding: 0.75rem 2.5rem;
+      font-size: 1rem;
     }
   </style>
 {% endblock %}
@@ -67,7 +81,7 @@
     </div>
     <div class="submit-row">
       <a href="{% url opts|admin_urlname:'changelist' %}" class="button cancel-link">{% trans 'Cancel' %}</a>
-      <button type="submit" class="button default">{% trans 'Send message' %}</button>
+      <button type="submit" class="button default send-net-message-submit">{% trans 'Send message' %}</button>
     </div>
   </form>
 {% endblock %}

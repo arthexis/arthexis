@@ -1,0 +1,13 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Validate screen Send Net Message layout padding",
+      "created_on": "2025-01-01T00:00:00Z",
+      "url": "/admin/nodes/netmessage/send/",
+      "request_details": "1. Sign into the Django admin and open Nodes → Net messages → Send Net Message or browse to /admin/nodes/netmessage/send/.\n2. Confirm the Subject/Body column and the filters column have consistent padding so content is not flush against the grid divider.\n3. Verify the Send message button renders with larger padding for better tap/click targets while preserving the Cancel link styling.\n4. Submit a test message and confirm the page processes without UI regressions.",
+      "generated_for_version": "",
+      "generated_for_revision": ""
+    }
+  }
+]
