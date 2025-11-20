@@ -141,6 +141,44 @@ def test_run_upgrade_command_logs_detached_failure(monkeypatch, tmp_path):
     assert systemd_call[1].get("text") is True
 
 
+def test_run_upgrade_command_requires_detached_services(monkeypatch, tmp_path):
+    """Celery-triggered auto-upgrades should not run inline when detached launch is unavailable."""
+
+    from core import tasks
+
+    log_entries: list[str] = []
+    monkeypatch.setattr(tasks, "_append_auto_upgrade_log", lambda base, message: log_entries.append(message))
+
+    watch_binary = tmp_path / "watch-upgrade"
+    watch_binary.write_text("#!/bin/true", encoding="utf-8")
+    monkeypatch.setattr(tasks, "WATCH_UPGRADE_BINARY", watch_binary)
+
+    monkeypatch.setenv("INVOCATION_ID", "auto-upgrade-test")
+
+    monkeypatch.setattr(
+        tasks.shutil,
+        "which",
+        lambda command: "/bin/systemd-run" if command == "systemd-run" else None,
+    )
+
+    run_calls: list[list[str]] = []
+
+    def fake_run(command, **kwargs):
+        run_calls.append(command)
+        return CompletedProcess(command, 0)
+
+    monkeypatch.setattr(tasks.subprocess, "run", fake_run)
+
+    unit, ran_inline = tasks._run_upgrade_command(
+        tmp_path, ["upgrade.sh", "--stable"], require_detached=True
+    )
+
+    assert unit is None
+    assert ran_inline is False
+    assert run_calls == []
+    assert any("Detached auto-upgrade unavailable" in entry for entry in log_entries)
+
+
 def test_check_github_updates_uses_project_base_dir(monkeypatch, tmp_path):
     """The auto-upgrade task should honor ``settings.BASE_DIR`` for log writes."""
 
