@@ -11,7 +11,7 @@ from django.urls import NoReverseMatch, path, reverse
 from django.utils.html import format_html
 
 from django.template.response import TemplateResponse
-from django.http import FileResponse, JsonResponse
+from django.http import FileResponse, JsonResponse, HttpResponseNotAllowed
 from django.utils import timezone
 from django.db.models import Count
 from django.core.exceptions import FieldError
@@ -1198,14 +1198,7 @@ def favorite_toggle(request, ct_id):
             },
         )
 
-    Favorite.objects.create(
-        user=request.user,
-        content_type=ct,
-        custom_label="",
-        user_data=True,
-        priority=0,
-    )
-    return redirect(next_url or "admin:index")
+    return HttpResponseNotAllowed(["POST"])
 
 
 def favorite_list(request):

@@ -3,7 +3,16 @@
 <tr class="model-{{ model_name }}{% if model.admin_url in request.path|urlencode %} current-model{% endif %}">
   <th scope="row" id="{{ row_dom_id }}">
     {% if ct_id %}
-      <a href="{% url 'admin:favorite_toggle' ct_id %}?next={{ request.get_full_path|urlencode }}" class="favorite-star{% if fav %} favorited{% endif %}" title="Toggle favorite">&#9733;</a>
+      <form method="post" action="{% url 'admin:favorite_toggle' ct_id %}" class="favorite-toggle-form">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.get_full_path|urlencode }}">
+        {% if fav %}
+          <input type="hidden" name="remove" value="1">
+        {% else %}
+          <input type="hidden" name="user_data" value="on">
+        {% endif %}
+        <button type="submit" class="favorite-star{% if fav %} favorited{% endif %}" title="{% translate 'Toggle favorite' %}" aria-label="{% translate 'Toggle favorite' %}">&#9733;</button>
+      </form>
     {% endif %}
     {% if model.admin_url %}
       <a href="{{ model.admin_url }}"{% if model.admin_url in request.path|urlencode %} aria-current="page"{% endif %}>{{ fav.custom_label|default:model.name }}</a>

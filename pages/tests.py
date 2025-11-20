@@ -3731,7 +3731,7 @@ class FavoriteTests(TestCase):
         self.assertEqual(fav.custom_label, "Apps")
         self.assertTrue(fav.user_data)
 
-    def test_add_favorite_get_sets_defaults_and_redirects(self):
+    def test_add_favorite_get_returns_not_allowed(self):
         ct = ContentType.objects.get_by_natural_key("pages", "application")
         next_url = reverse("admin:pages_application_changelist")
         url = (
@@ -3739,6 +3739,18 @@ class FavoriteTests(TestCase):
         )
 
         resp = self.client.get(url)
+
+        self.assertEqual(resp.status_code, 405)
+        self.assertFalse(
+            Favorite.objects.filter(user=self.user, content_type=ct).exists()
+        )
+
+    def test_add_favorite_post_sets_defaults_and_redirects(self):
+        ct = ContentType.objects.get_by_natural_key("pages", "application")
+        next_url = reverse("admin:pages_application_changelist")
+        url = reverse("admin:favorite_toggle", args=[ct.id])
+
+        resp = self.client.post(url, {"next": next_url, "user_data": "on"})
 
         self.assertRedirects(resp, next_url)
         fav = Favorite.objects.get(user=self.user, content_type=ct)
