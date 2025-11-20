@@ -273,8 +273,6 @@ def main() -> None:  # pragma: no cover - hardware dependent
                     lock_payload = _read_lock_file()
                     last_lock_mtime = mtime
             else:
-                if last_lock_mtime != 0:
-                    lock_payload = LockPayload("", "", DEFAULT_SCROLL_MS, False)
                 last_lock_mtime = 0.0
 
             last_net_message = _send_net_message_from_lock(
