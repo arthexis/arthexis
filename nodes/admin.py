@@ -2698,12 +2698,50 @@ class NetMessageAdmin(EntityModelAdmin):
         opts = self.model._meta
         custom_urls = [
             path(
+                "<path:object_id>/resend/",
+                self.admin_site.admin_view(self.resend_message),
+                name=f"{opts.app_label}_{opts.model_name}_resend",
+            ),
+            path(
                 "send/",
                 self.admin_site.admin_view(self.send_tool_view),
                 name=f"{opts.app_label}_{opts.model_name}_send",
             )
         ]
         return custom_urls + urls
+
+    def resend_message(self, request, object_id):
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+
+        net_message = self.get_object(request, object_id)
+        if not net_message:
+            self.message_user(request, _("Net Message not found."), messages.ERROR)
+            changelist_url = reverse(
+                f"admin:{self.model._meta.app_label}_{self.model._meta.model_name}_changelist"
+            )
+            return redirect(changelist_url)
+
+        if not self.has_change_permission(request, net_message):
+            raise PermissionDenied
+
+        try:
+            net_message.propagate()
+        except Exception as exc:  # pragma: no cover - admin feedback
+            self.message_user(request, str(exc), level=messages.ERROR)
+        else:
+            self.log_change(request, net_message, _("Resent net message"))
+            self.message_user(
+                request,
+                _("Net Message resent to the network."),
+                level=messages.SUCCESS,
+            )
+
+        change_url = reverse(
+            f"admin:{self.model._meta.app_label}_{self.model._meta.model_name}_change",
+            args=[object_id],
+        )
+        return redirect(change_url)
 
     def send_tool_view(self, request):
         if not self.has_add_permission(request):
@@ -2753,6 +2791,15 @@ class NetMessageAdmin(EntityModelAdmin):
             "admin/nodes/netmessage/send.html",
             context,
         )
+
+    def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
+        extra_context = extra_context or {}
+        if object_id:
+            extra_context["resend_url"] = reverse(
+                f"admin:{self.model._meta.app_label}_{self.model._meta.model_name}_resend",
+                args=[object_id],
+            )
+        return super().changeform_view(request, object_id, form_url, extra_context)
 
     def get_changeform_initial_data(self, request):
         initial = super().get_changeform_initial_data(request)

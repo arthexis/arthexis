@@ -2,6 +2,11 @@
 {% load i18n admin_urls %}
 
 {% block object-tools-items %}
+  {% if resend_url %}
+    <li>
+      <a class="historylink" href="{{ resend_url }}">{% trans "Resend Message" %}</a>
+    </li>
+  {% endif %}
   {% if original %}
     <li>
       <a class="addlink" href="{% url opts|admin_urlname:'add' %}?reply_to={{ original.pk }}">{% trans "Reply Message" %}</a>
