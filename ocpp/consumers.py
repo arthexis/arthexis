@@ -1795,8 +1795,8 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 snapshot = json.loads(json.dumps(payload, ensure_ascii=False))
             except (TypeError, ValueError):
                 snapshot = {
-                    str(key): (str(value) if value is not None else None),
-                    for key, value in payload.items(),
+                    str(key): (str(value) if value is not None else None)
+                    for key, value in payload.items()
                 }
             SecurityEvent.objects.create(
                 charger=target,
