@@ -1042,9 +1042,6 @@ def check_github_updates(channel_override: str | None = None) -> None:
             args = ["./upgrade.sh", "--stable"]
             upgrade_was_applied = True
 
-        if upgrade_was_applied:
-            args.append("--no-restart")
-
         with log_file.open("a") as fh:
             fh.write(
                 f"{timezone.now().isoformat()} running: {' '.join(args)}\n"
