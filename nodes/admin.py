@@ -29,11 +29,9 @@ import json
 import subprocess
 import uuid
 
-import pyperclip
 import requests
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
-from pyperclip import PyperclipException
 from requests import RequestException
 from asgiref.sync import async_to_sync
 
@@ -2538,44 +2536,12 @@ class ContentSampleAdmin(EntityModelAdmin):
         urls = super().get_urls()
         custom = [
             path(
-                "from-clipboard/",
-                self.admin_site.admin_view(self.add_from_clipboard),
-                name="nodes_contentsample_from_clipboard",
-            ),
-            path(
                 "capture/",
                 self.admin_site.admin_view(self.capture_now),
                 name="nodes_contentsample_capture",
             ),
         ]
         return custom + urls
-
-    def add_from_clipboard(self, request):
-        try:
-            content = pyperclip.paste()
-        except PyperclipException as exc:  # pragma: no cover - depends on OS clipboard
-            self.message_user(request, f"Clipboard error: {exc}", level=messages.ERROR)
-            return redirect("..")
-        if not content:
-            self.message_user(request, "Clipboard is empty.", level=messages.INFO)
-            return redirect("..")
-        if ContentSample.objects.filter(
-            content=content, kind=ContentSample.TEXT
-        ).exists():
-            self.message_user(
-                request, "Duplicate sample not created.", level=messages.INFO
-            )
-            return redirect("..")
-        user = request.user if request.user.is_authenticated else None
-        with suppress_default_classifiers():
-            sample = ContentSample.objects.create(
-                content=content, user=user, kind=ContentSample.TEXT
-            )
-        run_default_classifiers(sample)
-        self.message_user(
-            request, "Text sample added from clipboard.", level=messages.SUCCESS
-        )
-        return redirect("..")
 
     def capture_now(self, request):
         node = Node.get_local()

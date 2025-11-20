@@ -88,7 +88,6 @@ from .backends import OutboxEmailBackend
 from .tasks import (
     capture_node_screenshot,
     poll_unreachable_upstream,
-    sample_clipboard,
     run_role_configuration,
 )
 from . import tasks as node_tasks
@@ -147,23 +146,6 @@ class NodeTests(TestCase):
         self.client.force_login(self.user)
         NodeRole.objects.get_or_create(name="Terminal")
         NodeRole.objects.get_or_create(name="Interface")
-
-    def test_terminal_role_enables_clipboard_feature_by_default(self):
-        role = NodeRole.objects.get(name="Terminal")
-        feature, _ = NodeFeature.objects.get_or_create(
-            slug="clipboard-poll", defaults={"display": "Clipboard Poll"}
-        )
-        feature.roles.add(role)
-
-        node = Node.objects.create(
-            hostname="terminal-node",
-            address="10.0.0.5",
-            port=8888,
-            mac_address="aa:bb:cc:dd:ee:ff",
-            role=role,
-        )
-
-        self.assertTrue(node.has_feature("clipboard-poll"))
 
 
 class NodeGetLocalDatabaseUnavailableTests(SimpleTestCase):
@@ -629,7 +611,7 @@ class NodeGetLocalTests(TestCase):
 
     def test_register_node_feature_toggle(self):
         NodeFeature.objects.get_or_create(
-            slug="clipboard-poll", defaults={"display": "Clipboard Poll"}
+            slug="screenshot-poll", defaults={"display": "Screenshot Poll"}
         )
         url = reverse("register-node")
         first = self.client.post(
@@ -639,13 +621,13 @@ class NodeGetLocalTests(TestCase):
                 "address": "127.0.0.1",
                 "port": 8888,
                 "mac_address": "00:aa:bb:cc:dd:ee",
-                "features": ["clipboard-poll"],
+                "features": ["screenshot-poll"],
             },
             content_type="application/json",
         )
         self.assertEqual(first.status_code, 200)
         node = Node.objects.get(mac_address="00:aa:bb:cc:dd:ee")
-        self.assertTrue(node.has_feature("clipboard-poll"))
+        self.assertTrue(node.has_feature("screenshot-poll"))
 
         self.client.post(
             url,
@@ -659,7 +641,7 @@ class NodeGetLocalTests(TestCase):
             content_type="application/json",
         )
         node.refresh_from_db()
-        self.assertFalse(node.has_feature("clipboard-poll"))
+        self.assertFalse(node.has_feature("screenshot-poll"))
 
     def test_register_node_records_version_details(self):
         url = reverse("register-node")
@@ -892,7 +874,7 @@ class NodeGetLocalTests(TestCase):
     def test_register_node_accepts_signed_payload_without_login(self):
         self.client.logout()
         NodeFeature.objects.get_or_create(
-            slug="clipboard-poll", defaults={"display": "Clipboard Poll"}
+            slug="screenshot-poll", defaults={"display": "Screenshot Poll"}
         )
         private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
         public_bytes = private_key.public_key().public_bytes(
@@ -918,7 +900,7 @@ class NodeGetLocalTests(TestCase):
             "public_key": public_bytes,
             "token": token,
             "signature": signature,
-            "features": ["clipboard-poll"],
+            "features": ["screenshot-poll"],
         }
         response = self.client.post(
             reverse("register-node"),
@@ -931,7 +913,7 @@ class NodeGetLocalTests(TestCase):
         node = Node.objects.get(mac_address="aa:bb:cc:dd:ee:11")
         self.assertEqual(node.public_key, public_bytes)
         self.assertFalse(node.trusted)
-        self.assertTrue(node.has_feature("clipboard-poll"))
+        self.assertTrue(node.has_feature("screenshot-poll"))
 
     def test_register_node_marks_visitor_payload_trusted(self):
         self.client.logout()
@@ -2020,38 +2002,6 @@ class NodeRegisterCurrentTests(TestCase):
         self.assertTrue(NodeRole.objects.filter(name="AttachmentNew").exists())
         existing_role.refresh_from_db()
         self.assertEqual(existing_role.description, "updated via attachment")
-
-    @pytest.mark.feature("clipboard-poll")
-    def test_clipboard_polling_task_is_not_scheduled(self):
-        feature, _ = NodeFeature.objects.get_or_create(
-            slug="clipboard-poll", defaults={"display": "Clipboard Poll"}
-        )
-        node = Node.objects.create(
-            hostname="clip",
-            address="127.0.0.1",
-            port=9000,
-            mac_address="00:11:22:33:44:99",
-        )
-        raw_name = f"poll_clipboard_node_{node.pk}"
-        task_name = slugify_task_name(raw_name)
-        schedule, _ = IntervalSchedule.objects.get_or_create(
-            every=10, period=IntervalSchedule.SECONDS
-        )
-        PeriodicTask.objects.update_or_create(
-            name=task_name,
-            defaults={
-                "interval": schedule,
-                "task": "nodes.tasks.sample_clipboard",
-            },
-        )
-
-        NodeFeatureAssignment.objects.create(node=node, feature=feature)
-
-        self.assertFalse(
-            PeriodicTask.objects.filter(
-                name__in=periodic_task_name_variants(raw_name)
-            ).exists()
-        )
 
     @pytest.mark.feature("screenshot-poll")
     def test_screenshot_polling_creates_task(self):
@@ -4765,54 +4715,6 @@ class ContentSampleTransactionTests(TestCase):
             sample1.save()
 
 
-@pytest.mark.feature("clipboard-poll")
-class ContentSampleAdminTests(TestCase):
-    def setUp(self):
-        User = get_user_model()
-        self.user = User.objects.create_superuser(
-            "clipboard_admin", "admin@example.com", "pass"
-        )
-        self.client.login(username="clipboard_admin", password="pass")
-
-    @patch("pyperclip.paste")
-    def test_add_from_clipboard_creates_sample(self, mock_paste):
-        mock_paste.return_value = "clip text"
-        url = reverse("admin:nodes_contentsample_from_clipboard")
-        response = self.client.get(url, follow=True)
-        self.assertEqual(
-            ContentSample.objects.filter(kind=ContentSample.TEXT).count(), 1
-        )
-        sample = ContentSample.objects.filter(kind=ContentSample.TEXT).first()
-        self.assertEqual(sample.content, "clip text")
-        self.assertEqual(sample.user, self.user)
-        self.assertIsNone(sample.node)
-        self.assertContains(response, "Text sample added from clipboard")
-
-    @patch("pyperclip.paste")
-    def test_add_from_clipboard_sets_node_when_local_exists(self, mock_paste):
-        mock_paste.return_value = "clip text"
-        Node.objects.create(
-            hostname="host",
-            address="127.0.0.1",
-            port=8888,
-            mac_address=Node.get_current_mac(),
-        )
-        url = reverse("admin:nodes_contentsample_from_clipboard")
-        self.client.get(url, follow=True)
-        sample = ContentSample.objects.filter(kind=ContentSample.TEXT).first()
-        self.assertIsNotNone(sample.node)
-
-    @patch("pyperclip.paste")
-    def test_add_from_clipboard_skips_duplicate(self, mock_paste):
-        mock_paste.return_value = "clip text"
-        url = reverse("admin:nodes_contentsample_from_clipboard")
-        self.client.get(url, follow=True)
-        resp = self.client.get(url, follow=True)
-        self.assertEqual(
-            ContentSample.objects.filter(kind=ContentSample.TEXT).count(), 1
-        )
-        self.assertContains(resp, "Duplicate sample not created")
-
 
 @override_settings(EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend")
 class EmailOutboxTests(TestCase):
@@ -4941,32 +4843,7 @@ class EmailOutboxTests(TestCase):
         self.assertEqual(fallbacks, [])
 
 
-class ClipboardTaskTests(TestCase):
-    @pytest.mark.feature("clipboard-poll")
-    @patch("nodes.tasks.pyperclip.paste")
-    def test_sample_clipboard_task_creates_sample(self, mock_paste):
-        mock_paste.return_value = "task text"
-        Node.objects.create(
-            hostname="host",
-            address="127.0.0.1",
-            port=8888,
-            mac_address=Node.get_current_mac(),
-        )
-        sample_clipboard()
-        self.assertEqual(
-            ContentSample.objects.filter(kind=ContentSample.TEXT).count(), 1
-        )
-        sample = ContentSample.objects.filter(kind=ContentSample.TEXT).first()
-        self.assertEqual(sample.content, "task text")
-        self.assertIsNone(sample.user)
-        self.assertIsNotNone(sample.node)
-        self.assertEqual(sample.node.hostname, "host")
-        # Duplicate should not create another sample
-        sample_clipboard()
-        self.assertEqual(
-            ContentSample.objects.filter(kind=ContentSample.TEXT).count(), 1
-        )
-
+class TaskCaptureTests(TestCase):
     @pytest.mark.feature("screenshot-poll")
     @patch("nodes.tasks.capture_screenshot")
     def test_capture_node_screenshot_task(self, mock_capture):

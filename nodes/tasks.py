@@ -7,12 +7,10 @@ from dataclasses import dataclass
 from datetime import timedelta
 from pathlib import Path
 
-import pyperclip
 import requests
 from celery import shared_task
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
-from pyperclip import PyperclipException
 
 from django.conf import settings
 from django.contrib import admin
@@ -273,24 +271,6 @@ def apply_node_role_configuration(
 
     job = run_role_configuration(node, trigger=trigger, user_id=user_id)
     return {"status": job.status, "job_id": job.pk}
-
-@shared_task
-def sample_clipboard() -> None:
-    """Save current clipboard contents to a :class:`ContentSample` entry."""
-    try:
-        content = pyperclip.paste()
-    except PyperclipException as exc:  # pragma: no cover - depends on OS clipboard
-        logger.error("Clipboard error: %s", exc)
-        return
-    if not content:
-        logger.info("Clipboard is empty")
-        return
-    if ContentSample.objects.filter(content=content, kind=ContentSample.TEXT).exists():
-        logger.info("Duplicate clipboard content; sample not created")
-        return
-    node = Node.get_local()
-    ContentSample.objects.create(content=content, node=node, kind=ContentSample.TEXT)
-
 
 @shared_task
 def capture_node_screenshot(

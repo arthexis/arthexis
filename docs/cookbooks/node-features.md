@@ -35,7 +35,6 @@ Use the search field to find features by slug or display string. The queryset pr
 | AP Router | `ap-router` | Satellite | Auto-managed network access point capability for satellites. |
 | Audio Capture | `audio-capture` | Control | Manual feature with a **Test Microphone** admin action for verification. |
 | Celery Queue | `celery-queue` | Satellite, Control, Watchtower | Auto-managed feature with a **Celery Report** admin action. |
-| Clipboard Poll | `clipboard-poll` | Terminal | Manual feature that polls clipboard content on terminal devices. |
 | GraphQL API | `graphql` | Control, Interface, Satellite, Watchtower | Exposes the GraphQL API entry point for eligible roles. |
 | GUI Toast | `gui-toast` | Terminal, Control | Auto-managed feature that surfaces GUI toast notifications when supported. |
 | LCD Screen | `lcd-screen` | Control | Auto-managed flag for nodes driving an attached LCD panel. |
