@@ -191,9 +191,25 @@ def _run_upgrade_command(base_dir: Path, args: list[str]) -> str | None:
                     f"{unit_name}; inspect with journalctl -u {unit_name}"
                 ),
             )
-            subprocess.run(detached_args, cwd=base_dir, check=True)
+            subprocess.run(
+                detached_args,
+                cwd=base_dir,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
             return unit_name
-        except Exception:
+        except Exception as exc:
+            def _format_detached_failure(error: Exception) -> str:
+                if isinstance(error, subprocess.CalledProcessError):
+                    stderr = (error.stderr or "").strip()
+                    stdout = (error.stdout or "").strip()
+                    output = stderr or stdout
+                    if output:
+                        return f"exit code {error.returncode}; {output}"
+                    return f"exit code {error.returncode}; no output captured"
+                return str(error)
+
             logger.warning(
                 "Detached auto-upgrade launch failed; falling back to inline execution",
                 exc_info=True,
@@ -201,8 +217,8 @@ def _run_upgrade_command(base_dir: Path, args: list[str]) -> str | None:
             _append_auto_upgrade_log(
                 base_dir,
                 (
-                    "Detached auto-upgrade launch failed; falling back to inline "
-                    "execution"
+                    "Detached auto-upgrade launch failed "
+                    f"({_format_detached_failure(exc)}); falling back to inline execution"
                 ),
             )
 

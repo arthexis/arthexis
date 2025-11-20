@@ -1,0 +1,14 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Capture auto-upgrade detached launch errors",
+      "created_on": "2025-11-20T00:00:00Z",
+      "url": "/admin/system/upgrade-report/",
+      "request_details": "1. On a node with auto-upgrade enabled, create a failing systemd-run shim: `printf '#!/bin/sh\necho permission denied >&2\nexit 1\n' > /tmp/systemd-run && chmod +x /tmp/systemd-run`.\n2. In the same shell, prepend the shim to PATH and trigger a check: `INVOCATION_ID=detached-test PATH='/tmp:$PATH' python manage.py shell -c \"from pathlib import Path; from core import tasks; Path('locks').mkdir(exist_ok=True); Path('locks/service.lck').write_text('arthexis'); tasks._run_upgrade_command(Path('.'), ['./upgrade.sh', '--latest', '--no-restart'])\"`.\n3. Open the Upgrade Report admin page and locate the newest entry. Confirm the auto-upgrade log includes the detached failure exit code and stderr details.\n4. Remove the shim (`rm /tmp/systemd-run`) to restore normal behavior.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]
