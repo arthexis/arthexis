@@ -2344,17 +2344,16 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         return obj.charger_id
 
     def _build_local_authorization_list(self) -> list[dict[str, object]]:
-        """Return the payload for SendLocalList with released and allowed RFIDs."""
+        """Return the payload for SendLocalList with released RFIDs."""
 
         entries: list[dict[str, object]] = []
+        standard_status = "Accepted"  # OCPP 1.6 idTagInfo status value
         queryset = (
-            CoreRFID.objects.filter(released=True, allowed=True)
-            .order_by("rfid")
-            .only("rfid")
+            CoreRFID.objects.filter(released=True).order_by("rfid").only("rfid")
         )
         for tag in queryset.iterator():
             entry: dict[str, object] = {"idTag": tag.rfid}
-            entry["idTagInfo"] = {"status": "Accepted"}
+            entry["idTagInfo"] = {"status": standard_status}
             entries.append(entry)
         return entries
 
@@ -2616,7 +2615,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
                 f"Updated RFID authentication: {summary}",
             )
 
-    @admin.action(description="Send RFID list to EVCS")
+    @admin.action(description="Send Local RFIDs to CP")
     def send_rfid_list_to_evcs(self, request, queryset):
         authorization_list = self._build_local_authorization_list()
         update_type = "Full"

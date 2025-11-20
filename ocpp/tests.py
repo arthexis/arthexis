@@ -3727,6 +3727,29 @@ class ChargerAdminTests(TestCase):
         resp = self.client.get(url)
         self.assertNotContains(resp, charger.reference.image.url)
 
+    def test_send_local_list_includes_all_released_rfids(self):
+        released_allowed = RFID.objects.create(rfid="AAA111", released=True, allowed=True)
+        released_not_allowed = RFID.objects.create(
+            rfid="BBB222", released=True, allowed=False
+        )
+        RFID.objects.create(rfid="CCC333", released=False, allowed=True)
+
+        admin_site = AdminSite()
+        admin_instance = ChargerAdmin(Charger, admin_site)
+
+        entries = admin_instance._build_local_authorization_list()
+
+        tags = [entry.get("idTag") for entry in entries]
+        self.assertIn(released_allowed.rfid, tags)
+        self.assertIn(released_not_allowed.rfid, tags)
+        self.assertNotIn("CCC333", tags)
+        self.assertTrue(
+            all(
+                entry.get("idTagInfo", {}).get("status") == "Accepted"
+                for entry in entries
+            )
+        )
+
     def test_toggle_rfid_authentication_action_toggles_value(self):
         charger_requires = Charger.objects.create(
             charger_id="RFIDON", require_rfid=True
