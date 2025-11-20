@@ -31,6 +31,8 @@ UPGRADE=false
 ENABLE_CELERY=false
 SERVICE_MANAGEMENT_MODE="$ARTHEXIS_SERVICE_MODE_EMBEDDED"
 SERVICE_MANAGEMENT_MODE_FLAG=false
+CHANNEL_FLAG=false
+START_FLAG=false
 ENABLE_LCD_SCREEN=false
 DISABLE_LCD_SCREEN=false
 CLEAN=false
@@ -41,7 +43,7 @@ START_SERVICES=false
 REPAIR=false
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--public|--internal] [--port PORT] [--upgrade] [--fixed] [--stable|--regular|--normal|--unstable|--latest] [--satellite] [--terminal] [--control] [--watchtower] [--celery] [--embedded|--systemd] [--lcd-screen|--no-lcd-screen] [--clean] [--start] [--repair]" >&2
+    echo "Usage: $0 [--service NAME] [--public|--internal] [--port PORT] [--upgrade] [--fixed] [--stable|--regular|--normal|--unstable|--latest] [--satellite] [--terminal] [--control] [--watchtower] [--celery] [--embedded|--systemd] [--lcd-screen|--no-lcd-screen] [--clean] [--start|--no-start] [--repair]" >&2
     exit 1
 }
 
@@ -249,10 +251,12 @@ while [[ $# -gt 0 ]]; do
             ;;
         --latest|--unstable)
             CHANNEL="unstable"
+            CHANNEL_FLAG=true
             shift
             ;;
         --stable|--regular|--normal)
             CHANNEL="stable"
+            CHANNEL_FLAG=true
             shift
             ;;
         --celery)
@@ -285,6 +289,12 @@ while [[ $# -gt 0 ]]; do
             ;;
         --start)
             START_SERVICES=true
+            START_FLAG=true
+            shift
+            ;;
+        --no-start)
+            START_SERVICES=false
+            START_FLAG=true
             shift
             ;;
         --repair)
@@ -316,13 +326,18 @@ while [[ $# -gt 0 ]]; do
             AUTO_UPGRADE=true
             NGINX_MODE="internal"
             SERVICE="arthexis"
-            CHANNEL="unstable"
+            if [ "$CHANNEL_FLAG" = false ]; then
+                CHANNEL="unstable"
+            fi
             ENABLE_CELERY=true
             ENABLE_LCD_SCREEN=true
             DISABLE_LCD_SCREEN=false
             ENABLE_CONTROL=true
             NODE_ROLE="Control"
             REQUIRES_REDIS=true
+            if [ "$START_FLAG" = false ]; then
+                START_SERVICES=true
+            fi
             shift
             ;;
         --watchtower)

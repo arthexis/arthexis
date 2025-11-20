@@ -15,7 +15,7 @@ Passing a role flag applies a curated bundle of options. Each preset still honou
 | Flag | Description |
 | --- | --- |
 | `--terminal` (default) | Local workstation profile. Enables auto-upgrades on the unstable channel, uses the internal Nginx template, reserves port 8888 unless overridden, and enables Celery for email delivery.【F:install.sh†L243-L250】 |
-| `--control` | Appliance profile. Requires Nginx and Redis, enables Celery, LCD, Control-specific locks, auto-upgrade on the unstable channel, internal Nginx, and writes the `Control` role lock. Sets default service name `arthexis`.【F:install.sh†L252-L265】【F:install.sh†L320-L373】 |
+| `--control` | Appliance profile. Requires Nginx and Redis, enables Celery, LCD, Control-specific locks, internal Nginx, and writes the `Control` role lock. Defaults to the unstable channel and starts services automatically unless `--stable` or `--no-start` overrides. Sets default service name `arthexis`.【F:install.sh†L24-L47】【F:install.sh†L252-L275】【F:install.sh†L320-L341】 |
 | `--satellite` | Edge node profile. Requires Nginx and Redis, enables Celery, tracks the stable release channel, and configures the internal Nginx template.【F:install.sh†L232-L240】 |
 | `--watchtower` | Multi-tenant profile. Requires Nginx and Redis, keeps Celery on, switches to the public Nginx proxy with HTTPS expectations, and follows the stable channel unless overridden.【F:install.sh†L266-L275】 |
 
@@ -35,7 +35,7 @@ Passing a role flag applies a curated bundle of options. Each preset still honou
 | `--celery` | Forces Celery services on even if the preset would leave them disabled. Rarely needed because all presets already enable Celery.【F:install.sh†L162-L170】 |
 | `--lcd-screen` / `--no-lcd-screen` | Adds or removes the LCD updater service and lock. Control preset enables it automatically; `--no-lcd-screen` removes an existing unit after reading `locks/service.lck`.【F:install.sh†L171-L189】【F:install.sh†L516-L563】 |
 | `--clean` | Deletes `db.sqlite3` before installing, after first backing it up into `backups/` with version and Git metadata.【F:install.sh†L90-L120】 |
-| `--start` | Launches `start.sh` after setup completes, which is useful for unattended provisioning.【F:install.sh†L121-L132】【F:install.sh†L554-L563】 |
+| `--start` / `--no-start` | Launches or skips `start.sh` after setup completes, which is useful for unattended provisioning while still allowing explicit opt-outs.【F:install.sh†L24-L47】【F:install.sh†L290-L299】【F:install.sh†L622-L624】 |
 
 The script also:
 
