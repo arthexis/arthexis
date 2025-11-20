@@ -1,0 +1,15 @@
+[
+  {
+    "model": "core.todo",
+    "fields": {
+      "request": "Manual QA: Verify RFID expiry date management",
+      "created_on": "2025-01-01T00:00:00Z",
+      "url": "/admin/core/rfid/",
+      "request_details": "1. Open the RFID changelist in the Django admin and add expiry dates to a sample card; save and confirm the date appears in the list view.\n2. Edit an existing RFID to remove the expiry date and verify the change saves without errors.\n3. Export RFIDs and confirm the expiry_date column is present, then import a file with an updated expiry date to ensure the value is applied.",
+      "done_on": null,
+      "is_deleted": false,
+      "version": "0.1.33"
+    }
+  }
+]
+
