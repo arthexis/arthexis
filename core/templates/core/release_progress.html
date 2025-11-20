@@ -218,47 +218,6 @@
     color: var(--link-fg);
     font-weight: 600;
   }
-  .todo-item {
-    position: relative;
-  }
-  .todo-item .todo-details {
-    display: none;
-    position: absolute;
-    left: 1.75rem;
-    top: 100%;
-    background: var(--body-bg);
-    border: 1px solid var(--hairline-color);
-    padding: 8px;
-    z-index: 1000;
-    width: 200px;
-  }
-  .todo-item:hover .todo-details {
-    display: block;
-  }
-  .todo-ack-card {
-    margin: 1.5rem 0;
-    padding: 1rem;
-    border: 1px solid var(--hairline-color);
-    border-radius: 6px;
-    background: var(--body-bg);
-  }
-  .todo-ack-card h2 {
-    margin-top: 0;
-    margin-bottom: 0.5rem;
-  }
-  .todo-ack-card ul {
-    list-style: none;
-    padding-left: 0;
-    margin: 0 0 1rem;
-  }
-  .todo-ack-card li {
-    margin-bottom: 0.5rem;
-  }
-  .todo-ack-card .todo-ack-empty {
-    color: var(--body-quiet-color);
-    font-style: italic;
-    margin-bottom: 1rem;
-  }
 </style>
 {% endblock %}
 
@@ -409,52 +368,6 @@
       {% endif %}
     </div>
     {% endif %}
-    {% if has_pending_todos %}
-    <div class="todo-ack-card">
-      <h2>{% trans 'Release checklist' %}</h2>
-      <p>{% trans 'Confirm every checklist item before continuing.' %}</p>
-      <form method="get" class="todo-ack-form">
-        <input type="hidden" name="step" value="{{ current_step }}">
-        {% if todos %}
-        <ul>
-        {% for todo in todos %}
-          <li class="todo-item">
-            <label>
-              <input type="checkbox" class="todo-check">
-              {% if todo.url %}
-              <a href="{% url 'todo-focus' todo.id %}?next={{ request.get_full_path|urlencode }}" class="todo-link">{{ todo.request }}</a>
-              {% else %}
-              {{ todo.request }}
-              {% endif %}
-            </label>
-            {% if todo.request_details %}
-            <div class="todo-details">{{ todo.request_details }}</div>
-            {% endif %}
-          </li>
-        {% endfor %}
-        </ul>
-        {% else %}
-        <p class="todo-ack-empty">{% trans 'No open TODOs remain. Continue when ready.' %}</p>
-        {% endif %}
-        <button type="submit" name="ack_todos" value="1" id="continue-btn" disabled>{% trans 'Continue' %}</button>
-      </form>
-    </div>
-    <script>
-      (function(){
-        const btn = document.getElementById('continue-btn');
-        if (!btn) {
-          return;
-        }
-        const checks = Array.from(document.querySelectorAll('.todo-check'));
-        const updateBtn = () => {
-          const allChecked = checks.length === 0 || checks.every(c => c.checked);
-          btn.disabled = !allChecked;
-        };
-        checks.forEach(c => c.addEventListener('change', updateBtn));
-        updateBtn();
-      })();
-    </script>
-    {% endif %}
     {% if awaiting_approval %}
     <div class="approval-actions">
       {% if approval_credentials_ready %}
@@ -492,9 +405,7 @@
     <meta http-equiv="refresh" content="1; url={{ request.path }}?step={{ next_step }}">
     {% endif %}
     {% if started %}
-      {% if has_pending_todos %}
-      <p class="status-message">{% trans 'Waiting for checklist acknowledgment' %}</p>
-      {% elif awaiting_approval %}
+      {% if awaiting_approval %}
         {% if approval_credentials_ready %}
         <p class="status-message">{% trans 'Waiting for release manager approval' %}</p>
         {% else %}

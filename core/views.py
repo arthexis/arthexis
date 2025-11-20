@@ -382,9 +382,6 @@ from . import release as release_utils
 from .log_paths import select_log_dir
 
 
-TODO_FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures"
-
-
 DIRTY_COMMIT_DEFAULT_MESSAGE = "chore: commit pending changes"
 
 
@@ -1699,10 +1696,6 @@ def release_progress(request, pk: int, action: str):
     step_param = request.GET.get("step")
     if resume_requested and step_param is None:
         step_param = str(step_count)
-
-    ctx.pop("todos", None)
-    ctx.pop("todos_required", None)
-    ctx.pop("todos_ack", None)
 
     log_name = _release_log_name(release.package.name, release.version)
     if ctx.get("log") != log_name:

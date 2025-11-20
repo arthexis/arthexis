@@ -133,23 +133,6 @@
     color: var(--link-fg);
     font-weight: 600;
   }
-  .todo-item {
-    position: relative;
-  }
-  .todo-item .todo-details {
-    display: none;
-    position: absolute;
-    left: 1.75rem;
-    top: 100%;
-    background: var(--body-bg);
-    border: 1px solid var(--hairline-color);
-    padding: 8px;
-    z-index: 1000;
-    width: 200px;
-  }
-  .todo-item:hover .todo-details {
-    display: block;
-  }
 </style>
 {% endblock %}
 
@@ -264,9 +247,7 @@
     <meta http-equiv="refresh" content="1; url={{ request.path }}?step={{ next_step }}">
     {% endif %}
     {% if started %}
-      {% if has_pending_todos %}
-      <p class="status-message">{% trans 'Waiting for checklist acknowledgment' %}</p>
-      {% elif awaiting_approval %}
+      {% if awaiting_approval %}
         {% if approval_credentials_ready %}
         <p class="status-message">{% trans 'Waiting for release manager approval' %}</p>
         {% else %}

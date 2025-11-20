@@ -1429,10 +1429,6 @@ class ReleaseProcessTests(TestCase):
         finally:
             log_path.unlink(missing_ok=True)
 
-        self.assertTrue(ctx.get("todos_ack"))
-        self.assertNotIn("todos_required", ctx)
-        self.assertIsNone(ctx.get("todos"))
-
     @mock.patch("core.views._sync_with_origin_main")
     @mock.patch("core.views.release_utils._git_clean", return_value=True)
     @mock.patch("core.views.release_utils.network_available", return_value=False)
@@ -1633,7 +1629,6 @@ class ReleaseProcessTests(TestCase):
             run.assert_any_call(["git", "add", *release_fixtures], check=True)
         run.assert_any_call(["git", "add", "VERSION"], check=True)
         run.assert_any_call(["git", "diff", "--cached", "--quiet"], check=False)
-        ensure_todo.assert_called_once_with(self.release, previous_version=mock.ANY)
 
     @mock.patch("core.views.subprocess.run")
     @mock.patch("core.views.PackageRelease.dump_fixture")
