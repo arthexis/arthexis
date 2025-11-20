@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate a TODO fixture for manual screenshot validation."""
+"""Generate metadata for manual screenshot validation."""
 from __future__ import annotations
 
 import argparse
@@ -17,7 +17,7 @@ def guess_title(slug: str) -> str:
     return " ".join(word.capitalize() for word in words if word)
 
 
-def build_fixture(
+def build_record(
     slug: str, url: str, details: str, title: str | None
 ) -> list[dict[str, object]]:
     label = title or guess_title(slug)
@@ -38,10 +38,11 @@ def build_fixture(
     ]
 
 
-def write_fixture(path: Path, data: list[dict[str, object]], force: bool) -> None:
+def write_record(path: Path, data: list[dict[str, object]], force: bool) -> None:
     if path.exists() and not force:
         print(
-            f"Fixture {path} already exists. Use --force to overwrite.", file=sys.stderr
+            f"Validation record {path} already exists. Use --force to overwrite.",
+            file=sys.stderr,
         )
         raise SystemExit(1)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -51,20 +52,20 @@ def write_fixture(path: Path, data: list[dict[str, object]], force: bool) -> Non
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("slug", help="Spec slug the TODO relates to")
+    parser.add_argument("slug", help="Spec slug the manual check relates to")
     parser.add_argument("--url", required=True, help="URL requiring manual validation")
     parser.add_argument(
         "--details", required=True, help="Additional validation context"
     )
     parser.add_argument("--title", help="Override the human friendly screen title")
     parser.add_argument(
-        "--force", action="store_true", help="Overwrite an existing fixture"
+        "--force", action="store_true", help="Overwrite an existing record"
     )
     args = parser.parse_args(argv)
 
-    data = build_fixture(args.slug, args.url, args.details, args.title)
+    data = build_record(args.slug, args.url, args.details, args.title)
     fixture_path = FIXTURE_DIR / f"todos__validate_screen_{args.slug}.json"
-    write_fixture(fixture_path, data, args.force)
+    write_record(fixture_path, data, args.force)
     return 0
 
 

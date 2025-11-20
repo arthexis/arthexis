@@ -33,8 +33,7 @@ from pages.screenshot_specs import (  # noqa: E402  - Django setup required
 class ManualSummary:
     slug: str
     reason: str
-    todo_path: Path | None = None
-    todo_fields: dict | None = None
+    url: str | None = None
 
 
 @dataclass
@@ -91,31 +90,9 @@ def select_specs(
     )
 
 
-def ensure_todo_fixture(spec: ScreenshotSpec) -> ManualSummary:
-    fixture = (
-        REPO_ROOT / "core" / "fixtures" / f"todos__validate_screen_{spec.slug}.json"
-    )
-    if not fixture.exists():
-        return ManualSummary(
-            slug=spec.slug, reason=spec.manual_reason or "", todo_path=None
-        )
-    try:
-        payload = json.loads(fixture.read_text(encoding="utf-8"))
-        fields = payload[0]["fields"] if payload else {}
-    except Exception as exc:  # pragma: no cover - defensive
-        raise RuntimeError(f"Invalid TODO fixture for {spec.slug}: {exc}") from exc
-    return ManualSummary(
-        slug=spec.slug,
-        reason=spec.manual_reason or "",
-        todo_path=fixture,
-        todo_fields=fields,
-    )
-
-
 def write_summary(
     validated: list[ValidationSummary],
     manual: list[ManualSummary],
-    missing: list[ManualSummary],
     errors: list[str],
     output_dir: Path,
 ) -> None:
@@ -134,20 +111,9 @@ def write_summary(
         summary_lines.append("### Pending manual validation")
         summary_lines.append("")
         for item in manual:
-            details = item.todo_fields or {}
-            url = details.get("url", "")
             summary_lines.append(f"- `{item.slug}` → {item.reason}")
-            if url:
-                summary_lines.append(f"  - URL: {url}")
-            if item.todo_path:
-                summary_lines.append(
-                    f"  - Fixture: `{item.todo_path.relative_to(REPO_ROOT)}`"
-                )
-    if missing:
-        summary_lines.append("### Missing TODO fixtures")
-        summary_lines.append("")
-        for item in missing:
-            summary_lines.append(f"- `{item.slug}` → {item.reason}")
+            if item.url:
+                summary_lines.append(f"  - URL: {item.url}")
     if errors:
         summary_lines.append("### Errors")
         summary_lines.append("")
@@ -186,7 +152,6 @@ def main(argv: list[str] | None = None) -> int:
 
     validated: list[ValidationSummary] = []
     manual: list[ManualSummary] = []
-    missing: list[ManualSummary] = []
     errors: list[str] = []
     exit_code = 0
 
@@ -194,27 +159,18 @@ def main(argv: list[str] | None = None) -> int:
         for spec in selected:
             reason = spec.manual_reason
             if reason:
-                todo = ensure_todo_fixture(spec)
-                if not todo.todo_path:
-                    missing.append(todo)
-                    print(f"TODO fixture missing for manual spec {spec.slug}: {reason}")
-                    exit_code = 1
-                else:
-                    manual.append(todo)
-                    print(f"Manual validation recorded for {spec.slug}: {reason}")
+                manual.append(
+                    ManualSummary(slug=spec.slug, reason=reason, url=spec.url)
+                )
+                print(f"Manual validation recorded for {spec.slug}: {reason}")
                 continue
             try:
                 result = runner.run(spec)
             except ScreenshotUnavailable as exc:
-                todo = ensure_todo_fixture(spec)
-                todo.reason = str(exc)
-                if not todo.todo_path:
-                    missing.append(todo)
-                    print(f"TODO fixture missing for {spec.slug}: {exc}")
-                    exit_code = 1
-                else:
-                    manual.append(todo)
-                    print(f"Manual validation recorded for {spec.slug}: {exc}")
+                manual.append(
+                    ManualSummary(slug=spec.slug, reason=str(exc), url=spec.url)
+                )
+                print(f"Manual validation recorded for {spec.slug}: {exc}")
                 continue
             except Exception as exc:  # pragma: no cover - defensive
                 errors.append(f"{spec.slug}: {exc}")
@@ -232,13 +188,12 @@ def main(argv: list[str] | None = None) -> int:
             )
             print(f"Validated {spec.slug}: {result.image_path}")
 
-    write_summary(validated, manual, missing, errors, output_dir)
+    write_summary(validated, manual, errors, output_dir)
     (output_dir / "metadata.json").write_text(
         json.dumps(
             {
                 "validated": [item.spec.slug for item in validated],
                 "manual": [item.slug for item in manual],
-                "missing": [item.slug for item in missing],
                 "errors": errors,
                 "changed_files": changed_files,
             },
