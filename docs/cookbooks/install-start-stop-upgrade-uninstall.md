@@ -40,7 +40,7 @@ Run the installer from the project root. Every installer writes a timestamped lo
 | `--celery` | Forces Celery worker support even when the chosen role would normally skip it. The installer writes `locks/celery.lck` so later scripts manage the worker lifecycle.【F:install.sh†L87-L89】【F:install.sh†L170-L182】 |
 | `--lcd-screen` / `--no-lcd-screen` | Controls LCD support. `--lcd-screen` installs required I²C packages (if missing) and records the feature lock, while `--no-lcd-screen` removes the lock so the display stays off.【F:install.sh†L90-L110】【F:install.sh†L183-L199】 |
 | `--clean` | Deletes an existing SQLite database after first backing it up with a timestamp that includes the git revision. Use this when reinstalling on a development machine and you do not need existing data.【F:install.sh†L111-L152】 |
-| `--start` | Immediately runs `start.sh` after installation completes so the services come up without a separate command.【F:install.sh†L112-L115】【F:install.sh†L307-L309】 |
+| `--start` / `--no-start` | Runs (or skips) `start.sh` after installation completes so services come up automatically when desired.【F:install.sh†L24-L47】【F:install.sh†L290-L299】【F:install.sh†L622-L624】 |
 | `--satellite`, `--terminal`, `--control`, `--watchtower` | High-level presets that bundle multiple flags and dependency checks for each node role. See [Role presets](#12-role-presets). |
 
 Most flags only tweak configuration files and lock states; they do not persist secrets or environment variables. Review the generated `.env` files or rerun the installer with `--clean` when you need a fresh database snapshot.
@@ -53,7 +53,7 @@ of those roles.
 
 - **`--satellite`** – Requires nginx and Redis to be installed and running. Enables auto-upgrades on the stable channel, internal nginx, Celery, and marks the node as `Satellite`. Redis connection details are written to `redis.env`.【F:install.sh†L232-L240】【F:install.sh†L320-L373】
 - **`--terminal`** – The lightest profile. Keeps nginx internal, targets the unstable channel, and enables Celery for background tasks while leaving auto-upgrade enabled by default.【F:install.sh†L243-L250】【F:install.sh†L320-L373】
-- **`--control`** – For lab control stations. Requires nginx and Redis, enables auto-upgrades on the unstable channel, Celery, LCD control, and writes the `control.lck` flag so future scripts manage the accessory services.【F:install.sh†L252-L265】【F:install.sh†L320-L373】
+- **`--control`** – For lab control stations. Requires nginx and Redis, enables auto-upgrades, Celery, LCD control, and writes the `control.lck` flag so future scripts manage the accessory services. Defaults to the unstable channel and starts services immediately unless you pass `--stable` or `--no-start`.【F:install.sh†L24-L47】【F:install.sh†L252-L275】【F:install.sh†L320-L341】
 - **`--watchtower`** – Cloud-oriented role. Requires nginx, flips nginx into public mode, enables auto-upgrades and Celery on the stable track, and records the `Watchtower` role for downstream tooling.【F:install.sh†L266-L275】【F:install.sh†L320-L373】
 
 During installation, the script ensures the Python virtual environment exists, seeds nginx fallback assets, and writes fully rendered nginx vhosts (public or internal) with the correct upstream port substitution.【F:install.sh†L170-L309】 System prompts appear when prerequisites (nginx or Redis) are missing, explaining how to install them on Debian/Ubuntu systems.【F:install.sh†L33-L74】【F:install.sh†L124-L156】
