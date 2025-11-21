@@ -52,6 +52,12 @@
       {% blocktrans with path=startup_report.log_path %}Log file: {{ path }}{% endblocktrans %}
     </p>
 
+    {% if startup_report.clock_warning %}
+      <div class="messagelist">
+        <div class="warning">{{ startup_report.clock_warning }}</div>
+      </div>
+    {% endif %}
+
     {% if startup_report.error %}
       <p class="errornote">{{ startup_report.error }}</p>
     {% endif %}
