@@ -283,6 +283,10 @@
               <th scope="row">{% trans "Run count" %}</th>
               <td>{{ report.schedule.total_run_count }}</td>
             </tr>
+            <tr>
+              <th scope="row">{% trans "Failure count" %}</th>
+              <td>{{ report.schedule.failure_count }}</td>
+            </tr>
             {% if report.schedule.description %}
             <tr>
               <th scope="row">{% trans "Description" %}</th>

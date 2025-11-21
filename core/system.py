@@ -45,7 +45,7 @@ from core.release import (
     _manager_git_credentials,
     _remote_with_credentials,
 )
-from core.tasks import check_github_updates
+from core.tasks import check_github_updates, _read_auto_upgrade_failure_count
 from utils import revision
 from core import changelog
 
@@ -646,6 +646,7 @@ def _load_auto_upgrade_schedule() -> dict[str, object]:
     """Return normalized auto-upgrade scheduling metadata."""
 
     task, available, error = _get_auto_upgrade_periodic_task()
+    base_dir = Path(settings.BASE_DIR)
     info: dict[str, object] = {
         "available": available,
         "configured": bool(task),
@@ -665,6 +666,7 @@ def _load_auto_upgrade_schedule() -> dict[str, object]:
         "task_admin_url": "",
         "config_admin_url": "",
         "config_type": "",
+        "failure_count": _read_auto_upgrade_failure_count(base_dir),
     }
 
     if not task:

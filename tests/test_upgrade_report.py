@@ -73,6 +73,7 @@ class UpgradeReportTests(SimpleTestCase):
                 "task_admin_url": "",
                 "config_admin_url": "",
                 "config_type": "",
+                "failure_count": 0,
             }
 
             with override_settings(BASE_DIR=str(base)):
@@ -132,6 +133,7 @@ class UpgradeReportTests(SimpleTestCase):
                 "task_admin_url": "",
                 "config_admin_url": "",
                 "config_type": "",
+                "failure_count": 0,
             }
 
             remote_proc = mock.Mock(returncode=0, stdout="git@example.com/repo.git", stderr="")
@@ -390,6 +392,9 @@ class UpgradeReportTests(SimpleTestCase):
             "core.system._auto_upgrade_next_check",
             return_value="Soon",
         ), mock.patch(
+            "core.system._read_auto_upgrade_failure_count",
+            return_value=3,
+        ), mock.patch(
             "core.system._reverse_admin_url",
             side_effect=["/admin/task/42/", "/admin/interval/24/"],
         ) as mock_reverse:
@@ -405,6 +410,7 @@ class UpgradeReportTests(SimpleTestCase):
         self.assertEqual(info["name"], dummy_task.name)
         self.assertEqual(info["start_time"], expected_start)
         self.assertEqual(info["last_run_at"], expected_last_run)
+        self.assertEqual(info["failure_count"], 3)
         self.assertEqual(info["task_admin_url"], "/admin/task/42/")
         self.assertEqual(info["config_admin_url"], "/admin/interval/24/")
         self.assertEqual(info["config_type"], "interval")
