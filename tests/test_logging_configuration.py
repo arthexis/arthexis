@@ -1,6 +1,10 @@
+import logging
+
 import pytest
 from django.conf import settings as django_settings
+from django.test import override_settings
 
+from config import logging as project_logging
 from config.logging import configure_library_loggers
 
 
@@ -38,3 +42,39 @@ def test_configure_library_loggers_noop_when_debug_enabled():
     configure_library_loggers(True, logging_config)
 
     assert logging_config == {}
+
+
+def test_active_app_file_handler_reopens_after_deletion(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(project_logging, "get_active_app", lambda: "demo-app")
+
+    with override_settings(LOG_DIR=log_dir):
+        handler = project_logging.ActiveAppFileHandler(
+            filename=str(log_dir / "placeholder.log"),
+            when="midnight",
+            backupCount=1,
+            encoding="utf-8",
+        )
+
+        logger = logging.getLogger("test-active-app-handler")
+        logger.setLevel(logging.INFO)
+        logger.addHandler(handler)
+
+        try:
+            logger.info("first entry")
+
+            log_file = log_dir / "demo-app.log"
+            assert log_file.exists()
+
+            log_file.unlink()
+            logger.info("second entry")
+
+            assert log_file.exists()
+            content = log_file.read_text(encoding="utf-8")
+            assert "second entry" in content
+        finally:
+            logger.removeHandler(handler)
+            handler.close()
