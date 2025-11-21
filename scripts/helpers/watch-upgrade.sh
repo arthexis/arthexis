@@ -10,21 +10,36 @@ BASE_DIR="${ARTHEXIS_BASE_DIR:-$(pwd)}"
 LOG_DIR="${ARTHEXIS_LOG_DIR:-$BASE_DIR/logs}"
 LOG_FILE="${LOG_DIR}/watch-upgrade.log"
 
+log() {
+  echo "$(date --iso-8601=seconds) $*" >&2
+}
+
+on_error() {
+  local exit_code=$?
+  log "Upgrade failed at command: ${BASH_COMMAND:-<unknown>} (exit ${exit_code})"
+}
+
+trap on_error ERR
+set -o errtrace
+
 mkdir -p "$LOG_DIR"
 
 if [ ! -d "$BASE_DIR" ]; then
-  echo "Base directory $BASE_DIR does not exist" >>"$LOG_FILE"
+  log "Base directory $BASE_DIR does not exist; logging to $LOG_FILE"
   exit 1
 fi
 
 exec > >(tee -a "$LOG_FILE") 2>&1
 
-echo "$(date --iso-8601=seconds) Starting detached upgrade for ${SERVICE_NAME:-<unknown>} in ${BASE_DIR}" >&2
+log "Logging to $LOG_FILE"
+log "Starting detached upgrade for ${SERVICE_NAME:-<unknown>} in ${BASE_DIR}"
 
 UPGRADE_CMD=("$BASE_DIR/upgrade.sh" "--stable")
 if [ "$#" -gt 0 ]; then
   UPGRADE_CMD=("$@")
 fi
+
+log "Upgrade command: ${UPGRADE_CMD[*]}"
 
 control_with_sudo() {
   local action="$1"
@@ -37,6 +52,10 @@ control_with_sudo() {
   local runner=(systemctl)
   if command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then
     runner=(sudo -n systemctl)
+  fi
+
+  if [ -n "$unit" ]; then
+    log "systemctl ${action} ${unit}"
   fi
 
   "${runner[@]}" "$action" "$unit" || true
