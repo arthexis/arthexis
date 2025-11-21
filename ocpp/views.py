@@ -77,7 +77,7 @@ CALL_ACTION_LABELS = {
     "UpdateFirmware": _("Update firmware"),
 }
 
-CALL_EXPECTED_STATUSES: dict[str, set[str]] = {
+CALL_EXPECTED_STATUSES: dict[str, set[str] | None] = {
     "RemoteStartTransaction": {"Accepted"},
     "RemoteStopTransaction": {"Accepted"},
     "ChangeAvailability": {"Accepted", "Scheduled"},
@@ -89,7 +89,7 @@ CALL_EXPECTED_STATUSES: dict[str, set[str]] = {
     "CancelReservation": {"Accepted", "Rejected"},
     "ClearCache": {"Accepted", "Rejected"},
     "UnlockConnector": {"Unlocked", "Accepted"},
-    "UpdateFirmware": {"Accepted", "AcceptedCanceled"},
+    "UpdateFirmware": None,
 }
 
 

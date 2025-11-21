@@ -6617,6 +6617,18 @@ class DispatchActionViewTests(TestCase):
             "metadata": metadata_copy,
         }
 
+    def _wait_no_status(self, message_id, timeout=5.0):  # noqa: D401 - helper for patch
+        metadata = store.pending_calls.pop(message_id, None)
+        metadata_copy = dict(metadata or {})
+        self.last_metadata = metadata_copy
+        store._pending_call_events.pop(message_id, None)
+        store._pending_call_results.pop(message_id, None)
+        return {
+            "success": True,
+            "payload": {},
+            "metadata": metadata_copy,
+        }
+
     def test_remote_start_requires_id_tag(self):
         response = self.client.post(
             self.url,
@@ -7113,6 +7125,23 @@ class DispatchActionViewTests(TestCase):
         self.assertEqual(deployment.firmware, firmware)
         self.assertEqual(self.last_metadata.get("deployment_pk"), deployment.pk)
         self.mock_schedule.assert_called_once()
+
+    def test_update_firmware_accepts_empty_call_result(self):
+        firmware = CPFirmware.objects.create(
+            name="Firmware", filename="fw.bin", payload_binary=b"abc", is_user_data=True
+        )
+        self.mock_wait.side_effect = self._wait_no_status
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"action": "update_firmware", "firmwareId": firmware.pk}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.loop.run_until_complete(asyncio.sleep(0))
+        self.assertEqual(len(self.ws.sent), 1)
+        frame = json.loads(self.ws.sent[0])
+        self.assertEqual(frame[2], "UpdateFirmware")
+        self.assertEqual(response.json().get("sent"), self.ws.sent[0])
 
 
 class SimulatorStateMappingTests(TestCase):
