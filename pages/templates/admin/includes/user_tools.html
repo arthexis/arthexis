@@ -27,7 +27,7 @@
   <input name="next" type="hidden" value="{{ user_tools_return_url|default:request.get_full_path }}">
   <select name="language" class="language-select" onchange="this.form.submit()">
     {% for lang_code, lang_name in LANGUAGES %}
-      <option value="{{ lang_code }}" {% if lang_code == LANGUAGE_CODE %}selected{% endif %}>{{ lang_name }}</option>
+      <option value="{{ lang_code }}" {% if lang_code == LANGUAGE_CODE %}selected{% endif %} title="{{ lang_name }}">{{ lang_code|slice:":2"|upper }}</option>
     {% endfor %}
   </select>
 </form>
