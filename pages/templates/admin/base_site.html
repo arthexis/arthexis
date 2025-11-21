@@ -1285,21 +1285,21 @@ body.user-story-open {
 </div>
 {% endblock %}
 {% block userlinks %}
-  <div
+  <span
     id="user-tools-loader"
     hx-get="{% url 'admin-user-tools' %}"
     hx-target="#user-tools"
     hx-trigger="load"
     hx-swap="innerHTML"
   >
-    <div class="user-tools-placeholder" aria-live="polite" aria-busy="true">
+    <span class="user-tools-placeholder" aria-live="polite" aria-busy="true">
       <span class="user-tools-spinner" aria-hidden="true"></span>
       <span>{% trans "Loading account tools…" %}</span>
-    </div>
-    <div id="user-tools-inline-fallback" hidden>
+    </span>
+    <span id="user-tools-inline-fallback" hidden>
       {% include "admin/includes/user_tools.html" %}
-    </div>
-  </div>
+    </span>
+  </span>
   <noscript>
     {% include "admin/includes/user_tools.html" %}
   </noscript>
