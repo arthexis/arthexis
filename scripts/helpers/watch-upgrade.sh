@@ -17,7 +17,7 @@ if [ ! -d "$BASE_DIR" ]; then
   exit 1
 fi
 
-exec >>"$LOG_FILE" 2>&1
+exec > >(tee -a "$LOG_FILE") 2>&1
 
 echo "$(date --iso-8601=seconds) Starting detached upgrade for ${SERVICE_NAME:-<unknown>} in ${BASE_DIR}" >&2
 
