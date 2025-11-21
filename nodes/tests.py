@@ -23,7 +23,6 @@ from django.core import mail
 from django.core.cache import cache
 from django.core.mail import EmailMessage
 from django.core.management import call_command
-from django.core.management.base import CommandError
 import socket
 import base64
 import json
@@ -74,21 +73,18 @@ from .models import (
     ContentSample,
     ContentTag,
     NodeRole,
-    RoleConfigurationProfile,
     NodeFeature,
     NodeFeatureAssignment,
     NetMessage,
     PendingNetMessage,
     NodeManager,
     DNSRecord,
-    NodeConfigurationJob,
     NodeProfile,
 )
 from .backends import OutboxEmailBackend
 from .tasks import (
     capture_node_screenshot,
     poll_unreachable_upstream,
-    run_role_configuration,
 )
 from . import tasks as node_tasks
 from ocpp.models import Charger
@@ -98,7 +94,6 @@ from cryptography.hazmat.primitives import serialization, hashes
 from core.models import Package, PackageRelease, SecurityGroup, RFID, CustomerAccount
 from requests.exceptions import SSLError
 from teams.models import EmailOutbox
-from nodes.ansible import render_inventory_host
 
 
 class NodeBadgeColorTests(TestCase):
@@ -4990,10 +4985,6 @@ class NodeRoleAdminTests(TestCase):
             "name": "TestRole",
             "description": "",
             "nodes": [node2.pk],
-            "configuration_profile-TOTAL_FORMS": "0",
-            "configuration_profile-INITIAL_FORMS": "0",
-            "configuration_profile-MIN_NUM_FORMS": "0",
-            "configuration_profile-MAX_NUM_FORMS": "1",
         }
         resp = self.client.post(url, post_data, follow=True)
         self.assertRedirects(resp, reverse("admin:nodes_noderole_changelist"))
@@ -5013,66 +5004,6 @@ class NodeRoleAdminTests(TestCase):
         )
         resp = self.client.get(reverse("admin:nodes_noderole_changelist"))
         self.assertContains(resp, '<td class="field-registered">1</td>', html=True)
-
-    def test_configuration_profile_inline_updates(self):
-        role = NodeRole.objects.create(name="OpsRole")
-        profile = RoleConfigurationProfile.objects.create(
-            role=role,
-            ansible_playbook_path="ansible/playbooks/original.yml",
-            inventory_group="ops",
-            extra_vars={"enable_celery": True},
-            default_tags=["ops"],
-        )
-
-        url = reverse("admin:nodes_noderole_change", args=[role.pk])
-        response = self.client.get(url)
-        self.assertIn(
-            "configuration_profile-0-ansible_playbook_path",
-            response.content.decode(),
-        )
-
-        payload = {
-            "name": "OpsRole",
-            "description": "",
-            "nodes": [],
-            "configuration_profile-TOTAL_FORMS": "1",
-            "configuration_profile-INITIAL_FORMS": "1",
-            "configuration_profile-MIN_NUM_FORMS": "0",
-            "configuration_profile-MAX_NUM_FORMS": "1",
-            "configuration_profile-0-id": str(profile.pk),
-            "configuration_profile-0-role": str(role.pk),
-            "configuration_profile-0-ansible_playbook_path": "ansible/playbooks/ops.yml",
-            "configuration_profile-0-inventory_group": "ops",
-            "configuration_profile-0-extra_vars": json.dumps(
-                {"enable_celery": False, "nginx_mode": "internal"}
-            ),
-            "configuration_profile-0-default_tags": json.dumps(
-                ["ops", "manual"]
-            ),
-        }
-
-        response = self.client.post(url, payload)
-        self.assertRedirects(response, reverse("admin:nodes_noderole_changelist"))
-        profile.refresh_from_db()
-        self.assertEqual(profile.ansible_playbook_path, "ansible/playbooks/ops.yml")
-        self.assertEqual(profile.extra_vars, {"enable_celery": False, "nginx_mode": "internal"})
-        self.assertEqual(profile.default_tags, ["ops", "manual"])
-
-    def test_configuration_profile_inline_displays_expected_playbook_path(self):
-        role = NodeRole.objects.create(name="Control QA")
-        RoleConfigurationProfile.objects.create(
-            role=role,
-            ansible_playbook_path="",
-            inventory_group="control",
-            extra_vars={},
-            default_tags=[],
-        )
-
-        url = reverse("admin:nodes_noderole_change", args=[role.pk])
-        response = self.client.get(url)
-
-        self.assertContains(response, "Expected playbook path: ansible/playbooks/control-qa.yml")
-        self.assertContains(response, 'value="ansible/playbooks/control-qa.yml"')
 
 
 class NodeFeatureFixtureTests(TestCase):
@@ -6021,127 +5952,3 @@ class CaptureRpiSnapshotTests(SimpleTestCase):
         self.assertTrue(second.name.endswith("-11111111111111111111111111111111.jpg"))
         self.assertEqual(mock_uuid.call_count, 2)
         self.assertEqual(mock_run.call_count, 2)
-
-
-class RoleConfigurationWorkflowTests(TestCase):
-    def setUp(self):
-        super().setUp()
-        self.role = NodeRole.objects.create(name="Automation")
-        self.node = Node.objects.create(
-            hostname="automation",
-            address="10.1.0.10",
-            ipv4_address="10.1.0.10",
-            port=2222,
-            mac_address="00:aa:bb:cc:dd:10",
-            role=self.role,
-        )
-        self.profile = RoleConfigurationProfile.objects.create(
-            role=self.role,
-            ansible_playbook_path="ansible/playbooks/automation.yml",
-            inventory_group="automation",
-            extra_vars={"sample": True},
-            default_tags=["baseline"],
-        )
-        NodeConfigurationJob.objects.all().delete()
-
-    def test_render_inventory_host_includes_expected_metadata(self):
-        feature = NodeFeature.objects.create(slug="automation-probe", display="Automation Probe")
-        with patch("nodes.tasks.apply_node_role_configuration.delay"):
-            NodeFeatureAssignment.objects.create(node=self.node, feature=feature)
-
-        definition = render_inventory_host(self.node)
-
-        self.assertEqual(definition["name"], self.node.public_endpoint)
-        host_vars = definition["vars"]
-        self.assertEqual(host_vars["node_role"], self.role.name)
-        self.assertIn("automation-probe", host_vars["node_features"])
-        self.assertEqual(host_vars["ansible_port"], self.node.port)
-        self.assertEqual(host_vars["ansible_host"], "10.1.0.10")
-
-    def test_render_inventory_host_includes_profile_data(self):
-        profile = NodeProfile.objects.create(
-            name="Terminal Defaults",
-            data={"timezone": "UTC", "region": "ca-central"},
-        )
-        self.node.profile = profile
-        self.node.save(update_fields=["profile"])
-        self.node.refresh_from_db()
-
-        definition = render_inventory_host(self.node)
-
-        host_vars = definition["vars"]
-        self.assertEqual(host_vars["node_profile_name"], profile.name)
-        self.assertEqual(
-            host_vars["node_profile"], {"timezone": "UTC", "region": "ca-central"}
-        )
-        self.assertEqual(host_vars["timezone"], "UTC")
-        self.assertEqual(host_vars["region"], "ca-central")
-
-    def test_sync_feature_tasks_queues_role_configuration(self):
-        with patch("nodes.tasks.apply_node_role_configuration.delay") as mocked_delay:
-            self.node.sync_feature_tasks()
-
-        mocked_delay.assert_called_once()
-        kwargs = mocked_delay.call_args.kwargs
-        self.assertEqual(kwargs["node_id"], self.node.pk)
-        self.assertEqual(kwargs["trigger"], NodeConfigurationJob.Trigger.AUTOMATIC)
-        self.assertIsNone(kwargs["user_id"])
-
-    def test_run_role_configuration_success_records_job(self):
-        result = node_tasks.PlaybookResult(return_code=0, stdout="ok", stderr="")
-        with patch("nodes.tasks._execute_playbook", return_value=result):
-            job = run_role_configuration(self.node, trigger=NodeConfigurationJob.Trigger.AUTOMATIC)
-
-        self.assertEqual(job.status, NodeConfigurationJob.Status.SUCCESS)
-        self.assertEqual(job.return_code, 0)
-        self.assertEqual(job.stdout, "ok")
-        self.assertEqual(job.extra_vars, {"sample": True})
-        self.assertEqual(job.tags, ["baseline"])
-        self.assertEqual(job.playbook_path, self.profile.ansible_playbook_path)
-        self.assertIn(self.node.public_endpoint, job.inventory["all"]["hosts"])
-
-    def test_run_role_configuration_failure_without_profile(self):
-        other_role = NodeRole.objects.create(name="NoProfile")
-        other_node = Node.objects.create(
-            hostname="noprof",
-            address="10.1.0.11",
-            ipv4_address="10.1.0.11",
-            port=2223,
-            mac_address="00:aa:bb:cc:dd:11",
-            role=other_role,
-        )
-
-        job = run_role_configuration(other_node, trigger=NodeConfigurationJob.Trigger.AUTOMATIC)
-
-        self.assertEqual(job.status, NodeConfigurationJob.Status.FAILED)
-        self.assertIn("profile", job.status_message.lower())
-
-    def test_management_command_records_success(self):
-        result = node_tasks.PlaybookResult(return_code=0, stdout="ok", stderr="")
-        with patch("nodes.tasks._execute_playbook", return_value=result):
-            stdout = StringIO()
-            call_command("apply_role_config", "--node", str(self.node.pk), stdout=stdout)
-
-        stdout_value = stdout.getvalue()
-        self.assertIn("Configuration applied successfully", stdout_value)
-        job = NodeConfigurationJob.objects.latest("created_at")
-        self.assertEqual(job.status, NodeConfigurationJob.Status.SUCCESS)
-
-    def test_management_command_failure_raises_error(self):
-        NodeConfigurationJob.objects.all().delete()
-        result = node_tasks.PlaybookResult(return_code=2, stdout="", stderr="boom")
-        with patch("nodes.tasks._execute_playbook", return_value=result):
-            stdout = StringIO()
-            stderr = StringIO()
-            with self.assertRaises(CommandError):
-                call_command(
-                    "apply_role_config",
-                    "--node",
-                    str(self.node.pk),
-                    stdout=stdout,
-                    stderr=stderr,
-                )
-
-        self.assertIn("boom", stderr.getvalue())
-        job = NodeConfigurationJob.objects.latest("created_at")
-        self.assertEqual(job.status, NodeConfigurationJob.Status.FAILED)
