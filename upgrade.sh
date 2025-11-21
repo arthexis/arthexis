@@ -48,6 +48,21 @@ SYSTEMD_UNITS_LOCK="$LOCK_DIR/systemd_services.lck"
 SERVICE_NAME=""
 [ -f "$LOCK_DIR/service.lck" ] && SERVICE_NAME="$(cat "$LOCK_DIR/service.lck")"
 
+ensure_git_safe_directory() {
+  if ! command -v git >/dev/null 2>&1; then
+    return 0
+  fi
+
+  # Avoid fatal "dubious ownership" errors when upgrades run under systemd users.
+  if git config --global --get-all safe.directory "$BASE_DIR" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  git config --global --add safe.directory "$BASE_DIR" >/dev/null 2>&1 || true
+}
+
+ensure_git_safe_directory
+
 queue_startup_net_message() {
   python - "$BASE_DIR" <<'PY'
 import sys
