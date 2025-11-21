@@ -68,16 +68,13 @@ def test_install_script_role_defaults():
         return match.group(1)
 
     satellite = block("satellite")
-    assert "AUTO_UPGRADE=true" in satellite
-    assert "LATEST=false" in satellite
+    assert "AUTO_UPGRADE" not in satellite
 
     watchtower = block("watchtower")
-    assert "AUTO_UPGRADE=true" in watchtower
-    assert "LATEST=false" in watchtower
+    assert "AUTO_UPGRADE" not in watchtower
 
     control = block("control")
-    assert "AUTO_UPGRADE=true" in control
-    assert "LATEST=true" in control
+    assert "AUTO_UPGRADE" not in control
 
     assert "--virtual)" not in content
     assert "--particle)" not in content
