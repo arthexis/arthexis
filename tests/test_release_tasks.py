@@ -2,6 +2,7 @@ import subprocess
 import types
 from datetime import datetime
 import os
+from pathlib import Path
 from urllib.error import URLError
 from zoneinfo import ZoneInfo
 
@@ -16,7 +17,7 @@ class CommandRecorder:
 
     def __call__(self, *args, **kwargs):
         self.calls.append((args, kwargs))
-        return types.SimpleNamespace(returncode=0)
+        return types.SimpleNamespace(returncode=0, stdout="", stderr="")
 
     def find(self, executable: str):
         for args, kwargs in self.calls:
@@ -33,6 +34,18 @@ def _setup_tmp(monkeypatch, tmp_path):
     monkeypatch.setattr(tasks, "__file__", str(fake_file))
     monkeypatch.setattr(tasks.settings, "BASE_DIR", tmp_path, raising=False)
     return tmp_path
+
+
+def _write_delegate_script(base_dir: Path, unit_name: str = "delegate-unit", exit_code: int = 0):
+    script = base_dir / "delegated-upgrade.sh"
+    script.write_text(
+        """#!/usr/bin/env bash
+echo 'UNIT_NAME={unit}'
+exit {code}
+""".format(unit=unit_name, code=exit_code)
+    )
+    script.chmod(0o755)
+    return script
 
 
 @pytest.mark.role("Watchtower")
@@ -63,13 +76,14 @@ def test_no_upgrade_triggers_startup(monkeypatch, tmp_path):
     assert fetch_args[0][:3] == ["git", "fetch", "origin"]
     assert fetch_kwargs.get("cwd") == base
     assert fetch_kwargs.get("check") is True
-    assert run_recorder.find("./upgrade.sh") is None
+    assert run_recorder.find(str(base / "delegated-upgrade.sh")) is None
 
 
 @pytest.mark.role("Watchtower")
 def test_upgrade_shows_message(monkeypatch, tmp_path):
     base = _setup_tmp(monkeypatch, tmp_path)
     (base / "VERSION").write_text("1.0")
+    _write_delegate_script(base)
 
     run_recorder = CommandRecorder()
     monkeypatch.setattr(tasks.subprocess, "run", run_recorder)
@@ -117,12 +131,12 @@ def test_upgrade_shows_message(monkeypatch, tmp_path):
         subject == "Upgrading..." and body == expected_body
         for subject, body in notify_calls
     )
-    upgrade_call = run_recorder.find("./upgrade.sh")
+    upgrade_call = run_recorder.find(str(base / "delegated-upgrade.sh"))
     assert upgrade_call is not None
     upgrade_args, upgrade_kwargs = upgrade_call
-    assert upgrade_args[0] == ["./upgrade.sh", "--stable"]
+    assert upgrade_args[0][1:] == ["./upgrade.sh", "--stable"]
     assert upgrade_kwargs.get("cwd") == base
-    assert upgrade_kwargs.get("check") is True
+    assert upgrade_kwargs.get("check") is False
     fetch_call = run_recorder.calls[0]
     fetch_args, fetch_kwargs = fetch_call
     assert fetch_args[0][:3] == ["git", "fetch", "origin"]
@@ -138,6 +152,7 @@ def test_upgrade_shows_message(monkeypatch, tmp_path):
 def test_upgrade_detaches_when_running_under_systemd(monkeypatch, tmp_path):
     base = _setup_tmp(monkeypatch, tmp_path)
     (base / "VERSION").write_text("1.0")
+    _write_delegate_script(base)
 
     locks = base / "locks"
     locks.mkdir()
@@ -178,13 +193,10 @@ def test_upgrade_detaches_when_running_under_systemd(monkeypatch, tmp_path):
 
     tasks.check_github_updates()
 
-    upgrade_calls = [
-        args
-        for args, _ in run_recorder.calls
-        if args and args[0] and os.path.basename(args[0][0]) == "systemd-run"
-    ]
-    assert upgrade_calls, run_recorder.calls
-    assert str(watcher) in upgrade_calls[0][0]
+    upgrade_call = run_recorder.find(str(base / "delegated-upgrade.sh"))
+    assert upgrade_call is not None
+    delegated_args, _ = upgrade_call
+    assert delegated_args[0][1:] == ["./upgrade.sh", "--stable"]
     assert scheduled
 
 
@@ -192,6 +204,7 @@ def test_upgrade_detaches_when_running_under_systemd(monkeypatch, tmp_path):
 def test_upgrade_detach_falls_back_when_systemd_run_fails(monkeypatch, tmp_path):
     base = _setup_tmp(monkeypatch, tmp_path)
     (base / "VERSION").write_text("1.0")
+    _write_delegate_script(base)
 
     locks = base / "locks"
     locks.mkdir()
@@ -218,8 +231,8 @@ def test_upgrade_detach_falls_back_when_systemd_run_fails(monkeypatch, tmp_path)
 
     class FailingSystemdRun(CommandRecorder):
         def __call__(self, *args, **kwargs):
-            if args and args[0] and os.path.basename(args[0][0]) == "systemd-run":
-                return subprocess.CompletedProcess(args[0], 1, stdout="", stderr="")
+            if args and args[0] and os.path.basename(args[0][0]) == "delegated-upgrade.sh":
+                return subprocess.CompletedProcess(args[0], 1, stdout="", stderr="failed")
             return super().__call__(*args, **kwargs)
 
     run_recorder = FailingSystemdRun()
@@ -238,17 +251,13 @@ def test_upgrade_detach_falls_back_when_systemd_run_fails(monkeypatch, tmp_path)
 
     tasks.check_github_updates()
 
-    systemd_calls = [
+    upgrade_calls = [
         args
         for args, _ in run_recorder.calls
-        if args and os.path.basename(args[0][0]) == "systemd-run"
-    ]
-    inline_upgrade_calls = [
-        args for args, _ in run_recorder.calls if args and args[0][0] == "./upgrade.sh"
+        if args and os.path.basename(args[0][0]) == "delegated-upgrade.sh"
     ]
 
-    assert systemd_calls
-    assert not inline_upgrade_calls
+    assert upgrade_calls
     assert not scheduled
 
 
@@ -291,13 +300,14 @@ def test_stable_mode_skips_patch_upgrade(monkeypatch, tmp_path):
     assert fetch_args[0][:3] == ["git", "fetch", "origin"]
     assert fetch_kwargs.get("cwd") == base
     assert fetch_kwargs.get("check") is True
-    assert run_recorder.find("./upgrade.sh") is None
+    assert run_recorder.find(str(base / "delegated-upgrade.sh")) is None
 
 
 @pytest.mark.role("Watchtower")
 def test_stable_mode_triggers_minor_upgrade(monkeypatch, tmp_path):
     base = _setup_tmp(monkeypatch, tmp_path)
     (base / "VERSION").write_text("1.2.3")
+    _write_delegate_script(base)
     locks = base / "locks"
     locks.mkdir()
     (locks / "auto_upgrade.lck").write_text("stable")
@@ -356,12 +366,12 @@ def test_stable_mode_triggers_minor_upgrade(monkeypatch, tmp_path):
         subject == "Upgrading..." and body == expected_body
         for subject, body in notify_calls
     )
-    upgrade_call = run_recorder.find("./upgrade.sh")
+    upgrade_call = run_recorder.find(str(base / "delegated-upgrade.sh"))
     assert upgrade_call is not None
     upgrade_args, upgrade_kwargs = upgrade_call
-    assert upgrade_args[0] == ["./upgrade.sh", "--stable"]
+    assert upgrade_args[0][1:] == ["./upgrade.sh", "--stable"]
     assert upgrade_kwargs.get("cwd") == base
-    assert upgrade_kwargs.get("check") is True
+    assert upgrade_kwargs.get("check") is False
     fetch_call = run_recorder.calls[0]
     fetch_args, fetch_kwargs = fetch_call
     assert fetch_args[0][:3] == ["git", "fetch", "origin"]
@@ -474,4 +484,4 @@ def test_check_github_updates_skips_blocked_revision(monkeypatch, tmp_path):
     assert fetch_args[0][:3] == ["git", "fetch", "origin"]
     assert fetch_kwargs.get("cwd") == base
     assert fetch_kwargs.get("check") is True
-    assert run_recorder.find("./upgrade.sh") is None
+    assert run_recorder.find(str(base / "delegated-upgrade.sh")) is None
