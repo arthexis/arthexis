@@ -61,6 +61,7 @@ SUITE_UPTIME_LOCK_MAX_AGE = timedelta(minutes=10)
 
 STARTUP_REPORT_LOG_NAME = "startup-report.log"
 STARTUP_REPORT_DEFAULT_LIMIT = 50
+STARTUP_CLOCK_DRIFT_THRESHOLD = timedelta(minutes=5)
 
 
 UPGRADE_CHANNEL_CHOICES: dict[str, dict[str, object]] = {
@@ -948,6 +949,7 @@ def _read_startup_report(
             "missing": True,
             "error": _("Startup report log does not exist yet."),
             "limit": normalized_limit,
+            "clock_warning": None,
         }
     except OSError as exc:
         return {
@@ -956,6 +958,7 @@ def _read_startup_report(
             "missing": False,
             "error": str(exc),
             "limit": normalized_limit,
+            "clock_warning": None,
         }
 
     parsed_entries = [
@@ -963,12 +966,33 @@ def _read_startup_report(
     ]
     parsed_entries.reverse()
 
+    now = timezone.now()
+    clock_warning = None
+    for entry in parsed_entries:
+        timestamp = entry.get("timestamp")
+        if not isinstance(timestamp, datetime):
+            continue
+
+        delta = timestamp - now
+        absolute_delta = delta if delta >= timedelta(0) else -delta
+        if absolute_delta <= STARTUP_CLOCK_DRIFT_THRESHOLD:
+            break
+
+        offset_label = timesince(now - absolute_delta, now)
+        direction = _("ahead") if delta > timedelta(0) else _("behind")
+        clock_warning = _(
+            "Startup timestamps appear %(offset)s %(direction)s of the current system time. "
+            "Check the suite clock or NTP configuration."
+        ) % {"offset": offset_label, "direction": direction}
+        break
+
     return {
         "entries": parsed_entries,
         "log_path": log_path,
         "missing": False,
         "error": None,
         "limit": normalized_limit,
+        "clock_warning": clock_warning,
     }
 
 

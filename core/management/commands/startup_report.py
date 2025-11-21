@@ -41,6 +41,10 @@ class Command(BaseCommand):
         if log_path:
             self.stdout.write(f"Startup report log: {log_path}")
 
+        clock_warning = report.get("clock_warning")
+        if clock_warning:
+            self.stderr.write(str(clock_warning))
+
         error = report.get("error")
         if error:
             self.stderr.write(str(error))
