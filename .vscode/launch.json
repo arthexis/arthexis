@@ -43,6 +43,25 @@
             },
             "program": "${workspaceFolder}/scripts/migration_server.py",
             "noDebug": true
+        },
+        {
+            "name": "Pyxel viewport",
+            "type": "python",
+            "request": "launch",
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "windows": {
+                "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe"
+            },
+            "program": "${workspaceFolder}/manage.py",
+            "args": [
+                "pyxel_viewport",
+                "--output-dir",
+                "${workspaceFolder}/work/pyxel_viewport",
+                "--pyxel-runner",
+                "pyxel"
+            ],
+            "django": true,
+            "console": "integratedTerminal"
         }
     ]
 }
