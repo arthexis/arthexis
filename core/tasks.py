@@ -300,6 +300,47 @@ def _run_upgrade_command(
     return None, True
 
 
+def _delegate_upgrade_via_script(base_dir: Path, args: list[str]) -> str | None:
+    """Launch the delegated upgrade helper script and return the unit name."""
+
+    script = base_dir / "delegated-upgrade.sh"
+    if not script.exists():
+        _append_auto_upgrade_log(
+            base_dir,
+            "Delegated upgrade script missing; skipping auto-upgrade delegation",
+        )
+        return None
+
+    command = [str(script), *args]
+    result = subprocess.run(
+        command,
+        cwd=base_dir,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    unit_name = "delegated-upgrade"
+    for line in (result.stdout or "").splitlines():
+        if line.startswith("UNIT_NAME="):
+            unit_name = line.split("=", 1)[1].strip() or unit_name
+            break
+
+    if result.returncode != 0:
+        stderr_output = (result.stderr or result.stdout or "").strip()
+        details = f"; {stderr_output}" if stderr_output else ""
+        _append_auto_upgrade_log(
+            base_dir,
+            (
+                "Delegated upgrade launch failed "
+                f"(exit code {result.returncode}{details})"
+            ),
+        )
+        return None
+
+    return unit_name
+
+
 def _systemctl_command() -> list[str]:
     """Return the base systemctl command, preferring sudo when available."""
 
@@ -1197,15 +1238,13 @@ def check_github_updates(channel_override: str | None = None) -> None:
                 f"{timezone.now().isoformat()} running: {' '.join(args)}\n"
             )
 
-        watcher_unit, ran_inline = _run_upgrade_command(
-            base_dir, args, require_detached=True
-        )
-        if watcher_unit:
+        delegated_unit = _delegate_upgrade_via_script(base_dir, args)
+        if delegated_unit:
             _append_auto_upgrade_log(
                 base_dir,
                 (
                     "Auto-upgrade delegated to systemd; review "
-                    f"journalctl -u {watcher_unit} for progress"
+                    f"journalctl -u {delegated_unit} for progress"
                 ),
             )
             if upgrade_was_applied:
@@ -1219,46 +1258,13 @@ def check_github_updates(channel_override: str | None = None) -> None:
                 _schedule_health_check(1)
             return
 
-        if not ran_inline:
-            _append_auto_upgrade_log(
-                base_dir,
-                (
-                    "Inline upgrade skipped because detached launch failed; "
-                    "will retry on next cycle"
-                ),
-            )
-            _record_auto_upgrade_failure(base_dir, "UPGRADE-LAUNCH")
-            failure_recorded = True
-            return
-
         _append_auto_upgrade_log(
             base_dir,
-            f"Upgrade script completed successfully: {' '.join(args)}",
+            "Delegated auto-upgrade launch failed; will retry on next cycle",
         )
-
-        if not _ensure_runtime_services(
-            base_dir,
-            restart_if_active=True,
-            revert_on_failure=True,
-        ):
-            _record_auto_upgrade_failure(base_dir, "SERVICE-RESTART")
-            failure_recorded = True
-            return
-
-        _append_auto_upgrade_log(
-            base_dir,
-            "Auto-upgrade verification complete; runtime services are healthy",
-        )
-
-        if upgrade_was_applied:
-            _append_auto_upgrade_log(
-                base_dir,
-                (
-                    "Scheduled post-upgrade health check in %s seconds"
-                    % AUTO_UPGRADE_HEALTH_DELAY_SECONDS
-                ),
-            )
-            _schedule_health_check(1)
+        _record_auto_upgrade_failure(base_dir, "UPGRADE-LAUNCH")
+        failure_recorded = True
+        return
     except Exception as exc:
         failure_recorded = True
         _record_auto_upgrade_failure(base_dir, _classify_auto_upgrade_failure(exc))
