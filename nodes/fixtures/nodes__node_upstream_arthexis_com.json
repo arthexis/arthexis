@@ -8,6 +8,7 @@
       "port": 443,
       "trusted": false,
       "current_relation": "UPSTREAM",
+      "last_seen": "2024-01-01T00:00:00Z",
       "public_endpoint": "arthexis-com"
     }
   }
