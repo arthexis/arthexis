@@ -45,6 +45,7 @@ from .models import (
     ElectricVehicle,
     Simulator,
     MeterValue,
+    StationModel,
     EVModel,
     Transaction,
     DataTransferMessage,
@@ -1598,6 +1599,28 @@ class WMICodeInline(admin.TabularInline):
     extra = 0
 
 
+@admin.register(StationModel)
+class StationModelAdmin(EntityModelAdmin):
+    fields = (
+        "vendor",
+        "model_family",
+        "model",
+        "max_power_kw",
+        "max_voltage_v",
+        "connector_type",
+        "notes",
+    )
+    list_display = (
+        "model",
+        "model_family",
+        "vendor",
+        "max_power_kw",
+        "max_voltage_v",
+        "connector_type",
+    )
+    search_fields = ("vendor", "model_family", "model", "connector_type")
+
+
 @admin.register(Brand)
 class BrandAdmin(EntityModelAdmin):
     fields = ("name",)
@@ -1648,6 +1671,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
                     "language",
                     "energy_unit",
                     "location",
+                    "station_model",
                     "last_path",
                     "last_heartbeat",
                     "last_meter_values",
