@@ -1,9 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SERVICE_NAME="${1:-}"
-if [ -n "$SERVICE_NAME" ]; then
-  shift
+SERVICE_NAME=""
+if [ "$#" -gt 0 ]; then
+  first_arg="$1"
+
+  if [[ ! "$first_arg" =~ ^-- ]] && [ ! -f "$first_arg" ] && [[ "$first_arg" != /* ]] && [[ "$first_arg" != ./* ]] && [[ "$first_arg" != ../* ]]; then
+    SERVICE_NAME="$first_arg"
+    shift
+  fi
 fi
 
 BASE_DIR="${ARTHEXIS_BASE_DIR:-$(pwd)}"
