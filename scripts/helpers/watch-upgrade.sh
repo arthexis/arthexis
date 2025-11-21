@@ -45,6 +45,10 @@ control_with_sudo() {
 control_with_sudo stop "$SERVICE_NAME"
 
 STATUS=0
+if [ ! -x "${UPGRADE_CMD[0]}" ] && [ -f "${UPGRADE_CMD[0]}" ]; then
+  chmod +x "${UPGRADE_CMD[0]}" 2>/dev/null || true
+fi
+
 if [ -x "${UPGRADE_CMD[0]}" ]; then
   (cd "$BASE_DIR" && "${UPGRADE_CMD[@]}") || STATUS=$?
 else
