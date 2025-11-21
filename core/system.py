@@ -896,6 +896,20 @@ def _startup_report_log_path(base_dir: Path | None = None) -> Path:
     return root / "logs" / STARTUP_REPORT_LOG_NAME
 
 
+def _startup_report_reference_time(log_path: Path) -> datetime | None:
+    """Return the log's modification time in the current timezone."""
+
+    try:
+        mtime = log_path.stat().st_mtime
+    except OSError:
+        return None
+
+    try:
+        return timezone.make_aware(datetime.fromtimestamp(mtime))
+    except (OverflowError, ValueError, OSError):
+        return None
+
+
 def _parse_startup_report_entry(line: str) -> dict[str, object] | None:
     text = line.strip()
     if not text:
@@ -966,19 +980,21 @@ def _read_startup_report(
     ]
     parsed_entries.reverse()
 
-    now = timezone.now()
+    reference_time = _startup_report_reference_time(log_path) or timezone.now()
     clock_warning = None
     for entry in parsed_entries:
         timestamp = entry.get("timestamp")
         if not isinstance(timestamp, datetime):
             continue
 
-        delta = timestamp - now
+        delta = timestamp - reference_time
         absolute_delta = delta if delta >= timedelta(0) else -delta
         if absolute_delta <= STARTUP_CLOCK_DRIFT_THRESHOLD:
             break
 
-        offset_label = timesince(now - absolute_delta, now)
+        offset_label = timesince(
+            reference_time - absolute_delta, reference_time
+        )
         direction = _("ahead") if delta > timedelta(0) else _("behind")
         clock_warning = _(
             "Startup timestamps appear %(offset)s %(direction)s of the current system time. "

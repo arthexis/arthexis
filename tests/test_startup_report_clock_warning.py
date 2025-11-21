@@ -1,3 +1,4 @@
+import os
 from datetime import datetime, timedelta
 
 from django.utils import timezone
@@ -12,6 +13,11 @@ def _write_startup_entry(log_path, timestamp_text: str) -> None:
     )
 
 
+def _set_log_mtime(log_path, dt: datetime) -> None:
+    timestamp = dt.timestamp()
+    os.utime(log_path, (timestamp, timestamp))
+
+
 def test_startup_report_warns_when_clock_ahead(monkeypatch, tmp_path):
     now = timezone.make_aware(datetime(2024, 11, 20, 10, 0))
     monkeypatch.setattr(system.timezone, "now", lambda: now)
@@ -19,6 +25,7 @@ def test_startup_report_warns_when_clock_ahead(monkeypatch, tmp_path):
     log_path = tmp_path / "logs" / system.STARTUP_REPORT_LOG_NAME
     future_timestamp = (now + timedelta(days=1, hours=2)).isoformat()
     _write_startup_entry(log_path, future_timestamp)
+    _set_log_mtime(log_path, now)
 
     report = system._read_startup_report(base_dir=tmp_path)
 
@@ -34,6 +41,7 @@ def test_startup_report_warns_when_clock_behind(monkeypatch, tmp_path):
     log_path = tmp_path / "logs" / system.STARTUP_REPORT_LOG_NAME
     past_timestamp = (now - timedelta(days=2)).isoformat()
     _write_startup_entry(log_path, past_timestamp)
+    _set_log_mtime(log_path, now)
 
     report = system._read_startup_report(base_dir=tmp_path)
 
@@ -49,6 +57,21 @@ def test_startup_report_ignores_small_clock_offset(monkeypatch, tmp_path):
     log_path = tmp_path / "logs" / system.STARTUP_REPORT_LOG_NAME
     slight_offset = (now + timedelta(minutes=3)).isoformat()
     _write_startup_entry(log_path, slight_offset)
+    _set_log_mtime(log_path, now)
+
+    report = system._read_startup_report(base_dir=tmp_path)
+
+    assert report.get("clock_warning") is None
+
+
+def test_startup_report_ignores_historical_logs(monkeypatch, tmp_path):
+    log_time = timezone.make_aware(datetime(2024, 11, 20, 10, 0))
+    viewed_at = log_time + timedelta(days=3)
+    monkeypatch.setattr(system.timezone, "now", lambda: viewed_at)
+
+    log_path = tmp_path / "logs" / system.STARTUP_REPORT_LOG_NAME
+    _write_startup_entry(log_path, log_time.isoformat())
+    _set_log_mtime(log_path, log_time)
 
     report = system._read_startup_report(base_dir=tmp_path)
 
