@@ -13,7 +13,6 @@ def seed_role_configuration_profiles(apps, schema_editor):
     defaults = {
         "Terminal": {
             "description": "Single-User Research & Development",
-            "ansible_playbook_path": "ansible/playbooks/terminal.yml",
             "inventory_group": "terminal",
             "extra_vars": {
                 "enable_celery": True,
@@ -25,7 +24,6 @@ def seed_role_configuration_profiles(apps, schema_editor):
         },
         "Control": {
             "description": "Single-Device Testing & Special Task Appliances",
-            "ansible_playbook_path": "ansible/playbooks/control.yml",
             "inventory_group": "control",
             "extra_vars": {
                 "enable_celery": True,
@@ -37,7 +35,6 @@ def seed_role_configuration_profiles(apps, schema_editor):
         },
         "Watchtower": {
             "description": "Multi-User Cloud & Orchestration",
-            "ansible_playbook_path": "ansible/playbooks/watchtower.yml",
             "inventory_group": "watchtower",
             "extra_vars": {
                 "enable_celery": True,
@@ -49,7 +46,6 @@ def seed_role_configuration_profiles(apps, schema_editor):
         },
         "Satellite": {
             "description": "Multi-Device Edge, Network & Data Acquisition",
-            "ansible_playbook_path": "ansible/playbooks/satellite.yml",
             "inventory_group": "satellite",
             "extra_vars": {
                 "enable_celery": True,
@@ -72,7 +68,6 @@ def seed_role_configuration_profiles(apps, schema_editor):
         RoleConfigurationProfile.objects.update_or_create(
             role=role,
             defaults={
-                "ansible_playbook_path": config["ansible_playbook_path"],
                 "inventory_group": config["inventory_group"],
                 "extra_vars": config["extra_vars"],
                 "default_tags": [config["inventory_group"]],
@@ -85,9 +80,7 @@ def unseed_role_configuration_profiles(apps, schema_editor):
     RoleConfigurationProfile = apps.get_model(
         "nodes", "RoleConfigurationProfile"
     )
-    RoleConfigurationProfile.objects.filter(
-        ansible_playbook_path__startswith="ansible/playbooks/"
-    ).delete()
+    RoleConfigurationProfile.objects.filter(is_seed_data=True).delete()
 
 
 class Migration(migrations.Migration):
@@ -112,7 +105,6 @@ class Migration(migrations.Migration):
                 ("is_seed_data", models.BooleanField(default=False, editable=False)),
                 ("is_user_data", models.BooleanField(default=False, editable=False)),
                 ("is_deleted", models.BooleanField(default=False, editable=False)),
-                ("ansible_playbook_path", models.CharField(max_length=255)),
                 ("inventory_group", models.CharField(max_length=128)),
                 ("extra_vars", models.JSONField(blank=True, default=dict)),
                 ("default_tags", models.JSONField(blank=True, default=list)),
