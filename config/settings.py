@@ -653,6 +653,15 @@ EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 DEFAULT_FROM_EMAIL = "arthexis@gmail.com"
 SERVER_EMAIL = DEFAULT_FROM_EMAIL
 
+# Slack bot onboarding
+SLACK_CLIENT_ID = os.environ.get("SLACK_CLIENT_ID", "")
+SLACK_CLIENT_SECRET = os.environ.get("SLACK_CLIENT_SECRET", "")
+SLACK_SIGNING_SECRET = os.environ.get("SLACK_SIGNING_SECRET", "")
+SLACK_BOT_SCOPES = os.environ.get(
+    "SLACK_BOT_SCOPES",
+    "commands,chat:write,chat:write.public",
+)
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 

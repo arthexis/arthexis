@@ -1,6 +1,12 @@
+from django.conf import settings
 from django.contrib import admin, messages
 from django.contrib.admin.sites import NotRegistered
 from django.core.exceptions import ValidationError
+from django.http import HttpResponseRedirect
+from django.urls import path, reverse
+from urllib.parse import urlencode
+import secrets
+import requests
 from django.utils import formats, timezone
 from django.utils.translation import gettext_lazy as _, ngettext
 
@@ -125,6 +131,7 @@ class SlackBotProfileAdmin(EntityModelAdmin):
     list_filter = ("is_enabled",)
     search_fields = ("team_id", "bot_user_id", "node__hostname")
     raw_id_fields = ("node", "user", "group")
+    changelist_actions = ["bot_creation_wizard"]
     form = SlackBotProfileAdminForm
     fieldsets = (
         (
@@ -164,6 +171,190 @@ class SlackBotProfileAdmin(EntityModelAdmin):
                 if local_node is not None:
                     initial["node"] = local_node.pk
         return initial
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path(
+                "bot-creation-wizard/",
+                self.admin_site.admin_view(self.bot_creation_wizard_view),
+                name="teams_slackbotprofile_bot_creation_wizard",
+            ),
+            path(
+                "bot-creation-callback/",
+                self.admin_site.admin_view(self.bot_creation_callback_view),
+                name="teams_slackbotprofile_bot_creation_callback",
+            ),
+        ]
+        return custom + urls
+
+    def bot_creation_wizard(self, request):
+        return HttpResponseRedirect(
+            reverse("admin:teams_slackbotprofile_bot_creation_wizard")
+        )
+
+    bot_creation_wizard.label = _("Bot Creation Wizard")
+    bot_creation_wizard.short_description = _("Bot Creation Wizard")
+
+    def _slack_oauth_settings(self):
+        client_id = getattr(settings, "SLACK_CLIENT_ID", "") or ""
+        client_secret = getattr(settings, "SLACK_CLIENT_SECRET", "") or ""
+        signing_secret = getattr(settings, "SLACK_SIGNING_SECRET", "") or ""
+        scopes = getattr(settings, "SLACK_BOT_SCOPES", "") or ""
+        return client_id.strip(), client_secret.strip(), signing_secret.strip(), scopes.strip()
+
+    def _get_owner_kwargs(self, request):
+        owner = getattr(request, "node", None) or Node.get_local()
+        if owner is not None:
+            return {"node": owner, "user": None, "group": None}
+        user = getattr(request, "user", None)
+        if getattr(user, "is_authenticated", False):
+            return {"user": user, "group": None, "node": None}
+        return {}
+
+    def bot_creation_wizard_view(self, request):
+        client_id, client_secret, signing_secret, scopes = self._slack_oauth_settings()
+        changelist_url = reverse("admin:teams_slackbotprofile_changelist")
+        if not (client_id and client_secret and signing_secret):
+            self.message_user(
+                request,
+                _(
+                    "Configure SLACK_CLIENT_ID, SLACK_CLIENT_SECRET, and SLACK_SIGNING_SECRET to use the bot creation wizard."
+                ),
+                level=messages.ERROR,
+            )
+            return HttpResponseRedirect(changelist_url)
+
+        redirect_uri = request.build_absolute_uri(
+            reverse("admin:teams_slackbotprofile_bot_creation_callback")
+        )
+        state = secrets.token_urlsafe(32)
+        request.session["slack_bot_wizard_state"] = state
+        scope_param = scopes or "commands,chat:write,chat:write.public"
+        params = {
+            "client_id": client_id,
+            "scope": scope_param,
+            "redirect_uri": redirect_uri,
+            "state": state,
+        }
+        auth_url = f"https://slack.com/oauth/v2/authorize?{urlencode(params)}"
+        return HttpResponseRedirect(auth_url)
+
+    def bot_creation_callback_view(self, request):
+        changelist_url = reverse("admin:teams_slackbotprofile_changelist")
+        session_state = request.session.pop("slack_bot_wizard_state", None)
+        state = request.GET.get("state")
+        if not session_state or not state or session_state != state:
+            self.message_user(
+                request,
+                _("Slack authorization could not be validated. Please try again."),
+                level=messages.ERROR,
+            )
+            return HttpResponseRedirect(changelist_url)
+
+        error = request.GET.get("error")
+        if error:
+            self.message_user(
+                request,
+                _("Slack returned an error: %(error)s") % {"error": error},
+                level=messages.ERROR,
+            )
+            return HttpResponseRedirect(changelist_url)
+
+        code = request.GET.get("code")
+        if not code:
+            self.message_user(
+                request,
+                _("Slack did not provide an authorization code."),
+                level=messages.ERROR,
+            )
+            return HttpResponseRedirect(changelist_url)
+
+        client_id, client_secret, signing_secret, scopes = self._slack_oauth_settings()
+        if not (client_id and client_secret and signing_secret):
+            self.message_user(
+                request,
+                _("Slack OAuth is not configured."),
+                level=messages.ERROR,
+            )
+            return HttpResponseRedirect(changelist_url)
+
+        redirect_uri = request.build_absolute_uri(
+            reverse("admin:teams_slackbotprofile_bot_creation_callback")
+        )
+        try:
+            response = requests.post(
+                "https://slack.com/api/oauth.v2.access",
+                data={
+                    "code": code,
+                    "client_id": client_id,
+                    "client_secret": client_secret,
+                    "redirect_uri": redirect_uri,
+                },
+                timeout=10,
+            )
+            data = response.json()
+        except Exception:
+            data = None
+
+        if not isinstance(data, dict) or not data.get("ok"):
+            error_message = "unknown_error"
+            if isinstance(data, dict):
+                error_message = data.get("error") or error_message
+            self.message_user(
+                request,
+                _("Slack authentication failed: %(error)s")
+                % {"error": error_message},
+                level=messages.ERROR,
+            )
+            return HttpResponseRedirect(changelist_url)
+
+        bot_token = (data.get("access_token") or "").strip()
+        bot_user_id = (data.get("bot_user_id") or "").strip().upper()
+        team = data.get("team") or {}
+        team_id = (team.get("id") or "").strip().upper()
+        incoming = data.get("incoming_webhook") or {}
+        channel_id = (incoming.get("channel_id") or "").strip()
+
+        if not bot_token or not team_id:
+            self.message_user(
+                request,
+                _("Slack did not return the required workspace details."),
+                level=messages.ERROR,
+            )
+            return HttpResponseRedirect(changelist_url)
+
+        owner_kwargs = self._get_owner_kwargs(request)
+        if not owner_kwargs:
+            self.message_user(
+                request,
+                _("Unable to determine an owner for the Slack bot."),
+                level=messages.ERROR,
+            )
+            return HttpResponseRedirect(changelist_url)
+
+        defaults = {
+            "bot_token": bot_token,
+            "bot_user_id": bot_user_id,
+            "signing_secret": signing_secret,
+            "is_enabled": True,
+            "default_channels": [channel_id] if channel_id else [],
+            **owner_kwargs,
+        }
+
+        bot, _created = SlackBotProfile.objects.update_or_create(
+            team_id=team_id,
+            defaults=defaults,
+        )
+
+        self.message_user(
+            request,
+            _("Slack bot connected for workspace %(workspace)s")
+            % {"workspace": team_id or _("your workspace")},
+        )
+        return HttpResponseRedirect(
+            reverse("admin:teams_slackbotprofile_change", args=[bot.pk])
+        )
 
 
 @admin.register(TaskCategory)
