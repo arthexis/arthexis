@@ -1,0 +1,14 @@
+[
+  {
+    "model": "ocpp.stationmodel",
+    "fields": {
+      "vendor": "IOCHARGER",
+      "model_family": "IOJ2Y",
+      "model": "IOC750200A-T08",
+      "max_power_kw": "7.50",
+      "max_voltage_v": 480,
+      "connector_type": "CCS Type 1",
+      "notes": "Factory 7.5kW single-port configuration for IOCHARGER IOJ2Y series."
+    }
+  }
+]
