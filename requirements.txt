@@ -1,6 +1,5 @@
 # Development note: prefer rewriting the latest migration over adding new ones; preserve earlier migrations.
 amqp==5.3.1
-annotated-types==0.7.0
 anyio==4.9.0
 asgiref==3.10.0
 attrs==25.3.0
@@ -58,8 +57,6 @@ psycopg-binary==3.2.12
 pyasn1==0.6.1
 pyasn1_modules==0.4.2
 pycparser==2.23
-pydantic==2.12.3
-pydantic_core==2.41.4
 pyOpenSSL==25.1.0
 pyxel==2.1.9
 PySocks==1.7.1
@@ -86,7 +83,6 @@ trio-websocket==0.12.2
 Twisted==25.5.0
 twine==6.1.0
 txaio==25.9.2
-typing-inspection==0.4.2
 typing_extensions==4.14.1
 tzdata==2025.2
 urllib3==2.5.0
