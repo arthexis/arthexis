@@ -38,6 +38,21 @@ def _collect_actions_from_compare(node: ast.Compare, target_name: str) -> set[st
     return values
 
 
+def _collect_actions_from_dict(node: ast.Assign, target_name: str) -> set[str]:
+    if not any(
+        isinstance(target, ast.Name) and target.id == target_name
+        for target in node.targets
+    ):
+        return set()
+    if not isinstance(node.value, ast.Dict):
+        return set()
+    actions: set[str] = set()
+    for key in node.value.keys:
+        if isinstance(key, ast.Constant) and isinstance(key.value, str):
+            actions.add(key.value)
+    return actions
+
+
 def _implemented_cp_to_csms(app_dir: Path) -> set[str]:
     source = (app_dir / "consumers.py").read_text(encoding="utf-8")
     tree = ast.parse(source)
@@ -45,18 +60,47 @@ def _implemented_cp_to_csms(app_dir: Path) -> set[str]:
     class Visitor(ast.NodeVisitor):
         def __init__(self) -> None:
             self.actions: set[str] = set()
+            self._in_call_handler = False
 
         def visit_ClassDef(self, node: ast.ClassDef) -> None:
             if node.name == "CSMSConsumer":
                 for item in node.body:
-                    if isinstance(item, ast.FunctionDef) and item.name == "receive":
+                    if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)) and item.name in {
+                        "receive",
+                        "_handle_call_message",
+                    }:
                         self.visit(item)
-                        return
+                return
             # Continue walking in case nested classes exist.
             self.generic_visit(node)
 
         def visit_Compare(self, node: ast.Compare) -> None:
             self.actions.update(_collect_actions_from_compare(node, "action"))
+            self.generic_visit(node)
+
+        def visit_Assign(self, node: ast.Assign) -> None:
+            if self._in_call_handler:
+                self.actions.update(
+                    _collect_actions_from_dict(node, "action_handlers")
+                )
+            self.generic_visit(node)
+
+        def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+            if node.name == "_handle_call_message":
+                previous_state = self._in_call_handler
+                self._in_call_handler = True
+                self.generic_visit(node)
+                self._in_call_handler = previous_state
+                return
+            self.generic_visit(node)
+
+        def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+            if node.name == "_handle_call_message":
+                previous_state = self._in_call_handler
+                self._in_call_handler = True
+                self.generic_visit(node)
+                self._in_call_handler = previous_state
+                return
             self.generic_visit(node)
 
     visitor = Visitor()
@@ -73,9 +117,10 @@ def _implemented_csms_to_cp(app_dir: Path) -> set[str]:
             self.actions: set[str] = set()
 
         def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
-            if node.name == "dispatch_action":
-                self.generic_visit(node)
-            # Skip other functions by default.
+            self.generic_visit(node)
+
+        def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+            self.generic_visit(node)
 
         def visit_Assign(self, node: ast.Assign) -> None:
             if not node.targets:

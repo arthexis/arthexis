@@ -49,6 +49,7 @@ from .models import (
     DataTransferMessage,
     RFID,
     CPReservation,
+    CPFirmware,
     CPFirmwareDeployment,
     annotate_transaction_energy_bounds,
 )
@@ -72,9 +73,11 @@ CALL_ACTION_LABELS = {
     "ReserveNow": _("Reserve connector"),
     "CancelReservation": _("Cancel reservation"),
     "ClearCache": _("Clear cache"),
+    "UnlockConnector": _("Unlock connector"),
+    "UpdateFirmware": _("Update firmware"),
 }
 
-CALL_EXPECTED_STATUSES: dict[str, set[str]] = {
+CALL_EXPECTED_STATUSES: dict[str, set[str] | None] = {
     "RemoteStartTransaction": {"Accepted"},
     "RemoteStopTransaction": {"Accepted"},
     "ChangeAvailability": {"Accepted", "Scheduled"},
@@ -85,6 +88,8 @@ CALL_EXPECTED_STATUSES: dict[str, set[str]] = {
     "ReserveNow": {"Accepted"},
     "CancelReservation": {"Accepted", "Rejected"},
     "ClearCache": {"Accepted", "Rejected"},
+    "UnlockConnector": {"Unlocked", "Accepted"},
+    "UpdateFirmware": None,
 }
 
 
@@ -104,6 +109,7 @@ class ActionContext:
     charger: Charger | None
     ws: object
     log_key: str
+    request: object | None = None
 
 
 def _parse_request_body(request) -> dict:
@@ -2427,6 +2433,53 @@ def _handle_cancel_reservation(context: ActionContext, data: dict) -> JsonRespon
     )
 
 
+def _handle_unlock_connector(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
+    connector_value: int | None = context.connector_value
+    if "connectorId" in data or "connector_id" in data:
+        raw_value = data.get("connectorId")
+        if raw_value is None:
+            raw_value = data.get("connector_id")
+        try:
+            connector_value = int(raw_value)
+        except (TypeError, ValueError):
+            return JsonResponse({"detail": "invalid connectorId"}, status=400)
+
+    if connector_value in (None, 0):
+        return JsonResponse({"detail": "connector id is required"}, status=400)
+
+    payload = {"connectorId": connector_value}
+    message_id = uuid.uuid4().hex
+    ocpp_action = "UnlockConnector"
+    expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
+    msg = json.dumps([2, message_id, "UnlockConnector", payload])
+    async_to_sync(context.ws.send)(msg)
+    log_key = store.identity_key(context.cid, connector_value)
+    requested_at = timezone.now()
+    store.register_pending_call(
+        message_id,
+        {
+            "action": ocpp_action,
+            "charger_id": context.cid,
+            "connector_id": connector_value,
+            "log_key": log_key,
+            "requested_at": requested_at,
+        },
+    )
+    store.schedule_call_timeout(
+        message_id,
+        action=ocpp_action,
+        log_key=log_key,
+        message="UnlockConnector request timed out",
+    )
+    return ActionCall(
+        msg=msg,
+        message_id=message_id,
+        ocpp_action=ocpp_action,
+        expected_statuses=expected_statuses,
+        log_key=log_key,
+    )
+
+
 def _handle_data_transfer(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
     vendor_id = data.get("vendorId")
     if not isinstance(vendor_id, str) or not vendor_id.strip():
@@ -2652,6 +2705,127 @@ def _handle_get_local_list_version(context: ActionContext, _data: dict) -> JsonR
     )
 
 
+def _handle_update_firmware(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
+    firmware_id = (
+        data.get("firmwareId")
+        or data.get("firmware_id")
+        or data.get("firmware")
+    )
+    try:
+        firmware_pk = int(firmware_id)
+    except (TypeError, ValueError):
+        return JsonResponse({"detail": "firmwareId required"}, status=400)
+
+    firmware = CPFirmware.objects.filter(pk=firmware_pk).first()
+    if firmware is None:
+        return JsonResponse({"detail": "firmware not found"}, status=404)
+    if not firmware.has_binary and not firmware.has_json:
+        return JsonResponse({"detail": "firmware payload missing"}, status=400)
+
+    retrieve_raw = data.get("retrieveDate") or data.get("retrieve_date")
+    if retrieve_raw:
+        retrieve_date = parse_datetime(str(retrieve_raw))
+        if retrieve_date is None:
+            return JsonResponse({"detail": "invalid retrieveDate"}, status=400)
+        if timezone.is_naive(retrieve_date):
+            retrieve_date = timezone.make_aware(
+                retrieve_date, timezone.get_current_timezone()
+            )
+    else:
+        retrieve_date = timezone.now() + timedelta(seconds=30)
+
+    retries_value: int | None = None
+    if "retries" in data or "retryCount" in data or "retry_count" in data:
+        retries_raw = (
+            data.get("retries")
+            if "retries" in data
+            else data.get("retryCount")
+            if "retryCount" in data
+            else data.get("retry_count")
+        )
+        try:
+            retries_value = int(retries_raw)
+        except (TypeError, ValueError):
+            return JsonResponse({"detail": "invalid retries"}, status=400)
+        if retries_value < 0:
+            return JsonResponse({"detail": "invalid retries"}, status=400)
+
+    retry_interval_value: int | None = None
+    if "retryInterval" in data or "retry_interval" in data:
+        retry_interval_raw = data.get("retryInterval")
+        if retry_interval_raw is None:
+            retry_interval_raw = data.get("retry_interval")
+        try:
+            retry_interval_value = int(retry_interval_raw)
+        except (TypeError, ValueError):
+            return JsonResponse({"detail": "invalid retryInterval"}, status=400)
+        if retry_interval_value < 0:
+            return JsonResponse({"detail": "invalid retryInterval"}, status=400)
+
+    message_id = uuid.uuid4().hex
+    deployment = CPFirmwareDeployment.objects.create(
+        firmware=firmware,
+        charger=context.charger,
+        node=context.charger.node_origin if context.charger else None,
+        ocpp_message_id=message_id,
+        status="Pending",
+        status_info=_("Awaiting charge point response."),
+        status_timestamp=timezone.now(),
+        retrieve_date=retrieve_date,
+        retry_count=int(retries_value or 0),
+        retry_interval=int(retry_interval_value or 0),
+        request_payload={},
+        is_user_data=True,
+    )
+    token = deployment.issue_download_token(lifetime=timedelta(hours=4))
+    download_path = reverse("cp-firmware-download", args=[deployment.pk, token])
+    request_obj = getattr(context, "request", None)
+    if request_obj is not None:
+        download_url = request_obj.build_absolute_uri(download_path)
+    else:  # pragma: no cover - defensive fallback for unusual call contexts
+        download_url = download_path
+    payload = {
+        "location": download_url,
+        "retrieveDate": retrieve_date.isoformat(),
+    }
+    if retries_value is not None:
+        payload["retries"] = retries_value
+    if retry_interval_value is not None:
+        payload["retryInterval"] = retry_interval_value
+    if firmware.checksum:
+        payload["checksum"] = firmware.checksum
+    deployment.request_payload = payload
+    deployment.save(update_fields=["request_payload", "updated_at"])
+
+    ocpp_action = "UpdateFirmware"
+    expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
+    msg = json.dumps([2, message_id, "UpdateFirmware", payload])
+    async_to_sync(context.ws.send)(msg)
+    store.register_pending_call(
+        message_id,
+        {
+            "action": ocpp_action,
+            "charger_id": context.cid,
+            "connector_id": context.connector_value,
+            "deployment_pk": deployment.pk,
+            "log_key": context.log_key,
+        },
+    )
+    store.schedule_call_timeout(
+        message_id,
+        action=ocpp_action,
+        log_key=context.log_key,
+        message="UpdateFirmware request timed out",
+    )
+    return ActionCall(
+        msg=msg,
+        message_id=message_id,
+        ocpp_action=ocpp_action,
+        expected_statuses=expected_statuses,
+        log_key=context.log_key,
+    )
+
+
 ACTION_HANDLERS = {
     "get_configuration": _handle_get_configuration,
     "reserve_now": _handle_reserve_now,
@@ -2661,11 +2835,13 @@ ACTION_HANDLERS = {
     "change_configuration": _handle_change_configuration,
     "clear_cache": _handle_clear_cache,
     "cancel_reservation": _handle_cancel_reservation,
+    "unlock_connector": _handle_unlock_connector,
     "data_transfer": _handle_data_transfer,
     "reset": _handle_reset,
     "trigger_message": _handle_trigger_message,
     "send_local_list": _handle_send_local_list,
     "get_local_list_version": _handle_get_local_list_version,
+    "update_firmware": _handle_update_firmware,
 }
 
 @csrf_exempt
@@ -2693,6 +2869,7 @@ def dispatch_action(request, cid, connector=None):
         charger=charger_obj,
         ws=ws,
         log_key=log_key,
+        request=request,
     )
     result = handler(context, data)
     if isinstance(result, JsonResponse):
