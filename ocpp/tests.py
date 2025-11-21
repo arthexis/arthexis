@@ -7049,6 +7049,71 @@ class DispatchActionViewTests(TestCase):
         self.assertEqual(self.ws.sent, [])
         self.assertFalse(store.pending_calls)
 
+    def test_unlock_connector_requires_connector(self):
+        self.mock_schedule.reset_mock()
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"action": "unlock_connector", "connectorId": 0}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.loop.run_until_complete(asyncio.sleep(0))
+        self.assertEqual(self.ws.sent, [])
+        self.mock_schedule.assert_not_called()
+
+    def test_unlock_connector_dispatches_frame(self):
+        self.mock_schedule.reset_mock()
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"action": "unlock_connector"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.loop.run_until_complete(asyncio.sleep(0))
+        self.assertEqual(len(self.ws.sent), 1)
+        frame = json.loads(self.ws.sent[0])
+        self.assertEqual(frame[2], "UnlockConnector")
+        self.assertEqual(frame[3].get("connectorId"), self.charger.connector_id)
+        self.assertEqual(self.last_metadata.get("action"), "UnlockConnector")
+        self.assertEqual(
+            self.last_metadata.get("connector_id"), self.charger.connector_id
+        )
+        self.mock_schedule.assert_called_once()
+
+    def test_update_firmware_requires_payload(self):
+        firmware = CPFirmware.objects.create(name="Empty firmware")
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"action": "update_firmware", "firmwareId": firmware.pk}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("payload missing", response.json().get("detail", ""))
+        self.loop.run_until_complete(asyncio.sleep(0))
+        self.assertEqual(self.ws.sent, [])
+
+    def test_update_firmware_dispatches_frame(self):
+        self.mock_schedule.reset_mock()
+        firmware = CPFirmware.objects.create(
+            name="Firmware", filename="fw.bin", payload_binary=b"abc", is_user_data=True
+        )
+        response = self.client.post(
+            self.url,
+            data=json.dumps({"action": "update_firmware", "firmwareId": firmware.pk}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.loop.run_until_complete(asyncio.sleep(0))
+        self.assertEqual(len(self.ws.sent), 1)
+        frame = json.loads(self.ws.sent[0])
+        self.assertEqual(frame[2], "UpdateFirmware")
+        payload = frame[3]
+        self.assertIn("location", payload)
+        deployment = CPFirmwareDeployment.objects.get(ocpp_message_id=frame[1])
+        self.assertEqual(deployment.firmware, firmware)
+        self.assertEqual(self.last_metadata.get("deployment_pk"), deployment.pk)
+        self.mock_schedule.assert_called_once()
+
 
 class SimulatorStateMappingTests(TestCase):
     def tearDown(self):

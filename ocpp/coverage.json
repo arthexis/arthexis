@@ -18,23 +18,30 @@
       "total": 10
     },
     "csms_to_cp": {
-      "count": 8,
-      "percent": 42.11,
+      "count": 15,
+      "percent": 78.95,
       "supported": [
+        "CancelReservation",
         "ChangeAvailability",
         "ChangeConfiguration",
         "ClearCache",
         "DataTransfer",
+        "GetConfiguration",
+        "GetLocalListVersion",
         "RemoteStartTransaction",
         "RemoteStopTransaction",
+        "ReserveNow",
         "Reset",
-        "TriggerMessage"
+        "SendLocalList",
+        "TriggerMessage",
+        "UnlockConnector",
+        "UpdateFirmware"
       ],
       "total": 19
     },
     "overall": {
-      "count": 23,
-      "percent": 82.14,
+      "count": 24,
+      "percent": 85.71,
       "supported": [
         "Authorize",
         "BootNotification",
@@ -58,6 +65,7 @@
         "StatusNotification",
         "StopTransaction",
         "TriggerMessage",
+        "UnlockConnector",
         "UpdateFirmware"
       ],
       "total": 28
@@ -67,39 +75,33 @@
     "cp_to_csms": [
       "Authorize",
       "BootNotification",
-      "CancelReservation",
-      "ChangeConfiguration",
-      "ClearCache",
       "DataTransfer",
       "DiagnosticsStatusNotification",
       "FirmwareStatusNotification",
-      "GetConfiguration",
-      "GetLocalListVersion",
-      "GetLog",
       "Heartbeat",
       "LogStatusNotification",
       "MeterValues",
-      "RemoteStartTransaction",
-      "RemoteStopTransaction",
-      "ReserveNow",
-      "Reset",
       "SecurityEventNotification",
-      "SendLocalList",
       "StartTransaction",
       "StatusNotification",
-      "StopTransaction",
-      "TriggerMessage",
-      "UpdateFirmware"
+      "StopTransaction"
     ],
     "csms_to_cp": [
+      "CancelReservation",
       "ChangeAvailability",
       "ChangeConfiguration",
       "ClearCache",
       "DataTransfer",
+      "GetConfiguration",
+      "GetLocalListVersion",
       "RemoteStartTransaction",
       "RemoteStopTransaction",
+      "ReserveNow",
       "Reset",
-      "TriggerMessage"
+      "SendLocalList",
+      "TriggerMessage",
+      "UnlockConnector",
+      "UpdateFirmware"
     ]
   },
   "spec": {
