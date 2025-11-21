@@ -9,6 +9,7 @@ import secrets
 import requests
 from django.utils import formats, timezone
 from django.utils.translation import gettext_lazy as _, ngettext
+from django_object_actions import DjangoObjectActions
 
 from django_otp.plugins.otp_totp.models import TOTPDevice as CoreTOTPDevice
 from django_otp.plugins.otp_totp.admin import (
@@ -126,7 +127,7 @@ class GoogleCalendarProfileAdminProxy(GoogleCalendarProfileAdmin):
 
 
 @admin.register(SlackBotProfile)
-class SlackBotProfileAdmin(EntityModelAdmin):
+class SlackBotProfileAdmin(DjangoObjectActions, EntityModelAdmin):
     list_display = ("__str__", "team_id", "node", "is_enabled")
     list_filter = ("is_enabled",)
     search_fields = ("team_id", "bot_user_id", "node__hostname")
