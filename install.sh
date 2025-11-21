@@ -25,13 +25,12 @@ exec > >(tee "$LOG_FILE") 2>&1
 SERVICE=""
 NGINX_MODE="internal"
 PORT=""
-AUTO_UPGRADE=true
+AUTO_UPGRADE=false
 CHANNEL="stable"
 UPGRADE=false
 ENABLE_CELERY=false
 SERVICE_MANAGEMENT_MODE="$ARTHEXIS_SERVICE_MODE_EMBEDDED"
 SERVICE_MANAGEMENT_MODE_FLAG=false
-CHANNEL_FLAG=false
 START_FLAG=false
 ENABLE_LCD_SCREEN=false
 DISABLE_LCD_SCREEN=false
@@ -250,13 +249,13 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --latest|--unstable)
+            AUTO_UPGRADE=true
             CHANNEL="unstable"
-            CHANNEL_FLAG=true
             shift
             ;;
         --stable|--regular|--normal)
+            AUTO_UPGRADE=true
             CHANNEL="stable"
-            CHANNEL_FLAG=true
             shift
             ;;
         --celery)
@@ -303,32 +302,24 @@ while [[ $# -gt 0 ]]; do
             ;;
         --satellite)
             require_nginx "satellite"
-            AUTO_UPGRADE=true
             NGINX_MODE="internal"
             SERVICE="arthexis"
-            CHANNEL="stable"
             ENABLE_CELERY=true
             NODE_ROLE="Satellite"
             REQUIRES_REDIS=true
             shift
             ;;
         --terminal)
-            AUTO_UPGRADE=true
             NGINX_MODE="internal"
             SERVICE="arthexis"
-            CHANNEL="unstable"
             ENABLE_CELERY=true
             NODE_ROLE="Terminal"
             shift
             ;;
         --control)
             require_nginx "control"
-            AUTO_UPGRADE=true
             NGINX_MODE="internal"
             SERVICE="arthexis"
-            if [ "$CHANNEL_FLAG" = false ]; then
-                CHANNEL="unstable"
-            fi
             ENABLE_CELERY=true
             ENABLE_LCD_SCREEN=true
             DISABLE_LCD_SCREEN=false
@@ -342,11 +333,9 @@ while [[ $# -gt 0 ]]; do
             ;;
         --watchtower)
             require_nginx "watchtower"
-            AUTO_UPGRADE=true
             NGINX_MODE="public"
             SERVICE="arthexis"
             ENABLE_CELERY=true
-            CHANNEL="stable"
             NODE_ROLE="Watchtower"
             REQUIRES_REDIS=true
             shift
