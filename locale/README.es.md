@@ -120,7 +120,7 @@ Los nodos Terminal pueden iniciarse directamente con los siguientes scripts sin 
    - Usa `./install.sh --help` para ver la lista completa de flags si necesitas personalizar el nodo más allá del rol.
    - Actualiza con [`./upgrade.sh`](upgrade.sh).
    - Consulta el [Manual de scripts de instalación y ciclo de vida](docs/development/install-lifecycle-scripts-manual.md) para ver la descripción completa de los flags y las notas operativas.
-   - Revisa la [Guía de actualización](docs/UPGRADE.md) para los pasos manuales requeridos cuando ciertas migraciones dejan de automatizarse.
+   - Revisa el [Flujo de autoactualización](docs/auto-upgrade.md) para conocer cómo se ejecutan las actualizaciones delegadas y cómo monitorearlas.
 
 - **Windows:**
    - Ejecuta [`install.bat`](install.bat) para instalar (rol Terminal) y [`upgrade.bat`](upgrade.bat) para actualizar.
@@ -152,4 +152,3 @@ Contáctenos en [tecnologia@gelectriic.com](mailto:tecnologia@gelectriic.com) o 
 
 > "¿Qué? ¿También quieres saber sobre mí? Bueno, disfruto el [desarrollo de software](https://es.wikipedia.org/wiki/Desarrollo_de_software), los [juegos de rol](https://es.wikipedia.org/wiki/Juego_de_rol), largas caminatas por la [playa](https://es.wikipedia.org/wiki/Playa) y una cuarta cosa secreta."
 > --Arthexis
-

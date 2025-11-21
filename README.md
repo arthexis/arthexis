@@ -122,7 +122,7 @@ Terminal nodes can start directly with the scripts below without installing; Con
    - Use `./install.sh --help` to list every available flag if you need to customize the node beyond the role defaults.
    - Upgrade with [`./upgrade.sh`](upgrade.sh).
    - Consult the [Install & Lifecycle Scripts Manual](docs/development/install-lifecycle-scripts-manual.md) for complete flag descriptions and operational notes.
-   - Review the [Upgrade Guide](docs/UPGRADE.md) for manual steps required after releases that stop automating specific migrations.
+   - Review the [Auto-Upgrade Flow](docs/auto-upgrade.md) for how delegated upgrades run and how to observe them.
 
 - **Windows:**
    - Run [`install.bat`](install.bat) to install (Terminal role) and [`upgrade.bat`](upgrade.bat) to upgrade.
@@ -154,4 +154,3 @@ Contact us at [tecnologia@gelectriic.com](mailto:tecnologia@gelectriic.com) or v
 
 > "What, you want to know about me too? Well, I enjoy [developing software](https://en.wikipedia.org/wiki/Software_development), [role-playing games](https://en.wikipedia.org/wiki/Role-playing_game), long walks on the [beach](https://en.wikipedia.org/wiki/Beach) and a fourth secret thing above all else."
 > --Arthexis
-

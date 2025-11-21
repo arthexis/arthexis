@@ -4,9 +4,13 @@ set -euo pipefail
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 LOCK_DIR="$BASE_DIR/locks"
 SERVICE_NAME=""
+LOG_DIR="${ARTHEXIS_LOG_DIR:-$BASE_DIR/logs}"
+
 if [ -f "$LOCK_DIR/service.lck" ]; then
   SERVICE_NAME="$(tr -d '\r\n' < "$LOCK_DIR/service.lck")"
 fi
+
+mkdir -p "$LOG_DIR"
 
 DEFAULT_UPGRADE=("$BASE_DIR/upgrade.sh" "--stable")
 if [ "$#" -gt 0 ]; then
@@ -31,13 +35,17 @@ if [ ! -x "$WATCH_HELPER" ]; then
   echo "watch-upgrade helper missing at $WATCH_HELPER" >&2
   exit 1
 fi
-
+LOG_FILE="${LOG_DIR}/delegated-upgrade.log"
 UNIT_NAME="delegated-upgrade-$(date +%s)"
 DELEGATED_CMD=(
   "${RUNNER[@]}"
   --unit "$UNIT_NAME"
   --description "Delegated Arthexis upgrade"
+  --property "WorkingDirectory=$BASE_DIR"
+  --property "StandardOutput=append:$LOG_FILE"
+  --property "StandardError=append:$LOG_FILE"
   --setenv "ARTHEXIS_BASE_DIR=$BASE_DIR"
+  --setenv "ARTHEXIS_LOG_DIR=$LOG_DIR"
   "$WATCH_HELPER"
 )
 

@@ -44,6 +44,24 @@ if [ "$#" -gt 0 ]; then
   UPGRADE_CMD=("$@")
 fi
 
+resolve_upgrade_command() {
+  local raw="$1"
+
+  if [[ "$raw" == /* ]]; then
+    echo "$raw"
+    return
+  fi
+
+  if [[ "$raw" == ./* || "$raw" == ../* || "$raw" == */* || -f "$BASE_DIR/$raw" ]]; then
+    echo "$BASE_DIR/${raw#./}"
+    return
+  fi
+
+  echo "$raw"
+}
+
+UPGRADE_CMD[0]="$(resolve_upgrade_command "${UPGRADE_CMD[0]}")"
+
 log "Upgrade command: ${UPGRADE_CMD[*]}"
 
 control_with_sudo() {
