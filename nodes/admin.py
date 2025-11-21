@@ -24,7 +24,6 @@ from django.urls import NoReverseMatch, path, reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.utils.html import format_html, format_html_join
-from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _, ngettext
 from pathlib import Path
 from types import SimpleNamespace
@@ -61,8 +60,6 @@ from protocols.models import CPForwarder
 from .models import (
     Node,
     NodeRole,
-    RoleConfigurationProfile,
-    NodeConfigurationJob,
     NodeFeature,
     NodeFeatureAssignment,
     ContentSample,
@@ -120,61 +117,6 @@ class NodeFeatureAssignmentInline(admin.TabularInline):
     model = NodeFeatureAssignment
     extra = 0
     autocomplete_fields = ("feature",)
-
-
-class NodeConfigurationJobInline(admin.TabularInline):
-    model = NodeConfigurationJob
-    extra = 0
-    can_delete = False
-    show_change_link = True
-    ordering = ("-created_at",)
-    fields = (
-        "created_at",
-        "status",
-        "trigger",
-        "playbook_path",
-        "status_message",
-        "return_code",
-    )
-    readonly_fields = fields
-
-    def has_add_permission(self, request, obj=None):  # pragma: no cover - admin hook
-        return False
-
-    def has_change_permission(self, request, obj=None):  # pragma: no cover - admin hook
-        return False
-
-
-class RoleConfigurationProfileInline(admin.StackedInline):
-    model = RoleConfigurationProfile
-    extra = 0
-    fields = (
-        "ansible_playbook_path",
-        "inventory_group",
-        "extra_vars",
-        "default_tags",
-    )
-
-    def get_formset(self, request, obj=None, **kwargs):
-        formset = super().get_formset(request, obj, **kwargs)
-        expected_slug = slugify(obj.name) if obj else None
-        expected_path = (
-            f"ansible/playbooks/{expected_slug}.yml"
-            if expected_slug
-            else "ansible/playbooks/<role>.yml"
-        )
-        help_text = _("Expected playbook path: %(path)s") % {"path": expected_path}
-        base_form = formset.form
-
-        class InlineForm(base_form):  # type: ignore[valid-type]
-            def __init__(self, *args, **kwargs):
-                super().__init__(*args, **kwargs)
-                if not (self.instance.ansible_playbook_path or "").strip():
-                    self.initial.setdefault("ansible_playbook_path", expected_path)
-
-        InlineForm.base_fields["ansible_playbook_path"].help_text = help_text
-        formset.form = InlineForm
-        return formset
 
 
 class DeployDNSRecordsForm(forms.Form):
@@ -399,54 +341,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         "send_net_message",
     ]
     change_actions = ["update_node_action"]
-    inlines = [NodeFeatureAssignmentInline, NodeConfigurationJobInline]
-
-    def _queue_role_configuration(self, node: Node, request) -> None:
-        if not node.pk:
-            return
-        node.enqueue_role_configuration(
-            trigger=NodeConfigurationJob.Trigger.ADMIN,
-            user=request.user,
-        )
-
-    def save_model(self, request, obj, form, change):
-        should_queue = False
-        if not change and obj.role_id:
-            should_queue = True
-        elif change and "role" in (form.changed_data or []):
-            should_queue = True
-        if should_queue:
-            setattr(obj, "_skip_role_configuration_enqueue", True)
-        super().save_model(request, obj, form, change)
-        if should_queue:
-            if hasattr(obj, "_skip_role_configuration_enqueue"):
-                delattr(obj, "_skip_role_configuration_enqueue")
-            self._queue_role_configuration(obj, request)
-
-    def save_related(self, request, form, formsets, change):
-        node: Node = form.instance
-        should_queue = False
-        for formset in formsets:
-            if getattr(formset, "model", None) is not NodeFeatureAssignment:
-                continue
-            changed = any(
-                f.has_changed() and not f.cleaned_data.get("DELETE", False)
-                for f in formset.forms
-            )
-            if formset.deleted_objects:
-                changed = True
-            if changed:
-                should_queue = True
-                break
-        if should_queue:
-            setattr(node, "_skip_role_configuration_enqueue", True)
-            node.mark_role_configuration_skip(getattr(node, "pk", None))
-        super().save_related(request, form, formsets, change)
-        if should_queue:
-            if hasattr(node, "_skip_role_configuration_enqueue"):
-                delattr(node, "_skip_role_configuration_enqueue")
-            node.clear_role_configuration_skip(getattr(node, "pk", None))
-            self._queue_role_configuration(node, request)
+    inlines = [NodeFeatureAssignmentInline]
 
     class SendNetMessageForm(forms.Form):
         subject = forms.CharField(
@@ -2072,7 +1967,6 @@ class NodeRoleAdminForm(forms.ModelForm):
 class NodeRoleAdmin(EntityModelAdmin):
     form = NodeRoleAdminForm
     list_display = ("name", "description", "registered", "default_features")
-    inlines = (RoleConfigurationProfileInline,)
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
@@ -2242,15 +2136,9 @@ class NodeFeatureAdmin(EntityModelAdmin):
             )
             return
 
-        node.update_manual_features(
-            desired_manual, suppress_role_configuration=True
-        )
+        node.update_manual_features(desired_manual)
         display_map = {feature.slug: feature.display for feature in manual_features}
         newly_enabled_names = [display_map[slug] for slug in sorted(newly_enabled)]
-        node.enqueue_role_configuration(
-            trigger=NodeConfigurationJob.Trigger.ADMIN,
-            user=request.user,
-        )
         self.message_user(
             request,
             "Enabled {} feature(s): {}".format(
@@ -2850,40 +2738,3 @@ class NetMessageAdmin(EntityModelAdmin):
         return obj.target_limit or ""
 
 
-@admin.register(NodeConfigurationJob)
-class NodeConfigurationJobAdmin(EntityModelAdmin):
-    list_display = (
-        "node",
-        "role",
-        "status",
-        "trigger",
-        "playbook_path",
-        "created_at",
-        "completed_at",
-    )
-    list_filter = ("status", "trigger", "role")
-    search_fields = ("node__hostname", "playbook_path", "status_message")
-    readonly_fields = (
-        "node",
-        "role",
-        "triggered_by",
-        "trigger",
-        "status",
-        "status_message",
-        "playbook_path",
-        "inventory",
-        "extra_vars",
-        "tags",
-        "return_code",
-        "stdout",
-        "stderr",
-        "created_at",
-        "started_at",
-        "completed_at",
-    )
-
-    def has_add_permission(self, request):  # pragma: no cover - admin hook
-        return False
-
-    def has_delete_permission(self, request, obj=None):  # pragma: no cover - admin hook
-        return False

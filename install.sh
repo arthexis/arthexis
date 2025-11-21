@@ -40,9 +40,10 @@ NODE_ROLE="Terminal"
 REQUIRES_REDIS=false
 START_SERVICES=false
 REPAIR=false
+ENABLE_WATCHDOG=false
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--public|--internal] [--port PORT] [--upgrade] [--fixed] [--stable|--regular|--normal|--unstable|--latest] [--satellite] [--terminal] [--control] [--watchtower] [--celery] [--embedded|--systemd] [--lcd-screen|--no-lcd-screen] [--clean] [--start|--no-start] [--repair]" >&2
+    echo "Usage: $0 [--service NAME] [--public|--internal] [--port PORT] [--upgrade] [--fixed] [--stable|--regular|--normal|--unstable|--latest] [--satellite] [--terminal] [--control] [--watchtower] [--celery] [--embedded|--systemd] [--lcd-screen|--no-lcd-screen] [--watchdog] [--clean] [--start|--no-start] [--repair]" >&2
     exit 1
 }
 
@@ -260,6 +261,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --celery)
             ENABLE_CELERY=true
+            shift
+            ;;
+        --watchdog)
+            ENABLE_WATCHDOG=true
             shift
             ;;
         --embedded)
@@ -520,7 +525,7 @@ deactivate
 if [ -n "$SERVICE" ]; then
     echo "$SERVICE" > "$LOCK_DIR/service.lck"
     EXEC_CMD="$BASE_DIR/service-start.sh"
-    arthexis_install_service_stack "$BASE_DIR" "$LOCK_DIR" "$SERVICE" "$ENABLE_CELERY" "$EXEC_CMD" "$SERVICE_MANAGEMENT_MODE"
+    arthexis_install_service_stack "$BASE_DIR" "$LOCK_DIR" "$SERVICE" "$ENABLE_CELERY" "$EXEC_CMD" "$SERVICE_MANAGEMENT_MODE" "$ENABLE_WATCHDOG"
 fi
 
 if [ "$ENABLE_LCD_SCREEN" = true ] && [ -n "$SERVICE" ]; then
