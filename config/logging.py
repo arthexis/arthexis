@@ -23,7 +23,11 @@ class ActiveAppFileHandler(TimedRotatingFileHandler):
 
     def emit(self, record: logging.LogRecord) -> None:
         current = str(self._current_file())
-        if self.baseFilename != current:
+        should_reopen = self.baseFilename != current
+        if self.stream and not os.path.exists(self.baseFilename):
+            should_reopen = True
+
+        if should_reopen:
             self.baseFilename = current
             Path(self.baseFilename).parent.mkdir(parents=True, exist_ok=True)
             if self.stream:
