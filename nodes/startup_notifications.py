@@ -10,6 +10,19 @@ from utils import revision
 logger = logging.getLogger(__name__)
 
 STARTUP_NET_MESSAGE_FLAG = "net-message"
+LCD_FEATURE_LOCK = "lcd_screen_enabled.lck"
+LCD_RUNTIME_LOCK = "lcd_screen.lck"
+
+
+def lcd_feature_enabled(lock_dir: Path) -> bool:
+    """Return True when the LCD feature flag or runtime lock is present."""
+
+    if not lock_dir:
+        return False
+
+    feature_lock = lock_dir / LCD_FEATURE_LOCK
+    runtime_lock = lock_dir / LCD_RUNTIME_LOCK
+    return feature_lock.exists() or runtime_lock.exists()
 
 
 def _maybe_setup_django() -> bool:

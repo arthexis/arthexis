@@ -4609,6 +4609,8 @@ class StartupNotificationTests(TestCase):
         with TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             lock_file = tmp_path / "locks" / "lcd_screen.lck"
+            (tmp_path / "locks" / "lcd_screen_enabled.lck").parent.mkdir()
+            (tmp_path / "locks" / "lcd_screen_enabled.lck").touch()
             (tmp_path / "VERSION").write_text("1.2.3")
             with self.settings(BASE_DIR=tmp_path):
                 with patch(
@@ -4625,12 +4627,25 @@ class StartupNotificationTests(TestCase):
         self.assertTrue(lines[1].startswith("1.2.3 r"))
         self.assertEqual(lines[2], "net-message")
 
+    def test_startup_notification_skips_when_feature_disabled(self):
+        from nodes.apps import _startup_notification
+
+        with TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            lock_file = tmp_path / "locks" / "lcd_screen.lck"
+            with self.settings(BASE_DIR=tmp_path):
+                _startup_notification(lock_file=lock_file)
+
+            self.assertFalse(lock_file.exists())
+
     def test_startup_notification_marks_nonrelease_version(self):
         from nodes.apps import _startup_notification
 
         with TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             lock_file = tmp_path / "locks" / "lcd_screen.lck"
+            (tmp_path / "locks" / "lcd_screen_enabled.lck").parent.mkdir()
+            (tmp_path / "locks" / "lcd_screen_enabled.lck").touch()
             (tmp_path / "VERSION").write_text("1.2.3")
             with self.settings(BASE_DIR=tmp_path):
                 with patch(
