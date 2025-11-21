@@ -189,7 +189,7 @@ class SlackBotProfileAdmin(DjangoObjectActions, EntityModelAdmin):
         ]
         return custom + urls
 
-    def bot_creation_wizard(self, request):
+    def bot_creation_wizard(self, request, queryset=None):
         return HttpResponseRedirect(
             reverse("admin:teams_slackbotprofile_bot_creation_wizard")
         )
