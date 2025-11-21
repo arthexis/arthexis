@@ -1,0 +1,14 @@
+[
+  {
+    "model": "nodes.node",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "hostname": "arthexis.com",
+      "port": 443,
+      "trusted": false,
+      "current_relation": "UPSTREAM",
+      "public_endpoint": "arthexis-com"
+    }
+  }
+]
