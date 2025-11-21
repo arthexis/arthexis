@@ -47,7 +47,7 @@ fi
 
 DELEGATED_CMD+=("${UPGRADE_CMD[@]}")
 
-"${DELEGATED_CMD[@]}" --quiet
+"${DELEGATED_CMD[@]}"
 
 SYSTEMCTL_CMD=()
 if command -v systemctl >/dev/null 2>&1; then
