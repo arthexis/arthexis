@@ -25,6 +25,11 @@ Flags:
 - `--pyxel-runner` lets you point to a custom Pyxel executable (for example `python -m pyxel`).
 - `--output-dir` controls where the game files and data snapshot are staged. When omitted, the command uses a temporary directory and cleans it up after the Pyxel process exits.
 
+Helper scripts simplify common invocations:
+
+- Unix-like environments: `./pyxel-viewport.sh` creates (or refreshes) a clean work directory under `work/pyxel_viewport` and launches the viewport with the `pyxel` CLI by default.
+- Windows: `pyxel-viewport.bat` mirrors the same behavior, honoring the `WORK_DIR` and `PYXEL_RUNNER` environment variables or `--work-dir` / `--pyxel-runner` arguments to override defaults.
+
 ## Widget layout
 
 Each connector with a non-empty `connector_id` appears as a card that shows:
