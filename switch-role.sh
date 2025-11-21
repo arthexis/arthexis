@@ -590,11 +590,6 @@ if [ -z "$NODE_ROLE" ]; then
     usage
 fi
 
-if [ "$INSTALL_WATCHDOG" = true ] && [ -z "$SERVICE" ]; then
-    echo "--watchdog requires specifying --service or having an existing service.lck" >&2
-    usage
-fi
-
 if [ "$DEBUG_OVERRIDDEN" = false ]; then
     if [ "$NODE_ROLE" = "Terminal" ]; then
         write_debug_env "1"
@@ -609,6 +604,11 @@ SERVICE_MANAGEMENT_MODE="$(arthexis_detect_service_mode "$LOCK_DIR")"
 
 if [ -z "$SERVICE" ] && [ -f "$LOCK_DIR/service.lck" ]; then
     SERVICE="$(cat "$LOCK_DIR/service.lck")"
+fi
+
+if [ "$INSTALL_WATCHDOG" = true ] && [ -z "$SERVICE" ]; then
+    echo "--watchdog requires specifying --service or having an existing service.lck" >&2
+    usage
 fi
 
 if [ "$REQUIRES_REDIS" = true ]; then
