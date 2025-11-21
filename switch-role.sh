@@ -30,12 +30,13 @@ REPAIR=false
 SKIP_SERVICE_RESTART=false
 REPAIR_AUTO_UPGRADE_CHANNEL=""
 FAILOVER_ROLE=""
+INSTALL_WATCHDOG=false
 
 BASE_DIR="$SCRIPT_DIR"
 LOCK_DIR="$BASE_DIR/locks"
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--latest|--stable|--regular] [--check] [--auto-upgrade|--no-auto-upgrade] [--debug|--no-debug] [--satellite|--terminal|--control|--watchtower] [--repair [--failover ROLE]]]" >&2
+    echo "Usage: $0 [--service NAME] [--latest|--stable|--regular] [--check] [--auto-upgrade|--no-auto-upgrade] [--debug|--no-debug] [--satellite|--terminal|--control|--watchtower] [--watchdog] [--repair [--failover ROLE]]]" >&2
     exit 1
 }
 
@@ -405,6 +406,10 @@ while [[ $# -gt 0 ]]; do
             REQUIRES_REDIS=true
             shift
             ;;
+        --watchdog)
+            INSTALL_WATCHDOG=true
+            shift
+            ;;
         --repair)
             REPAIR=true
             shift
@@ -595,9 +600,15 @@ if [ "$DEBUG_OVERRIDDEN" = false ]; then
 fi
 
 mkdir -p "$LOCK_DIR"
+SERVICE_MANAGEMENT_MODE="$(arthexis_detect_service_mode "$LOCK_DIR")"
 
 if [ -z "$SERVICE" ] && [ -f "$LOCK_DIR/service.lck" ]; then
     SERVICE="$(cat "$LOCK_DIR/service.lck")"
+fi
+
+if [ "$INSTALL_WATCHDOG" = true ] && [ -z "$SERVICE" ]; then
+    echo "--watchdog requires specifying --service or having an existing service.lck" >&2
+    usage
 fi
 
 if [ "$REQUIRES_REDIS" = true ]; then
@@ -634,6 +645,11 @@ echo "$NGINX_MODE" > "$LOCK_DIR/nginx_mode.lck"
 echo "$NODE_ROLE" > "$LOCK_DIR/role.lck"
 if [ -n "$SERVICE" ]; then
     echo "$SERVICE" > "$LOCK_DIR/service.lck"
+fi
+
+if [ "$INSTALL_WATCHDOG" = true ]; then
+    EXEC_CMD="$BASE_DIR/service-start.sh"
+    arthexis_install_service_stack "$BASE_DIR" "$LOCK_DIR" "$SERVICE" "$ENABLE_CELERY" "$EXEC_CMD" "$SERVICE_MANAGEMENT_MODE" true
 fi
 
 if [ "$AUTO_UPGRADE_MODE" = "enable" ]; then
