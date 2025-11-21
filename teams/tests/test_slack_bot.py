@@ -6,8 +6,9 @@ from unittest import mock
 
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth import get_user_model
+from django.contrib.messages import get_messages
 from django.core.exceptions import ValidationError
-from django.test import RequestFactory, TestCase
+from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
 
 from nodes.models import NetMessage, Node
@@ -196,3 +197,87 @@ class SlackBotProfileAdminTests(TestCase):
         admin = SlackBotProfileAdmin(SlackBotProfile, self.site)
 
         self.assertEqual(admin.raw_id_fields, ("node", "user", "group"))
+
+
+class SlackBotProfileWizardTests(TestCase):
+    def setUp(self):
+        user_model = get_user_model()
+        self.user = user_model.objects.create_superuser(
+            username="admin", email="admin@example.com", password="password"
+        )
+        self.client.force_login(self.user)
+        self.node = Node.objects.create(
+            hostname="local",
+            port=8443,
+            mac_address="AA:BB:CC:DD:EE:FF",
+            current_relation=Node.Relation.SELF,
+        )
+
+    @override_settings(
+        SLACK_CLIENT_ID="client",
+        SLACK_CLIENT_SECRET="secret",
+        SLACK_SIGNING_SECRET="signing",
+        SLACK_BOT_SCOPES="commands,chat:write",
+    )
+    def test_wizard_redirects_to_slack_authorize(self):
+        response = self.client.get(
+            reverse("admin:teams_slackbotprofile_bot_creation_wizard")
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("slack.com/oauth/v2/authorize", response["Location"])
+        self.assertIn("client_id=client", response["Location"])
+        self.assertTrue(self.client.session.get("slack_bot_wizard_state"))
+
+    @override_settings(
+        SLACK_CLIENT_ID="client",
+        SLACK_CLIENT_SECRET="secret",
+        SLACK_SIGNING_SECRET="signing",
+        SLACK_BOT_SCOPES="commands,chat:write",
+    )
+    @mock.patch("teams.admin.requests.post")
+    @mock.patch("teams.admin.Node.get_local")
+    def test_callback_creates_bot_profile(self, mock_get_local, mock_post):
+        mock_get_local.return_value = self.node
+        session = self.client.session
+        session["slack_bot_wizard_state"] = "state-token"
+        session.save()
+        mock_response = mock.Mock()
+        mock_response.json.return_value = {
+            "ok": True,
+            "access_token": "xoxb-new-token",
+            "bot_user_id": "B123",
+            "team": {"id": "TNEW"},
+            "incoming_webhook": {"channel_id": "C123"},
+        }
+        mock_post.return_value = mock_response
+
+        response = self.client.get(
+            reverse("admin:teams_slackbotprofile_bot_creation_callback"),
+            {"state": "state-token", "code": "auth-code"},
+        )
+
+        profile = SlackBotProfile.objects.get(team_id="TNEW")
+        self.assertEqual(profile.bot_token, "xoxb-new-token")
+        self.assertEqual(profile.bot_user_id, "B123")
+        self.assertEqual(profile.default_channels, ["C123"])
+        self.assertRedirects(
+            response,
+            reverse("admin:teams_slackbotprofile_change", args=[profile.pk]),
+        )
+
+    @override_settings(
+        SLACK_CLIENT_ID="",
+        SLACK_CLIENT_SECRET="",
+        SLACK_SIGNING_SECRET="",
+    )
+    def test_wizard_requires_configuration(self):
+        response = self.client.get(
+            reverse("admin:teams_slackbotprofile_bot_creation_wizard"),
+            follow=True,
+        )
+
+        messages = list(get_messages(response.wsgi_request))
+        self.assertTrue(
+            any("Configure SLACK_CLIENT_ID" in str(message) for message in messages)
+        )
