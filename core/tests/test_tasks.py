@@ -482,10 +482,74 @@ def test_check_github_updates_respects_channel_override(
         )
 
 
+def test_check_github_updates_skips_stable_outside_window(monkeypatch, tmp_path):
+    """Stable auto-upgrades should defer when outside the allowed window."""
+
+    from core import tasks
+    from django.utils import timezone
+
+    base_dir = tmp_path / "node"
+    locks = base_dir / "locks"
+    logs = base_dir / "logs"
+    locks.mkdir(parents=True)
+    logs.mkdir(parents=True)
+
+    (base_dir / "VERSION").write_text("0.0.0")
+    (locks / "auto_upgrade.lck").write_text("stable")
+
+    monkeypatch.setattr(tasks, "_project_base_dir", lambda: base_dir)
+    monkeypatch.setattr(tasks, "_load_skipped_revisions", lambda base: set())
+    monkeypatch.setattr(
+        tasks, "_resolve_release_severity", lambda version: tasks.SEVERITY_NORMAL
+    )
+    monkeypatch.setattr(tasks, "_read_remote_version", lambda base, branch: "0.0.1")
+    monkeypatch.setattr(tasks, "_read_local_version", lambda base: "0.0.0")
+    monkeypatch.setattr(tasks, "_schedule_health_check", lambda *args, **kwargs: None)
+    monkeypatch.setattr(tasks, "_reset_network_failure_count", lambda _base: None)
+
+    log_messages: list[str] = []
+    log_path = logs / "auto-upgrade.log"
+    monkeypatch.setattr(tasks, "_auto_upgrade_log_path", lambda _base: log_path)
+    monkeypatch.setattr(
+        tasks,
+        "_append_auto_upgrade_log",
+        lambda _base, message: log_messages.append(message),
+    )
+
+    ensured_services: list[tuple[tuple[Path, ...], dict[str, object]]] = []
+
+    def record_runtime_services(*args, **kwargs):
+        ensured_services.append((args, kwargs))
+        return True
+
+    monkeypatch.setattr(tasks, "_ensure_runtime_services", record_runtime_services)
+
+    monkeypatch.setattr(
+        tasks.subprocess, "run", lambda *args, **kwargs: pytest.fail("Unexpected run")
+    )
+    monkeypatch.setattr(
+        tasks.subprocess,
+        "check_output",
+        lambda *args, **kwargs: pytest.fail("Unexpected check_output"),
+    )
+
+    daytime = timezone.make_aware(datetime(2024, 1, 1, 12, 0))
+    monkeypatch.setattr(tasks.timezone, "now", lambda: daytime)
+    monkeypatch.setattr(tasks.timezone, "localtime", lambda value=None: daytime)
+
+    tasks.check_github_updates()
+
+    assert log_messages == [
+        "Skipping stable auto-upgrade; outside the 7:30 PM to 5:30 AM window"
+    ]
+    assert ensured_services
+
+
 def test_check_github_updates_allows_stable_critical_patch(monkeypatch, tmp_path):
     """Stable mode should upgrade when a critical patch is available."""
 
     from core import tasks
+    from django.utils import timezone
 
     base_dir = Path(tasks.__file__).resolve().parent.parent
     mode_path = base_dir / "locks" / "auto_upgrade.lck"
@@ -535,6 +599,10 @@ def test_check_github_updates_allows_stable_critical_patch(monkeypatch, tmp_path
 
     run_commands: list[list[str]] = []
 
+    overnight = timezone.make_aware(datetime(2024, 1, 1, 3, 0))
+    monkeypatch.setattr(tasks.timezone, "now", lambda: overnight)
+    monkeypatch.setattr(tasks.timezone, "localtime", lambda value=None: overnight)
+
     def fake_run(command, *args, **kwargs):
         run_commands.append(command)
         return CompletedProcess(command, 0)
@@ -549,7 +617,9 @@ def test_check_github_updates_allows_stable_critical_patch(monkeypatch, tmp_path
 
     tasks.check_github_updates()
 
-    assert ["./upgrade.sh", "--stable"] in run_commands
+    assert any(
+        command[-2:] == ["./upgrade.sh", "--stable"] for command in run_commands
+    )
 
 
 def test_check_github_updates_restarts_dev_server(monkeypatch, tmp_path):
