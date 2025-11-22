@@ -252,7 +252,7 @@ class ConnectorViewport:
             pyxel.text(menu_x + 8, item_y + 6, action["label"][:28], 7)
 
     def _handle_mouse(self) -> None:
-        if not pyxel.btnp(pyxel.MOUSE_LEFT_BUTTON):
+        if not pyxel.btnp(pyxel.MOUSE_BUTTON_LEFT):
             return
 
         mx, my = pyxel.mouse_x, pyxel.mouse_y
