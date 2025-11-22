@@ -10,6 +10,7 @@ import subprocess
 import sys
 import time
 import uuid
+from datetime import datetime, time as datetime_time
 from pathlib import Path
 import urllib.error
 import urllib.request
@@ -28,6 +29,8 @@ AUTO_UPGRADE_SKIP_LOCK_NAME = "auto_upgrade_skip_revisions.lck"
 AUTO_UPGRADE_NETWORK_FAILURE_LOCK_NAME = "auto_upgrade_network_failures.lck"
 AUTO_UPGRADE_NETWORK_FAILURE_THRESHOLD = 3
 AUTO_UPGRADE_FAILURE_LOCK_NAME = "auto_upgrade_failures.lck"
+STABLE_AUTO_UPGRADE_START = datetime_time(hour=19, minute=30)
+STABLE_AUTO_UPGRADE_END = datetime_time(hour=5, minute=30)
 WATCH_UPGRADE_BINARY = Path("/usr/local/bin/watch-upgrade")
 
 _NETWORK_FAILURE_PATTERNS = (
@@ -784,6 +787,21 @@ def _read_remote_version(base_dir: Path, branch: str) -> str | None:
         return None
 
 
+def _is_within_stable_upgrade_window(current: datetime | None = None) -> bool:
+    """Return whether the current time is inside the stable upgrade window."""
+
+    if current is None:
+        current = timezone.localtime(timezone.now())
+    else:
+        current = timezone.localtime(current)
+
+    current_time = current.time()
+    return (
+        current_time >= STABLE_AUTO_UPGRADE_START
+        or current_time <= STABLE_AUTO_UPGRADE_END
+    )
+
+
 def _skip_lock_path(base_dir: Path) -> Path:
     return base_dir / "locks" / AUTO_UPGRADE_SKIP_LOCK_NAME
 
@@ -1102,6 +1120,7 @@ def check_github_updates(channel_override: str | None = None) -> None:
     base_dir = _project_base_dir()
     mode_file = base_dir / "locks" / "auto_upgrade.lck"
     mode = "stable"
+    admin_override = channel_override is not None
     reset_network_failures = True
     failure_recorded = False
     try:
@@ -1134,6 +1153,23 @@ def check_github_updates(channel_override: str | None = None) -> None:
             "normal": "stable",
             "regular": "stable",
         }.get(mode, mode)
+
+        if mode == "stable" and not admin_override:
+            now_local = timezone.localtime(timezone.now())
+            if not _is_within_stable_upgrade_window(now_local):
+                _append_auto_upgrade_log(
+                    base_dir,
+                    (
+                        "Skipping stable auto-upgrade; outside the 7:30 PM to "
+                        "5:30 AM window"
+                    ),
+                )
+                _ensure_runtime_services(
+                    base_dir,
+                    restart_if_active=False,
+                    revert_on_failure=False,
+                )
+                return
 
         branch = "main"
         try:
