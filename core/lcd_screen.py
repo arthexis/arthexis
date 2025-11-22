@@ -294,11 +294,16 @@ def _display(lcd: CharLCD1602, line1: str, line2: str, scroll_ms: int) -> None:
     pad2 = text2 + " " * 16 if len(text2) > 16 else text2.ljust(16)
     steps = max(len(pad1) - 15, len(pad2) - 15)
     for i in range(steps):
+        if _shutdown_requested():
+            break
         segment1 = pad1[i : i + 16]
         segment2 = pad2[i : i + 16]
         lcd.write(0, 0, segment1.ljust(16))
         lcd.write(0, 1, segment2.ljust(16))
-        time.sleep(scroll_sec)
+        if _shutdown_requested():
+            break
+        if scroll_sec:
+            time.sleep(scroll_sec)
 
 
 def main() -> None:  # pragma: no cover - hardware dependent
