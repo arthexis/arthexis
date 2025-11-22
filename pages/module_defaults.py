@@ -17,6 +17,7 @@ ROLE_MODULE_DEFAULTS: Mapping[str, tuple[ModuleDefinition, ...]] = {
             "menu": "Chargers",
             "landings": (
                 ("/ocpp/cpms/dashboard/", "CPMS Online Dashboard"),
+                ("/ocpp/net-monitor/", "Net Monitor Console"),
                 ("/ocpp/evcs/simulator/", "Charge Point Simulator"),
                 ("/ocpp/rfid/validator/", "RFID Tag Validator"),
             ),

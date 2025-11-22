@@ -4,6 +4,7 @@ from . import views
 
 urlpatterns = [
     path("cpms/dashboard/", views.dashboard, name="ocpp-dashboard"),
+    path("net-monitor/", views.net_monitor_console, name="net-monitor-console"),
     path("evcs/simulator/", views.cp_simulator, name="cp-simulator"),
     path(
         "firmware/<int:deployment_id>/<slug:token>/",
