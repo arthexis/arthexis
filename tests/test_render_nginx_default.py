@@ -12,6 +12,7 @@ def test_generate_internal_config_uses_ipv4_listeners_by_default():
     config = generate_config("internal", 8888)
     assert "listen 0.0.0.0:80;" in config
     assert "listen 0.0.0.0:8080;" in config
+    assert "listen 0.0.0.0:8900;" in config
     assert "listen [::]:80;" not in config
     assert "server_name _;" in config
     assert "listen 443" not in config
@@ -43,7 +44,7 @@ def test_generate_config_allows_custom_server_names():
 
 def test_generate_config_can_include_ipv6():
     config = generate_config("public", 7777, include_ipv6=True)
-    for listen in ("0.0.0.0:80", "0.0.0.0:8080", "[::]:80", "[::]:8080"):
+    for listen in ("0.0.0.0:80", "0.0.0.0:8080", "0.0.0.0:8900", "[::]:80", "[::]:8080", "[::]:8900"):
         assert f"listen {listen};" in config
     assert "listen [::]:443 ssl;" in config
 
