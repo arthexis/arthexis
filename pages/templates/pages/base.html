@@ -332,14 +332,14 @@
         gap: 0.75rem;
         flex-wrap: wrap;
       }
-      .user-story-screenshot {
+      .user-story-clipboard {
         margin: 0;
         margin-left: auto;
         display: inline-flex;
         align-items: center;
         gap: 0.35rem;
       }
-      .user-story-screenshot .form-check-input {
+      .user-story-clipboard .form-check-input {
         margin-top: 0;
       }
       .user-story-rating input {
@@ -902,17 +902,19 @@
                   <input type="radio" id="user-story-rating-1" name="rating" value="1">
                   <label for="user-story-rating-1" title="{% trans 'Needs improvement' %}" aria-label="{% trans '1 star' %}">★</label>
                 </div>
-                <div class="form-check user-story-screenshot">
-                  <input
-                    class="form-check-input"
-                    type="checkbox"
-                    id="user-story-take-screenshot"
-                    name="take_screenshot"
-                    value="1"
-                    checked
-                  >
-                  <label class="form-check-label" for="user-story-take-screenshot">{% trans 'Take a screenshot' %}</label>
-                </div>
+                <input type="hidden" name="take_screenshot" value="1">
+                {% if request.user.is_authenticated %}
+                  <div class="form-check user-story-clipboard">
+                    <input
+                      class="form-check-input"
+                      type="checkbox"
+                      id="user-story-copy-report"
+                      name="copy_report"
+                      value="1"
+                    >
+                    <label class="form-check-label" for="user-story-copy-report">{% trans 'Copy to clipboard' %}</label>
+                  </div>
+                {% endif %}
               </div>
             </div>
             <div class="mb-3">
@@ -1179,7 +1181,39 @@
           const commentField = document.getElementById('user-story-comments');
           const counter = document.getElementById('user-story-char-count');
           const submitBtn = form.querySelector('button[type="submit"]');
+          const copyCheckbox = document.getElementById('user-story-copy-report');
+          const defaultSuccessMessage = successAlert ? successAlert.textContent.trim() : '';
+          const copySuccessMessage = '{% trans "Report copied to clipboard." %}';
+          const copyFailureMessage = '{% trans "Feedback sent, but we could not copy the report to your clipboard." %}';
+          const anonymousLabel = '{% trans "Anonymous" %}';
           let previousFocus = null;
+
+          const buildToonReport = formData => {
+            const rating = formData.get('rating') || 'n/a';
+            const comments = (formData.get('comments') || '').toString().trim();
+            const nameField = form.querySelector('#user-story-name');
+            const username = nameField && nameField.value ? nameField.value.trim() : anonymousLabel;
+            const path = formData.get('path') || window.location.pathname || '/';
+            const userAgent = navigator.userAgent || 'unknown';
+            const language = document.documentElement.lang || '';
+            const timestamp = new Date().toISOString();
+
+            return [
+              '[TOON-FEEDBACK-REPORT]',
+              `user=${username || anonymousLabel}`,
+              `path=${path}`,
+              `rating=${rating}/5`,
+              'comments<<<',
+              comments || '(none provided)',
+              '>>>',
+              `ua=${userAgent}`,
+              language ? `lang=${language}` : null,
+              `submitted_at=${timestamp}`,
+              'screenshot=requested',
+            ]
+              .filter(Boolean)
+              .join('\n');
+          };
 
           const setCharCount = () => {
             if (counter && commentField) {
@@ -1189,11 +1223,14 @@
 
           const resetAlerts = () => {
             if (successAlert) {
+              successAlert.textContent = defaultSuccessMessage;
               successAlert.classList.add('d-none');
+              successAlert.setAttribute('hidden', '');
             }
             if (errorAlert) {
               errorAlert.classList.add('d-none');
               errorAlert.textContent = '';
+              errorAlert.setAttribute('hidden', '');
             }
           };
 
@@ -1269,6 +1306,8 @@
             }
 
             const formData = new FormData(form);
+            const shouldCopy = Boolean(copyCheckbox && copyCheckbox.checked);
+            const toonReport = shouldCopy ? buildToonReport(formData) : '';
             try {
               const response = await fetch(form.action, {
                 method: 'POST',
@@ -1282,7 +1321,24 @@
                 form.reset();
                 setCharCount();
                 if (successAlert) {
+                  successAlert.textContent = defaultSuccessMessage;
                   successAlert.classList.remove('d-none');
+                  successAlert.removeAttribute('hidden');
+                }
+
+                if (shouldCopy && toonReport) {
+                  try {
+                    await navigator.clipboard.writeText(toonReport);
+                    if (successAlert) {
+                      successAlert.textContent = `${defaultSuccessMessage} ${copySuccessMessage}`;
+                    }
+                  } catch (copyError) {
+                    if (errorAlert) {
+                      errorAlert.textContent = copyFailureMessage;
+                      errorAlert.classList.remove('d-none');
+                      errorAlert.removeAttribute('hidden');
+                    }
+                  }
                 }
               } else {
                 const data = await response.json().catch(() => ({}));
@@ -1298,12 +1354,14 @@
                 if (errorAlert) {
                   errorAlert.textContent = message;
                   errorAlert.classList.remove('d-none');
+                  errorAlert.removeAttribute('hidden');
                 }
               }
             } catch (error) {
               if (errorAlert) {
                 errorAlert.textContent = '{% trans "Network error. Please try again." %}';
                 errorAlert.classList.remove('d-none');
+                errorAlert.removeAttribute('hidden');
               }
             } finally {
               if (submitBtn) {
