@@ -360,7 +360,10 @@ def model_admin_actions(context, app_label, model_name):
     for action_name, (func, _name, description) in model_admin.get_actions(
         request
     ).items():
-        if action_name == "delete_selected" or uses_queryset(func):
+        requires_queryset = getattr(func, "requires_queryset", None)
+        if action_name == "delete_selected" or requires_queryset is True:
+            continue
+        if requires_queryset is None and uses_queryset(func):
             continue
         url = None
         label = getattr(
@@ -401,7 +404,12 @@ def model_admin_actions(context, app_label, model_name):
             if action_name in seen:
                 continue
             func = getattr(model_admin, action_name, None)
-            if func is None or uses_queryset(func):
+            if func is None:
+                continue
+            requires_queryset = getattr(func, "requires_queryset", None)
+            if requires_queryset is True:
+                continue
+            if requires_queryset is None and uses_queryset(func):
                 continue
             label = getattr(
                 func,
