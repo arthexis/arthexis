@@ -1827,7 +1827,8 @@ class Simulator(Entity):
         default=False, help_text=_("Mark this simulator as the default option.")
     )
     cp_path = models.CharField(
-        _("Serial Number"), max_length=100, help_text=_("Charge Point WS path")
+        _("Serial Number"),
+        max_length=100,
     )
     host = models.CharField(max_length=100, default="127.0.0.1")
     ws_port = models.IntegerField(
