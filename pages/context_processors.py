@@ -59,7 +59,12 @@ def nav_links(request):
         user_group_names = set()
     for module in modules:
         landings = []
+        seen_paths: set[str] = set()
         for landing in module.landings.filter(enabled=True):
+            normalized_path = landing.path.rstrip("/") or "/"
+            if normalized_path in seen_paths:
+                continue
+            seen_paths.add(normalized_path)
             try:
                 match = resolve(landing.path)
             except Resolver404:
