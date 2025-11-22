@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+import time
 
 import pytest
 
@@ -188,3 +189,24 @@ def test_handle_shutdown_request_noop_without_signal():
     lcd_screen._reset_shutdown_flag()
 
     assert lcd_screen._handle_shutdown_request(None) is False
+
+
+def test_display_breaks_on_shutdown(monkeypatch):
+    lcd_screen._reset_shutdown_flag()
+
+    writes: list[str] = []
+    sleeps: list[float] = []
+
+    class FakeLCD:
+        def write(self, x: int, y: int, text: str):
+            writes.append(text)
+            if len(writes) == 2:
+                lcd_screen._request_shutdown(None, None)
+
+    monkeypatch.setattr(time, "sleep", lambda seconds: sleeps.append(seconds))
+
+    lcd = FakeLCD()
+    lcd_screen._display(lcd, "a" * 64, "b" * 64, 1000)
+
+    assert len(writes) == 2
+    assert sleeps == []
