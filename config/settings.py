@@ -723,6 +723,8 @@ configure_library_loggers(DEBUG, LOGGING)
 CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "memory://")
 CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", "cache+memory://")
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_ENABLE_UTC = True
 # Allow Celery workers extra time to finish acknowledged jobs before SIGTERM.
 CELERY_WORKER_SOFT_SHUTDOWN_TIMEOUT = resolve_celery_shutdown_timeout()
 # Legacy alias retained for fixture references and admin guidance.

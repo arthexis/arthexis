@@ -2,6 +2,7 @@
 set -e
 
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
+export TZ="${TZ:-America/Monterrey}"
 # shellcheck source=scripts/helpers/logging.sh
 . "$BASE_DIR/scripts/helpers/logging.sh"
 # shellcheck source=scripts/helpers/ports.sh

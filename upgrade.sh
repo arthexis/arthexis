@@ -3,6 +3,7 @@ set -eE
 
 # Initialize logging and helper functions shared across upgrade steps.
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
+export TZ="${TZ:-America/Monterrey}"
 PIP_INSTALL_HELPER="$BASE_DIR/scripts/helpers/pip_install.py"
 # Track upgrade script changes triggered by git pull so the newer version can be re-run.
 UPGRADE_SCRIPT_PATH="$BASE_DIR/upgrade.sh"
