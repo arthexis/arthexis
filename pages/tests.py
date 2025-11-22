@@ -17,7 +17,7 @@ from django.test import (
     override_settings,
 )
 from django.test.utils import CaptureQueriesContext
-from django.urls import reverse
+from django.urls import resolve, reverse
 from django.shortcuts import resolve_url
 from django.templatetags.static import static
 from django.template import Context
@@ -3240,6 +3240,7 @@ class WatchtowerLandingLinkTests(TestCase):
         }
         expected_landings = {
             "CPMS Online Dashboard": "/ocpp/cpms/dashboard/",
+            "Net Monitor Console": "/ocpp/net-monitor/",
             "Charge Point Simulator": "/ocpp/evcs/simulator/",
             "RFID Tag Validator": "/ocpp/rfid/validator/",
         }
@@ -3263,6 +3264,9 @@ class WatchtowerLandingLinkTests(TestCase):
         simulator = locked_landings.get("Charge Point Simulator")
         self.assertIsNotNone(simulator)
         self.assertTrue(simulator.nav_is_locked)
+        net_monitor = locked_landings.get("Net Monitor Console")
+        self.assertIsNotNone(net_monitor)
+        self.assertTrue(net_monitor.nav_is_locked)
 
 class StaffNavVisibilityTests(TestCase):
     def setUp(self):

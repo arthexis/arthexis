@@ -1,0 +1,14 @@
+[
+  {
+    "model": "pages.landing",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "module": ["Control", "/ocpp/"],
+      "path": "/ocpp/net-monitor/",
+      "label": "Net Monitor Console",
+      "enabled": true,
+      "description": ""
+    }
+  }
+]

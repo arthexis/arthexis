@@ -14,6 +14,7 @@ from django.core.paginator import Paginator
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import redirect_to_login
 from django.utils.translation import gettext_lazy as _, gettext, ngettext
+from django.templatetags.static import static
 from django.utils.text import slugify
 from django.urls import NoReverseMatch, reverse
 from django.conf import settings
@@ -1378,6 +1379,18 @@ def dashboard(request):
         )
         return JsonResponse({"html": html})
     return render(request, "ocpp/dashboard.html", context)
+
+
+@login_required(login_url="pages:login")
+@landing("Net Monitor Console")
+def net_monitor_console(request):
+    """Serve the WASM-enabled Net Monitor Console for the Pyxel viewport."""
+
+    return render(
+        request,
+        "ocpp/net_monitor_console.html",
+        {"viewport_src": static("ocpp/net_monitor/index.html")},
+    )
 
 
 @login_required(login_url="pages:login")
