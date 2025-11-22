@@ -56,13 +56,9 @@ if [[ -e "$WORK_DIR" && ! -d "$WORK_DIR" ]]; then
 fi
 
 if [[ -d "$WORK_DIR" ]]; then
-  if find "$WORK_DIR" -mindepth 1 -maxdepth 1 -print -quit | grep -q .; then
-    echo "Refusing to clear non-empty work directory: $WORK_DIR" >&2
-    echo "Please provide an empty directory or remove its contents manually." >&2
-    exit 1
-  fi
-else
-  mkdir -p "$WORK_DIR"
+  rm -rf "$WORK_DIR"
 fi
+
+mkdir -p "$WORK_DIR"
 
 python manage.py pyxel_viewport --output-dir "$WORK_DIR" --pyxel-runner "$PYXEL_RUNNER" --ensure-instance

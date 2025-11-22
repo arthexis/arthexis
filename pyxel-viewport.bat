@@ -70,19 +70,20 @@ if exist "%WORK_DIR%" (
     set EXIT_CODE=1
     goto cleanup
   )
-  for /f %%i in ('dir /b "%WORK_DIR%" 2^>nul') do (
-    echo Refusing to clear non-empty work directory: %WORK_DIR%
-    echo Please provide an empty directory or remove its contents manually.
-    set EXIT_CODE=1
-    goto cleanup
-  )
-) else (
-  mkdir "%WORK_DIR%" >nul 2>&1
+
+  rmdir /s /q "%WORK_DIR%" >nul 2>&1
   if errorlevel 1 (
-    echo Failed to create work directory: %WORK_DIR%
+    echo Failed to clear work directory: %WORK_DIR%
     set EXIT_CODE=1
     goto cleanup
   )
+)
+
+mkdir "%WORK_DIR%" >nul 2>&1
+if errorlevel 1 (
+  echo Failed to create work directory: %WORK_DIR%
+  set EXIT_CODE=1
+  goto cleanup
 )
 
 "%VENV%\Scripts\python.exe" manage.py pyxel_viewport --output-dir "%WORK_DIR%" --pyxel-runner "%PYXEL_RUNNER%" --ensure-instance
