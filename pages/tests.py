@@ -2750,6 +2750,8 @@ class ReleaseModuleNavTests(TestCase):
     def test_release_fixtures_are_absent(self):
         self.assertFalse(self.release_module_fixture.exists())
         self.assertFalse(self.release_landing_fixture.exists())
+        self.assertFalse(Module.objects.filter(path="/release/").exists())
+        self.assertFalse(Landing.objects.filter(path="/release/").exists())
 
     def test_release_module_hidden_for_anonymous(self):
         response = self.client.get(reverse("pages:index"))
