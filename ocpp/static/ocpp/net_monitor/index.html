@@ -111,9 +111,21 @@
         const viewportBody = document.getElementById('viewport-body');
         const notice = document.getElementById('viewport-notice');
         const label = status.querySelector('span:last-child');
+        const parentOrigin = (() => {
+          try {
+            const { origin } = new URL(document.referrer);
+            return origin === 'null' ? '*' : origin;
+          } catch (error) {
+            return '*';
+          }
+        })();
+
         const notifyParent = (state) => {
           try {
-            window.parent?.postMessage({ type: 'net-monitor-status', status: state }, window.location.origin);
+            window.parent?.postMessage(
+              { type: 'net-monitor-status', status: state },
+              parentOrigin,
+            );
           } catch (error) {
             /* no-op */
           }
