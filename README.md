@@ -42,6 +42,7 @@ Check out the latest [Developer Article](https://arthexis.com/articles/protoline
   | `ClearCache` | ✅ | ✅ | Flush local authorization caches to force fresh lookups from the CSMS. |
   | `DataTransfer` | ✅ | ✅ | Send vendor-specific commands and log the charge point response. |
   | `GetConfiguration` | ✅ | — | Poll the device for the current values of tracked configuration keys. |
+  | `GetDiagnostics` | ✅ | — | Request a diagnostics archive upload to a signed URL for troubleshooting. |
   | `GetLocalListVersion` | ✅ | ✅ | Retrieve the current RFID whitelist version and synchronize entries reported by the charge point. |
   | `RemoteStartTransaction` | ✅ | — | Initiate a charging session remotely for an identified customer or token. |
   | `RemoteStopTransaction` | ✅ | — | Terminate active charging sessions from the control center. |

@@ -42,6 +42,7 @@ Consulta il nuovo [articolo degli sviluppatori](https://arthexis.com/articles/pr
   | `ClearCache` | ✅ | ✅ | Svuotiamo le cache di autorizzazione locali per forzare nuove verifiche dal CSMS. |
   | `DataTransfer` | ✅ | ✅ | Inviamo comandi specifici del fornitore e registriamo la risposta del punto di ricarica. |
   | `GetConfiguration` | ✅ | — | Interroghiamo il dispositivo sui valori correnti delle chiavi di configurazione monitorate. |
+  | `GetDiagnostics` | ✅ | — | Richiediamo il caricamento di un archivio di diagnostica su un URL firmato per la risoluzione dei problemi. |
   | `GetLocalListVersion` | ✅ | ✅ | Recuperiamo la versione corrente della whitelist RFID e sincronizziamo le voci segnalate dal punto di ricarica. |
   | `RemoteStartTransaction` | ✅ | — | Avviamo da remoto una sessione di ricarica per clienti o token identificati. |
   | `RemoteStopTransaction` | ✅ | — | Interrompiamo da remoto sessioni attive dal centro di controllo. |
