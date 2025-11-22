@@ -104,3 +104,19 @@ def test_auto_upgrade_interval_respects_env_override(tmp_path, monkeypatch):
     task = PeriodicTask.objects.get(name=AUTO_UPGRADE_TASK_NAME)
     assert task.interval.every == 30
     assert task.interval.period == IntervalSchedule.MINUTES
+
+
+def test_auto_upgrade_interval_ignores_invalid_override(tmp_path, monkeypatch):
+    PeriodicTask.objects.filter(name=AUTO_UPGRADE_TASK_NAME).delete()
+
+    locks_dir = tmp_path / "locks"
+    locks_dir.mkdir()
+    (locks_dir / "auto_upgrade.lck").write_text("stable")
+
+    monkeypatch.setenv("ARTHEXIS_UPGRADE_FREQ", "fifteen")
+
+    ensure_auto_upgrade_periodic_task(base_dir=tmp_path)
+
+    task = PeriodicTask.objects.get(name=AUTO_UPGRADE_TASK_NAME)
+    assert task.interval.every == 1440
+    assert task.interval.period == IntervalSchedule.MINUTES
