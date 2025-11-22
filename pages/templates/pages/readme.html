@@ -53,39 +53,6 @@
     });
     resetTimer();
   })();
-  (function () {
-    const initQr = () => {
-      const qrContainer = document.getElementById("reader-qr");
-      if (!qrContainer || typeof window.QRCode === "undefined") {
-        return;
-      }
-      const url = qrContainer.dataset.url || window.location.href;
-      qrContainer.innerHTML = "";
-      new QRCode(qrContainer, {
-        text: url,
-        width: 180,
-        height: 180,
-        colorDark: "#0a0a0a",
-        colorLight: "#ffffff",
-        correctLevel: QRCode.CorrectLevel.M,
-      });
-    };
-
-    if (document.readyState === "complete" || document.readyState === "interactive") {
-      if (window.QRCode) {
-        initQr();
-      } else {
-        window.addEventListener("load", initQr, { once: true });
-      }
-    } else {
-      document.addEventListener("DOMContentLoaded", () => {
-        if (window.QRCode) {
-          initQr();
-        } else {
-          window.addEventListener("load", initQr, { once: true });
-        }
-      });
-    }
-  })();
 </script>
+{% include "includes/reader_qr_script.html" %}
 {% endblock %}

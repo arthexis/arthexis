@@ -1,0 +1,131 @@
+<script>
+  (function () {
+    const qrContainer = document.getElementById("reader-qr");
+    if (!qrContainer) {
+      return;
+    }
+
+    const baseUrlString = qrContainer.dataset.url || window.location.href;
+    let lastQrUrl = "";
+    let activeHeadingId = window.location.hash.replace(/^#/, "");
+
+    const buildQrUrl = () => {
+      try {
+        const url = new URL(baseUrlString, window.location.origin);
+        url.hash = window.location.hash;
+        return url.toString();
+      } catch (_error) {
+        return `${baseUrlString}${window.location.hash}`;
+      }
+    };
+
+    const renderQr = () => {
+      if (typeof window.QRCode === "undefined") {
+        return;
+      }
+
+      const qrUrl = buildQrUrl();
+      if (qrUrl === lastQrUrl) {
+        return;
+      }
+
+      lastQrUrl = qrUrl;
+      qrContainer.innerHTML = "";
+      new QRCode(qrContainer, {
+        text: qrUrl,
+        width: 180,
+        height: 180,
+        colorDark: "#0a0a0a",
+        colorLight: "#ffffff",
+        correctLevel: QRCode.CorrectLevel.M,
+      });
+    };
+
+    const handleHashChange = () => {
+      activeHeadingId = window.location.hash.replace(/^#/, "");
+      renderQr();
+    };
+
+    const updateHash = (nextId) => {
+      if (!nextId || nextId === activeHeadingId) {
+        return;
+      }
+
+      activeHeadingId = nextId;
+      const basePath = `${window.location.pathname}${window.location.search}`;
+      history.replaceState(null, "", `${basePath}#${nextId}`);
+      renderQr();
+    };
+
+    const observeHeadings = () => {
+      const headings = Array.from(
+        document.querySelectorAll(
+          ".markdown-body h1[id], .markdown-body h2[id], .markdown-body h3[id], .markdown-body h4[id], .markdown-body h5[id], .markdown-body h6[id]"
+        )
+      );
+
+      if (!("IntersectionObserver" in window) || !headings.length) {
+        window.addEventListener("hashchange", handleHashChange, { passive: true });
+        return;
+      }
+
+      const visibility = new Map();
+
+      const selectActiveHeading = () => {
+        const visibleHeadings = headings
+          .filter((heading) => visibility.get(heading))
+          .sort((a, b) => a.offsetTop - b.offsetTop);
+
+        if (!visibleHeadings.length) {
+          return;
+        }
+
+        const nextId = visibleHeadings[0].id;
+        if (nextId) {
+          updateHash(nextId);
+        }
+      };
+
+      const observer = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => visibility.set(entry.target, entry.isIntersecting));
+          selectActiveHeading();
+        },
+        {
+          rootMargin: "0px 0px -65% 0px",
+          threshold: [0, 0.1, 0.25, 0.5, 1],
+        }
+      );
+
+      headings.forEach((heading) => observer.observe(heading));
+      window.addEventListener("hashchange", handleHashChange, { passive: true });
+      requestAnimationFrame(selectActiveHeading);
+    };
+
+    const initQr = () => {
+      renderQr();
+      observeHeadings();
+    };
+
+    const onReady = () => {
+      if (typeof window.QRCode === "undefined") {
+        window.addEventListener(
+          "load",
+          () => {
+            initQr();
+          },
+          { once: true }
+        );
+        return;
+      }
+
+      initQr();
+    };
+
+    if (document.readyState === "complete" || document.readyState === "interactive") {
+      onReady();
+    } else {
+      document.addEventListener("DOMContentLoaded", onReady, { once: true });
+    }
+  })();
+</script>
