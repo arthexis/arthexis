@@ -58,7 +58,8 @@
                 "--output-dir",
                 "${workspaceFolder}/work/pyxel_viewport",
                 "--pyxel-runner",
-                "pyxel"
+                "pyxel",
+                "--ensure-instance"
             ],
             "django": true,
             "console": "integratedTerminal"

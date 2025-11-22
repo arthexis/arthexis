@@ -43,6 +43,16 @@ class PyxelViewportCommandTests(TestCase):
         self.assertEqual(entry["status_color"], STATUS_BADGE_MAP["charging"][1])
         self.assertTrue(entry["is_charging"])
 
+    def test_snapshot_includes_instance_flag(self):
+        output_dir = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, output_dir, ignore_errors=True)
+
+        call_command("pyxel_viewport", "--output-dir", str(output_dir), "--skip-launch")
+
+        payload = json.loads((output_dir / "data" / "connectors.json").read_text())
+        self.assertIn("instance_running", payload)
+        self.assertIs(payload["instance_running"], False)
+
     def test_requires_empty_output_directory(self):
         output_dir = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, output_dir, ignore_errors=True)

@@ -12,8 +12,9 @@ usage() {
 Usage: ./pyxel-viewport.sh [--work-dir PATH] [--pyxel-runner CMD]
 
 Creates or refreshes the Pyxel viewport project in the work directory and
-launches it immediately. Environment variables WORK_DIR and PYXEL_RUNNER can
-also override the defaults.
+launches it immediately. If the application instance is not running, the
+script will start it automatically and stop it after the Pyxel window closes.
+Environment variables WORK_DIR and PYXEL_RUNNER can also override the defaults.
 USAGE
 }
 
@@ -64,4 +65,4 @@ else
   mkdir -p "$WORK_DIR"
 fi
 
-python manage.py pyxel_viewport --output-dir "$WORK_DIR" --pyxel-runner "$PYXEL_RUNNER"
+python manage.py pyxel_viewport --output-dir "$WORK_DIR" --pyxel-runner "$PYXEL_RUNNER" --ensure-instance

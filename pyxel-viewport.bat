@@ -59,6 +59,7 @@ set EXIT_CODE=0
 echo Usage: %~nx0 [--work-dir PATH] [--pyxel-runner CMD]
 echo(
 echo Creates or refreshes the Pyxel viewport project in the work directory and launches it immediately.
+echo If the instance is not running, it will be started automatically and stopped when the viewport closes.
 echo Environment variables WORK_DIR and PYXEL_RUNNER can also override the defaults.
 goto cleanup
 
@@ -84,7 +85,7 @@ if exist "%WORK_DIR%" (
   )
 )
 
-"%VENV%\Scripts\python.exe" manage.py pyxel_viewport --output-dir "%WORK_DIR%" --pyxel-runner "%PYXEL_RUNNER%"
+"%VENV%\Scripts\python.exe" manage.py pyxel_viewport --output-dir "%WORK_DIR%" --pyxel-runner "%PYXEL_RUNNER%" --ensure-instance
 set EXIT_CODE=%ERRORLEVEL%
 
 :cleanup
