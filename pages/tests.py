@@ -4188,6 +4188,35 @@ class AdminActionListTests(TestCase):
         )
         self.assertEqual(url, reverse("admin:nodes_netmessage_send"))
 
+    def test_queryset_actions_are_omitted(self):
+        from django.contrib.contenttypes.models import ContentType
+        from pages.templatetags.admin_extras import model_admin_actions
+
+        request = self.factory.get("/")
+        request.user = self.user
+        context = {"request": request}
+
+        class DummyAdmin(admin.ModelAdmin):
+            actions = ["needs_selection"]
+
+            def needs_selection(self, request, queryset):
+                return None
+
+        model = ContentType
+        original_admin = admin.site._registry.get(model)
+        if original_admin:
+            admin.site.unregister(model)
+        try:
+            admin.site.register(model, DummyAdmin)
+            actions = model_admin_actions(
+                context, model._meta.app_label, model._meta.object_name
+            )
+            self.assertEqual(actions, [])
+        finally:
+            admin.site.unregister(model)
+            if original_admin:
+                admin.site.register(model, type(original_admin))
+
 
 class AdminModelGraphViewTests(TestCase):
     def setUp(self):
