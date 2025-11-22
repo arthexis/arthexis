@@ -24,8 +24,7 @@
             <div class="col-sm-6 col-md-4">
               <div class="mb-2">
                 <label class="form-label" for="cp_path{{ idx }}">Serial Number</label>
-                <input id="cp_path{{ idx }}" name="cp_path" aria-describedby="cp_path_help{{ idx }}" value="{{ form_params.cp_path|default:'' }}" class="form-control form-control-sm">
-                <div id="cp_path_help{{ idx }}" class="form-text">Charge Point WS path</div>
+                <input id="cp_path{{ idx }}" name="cp_path" value="{{ form_params.cp_path|default:'' }}" class="form-control form-control-sm">
               </div>
             </div>
             <div class="col-sm-6 col-md-4">
