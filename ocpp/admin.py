@@ -1813,6 +1813,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         "send_rfid_list_to_evcs",
         "update_rfids_from_evcs",
         "recheck_charger_status",
+        "setup_cp_diagnostics",
         "request_cp_diagnostics",
         "get_diagnostics",
         "change_availability_operative",
@@ -2099,29 +2100,32 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         for field, value in applied.items():
             setattr(charger, field, value)
 
-    @admin.action(description="Request CP diagnostics")
-    def request_cp_diagnostics(self, request, queryset):
+    def _prepare_diagnostics_payload(self, request, charger: Charger, *, expires_at):
+        bucket = charger.ensure_diagnostics_bucket(expires_at=expires_at)
+        upload_path = reverse(
+            "protocols:media-bucket-upload", kwargs={"slug": bucket.slug}
+        )
+        location = request.build_absolute_uri(upload_path)
+        payload: dict[str, object] = {"location": location}
+        if bucket.expires_at:
+            payload["stopTime"] = bucket.expires_at.isoformat()
+        Charger.objects.filter(pk=charger.pk).update(
+            diagnostics_bucket=bucket, diagnostics_location=location
+        )
+        charger.diagnostics_bucket = bucket
+        charger.diagnostics_location = location
+        return payload
+
+    def _request_get_diagnostics(self, request, queryset, *, expires_at, success_message):
         requested = 0
         local_node = None
         private_key = None
         remote_unavailable = False
-        expiration = timezone.now() + timedelta(days=30)
 
         for charger in queryset:
-            bucket = charger.ensure_diagnostics_bucket(expires_at=expiration)
-            upload_path = reverse(
-                "protocols:media-bucket-upload", kwargs={"slug": bucket.slug}
+            payload = self._prepare_diagnostics_payload(
+                request, charger, expires_at=expires_at
             )
-            location = request.build_absolute_uri(upload_path)
-            stop_time = bucket.expires_at.isoformat() if bucket.expires_at else None
-            payload = {"location": location}
-            if stop_time:
-                payload["stopTime"] = stop_time
-            Charger.objects.filter(pk=charger.pk).update(
-                diagnostics_bucket=bucket, diagnostics_location=location
-            )
-            charger.diagnostics_bucket = bucket
-            charger.diagnostics_location = location
 
             if charger.is_local:
                 connector_value = charger.connector_id
@@ -2153,7 +2157,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
                         "charger_id": charger.charger_id,
                         "connector_id": connector_value,
                         "log_key": log_key,
-                        "location": location,
+                        "location": payload["location"],
                         "requested_at": timezone.now(),
                     },
                 )
@@ -2187,15 +2191,49 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
                 requested += 1
 
         if requested:
-            self.message_user(
-                request,
+            self.message_user(request, success_message(requested))
+
+    @admin.action(description="Request CP diagnostics")
+    def request_cp_diagnostics(self, request, queryset):
+        expiration = timezone.now() + timedelta(days=30)
+
+        def success_message(count):
+            return (
                 ngettext(
                     "Requested diagnostics from %(count)d charger.",
                     "Requested diagnostics from %(count)d chargers.",
-                    requested,
+                    count,
                 )
-                % {"count": requested},
+                % {"count": count}
             )
+
+        self._request_get_diagnostics(
+            request,
+            queryset,
+            expires_at=expiration,
+            success_message=success_message,
+        )
+
+    @admin.action(description="Setup CP Diagnostics")
+    def setup_cp_diagnostics(self, request, queryset):
+        expiration = timezone.now() + timedelta(days=30)
+
+        def success_message(count):
+            return (
+                ngettext(
+                    "Set up diagnostics upload for %(count)d charger.",
+                    "Set up diagnostics upload for %(count)d chargers.",
+                    count,
+                )
+                % {"count": count}
+            )
+
+        self._request_get_diagnostics(
+            request,
+            queryset,
+            expires_at=expiration,
+            success_message=success_message,
+        )
 
     @admin.action(description="Get diagnostics")
     def get_diagnostics(self, request, queryset):

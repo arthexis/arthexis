@@ -63,6 +63,7 @@ from nodes.models import Node, NodeRole
 from django.contrib import messages
 from django.contrib.admin.sites import AdminSite
 from django.contrib.admin.utils import quote
+from protocols.models import MediaBucket
 
 from config.asgi import application
 
@@ -4239,6 +4240,65 @@ class ChargerAdminTests(TestCase):
             self.assertTrue(
                 any("GetConfiguration" in entry for entry in log_entries)
             )
+        finally:
+            store.pop_connection(charger.charger_id, charger.connector_id)
+            store.pending_calls.clear()
+            store.clear_log(log_key, log_type="charger")
+            store.clear_log(pending_key, log_type="charger")
+
+    def test_setup_cp_diagnostics_reuses_bucket_and_requests_upload(self):
+        existing_expiration = datetime(2024, 1, 10, tzinfo=dt_timezone.utc)
+        bucket = MediaBucket.objects.create(
+            name="Existing diagnostics",
+            allowed_patterns="*.log",
+            expires_at=existing_expiration,
+        )
+        charger = Charger.objects.create(
+            charger_id="DIAGSETUP",
+            connector_id=2,
+            diagnostics_bucket=bucket,
+        )
+        ws = DummyWebSocket()
+        log_key = store.identity_key(charger.charger_id, charger.connector_id)
+        pending_key = store.pending_key(charger.charger_id)
+        store.clear_log(log_key, log_type="charger")
+        store.clear_log(pending_key, log_type="charger")
+        store.pending_calls.clear()
+        store.set_connection(charger.charger_id, charger.connector_id, ws)
+
+        fixed_now = datetime(2024, 1, 2, 3, 4, 5, tzinfo=dt_timezone.utc)
+        expected_expiration = fixed_now + timedelta(days=30)
+
+        try:
+            with patch("ocpp.admin.timezone.now", return_value=fixed_now):
+                response = self.client.post(
+                    reverse("admin:ocpp_charger_changelist"),
+                    {
+                        "action": "setup_cp_diagnostics",
+                        "_selected_action": [charger.pk],
+                    },
+                    follow=True,
+                )
+            self.assertEqual(response.status_code, 200)
+            charger.refresh_from_db()
+            charger_bucket = charger.diagnostics_bucket
+            self.assertIsNotNone(charger_bucket)
+            self.assertEqual(charger_bucket.pk, bucket.pk)
+            bucket.refresh_from_db()
+            self.assertGreaterEqual(bucket.expires_at, expected_expiration)
+            expected_location = "http://testserver" + reverse(
+                "protocols:media-bucket-upload", kwargs={"slug": bucket.slug}
+            )
+            self.assertEqual(len(ws.sent), 1)
+            frame = json.loads(ws.sent[0])
+            self.assertEqual(frame[0], 2)
+            self.assertEqual(frame[2], "GetDiagnostics")
+            payload = frame[3]
+            self.assertEqual(payload.get("location"), expected_location)
+            self.assertEqual(payload.get("stopTime"), bucket.expires_at.isoformat())
+            pending = store.pending_calls.get(frame[1])
+            self.assertIsNotNone(pending)
+            self.assertEqual(pending.get("action"), "GetDiagnostics")
         finally:
             store.pop_connection(charger.charger_id, charger.connector_id)
             store.pending_calls.clear()
