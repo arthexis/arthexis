@@ -80,6 +80,7 @@ def _connector_state(charger: Charger) -> tuple[str, str, bool]:
 
 
 _OUTPUT_DIR_MARKER = ".pyxel_viewport"
+_DEFAULT_SUITE_HOST = "127.0.0.1"
 
 
 def _normalize_output_dir(value: str | None) -> tuple[Path, bool]:
@@ -126,7 +127,7 @@ def _copy_project_assets(target_dir: Path) -> None:
 
 
 def _connector_snapshot(
-    connectors: Iterable[Charger], *, instance_running: bool, waiting_for_instance: bool
+    connectors: Iterable[Charger], *, instance_running: bool, waiting_for_instance: bool, suite_host: str, suite_port: int
 ) -> dict:
     """Return a JSON-serializable payload describing connector state."""
 
@@ -134,6 +135,8 @@ def _connector_snapshot(
         "generated_at": timezone.now().isoformat(),
         "instance_running": bool(instance_running),
         "waiting_for_instance": bool(waiting_for_instance),
+        "suite_host": str(suite_host or _DEFAULT_SUITE_HOST),
+        "suite_port": suite_port if 1 <= suite_port <= 65535 else None,
         "connectors": [],
     }
     for connector in connectors:
@@ -235,6 +238,16 @@ def _detect_instance(base_dir: Path) -> tuple[bool, int]:
     return False, default_port
 
 
+def _validated_port(value: object, fallback: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return fallback
+    if 1 <= parsed <= 65535:
+        return parsed
+    return fallback
+
+
 def _start_instance(base_dir: Path, port: int, stdout=None) -> subprocess.Popen[bytes]:
     python_path = base_dir / ".venv" / ("Scripts" if os.name == "nt" else "bin") / (
         "python.exe" if os.name == "nt" else "python"
@@ -265,8 +278,8 @@ def _refresh_snapshot_periodically(
             )
             instance_running = bool(instance_state.get("running"))
             waiting_for_instance = bool(instance_state.get("waiting"))
-            port = instance_state.get("port")
-            if not instance_running and isinstance(port, int):
+            port = _validated_port(instance_state.get("port"), _validated_port(instance_state.get("default_port"), 8888))
+            if not instance_running:
                 instance_running = _probe_port(port)
                 instance_state["running"] = instance_running
                 waiting_for_instance = waiting_for_instance and not instance_running
@@ -275,6 +288,8 @@ def _refresh_snapshot_periodically(
                 connectors,
                 instance_running=instance_running,
                 waiting_for_instance=waiting_for_instance,
+                suite_host=str(instance_state.get("host") or _DEFAULT_SUITE_HOST),
+                suite_port=port,
             )
             _write_snapshot(runtime_dir, snapshot)
         except Exception as exc:  # pragma: no cover - defensive logging
@@ -396,6 +411,8 @@ class Command(BaseCommand):
         instance_state: dict[str, object] = {
             "running": instance_running,
             "port": instance_port,
+            "default_port": instance_port,
+            "host": _DEFAULT_SUITE_HOST,
             "waiting": False,
         }
         instance_process: subprocess.Popen[bytes] | None = None
@@ -434,6 +451,8 @@ class Command(BaseCommand):
             connectors,
             instance_running=instance_state["running"],
             waiting_for_instance=instance_state.get("waiting", False),
+            suite_host=str(instance_state.get("host") or _DEFAULT_SUITE_HOST),
+            suite_port=_validated_port(instance_state.get("port"), instance_port),
         )
         if not snapshot["connectors"]:
             self.stdout.write(

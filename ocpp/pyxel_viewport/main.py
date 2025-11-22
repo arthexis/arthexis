@@ -77,6 +77,8 @@ class ConnectorViewport:
         self._pending_action_token: str | None = None
         self._action_feedback = ""
         self._action_feedback_frame = 0
+        self._suite_host = "127.0.0.1"
+        self._suite_port: int | None = None
         self._quick_actions = (
             {"label": "Start Default Simulator", "action": "start_default_simulator"},
         )
@@ -111,6 +113,13 @@ class ConnectorViewport:
         self.instance_running = bool(payload.get("instance_running"))
         self.waiting_for_instance = bool(payload.get("waiting_for_instance"))
         self.connectors = payload.get("connectors", []) or []
+        self._suite_host = str(payload.get("suite_host") or "127.0.0.1").strip() or "127.0.0.1"
+        suite_port = payload.get("suite_port")
+        try:
+            parsed_port = int(suite_port)
+            self._suite_port = parsed_port if 1 <= parsed_port <= 65535 else None
+        except (TypeError, ValueError):
+            self._suite_port = None
 
     def update(self) -> None:
         if pyxel.btnp(pyxel.KEY_R):
@@ -128,12 +137,14 @@ class ConnectorViewport:
         if self.waiting_for_instance and not self.instance_running:
             self._draw_loading()
             self._draw_menu()
+            self._draw_suite_hint()
             self._draw_feedback()
             return
 
         if not self._has_loaded_snapshot or (not self.instance_running and not self.connectors):
             self._draw_loading()
             self._draw_menu()
+            self._draw_suite_hint()
             self._draw_feedback()
             return
 
@@ -159,6 +170,7 @@ class ConnectorViewport:
             self._draw_card(connector, x, y, card_width, card_height)
 
         self._draw_menu()
+        self._draw_suite_hint()
         self._draw_feedback()
 
     def _draw_card(self, connector: dict, x: int, y: int, width: int, height: int) -> None:
@@ -333,6 +345,30 @@ class ConnectorViewport:
         y = pyxel.height - 10
         pyxel.rect(x - 2, y - 2, text_width + 4, 10, 0)
         pyxel.text(x, y, text, 10 if self._pending_action_token else 7)
+
+    def _suite_label(self) -> str:
+        if self._suite_port:
+            return f"Suite: {self._suite_host}:{self._suite_port}"
+        if self._suite_host:
+            return f"Suite: {self._suite_host}"
+        return ""
+
+    def _draw_suite_hint(self) -> None:
+        label = self._suite_label()
+        if not label:
+            return
+
+        padding = 4
+        text_width = len(label) * 4
+        box_width = text_width + padding * 2
+        box_height = 12
+        x = 6
+        y = pyxel.height - box_height - 4
+
+        pyxel.rect(x - 1, y - 1, box_width + 2, box_height + 2, 0)
+        pyxel.rect(x, y, box_width, box_height, 1)
+        pyxel.rectb(x, y, box_width, box_height, 5)
+        pyxel.text(x + padding - 1, y + 3, label, 7)
 
 
 def main() -> None:

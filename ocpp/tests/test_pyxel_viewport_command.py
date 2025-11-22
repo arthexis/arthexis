@@ -42,6 +42,8 @@ class PyxelViewportCommandTests(TestCase):
         self.assertEqual(entry["connector_id"], 1)
         self.assertEqual(entry["status_color"], STATUS_BADGE_MAP["charging"][1])
         self.assertTrue(entry["is_charging"])
+        self.assertEqual(payload["suite_host"], "127.0.0.1")
+        self.assertEqual(payload["suite_port"], 8888)
 
     def test_snapshot_includes_instance_flag(self):
         output_dir = Path(tempfile.mkdtemp())
@@ -52,6 +54,8 @@ class PyxelViewportCommandTests(TestCase):
         payload = json.loads((output_dir / "data" / "connectors.json").read_text())
         self.assertIn("instance_running", payload)
         self.assertIs(payload["instance_running"], False)
+        self.assertEqual(payload["suite_host"], "127.0.0.1")
+        self.assertEqual(payload["suite_port"], 8888)
 
     def test_clears_existing_initialized_output_directory(self):
         connector = Charger.objects.create(
