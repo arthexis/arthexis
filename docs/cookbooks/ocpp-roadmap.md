@@ -20,6 +20,12 @@ This cookbook captures the backlog of Open Charge Point Protocol (OCPP) features
 - Publish charging profiles created in Constellation's tariff editor so operators can orchestrate peak shaving and time-of-use incentives from a single interface.
 - Synchronise the selected profile with the live session timeline and raise alerts if the station fails to acknowledge or apply the requested limits.
 
+## OCPP 2.0.1 checkpoint
+
+- Validate OCPP 2.0.1 interoperability by mapping the supported 1.6 flows (authentication, heartbeats, metering, firmware and log status notifications) to their 2.x counterparts and surfacing any gaps in the coverage badge.
+- Exercise certificate lifecycles and ISO 15118 prerequisites end-to-end so that chargers can authenticate securely before we layer the broader 2.1 backlog on top.
+- Capture driver- and grid-facing notifications (for example, charging limits, display messages, and event reports) so that customer communications stay aligned while we iterate toward the full 2.1 catalog.
+
 ## OCPP 2.1 backlog – Charge point → CSMS
 
 ### ClearedChargingLimit

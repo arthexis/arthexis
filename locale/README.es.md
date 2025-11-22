@@ -1,6 +1,6 @@
 # Constelación Arthexis
 
-[![CI](https://github.com/arthexis/arthexis/actions/workflows/ci.yml/badge.svg)](https://github.com/arthexis/arthexis/actions/workflows/ci.yml) [![Cobertura](https://raw.githubusercontent.com/arthexis/arthexis/main/coverage.svg)](https://github.com/arthexis/arthexis/actions/workflows/coverage.yml) [![Cobertura OCPP 1.6](https://raw.githubusercontent.com/arthexis/arthexis/main/ocpp_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md) [![Cobertura OCPP 2.1](https://raw.githubusercontent.com/arthexis/arthexis/main/ocpp21_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md) [![Licencia: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+[![CI](https://github.com/arthexis/arthexis/actions/workflows/ci.yml/badge.svg)](https://github.com/arthexis/arthexis/actions/workflows/ci.yml) [![Cobertura](https://raw.githubusercontent.com/arthexis/arthexis/main/coverage.svg)](https://github.com/arthexis/arthexis/actions/workflows/coverage.yml) [![Cobertura OCPP 1.6](https://raw.githubusercontent.com/arthexis/arthexis/main/ocpp_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md) [![Cobertura OCPP 2.0.1](https://raw.githubusercontent.com/arthexis/arthexis/main/ocpp201_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md) [![Cobertura OCPP 2.1](https://raw.githubusercontent.com/arthexis/arthexis/main/ocpp21_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md) [![Licencia: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
 
 ## Propósito
@@ -17,43 +17,43 @@ Consulta el nuevo [artículo para desarrolladores](https://arthexis.com/articles
 
   **Punto de carga → CSMS**
 
-  | Acción | Versión 1.6 | Versión 2.1 | Qué hacemos |
-  | --- | --- | --- | --- |
-  | `Authorize` | ✅ | ✅ | Validamos solicitudes de autorización por RFID o token antes de iniciar una sesión. |
-  | `BootNotification` | ✅ | ✅ | Registramos el punto de carga y actualizamos identidad, firmware y estado. |
-  | `DataTransfer` | ✅ | ✅ | Aceptamos cargas útiles específicas del proveedor y registramos los resultados. |
-  | `DiagnosticsStatusNotification` | ✅ | — | Seguimos el progreso de las cargas de diagnósticos iniciadas desde la oficina central. |
-  | `FirmwareStatusNotification` | ✅ | ✅ | Seguimos los eventos del ciclo de vida de actualizaciones de firmware desde los puntos de carga. |
-  | `Heartbeat` | ✅ | ✅ | Mantenemos viva la sesión websocket y actualizamos la última conexión. |
-  | `LogStatusNotification` | — | ✅ | Informamos el progreso de las cargas de registros del punto de carga para supervisar diagnósticos. |
-  | `MeterValues` | ✅ | ✅ | Guardamos lecturas periódicas de energía y potencia mientras la transacción está activa. |
-  | `SecurityEventNotification` | — | ✅ | Registramos eventos de seguridad reportados por los puntos de carga para auditoría. |
-  | `StartTransaction` | ✅ | — | Creamos sesiones de carga con valores iniciales y datos de identificación. |
-  | `StatusNotification` | ✅ | ✅ | Reflejamos la disponibilidad y los fallos del conector en tiempo real. |
-  | `StopTransaction` | ✅ | — | Cerramos sesiones de carga, capturando lecturas finales y motivos de cierre. |
+  | Acción | Versión 1.6 | Versión 2.0.1 | Versión 2.1 | Qué hacemos |
+  | --- | --- | --- | --- | --- |
+  | `Authorize` | ✅ | ✅ | ✅ | Validamos solicitudes de autorización por RFID o token antes de iniciar una sesión. |
+  | `BootNotification` | ✅ | ✅ | ✅ | Registramos el punto de carga y actualizamos identidad, firmware y estado. |
+  | `DataTransfer` | ✅ | ✅ | ✅ | Aceptamos cargas útiles específicas del proveedor y registramos los resultados. |
+  | `DiagnosticsStatusNotification` | ✅ | — | — | Seguimos el progreso de las cargas de diagnósticos iniciadas desde la oficina central. |
+  | `FirmwareStatusNotification` | ✅ | ✅ | ✅ | Seguimos los eventos del ciclo de vida de actualizaciones de firmware desde los puntos de carga. |
+  | `Heartbeat` | ✅ | ✅ | ✅ | Mantenemos viva la sesión websocket y actualizamos la última conexión. |
+  | `LogStatusNotification` | — | ✅ | ✅ | Informamos el progreso de las cargas de registros del punto de carga para supervisar diagnósticos. |
+  | `MeterValues` | ✅ | ✅ | ✅ | Guardamos lecturas periódicas de energía y potencia mientras la transacción está activa. |
+  | `SecurityEventNotification` | — | ✅ | ✅ | Registramos eventos de seguridad reportados por los puntos de carga para auditoría. |
+  | `StartTransaction` | ✅ | — | — | Creamos sesiones de carga con valores iniciales y datos de identificación. |
+  | `StatusNotification` | ✅ | ✅ | ✅ | Reflejamos la disponibilidad y los fallos del conector en tiempo real. |
+  | `StopTransaction` | ✅ | — | — | Cerramos sesiones de carga, capturando lecturas finales y motivos de cierre. |
 
   **CSMS → Punto de carga**
 
-  | Acción | Versión 1.6 | Versión 2.1 | Qué hacemos |
-  | --- | --- | --- | --- |
-  | `CancelReservation` | ✅ | ✅ | Cancelamos reservas pendientes y liberamos conectores directamente desde el centro de control. |
-  | `ChangeAvailability` | ✅ | ✅ | Cambiamos conectores o estaciones completas entre estados operativos e inoperativos. |
-  | `ChangeConfiguration` | ✅ | — | Actualizamos los ajustes compatibles del cargador y registramos los valores aplicados en el centro de control. |
-  | `ClearCache` | ✅ | ✅ | Limpiamos la caché de autorizaciones local para forzar consultas frescas al CSMS. |
-  | `DataTransfer` | ✅ | ✅ | Enviamos comandos específicos del proveedor y registramos la respuesta. |
-  | `GetConfiguration` | ✅ | — | Consultamos al dispositivo por los valores actuales de las claves de configuración seguidas. |
-  | `GetDiagnostics` | ✅ | — | Solicitamos una carga de diagnóstico del dispositivo hacia una URL firmada para resolver problemas. |
-  | `GetLocalListVersion` | ✅ | ✅ | Obtenemos la versión actual de la lista blanca de RFID y sincronizamos las entradas reportadas por el punto de carga. |
-  | `RemoteStartTransaction` | ✅ | — | Iniciamos sesiones de carga de forma remota para un cliente o token identificado. |
-  | `RemoteStopTransaction` | ✅ | — | Terminamos sesiones activas desde el centro de control. |
-  | `ReserveNow` | ✅ | ✅ | Reservamos conectores para sesiones futuras con asignación automática y seguimiento de confirmaciones. |
-  | `Reset` | ✅ | ✅ | Solicitamos un reinicio suave o completo para recuperarnos de fallos. |
-  | `SendLocalList` | ✅ | ✅ | Publicamos los RFID liberados y aprobados como la lista de autorización local del punto de carga. |
-  | `TriggerMessage` | ✅ | ✅ | Pedimos al dispositivo un mensaje inmediato (por ejemplo estado o diagnósticos). |
-  | `UnlockConnector` | ✅ | ✅ | Liberamos conectores bloqueados sin intervención en sitio. |
-  | `UpdateFirmware` | ✅ | ✅ | Entregamos paquetes de firmware a los cargadores con tokens de descarga seguros y seguimos las respuestas de instalación. |
+  | Acción | Versión 1.6 | Versión 2.0.1 | Versión 2.1 | Qué hacemos |
+  | --- | --- | --- | --- | --- |
+  | `CancelReservation` | ✅ | ✅ | ✅ | Cancelamos reservas pendientes y liberamos conectores directamente desde el centro de control. |
+  | `ChangeAvailability` | ✅ | ✅ | ✅ | Cambiamos conectores o estaciones completas entre estados operativos e inoperativos. |
+  | `ChangeConfiguration` | ✅ | — | — | Actualizamos los ajustes compatibles del cargador y registramos los valores aplicados en el centro de control. |
+  | `ClearCache` | ✅ | ✅ | ✅ | Limpiamos la caché de autorizaciones local para forzar consultas frescas al CSMS. |
+  | `DataTransfer` | ✅ | ✅ | ✅ | Enviamos comandos específicos del proveedor y registramos la respuesta. |
+  | `GetConfiguration` | ✅ | — | — | Consultamos al dispositivo por los valores actuales de las claves de configuración seguidas. |
+  | `GetDiagnostics` | ✅ | — | — | Solicitamos una carga de diagnóstico del dispositivo hacia una URL firmada para resolver problemas. |
+  | `GetLocalListVersion` | ✅ | ✅ | ✅ | Obtenemos la versión actual de la lista blanca de RFID y sincronizamos las entradas reportadas por el punto de carga. |
+  | `RemoteStartTransaction` | ✅ | — | — | Iniciamos sesiones de carga de forma remota para un cliente o token identificado. |
+  | `RemoteStopTransaction` | ✅ | — | — | Terminamos sesiones activas desde el centro de control. |
+  | `ReserveNow` | ✅ | ✅ | ✅ | Reservamos conectores para sesiones futuras con asignación automática y seguimiento de confirmaciones. |
+  | `Reset` | ✅ | ✅ | ✅ | Solicitamos un reinicio suave o completo para recuperarnos de fallos. |
+  | `SendLocalList` | ✅ | ✅ | ✅ | Publicamos los RFID liberados y aprobados como la lista de autorización local del punto de carga. |
+  | `TriggerMessage` | ✅ | ✅ | ✅ | Pedimos al dispositivo un mensaje inmediato (por ejemplo estado o diagnósticos). |
+  | `UnlockConnector` | ✅ | ✅ | ✅ | Liberamos conectores bloqueados sin intervención en sitio. |
+  | `UpdateFirmware` | ✅ | ✅ | ✅ | Entregamos paquetes de firmware a los cargadores con tokens de descarga seguros y seguimos las respuestas de instalación. |
 
-  **Hoja de ruta OCPP.** Consulta el [cookbook de la hoja de ruta OCPP](docs/cookbooks/ocpp-roadmap.md) para conocer el trabajo planificado de los catálogos OCPP 1.6 y 2.1.
+  **Hoja de ruta OCPP.** Consulta el [cookbook de la hoja de ruta OCPP](docs/cookbooks/ocpp-roadmap.md) para conocer el trabajo planificado de los catálogos OCPP 1.6, 2.0.1 y 2.1.
 
 - Reservas de puntos de carga con asignación automática de conectores, vinculación a cuentas de energía y RFIDs, confirmación del EVCS y cancelación desde el centro de control.
 - Integración de [API](https://es.wikipedia.org/wiki/Interfaz_de_programaci%C3%B3n_de_aplicaciones) con [Odoo](https://www.odoo.com/) para:
