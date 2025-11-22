@@ -3130,6 +3130,30 @@ class PowerNavTests(TestCase):
         icon_index = html.find("dropdown-lock-icon", energy_index, energy_index + 300)
         self.assertEqual(icon_index, -1)
 
+    def test_calculator_landings_deduplicate_trailing_slashes(self):
+        role = NodeRole.objects.get(name="Terminal")
+        module = Module.objects.get(node_role=role, path="/awg/")
+        Landing.objects.create(module=module, path="/awg", label="AWG Cable Calculator")
+
+        request = RequestFactory().get("/")
+        request.user = AnonymousUser()
+        request.session = self.client.session
+
+        context = nav_links(request)
+
+        power_module = None
+        for module in context["nav_modules"]:
+            if module.path == "/awg/":
+                power_module = module
+                break
+
+        self.assertIsNotNone(power_module)
+
+        normalized_paths = [
+            landing.path.rstrip("/") or "/" for landing in power_module.enabled_landings
+        ]
+        self.assertEqual(len(normalized_paths), len(set(normalized_paths)))
+
 
 class WatchtowerLandingLinkTests(TestCase):
     def setUp(self):
