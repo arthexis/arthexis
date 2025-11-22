@@ -53,7 +53,7 @@ class PyxelViewportCommandTests(TestCase):
         self.assertIn("instance_running", payload)
         self.assertIs(payload["instance_running"], False)
 
-    def test_clears_existing_output_directory(self):
+    def test_clears_existing_initialized_output_directory(self):
         connector = Charger.objects.create(
             charger_id="LOV-02",
             connector_id=2,
@@ -68,6 +68,7 @@ class PyxelViewportCommandTests(TestCase):
 
         output_dir = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, output_dir, ignore_errors=True)
+        call_command("pyxel_viewport", "--output-dir", str(output_dir), "--skip-launch")
         nested_dir = output_dir / "nested"
         nested_dir.mkdir()
         (nested_dir / "occupied.txt").write_text("busy")
@@ -76,6 +77,15 @@ class PyxelViewportCommandTests(TestCase):
 
         self.assertFalse((nested_dir / "occupied.txt").exists())
         self.assertTrue((output_dir / "data" / "connectors.json").exists())
+
+    def test_errors_when_output_directory_contains_unrelated_content(self):
+        output_dir = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, output_dir, ignore_errors=True)
+
+        (output_dir / "unrelated.txt").write_text("leave me alone")
+
+        with self.assertRaises(CommandError):
+            call_command("pyxel_viewport", "--output-dir", str(output_dir), "--skip-launch")
 
     def test_errors_when_pyxel_runner_missing(self):
         connector = Charger.objects.create(
