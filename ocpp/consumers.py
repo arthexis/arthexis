@@ -971,6 +971,20 @@ class CSMSConsumer(AsyncWebsocketConsumer):
 
         existing_uuid = self._consumption_message_uuid
 
+        def _subject_initials(value: str) -> str:
+            characters = re.findall(r"\b(\w)", value)
+            return "".join(characters).upper()
+
+        def _format_elapsed(start: datetime | None) -> str:
+            if not start:
+                return "00:00:00"
+            now_local = timezone.localtime(timezone.now())
+            start_local = timezone.localtime(start)
+            elapsed_seconds = max(0, int((now_local - start_local).total_seconds()))
+            hours, remainder = divmod(elapsed_seconds, 3600)
+            minutes, seconds = divmod(remainder, 60)
+            return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
         def _persist() -> str | None:
             tx = (
                 Transaction.objects.select_related("charger")
@@ -980,25 +994,42 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             if not tx:
                 return None
             charger = tx.charger or self.charger
-            serial = ""
-            if charger and charger.charger_id:
-                serial = charger.charger_id
-            elif self.charger_id:
-                serial = self.charger_id
-            serial = serial[:64]
-            if not serial:
+            subject_label = ""
+            if charger:
+                display_value = (
+                    charger.display_name
+                    or getattr(charger, "name", "")
+                    or charger.charger_id
+                    or ""
+                )
+                subject_label = _subject_initials(display_value)
+            connector_value = tx.connector_id or getattr(charger, "connector_id", None)
+            subject_suffix = f" CP{connector_value}" if connector_value else ""
+            if not subject_label:
+                subject_label = (
+                    getattr(charger, "charger_id", "")
+                    or self.charger_id
+                    or ""
+                )
+            subject_value = f"{subject_label}{subject_suffix}".strip()[:64]
+            if not subject_value:
                 return None
-            now_local = timezone.localtime(timezone.now())
-            body_value = f"{tx.kw:.1f} kWh {now_local.strftime('%H:%M')}"[:256]
+
+            energy_consumed = tx.kw
+            unit = getattr(charger, "energy_unit", Charger.EnergyUnit.KW)
+            if unit == Charger.EnergyUnit.W:
+                energy_consumed *= 1000
+            elapsed_label = _format_elapsed(tx.start_time)
+            body_value = f"{energy_consumed:.1f}{unit} {elapsed_label}"[:256]
             if existing_uuid:
                 msg = NetMessage.objects.filter(uuid=existing_uuid).first()
                 if msg:
-                    msg.subject = serial
+                    msg.subject = subject_value
                     msg.body = body_value
                     msg.save(update_fields=["subject", "body"])
                     msg.propagate()
                     return str(msg.uuid)
-            msg = NetMessage.broadcast(subject=serial, body=body_value)
+            msg = NetMessage.broadcast(subject=subject_value, body=body_value)
             return str(msg.uuid)
 
         try:
