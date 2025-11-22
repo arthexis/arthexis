@@ -1607,6 +1607,7 @@ class StationModelAdmin(EntityModelAdmin):
         "model",
         "max_power_kw",
         "max_voltage_v",
+        "preferred_ocpp_version",
         "connector_type",
         "notes",
     )
@@ -1616,6 +1617,7 @@ class StationModelAdmin(EntityModelAdmin):
         "vendor",
         "max_power_kw",
         "max_voltage_v",
+        "preferred_ocpp_version",
         "connector_type",
     )
     search_fields = ("vendor", "model_family", "model", "connector_type")
@@ -1669,6 +1671,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
                     "display_name",
                     "connector_id",
                     "language",
+                    "preferred_ocpp_version",
                     "energy_unit",
                     "location",
                     "station_model",

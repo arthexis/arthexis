@@ -98,6 +98,15 @@ class Charger(Entity):
         blank=True,
         help_text=_("Preferred language for the public landing page."),
     )
+    preferred_ocpp_version = models.CharField(
+        _("Preferred OCPP Version"),
+        max_length=16,
+        blank=True,
+        default="",
+        help_text=_(
+            "Optional OCPP protocol version to prefer when multiple are available."
+        ),
+    )
     energy_unit = models.CharField(
         _("Charger Units"),
         max_length=4,
@@ -494,6 +503,15 @@ class Charger(Entity):
                 }
             )
         return normalized
+
+    def preferred_ocpp_version_value(self) -> str:
+        """Return the preferred OCPP version, inheriting from the model when set."""
+
+        if self.preferred_ocpp_version:
+            return self.preferred_ocpp_version
+        if self.station_model and self.station_model.preferred_ocpp_version:
+            return self.station_model.preferred_ocpp_version
+        return ""
 
     @classmethod
     def sanitize_auto_location_name(cls, value: str) -> str:
@@ -2574,6 +2592,15 @@ class StationModel(Entity):
         null=True,
         blank=True,
         help_text=_("Maximum supported operating voltage."),
+    )
+    preferred_ocpp_version = models.CharField(
+        _("Preferred OCPP Version"),
+        max_length=16,
+        blank=True,
+        default="",
+        help_text=_(
+            "Optional OCPP protocol version usually paired with this EVCS model."
+        ),
     )
     connector_type = models.CharField(
         _("Connector Type"),
