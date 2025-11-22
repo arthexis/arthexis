@@ -84,6 +84,7 @@ from .models import (
     SecurityEvent,
     ChargerLogRequest,
     PowerProjection,
+    StationModel,
 )
 from .admin import (
     ChargerAdmin,
@@ -816,6 +817,39 @@ class CSMSConsumerTests(TransactionTestCase):
                 store.logs["charger"].pop(key, None)
         return pending_key
 
+    def _snapshot_store_state(self):
+        return (
+            dict(store.connections),
+            {ip: set(consumers) for ip, consumers in store.ip_connections.items()},
+            {
+                key: list(entries)
+                for key, entries in store.logs.get("charger", {}).items()
+            },
+            dict(store.log_names.get("charger", {})),
+        )
+
+    def _restore_store_state(self, snapshot):
+        (
+            original_connections,
+            original_ip_connections,
+            original_logs,
+            original_log_names,
+        ) = snapshot
+        store.connections.clear()
+        store.connections.update(original_connections)
+        store.ip_connections.clear()
+        for ip, consumers in original_ip_connections.items():
+            store.ip_connections[ip] = set(consumers)
+        store.logs.setdefault("charger", {})
+        store.logs["charger"].clear()
+        for key, entries in original_logs.items():
+            store.logs["charger"][key] = deque(
+                entries, maxlen=store.MAX_IN_MEMORY_LOG_ENTRIES
+            )
+        store.log_names.setdefault("charger", {})
+        store.log_names["charger"].clear()
+        store.log_names["charger"].update(original_log_names)
+
     def _create_firmware_deployment(self, charger_id: str) -> int:
         try:
             charger = Charger.objects.get(charger_id=charger_id, connector_id=None)
@@ -1170,15 +1204,9 @@ class CSMSConsumerTests(TransactionTestCase):
 
     async def test_connection_logs_subprotocol(self):
         pending_key = store.pending_key("PROT1")
-        original_connections = dict(store.connections)
-        original_ip_connections = {
-            ip: set(consumers) for ip, consumers in store.ip_connections.items()
-        }
-        original_logs = {
-            key: list(entries)
-            for key, entries in store.logs.get("charger", {}).items()
-        }
-        original_log_names = dict(store.log_names.get("charger", {}))
+        original_connections, original_ip_connections, original_logs, original_log_names = (
+            self._snapshot_store_state()
+        )
         store.connections.clear()
         store.ip_connections.clear()
         store.clear_log(pending_key, log_type="charger")
@@ -1252,20 +1280,61 @@ class CSMSConsumerTests(TransactionTestCase):
                 await communicator_with_protocol.disconnect()
             with suppress(Exception):
                 await communicator_with_invalid_protocol.disconnect()
-            store.connections.clear()
-            store.connections.update(original_connections)
-            store.ip_connections.clear()
-            for ip, consumers in original_ip_connections.items():
-                store.ip_connections[ip] = set(consumers)
-            store.logs.setdefault("charger", {})
-            store.logs["charger"].clear()
-            for key, entries in original_logs.items():
-                store.logs["charger"][key] = deque(
-                    entries, maxlen=store.MAX_IN_MEMORY_LOG_ENTRIES
-                )
-            store.log_names.setdefault("charger", {})
-            store.log_names["charger"].clear()
-            store.log_names["charger"].update(original_log_names)
+            self._restore_store_state(
+                (original_connections, original_ip_connections, original_logs, original_log_names)
+            )
+
+    async def test_preferred_version_is_used_when_offered(self):
+        charger_id = "PREFVER1"
+        await database_sync_to_async(Charger.objects.create)(
+            charger_id=charger_id, preferred_ocpp_version="ocpp2.0"
+        )
+        pending_key = self._reset_charger_logs(charger_id)
+        store_state = self._snapshot_store_state()
+
+        communicator = ClientWebsocketCommunicator(
+            application, f"/{charger_id}/", subprotocols=["ocpp1.6", "ocpp2.0"]
+        )
+        communicator.scope["path"] = communicator.scope.get("path", "").rstrip("/")
+
+        try:
+            connected, negotiated = await communicator.connect()
+            logs = store.get_logs(pending_key, log_type="charger")
+            self.assertTrue(connected, logs)
+            self.assertEqual(negotiated, "ocpp2.0")
+        finally:
+            with suppress(Exception):
+                await communicator.disconnect()
+            self._restore_store_state(store_state)
+
+    async def test_station_model_preferred_version_is_used(self):
+        charger_id = "PREFVER2"
+        station_model = await database_sync_to_async(StationModel.objects.create)(
+            vendor="Acme",
+            model_family="Series",
+            model="ModelZ",
+            preferred_ocpp_version="ocpp2.0",
+        )
+        await database_sync_to_async(Charger.objects.create)(
+            charger_id=charger_id, station_model=station_model
+        )
+        pending_key = self._reset_charger_logs(charger_id)
+        store_state = self._snapshot_store_state()
+
+        communicator = ClientWebsocketCommunicator(
+            application, f"/{charger_id}/", subprotocols=["ocpp2.0", "ocpp1.6"]
+        )
+        communicator.scope["path"] = communicator.scope.get("path", "").rstrip("/")
+
+        try:
+            connected, negotiated = await communicator.connect()
+            logs = store.get_logs(pending_key, log_type="charger")
+            self.assertTrue(connected, logs)
+            self.assertEqual(negotiated, "ocpp2.0")
+        finally:
+            with suppress(Exception):
+                await communicator.disconnect()
+            self._restore_store_state(store_state)
 
     async def test_existing_charger_does_not_request_metadata_when_missing(self):
         charger_id = "AUTOFETCH"

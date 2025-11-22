@@ -294,6 +294,23 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             return None
         return user
 
+    def _select_subprotocol(
+        self, offered: list[str] | tuple[str, ...], preferred: str | None
+    ) -> str | None:
+        """Choose the negotiated OCPP subprotocol, honoring stored preference."""
+
+        available = [proto for proto in offered if proto]
+        preferred_normalized = (preferred or "").strip()
+        if preferred_normalized and preferred_normalized in available:
+            return preferred_normalized
+        # Operational safeguard: never reject a charger solely because it omits
+        # or sends an unexpected subprotocol.  We negotiate ``ocpp1.6`` when the
+        # charger offers it, but otherwise continue without a subprotocol so we
+        # accept as many real-world stations as possible.
+        if "ocpp1.6" in available:
+            return "ocpp1.6"
+        return None
+
     @requires_network
     async def connect(self):
         raw_serial = self._extract_serial_identifier()
@@ -322,21 +339,23 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         self.aggregate_charger: Charger | None = None
         self._consumption_task: asyncio.Task | None = None
         self._consumption_message_uuid: str | None = None
-        subprotocol = None
-        offered = self.scope.get("subprotocols", [])
-        # Operational safeguard: never reject a charger solely because it omits
-        # or sends an unexpected subprotocol.  We negotiate ``ocpp1.6`` when the
-        # charger offers it, but otherwise continue without a subprotocol so we
-        # accept as many real-world stations as possible.
-        if "ocpp1.6" in offered:
-            subprotocol = "ocpp1.6"
         self.client_ip = _resolve_client_ip(self.scope)
         self._header_reference_created = False
         existing_charger = await database_sync_to_async(
-            lambda: Charger.objects.select_related("ws_auth_user", "ws_auth_group")
+            lambda: Charger.objects.select_related(
+                "ws_auth_user", "ws_auth_group", "station_model"
+            )
             .filter(charger_id=self.charger_id, connector_id=None)
             .first()
         )()
+        preferred_version = (
+            existing_charger.preferred_ocpp_version_value()
+            if existing_charger
+            else ""
+        )
+        offered = self.scope.get("subprotocols", [])
+        subprotocol = self._select_subprotocol(offered, preferred_version)
+        self.preferred_ocpp_version = preferred_version
         if existing_charger and existing_charger.requires_ws_auth:
             credentials, error_code = self._parse_basic_auth_header()
             rejection_reason: str | None = None
