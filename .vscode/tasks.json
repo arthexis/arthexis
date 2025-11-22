@@ -109,6 +109,19 @@
             },
             "problemMatcher": [],
             "detail": "Remove all files from logs and its subdirectories"
+        },
+        {
+            "label": "Dev: pyxel viewport",
+            "type": "shell",
+            "command": "${workspaceFolder}/pyxel-viewport.sh",
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "windows": {
+                "command": "${workspaceFolder}\\pyxel-viewport.bat"
+            },
+            "problemMatcher": [],
+            "detail": "Stage and launch the Pyxel viewport, ensuring the instance is running"
         }
     ]
 }

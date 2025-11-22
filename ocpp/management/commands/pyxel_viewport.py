@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 import json
+import os
 import shlex
 import shutil
+import socket
 import subprocess
 import tempfile
+import threading
 from pathlib import Path
 from typing import Iterable
 
+from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
+from django.db import close_old_connections
 from django.utils import timezone
 from django.utils.translation import gettext as _
 
@@ -101,11 +106,12 @@ def _copy_project_assets(target_dir: Path) -> None:
     shutil.copytree(project_root, target_dir, dirs_exist_ok=True)
 
 
-def _connector_snapshot(connectors: Iterable[Charger]) -> dict:
+def _connector_snapshot(connectors: Iterable[Charger], *, instance_running: bool) -> dict:
     """Return a JSON-serializable payload describing connector state."""
 
     payload = {
         "generated_at": timezone.now().isoformat(),
+        "instance_running": bool(instance_running),
         "connectors": [],
     }
     for connector in connectors:
@@ -125,14 +131,20 @@ def _connector_snapshot(connectors: Iterable[Charger]) -> dict:
     return payload
 
 
+def _atomic_write_json(target: Path, payload: dict) -> Path:
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = target.with_suffix(target.suffix + ".tmp")
+    temp_path.write_text(json.dumps(payload, indent=2))
+    temp_path.replace(target)
+    return target
+
+
 def _write_snapshot(target_dir: Path, snapshot: dict) -> Path:
     """Persist the snapshot to ``data/connectors.json`` and return the path."""
 
     data_dir = target_dir / "data"
-    data_dir.mkdir(parents=True, exist_ok=True)
     json_path = data_dir / "connectors.json"
-    json_path.write_text(json.dumps(snapshot, indent=2))
-    return json_path
+    return _atomic_write_json(json_path, snapshot)
 
 
 def _resolve_pyxel_runner(runner: str) -> list[str]:
@@ -166,6 +178,144 @@ def _launch_pyxel(runner_parts: list[str], runtime_dir: Path) -> None:
     subprocess.run(command, cwd=runtime_dir, check=True)
 
 
+def _configured_backend_port(base_dir: Path) -> int:
+    lock_file = base_dir / "locks" / "backend_port.lck"
+    try:
+        value = int(lock_file.read_text().strip())
+    except (OSError, TypeError, ValueError):
+        return 8888
+    if 1 <= value <= 65535:
+        return value
+    return 8888
+
+
+def _port_candidates(default_port: int) -> list[int]:
+    candidates = [default_port]
+    for port in (8000, 8888):
+        if port not in candidates:
+            candidates.append(port)
+    return candidates
+
+
+def _probe_port(port: int) -> bool:
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=0.25):
+            return True
+    except OSError:
+        return False
+
+
+def _detect_instance(base_dir: Path) -> tuple[bool, int]:
+    default_port = _configured_backend_port(base_dir)
+    for port in _port_candidates(default_port):
+        if _probe_port(port):
+            return True, port
+    return False, default_port
+
+
+def _start_instance(base_dir: Path, port: int, stdout=None) -> subprocess.Popen[bytes]:
+    python_path = base_dir / ".venv" / ("Scripts" if os.name == "nt" else "bin") / (
+        "python.exe" if os.name == "nt" else "python"
+    )
+    if not python_path.exists():
+        raise CommandError(
+            "Virtual environment not found. Run install.sh or install.bat first."
+        )
+
+    command = [str(python_path), "manage.py", "runserver", f"0.0.0.0:{port}", "--noreload"]
+    return subprocess.Popen(command, cwd=base_dir, stdout=stdout, stderr=stdout)
+
+
+def _refresh_snapshot_periodically(
+    runtime_dir: Path,
+    stop_event: threading.Event,
+    instance_state: dict[str, object],
+    stdout,
+    interval: float = 3.0,
+) -> None:
+    while not stop_event.wait(interval):
+        try:
+            close_old_connections()
+            connectors = (
+                Charger.objects.exclude(connector_id__isnull=True)
+                .order_by("charger_id", "connector_id")
+                .select_related("location")
+            )
+            instance_running = bool(instance_state.get("running"))
+            port = instance_state.get("port")
+            if not instance_running and isinstance(port, int):
+                instance_running = _probe_port(port)
+                instance_state["running"] = instance_running
+            snapshot = _connector_snapshot(connectors, instance_running=instance_running)
+            _write_snapshot(runtime_dir, snapshot)
+        except Exception as exc:  # pragma: no cover - defensive logging
+            stdout.write(f"Snapshot refresh failed: {exc}")
+        finally:
+            close_old_connections()
+
+
+def _start_default_simulator() -> tuple[bool, str]:
+    from ocpp.models import Simulator
+    from ocpp.simulator import ChargePointSimulator
+
+    default_simulator = (
+        Simulator.objects.filter(default=True, is_deleted=False).order_by("pk").first()
+    )
+    if default_simulator is None:
+        return False, "No default simulator configured."
+
+    if default_simulator.pk in store.simulators:
+        return False, "Default simulator is already running."
+
+    store.register_log_name(default_simulator.cp_path, default_simulator.name, log_type="simulator")
+    simulator = ChargePointSimulator(default_simulator.as_config())
+    started, status, log_file = simulator.start()
+    if started:
+        store.simulators[default_simulator.pk] = simulator
+    return started, f"{status}. Log: {log_file}"
+
+
+def _process_action_requests(
+    runtime_dir: Path, stop_event: threading.Event, stdout, instance_state: dict[str, object]
+) -> None:
+    request_path = runtime_dir / "data" / "pyxel_action_request.json"
+    response_path = runtime_dir / "data" / "pyxel_action_response.json"
+    last_token = ""
+
+    while not stop_event.wait(0.5):
+        try:
+            payload = json.loads(request_path.read_text())
+        except FileNotFoundError:
+            continue
+        except json.JSONDecodeError:
+            continue
+
+        token = payload.get("token")
+        if not token or token == last_token:
+            continue
+
+        action = payload.get("action")
+        success = False
+        message = "Unknown action"
+        if action == "start_default_simulator":
+            close_old_connections()
+            success, message = _start_default_simulator()
+            instance_state["running"] = instance_state.get("running") or success
+            close_old_connections()
+
+        response = {
+            "token": token,
+            "success": success,
+            "message": message,
+            "completed_at": timezone.now().isoformat(),
+        }
+        try:
+            _atomic_write_json(response_path, response)
+        except Exception as exc:  # pragma: no cover - defensive logging
+            stdout.write(f"Failed to write action response: {exc}")
+        last_token = token
+
+
 class Command(BaseCommand):
     help = (
         "Prepare connector data and launch a Pyxel viewport that renders a "
@@ -195,18 +345,58 @@ class Command(BaseCommand):
                 "flag in CI environments or when you only need the staged assets."
             ),
         )
+        parser.add_argument(
+            "--ensure-instance",
+            action="store_true",
+            help=(
+                "Start a local instance for the viewport when none is reachable. "
+                "The process stops automatically when the Pyxel window closes."
+            ),
+        )
 
     def handle(self, *args, **options):
         output_dir_option = options.get("output_dir")
         pyxel_runner = options.get("pyxel_runner")
         skip_launch = options.get("skip_launch")
+        ensure_instance = options.get("ensure_instance")
+
+        runtime_dir, is_temp_dir = _normalize_output_dir(output_dir_option)
+
+        base_dir = Path(settings.BASE_DIR)
+        instance_running, instance_port = _detect_instance(base_dir)
+        instance_state: dict[str, object] = {"running": instance_running, "port": instance_port}
+        instance_process: subprocess.Popen[bytes] | None = None
+        instance_started = False
+        instance_log_handle = None
+
+        if ensure_instance and instance_running:
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"Detected an existing instance listening on port {instance_port}; reusing it."
+                )
+            )
+        elif ensure_instance and not instance_running:
+            instance_log_path = runtime_dir / "instance.log"
+            instance_log_handle = instance_log_path.open("w")
+            self.stdout.write(
+                self.style.WARNING(
+                    f"No running instance detected; starting a local server on port {instance_port}."
+                )
+            )
+            try:
+                instance_process = _start_instance(base_dir, instance_port, stdout=instance_log_handle)
+            except Exception:
+                instance_log_handle.close()
+                raise
+            instance_started = True
+            instance_state["running"] = _probe_port(instance_port)
 
         connectors = (
             Charger.objects.exclude(connector_id__isnull=True)
             .order_by("charger_id", "connector_id")
             .select_related("location")
         )
-        snapshot = _connector_snapshot(connectors)
+        snapshot = _connector_snapshot(connectors, instance_running=instance_state["running"])
         if not snapshot["connectors"]:
             self.stdout.write(
                 self.style.WARNING(
@@ -214,7 +404,6 @@ class Command(BaseCommand):
                 )
             )
 
-        runtime_dir, is_temp_dir = _normalize_output_dir(output_dir_option)
         _copy_project_assets(runtime_dir)
         snapshot_path = _write_snapshot(runtime_dir, snapshot)
         self.stdout.write(self.style.SUCCESS(f"Connector snapshot written to {snapshot_path}"))
@@ -223,12 +412,46 @@ class Command(BaseCommand):
             self.stdout.write(
                 "Skipping Pyxel launch; run `pyxel run main.py` from %s to open the viewport." % runtime_dir
             )
+            if instance_started and instance_process:
+                instance_process.terminate()
+                try:
+                    instance_process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    instance_process.kill()
+            if instance_log_handle:
+                instance_log_handle.close()
             return
 
         cleanup_required = is_temp_dir
+        stop_event = threading.Event()
+        threads = [
+            threading.Thread(
+                target=_refresh_snapshot_periodically,
+                args=(runtime_dir, stop_event, instance_state, self.stdout),
+                daemon=True,
+            ),
+            threading.Thread(
+                target=_process_action_requests,
+                args=(runtime_dir, stop_event, self.stdout, instance_state),
+                daemon=True,
+            ),
+        ]
+        for thread in threads:
+            thread.start()
         try:
             runner_parts = _resolve_pyxel_runner(pyxel_runner)
             _launch_pyxel(runner_parts, runtime_dir)
         finally:
+            stop_event.set()
+            for thread in threads:
+                thread.join(timeout=2)
+            if instance_started and instance_process:
+                instance_process.terminate()
+                try:
+                    instance_process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    instance_process.kill()
+            if instance_log_handle:
+                instance_log_handle.close()
             if cleanup_required:
                 shutil.rmtree(runtime_dir, ignore_errors=True)

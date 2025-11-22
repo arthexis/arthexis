@@ -25,6 +25,8 @@ Flags:
 - `--pyxel-runner` lets you point to a custom Pyxel executable (for example `python -m pyxel`).
 - `--output-dir` controls where the game files and data snapshot are staged. When omitted, the command uses a temporary directory and cleans it up after the Pyxel process exits.
 
+The management command can also start a local instance for you with `--ensure-instance`, bringing the Django server up if it is down and shutting it down again after the Pyxel window is closed.
+
 Helper scripts simplify common invocations:
 
 - Unix-like environments: `./pyxel-viewport.sh` creates (or refreshes) a clean work directory under `work/pyxel_viewport` and launches the viewport with the `pyxel` CLI by default.
@@ -38,5 +40,7 @@ Each connector with a non-empty `connector_id` appears as a card that shows:
 - The OCPP status label in a palette-matched status color
 - A simple car outline and battery bar; connectors marked as charging pulse the battery fill to visualize activity
 - A reload hint when no connectors are available
+- A loading bar while the instance starts, plus periodic background refreshes to pick up new charge points automatically
+- A floating hamburger menu in the upper-right corner with quick actions such as **Start Default Simulator**
 
 The Pyxel assets live under `ocpp/pyxel_viewport/` and rely on Python's built-in JSON parser to load the snapshot emitted by the management command.
