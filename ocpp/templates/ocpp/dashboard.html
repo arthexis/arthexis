@@ -102,6 +102,7 @@
         }
         const tableBody = document.querySelector('[data-dashboard-table-body]');
         if (!tableBody) {
+          setInterval(() => location.reload(), intervalSeconds * 1000);
           return;
         }
         const requestUrl = new URL(window.location.href, window.location.origin);

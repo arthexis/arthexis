@@ -51,13 +51,13 @@ from .models import (
     CPReservation,
     CPFirmware,
     CPFirmwareDeployment,
+    Simulator,
     annotate_transaction_energy_bounds,
 )
 from .evcs import (
     _start_simulator,
     _stop_simulator,
     get_simulator_state,
-    _simulator_status_json,
 )
 from .status_display import STATUS_BADGE_MAP, ERROR_OK_VALUES
 
@@ -1195,6 +1195,8 @@ def dashboard(request):
         return redirect_to_login(
             request.get_full_path(), login_url=reverse("pages:login")
         )
+    if not getattr(request, "live_update_interval", None):
+        setattr(request, "live_update_interval", 5)
     is_watchtower = role_name in {"Watchtower", "Constellation"}
     latest_tx_subquery = (
         Transaction.objects.filter(charger=OuterRef("pk"))
@@ -1380,58 +1382,128 @@ def dashboard(request):
 
 @login_required(login_url="pages:login")
 @landing("Charge Point Simulator")
-@live_update()
 def cp_simulator(request):
     """Public landing page to control the OCPP charge point simulator."""
+    simulator_slot = 1
     host_header = request.get_host()
     default_host, host_port = split_domain_port(host_header)
     if not default_host:
         default_host = "127.0.0.1"
     default_ws_port = request.get_port() or host_port or "8000"
-    default_cp_paths = ["CP1", "CP2"]
-    default_serial_numbers = default_cp_paths
-    default_connector_id = 1
-    default_rfid = "FFFFFFFF"
-    default_vins = ["WP0ZZZ00000000000", "WAUZZZ00000000000"]
 
+    default_simulator = (
+        Simulator.objects.filter(default=True, is_deleted=False).order_by("pk").first()
+    )
+    default_params = {
+        "host": default_host,
+        "ws_port": int(default_ws_port) if default_ws_port else None,
+        "cp_path": "CP2",
+        "serial_number": "CP2",
+        "connector_id": 1,
+        "rfid": "FFFFFFFF",
+        "vin": "WP0ZZZ00000000000",
+        "duration": 600,
+        "interval": 5.0,
+        "pre_charge_delay": 0.0,
+        "kw_min": 30.0,
+        "kw_max": 60.0,
+        "repeat": False,
+        "username": "",
+        "password": "",
+    }
+    if default_simulator:
+        default_params.update(
+            {
+                "host": default_simulator.host or default_host,
+                "ws_port": default_simulator.ws_port
+                if default_simulator.ws_port is not None
+                else default_params["ws_port"],
+                "cp_path": default_simulator.cp_path or default_params["cp_path"],
+                "serial_number": default_simulator.serial_number
+                or default_simulator.cp_path
+                or default_params["serial_number"],
+                "connector_id": default_simulator.connector_id or 1,
+                "rfid": default_simulator.rfid or default_params["rfid"],
+                "vin": default_simulator.vin or default_params["vin"],
+                "duration": default_simulator.duration or default_params["duration"],
+                "interval": default_simulator.interval or default_params["interval"],
+                "pre_charge_delay": default_simulator.pre_charge_delay
+                if default_simulator.pre_charge_delay is not None
+                else default_params["pre_charge_delay"],
+                "kw_max": default_simulator.kw_max or default_params["kw_max"],
+                "repeat": default_simulator.repeat,
+                "username": default_simulator.username or "",
+                "password": default_simulator.password or "",
+            }
+        )
+
+    def _cast_value(value, cast, fallback):
+        try:
+            return cast(value)
+        except (TypeError, ValueError):
+            return fallback
+
+    def _port_value(raw_value):
+        if raw_value is None:
+            return default_params["ws_port"]
+        if str(raw_value).strip():
+            return _cast_value(raw_value, int, default_params["ws_port"])
+        return None
+
+    is_htmx = request.headers.get("HX-Request") == "true"
     message = ""
     dashboard_link: str | None = None
     if request.method == "POST":
-        cp_idx = int(request.POST.get("cp") or 1)
         action = request.POST.get("action")
+        repeat_value = request.POST.get("repeat")
+        sim_params = {
+            "host": request.POST.get("host") or default_params["host"],
+            "ws_port": _port_value(request.POST.get("ws_port")),
+            "cp_path": request.POST.get("cp_path") or default_params["cp_path"],
+            "serial_number": request.POST.get("serial_number")
+            or default_params["serial_number"],
+            "connector_id": _cast_value(
+                request.POST.get("connector_id"), int, default_params["connector_id"]
+            ),
+            "rfid": request.POST.get("rfid") or default_params["rfid"],
+            "vin": request.POST.get("vin") or default_params["vin"],
+            "duration": _cast_value(
+                request.POST.get("duration"), int, default_params["duration"]
+            ),
+            "interval": _cast_value(
+                request.POST.get("interval"), float, default_params["interval"]
+            ),
+            "kw_min": _cast_value(
+                request.POST.get("kw_min"), float, default_params["kw_min"]
+            ),
+            "kw_max": _cast_value(
+                request.POST.get("kw_max"), float, default_params["kw_max"]
+            ),
+            "pre_charge_delay": _cast_value(
+                request.POST.get("pre_charge_delay"),
+                float,
+                default_params["pre_charge_delay"],
+            ),
+            "repeat": default_params["repeat"],
+            "daemon": True,
+            "username": request.POST.get("username")
+            or default_params["username"]
+            or None,
+            "password": request.POST.get("password")
+            or default_params["password"]
+            or None,
+        }
+        if repeat_value is not None:
+            sim_params["repeat"] = repeat_value == "True"
+
         if action == "start":
-            ws_port_value = request.POST.get("ws_port")
-            if ws_port_value is None:
-                ws_port = int(default_ws_port) if default_ws_port else None
-            elif ws_port_value.strip():
-                ws_port = int(ws_port_value)
-            else:
-                ws_port = None
-            sim_params = dict(
-                host=request.POST.get("host") or default_host,
-                ws_port=ws_port,
-                cp_path=request.POST.get("cp_path") or default_cp_paths[cp_idx - 1],
-                serial_number=request.POST.get("serial_number")
-                or default_serial_numbers[cp_idx - 1],
-                connector_id=int(
-                    request.POST.get("connector_id") or default_connector_id
-                ),
-                rfid=request.POST.get("rfid") or default_rfid,
-                vin=request.POST.get("vin") or default_vins[cp_idx - 1],
-                duration=int(request.POST.get("duration") or 600),
-                interval=float(request.POST.get("interval") or 5),
-                kw_min=float(request.POST.get("kw_min") or 30),
-                kw_max=float(request.POST.get("kw_max") or 60),
-                pre_charge_delay=float(request.POST.get("pre_charge_delay") or 0),
-                repeat=request.POST.get("repeat") or False,
-                daemon=True,
-                username=request.POST.get("username") or None,
-                password=request.POST.get("password") or None,
-            )
             try:
-                started, status, log_file = _start_simulator(sim_params, cp=cp_idx)
+                started, status, log_file = _start_simulator(
+                    sim_params, cp=simulator_slot
+                )
+                prefix = default_simulator.name if default_simulator else "CP Simulator"
                 if started:
-                    message = f"CP{cp_idx} started: {status}. Logs: {log_file}"
+                    message = f"{prefix} started: {status}. Logs: {log_file}"
                     try:
                         dashboard_link = reverse(
                             "charger-status", args=[sim_params["cp_path"]]
@@ -1439,44 +1511,39 @@ def cp_simulator(request):
                     except NoReverseMatch:  # pragma: no cover - defensive
                         dashboard_link = None
                 else:
-                    message = f"CP{cp_idx} {status}. Logs: {log_file}"
+                    message = f"{prefix} {status}. Logs: {log_file}"
             except Exception as exc:  # pragma: no cover - unexpected
-                message = f"Failed to start CP{cp_idx}: {exc}"
+                message = f"Failed to start simulator: {exc}"
         elif action == "stop":
             try:
-                _stop_simulator(cp=cp_idx)
-                message = f"CP{cp_idx} stop requested."
+                _stop_simulator(cp=simulator_slot)
+                message = "Simulator stop requested."
             except Exception as exc:  # pragma: no cover - unexpected
-                message = f"Failed to stop CP{cp_idx}: {exc}"
+                message = f"Failed to stop simulator: {exc}"
         else:
             message = "Unknown action."
 
-    states_dict = get_simulator_state()
-    state_list = [states_dict[1], states_dict[2]]
-    params_jsons = [
-        json.dumps(state_list[0].get("params", {}), indent=2),
-        json.dumps(state_list[1].get("params", {}), indent=2),
-    ]
-    state_jsons = [
-        _simulator_status_json(1),
-        _simulator_status_json(2),
-    ]
+    refresh_state = is_htmx or request.method == "POST"
+    state = get_simulator_state(cp=simulator_slot, refresh_file=refresh_state)
+    state_params = state.get("params") or {}
+
+    form_params = {key: state_params.get(key, default_params[key]) for key in default_params}
+    form_params["password"] = ""
+
+    if not default_simulator:
+        message = message or "No default CP Simulator is configured; using local defaults."
 
     context = {
         "message": message,
         "dashboard_link": dashboard_link,
-        "states": state_list,
-        "default_host": default_host,
-        "default_ws_port": default_ws_port,
-        "default_cp_paths": default_cp_paths,
-        "default_serial_numbers": default_serial_numbers,
-        "default_connector_id": default_connector_id,
-        "default_rfid": default_rfid,
-        "default_vins": default_vins,
-        "params_jsons": params_jsons,
-        "state_jsons": state_jsons,
+        "state": state,
+        "form_params": form_params,
+        "simulator_slot": simulator_slot,
+        "default_simulator": default_simulator,
     }
-    return render(request, "ocpp/cp_simulator.html", context)
+
+    template = "ocpp/includes/cp_simulator_panel.html" if is_htmx else "ocpp/cp_simulator.html"
+    return render(request, template, context)
 
 
 def charger_page(request, cid, connector=None):

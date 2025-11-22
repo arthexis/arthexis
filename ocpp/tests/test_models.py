@@ -820,6 +820,12 @@ def test_simulator_allows_single_default(simulator: Simulator):
 
     another = Simulator.objects.create(name="Simulator 2", cp_path="SIM-2")
     another.default = True
+    another.full_clean()
+    another.save(update_fields=["default"])
 
-    with pytest.raises(ValidationError):
-        another.full_clean()
+    simulator.refresh_from_db()
+    another.refresh_from_db()
+
+    assert another.default is True
+    assert simulator.default is False
+    assert Simulator.objects.filter(default=True, is_deleted=False).count() == 1

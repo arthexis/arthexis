@@ -1871,10 +1871,18 @@ class Simulator(Entity):
 
     def clean(self):
         super().clean()
-        if self.default and type(self).objects.filter(
-            default=True, is_deleted=False
-        ).exclude(pk=self.pk).exists():
-            raise ValidationError({"default": _("Only one simulator can be the default.")})
+
+        # ``save`` enforces that at most one simulator remains marked as the
+        # default. Validation is kept lightweight here to allow the admin to
+        # promote a new default without having to manually demote the
+        # previous one first.
+
+    def save(self, *args, **kwargs):
+        if self.default and not self.is_deleted:
+            type(self).all_objects.filter(default=True, is_deleted=False).exclude(
+                pk=self.pk
+            ).update(default=False)
+        super().save(*args, **kwargs)
 
     class Meta:
         verbose_name = _("CP Simulator")

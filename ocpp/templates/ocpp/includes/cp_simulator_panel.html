@@ -1,0 +1,20 @@
+<div id="cp-simulator-panel"
+     hx-get="{% url 'cp-simulator' %}"
+     hx-trigger="load, every 5s"
+     hx-swap="outerHTML">
+  {% if message %}
+  <div class="sim-msg mb-3">
+    <div>{{ message }}</div>
+    {% if dashboard_link %}
+    <div>If CSMS Dashboard is running on the target, view it here: <a href="{{ dashboard_link }}">{{ dashboard_link }}</a></div>
+    {% endif %}
+  </div>
+  {% endif %}
+  {% if default_simulator %}
+  <p class="text-muted mb-2">Default simulator: {{ default_simulator.name }} ({{ default_simulator.cp_path }})</p>
+  {% else %}
+  <p class="text-muted mb-2">Using local defaults. Configure a default CP Simulator in the admin to customise this view.</p>
+  {% endif %}
+
+  {% include "ocpp/cp_simulator_block.html" with cp=state idx=simulator_slot form_params=form_params %}
+</div>

@@ -7,30 +7,13 @@
 <link rel="stylesheet" href="{% static 'ocpp/evcs/cp_simulator.css' %}">
 {% endblock %}
 
+{% block extra_scripts %}
+<script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
+{% endblock %}
+
 {% block content %}
 <h1>OCPP Charge Point Simulator</h1>
-{% if message %}
-<div class="sim-msg">
-  <div>{{ message }}</div>
-  {% if dashboard_link %}
-  <div>If CSMS Dashboard is running on the target, view it here: <a href="{{ dashboard_link }}">{{ dashboard_link }}</a></div>
-  {% endif %}
-</div>
-{% endif %}
-<ul class="nav nav-tabs mb-3" id="cpSimTabs" role="tablist">
-  <li class="nav-item" role="presentation">
-    <button class="nav-link active" id="cp1-tab" data-bs-toggle="tab" data-bs-target="#cp1" type="button" role="tab" aria-controls="cp1" aria-selected="true">Primary CP</button>
-  </li>
-  <li class="nav-item" role="presentation">
-    <button class="nav-link" id="cp2-tab" data-bs-toggle="tab" data-bs-target="#cp2" type="button" role="tab" aria-controls="cp2" aria-selected="false">Secondary CP</button>
-  </li>
-</ul>
-<div class="tab-content" id="cpSimContent">
-  <div class="tab-pane fade show active" id="cp1" role="tabpanel" aria-labelledby="cp1-tab">
-      {% include "ocpp/cp_simulator_block.html" with cp=states.0 idx=1 params_json=params_jsons.0 state_json=state_jsons.0 default_cp_path=default_cp_paths.0 default_vin=default_vins.0 default_serial_number=default_serial_numbers.0 default_connector_id=default_connector_id next_tab='cp2' %}
-  </div>
-  <div class="tab-pane fade" id="cp2" role="tabpanel" aria-labelledby="cp2-tab">
-      {% include "ocpp/cp_simulator_block.html" with cp=states.1 idx=2 params_json=params_jsons.1 state_json=state_jsons.1 default_cp_path=default_cp_paths.1 default_vin=default_vins.1 default_serial_number=default_serial_numbers.1 default_connector_id=default_connector_id prev_tab='cp1' %}
-  </div>
+<div class="mt-3">
+  {% include "ocpp/includes/cp_simulator_panel.html" %}
 </div>
 {% endblock %}
