@@ -9,6 +9,28 @@
       width: 100%;
     }
 
+    .filters-fieldset .filters-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 0.5rem 1rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .filters-fieldset .filters-grid__label {
+      font-weight: 600;
+      color: var(--body-fg);
+      margin-bottom: 0;
+    }
+
+    .filters-fieldset .filters-grid__field .related-widget-wrapper,
+    .filters-fieldset .filters-grid__field select {
+      width: 100%;
+    }
+
+    .filters-fieldset .filters-grid__field .help {
+      margin-top: 0.25rem;
+    }
+
     .send-net-message-fields .module .form-row {
       align-items: center;
     }
@@ -43,7 +65,66 @@
     {{ adminform.form.non_field_errors }}
     <div class="send-net-message-fields">
       {% for fieldset in adminform %}
-        {% include "admin/includes/fieldset.html" with heading_level=2 prefix="fieldset" id_prefix=0 id_suffix=forloop.counter0 %}
+        {% if 'filter_node' in fieldset.fields %}
+          <fieldset class="module aligned filters-fieldset {{ fieldset.classes }}">
+            <h2>{{ fieldset.name }}</h2>
+            {% if fieldset.description %}
+              <div class="description">{{ fieldset.description|safe }}</div>
+            {% endif %}
+            <div class="filters-grid">
+              <div class="filters-grid__label">{{ adminform.form.filter_node.label_tag }}</div>
+              <div class="filters-grid__label">{{ adminform.form.filter_node_feature.label_tag }}</div>
+              <div class="filters-grid__label">{{ adminform.form.filter_node_role.label_tag }}</div>
+              <div class="filters-grid__label">{{ adminform.form.filter_current_relation.label_tag }}</div>
+
+              <div class="filters-grid__field">
+                {{ adminform.form.filter_node.errors }}
+                {{ adminform.form.filter_node }}
+                {% if adminform.form.filter_node.help_text %}
+                  <div class="help">{{ adminform.form.filter_node.help_text|safe }}</div>
+                {% endif %}
+              </div>
+              <div class="filters-grid__field">
+                {{ adminform.form.filter_node_feature.errors }}
+                {{ adminform.form.filter_node_feature }}
+                {% if adminform.form.filter_node_feature.help_text %}
+                  <div class="help">{{ adminform.form.filter_node_feature.help_text|safe }}</div>
+                {% endif %}
+              </div>
+              <div class="filters-grid__field">
+                {{ adminform.form.filter_node_role.errors }}
+                {{ adminform.form.filter_node_role }}
+                {% if adminform.form.filter_node_role.help_text %}
+                  <div class="help">{{ adminform.form.filter_node_role.help_text|safe }}</div>
+                {% endif %}
+              </div>
+              <div class="filters-grid__field">
+                {{ adminform.form.filter_current_relation.errors }}
+                {{ adminform.form.filter_current_relation }}
+                {% if adminform.form.filter_current_relation.help_text %}
+                  <div class="help">{{ adminform.form.filter_current_relation.help_text|safe }}</div>
+                {% endif %}
+              </div>
+            </div>
+
+            {% for field in adminform.form %}
+              {% if field.name == 'filter_installed_version' or field.name == 'filter_installed_revision' %}
+                <div class="form-row {{ field.name }}{% if field.is_checkbox %} checkbox-row{% endif %}">
+                  <div class="field-box{% if field.errors %} errors{% endif %}">
+                    {{ field.errors }}
+                    {{ field.label_tag }}
+                    {{ field }}
+                    {% if field.help_text %}
+                      <div class="help">{{ field.help_text|safe }}</div>
+                    {% endif %}
+                  </div>
+                </div>
+              {% endif %}
+            {% endfor %}
+          </fieldset>
+        {% else %}
+          {% include "admin/includes/fieldset.html" with heading_level=2 prefix="fieldset" id_prefix=0 id_suffix=forloop.counter0 %}
+        {% endif %}
       {% endfor %}
     </div>
     <div class="submit-row">
