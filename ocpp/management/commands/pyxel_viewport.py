@@ -79,16 +79,35 @@ def _connector_state(charger: Charger) -> tuple[str, str, bool]:
     return str(label), color, has_session
 
 
+_OUTPUT_DIR_MARKER = ".pyxel_viewport"
+
+
 def _normalize_output_dir(value: str | None) -> tuple[Path, bool]:
     """Return the output directory and whether the directory is temporary."""
 
+    def _write_marker(path: Path) -> None:
+        marker_path = path / _OUTPUT_DIR_MARKER
+        marker_path.write_text("Pyxel viewport output directory; safe to clear.")
+
     if value:
         output_dir = Path(value).expanduser().resolve()
-        if output_dir.exists() and any(output_dir.iterdir()):
-            raise CommandError(
-                "--output-dir must be empty so the Pyxel viewport can be staged safely."
-            )
+        if output_dir.exists():
+            if not output_dir.is_dir():
+                raise CommandError("--output-dir must be a directory.")
+            marker_path = output_dir / _OUTPUT_DIR_MARKER
+            has_marker = marker_path.exists()
+            children = [child for child in output_dir.iterdir() if child.name != _OUTPUT_DIR_MARKER]
+            if children and not has_marker:
+                raise CommandError(
+                    "--output-dir must be empty or previously initialized by pyxel_viewport."
+                )
+            for child in children:
+                if child.is_dir():
+                    shutil.rmtree(child, ignore_errors=True)
+                else:
+                    child.unlink(missing_ok=True)
         output_dir.mkdir(parents=True, exist_ok=True)
+        _write_marker(output_dir)
         return output_dir, False
 
     temp_dir = Path(tempfile.mkdtemp(prefix="pyxel_viewport_"))
