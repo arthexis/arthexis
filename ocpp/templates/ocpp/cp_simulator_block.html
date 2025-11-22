@@ -125,8 +125,6 @@
             {% if cp.last_error %}
             <div class="error"><b>Error:</b><pre>{{ cp.last_error }}</pre></div>
             {% endif %}
-            <details class="simulator-panel"><summary>Show CP Simulator Params</summary><pre>{{ params_json|safe }}</pre></details>
-            <details class="simulator-panel"><summary>Show CP Simulator State JSON</summary><pre>{{ state_json|safe }}</pre></details>
           </div>
         </div>
       </div>

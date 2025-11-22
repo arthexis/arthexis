@@ -58,7 +58,6 @@ from .evcs import (
     _start_simulator,
     _stop_simulator,
     get_simulator_state,
-    _simulator_status_json,
 )
 from .status_display import STATUS_BADGE_MAP, ERROR_OK_VALUES
 
@@ -1527,8 +1526,6 @@ def cp_simulator(request):
     refresh_state = is_htmx or request.method == "POST"
     state = get_simulator_state(cp=simulator_slot, refresh_file=refresh_state)
     state_params = state.get("params") or {}
-    params_json = json.dumps(state_params or default_params, indent=2)
-    state_json = _simulator_status_json(simulator_slot)
 
     form_params = {key: state_params.get(key, default_params[key]) for key in default_params}
     form_params["password"] = ""
@@ -1541,8 +1538,6 @@ def cp_simulator(request):
         "dashboard_link": dashboard_link,
         "state": state,
         "form_params": form_params,
-        "params_json": params_json,
-        "state_json": state_json,
         "simulator_slot": simulator_slot,
         "default_simulator": default_simulator,
     }
