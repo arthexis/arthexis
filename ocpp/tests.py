@@ -4247,7 +4247,7 @@ class ChargerAdminTests(TestCase):
             store.clear_log(pending_key, log_type="charger")
 
     def test_setup_cp_diagnostics_reuses_bucket_and_requests_upload(self):
-        existing_expiration = datetime(2024, 1, 10, tzinfo=dt_timezone.utc)
+        existing_expiration = datetime(2099, 1, 10, tzinfo=dt_timezone.utc)
         bucket = MediaBucket.objects.create(
             name="Existing diagnostics",
             allowed_patterns="*.log",
