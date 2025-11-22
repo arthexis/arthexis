@@ -7,6 +7,13 @@ PIP_INSTALL_HELPER="$SCRIPT_DIR/scripts/helpers/pip_install.py"
 . "$SCRIPT_DIR/scripts/helpers/logging.sh"
 # shellcheck source=scripts/helpers/systemd_locks.sh
 . "$SCRIPT_DIR/scripts/helpers/systemd_locks.sh"
+
+if [ -z "${ARTHEXIS_RUN_AS_USER:-}" ]; then
+  TARGET_USER="$(arthexis_detect_service_user "$SCRIPT_DIR")"
+  if [ -n "$TARGET_USER" ] && [ "$TARGET_USER" != "root" ] && [ "$(id -un)" != "$TARGET_USER" ] && command -v sudo >/dev/null 2>&1 && sudo -n -u "$TARGET_USER" true >/dev/null 2>&1; then
+    exec sudo -u "$TARGET_USER" ARTHEXIS_RUN_AS_USER="$TARGET_USER" "$SCRIPT_DIR/$(basename "$0")" "$@"
+  fi
+fi
 if [ -z "$SCRIPT_DIR" ] || [ "$SCRIPT_DIR" = "/" ]; then
   echo "Refusing to run from root directory." >&2
   exit 1

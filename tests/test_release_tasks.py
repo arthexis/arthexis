@@ -262,6 +262,52 @@ def test_upgrade_detach_falls_back_when_systemd_run_fails(monkeypatch, tmp_path)
 
 
 @pytest.mark.role("Watchtower")
+def test_upgrade_detach_uses_path_owner(monkeypatch, tmp_path):
+    base = _setup_tmp(monkeypatch, tmp_path)
+    (base / "VERSION").write_text("1.0")
+
+    locks = base / "locks"
+    locks.mkdir()
+    (locks / "service.lck").write_text("myapp")
+
+    watcher = tmp_path / "watch-upgrade"
+    watcher.write_text("#!/bin/true")
+    watcher.chmod(0o755)
+    monkeypatch.setattr(tasks, "WATCH_UPGRADE_BINARY", watcher)
+
+    monkeypatch.setenv("INVOCATION_ID", "auto-upgrade-test")
+
+    def fake_which(name):
+        if name == "systemd-run":
+            return "/bin/systemd-run"
+        if name == "systemctl":
+            return "/bin/systemctl"
+        if name == "sudo":
+            return None
+        return None
+
+    monkeypatch.setattr(tasks.shutil, "which", fake_which)
+    monkeypatch.setattr(tasks.subprocess, "check_output", lambda *a, **k: "2.0")
+
+    run_recorder = CommandRecorder()
+    monkeypatch.setattr(tasks.subprocess, "run", run_recorder)
+
+    tasks.check_github_updates()
+
+    systemd_run_call = None
+    for args, _ in run_recorder.calls:
+        if args and os.path.basename(args[0][0]) == "systemd-run":
+            systemd_run_call = args[0]
+            break
+
+    assert systemd_run_call is not None
+    owner = base.owner()
+    assert "--uid" in systemd_run_call
+    assert owner in systemd_run_call
+    assert f"HOME={Path.home()}" in systemd_run_call
+
+
+@pytest.mark.role("Watchtower")
 def test_stable_mode_skips_patch_upgrade(monkeypatch, tmp_path):
     base = _setup_tmp(monkeypatch, tmp_path)
     (base / "VERSION").write_text("1.2.3")

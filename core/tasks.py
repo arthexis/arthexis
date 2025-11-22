@@ -9,6 +9,7 @@ import socket
 import subprocess
 import time
 import uuid
+import pwd
 from pathlib import Path
 import urllib.error
 import urllib.request
@@ -142,6 +143,18 @@ def _append_auto_upgrade_log(base_dir: Path, message: str) -> None:
         logger.warning("Failed to append auto-upgrade log entry: %s", message)
 
 
+def _detect_path_owner(base_dir: Path) -> tuple[str | None, str | None]:
+    """Return the owning username and home directory for ``base_dir``."""
+
+    try:
+        stat_info = base_dir.stat()
+        user = pwd.getpwuid(stat_info.st_uid)
+    except (OSError, KeyError):
+        return None, None
+
+    return user.pw_name, user.pw_dir
+
+
 def _run_upgrade_command(
     base_dir: Path, args: list[str], *, require_detached: bool = False
 ) -> tuple[str | None, bool]:
@@ -190,6 +203,7 @@ def _run_upgrade_command(
     systemd_run_command = _systemd_run_command()
     running_in_service = bool(os.environ.get("INVOCATION_ID"))
     service_name = _read_service_name()
+    path_owner, path_home = _detect_path_owner(base_dir)
 
     missing_prereqs: list[str] = []
     if require_detached and not running_in_service:
@@ -225,12 +239,22 @@ def _run_upgrade_command(
             unit_name,
             "--description",
             f"Watch {service_name} upgrade",
+        ]
+
+        if path_owner:
+            detached_args.extend(["--uid", path_owner])
+            if path_home:
+                detached_args.extend(["--setenv", f"HOME={path_home}"])
+
+        detached_args.extend(
+            [
             "--setenv",
             f"ARTHEXIS_BASE_DIR={base_dir}",
             str(WATCH_UPGRADE_BINARY),
             service_name,
             *args,
-        ]
+            ]
+        )
 
         def _format_detached_failure(
             result: Exception | subprocess.CompletedProcess[str],
@@ -258,8 +282,8 @@ def _run_upgrade_command(
                 base_dir,
                 (
                     "Delegating auto-upgrade to transient unit "
-                    f"{unit_name}; inspect with journalctl -u {unit_name}"
-                ),
+            f"{unit_name}; inspect with journalctl -u {unit_name}"
+        ),
             )
             result = subprocess.run(
                 detached_args,
