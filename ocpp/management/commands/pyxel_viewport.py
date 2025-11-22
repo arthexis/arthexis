@@ -125,12 +125,15 @@ def _copy_project_assets(target_dir: Path) -> None:
     shutil.copytree(project_root, target_dir, dirs_exist_ok=True)
 
 
-def _connector_snapshot(connectors: Iterable[Charger], *, instance_running: bool) -> dict:
+def _connector_snapshot(
+    connectors: Iterable[Charger], *, instance_running: bool, waiting_for_instance: bool
+) -> dict:
     """Return a JSON-serializable payload describing connector state."""
 
     payload = {
         "generated_at": timezone.now().isoformat(),
         "instance_running": bool(instance_running),
+        "waiting_for_instance": bool(waiting_for_instance),
         "connectors": [],
     }
     for connector in connectors:
@@ -261,11 +264,18 @@ def _refresh_snapshot_periodically(
                 .select_related("location")
             )
             instance_running = bool(instance_state.get("running"))
+            waiting_for_instance = bool(instance_state.get("waiting"))
             port = instance_state.get("port")
             if not instance_running and isinstance(port, int):
                 instance_running = _probe_port(port)
                 instance_state["running"] = instance_running
-            snapshot = _connector_snapshot(connectors, instance_running=instance_running)
+                waiting_for_instance = waiting_for_instance and not instance_running
+                instance_state["waiting"] = waiting_for_instance
+            snapshot = _connector_snapshot(
+                connectors,
+                instance_running=instance_running,
+                waiting_for_instance=waiting_for_instance,
+            )
             _write_snapshot(runtime_dir, snapshot)
         except Exception as exc:  # pragma: no cover - defensive logging
             stdout.write(f"Snapshot refresh failed: {exc}")
@@ -383,7 +393,11 @@ class Command(BaseCommand):
 
         base_dir = Path(settings.BASE_DIR)
         instance_running, instance_port = _detect_instance(base_dir)
-        instance_state: dict[str, object] = {"running": instance_running, "port": instance_port}
+        instance_state: dict[str, object] = {
+            "running": instance_running,
+            "port": instance_port,
+            "waiting": False,
+        }
         instance_process: subprocess.Popen[bytes] | None = None
         instance_started = False
         instance_log_handle = None
@@ -409,13 +423,18 @@ class Command(BaseCommand):
                 raise
             instance_started = True
             instance_state["running"] = _probe_port(instance_port)
+            instance_state["waiting"] = not instance_state["running"]
 
         connectors = (
             Charger.objects.exclude(connector_id__isnull=True)
             .order_by("charger_id", "connector_id")
             .select_related("location")
         )
-        snapshot = _connector_snapshot(connectors, instance_running=instance_state["running"])
+        snapshot = _connector_snapshot(
+            connectors,
+            instance_running=instance_state["running"],
+            waiting_for_instance=instance_state.get("waiting", False),
+        )
         if not snapshot["connectors"]:
             self.stdout.write(
                 self.style.WARNING(

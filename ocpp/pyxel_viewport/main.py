@@ -68,6 +68,7 @@ class ConnectorViewport:
     def __init__(self) -> None:
         self.connectors: list[dict] = []
         self.instance_running = False
+        self.waiting_for_instance = False
         self._has_loaded_snapshot = False
         self._last_mtime: float | None = None
         self._last_reload_frame = 0
@@ -102,11 +103,13 @@ class ConnectorViewport:
             self.connectors = []
             self._has_loaded_snapshot = False
             self.instance_running = False
+            self.waiting_for_instance = False
             return
 
         self._last_mtime = stat.st_mtime
         self._has_loaded_snapshot = True
         self.instance_running = bool(payload.get("instance_running"))
+        self.waiting_for_instance = bool(payload.get("waiting_for_instance"))
         self.connectors = payload.get("connectors", []) or []
 
     def update(self) -> None:
@@ -121,6 +124,12 @@ class ConnectorViewport:
 
     def draw(self) -> None:
         pyxel.cls(1)
+
+        if self.waiting_for_instance and not self.instance_running:
+            self._draw_loading()
+            self._draw_menu()
+            self._draw_feedback()
+            return
 
         if not self._has_loaded_snapshot or (not self.instance_running and not self.connectors):
             self._draw_loading()
@@ -213,7 +222,7 @@ class ConnectorViewport:
         x = (pyxel.width - bar_width) // 2
         y = (pyxel.height // 2) - (bar_height // 2)
 
-        pyxel.text(10, 10, "Starting instance...", 7)
+        pyxel.text(10, 10, "Loading...", 7)
         pyxel.rect(x, y, bar_width, bar_height, 0)
         pyxel.rectb(x, y, bar_width, bar_height, 7)
         fill = int(bar_width * self._loading_progress)
