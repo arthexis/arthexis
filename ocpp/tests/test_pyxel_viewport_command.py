@@ -53,13 +53,29 @@ class PyxelViewportCommandTests(TestCase):
         self.assertIn("instance_running", payload)
         self.assertIs(payload["instance_running"], False)
 
-    def test_requires_empty_output_directory(self):
+    def test_clears_existing_output_directory(self):
+        connector = Charger.objects.create(
+            charger_id="LOV-02",
+            connector_id=2,
+            last_status="Available",
+        )
+        Transaction.objects.create(
+            charger=connector,
+            connector_id=2,
+            start_time=timezone.now(),
+            stop_time=timezone.now(),
+        )
+
         output_dir = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, output_dir, ignore_errors=True)
-        (output_dir / "occupied.txt").write_text("busy")
+        nested_dir = output_dir / "nested"
+        nested_dir.mkdir()
+        (nested_dir / "occupied.txt").write_text("busy")
 
-        with self.assertRaises(CommandError):
-            call_command("pyxel_viewport", "--output-dir", str(output_dir), "--skip-launch")
+        call_command("pyxel_viewport", "--output-dir", str(output_dir), "--skip-launch")
+
+        self.assertFalse((nested_dir / "occupied.txt").exists())
+        self.assertTrue((output_dir / "data" / "connectors.json").exists())
 
     def test_errors_when_pyxel_runner_missing(self):
         connector = Charger.objects.create(

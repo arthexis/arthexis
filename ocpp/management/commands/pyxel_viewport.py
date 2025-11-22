@@ -84,10 +84,14 @@ def _normalize_output_dir(value: str | None) -> tuple[Path, bool]:
 
     if value:
         output_dir = Path(value).expanduser().resolve()
-        if output_dir.exists() and any(output_dir.iterdir()):
-            raise CommandError(
-                "--output-dir must be empty so the Pyxel viewport can be staged safely."
-            )
+        if output_dir.exists():
+            if not output_dir.is_dir():
+                raise CommandError("--output-dir must be a directory.")
+            for child in output_dir.iterdir():
+                if child.is_dir():
+                    shutil.rmtree(child, ignore_errors=True)
+                else:
+                    child.unlink(missing_ok=True)
         output_dir.mkdir(parents=True, exist_ok=True)
         return output_dir, False
 
