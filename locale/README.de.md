@@ -1,6 +1,6 @@
 # Arthexis-Konstellation
 
-[![CI](https://github.com/arthexis/arthexis/actions/workflows/ci.yml/badge.svg)](https://github.com/arthexis/arthexis/actions/workflows/ci.yml) [![Testabdeckung](https://raw.githubusercontent.com/arthexis/arthexis/main/coverage.svg)](https://github.com/arthexis/arthexis/actions/workflows/coverage.yml) [![OCPP 1.6-Abdeckung](https://raw.githubusercontent.com/arthexis/arthexis/main/ocpp_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md) [![OCPP 2.1-Abdeckung](https://raw.githubusercontent.com/arthexis/arthexis/main/ocpp21_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md) [![Lizenz: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+[![CI](https://github.com/arthexis/arthexis/actions/workflows/ci.yml/badge.svg)](https://github.com/arthexis/arthexis/actions/workflows/ci.yml) [![Testabdeckung](https://raw.githubusercontent.com/arthexis/arthexis/main/coverage.svg)](https://github.com/arthexis/arthexis/actions/workflows/coverage.yml) [![OCPP 1.6-Abdeckung](https://raw.githubusercontent.com/arthexis/arthexis/main/ocpp_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md) [![OCPP 2.0.1-Abdeckung](https://raw.githubusercontent.com/arthexis/arthexis/main/ocpp201_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md) [![OCPP 2.1-Abdeckung](https://raw.githubusercontent.com/arthexis/arthexis/main/ocpp21_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md) [![Lizenz: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
 
 ## Zweck
@@ -17,43 +17,43 @@ Lies den aktuellen [Developer-Artikel](https://arthexis.com/articles/protoline-i
 
   **Ladepunkt → CSMS**
 
-  | Aktion | Version 1.6 | Version 2.1 | Was wir erledigen |
-  | --- | --- | --- | --- |
-  | `Authorize` | ✅ | ✅ | Validieren RFID- oder Token-Autorisierungsanfragen vor Sitzungsstart. |
-  | `BootNotification` | ✅ | ✅ | Registrieren den Ladepunkt und aktualisieren Identität, Firmware und Status. |
-  | `DataTransfer` | ✅ | ✅ | Akzeptieren herstellerspezifische Nutzdaten und protokollieren die Ergebnisse. |
-  | `DiagnosticsStatusNotification` | ✅ | — | Verfolgen den Fortschritt von aus dem Backoffice gestarteten Diagnoseuploads. |
-  | `FirmwareStatusNotification` | ✅ | ✅ | Verfolgen Firmware-Update-Lebenszyklusmeldungen der Ladepunkte. |
-  | `Heartbeat` | ✅ | ✅ | Halten die Websocket-Sitzung aktiv und aktualisieren den Zeitstempel der letzten Verbindung. |
-  | `LogStatusNotification` | — | ✅ | Verfolgen den Fortschritt von Log-Uploads vom Ladepunkt für die Diagnostiküberwachung. |
-  | `MeterValues` | ✅ | ✅ | Speichern periodische Energie- und Leistungswerte während aktiver Transaktionen. |
-  | `SecurityEventNotification` | — | ✅ | Erfassen Sicherheitsereignisse, die vom Ladepunkt gemeldet werden, für Prüfpfade. |
-  | `StartTransaction` | ✅ | — | Erstellen Ladevorgänge mit Startzählerstand und Identifikationsdaten. |
-  | `StatusNotification` | ✅ | ✅ | Spiegeln Verfügbarkeits- und Fehlerzustände der Anschlüsse in Echtzeit. |
-  | `StopTransaction` | ✅ | — | Schließen Ladevorgänge und erfassen Endzählerstand sowie Stopgrund. |
+  | Aktion | Version 1.6 | Version 2.0.1 | Version 2.1 | Was wir erledigen |
+  | --- | --- | --- | --- | --- |
+  | `Authorize` | ✅ | ✅ | ✅ | Validieren RFID- oder Token-Autorisierungsanfragen vor Sitzungsstart. |
+  | `BootNotification` | ✅ | ✅ | ✅ | Registrieren den Ladepunkt und aktualisieren Identität, Firmware und Status. |
+  | `DataTransfer` | ✅ | ✅ | ✅ | Akzeptieren herstellerspezifische Nutzdaten und protokollieren die Ergebnisse. |
+  | `DiagnosticsStatusNotification` | ✅ | — | — | Verfolgen den Fortschritt von aus dem Backoffice gestarteten Diagnoseuploads. |
+  | `FirmwareStatusNotification` | ✅ | ✅ | ✅ | Verfolgen Firmware-Update-Lebenszyklusmeldungen der Ladepunkte. |
+  | `Heartbeat` | ✅ | ✅ | ✅ | Halten die Websocket-Sitzung aktiv und aktualisieren den Zeitstempel der letzten Verbindung. |
+  | `LogStatusNotification` | — | ✅ | ✅ | Verfolgen den Fortschritt von Log-Uploads vom Ladepunkt für die Diagnostiküberwachung. |
+  | `MeterValues` | ✅ | ✅ | ✅ | Speichern periodische Energie- und Leistungswerte während aktiver Transaktionen. |
+  | `SecurityEventNotification` | — | ✅ | ✅ | Erfassen Sicherheitsereignisse, die vom Ladepunkt gemeldet werden, für Prüfpfade. |
+  | `StartTransaction` | ✅ | — | — | Erstellen Ladevorgänge mit Startzählerstand und Identifikationsdaten. |
+  | `StatusNotification` | ✅ | ✅ | ✅ | Spiegeln Verfügbarkeits- und Fehlerzustände der Anschlüsse in Echtzeit. |
+  | `StopTransaction` | ✅ | — | — | Schließen Ladevorgänge und erfassen Endzählerstand sowie Stopgrund. |
 
   **CSMS → Ladepunkt**
 
-  | Aktion | Version 1.6 | Version 2.1 | Was wir erledigen |
-  | --- | --- | --- | --- |
-  | `CancelReservation` | ✅ | ✅ | Stornieren ausstehender Reservierungen und geben Anschlüsse direkt aus der Leitwarte frei. |
-  | `ChangeAvailability` | ✅ | ✅ | Schalten Anschlüsse oder die gesamte Station zwischen betriebsbereit und außer Betrieb. |
-  | `ChangeConfiguration` | ✅ | — | Aktualisieren unterstützte Ladeeinstellungen und übernehmen angewendete Werte in der Leitwarte. |
-  | `ClearCache` | ✅ | ✅ | Leeren lokale Autorisierungscaches, um erneute Abgleiche über das CSMS zu erzwingen. |
-  | `DataTransfer` | ✅ | ✅ | Senden herstellerspezifische Befehle und protokollieren die Antwort des Ladepunkts. |
-  | `GetConfiguration` | ✅ | — | Fragen die aktuellen Werte der überwachten Konfigurationsschlüssel ab. |
-  | `GetDiagnostics` | ✅ | — | Fordern ein Diagnosenarchiv an, das zu einer signierten URL hochgeladen wird, um Störungen zu prüfen. |
-  | `GetLocalListVersion` | ✅ | ✅ | Rufen die aktuelle RFID-Whitelist-Version ab und synchronisieren die vom Ladepunkt gemeldeten Einträge. |
-  | `RemoteStartTransaction` | ✅ | — | Starten Ladevorgänge remote für identifizierte Kundinnen und Kunden oder Tokens. |
-  | `RemoteStopTransaction` | ✅ | — | Beenden aktive Ladevorgänge aus der Leitwarte. |
-  | `ReserveNow` | ✅ | ✅ | Reservieren Anschlüsse für kommende Sitzungen mit automatischer Zuweisung und Bestätigungsnachverfolgung. |
-  | `Reset` | ✅ | ✅ | Fordern einen Soft- oder Hard-Reset zur Fehlerbehebung an. |
-  | `SendLocalList` | ✅ | ✅ | Veröffentlichen freigegebene und genehmigte RFIDs als lokale Autorisierungsliste des Ladepunkts. |
-  | `TriggerMessage` | ✅ | ✅ | Fordern sofortige Nachrichten an (z. B. Status oder Diagnose). |
-  | `UnlockConnector` | ✅ | ✅ | Entriegeln blockierte Anschlüsse ohne Vor-Ort-Einsatz. |
-  | `UpdateFirmware` | ✅ | ✅ | Liefern Firmwarepakete an Ladepunkte mit sicheren Download-Tokens und verfolgen Installationsrückmeldungen. |
+  | Aktion | Version 1.6 | Version 2.0.1 | Version 2.1 | Was wir erledigen |
+  | --- | --- | --- | --- | --- |
+  | `CancelReservation` | ✅ | ✅ | ✅ | Stornieren ausstehender Reservierungen und geben Anschlüsse direkt aus der Leitwarte frei. |
+  | `ChangeAvailability` | ✅ | ✅ | ✅ | Schalten Anschlüsse oder die gesamte Station zwischen betriebsbereit und außer Betrieb. |
+  | `ChangeConfiguration` | ✅ | — | — | Aktualisieren unterstützte Ladeeinstellungen und übernehmen angewendete Werte in der Leitwarte. |
+  | `ClearCache` | ✅ | ✅ | ✅ | Leeren lokale Autorisierungscaches, um erneute Abgleiche über das CSMS zu erzwingen. |
+  | `DataTransfer` | ✅ | ✅ | ✅ | Senden herstellerspezifische Befehle und protokollieren die Antwort des Ladepunkts. |
+  | `GetConfiguration` | ✅ | — | — | Fragen die aktuellen Werte der überwachten Konfigurationsschlüssel ab. |
+  | `GetDiagnostics` | ✅ | — | — | Fordern ein Diagnosenarchiv an, das zu einer signierten URL hochgeladen wird, um Störungen zu prüfen. |
+  | `GetLocalListVersion` | ✅ | ✅ | ✅ | Rufen die aktuelle RFID-Whitelist-Version ab und synchronisieren die vom Ladepunkt gemeldeten Einträge. |
+  | `RemoteStartTransaction` | ✅ | — | — | Starten Ladevorgänge remote für identifizierte Kundinnen und Kunden oder Tokens. |
+  | `RemoteStopTransaction` | ✅ | — | — | Beenden aktive Ladevorgänge aus der Leitwarte. |
+  | `ReserveNow` | ✅ | ✅ | ✅ | Reservieren Anschlüsse für kommende Sitzungen mit automatischer Zuweisung und Bestätigungsnachverfolgung. |
+  | `Reset` | ✅ | ✅ | ✅ | Fordern einen Soft- oder Hard-Reset zur Fehlerbehebung an. |
+  | `SendLocalList` | ✅ | ✅ | ✅ | Veröffentlichen freigegebene und genehmigte RFIDs als lokale Autorisierungsliste des Ladepunkts. |
+  | `TriggerMessage` | ✅ | ✅ | ✅ | Fordern sofortige Nachrichten an (z. B. Status oder Diagnose). |
+  | `UnlockConnector` | ✅ | ✅ | ✅ | Entriegeln blockierte Anschlüsse ohne Vor-Ort-Einsatz. |
+  | `UpdateFirmware` | ✅ | ✅ | ✅ | Liefern Firmwarepakete an Ladepunkte mit sicheren Download-Tokens und verfolgen Installationsrückmeldungen. |
 
-  **OCPP-Roadmap.** Die geplante Arbeit für die OCPP-1.6- und 2.1-Kataloge findest du im [OCPP-Roadmap-Cookbook](docs/cookbooks/ocpp-roadmap.md).
+  **OCPP-Roadmap.** Die geplante Arbeit für die OCPP-1.6-, 2.0.1- und 2.1-Kataloge findest du im [OCPP-Roadmap-Cookbook](docs/cookbooks/ocpp-roadmap.md).
 
 - Ladepunktreservierungen mit automatischer Anschlusswahl, Verknüpfung zu Energiekonten und RFID-Tags, EVCS-Bestätigung sowie Stornierung über die Leitwarte.
 

@@ -1,6 +1,6 @@
 # Arthexis Constellation
 
-[![CI](https://github.com/arthexis/arthexis/actions/workflows/ci.yml/badge.svg)](https://github.com/arthexis/arthexis/actions/workflows/ci.yml) [![Coverage](https://raw.githubusercontent.com/arthexis/arthexis/main/coverage.svg)](https://github.com/arthexis/arthexis/actions/workflows/coverage.yml) [![OCPP 1.6 Coverage](https://raw.githubusercontent.com/arthexis/arthexis/main/ocpp_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md) [![OCPP 2.1 Coverage](https://raw.githubusercontent.com/arthexis/arthexis/main/ocpp21_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md) [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+[![CI](https://github.com/arthexis/arthexis/actions/workflows/ci.yml/badge.svg)](https://github.com/arthexis/arthexis/actions/workflows/ci.yml) [![Coverage](https://raw.githubusercontent.com/arthexis/arthexis/main/coverage.svg)](https://github.com/arthexis/arthexis/actions/workflows/coverage.yml) [![OCPP 1.6 Coverage](https://raw.githubusercontent.com/arthexis/arthexis/main/ocpp_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md) [![OCPP 2.0.1 Coverage](https://raw.githubusercontent.com/arthexis/arthexis/main/ocpp201_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md) [![OCPP 2.1 Coverage](https://raw.githubusercontent.com/arthexis/arthexis/main/ocpp21_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md) [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
 
 ## Purpose
@@ -17,43 +17,43 @@ Check out the latest [Developer Article](https://arthexis.com/articles/protoline
 
   **Charge point → CSMS**
 
-  | Action | Version 1.6 | Version 2.1 | What we do |
-  | --- | --- | --- | --- |
-  | `Authorize` | ✅ | ✅ | Validate RFID or token authorization requests before a session starts. |
-  | `BootNotification` | ✅ | ✅ | Register the charge point and update identity, firmware, and status details. |
-  | `DataTransfer` | ✅ | ✅ | Accept vendor-specific payloads and record the results. |
-  | `DiagnosticsStatusNotification` | ✅ | — | Track the progress of diagnostic uploads kicked off from the back office. |
-  | `FirmwareStatusNotification` | ✅ | ✅ | Track firmware update lifecycle events from charge points. |
-  | `Heartbeat` | ✅ | ✅ | Keep the websocket session alive and update last-seen timestamps. |
-  | `LogStatusNotification` | — | ✅ | Report log upload progress from the charge point for diagnostics oversight. |
-  | `MeterValues` | ✅ | ✅ | Persist periodic energy and power readings while a transaction is active. |
-  | `SecurityEventNotification` | — | ✅ | Record charge point security events for audit trails. |
-  | `StartTransaction` | ✅ | — | Create charging sessions with initial meter values and identification data. |
-  | `StatusNotification` | ✅ | ✅ | Reflect connector availability and fault states in real time. |
-  | `StopTransaction` | ✅ | — | Close charging sessions, capturing closing meter values and stop reasons. |
+  | Action | Version 1.6 | Version 2.0.1 | Version 2.1 | What we do |
+  | --- | --- | --- | --- | --- |
+  | `Authorize` | ✅ | ✅ | ✅ | Validate RFID or token authorization requests before a session starts. |
+  | `BootNotification` | ✅ | ✅ | ✅ | Register the charge point and update identity, firmware, and status details. |
+  | `DataTransfer` | ✅ | ✅ | ✅ | Accept vendor-specific payloads and record the results. |
+  | `DiagnosticsStatusNotification` | ✅ | — | — | Track the progress of diagnostic uploads kicked off from the back office. |
+  | `FirmwareStatusNotification` | ✅ | ✅ | ✅ | Track firmware update lifecycle events from charge points. |
+  | `Heartbeat` | ✅ | ✅ | ✅ | Keep the websocket session alive and update last-seen timestamps. |
+  | `LogStatusNotification` | — | ✅ | ✅ | Report log upload progress from the charge point for diagnostics oversight. |
+  | `MeterValues` | ✅ | ✅ | ✅ | Persist periodic energy and power readings while a transaction is active. |
+  | `SecurityEventNotification` | — | ✅ | ✅ | Record charge point security events for audit trails. |
+  | `StartTransaction` | ✅ | — | — | Create charging sessions with initial meter values and identification data. |
+  | `StatusNotification` | ✅ | ✅ | ✅ | Reflect connector availability and fault states in real time. |
+  | `StopTransaction` | ✅ | — | — | Close charging sessions, capturing closing meter values and stop reasons. |
 
   **CSMS → Charge point**
 
-  | Action | Version 1.6 | Version 2.1 | What we do |
-  | --- | --- | --- | --- |
-  | `CancelReservation` | ✅ | ✅ | Withdraw pending reservations and release connectors directly from the control center. |
-  | `ChangeAvailability` | ✅ | ✅ | Switch connectors or the whole station between operative and inoperative states. |
-  | `ChangeConfiguration` | ✅ | — | Update supported charger settings and persist applied values in the control center. |
-  | `ClearCache` | ✅ | ✅ | Flush local authorization caches to force fresh lookups from the CSMS. |
-  | `DataTransfer` | ✅ | ✅ | Send vendor-specific commands and log the charge point response. |
-  | `GetConfiguration` | ✅ | — | Poll the device for the current values of tracked configuration keys. |
-  | `GetDiagnostics` | ✅ | — | Request a diagnostics archive upload to a signed URL for troubleshooting. |
-  | `GetLocalListVersion` | ✅ | ✅ | Retrieve the current RFID whitelist version and synchronize entries reported by the charge point. |
-  | `RemoteStartTransaction` | ✅ | — | Initiate a charging session remotely for an identified customer or token. |
-  | `RemoteStopTransaction` | ✅ | — | Terminate active charging sessions from the control center. |
-  | `ReserveNow` | ✅ | ✅ | Reserve connectors for upcoming sessions with automatic connector selection and confirmation tracking. |
-  | `Reset` | ✅ | ✅ | Request a soft or hard reboot to recover from faults. |
-  | `SendLocalList` | ✅ | ✅ | Publish released and approved RFIDs as the charge point's local authorization list. |
-  | `TriggerMessage` | ✅ | ✅ | Ask the device to send an immediate update (for example status or diagnostics). |
-  | `UnlockConnector` | ✅ | ✅ | Release stuck connectors without on-site intervention. |
-  | `UpdateFirmware` | ✅ | ✅ | Deliver firmware packages to chargers with secure download tokens and track installation responses. |
+  | Action | Version 1.6 | Version 2.0.1 | Version 2.1 | What we do |
+  | --- | --- | --- | --- | --- |
+  | `CancelReservation` | ✅ | ✅ | ✅ | Withdraw pending reservations and release connectors directly from the control center. |
+  | `ChangeAvailability` | ✅ | ✅ | ✅ | Switch connectors or the whole station between operative and inoperative states. |
+  | `ChangeConfiguration` | ✅ | — | — | Update supported charger settings and persist applied values in the control center. |
+  | `ClearCache` | ✅ | ✅ | ✅ | Flush local authorization caches to force fresh lookups from the CSMS. |
+  | `DataTransfer` | ✅ | ✅ | ✅ | Send vendor-specific commands and log the charge point response. |
+  | `GetConfiguration` | ✅ | — | — | Poll the device for the current values of tracked configuration keys. |
+  | `GetDiagnostics` | ✅ | — | — | Request a diagnostics archive upload to a signed URL for troubleshooting. |
+  | `GetLocalListVersion` | ✅ | ✅ | ✅ | Retrieve the current RFID whitelist version and synchronize entries reported by the charge point. |
+  | `RemoteStartTransaction` | ✅ | — | — | Initiate a charging session remotely for an identified customer or token. |
+  | `RemoteStopTransaction` | ✅ | — | — | Terminate active charging sessions from the control center. |
+  | `ReserveNow` | ✅ | ✅ | ✅ | Reserve connectors for upcoming sessions with automatic connector selection and confirmation tracking. |
+  | `Reset` | ✅ | ✅ | ✅ | Request a soft or hard reboot to recover from faults. |
+  | `SendLocalList` | ✅ | ✅ | ✅ | Publish released and approved RFIDs as the charge point's local authorization list. |
+  | `TriggerMessage` | ✅ | ✅ | ✅ | Ask the device to send an immediate update (for example status or diagnostics). |
+  | `UnlockConnector` | ✅ | ✅ | ✅ | Release stuck connectors without on-site intervention. |
+  | `UpdateFirmware` | ✅ | ✅ | ✅ | Deliver firmware packages to chargers with secure download tokens and track installation responses. |
 
-  **OCPP roadmap.** Explore the upcoming OCPP 1.6 and 2.1 catalogue work in the [OCPP roadmap cookbook](docs/cookbooks/ocpp-roadmap.md).
+  **OCPP roadmap.** Explore the upcoming OCPP 1.6, 2.0.1, and 2.1 catalogue work in the [OCPP roadmap cookbook](docs/cookbooks/ocpp-roadmap.md).
 
 - Charge point reservations with automated connector assignment, energy account and RFID linkage, EVCS confirmation tracking, and control-center cancellation support.
 - [API](https://en.wikipedia.org/wiki/API) integration with [Odoo](https://www.odoo.com/), syncing:

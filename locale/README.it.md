@@ -1,6 +1,6 @@
 # Costellazione Arthexis
 
-[![CI](https://github.com/arthexis/arthexis/actions/workflows/ci.yml/badge.svg)](https://github.com/arthexis/arthexis/actions/workflows/ci.yml) [![Copertura](https://raw.githubusercontent.com/arthexis/arthexis/main/coverage.svg)](https://github.com/arthexis/arthexis/actions/workflows/coverage.yml) [![Copertura OCPP 1.6](https://raw.githubusercontent.com/arthexis/arthexis/main/ocpp_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md) [![Copertura OCPP 2.1](https://raw.githubusercontent.com/arthexis/arthexis/main/ocpp21_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md) [![Licenza: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+[![CI](https://github.com/arthexis/arthexis/actions/workflows/ci.yml/badge.svg)](https://github.com/arthexis/arthexis/actions/workflows/ci.yml) [![Copertura](https://raw.githubusercontent.com/arthexis/arthexis/main/coverage.svg)](https://github.com/arthexis/arthexis/actions/workflows/coverage.yml) [![Copertura OCPP 1.6](https://raw.githubusercontent.com/arthexis/arthexis/main/ocpp_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md) [![Copertura OCPP 2.0.1](https://raw.githubusercontent.com/arthexis/arthexis/main/ocpp201_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md) [![Copertura OCPP 2.1](https://raw.githubusercontent.com/arthexis/arthexis/main/ocpp21_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md) [![Licenza: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
 
 ## Scopo
@@ -17,43 +17,43 @@ Consulta il nuovo [articolo degli sviluppatori](https://arthexis.com/articles/pr
 
   **Punto di ricarica → CSMS**
 
-  | Azione | Versione 1.6 | Versione 2.1 | Cosa facciamo |
-  | --- | --- | --- | --- |
-  | `Authorize` | ✅ | ✅ | Convalidiamo richieste di autorizzazione RFID o token prima dell'inizio della sessione. |
-  | `BootNotification` | ✅ | ✅ | Registriamo il punto di ricarica e aggiorniamo identità, firmware e stato. |
-  | `DataTransfer` | ✅ | ✅ | Accettiamo payload specifici del fornitore e registriamo gli esiti. |
-  | `DiagnosticsStatusNotification` | ✅ | — | Monitoriamo l'avanzamento dei caricamenti diagnostici avviati dal backoffice. |
-  | `FirmwareStatusNotification` | ✅ | ✅ | Monitoriamo le fasi degli aggiornamenti firmware segnalate dai punti di ricarica. |
-  | `Heartbeat` | ✅ | ✅ | Manteniamo viva la sessione websocket e aggiorniamo il timestamp dell'ultima attività. |
-  | `LogStatusNotification` | — | ✅ | Monitoriamo l'avanzamento dei caricamenti dei log dal punto di ricarica per la supervisione diagnostica. |
-  | `MeterValues` | ✅ | ✅ | Salviamo letture periodiche di energia e potenza durante la transazione. |
-  | `SecurityEventNotification` | — | ✅ | Registriamo gli eventi di sicurezza segnalati dai punti di ricarica per la tracciabilità. |
-  | `StartTransaction` | ✅ | — | Creiamo sessioni di ricarica con valori iniziali del contatore e dati identificativi. |
-  | `StatusNotification` | ✅ | ✅ | Riflettiamo in tempo reale disponibilità e stati di guasto dei connettori. |
-  | `StopTransaction` | ✅ | — | Chiudiamo le sessioni di ricarica registrando valori finali e motivazioni di chiusura. |
+  | Azione | Versione 1.6 | Versione 2.0.1 | Versione 2.1 | Cosa facciamo |
+  | --- | --- | --- | --- | --- |
+  | `Authorize` | ✅ | ✅ | ✅ | Convalidiamo richieste di autorizzazione RFID o token prima dell'inizio della sessione. |
+  | `BootNotification` | ✅ | ✅ | ✅ | Registriamo il punto di ricarica e aggiorniamo identità, firmware e stato. |
+  | `DataTransfer` | ✅ | ✅ | ✅ | Accettiamo payload specifici del fornitore e registriamo gli esiti. |
+  | `DiagnosticsStatusNotification` | ✅ | — | — | Monitoriamo l'avanzamento dei caricamenti diagnostici avviati dal backoffice. |
+  | `FirmwareStatusNotification` | ✅ | ✅ | ✅ | Monitoriamo le fasi degli aggiornamenti firmware segnalate dai punti di ricarica. |
+  | `Heartbeat` | ✅ | ✅ | ✅ | Manteniamo viva la sessione websocket e aggiorniamo il timestamp dell'ultima attività. |
+  | `LogStatusNotification` | — | ✅ | ✅ | Monitoriamo l'avanzamento dei caricamenti dei log dal punto di ricarica per la supervisione diagnostica. |
+  | `MeterValues` | ✅ | ✅ | ✅ | Salviamo letture periodiche di energia e potenza durante la transazione. |
+  | `SecurityEventNotification` | — | ✅ | ✅ | Registriamo gli eventi di sicurezza segnalati dai punti di ricarica per la tracciabilità. |
+  | `StartTransaction` | ✅ | — | — | Creiamo sessioni di ricarica con valori iniziali del contatore e dati identificativi. |
+  | `StatusNotification` | ✅ | ✅ | ✅ | Riflettiamo in tempo reale disponibilità e stati di guasto dei connettori. |
+  | `StopTransaction` | ✅ | — | — | Chiudiamo le sessioni di ricarica registrando valori finali e motivazioni di chiusura. |
 
   **CSMS → Punto di ricarica**
 
-  | Azione | Versione 1.6 | Versione 2.1 | Cosa facciamo |
-  | --- | --- | --- | --- |
-  | `CancelReservation` | ✅ | ✅ | Annulliamo prenotazioni in sospeso e liberiamo i connettori direttamente dal centro di controllo. |
-  | `ChangeAvailability` | ✅ | ✅ | Impostiamo connettori o stazione tra operativa e fuori servizio. |
-  | `ChangeConfiguration` | ✅ | — | Aggiorniamo le impostazioni supportate del charger e registriamo i valori applicati nel centro di controllo. |
-  | `ClearCache` | ✅ | ✅ | Svuotiamo le cache di autorizzazione locali per forzare nuove verifiche dal CSMS. |
-  | `DataTransfer` | ✅ | ✅ | Inviamo comandi specifici del fornitore e registriamo la risposta del punto di ricarica. |
-  | `GetConfiguration` | ✅ | — | Interroghiamo il dispositivo sui valori correnti delle chiavi di configurazione monitorate. |
-  | `GetDiagnostics` | ✅ | — | Richiediamo il caricamento di un archivio di diagnostica su un URL firmato per la risoluzione dei problemi. |
-  | `GetLocalListVersion` | ✅ | ✅ | Recuperiamo la versione corrente della whitelist RFID e sincronizziamo le voci segnalate dal punto di ricarica. |
-  | `RemoteStartTransaction` | ✅ | — | Avviamo da remoto una sessione di ricarica per clienti o token identificati. |
-  | `RemoteStopTransaction` | ✅ | — | Interrompiamo da remoto sessioni attive dal centro di controllo. |
-  | `ReserveNow` | ✅ | ✅ | Prenotiamo i connettori per le sessioni future con assegnazione automatica e tracciamento della conferma. |
-  | `Reset` | ✅ | ✅ | Richiediamo un riavvio soft o hard per ripristinare guasti. |
-  | `SendLocalList` | ✅ | ✅ | Pubbliciamo gli RFID rilasciati e approvati come lista di autorizzazione locale del punto di ricarica. |
-  | `TriggerMessage` | ✅ | ✅ | Chiediamo al dispositivo un aggiornamento immediato (ad esempio stato o diagnostica). |
-  | `UnlockConnector` | ✅ | ✅ | Sblocchiamo i connettori bloccati senza intervento in loco. |
-  | `UpdateFirmware` | ✅ | ✅ | Distribuiamo pacchetti firmware ai charger con token di download sicuri e tracciamo le risposte di installazione. |
+  | Azione | Versione 1.6 | Versione 2.0.1 | Versione 2.1 | Cosa facciamo |
+  | --- | --- | --- | --- | --- |
+  | `CancelReservation` | ✅ | ✅ | ✅ | Annulliamo prenotazioni in sospeso e liberiamo i connettori direttamente dal centro di controllo. |
+  | `ChangeAvailability` | ✅ | ✅ | ✅ | Impostiamo connettori o stazione tra operativa e fuori servizio. |
+  | `ChangeConfiguration` | ✅ | — | — | Aggiorniamo le impostazioni supportate del charger e registriamo i valori applicati nel centro di controllo. |
+  | `ClearCache` | ✅ | ✅ | ✅ | Svuotiamo le cache di autorizzazione locali per forzare nuove verifiche dal CSMS. |
+  | `DataTransfer` | ✅ | ✅ | ✅ | Inviamo comandi specifici del fornitore e registriamo la risposta del punto di ricarica. |
+  | `GetConfiguration` | ✅ | — | — | Interroghiamo il dispositivo sui valori correnti delle chiavi di configurazione monitorate. |
+  | `GetDiagnostics` | ✅ | — | — | Richiediamo il caricamento di un archivio di diagnostica su un URL firmato per la risoluzione dei problemi. |
+  | `GetLocalListVersion` | ✅ | ✅ | ✅ | Recuperiamo la versione corrente della whitelist RFID e sincronizziamo le voci segnalate dal punto di ricarica. |
+  | `RemoteStartTransaction` | ✅ | — | — | Avviamo da remoto una sessione di ricarica per clienti o token identificati. |
+  | `RemoteStopTransaction` | ✅ | — | — | Interrompiamo da remoto sessioni attive dal centro di controllo. |
+  | `ReserveNow` | ✅ | ✅ | ✅ | Prenotiamo i connettori per le sessioni future con assegnazione automatica e tracciamento della conferma. |
+  | `Reset` | ✅ | ✅ | ✅ | Richiediamo un riavvio soft o hard per ripristinare guasti. |
+  | `SendLocalList` | ✅ | ✅ | ✅ | Pubbliciamo gli RFID rilasciati e approvati come lista di autorizzazione locale del punto di ricarica. |
+  | `TriggerMessage` | ✅ | ✅ | ✅ | Chiediamo al dispositivo un aggiornamento immediato (ad esempio stato o diagnostica). |
+  | `UnlockConnector` | ✅ | ✅ | ✅ | Sblocchiamo i connettori bloccati senza intervento in loco. |
+  | `UpdateFirmware` | ✅ | ✅ | ✅ | Distribuiamo pacchetti firmware ai charger con token di download sicuri e tracciamo le risposte di installazione. |
 
-  **Roadmap OCPP.** Esplora il lavoro pianificato per i cataloghi OCPP 1.6 e 2.1 nel [cookbook della roadmap OCPP](docs/cookbooks/ocpp-roadmap.md).
+  **Roadmap OCPP.** Esplora il lavoro pianificato per i cataloghi OCPP 1.6, 2.0.1 e 2.1 nel [cookbook della roadmap OCPP](docs/cookbooks/ocpp-roadmap.md).
 
 - Prenotazioni dei punti di ricarica con assegnazione automatica del connettore, collegamento agli Energy Account e ai RFID, conferma EVCS e annullamento dal centro di controllo.
 
