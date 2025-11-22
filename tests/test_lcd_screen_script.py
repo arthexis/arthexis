@@ -141,3 +141,50 @@ def test_net_message_broadcasts_once(monkeypatch):
     repeat_sent = lcd_screen._send_net_message_from_lock(payload, last_sent)
     assert calls == [("hello", "world")]
     assert repeat_sent == ("hello", "world")
+
+
+def test_blank_display_clears_screen():
+    calls: list[tuple[str, str | int]] = []
+
+    class FakeLCD:
+        def clear(self):
+            calls.append(("clear", ""))
+
+        def write(self, x: int, y: int, text: str):
+            calls.append(("write", x, y, text))
+
+    lcd = FakeLCD()
+
+    lcd_screen._blank_display(lcd)
+
+    assert ("clear", "") in calls
+    assert ("write", 0, 0, " " * 16) in calls
+    assert ("write", 0, 1, " " * 16) in calls
+
+
+def test_handle_shutdown_request_blanks_display():
+    lcd_screen._reset_shutdown_flag()
+    lcd_screen._request_shutdown(None, None)
+
+    calls: list[str] = []
+
+    class FakeLCD:
+        def clear(self):
+            calls.append("clear")
+
+        def write(self, x: int, y: int, text: str):
+            calls.append("write")
+
+    lcd = FakeLCD()
+
+    assert lcd_screen._handle_shutdown_request(lcd) is True
+    assert "clear" in calls
+    assert "write" in calls
+
+    lcd_screen._reset_shutdown_flag()
+
+
+def test_handle_shutdown_request_noop_without_signal():
+    lcd_screen._reset_shutdown_flag()
+
+    assert lcd_screen._handle_shutdown_request(None) is False

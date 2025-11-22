@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 import os
 import shutil
+import signal
 import subprocess
 import time
 from datetime import datetime
@@ -186,6 +187,7 @@ def _resolve_display_payload(
 
 
 _DJANGO_READY = False
+_SHUTDOWN_REQUESTED = False
 
 
 def _ensure_django() -> bool:
@@ -207,6 +209,46 @@ def _ensure_django() -> bool:
         return False
 
     _DJANGO_READY = True
+    return True
+
+
+def _request_shutdown(signum, frame) -> None:  # pragma: no cover - signal handler
+    """Mark the loop for shutdown when the process receives a signal."""
+
+    global _SHUTDOWN_REQUESTED
+    _SHUTDOWN_REQUESTED = True
+
+
+def _shutdown_requested() -> bool:
+    return _SHUTDOWN_REQUESTED
+
+
+def _reset_shutdown_flag() -> None:
+    global _SHUTDOWN_REQUESTED
+    _SHUTDOWN_REQUESTED = False
+
+
+def _blank_display(lcd: CharLCD1602 | None) -> None:
+    """Clear the LCD and write empty lines to leave a known state."""
+
+    if lcd is None:
+        return
+
+    try:
+        lcd.clear()
+        lcd.write(0, 0, " " * 16)
+        lcd.write(0, 1, " " * 16)
+    except Exception:
+        logger.debug("Failed to blank LCD during shutdown", exc_info=True)
+
+
+def _handle_shutdown_request(lcd: CharLCD1602 | None) -> bool:
+    """Blank the display and signal the loop to exit when shutting down."""
+
+    if not _shutdown_requested():
+        return False
+
+    _blank_display(lcd)
     return True
 
 
@@ -265,38 +307,50 @@ def main() -> None:  # pragma: no cover - hardware dependent
     lock_payload: LockPayload = LockPayload("", "", DEFAULT_SCROLL_MS, False)
     last_display: tuple[str, str, int, str] | None = None
     last_net_message: tuple[str, str] | None = None
-    while True:
-        try:
-            if LOCK_FILE.exists():
-                mtime = LOCK_FILE.stat().st_mtime
-                if mtime != last_lock_mtime:
-                    lock_payload = _read_lock_file()
-                    last_lock_mtime = mtime
-            else:
-                last_lock_mtime = 0.0
 
-            last_net_message = _send_net_message_from_lock(
-                lock_payload, last_net_message
-            )
+    signal.signal(signal.SIGTERM, _request_shutdown)
+    signal.signal(signal.SIGINT, _request_shutdown)
+    signal.signal(signal.SIGHUP, _request_shutdown)
 
-            line1, line2, speed, source = _resolve_display_payload(lock_payload)
-            current_display = (line1, line2, speed, source)
-            if current_display != last_display or lcd is None:
-                if lcd is None:
-                    lcd = CharLCD1602()
-                    lcd.init_lcd()
-                lcd.clear()
-                _display(lcd, line1, line2, speed)
-                last_display = current_display
-                if source == "lock-file" and _lock_file_matches(lock_payload, last_lock_mtime):
-                    _clear_lock_file()
-        except LCDUnavailableError as exc:
-            logger.warning("LCD unavailable: %s", exc)
-            lcd = None
-        except Exception as exc:
-            logger.warning("LCD update failed: %s", exc)
-            lcd = None
-        time.sleep(0.5)
+    try:
+        while True:
+            if _handle_shutdown_request(lcd):
+                break
+
+            try:
+                if LOCK_FILE.exists():
+                    mtime = LOCK_FILE.stat().st_mtime
+                    if mtime != last_lock_mtime:
+                        lock_payload = _read_lock_file()
+                        last_lock_mtime = mtime
+                else:
+                    last_lock_mtime = 0.0
+
+                last_net_message = _send_net_message_from_lock(
+                    lock_payload, last_net_message
+                )
+
+                line1, line2, speed, source = _resolve_display_payload(lock_payload)
+                current_display = (line1, line2, speed, source)
+                if current_display != last_display or lcd is None:
+                    if lcd is None:
+                        lcd = CharLCD1602()
+                        lcd.init_lcd()
+                    lcd.clear()
+                    _display(lcd, line1, line2, speed)
+                    last_display = current_display
+                    if source == "lock-file" and _lock_file_matches(lock_payload, last_lock_mtime):
+                        _clear_lock_file()
+            except LCDUnavailableError as exc:
+                logger.warning("LCD unavailable: %s", exc)
+                lcd = None
+            except Exception as exc:
+                logger.warning("LCD update failed: %s", exc)
+                lcd = None
+            time.sleep(0.5)
+    finally:
+        _blank_display(lcd)
+        _reset_shutdown_flag()
 
 
 if __name__ == "__main__":  # pragma: no cover - script entry point
