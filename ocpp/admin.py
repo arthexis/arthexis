@@ -3855,6 +3855,9 @@ class SimulatorAdmin(SaveBeforeChangeAction, LogViewAdminMixin, EntityModelAdmin
 
     @admin.action(description="Start Default Simulator")
     def start_default_simulator(self, request, queryset=None):
+        from django.urls import reverse
+        from django.utils.html import format_html
+
         default_simulator = (
             Simulator.objects.filter(default=True, is_deleted=False).order_by("pk").first()
         )
@@ -3864,9 +3867,37 @@ class SimulatorAdmin(SaveBeforeChangeAction, LogViewAdminMixin, EntityModelAdmin
                 "No default simulator is configured.",
                 level=messages.ERROR,
             )
-            return None
+        else:
+            if default_simulator.pk in store.simulators:
+                self.message_user(
+                    request,
+                    f"{default_simulator.name}: already running",
+                )
+            else:
+                type(default_simulator).objects.filter(pk=default_simulator.pk).update(
+                    door_open=False
+                )
+                default_simulator.door_open = False
+                store.register_log_name(
+                    default_simulator.cp_path, default_simulator.name, log_type="simulator"
+                )
+                simulator = ChargePointSimulator(default_simulator.as_config())
+                started, status, log_file = simulator.start()
+                if started:
+                    store.simulators[default_simulator.pk] = simulator
+                log_url = reverse("admin:ocpp_simulator_log", args=[default_simulator.pk])
+                self.message_user(
+                    request,
+                    format_html(
+                        '{}: {}. Log: <code>{}</code> (<a href="{}" target="_blank">View Log</a>)',
+                        default_simulator.name,
+                        status,
+                        log_file,
+                        log_url,
+                    ),
+                )
 
-        self._start_simulators(request, [default_simulator])
+        return HttpResponseRedirect(reverse("admin:ocpp_simulator_changelist"))
 
     def stop_simulator(self, request, queryset):
         async def _stop(objs):

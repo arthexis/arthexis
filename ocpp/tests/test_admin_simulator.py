@@ -36,9 +36,20 @@ class SimulatorAdminDefaultActionTests(TestCase):
             patch.object(store, "simulators", {}),
         ):
             request = self._build_request("start_default_simulator")
-            admin.response_action(request, Simulator.objects.none())
+            response = admin.response_action(request, Simulator.objects.none())
 
             self.assertIs(store.simulators.get(simulator.pk), fake_simulator)
             messages = [message.message for message in request._messages]
             self.assertTrue(any("Default" in message for message in messages))
+            self.assertEqual(response.status_code, 302)
+
+    def test_start_default_simulator_shows_error_when_missing(self):
+        admin = SimulatorAdmin(Simulator, self.admin_site)
+        request = self._build_request("start_default_simulator")
+
+        response = admin.response_action(request, Simulator.objects.none())
+
+        messages = [message.message for message in request._messages]
+        self.assertIn("No default simulator is configured.", messages)
+        self.assertEqual(response.status_code, 302)
 
