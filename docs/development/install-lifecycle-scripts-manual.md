@@ -24,7 +24,7 @@ Passing a role flag applies a curated bundle of options. Each preset still honou
 | Flag | Purpose |
 | --- | --- |
 | `--service NAME` | Installs or updates systemd services (`NAME`, `celery-NAME`, `celery-beat-NAME`, and optionally `lcd-NAME`) and records the name in `locks/service.lck` for the runtime helpers.【F:install.sh†L221-L225】【F:install.sh†L519-L524】 |
-| `--internal` | Forces the internal Nginx template (ports 8000/8080). This is the default unless a role preset changes it.【F:install.sh†L226-L229】【F:install.sh†L320-L373】 |
+| `--internal` | Forces the internal Nginx template (HTTP ports 80/8000/8080/8900). This is the default unless a role preset changes it.【F:install.sh†L226-L229】【F:install.sh†L320-L373】 |
 | `--public` | Enables the public HTTPS reverse proxy template while continuing to proxy to the backend on port 8888 unless overridden.【F:install.sh†L230-L233】【F:install.sh†L305-L373】 |
 | `--port PORT` | Overrides the backend Django port used in generated systemd units and the stored lock. If omitted, every mode defaults to `8888`.【F:install.sh†L234-L237】 |
 | `--upgrade` | Immediately runs `upgrade.sh` after installation, using the selected channel (stable by default, unstable when requested).【F:install.sh†L239-L242】【F:install.sh†L578-L599】 |

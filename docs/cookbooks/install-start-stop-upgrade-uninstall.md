@@ -31,7 +31,7 @@ Run the installer from the project root. Every installer writes a timestamped lo
 | Flag | Purpose |
 | --- | --- |
 | `--service NAME` | Registers the deployment under a specific systemd service name. When present, the installer records the value in `locks/service.lck`, enabling later scripts to control that service instead of spawning foreground processes.【F:install.sh†L221-L225】【F:install.sh†L519-L524】 |
-| `--internal` / `--public` | Chooses the nginx topology. `--internal` listens on ports 8000/8080 for LAN-only access, while `--public` provisions TLS-forwarding on 80/443. Both modes proxy to the configured backend port (default 8888).【F:install.sh†L226-L233】【F:install.sh†L305-L373】 |
+| `--internal` / `--public` | Chooses the nginx topology. `--internal` listens on HTTP ports 80/8000/8080/8900 for LAN-only access, while `--public` provisions TLS-forwarding on 80/443. Both modes proxy to the configured backend port (default 8888).【F:install.sh†L226-L233】【F:install.sh†L305-L373】 |
 | `--port PORT` | Overrides the backend port used by Django when nginx proxies traffic. Defaults to 8888 for every role unless explicitly overridden.【F:install.sh†L234-L237】 |
 | `--upgrade` | Runs the installer in upgrade mode, preserving state while refreshing configuration. Often paired with role flags to recompute dependencies.【F:install.sh†L239-L242】【F:install.sh†L578-L599】 |
 | `--auto-upgrade` | Enables unattended upgrades (disabled by default) and writes `locks/auto_upgrade.lck` so Celery schedules the checks.【F:install.sh†L243-L259】【F:install.sh†L578-L603】 |
