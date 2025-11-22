@@ -5,6 +5,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PIP_INSTALL_HELPER="$SCRIPT_DIR/scripts/helpers/pip_install.py"
 # shellcheck source=scripts/helpers/logging.sh
 . "$SCRIPT_DIR/scripts/helpers/logging.sh"
+# shellcheck source=scripts/helpers/systemd_locks.sh
+. "$SCRIPT_DIR/scripts/helpers/systemd_locks.sh"
 if [ -z "$SCRIPT_DIR" ] || [ "$SCRIPT_DIR" = "/" ]; then
   echo "Refusing to run from root directory." >&2
   exit 1
@@ -159,6 +161,9 @@ elif [ -f "$REQ_FILE" ]; then
 fi
 
 install_watch_upgrade_helper
+
+# Ensure systemd units run as the project owner, matching the install user.
+arthexis_update_systemd_service_user "$SCRIPT_DIR" "$SCRIPT_DIR/locks" || true
 
 ARGS=""
 if [ "$LATEST" -eq 1 ]; then

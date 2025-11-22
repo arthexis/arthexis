@@ -8,6 +8,18 @@ _arthexis_systemd_lock_file() {
   printf "%s/systemd_services.lck" "$lock_dir"
 }
 
+arthexis_detect_service_user() {
+  # Prefer the owner of the project directory so services run as the install user.
+  local base_dir="$1"
+  if [ -n "$base_dir" ] && [ -d "$base_dir" ]; then
+    if stat -c '%U' "$base_dir" >/dev/null 2>&1; then
+      stat -c '%U' "$base_dir"
+      return 0
+    fi
+  fi
+  id -un
+}
+
 arthexis_record_systemd_unit() {
   local lock_dir="$1"
   local unit_name="$2"
@@ -97,7 +109,7 @@ arthexis_install_service_stack() {
   local systemd_dir="${SYSTEMD_DIR:-/etc/systemd/system}"
   local service_file="${systemd_dir}/${service_name}.service"
   local service_user
-  service_user="$(id -un)"
+  service_user="$(arthexis_detect_service_user "$base_dir")"
 
   sudo bash -c "cat > '$service_file'" <<SERVICEEOF
 [Unit]
@@ -213,5 +225,40 @@ WATCHDOGEOF
     sudo systemctl daemon-reload
     sudo systemctl enable "$watchdog_service"
     sudo systemctl start "$watchdog_service"
+  fi
+}
+
+arthexis_update_systemd_service_user() {
+  # Ensure existing systemd units run as the owner of the project directory.
+  local base_dir="$1"
+  local lock_dir="$2"
+  local systemd_dir="${SYSTEMD_DIR:-/etc/systemd/system}"
+
+  if [ -z "$lock_dir" ]; then
+    return 0
+  fi
+
+  local service_user
+  service_user="$(arthexis_detect_service_user "$base_dir")"
+
+  local updated=0
+  local unit
+  while IFS= read -r unit; do
+    [ -z "$unit" ] && continue
+    local service_file="${systemd_dir}/${unit}"
+    [ ! -f "$service_file" ] && continue
+    if grep -Fq "User=${service_user}" "$service_file"; then
+      continue
+    fi
+    if grep -Eq '^User=' "$service_file"; then
+      sudo sed -i "s/^User=.*/User=${service_user}/" "$service_file" || continue
+    else
+      sudo sed -i "/^\[Service\]/a User=${service_user}" "$service_file" || continue
+    fi
+    updated=1
+  done < <(arthexis_read_systemd_unit_records "$lock_dir")
+
+  if [ "$updated" -eq 1 ]; then
+    sudo systemctl daemon-reload
   fi
 }

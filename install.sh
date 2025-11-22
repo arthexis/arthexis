@@ -529,10 +529,11 @@ if [ -n "$SERVICE" ]; then
 fi
 
 if [ "$ENABLE_LCD_SCREEN" = true ] && [ -n "$SERVICE" ]; then
-    LCD_SERVICE="lcd-$SERVICE"
-    if [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
-        LCD_SERVICE_FILE="/etc/systemd/system/${LCD_SERVICE}.service"
-        sudo bash -c "cat > '$LCD_SERVICE_FILE'" <<SERVICEEOF
+  LCD_SERVICE="lcd-$SERVICE"
+  if [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
+    LCD_SERVICE_FILE="/etc/systemd/system/${LCD_SERVICE}.service"
+    LCD_SERVICE_USER="$(arthexis_detect_service_user "$BASE_DIR")"
+    sudo bash -c "cat > '$LCD_SERVICE_FILE'" <<SERVICEEOF
 [Unit]
 Description=LCD screen updater service for Arthexis
 After=${SERVICE}.service network-online.target
@@ -548,7 +549,7 @@ Restart=always
 TimeoutStartSec=500
 StandardOutput=journal
 StandardError=journal
-User=$(id -un)
+User=$LCD_SERVICE_USER
 
 [Install]
 WantedBy=multi-user.target
@@ -618,4 +619,3 @@ if [ "$START_SERVICES" = true ]; then
 fi
 
 arthexis_refresh_desktop_shortcuts "$BASE_DIR"
-
