@@ -42,6 +42,7 @@ Lies den aktuellen [Developer-Artikel](https://arthexis.com/articles/protoline-i
   | `ClearCache` | ✅ | ✅ | Leeren lokale Autorisierungscaches, um erneute Abgleiche über das CSMS zu erzwingen. |
   | `DataTransfer` | ✅ | ✅ | Senden herstellerspezifische Befehle und protokollieren die Antwort des Ladepunkts. |
   | `GetConfiguration` | ✅ | — | Fragen die aktuellen Werte der überwachten Konfigurationsschlüssel ab. |
+  | `GetDiagnostics` | ✅ | — | Fordern ein Diagnosenarchiv an, das zu einer signierten URL hochgeladen wird, um Störungen zu prüfen. |
   | `GetLocalListVersion` | ✅ | ✅ | Rufen die aktuelle RFID-Whitelist-Version ab und synchronisieren die vom Ladepunkt gemeldeten Einträge. |
   | `RemoteStartTransaction` | ✅ | — | Starten Ladevorgänge remote für identifizierte Kundinnen und Kunden oder Tokens. |
   | `RemoteStopTransaction` | ✅ | — | Beenden aktive Ladevorgänge aus der Leitwarte. |

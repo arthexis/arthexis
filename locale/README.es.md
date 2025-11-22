@@ -42,6 +42,7 @@ Consulta el nuevo [artículo para desarrolladores](https://arthexis.com/articles
   | `ClearCache` | ✅ | ✅ | Limpiamos la caché de autorizaciones local para forzar consultas frescas al CSMS. |
   | `DataTransfer` | ✅ | ✅ | Enviamos comandos específicos del proveedor y registramos la respuesta. |
   | `GetConfiguration` | ✅ | — | Consultamos al dispositivo por los valores actuales de las claves de configuración seguidas. |
+  | `GetDiagnostics` | ✅ | — | Solicitamos una carga de diagnóstico del dispositivo hacia una URL firmada para resolver problemas. |
   | `GetLocalListVersion` | ✅ | ✅ | Obtenemos la versión actual de la lista blanca de RFID y sincronizamos las entradas reportadas por el punto de carga. |
   | `RemoteStartTransaction` | ✅ | — | Iniciamos sesiones de carga de forma remota para un cliente o token identificado. |
   | `RemoteStopTransaction` | ✅ | — | Terminamos sesiones activas desde el centro de control. |
