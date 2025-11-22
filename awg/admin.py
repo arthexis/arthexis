@@ -23,7 +23,7 @@ class CableSizeAdmin(EntityModelAdmin):
 
 @admin.register(ConduitFill)
 class ConduitFillAdmin(EntityModelAdmin):
-    list_display = ("trade_size", "conduit")
+    list_display = ("trade_size", "conduit", "awg_8", "awg_6", "awg_4", "awg_2")
     search_fields = ("trade_size", "conduit")
 
 
