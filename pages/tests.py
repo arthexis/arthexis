@@ -2689,47 +2689,90 @@ class ReleaseModuleNavTests(TestCase):
         Site.objects.update_or_create(
             id=1, defaults={"domain": "testserver", "name": "Terminal"}
         )
-        application, _ = Application.objects.get_or_create(name="core")
-        module, _ = Module.objects.get_or_create(
-            node_role=role,
-            application=application,
-            path="/release/",
-            defaults={"menu": "Release", "is_default": False},
-        )
-        module_updates = []
-        if module.menu != "Release":
-            module.menu = "Release"
-            module_updates.append("menu")
-        if getattr(module, "is_deleted", False):
-            module.is_deleted = False
-            module_updates.append("is_deleted")
-        if module_updates:
-            module.save(update_fields=module_updates)
-        Landing.objects.update_or_create(
-            module=module,
-            path="/release/",
-            defaults={
-                "label": "Package Releases",
-                "enabled": True,
-                "description": "",
-            },
-        )
+        fixtures = [
+            Path(
+                settings.BASE_DIR,
+                "pages",
+                "fixtures",
+                "default__application_awg.json",
+            ),
+            Path(
+                settings.BASE_DIR,
+                "pages",
+                "fixtures",
+                "localhost__application_ocpp.json",
+            ),
+            Path(
+                settings.BASE_DIR,
+                "pages",
+                "fixtures",
+                "localhost__module_awg.json",
+            ),
+            Path(
+                settings.BASE_DIR,
+                "pages",
+                "fixtures",
+                "localhost__module_ocpp.json",
+            ),
+            Path(
+                settings.BASE_DIR,
+                "pages",
+                "fixtures",
+                "localhost__landing_ocpp_dashboard.json",
+            ),
+            Path(
+                settings.BASE_DIR,
+                "pages",
+                "fixtures",
+                "localhost__landing_ocpp_cp_simulator.json",
+            ),
+            Path(
+                settings.BASE_DIR,
+                "pages",
+                "fixtures",
+                "localhost__landing_ocpp_rfid.json",
+            ),
+        ]
+
+        for fixture_path in fixtures:
+            call_command("loaddata", str(fixture_path))
+
         self.release_group, _ = SecurityGroup.objects.get_or_create(
             name="Release Managers"
         )
+        self.release_module_fixture = Path(
+            settings.BASE_DIR, "pages", "fixtures", "localhost__module_release.json"
+        )
+        self.release_landing_fixture = Path(
+            settings.BASE_DIR, "pages", "fixtures", "localhost__landing_release.json"
+        )
+
+    def test_release_fixtures_are_absent(self):
+        self.assertFalse(self.release_module_fixture.exists())
+        self.assertFalse(self.release_landing_fixture.exists())
+        self.assertFalse(Module.objects.filter(path="/release/").exists())
+        self.assertFalse(Landing.objects.filter(path="/release/").exists())
 
     def test_release_module_hidden_for_anonymous(self):
         response = self.client.get(reverse("pages:index"))
         self.assertNotContains(response, 'badge rounded-pill text-bg-secondary">RELEASE')
+        nav_labels = [
+            module.menu_label.upper() for module in response.context["nav_modules"]
+        ]
+        self.assertNotIn("RELEASE", nav_labels)
 
-    def test_release_module_visible_to_release_manager(self):
+    def test_release_module_hidden_for_release_manager(self):
         user = self.user_model.objects.create_user(
             "release-admin", password="test", is_staff=True
         )
         user.groups.add(self.release_group)
         self.client.force_login(user)
         response = self.client.get(reverse("pages:index"))
-        self.assertContains(response, 'badge rounded-pill text-bg-secondary">RELEASE')
+        self.assertNotContains(response, 'badge rounded-pill text-bg-secondary">RELEASE')
+        nav_labels = [
+            module.menu_label.upper() for module in response.context["nav_modules"]
+        ]
+        self.assertNotIn("RELEASE", nav_labels)
 
     def test_release_module_hidden_for_non_member_staff(self):
         user = self.user_model.objects.create_user(
@@ -2738,6 +2781,10 @@ class ReleaseModuleNavTests(TestCase):
         self.client.force_login(user)
         response = self.client.get(reverse("pages:index"))
         self.assertNotContains(response, 'badge rounded-pill text-bg-secondary">RELEASE')
+        nav_labels = [
+            module.menu_label.upper() for module in response.context["nav_modules"]
+        ]
+        self.assertNotIn("RELEASE", nav_labels)
 
 
 class ControlNavTests(TestCase):
