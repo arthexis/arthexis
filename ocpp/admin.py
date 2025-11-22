@@ -3692,7 +3692,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
 class SimulatorAdmin(SaveBeforeChangeAction, LogViewAdminMixin, EntityModelAdmin):
     list_display = (
         "name",
-        "cp_path",
+        "default",
         "host",
         "ws_port",
         "ws_url",
