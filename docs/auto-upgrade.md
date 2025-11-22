@@ -11,6 +11,10 @@ delegated systemd unit is launched, and what to check if something fails.
   `arthexis`) so the watcher knows which unit to stop and restart.
 - The service user can run `systemd-run` (with passwordless sudo when required).
 - `upgrade.sh` remains executable in the project root.
+- The Celery beat schedule is kept in sync with `locks/auto_upgrade.lck`; when
+  the lock is removed, the periodic task is removed as well, and any
+  environment override set with `ARTHEXIS_UPGRADE_FREQ` is ignored unless it is
+  a positive integer.
 
 ## How delegation works
 
