@@ -4470,6 +4470,9 @@ class UserStorySubmissionTests(TestCase):
         self.assertEqual(response.status_code, 200)
         story = UserStory.objects.get()
         self.assertEqual(story.referer, "https://ads.example/original")
+        self.assertTrue(story.take_screenshot)
+        self.mock_capture.assert_called_once_with("http://testserver/wizard/step-2/")
+
     def test_screenshot_request_links_saved_sample(self):
         self.client.force_login(self.user)
         screenshot_file = Path("/tmp/fake.png")
@@ -4578,11 +4581,11 @@ class UserStorySubmissionTests(TestCase):
         )
         self.assertEqual(response.status_code, 200)
         story = UserStory.objects.get()
-        self.assertFalse(story.take_screenshot)
+        self.assertTrue(story.take_screenshot)
         self.assertIsNone(story.owner)
         self.assertIsNone(story.screenshot)
         self.assertEqual(story.status, UserStory.Status.OPEN)
-        self.mock_capture.assert_not_called()
+        self.mock_capture.assert_called_once_with("http://testserver/feedback/")
         self.mock_save.assert_not_called()
 
     def test_rate_limit_blocks_repeated_submissions(self):
