@@ -7,6 +7,34 @@ from pathlib import Path
 
 import pyxel
 
+
+class ContainerWindow:
+    def __init__(self, title: str, x: int, y: int, width: int, height: int, connectors: list[dict]) -> None:
+        self.title = title
+        self.x = x
+        self.y = y
+        self.width = width
+        self.height = height
+        self.connectors = connectors
+        self._drag_offset_x = 0
+        self._drag_offset_y = 0
+
+    @property
+    def header_height(self) -> int:
+        return 16
+
+    def hit_header(self, mx: int, my: int) -> bool:
+        return self.x <= mx <= self.x + self.width and self.y <= my <= self.y + self.header_height
+
+    def set_drag_offset(self, mx: int, my: int) -> None:
+        self._drag_offset_x = mx - self.x
+        self._drag_offset_y = my - self.y
+
+    def snapped_position(self, mx: int, my: int, grid_size: int, viewport_width: int, viewport_height: int) -> tuple[int, int]:
+        snapped_x = max(0, min(viewport_width - self.width, round((mx - self._drag_offset_x) / grid_size) * grid_size))
+        snapped_y = max(0, min(viewport_height - self.height, round((my - self._drag_offset_y) / grid_size) * grid_size))
+        return snapped_x, snapped_y
+
 DATA_PATH = Path(__file__).resolve().parent / "data" / "connectors.json"
 ACTION_REQUEST_PATH = DATA_PATH.parent / "pyxel_action_request.json"
 ACTION_RESPONSE_PATH = DATA_PATH.parent / "pyxel_action_response.json"
@@ -67,6 +95,7 @@ def _nearest_palette_index(hex_color: str | None) -> int:
 class ConnectorViewport:
     def __init__(self) -> None:
         self.connectors: list[dict] = []
+        self._containers: list[ContainerWindow] = []
         self.instance_running = False
         self.waiting_for_instance = False
         self._has_loaded_snapshot = False
@@ -79,6 +108,8 @@ class ConnectorViewport:
         self._action_feedback_frame = 0
         self._suite_host = "127.0.0.1"
         self._suite_port: int | None = None
+        self._grid_size = 8
+        self._dragging_container: ContainerWindow | None = None
         self._quick_actions = (
             {"label": "Start Default Simulator", "action": "start_default_simulator"},
         )
@@ -121,6 +152,36 @@ class ConnectorViewport:
         except (TypeError, ValueError):
             self._suite_port = None
 
+        self._rebuild_containers()
+
+    def _rebuild_containers(self) -> None:
+        existing_positions = {container.title: (container.x, container.y) for container in self._containers}
+
+        grouped: dict[str, list[dict]] = {}
+        for connector in self.connectors:
+            key = str(connector.get("location") or "Connectors")
+            grouped.setdefault(key, []).append(connector)
+
+        self._containers = []
+        default_width = 220
+        for index, (title, items) in enumerate(sorted(grouped.items())):
+            columns = max(1, (default_width - 16) // 130)
+            rows = max(1, math.ceil(len(items) / columns))
+            body_height = rows * (82 + 6) + 12
+            height = 20 + body_height
+
+            existing_position = existing_positions.get(title)
+            if existing_position:
+                x, y = existing_position
+            else:
+                x = 8 + (index % 2) * (default_width + 12)
+                y = 8 + (index // 2) * (height + 12)
+
+            x = max(0, min(pyxel.width - default_width, x))
+            y = max(0, min(pyxel.height - height, y))
+
+            self._containers.append(ContainerWindow(title, x, y, default_width, height, items))
+
     def update(self) -> None:
         if pyxel.btnp(pyxel.KEY_R):
             self._load_connectors(force=True)
@@ -149,11 +210,8 @@ class ConnectorViewport:
             return
 
         padding = 10
-        card_width = 150
-        card_height = 90
-        columns = max(1, (pyxel.width - padding) // (card_width + padding))
 
-        if not self.connectors:
+        if not self._containers:
             pyxel.text(padding, padding, "No connectors available. Press R to reload.", 7)
             self._draw_menu()
             self._draw_feedback()
@@ -162,12 +220,8 @@ class ConnectorViewport:
         if not self.instance_running:
             pyxel.text(padding, padding - 6, "Instance is starting...", 6)
 
-        for idx, connector in enumerate(self.connectors):
-            col = idx % columns
-            row = idx // columns
-            x = padding + col * (card_width + padding)
-            y = padding + row * (card_height + padding)
-            self._draw_card(connector, x, y, card_width, card_height)
+        for container in self._containers:
+            self._draw_container(container)
 
         self._draw_menu()
         self._draw_suite_hint()
@@ -217,6 +271,56 @@ class ConnectorViewport:
 
         status_label = str(connector.get("status_label", ""))
         pyxel.text(battery_x, battery_y - 10, status_label[:26], text_color)
+
+    def _draw_container(self, container: ContainerWindow) -> None:
+        accent = 5
+        if container.connectors:
+            accent = _nearest_palette_index(container.connectors[0].get("status_color"))
+
+        pyxel.rect(container.x, container.y, container.width, container.height, 0)
+        pyxel.rectb(container.x, container.y, container.width, container.height, accent)
+
+        header_color = 1
+        pyxel.rect(container.x, container.y, container.width, container.header_height, header_color)
+        pyxel.rectb(container.x, container.y, container.width, container.header_height, accent)
+        pyxel.text(container.x + 6, container.y + 5, container.title[:26], 7)
+
+        content_x = container.x + 4
+        content_y = container.y + container.header_height + 4
+        content_width = container.width - 8
+        content_height = container.height - container.header_height - 8
+
+        for grid_y in range(content_y, content_y + content_height, self._grid_size * 2):
+            pyxel.rect(content_x, grid_y, content_width, 1, 1)
+
+        for grid_x in range(content_x, content_x + content_width, self._grid_size * 2):
+            pyxel.rect(grid_x, content_y, 1, content_height, 1)
+
+        self._draw_container_connectors(container, content_x, content_y, content_width, content_height)
+
+    def _draw_container_connectors(
+        self, container: ContainerWindow, content_x: int, content_y: int, content_width: int, content_height: int
+    ) -> None:
+        padding = 6
+        card_width = 120
+        card_height = 82
+        columns = max(1, (content_width - padding) // (card_width + padding))
+        rows = max(1, math.ceil(max(1, len(container.connectors)) / columns))
+        total_height = rows * (card_height + padding)
+
+        start_y = content_y + max(0, (content_height - total_height) // 2)
+
+        if not container.connectors:
+            empty_text = "Drop connectors here" if self.instance_running else "No connectors"
+            pyxel.text(content_x + padding, start_y + padding, empty_text[:28], 7)
+            return
+
+        for idx, connector in enumerate(container.connectors):
+            col = idx % columns
+            row = idx // columns
+            x = content_x + padding + col * (card_width + padding)
+            y = start_y + row * (card_height + padding)
+            self._draw_card(connector, x, y, card_width, card_height)
 
     def _auto_reload(self) -> None:
         if pyxel.frame_count - self._last_reload_frame < 30:
@@ -273,28 +377,58 @@ class ConnectorViewport:
             pyxel.text(menu_x + 8, item_y + 6, action["label"][:28], 7)
 
     def _handle_mouse(self) -> None:
-        if not pyxel.btnp(pyxel.MOUSE_BUTTON_LEFT):
-            return
-
         mx, my = pyxel.mouse_x, pyxel.mouse_y
+
+        if pyxel.btnp(pyxel.MOUSE_BUTTON_LEFT):
+            if self._handle_menu_click(mx, my):
+                return
+            self._start_container_drag(mx, my)
+
+        if self._dragging_container and pyxel.btn(pyxel.MOUSE_BUTTON_LEFT):
+            self._update_container_drag(mx, my)
+        elif self._dragging_container and not pyxel.btn(pyxel.MOUSE_BUTTON_LEFT):
+            self._dragging_container = None
+
+    def _handle_menu_click(self, mx: int, my: int) -> bool:
         btn_x, btn_y, btn_w, btn_h = self._menu_hitbox()
         if btn_x <= mx <= btn_x + btn_w and btn_y <= my <= btn_y + btn_h:
             self._menu_open = not self._menu_open
-            return
+            return True
 
         if not self._menu_open:
-            return
+            return False
 
         menu_width = 150
         menu_x = btn_x - menu_width + btn_w
         menu_y = btn_y + btn_h + 4
+        menu_height = 14 + 14 * len(self._quick_actions)
         for index, action in enumerate(self._quick_actions):
             item_y = menu_y + 8 + index * 14
             item_height = 10
             if menu_x + 4 <= mx <= menu_x + menu_width - 4 and item_y + 4 <= my <= item_y + 4 + item_height:
                 self._queue_action(action)
                 self._menu_open = False
+                return True
+
+        return menu_x <= mx <= menu_x + menu_width and menu_y <= my <= menu_y + menu_height
+
+    def _start_container_drag(self, mx: int, my: int) -> None:
+        for container in reversed(self._containers):
+            if container.hit_header(mx, my):
+                container.set_drag_offset(mx, my)
+                self._dragging_container = container
+                self._containers.remove(container)
+                self._containers.append(container)
+                self._update_container_drag(mx, my)
                 return
+
+    def _update_container_drag(self, mx: int, my: int) -> None:
+        if not self._dragging_container:
+            return
+
+        new_x, new_y = self._dragging_container.snapped_position(mx, my, self._grid_size, pyxel.width, pyxel.height)
+        self._dragging_container.x = new_x
+        self._dragging_container.y = new_y
 
     def _queue_action(self, action: dict) -> None:
         token = uuid.uuid4().hex
