@@ -7,9 +7,9 @@ import re
 import shlex
 import socket
 import subprocess
+import sys
 import time
 import uuid
-import pwd
 from pathlib import Path
 import urllib.error
 import urllib.request
@@ -145,6 +145,11 @@ def _append_auto_upgrade_log(base_dir: Path, message: str) -> None:
 
 def _detect_path_owner(base_dir: Path) -> tuple[str | None, str | None]:
     """Return the owning username and home directory for ``base_dir``."""
+
+    if sys.platform == "win32":
+        return None, None
+
+    import pwd  # noqa: WPS433 - platform-specific import
 
     try:
         stat_info = base_dir.stat()
