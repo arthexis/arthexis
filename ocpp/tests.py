@@ -8001,10 +8001,13 @@ class LiveUpdateViewTests(TestCase):
         self.assertAlmostEqual(stats["total_kw"], 4.0, places=2)
         self.assertAlmostEqual(stats["today_kw"], 3.0, places=2)
 
-    def test_cp_simulator_includes_interval(self):
+    def test_cp_simulator_uses_htmx_refresh(self):
         resp = self.client.get(reverse("cp-simulator"))
-        self.assertEqual(resp.context["request"].live_update_interval, 5)
-        self.assertContains(resp, "setInterval(() => location.reload()")
+
+        self.assertIsNone(getattr(resp.context["request"], "live_update_interval", None))
+        self.assertContains(resp, 'id="cp-simulator-panel"')
+        self.assertContains(resp, f'hx-get="{reverse("cp-simulator")}"')
+        self.assertNotContains(resp, "setInterval(() => location.reload()")
 
     def test_dashboard_hides_private_chargers(self):
         public = Charger.objects.create(charger_id="PUBLICCP")
