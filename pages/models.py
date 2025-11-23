@@ -1312,7 +1312,8 @@ class DashboardRule(Entity):
                 logger.exception("Dashboard rule handler failed: %s", self.function_name)
                 return rule_failure(_("Unable to evaluate dashboard rule."))
 
-        result = self.condition.evaluate(self)
+        condition_field = self._meta.get_field("condition")
+        result = condition_field.evaluate(self)
         if result.passed:
             message = self.success_message or str(DEFAULT_SUCCESS_MESSAGE)
             return rule_success(message)
