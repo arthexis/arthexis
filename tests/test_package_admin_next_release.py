@@ -37,3 +37,11 @@ class PackageAdminPrepareTests(TestCase):
         self.admin._prepare(self.factory.get("/"), self.package)
         release = PackageRelease.objects.get(package=self.package)
         self.assertEqual(release.version, "0.1.9")
+
+    @patch("core.admin.requests.get")
+    def test_local_version_bumps_patch(self, mock_get):
+        mock_get.return_value = self._mock_pypi("0.1.8")
+        self.version_file.write_text("0.1.9+dev")
+        self.admin._prepare(self.factory.get("/"), self.package)
+        release = PackageRelease.objects.get(package=self.package)
+        self.assertEqual(release.version, "0.1.10")

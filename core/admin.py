@@ -674,8 +674,8 @@ class PackageAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         ver_file = Path("VERSION")
         if ver_file.exists():
             raw_version = ver_file.read_text().strip()
-            cleaned_version = raw_version.rstrip("+") or "0.0.0"
-            repo_version = Version(cleaned_version)
+            repo_version_text = PackageRelease.normalize_version(raw_version) or "0.0.0"
+            repo_version = Version(repo_version_text)
         else:
             repo_version = Version("0.0.0")
 

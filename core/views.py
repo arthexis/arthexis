@@ -502,6 +502,11 @@ def _sync_release_with_revision(release: PackageRelease) -> tuple[bool, str]:
     updated = False
     if version_path.exists():
         current_version = version_path.read_text(encoding="utf-8").strip()
+        if "+" in current_version:
+            normalized_version = PackageRelease.normalize_version(current_version)
+            if normalized_version != current_version:
+                version_path.write_text(normalized_version + "\n", encoding="utf-8")
+                current_version = normalized_version
         if current_version and current_version != release.version:
             release.version = current_version
             release.revision = revision.get_revision()
