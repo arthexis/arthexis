@@ -17,7 +17,6 @@ exec > >(tee "$LOG_FILE") 2> >(tee -a "$ERROR_LOG" >&2)
 cd "$BASE_DIR"
 LOCK_DIR="$BASE_DIR/locks"
 STARTUP_LOCK="$LOCK_DIR/startup_started_at.lck"
-SKIP_LOCK="$LOCK_DIR/service-start-skip.lck"
 SYSTEMD_LOCK_FILE="$LOCK_DIR/systemd_services.lck"
 SERVICE_MANAGEMENT_MODE="$(arthexis_detect_service_mode "$LOCK_DIR")"
 SERVICE_NAME=""
@@ -41,45 +40,6 @@ for env_file in *.env; do
   . "$env_file"
   set +a
 done
-
-# Determine whether to skip auto-upgrade once
-SKIP_UPGRADE=false
-if [ -f "$SKIP_LOCK" ]; then
-  now=$(date +%s)
-  modified=""
-  if stat -c %Y "$SKIP_LOCK" >/dev/null 2>&1; then
-    modified=$(stat -c %Y "$SKIP_LOCK")
-  elif stat -f %m "$SKIP_LOCK" >/dev/null 2>&1; then
-    modified=$(stat -f %m "$SKIP_LOCK")
-  fi
-  if [ -n "$modified" ] && [ $((now - modified)) -le 300 ]; then
-    SKIP_UPGRADE=true
-  else
-    echo "Ignoring stale manual start lock older than 5 minutes."
-  fi
-  rm -f "$SKIP_LOCK"
-fi
-
-# Run auto-upgrade during startup unless a one-time skip was requested
-if [ "$SKIP_UPGRADE" != true ] && [ -f "$LOCK_DIR/auto_upgrade.lck" ]; then
-  MODE=$(tr -d '\r\n' < "$LOCK_DIR/auto_upgrade.lck" | tr 'A-Z' 'a-z')
-  [ -n "$MODE" ] || MODE="version"
-  UPGRADE_ARGS=("$BASE_DIR/upgrade.sh")
-  # Prevent upgrade.sh from restarting services here; service-start.sh will continue with startup
-  UPGRADE_ARGS+=("--no-restart")
-  case "$MODE" in
-    latest)
-      UPGRADE_ARGS+=("--latest")
-      ;;
-    stable)
-      UPGRADE_ARGS+=("--stable")
-      ;;
-    *)
-      ;;
-  esac
-  echo "Running startup upgrade with mode '$MODE'..."
-  "${UPGRADE_ARGS[@]}"
-fi
 
 # Collect static files only when their sources change
 STATIC_MD5_FILE="$BASE_DIR/staticfiles.md5"
