@@ -17,7 +17,7 @@ Check out the latest [Developer Article](https://arthexis.com/articles/protoline
 
   **Charge point → CSMS**
 
-  | Action | Version 1.6 | Version 2.0.1 | Version 2.1 | What we do |
+  | Action | 1.6 | 2.0.1 | 2.1 | What we do |
   | --- | --- | --- | --- | --- |
   | `Authorize` | ✅ | ✅ | ✅ | Validate RFID or token authorization requests before a session starts. |
   | `BootNotification` | ✅ | ✅ | ✅ | Register the charge point and update identity, firmware, and status details. |
@@ -34,7 +34,7 @@ Check out the latest [Developer Article](https://arthexis.com/articles/protoline
 
   **CSMS → Charge point**
 
-  | Action | Version 1.6 | Version 2.0.1 | Version 2.1 | What we do |
+  | Action | 1.6 | 2.0.1 | 2.1 | What we do |
   | --- | --- | --- | --- | --- |
   | `CancelReservation` | ✅ | ✅ | ✅ | Withdraw pending reservations and release connectors directly from the control center. |
   | `ChangeAvailability` | ✅ | ✅ | ✅ | Switch connectors or the whole station between operative and inoperative states. |

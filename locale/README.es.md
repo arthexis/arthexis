@@ -17,7 +17,7 @@ Consulta el nuevo [artículo para desarrolladores](https://arthexis.com/articles
 
   **Punto de carga → CSMS**
 
-  | Acción | Versión 1.6 | Versión 2.0.1 | Versión 2.1 | Qué hacemos |
+  | Acción | 1.6 | 2.0.1 | 2.1 | Qué hacemos |
   | --- | --- | --- | --- | --- |
   | `Authorize` | ✅ | ✅ | ✅ | Validamos solicitudes de autorización por RFID o token antes de iniciar una sesión. |
   | `BootNotification` | ✅ | ✅ | ✅ | Registramos el punto de carga y actualizamos identidad, firmware y estado. |
@@ -34,7 +34,7 @@ Consulta el nuevo [artículo para desarrolladores](https://arthexis.com/articles
 
   **CSMS → Punto de carga**
 
-  | Acción | Versión 1.6 | Versión 2.0.1 | Versión 2.1 | Qué hacemos |
+  | Acción | 1.6 | 2.0.1 | 2.1 | Qué hacemos |
   | --- | --- | --- | --- | --- |
   | `CancelReservation` | ✅ | ✅ | ✅ | Cancelamos reservas pendientes y liberamos conectores directamente desde el centro de control. |
   | `ChangeAvailability` | ✅ | ✅ | ✅ | Cambiamos conectores o estaciones completas entre estados operativos e inoperativos. |
