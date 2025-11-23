@@ -559,56 +559,28 @@ if [ -n "$SERVICE" ]; then
     arthexis_install_service_stack "$BASE_DIR" "$LOCK_DIR" "$SERVICE" "$ENABLE_CELERY" "$EXEC_CMD" "$SERVICE_MANAGEMENT_MODE" "$ENABLE_WATCHDOG"
 fi
 
-if [ "$ENABLE_LCD_SCREEN" = true ] && [ -n "$SERVICE" ]; then
-  LCD_SERVICE="lcd-$SERVICE"
-  if [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
-    LCD_SERVICE_FILE="/etc/systemd/system/${LCD_SERVICE}.service"
-    LCD_SERVICE_USER="$(arthexis_detect_service_user "$BASE_DIR")"
-    sudo bash -c "cat > '$LCD_SERVICE_FILE'" <<SERVICEEOF
-[Unit]
-Description=LCD screen updater service for Arthexis
-After=${SERVICE}.service network-online.target
-Requires=${SERVICE}.service
-PartOf=${SERVICE}.service
-Wants=network-online.target
-
-[Service]
-Type=simple
-WorkingDirectory=$BASE_DIR
-ExecStart=$BASE_DIR/.venv/bin/python -m core.lcd_screen
-Restart=always
-TimeoutStartSec=500
-StandardOutput=journal
-StandardError=journal
-User=$LCD_SERVICE_USER
-
-[Install]
-WantedBy=multi-user.target
-SERVICEEOF
-        sudo systemctl daemon-reload
-        sudo systemctl enable "$LCD_SERVICE"
-        arthexis_record_systemd_unit "$LOCK_DIR" "${LCD_SERVICE}.service"
+if [ -n "$SERVICE" ]; then
+    LCD_SERVICE="lcd-$SERVICE"
+    if [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
+        if [ "$DISABLE_LCD_SCREEN" = true ]; then
+            if systemctl list-unit-files | grep -Fq "${LCD_SERVICE}.service"; then
+                sudo systemctl stop "$LCD_SERVICE" || true
+                sudo systemctl disable "$LCD_SERVICE" || true
+                LCD_SERVICE_FILE="/etc/systemd/system/${LCD_SERVICE}.service"
+                if [ -f "$LCD_SERVICE_FILE" ]; then
+                    sudo rm "$LCD_SERVICE_FILE"
+                fi
+                sudo systemctl daemon-reload
+            fi
+            arthexis_remove_systemd_unit_record "$LOCK_DIR" "${LCD_SERVICE}.service"
+        elif [ "$ENABLE_LCD_SCREEN" = true ] || [ "$ENABLE_CONTROL" = true ]; then
+            arthexis_install_lcd_service_unit "$BASE_DIR" "$LOCK_DIR" "$SERVICE"
+        else
+            arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${LCD_SERVICE}.service"
+        fi
     else
         arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${LCD_SERVICE}.service"
     fi
-elif [ "$DISABLE_LCD_SCREEN" = true ]; then
-    if [ -z "$SERVICE" ] && [ -f "$LOCK_DIR/service.lck" ]; then
-        SERVICE="$(cat "$LOCK_DIR/service.lck")"
-    fi
-    if [ -n "$SERVICE" ]; then
-        LCD_SERVICE="lcd-$SERVICE"
-        if systemctl list-unit-files | grep -Fq "${LCD_SERVICE}.service"; then
-            sudo systemctl stop "$LCD_SERVICE" || true
-            sudo systemctl disable "$LCD_SERVICE" || true
-            LCD_SERVICE_FILE="/etc/systemd/system/${LCD_SERVICE}.service"
-            if [ -f "$LCD_SERVICE_FILE" ]; then
-                sudo rm "$LCD_SERVICE_FILE"
-            fi
-            sudo systemctl daemon-reload
-        fi
-        arthexis_remove_systemd_unit_record "$LOCK_DIR" "${LCD_SERVICE}.service"
-    fi
-    arthexis_disable_lcd_feature_flag "$LOCK_DIR"
 fi
 
 
