@@ -4501,7 +4501,11 @@ class PackageRelease(Entity):
                     parts[index] = str(int(segment) + 1)
                     return ".".join(parts)
             return cleaned or text
-        return f"{parsed.major}.{parsed.minor}.{parsed.micro + 1}"
+
+        bumped_patch = f"{parsed.major}.{parsed.minor}.{parsed.micro + 1}"
+        if parsed.epoch:
+            return f"{parsed.epoch}!{bumped_patch}"
+        return bumped_patch
 
     class Severity(models.TextChoices):
         NORMAL = "normal", _("Normal")
