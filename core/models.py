@@ -4477,6 +4477,36 @@ class PackageRelease(Entity):
     def natural_key(self):
         return (self.package.name, self.version)
 
+    @staticmethod
+    def normalize_version(version: str) -> str:
+        """Return a release-safe version without local identifiers.
+
+        Versions containing a ``+`` are treated as local builds and bumped to
+        the next patch release.
+        """
+        from packaging.version import InvalidVersion, Version
+
+        text = (version or "").strip()
+        if "+" not in text:
+            return text
+
+        cleaned = text.rstrip("+")
+        try:
+            parsed = Version(cleaned)
+        except InvalidVersion:
+            parts = cleaned.split(".") if cleaned else []
+            for index in range(len(parts) - 1, -1, -1):
+                segment = parts[index]
+                if segment.isdigit():
+                    parts[index] = str(int(segment) + 1)
+                    return ".".join(parts)
+            return cleaned or text
+
+        bumped_patch = f"{parsed.major}.{parsed.minor}.{parsed.micro + 1}"
+        if parsed.epoch:
+            return f"{parsed.epoch}!{bumped_patch}"
+        return bumped_patch
+
     class Severity(models.TextChoices):
         NORMAL = "normal", _("Normal")
         LOW = "low", _("Low")
@@ -4581,6 +4611,14 @@ class PackageRelease(Entity):
     def save(self, *args, **kwargs):
         sync_schedule = kwargs.pop("sync_schedule", True)
         sync_timer = kwargs.pop("sync_timer", True)
+        update_fields = kwargs.get("update_fields")
+        normalized_version = type(self).normalize_version(self.version)
+        if normalized_version != self.version:
+            self.version = normalized_version
+            if update_fields:
+                updated_fields = set(update_fields)
+                updated_fields.add("version")
+                kwargs["update_fields"] = list(updated_fields)
         super().save(*args, **kwargs)
         if sync_schedule and self.pk:
             self.sync_scheduled_task()
