@@ -12,6 +12,8 @@ PIP_INSTALL_HELPER="$SCRIPT_DIR/scripts/helpers/pip_install.py"
 . "$SCRIPT_DIR/scripts/helpers/version_marker.sh"
 # shellcheck source=scripts/helpers/ports.sh
 . "$SCRIPT_DIR/scripts/helpers/ports.sh"
+# shellcheck source=scripts/helpers/nginx_maintenance.sh
+. "$SCRIPT_DIR/scripts/helpers/nginx_maintenance.sh"
 # shellcheck source=scripts/helpers/systemd_locks.sh
 . "$SCRIPT_DIR/scripts/helpers/systemd_locks.sh"
 # shellcheck source=scripts/helpers/service_manager.sh
@@ -177,6 +179,26 @@ require_redis() {
 CELERY_BROKER_URL=redis://localhost:6379/0
 CELERY_RESULT_BACKEND=redis://localhost:6379/0
 EOF
+}
+
+configure_nginx_site() {
+    local setup_script="$SCRIPT_DIR/nginx-setup.sh"
+
+    if [ ! -x "$setup_script" ]; then
+        echo "nginx setup script missing at $setup_script; skipping nginx configuration." >&2
+        return 0
+    fi
+
+    if ! arthexis_can_manage_nginx; then
+        echo "Skipping nginx configuration; sudo privileges or nginx assets are unavailable." >&2
+        return 0
+    fi
+
+    if "$setup_script" --mode "$NGINX_MODE" --port "$PORT" --role "$NODE_ROLE"; then
+        echo "nginx configuration applied using $setup_script."
+    else
+        echo "Warning: failed to configure nginx via $setup_script" >&2
+    fi
 }
 
 check_nginx_and_redis() {
@@ -478,6 +500,8 @@ fi
 echo "$PORT" > "$LOCK_DIR/backend_port.lck"
 echo "$NGINX_MODE" > "$LOCK_DIR/nginx_mode.lck"
 echo "$NODE_ROLE" > "$LOCK_DIR/role.lck"
+
+configure_nginx_site
 
 source .venv/bin/activate
 pip install --upgrade pip
