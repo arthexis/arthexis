@@ -27,6 +27,7 @@ from datetime import (
     date as datetime_date,
     timezone as datetime_timezone,
 )
+import contextlib
 import logging
 import json
 from decimal import Decimal
@@ -1005,6 +1006,7 @@ class OpenPayProfile(Profile):
 
     def _verify_openpay(self):
         url = self.build_api_url("charges")
+        response = None
         try:
             response = requests.get(
                 url,
@@ -1020,40 +1022,47 @@ class OpenPayProfile(Profile):
                 _("Unable to verify OpenPay credentials: %(error)s")
                 % {"error": exc}
             ) from exc
-        if response.status_code != 200:
-            self._clear_verification()
-            if self.pk:
-                self.save(update_fields=["verification_reference", "verified_on"])
-            raise ValidationError(_("Invalid OpenPay credentials"))
+
         try:
-            payload = response.json() or {}
-        except ValueError:
-            payload = {}
-        reference = ""
-        if isinstance(payload, dict):
-            reference = (
-                payload.get("status")
-                or payload.get("name")
-                or payload.get("id")
-                or payload.get("description")
-                or ""
-            )
-        elif isinstance(payload, list) and payload:
-            first = payload[0]
-            if isinstance(first, dict):
+            if response.status_code != 200:
+                self._clear_verification()
+                if self.pk:
+                    self.save(update_fields=["verification_reference", "verified_on"])
+                raise ValidationError(_("Invalid OpenPay credentials"))
+            try:
+                payload = response.json() or {}
+            except ValueError:
+                payload = {}
+            reference = ""
+            if isinstance(payload, dict):
                 reference = (
-                    first.get("status")
-                    or first.get("id")
-                    or first.get("description")
+                    payload.get("status")
+                    or payload.get("name")
+                    or payload.get("id")
+                    or payload.get("description")
                     or ""
                 )
-        self.verification_reference = str(reference) if reference else ""
-        self.verified_on = timezone.now()
-        self.save(update_fields=["verification_reference", "verified_on"])
-        return True
+            elif isinstance(payload, list) and payload:
+                first = payload[0]
+                if isinstance(first, dict):
+                    reference = (
+                        first.get("status")
+                        or first.get("id")
+                        or first.get("description")
+                        or ""
+                    )
+            self.verification_reference = str(reference) if reference else ""
+            self.verified_on = timezone.now()
+            self.save(update_fields=["verification_reference", "verified_on"])
+            return True
+        finally:
+            if response is not None:
+                with contextlib.suppress(Exception):
+                    response.close()
 
     def _verify_paypal(self):
         url = f"{self.get_paypal_api_base_url()}/v1/oauth2/token"
+        response = None
         try:
             response = requests.post(
                 url,
@@ -1069,25 +1078,31 @@ class OpenPayProfile(Profile):
                 _("Unable to verify PayPal credentials: %(error)s")
                 % {"error": exc}
             ) from exc
-        if response.status_code != 200:
-            self._clear_verification()
-            if self.pk:
-                self.save(update_fields=["verification_reference", "verified_on"])
-            raise ValidationError(_("Invalid PayPal credentials"))
         try:
-            payload = response.json() or {}
-        except ValueError:
-            payload = {}
-        scope = ""
-        if isinstance(payload, dict):
-            scope = payload.get("scope") or payload.get("access_token") or ""
-        self.verification_reference = f"PayPal: {scope}" if scope else "PayPal"
-        self.verified_on = timezone.now()
-        self.save(update_fields=["verification_reference", "verified_on"])
-        return True
+            if response.status_code != 200:
+                self._clear_verification()
+                if self.pk:
+                    self.save(update_fields=["verification_reference", "verified_on"])
+                raise ValidationError(_("Invalid PayPal credentials"))
+            try:
+                payload = response.json() or {}
+            except ValueError:
+                payload = {}
+            scope = ""
+            if isinstance(payload, dict):
+                scope = payload.get("scope") or payload.get("access_token") or ""
+            self.verification_reference = f"PayPal: {scope}" if scope else "PayPal"
+            self.verified_on = timezone.now()
+            self.save(update_fields=["verification_reference", "verified_on"])
+            return True
+        finally:
+            if response is not None:
+                with contextlib.suppress(Exception):
+                    response.close()
 
     def _verify_stripe(self):
         url = f"{self.get_stripe_api_base_url()}/v1/account"
+        response = None
         try:
             response = requests.get(
                 url,
@@ -1102,27 +1117,32 @@ class OpenPayProfile(Profile):
                 _("Unable to verify Stripe credentials: %(error)s")
                 % {"error": exc}
             ) from exc
-        if response.status_code != 200:
-            self._clear_verification()
-            if self.pk:
-                self.save(update_fields=["verification_reference", "verified_on"])
-            raise ValidationError(_("Invalid Stripe credentials"))
         try:
-            payload = response.json() or {}
-        except ValueError:
-            payload = {}
-        reference = ""
-        if isinstance(payload, dict):
-            reference = (
-                payload.get("id")
-                or payload.get("email")
-                or payload.get("object")
-                or ""
-            )
-        self.verification_reference = f"Stripe: {reference}" if reference else "Stripe"
-        self.verified_on = timezone.now()
-        self.save(update_fields=["verification_reference", "verified_on"])
-        return True
+            if response.status_code != 200:
+                self._clear_verification()
+                if self.pk:
+                    self.save(update_fields=["verification_reference", "verified_on"])
+                raise ValidationError(_("Invalid Stripe credentials"))
+            try:
+                payload = response.json() or {}
+            except ValueError:
+                payload = {}
+            reference = ""
+            if isinstance(payload, dict):
+                reference = (
+                    payload.get("id")
+                    or payload.get("email")
+                    or payload.get("object")
+                    or ""
+                )
+            self.verification_reference = f"Stripe: {reference}" if reference else "Stripe"
+            self.verified_on = timezone.now()
+            self.save(update_fields=["verification_reference", "verified_on"])
+            return True
+        finally:
+            if response is not None:
+                with contextlib.suppress(Exception):
+                    response.close()
 
     def verify(self):
         errors = []
@@ -1301,6 +1321,7 @@ class GoogleCalendarProfile(Profile):
             "maxResults": max_results or self.max_events or 5,
         }
 
+        response = None
         try:
             response = requests.get(url, params=params, timeout=10)
             response.raise_for_status()
@@ -1311,6 +1332,10 @@ class GoogleCalendarProfile(Profile):
                 exc_info=True,
             )
             return []
+        finally:
+            if response is not None:
+                with contextlib.suppress(Exception):
+                    response.close()
 
         items = payload.get("items")
         if not isinstance(items, list):

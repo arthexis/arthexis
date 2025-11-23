@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import logging
 from typing import Mapping
 
@@ -48,25 +49,33 @@ def create_repository(
 
     payload = _build_repository_payload(repo, visibility, description)
 
-    response = requests.post(
-        url,
-        json=payload,
-        headers=headers,
-        timeout=REQUEST_TIMEOUT,
-    )
-
-    if not (200 <= response.status_code < 300):
-        logger.error(
-            "GitHub repository creation failed with status %s: %s",
-            response.status_code,
-            response.text,
+    response = None
+    try:
+        response = requests.post(
+            url,
+            json=payload,
+            headers=headers,
+            timeout=REQUEST_TIMEOUT,
         )
-        response.raise_for_status()
 
-    logger.info(
-        "GitHub repository created for %s with status %s",
-        owner or "authenticated user",
-        response.status_code,
-    )
+        if not (200 <= response.status_code < 300):
+            logger.error(
+                "GitHub repository creation failed with status %s: %s",
+                response.status_code,
+                response.text,
+            )
+            response.raise_for_status()
 
-    return response
+        logger.info(
+            "GitHub repository created for %s with status %s",
+            owner or "authenticated user",
+            response.status_code,
+        )
+
+        return response
+    finally:
+        if response is not None:
+            close = getattr(response, "close", None)
+            if callable(close):
+                with contextlib.suppress(Exception):
+                    close()

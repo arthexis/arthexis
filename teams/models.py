@@ -6,6 +6,7 @@ from math import ceil
 from pathlib import Path
 from typing import Iterable, Iterator, Sequence
 
+import contextlib
 import requests
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -900,21 +901,29 @@ class SlackBotProfile(CoreProfile):
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json; charset=utf-8",
         }
+        response = None
         try:
             response = requests.post(url, json=payload, headers=headers, timeout=5)
         except requests.RequestException as exc:  # pragma: no cover - network issues
             raise SlackApiError("request_failed") from exc
-        data: dict[str, object] | None
         try:
-            data = response.json()
-        except ValueError:
-            data = None
-        if not response.ok or not isinstance(data, dict) or not data.get("ok"):
-            error = "unknown_error"
-            if isinstance(data, dict):
-                error = str(data.get("error") or error)
-            raise SlackApiError(error)
-        return data
+            data: dict[str, object] | None
+            try:
+                data = response.json()
+            except ValueError:
+                data = None
+            if not response.ok or not isinstance(data, dict) or not data.get("ok"):
+                error = "unknown_error"
+                if isinstance(data, dict):
+                    error = str(data.get("error") or error)
+                raise SlackApiError(error)
+            return data
+        finally:
+            if response is not None:
+                close = getattr(response, "close", None)
+                if callable(close):
+                    with contextlib.suppress(Exception):
+                        close()
 
     def _profile_fields(self) -> Iterable[str]:  # pragma: no cover - admin helper
         return self.profile_fields
