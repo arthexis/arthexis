@@ -918,6 +918,7 @@ def check_pypi_readiness(
         add("warning", "requests library unavailable; skipping network checks")
         return PyPICheckResult(ok=not has_error, messages=messages)
 
+    resp = None
     try:
         resp = requests.get(
             f"https://pypi.org/pypi/{package.name}/json", timeout=10
@@ -935,6 +936,12 @@ def check_pypi_readiness(
                 "error",
                 f"PyPI JSON API returned status {resp.status_code} for '{package.name}'",
             )
+    finally:
+        if resp is not None:
+            close = getattr(resp, "close", None)
+            if callable(close):
+                with contextlib.suppress(Exception):
+                    close()
 
     checked_urls: set[str] = set()
     for target in repositories:
@@ -942,20 +949,29 @@ def check_pypi_readiness(
         if url in checked_urls:
             continue
         checked_urls.add(url)
+        resp = None
         try:
             resp = requests.get(url, timeout=10)
         except Exception as exc:  # pragma: no cover - network failure
             add("error", f"Failed to reach upload endpoint {url}: {exc}")
             continue
-        if resp.ok:
-            add(
-                "success",
-                f"Upload endpoint {url} responded with status {resp.status_code}",
-            )
-        else:
-            add(
-                "error",
-                f"Upload endpoint {url} returned status {resp.status_code}",
-            )
+
+        try:
+            if resp.ok:
+                add(
+                    "success",
+                    f"Upload endpoint {url} responded with status {resp.status_code}",
+                )
+            else:
+                add(
+                    "error",
+                    f"Upload endpoint {url} returned status {resp.status_code}",
+                )
+        finally:
+            if resp is not None:
+                close = getattr(resp, "close", None)
+                if callable(close):
+                    with contextlib.suppress(Exception):
+                        close()
 
     return PyPICheckResult(ok=not has_error, messages=messages)

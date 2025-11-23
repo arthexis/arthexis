@@ -1,4 +1,5 @@
 from collections import defaultdict
+import contextlib
 from io import BytesIO
 import os
 from typing import Any
@@ -579,6 +580,7 @@ class ReleaseManagerAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModel
             if creds.token
             else (creds.username, creds.password)
         )
+        resp = None
         try:
             resp = requests.post(
                 url,
@@ -611,6 +613,12 @@ class ReleaseManagerAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModel
             self.message_user(
                 request, f"{manager} credentials check failed: {exc}", messages.ERROR
             )
+        finally:
+            if resp is not None:
+                close = getattr(resp, "close", None)
+                if callable(close):
+                    with contextlib.suppress(Exception):
+                        close()
 
     (
         test_credentials,
@@ -680,6 +688,7 @@ class PackageAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             repo_version = Version("0.0.0")
 
         pypi_latest = Version("0.0.0")
+        resp = None
         try:
             resp = requests.get(
                 f"https://pypi.org/pypi/{package.name}/json", timeout=10
@@ -690,6 +699,12 @@ class PackageAdmin(SaveBeforeChangeAction, EntityModelAdmin):
                     pypi_latest = max(Version(v) for v in releases)
         except Exception:
             pass
+        finally:
+            if resp is not None:
+                close = getattr(resp, "close", None)
+                if callable(close):
+                    with contextlib.suppress(Exception):
+                        close()
         pypi_plus_one = Version(
             PackageRelease._format_patch_with_epoch(pypi_latest)
         )
@@ -4407,15 +4422,22 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         if not package:
             self.message_user(request, "No active package", messages.ERROR)
             return
+        resp = None
         try:
             resp = requests.get(
                 f"https://pypi.org/pypi/{package.name}/json", timeout=10
             )
             resp.raise_for_status()
+            releases = resp.json().get("releases", {})
         except Exception as exc:  # pragma: no cover - network failure
             self.message_user(request, str(exc), messages.ERROR)
             return
-        releases = resp.json().get("releases", {})
+        finally:
+            if resp is not None:
+                close = getattr(resp, "close", None)
+                if callable(close):
+                    with contextlib.suppress(Exception):
+                        close()
         updated = 0
         restored = 0
         missing: list[str] = []
@@ -4575,20 +4597,29 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
                 )
                 continue
             url = f"https://pypi.org/pypi/{release.package.name}/{release.version}/json"
+            resp = None
             try:
                 resp = requests.get(url, timeout=10)
             except Exception as exc:  # pragma: no cover - network failure
                 self.message_user(request, f"{release}: {exc}", messages.ERROR)
                 continue
-            if resp.status_code == 200:
-                continue
-            release.delete()
-            deleted = True
-            self.message_user(
-                request,
-                f"Deleted {release} as it was not found on PyPI",
-                messages.WARNING,
-            )
+
+            try:
+                if resp.status_code == 200:
+                    continue
+                release.delete()
+                deleted = True
+                self.message_user(
+                    request,
+                    f"Deleted {release} as it was not found on PyPI",
+                    messages.WARNING,
+                )
+            finally:
+                if resp is not None:
+                    close = getattr(resp, "close", None)
+                    if callable(close):
+                        with contextlib.suppress(Exception):
+                            close()
         if deleted:
             PackageRelease.dump_fixture()
 

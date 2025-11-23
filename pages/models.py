@@ -1472,9 +1472,15 @@ class UserStory(Lead):
             return None
 
         try:
-            payload = response.json()
-        except ValueError:  # pragma: no cover - defensive guard
-            payload = {}
+            try:
+                payload = response.json()
+            except ValueError:  # pragma: no cover - defensive guard
+                payload = {}
+        finally:
+            close = getattr(response, "close", None)
+            if callable(close):
+                with contextlib.suppress(Exception):
+                    close()
 
         issue_url = payload.get("html_url")
         issue_number = payload.get("number")

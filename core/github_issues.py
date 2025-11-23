@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import logging
 import os
@@ -163,16 +164,29 @@ def create_issue(
     }
     url = f"https://api.github.com/repos/{owner}/{repo}/issues"
 
-    response = requests.post(
-        url, json=payload, headers=headers, timeout=REQUEST_TIMEOUT
-    )
+    response = None
+    try:
+        response = requests.post(
+            url, json=payload, headers=headers, timeout=REQUEST_TIMEOUT
+        )
+    except Exception:
+        if response is not None:
+            with contextlib.suppress(Exception):
+                response.close()
+        raise
+
     if not (200 <= response.status_code < 300):
         logger.error(
             "GitHub issue creation failed with status %s: %s",
             response.status_code,
             response.text,
         )
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        finally:
+            with contextlib.suppress(Exception):
+                response.close()
+        return None
 
     logger.info(
         "GitHub issue created for %s/%s with status %s",
