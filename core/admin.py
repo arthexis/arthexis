@@ -691,7 +691,7 @@ class PackageAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         except Exception:
             pass
         pypi_plus_one = Version(
-            f"{pypi_latest.major}.{pypi_latest.minor}.{pypi_latest.micro + 1}"
+            PackageRelease._format_patch_with_epoch(pypi_latest)
         )
         next_version = max(repo_version, pypi_plus_one)
         release, _created = PackageRelease.all_objects.update_or_create(

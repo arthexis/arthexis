@@ -53,3 +53,11 @@ class PackageAdminPrepareTests(TestCase):
         self.admin._prepare(self.factory.get("/"), self.package)
         release = PackageRelease.objects.get(package=self.package)
         self.assertEqual(release.version, "1!0.1.1")
+
+    @patch("core.admin.requests.get")
+    def test_pypi_epoch_preserved_when_bumping(self, mock_get):
+        mock_get.return_value = self._mock_pypi("1!0.1")
+        self.version_file.write_text("0.0.1")
+        self.admin._prepare(self.factory.get("/"), self.package)
+        release = PackageRelease.objects.get(package=self.package)
+        self.assertEqual(release.version, "1!0.1.1")

@@ -4478,6 +4478,15 @@ class PackageRelease(Entity):
         return (self.package.name, self.version)
 
     @staticmethod
+    def _format_patch_with_epoch(parsed: "Version", *, increment: int = 1) -> str:
+        """Return a patch-bumped version string preserving the epoch."""
+
+        bumped_patch = f"{parsed.major}.{parsed.minor}.{parsed.micro + increment}"
+        if parsed.epoch:
+            return f"{parsed.epoch}!{bumped_patch}"
+        return bumped_patch
+
+    @staticmethod
     def normalize_version(version: str) -> str:
         """Return a release-safe version without local identifiers.
 
@@ -4502,10 +4511,7 @@ class PackageRelease(Entity):
                     return ".".join(parts)
             return cleaned or text
 
-        bumped_patch = f"{parsed.major}.{parsed.minor}.{parsed.micro + 1}"
-        if parsed.epoch:
-            return f"{parsed.epoch}!{bumped_patch}"
-        return bumped_patch
+        return PackageRelease._format_patch_with_epoch(parsed)
 
     class Severity(models.TextChoices):
         NORMAL = "normal", _("Normal")
