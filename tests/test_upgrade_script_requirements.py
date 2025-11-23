@@ -20,3 +20,9 @@ def test_upgrade_script_runs_database_migrations() -> None:
 def test_upgrade_script_reloads_personal_fixtures() -> None:
     content = _read_upgrade_script()
     assert "python manage.py loaddata data/*.json" in content
+
+
+def test_upgrade_script_applies_nginx_configuration() -> None:
+    content = _read_upgrade_script()
+    assert "nginx-setup.sh" in content
+    assert "configure_nginx_site" in content

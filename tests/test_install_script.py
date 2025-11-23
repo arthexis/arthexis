@@ -101,10 +101,11 @@ def test_install_script_checks_rfid_for_control_nodes():
     assert "rfid-scanner" in content
 
 
-def test_install_script_defers_nginx_configuration():
+def test_install_script_configures_nginx_during_install():
     script_path = Path(__file__).resolve().parent.parent / "install.sh"
     content = script_path.read_text()
-    assert "render_nginx_default.py" not in content
+    assert "nginx-setup.sh" in content
+    assert "configure_nginx_site" in content
 
 
 def test_nginx_setup_script_renders_nginx_config_with_helper():

@@ -62,6 +62,23 @@ ensure_git_safe_directory() {
   git config --global --add safe.directory "$BASE_DIR" >/dev/null 2>&1 || true
 }
 
+configure_nginx_site() {
+  local setup_script="$BASE_DIR/nginx-setup.sh"
+
+  if [ ! -x "$setup_script" ]; then
+    return 0
+  fi
+
+  if ! arthexis_can_manage_nginx; then
+    echo "Skipping nginx configuration; sudo privileges or nginx assets are unavailable." >&2
+    return 0
+  fi
+
+  if ! "$setup_script"; then
+    echo "Warning: failed to configure nginx via $setup_script" >&2
+  fi
+}
+
 ensure_git_safe_directory
 
 queue_startup_net_message() {
@@ -794,6 +811,8 @@ if [ $VENV_PRESENT -eq 0 ]; then
   echo "Virtual environment not found. Run ./install.sh to install the node. Skipping remaining steps." >&2
   exit 0
 fi
+
+configure_nginx_site
 
 if arthexis_can_manage_nginx; then
   arthexis_refresh_nginx_maintenance "$BASE_DIR" \
