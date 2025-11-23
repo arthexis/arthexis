@@ -5,6 +5,7 @@ from django.core.exceptions import ValidationError
 from django.http import HttpResponseRedirect
 from django.urls import path, reverse
 from urllib.parse import urlencode
+import contextlib
 import secrets
 import requests
 from django.utils import formats, timezone
@@ -283,6 +284,7 @@ class SlackBotProfileAdmin(DjangoObjectActions, EntityModelAdmin):
         redirect_uri = request.build_absolute_uri(
             reverse("admin:teams_slackbotprofile_bot_creation_callback")
         )
+        response = None
         try:
             response = requests.post(
                 "https://slack.com/api/oauth.v2.access",
@@ -297,6 +299,12 @@ class SlackBotProfileAdmin(DjangoObjectActions, EntityModelAdmin):
             data = response.json()
         except Exception:
             data = None
+        finally:
+            if response is not None:
+                close = getattr(response, "close", None)
+                if callable(close):
+                    with contextlib.suppress(Exception):
+                        close()
 
         if not isinstance(data, dict) or not data.get("ok"):
             error_message = "unknown_error"

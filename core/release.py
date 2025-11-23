@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import os
 import shlex
 import shutil
@@ -592,11 +593,23 @@ def build(
             except Exception:
                 requests = None  # type: ignore
             if requests is not None:
-                resp = requests.get(f"https://pypi.org/pypi/{package.name}/json")
-                if resp.ok:
-                    releases = resp.json().get("releases", {})
-                    if version in releases:
-                        raise ReleaseError(f"Version {version} already on PyPI")
+                resp = None
+                try:
+                    resp = requests.get(
+                        f"https://pypi.org/pypi/{package.name}/json"
+                    )
+                    if resp.ok:
+                        releases = resp.json().get("releases", {})
+                        if version in releases:
+                            raise ReleaseError(
+                                f"Version {version} already on PyPI"
+                            )
+                finally:
+                    if resp is not None:
+                        close = getattr(resp, "close", None)
+                        if callable(close):
+                            with contextlib.suppress(Exception):
+                                close()
         creds = (
             creds
             or _manager_credentials()
@@ -691,9 +704,17 @@ def publish(
     primary = repository_targets[0]
 
     if network_available() and primary.verify_availability and requests is not None:
-        resp = requests.get(f"https://pypi.org/pypi/{package.name}/json")
-        if resp.ok and version in resp.json().get("releases", {}):
-            raise ReleaseError(f"Version {version} already on PyPI")
+        resp = None
+        try:
+            resp = requests.get(f"https://pypi.org/pypi/{package.name}/json")
+            if resp.ok and version in resp.json().get("releases", {}):
+                raise ReleaseError(f"Version {version} already on PyPI")
+        finally:
+            if resp is not None:
+                close = getattr(resp, "close", None)
+                if callable(close):
+                    with contextlib.suppress(Exception):
+                        close()
 
     if not Path("dist").exists():
         raise ReleaseError("dist directory not found")
