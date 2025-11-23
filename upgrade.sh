@@ -149,6 +149,28 @@ fi
 
 SYSTEMD_DIR="${SYSTEMD_DIR:-/etc/systemd/system}"
 
+lcd_systemd_unit_present() {
+  local service_name="$1"
+
+  if [ -z "$service_name" ] || [ "$SERVICE_MANAGEMENT_MODE" != "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
+    return 1
+  fi
+
+  local lcd_unit
+  lcd_unit="lcd-${service_name}.service"
+
+  if [ -f "${SYSTEMD_DIR}/${lcd_unit}" ]; then
+    return 0
+  fi
+
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl list-unit-files | awk '{print $1}' | grep -Fxq "$lcd_unit"
+    return $?
+  fi
+
+  return 1
+}
+
 # Repair any auto-upgrade working directory to keep services consistent before modifying systemd.
 if [ -n "$SERVICE_NAME" ]; then
   arthexis_repair_auto_upgrade_workdir "$BASE_DIR" "$SERVICE_NAME" "$SYSTEMD_DIR"
@@ -513,7 +535,7 @@ restart_services() {
         "${systemctl_cmd[@]}" kill --signal=TERM "$service_name" || true
         restart_via_systemd=1
       fi
-      if arthexis_lcd_feature_enabled "$LOCK_DIR" && [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
+      if lcd_systemd_unit_present "$service_name"; then
         local lcd_service="lcd-$service_name"
         if "${systemctl_cmd[@]}" is-active --quiet "$lcd_service"; then
           echo "Signaling $lcd_service for restart via systemd..."
@@ -526,7 +548,7 @@ restart_services() {
         echo "Service $service_name did not become active after restart." >&2
         return 1
       fi
-      if arthexis_lcd_feature_enabled "$LOCK_DIR" && [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
+      if lcd_systemd_unit_present "$service_name"; then
         local lcd_service="lcd-$service_name"
         if ! wait_for_service_active "$lcd_service" 1; then
           if [ "$systemctl_available" -eq 1 ]; then
@@ -596,7 +618,7 @@ restart_services() {
       echo "Service $service_name did not become active after restart." >&2
       return 1
     fi
-    if arthexis_lcd_feature_enabled "$LOCK_DIR" && [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
+    if lcd_systemd_unit_present "$service_name"; then
       local lcd_service="lcd-$service_name"
       if ! wait_for_service_active "$lcd_service" 1; then
         echo "LCD service $lcd_service did not become active after restart." >&2
@@ -781,6 +803,10 @@ if [[ $VENV_PRESENT -eq 1 ]]; then
     fi
     exit 1
   fi
+
+  if [ -n "$SERVICE_NAME" ] && lcd_systemd_unit_present "$SERVICE_NAME"; then
+    arthexis_stop_systemd_unit_if_present "lcd-${SERVICE_NAME}.service"
+  fi
 fi
 
 # Pull latest changes
@@ -859,7 +885,7 @@ if [ -n "$SERVICE_NAME" ]; then
     remove_prestart_env_refresh "celery-$SERVICE_NAME"
     remove_prestart_env_refresh "celery-beat-$SERVICE_NAME"
   fi
-  if arthexis_lcd_feature_enabled "$LOCK_DIR" && [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
+  if lcd_systemd_unit_present "$SERVICE_NAME"; then
     remove_prestart_env_refresh "lcd-$SERVICE_NAME"
   fi
 fi
@@ -875,6 +901,12 @@ if [ -f "$LOCK_DIR/service.lck" ]; then
     touch "$LOCK_DIR/celery.lck"
     arthexis_install_service_stack "$BASE_DIR" "$LOCK_DIR" "$SERVICE_NAME" true "$BASE_DIR/service-start.sh" "$SERVICE_MANAGEMENT_MODE"
   fi
+fi
+
+if [ -n "$SERVICE_NAME" ] && lcd_systemd_unit_present "$SERVICE_NAME"; then
+  arthexis_install_lcd_service_unit "$BASE_DIR" "$LOCK_DIR" "$SERVICE_NAME"
+elif [ -n "$SERVICE_NAME" ] && [ "$NODE_ROLE_NAME" = "Control" ] && [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
+  arthexis_install_lcd_service_unit "$BASE_DIR" "$LOCK_DIR" "$SERVICE_NAME"
 fi
 
 if [[ $NO_RESTART -eq 0 ]]; then

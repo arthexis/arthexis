@@ -65,12 +65,10 @@ if [ -f "$LOCK_DIR/service.lck" ]; then
       pkill -f "celery -A config" || true
     fi
 
-    if arthexis_lcd_feature_enabled "$LOCK_DIR"; then
-      LCD_SERVICE="lcd-$SERVICE_NAME"
-      if systemctl list-unit-files | awk '{print $1}' | grep -Fxq "${LCD_SERVICE}.service"; then
-        $SUDO systemctl stop "$LCD_SERVICE" || true
-        $SUDO systemctl status "$LCD_SERVICE" --no-pager || true
-      fi
+    LCD_SERVICE="lcd-$SERVICE_NAME"
+    if arthexis_lcd_feature_enabled "$LOCK_DIR" || systemctl list-unit-files | awk '{print $1}' | grep -Fxq "${LCD_SERVICE}.service"; then
+      $SUDO systemctl stop "$LCD_SERVICE" || true
+      $SUDO systemctl status "$LCD_SERVICE" --no-pager || true
     fi
 
     exit 0
