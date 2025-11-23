@@ -1,4 +1,5 @@
 import base64
+import contextlib
 import binascii
 import json
 import logging
@@ -1238,6 +1239,7 @@ def _step_check_version(release, ctx, log_path: Path, *, user=None) -> None:
 
     _append_log(log_path, f"Checking if version {release.version} exists on PyPI")
     if release_utils.network_available():
+        resp = None
         try:
             resp = requests.get(
                 f"https://pypi.org/pypi/{release.package.name}/json",
@@ -1280,6 +1282,12 @@ def _step_check_version(release, ctx, log_path: Path, *, user=None) -> None:
                 log_path,
                 f"Version {release.version} not published on PyPI",
             )
+        finally:
+            if resp is not None:
+                close = getattr(resp, "close", None)
+                if callable(close):
+                    with contextlib.suppress(Exception):
+                        close()
     else:
         _append_log(log_path, "Network unavailable, skipping PyPI check")
 

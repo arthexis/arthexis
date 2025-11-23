@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 from collections.abc import Mapping
@@ -140,6 +141,7 @@ def create_repository_for_package(
     last_error: str | None = None
 
     for index, endpoint in enumerate(endpoints):
+        response = None
         try:
             response = requests.post(
                 endpoint,
@@ -153,36 +155,43 @@ def create_repository_for_package(
             )
             raise GitHubRepositoryError(str(exc)) from exc
 
-        if 200 <= response.status_code < 300:
-            data = _safe_json(response)
-            html_url = data.get("html_url")
-            if html_url:
-                return html_url
+        try:
+            if 200 <= response.status_code < 300:
+                data = _safe_json(response)
+                html_url = data.get("html_url")
+                if html_url:
+                    return html_url
 
-            resolved_owner = (
-                data.get("owner", {}).get("login")
-                if isinstance(data.get("owner"), Mapping)
-                else owner
+                resolved_owner = (
+                    data.get("owner", {}).get("login")
+                    if isinstance(data.get("owner"), Mapping)
+                    else owner
+                )
+                resolved_owner = (resolved_owner or owner).strip("/")
+                return f"https://github.com/{resolved_owner}/{repo}"
+
+            message = _extract_error_message(response)
+            logger.error(
+                "GitHub repository creation failed for %s/%s (%s): %s",
+                owner or "<user>",
+                repo,
+                response.status_code,
+                message,
             )
-            resolved_owner = (resolved_owner or owner).strip("/")
-            return f"https://github.com/{resolved_owner}/{repo}"
+            last_error = message
 
-        message = _extract_error_message(response)
-        logger.error(
-            "GitHub repository creation failed for %s/%s (%s): %s",
-            owner or "<user>",
-            repo,
-            response.status_code,
-            message,
-        )
-        last_error = message
+            # If we're attempting to create within an organization and receive a
+            # not found or forbidden error, fall back to creating for the
+            # authenticated user.
+            if index == 0 and owner and response.status_code in {403, 404}:
+                continue
 
-        # If we're attempting to create within an organization and receive a
-        # not found or forbidden error, fall back to creating for the
-        # authenticated user.
-        if index == 0 and owner and response.status_code in {403, 404}:
-            continue
-
-        break
+            break
+        finally:
+            if response is not None:
+                close = getattr(response, "close", None)
+                if callable(close):
+                    with contextlib.suppress(Exception):
+                        close()
 
     raise GitHubRepositoryError(last_error or "GitHub repository creation failed")

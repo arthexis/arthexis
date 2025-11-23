@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import contextlib
 import logging
 import uuid
 from datetime import timedelta
@@ -633,6 +634,7 @@ class WhatsAppChatBridge(Entity):
             "text": {"body": content[:4096]},
         }
         timeout = getattr(settings, "PAGES_WHATSAPP_TIMEOUT", 10)
+        response = None
         try:
             response = requests.post(
                 endpoint, json=payload, headers=headers, timeout=timeout
@@ -644,15 +646,22 @@ class WhatsAppChatBridge(Entity):
                 getattr(session, "pk", None),
             )
             return False
-        if response.status_code >= 400:
-            logger.warning(
-                "WhatsApp API returned %s for session %s: %s",
-                response.status_code,
-                getattr(session, "pk", None),
-                getattr(response, "text", ""),
-            )
-            return False
-        return True
+        try:
+            if response.status_code >= 400:
+                logger.warning(
+                    "WhatsApp API returned %s for session %s: %s",
+                    response.status_code,
+                    getattr(session, "pk", None),
+                    getattr(response, "text", ""),
+                )
+                return False
+            return True
+        finally:
+            if response is not None:
+                close = getattr(response, "close", None)
+                if callable(close):
+                    with contextlib.suppress(Exception):
+                        close()
 
 
 from . import odoo as odoo_bridge
@@ -1463,9 +1472,15 @@ class UserStory(Lead):
             return None
 
         try:
-            payload = response.json()
-        except ValueError:  # pragma: no cover - defensive guard
-            payload = {}
+            try:
+                payload = response.json()
+            except ValueError:  # pragma: no cover - defensive guard
+                payload = {}
+        finally:
+            close = getattr(response, "close", None)
+            if callable(close):
+                with contextlib.suppress(Exception):
+                    close()
 
         issue_url = payload.get("html_url")
         issue_number = payload.get("number")

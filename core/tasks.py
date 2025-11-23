@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import shutil
@@ -1362,6 +1363,7 @@ def report_runtime_issue(
 ):
     """Report a runtime issue to GitHub using :mod:`core.github_issues`."""
 
+    response = None
     try:
         response = github_issues.create_issue(
             title,
@@ -1375,10 +1377,16 @@ def report_runtime_issue(
 
     if response is None:
         logger.info("Skipped GitHub issue creation for fingerprint %s", fingerprint)
-    else:
-        logger.info("Reported runtime issue '%s' to GitHub", title)
+        return None
 
-    return response
+    try:
+        logger.info("Reported runtime issue '%s' to GitHub", title)
+        return response
+    finally:
+        close = getattr(response, "close", None)
+        if callable(close):
+            with contextlib.suppress(Exception):
+                close()
 
 
 def _record_health_check_result(

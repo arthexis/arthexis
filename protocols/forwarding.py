@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import base64
 import json
 from pathlib import Path
@@ -150,6 +151,8 @@ def send_forwarding_metadata(
     for url in target.iter_remote_urls("/nodes/network/chargers/forward/"):
         if not url:
             continue
+
+        response = None
         try:
             response = requests.post(url, data=payload_json, headers=headers, timeout=5)
         except RequestException as exc:
@@ -162,25 +165,34 @@ def send_forwarding_metadata(
             continue
 
         try:
-            data: Mapping = response.json()
-        except ValueError:
-            data = {}
+            try:
+                data: Mapping = response.json()
+            except ValueError:
+                data = {}
 
-        if response.ok and isinstance(data, Mapping) and data.get("status") == "ok":
-            return True, None
+            if response.ok and isinstance(data, Mapping) and data.get("status") == "ok":
+                return True, None
 
-        detail = ""
-        if isinstance(data, Mapping):
-            detail = data.get("detail") or ""
-        errors.append(
-            _("Forwarding metadata to %(node)s via %(url)s failed: %(status)s %(detail)s")
-            % {
-                "node": target,
-                "url": url,
-                "status": response.status_code,
-                "detail": detail,
-            }
-        )
+            detail = ""
+            if isinstance(data, Mapping):
+                detail = data.get("detail") or ""
+            errors.append(
+                _(
+                    "Forwarding metadata to %(node)s via %(url)s failed: %(status)s %(detail)s"
+                )
+                % {
+                    "node": target,
+                    "url": url,
+                    "status": response.status_code,
+                    "detail": detail,
+                }
+            )
+        finally:
+            if response is not None:
+                close = getattr(response, "close", None)
+                if callable(close):
+                    with contextlib.suppress(Exception):
+                        close()
 
     if not errors:
         return False, _("No reachable host found for %(node)s.") % {"node": target}
