@@ -1,11 +1,8 @@
 <script>
   (function () {
     const qrContainer = document.getElementById("reader-qr");
-    if (!qrContainer) {
-      return;
-    }
 
-    const baseUrlString = qrContainer.dataset.url || window.location.href;
+    const baseUrlString = (qrContainer && qrContainer.dataset.url) || window.location.href;
     let lastQrUrl = "";
     let activeHeadingId = window.location.hash.replace(/^#/, "");
 
@@ -20,7 +17,7 @@
     };
 
     const renderQr = () => {
-      if (typeof window.QRCode === "undefined") {
+      if (!qrContainer || typeof window.QRCode === "undefined") {
         return;
       }
 
@@ -102,24 +99,23 @@
       requestAnimationFrame(selectActiveHeading);
     };
 
-    const initQr = () => {
-      renderQr();
-      observeHeadings();
-    };
-
     const onReady = () => {
+      observeHeadings();
+
       if (typeof window.QRCode === "undefined") {
-        window.addEventListener(
-          "load",
-          () => {
-            initQr();
-          },
-          { once: true }
-        );
+        if (qrContainer) {
+          window.addEventListener(
+            "load",
+            () => {
+              renderQr();
+            },
+            { once: true }
+          );
+        }
         return;
       }
 
-      initQr();
+      renderQr();
     };
 
     if (document.readyState === "complete" || document.readyState === "interactive") {
