@@ -1,8 +1,7 @@
 import ast
 import inspect
+import logging
 import textwrap
-from datetime import timedelta
-import ipaddress
 from pathlib import Path
 
 from django import template
@@ -15,14 +14,15 @@ from django.db.models import Model
 from django.conf import settings
 from django.core.cache import cache
 from django.urls import NoReverseMatch, reverse
-from django.utils import timezone
 from django.utils.text import capfirst
-from django.utils.translation import gettext_lazy as _, ngettext
+from django.utils.translation import gettext_lazy as _
 from core import mailer
 from core.models import Lead, RFID, GoogleCalendarProfile
 from core.entity import Entity
 from ocpp.models import Charger, ChargerConfiguration, CPFirmware
 from nodes.models import NetMessage, Node
+from pages.dashboard_rules import load_callable, rule_failure
+from pages.models import DashboardRule
 
 register = template.Library()
 
@@ -34,154 +34,14 @@ _RFID_STATS_CACHE_KEY = f"{_BADGE_CACHE_PREFIX}.rfid_release_stats"
 _CHARGER_STATS_CACHE_KEY = f"{_BADGE_CACHE_PREFIX}.charger_availability_stats"
 _MODEL_RULES_CACHE_KEY = "_model_rule_status_cache"
 _NODE_COUNT_CACHE_KEY = f"{_BADGE_CACHE_PREFIX}.node_known_count"
-_ALL_RULES_MET_MESSAGE = _("All rules met.")
-_SUCCESS_ICON = "✓"
-_ERROR_ICON = "✗"
-
-
-def _format_evcs_list(evcs_identifiers: list[str]) -> str:
-    """Return a human-readable list of EVCS identifiers."""
-
-    return ", ".join(evcs_identifiers)
-
-
-def _rule_success() -> dict[str, object]:
-    return {"success": True, "message": _ALL_RULES_MET_MESSAGE, "icon": _SUCCESS_ICON}
-
-
-def _rule_failure(message: str) -> dict[str, object]:
-    return {"success": False, "message": message, "icon": _ERROR_ICON}
-
-
-def _evaluate_cp_configuration_rules() -> dict[str, object] | None:
-    chargers = list(
-        Charger.objects.filter(connector_id__isnull=True)
-        .order_by("charger_id")
-        .values_list("charger_id", flat=True)
-    )
-    charger_ids = [identifier for identifier in chargers if identifier]
-    if not charger_ids:
-        return _rule_success()
-
-    configured = set(
-        ChargerConfiguration.objects.filter(charger_identifier__in=charger_ids)
-        .values_list("charger_identifier", flat=True)
-    )
-    missing = [identifier for identifier in charger_ids if identifier not in configured]
-    if missing:
-        evcs_list = _format_evcs_list(missing)
-        message = ngettext(
-            "Missing CP Configuration for %(evcs)s.",
-            "Missing CP Configurations for %(evcs)s.",
-            len(missing),
-        ) % {"evcs": evcs_list}
-        return _rule_failure(message)
-
-    return _rule_success()
-
-
-def _evaluate_cp_firmware_rules() -> dict[str, object] | None:
-    chargers = list(
-        Charger.objects.filter(connector_id__isnull=True)
-        .order_by("charger_id")
-        .values_list("charger_id", flat=True)
-    )
-    charger_ids = [identifier for identifier in chargers if identifier]
-    if not charger_ids:
-        return _rule_success()
-
-    firmware_sources = set(
-        CPFirmware.objects.filter(
-            source_charger__isnull=False,
-            source_charger__charger_id__in=charger_ids,
-        ).values_list("source_charger__charger_id", flat=True)
-    )
-    missing = [identifier for identifier in charger_ids if identifier not in firmware_sources]
-    if missing:
-        evcs_list = _format_evcs_list(missing)
-        message = ngettext(
-            "Missing CP Firmware for %(evcs)s.",
-            "Missing CP Firmware for %(evcs)s.",
-            len(missing),
-        ) % {"evcs": evcs_list}
-        return _rule_failure(message)
-
-    return _rule_success()
-
-
-def _evaluate_evcs_heartbeat_rules() -> dict[str, object] | None:
-    cutoff = timezone.now() - timedelta(hours=1)
-    chargers = list(
-        Charger.objects.filter(connector_id__isnull=True)
-        .order_by("charger_id")
-        .values_list("charger_id", "last_heartbeat")
-    )
-    registered = [
-        (identifier, heartbeat)
-        for identifier, heartbeat in chargers
-        if identifier and heartbeat is not None
-    ]
-    if not registered:
-        return _rule_success()
-
-    missing = [
-        identifier
-        for identifier, heartbeat in registered
-        if heartbeat < cutoff
-    ]
-    if missing:
-        evcs_list = _format_evcs_list(missing)
-        message = ngettext(
-            "Missing EVCS heartbeat within the last hour for %(evcs)s.",
-            "Missing EVCS heartbeats within the last hour for %(evcs)s.",
-            len(missing),
-        ) % {"evcs": evcs_list}
-        return _rule_failure(message)
-
-    return _rule_success()
-
-
-def _evaluate_node_rules() -> dict[str, object]:
-    """Return admin dashboard rule metadata for ``nodes.Node``."""
-
-    local_node = Node.get_local()
-    if local_node is None:
-        return _rule_failure(_("Local node record is missing."))
-
-    if not getattr(local_node, "role_id", None):
-        return _rule_failure(_("Local node is missing an assigned role."))
-
-    is_watchtower = (local_node.role.name or "").lower() == "watchtower"
-    network_hostname = (local_node.network_hostname or "").strip()
-    has_domain_hostname = False
-    if network_hostname:
-        try:
-            ipaddress.ip_address(network_hostname.strip("[]"))
-        except ValueError:
-            has_domain_hostname = True
-
-    requires_upstream = is_watchtower and has_domain_hostname
-
-    if requires_upstream:
-        upstream_nodes = Node.objects.filter(current_relation=Node.Relation.UPSTREAM)
-        if not upstream_nodes.exists():
-            return _rule_failure(_("At least one upstream node is required."))
-
-        recent_cutoff = timezone.now() - timedelta(hours=24)
-        if not upstream_nodes.filter(last_seen__gte=recent_cutoff).exists():
-            return _rule_failure(
-                _("No upstream nodes have checked in within the last 24 hours."),
-            )
-
-    return _rule_success()
-
-
-_MODEL_RULE_EVALUATORS = {
-    "ocpp.Charger": _evaluate_evcs_heartbeat_rules,
-    "ocpp.ChargerConfiguration": _evaluate_cp_configuration_rules,
-    "ocpp.CPFirmware": _evaluate_cp_firmware_rules,
-    "nodes.Node": _evaluate_node_rules,
+_DEFAULT_RULE_HANDLERS = {
+    "ocpp.charger": "evaluate_evcs_heartbeat_rules",
+    "ocpp.chargerconfiguration": "evaluate_cp_configuration_rules",
+    "ocpp.cpfirmware": "evaluate_cp_firmware_rules",
+    "nodes.node": "evaluate_node_rules",
 }
+
+logger = logging.getLogger(__name__)
 
 
 @register.simple_tag
@@ -693,17 +553,44 @@ def model_rule_status(context, app_label: str, model_name: str):
         cache_map = {}
         context[_MODEL_RULES_CACHE_KEY] = cache_map
 
-    model_key = f"{app_label}.{model_name}"
-    if model_key in cache_map:
-        return cache_map[model_key]
+    lookup_key = f"{app_label}.{model_name}"
+    normalized_key = lookup_key.lower()
+    if normalized_key in cache_map:
+        return cache_map[normalized_key]
 
-    evaluator = _MODEL_RULE_EVALUATORS.get(model_key)
-    if evaluator is None:
-        result = None
+    rule = (
+        DashboardRule.objects.select_related("content_type")
+        .filter(
+            content_type__app_label=app_label,
+            content_type__model=model_name.lower(),
+        )
+        .first()
+    )
+
+    if rule is None:
+        handler_name = _DEFAULT_RULE_HANDLERS.get(normalized_key)
+        handler = load_callable(handler_name) if handler_name else None
+        if handler:
+            try:
+                result = handler()
+            except Exception:
+                logger.exception(
+                    "Dashboard rule handler failed", extra={"model": normalized_key}
+                )
+                result = rule_failure(_("Unable to evaluate dashboard rule."))
+        else:
+            result = None
     else:
-        result = evaluator()
+        try:
+            result = rule.evaluate()
+        except Exception:
+            logger.exception(
+                "Dashboard rule evaluation failed",
+                extra={"model": normalized_key, "rule_id": rule.pk},
+            )
+            result = rule_failure(_("Unable to evaluate dashboard rule."))
 
-    cache_map[model_key] = result
+    cache_map[normalized_key] = result
     return result
 
 
