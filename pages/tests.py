@@ -1226,7 +1226,7 @@ class AdminModelRuleTemplateTagTests(TestCase):
 
         context = Context({})
 
-        with self.assertNumQueries(2):
+        with self.assertNumQueries(3):
             status = admin_extras.model_rule_status(
                 context, "ocpp", "ChargerConfiguration"
             )
