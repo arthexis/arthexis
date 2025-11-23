@@ -1748,6 +1748,18 @@ class Reference(Entity):
     image = models.ImageField(upload_to="refs/qr/", blank=True)
     uses = models.PositiveIntegerField(default=0)
     method = models.CharField(max_length=50, default="qr")
+    validated_url_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Validated URL",
+        help_text="Timestamp of the last URL validation check.",
+    )
+    validation_status = models.IntegerField(
+        null=True,
+        blank=True,
+        verbose_name="Validation Status",
+        help_text="HTTP status code from the last URL validation attempt.",
+    )
     include_in_footer = models.BooleanField(
         default=False, verbose_name="Include in Footer"
     )
@@ -1823,6 +1835,13 @@ class Reference(Entity):
 
     def natural_key(self):  # pragma: no cover - simple representation
         return (self.alt_text,)
+
+    def is_link_valid(self) -> bool:
+        """Return ``True`` when the reference URL is valid."""
+
+        if self.validation_status is None:
+            return True
+        return self.validation_status == 200
 
 
     class Meta:

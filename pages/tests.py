@@ -2915,6 +2915,21 @@ class ControlNavTests(TestCase):
         self.assertFalse(resp.context["header_references"])
         self.assertNotContains(resp, "https://example.com/restricted")
 
+    def test_header_links_hidden_when_validation_fails(self):
+        Reference.objects.create(
+            alt_text="Broken",
+            value="https://example.com/broken",
+            show_in_header=True,
+            validation_status=500,
+            validated_url_at=timezone.now(),
+        )
+
+        resp = self.client.get(reverse("pages:index"))
+
+        self.assertIn("header_references", resp.context)
+        self.assertFalse(resp.context["header_references"])
+        self.assertNotContains(resp, "LINKS")
+
     def test_readme_pill_visible(self):
         resp = self.client.get(reverse("pages:readme"))
         self.assertContains(resp, 'href="/read/docs/cookbooks/install-start-stop-upgrade-uninstall"')

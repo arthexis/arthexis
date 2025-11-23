@@ -11,17 +11,19 @@ import subprocess
 import sys
 import time
 import uuid
-from datetime import datetime, time as datetime_time
+from datetime import datetime, time as datetime_time, timedelta
 from pathlib import Path
 import urllib.error
 import urllib.request
+
+import requests
 
 from celery import shared_task
 from core import github_issues
 from . import release_workflow
 from core.auto_upgrade_failover import clear_failover_lock, write_failover_lock
 from django.conf import settings
-from django.db import DatabaseError
+from django.db import DatabaseError, models
 from django.utils import timezone
 
 
@@ -1352,6 +1354,41 @@ def poll_email_collectors() -> None:
 
     for collector in EmailCollector.objects.all():
         collector.collect()
+
+
+@shared_task
+def validate_reference_links() -> int:
+    """Validate stale or missing reference URLs and store their status codes."""
+
+    from .models import Reference
+
+    now = timezone.now()
+    cutoff = now - timedelta(days=7)
+    references = Reference.objects.filter(
+        models.Q(validated_url_at__isnull=True)
+        | models.Q(validated_url_at__lt=cutoff)
+    ).exclude(value="")
+
+    updated = 0
+    for reference in references:
+        status_code: int | None = None
+        try:
+            response = requests.get(reference.value, timeout=5)
+        except requests.RequestException as exc:
+            status_code = getattr(getattr(exc, "response", None), "status_code", None)
+            logger.warning(
+                "Failed to validate reference %s at %s", reference.pk, reference.value
+            )
+            logger.debug("Reference validation error", exc_info=exc)
+        else:
+            status_code = response.status_code
+
+        reference.validation_status = status_code if status_code is not None else 0
+        reference.validated_url_at = now
+        reference.save(update_fields=["validation_status", "validated_url_at"])
+        updated += 1
+
+    return updated
 
 
 @shared_task

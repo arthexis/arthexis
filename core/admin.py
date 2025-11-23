@@ -391,16 +391,26 @@ class ReferenceAdmin(EntityModelAdmin):
         "header",
         "footer",
         "visibility",
+        "validation_status",
+        "validated_url_at",
         "author",
         "transaction_uuid",
     )
-    readonly_fields = ("uses", "qr_code", "author")
+    readonly_fields = (
+        "uses",
+        "qr_code",
+        "author",
+        "validated_url_at",
+        "validation_status",
+    )
     fields = (
         "alt_text",
         "content_type",
         "value",
         "file",
         "method",
+        "validation_status",
+        "validated_url_at",
         "roles",
         "features",
         "sites",
