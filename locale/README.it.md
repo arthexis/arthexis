@@ -17,7 +17,7 @@ Consulta il nuovo [articolo degli sviluppatori](https://arthexis.com/articles/pr
 
   **Punto di ricarica → CSMS**
 
-  | Azione | Versione 1.6 | Versione 2.0.1 | Versione 2.1 | Cosa facciamo |
+  | Azione | 1.6 | 2.0.1 | 2.1 | Cosa facciamo |
   | --- | --- | --- | --- | --- |
   | `Authorize` | ✅ | ✅ | ✅ | Convalidiamo richieste di autorizzazione RFID o token prima dell'inizio della sessione. |
   | `BootNotification` | ✅ | ✅ | ✅ | Registriamo il punto di ricarica e aggiorniamo identità, firmware e stato. |
@@ -34,7 +34,7 @@ Consulta il nuovo [articolo degli sviluppatori](https://arthexis.com/articles/pr
 
   **CSMS → Punto di ricarica**
 
-  | Azione | Versione 1.6 | Versione 2.0.1 | Versione 2.1 | Cosa facciamo |
+  | Azione | 1.6 | 2.0.1 | 2.1 | Cosa facciamo |
   | --- | --- | --- | --- | --- |
   | `CancelReservation` | ✅ | ✅ | ✅ | Annulliamo prenotazioni in sospeso e liberiamo i connettori direttamente dal centro di controllo. |
   | `ChangeAvailability` | ✅ | ✅ | ✅ | Impostiamo connettori o stazione tra operativa e fuori servizio. |

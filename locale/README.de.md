@@ -17,7 +17,7 @@ Lies den aktuellen [Developer-Artikel](https://arthexis.com/articles/protoline-i
 
   **Ladepunkt → CSMS**
 
-  | Aktion | Version 1.6 | Version 2.0.1 | Version 2.1 | Was wir erledigen |
+  | Aktion | 1.6 | 2.0.1 | 2.1 | Was wir erledigen |
   | --- | --- | --- | --- | --- |
   | `Authorize` | ✅ | ✅ | ✅ | Validieren RFID- oder Token-Autorisierungsanfragen vor Sitzungsstart. |
   | `BootNotification` | ✅ | ✅ | ✅ | Registrieren den Ladepunkt und aktualisieren Identität, Firmware und Status. |
@@ -34,7 +34,7 @@ Lies den aktuellen [Developer-Artikel](https://arthexis.com/articles/protoline-i
 
   **CSMS → Ladepunkt**
 
-  | Aktion | Version 1.6 | Version 2.0.1 | Version 2.1 | Was wir erledigen |
+  | Aktion | 1.6 | 2.0.1 | 2.1 | Was wir erledigen |
   | --- | --- | --- | --- | --- |
   | `CancelReservation` | ✅ | ✅ | ✅ | Stornieren ausstehender Reservierungen und geben Anschlüsse direkt aus der Leitwarte frei. |
   | `ChangeAvailability` | ✅ | ✅ | ✅ | Schalten Anschlüsse oder die gesamte Station zwischen betriebsbereit und außer Betrieb. |
