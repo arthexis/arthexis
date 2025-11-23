@@ -58,6 +58,9 @@ DEFAULT_PALETTE = [
     0xFFCCAA,
 ]
 
+ACTIVE_DRAG_ACCENT = 11
+LAST_ACTIVE_ACCENT = 3
+
 
 def _rgb_from_hex(hex_color: str | None) -> tuple[int, int, int]:
     if not hex_color:
@@ -110,12 +113,19 @@ class ConnectorViewport:
         self._suite_port: int | None = None
         self._grid_size = 8
         self._dragging_container: ContainerWindow | None = None
+        self._last_active_container: ContainerWindow | None = None
+        self._suite_overlay_dragging = False
+        self._suite_overlay_x = 6
+        self._suite_overlay_y = 0
+        self._suite_overlay_offset_x = 0
+        self._suite_overlay_offset_y = 0
         self._quick_actions = (
             {"label": "Start Default Simulator", "action": "start_default_simulator"},
         )
 
         pyxel.init(480, 320, title="Connector Viewport", fps=30)
         pyxel.mouse(True)
+        self._suite_overlay_y = pyxel.height - 16
         self._load_connectors(force=True)
         pyxel.run(self.update, self.draw)
 
@@ -274,7 +284,11 @@ class ConnectorViewport:
 
     def _draw_container(self, container: ContainerWindow) -> None:
         accent = 5
-        if container.connectors:
+        if self._dragging_container is container:
+            accent = ACTIVE_DRAG_ACCENT
+        elif self._last_active_container is container:
+            accent = LAST_ACTIVE_ACCENT
+        elif container.connectors:
             accent = _nearest_palette_index(container.connectors[0].get("status_color"))
 
         pyxel.rect(container.x, container.y, container.width, container.height, 0)
@@ -382,11 +396,21 @@ class ConnectorViewport:
         if pyxel.btnp(pyxel.MOUSE_BUTTON_LEFT):
             if self._handle_menu_click(mx, my):
                 return
+            if self._start_suite_overlay_drag(mx, my):
+                return
             self._start_container_drag(mx, my)
+
+        if self._suite_overlay_dragging:
+            if pyxel.btn(pyxel.MOUSE_BUTTON_LEFT):
+                self._update_suite_overlay_drag(mx, my)
+            else:
+                self._suite_overlay_dragging = False
+            return
 
         if self._dragging_container and pyxel.btn(pyxel.MOUSE_BUTTON_LEFT):
             self._update_container_drag(mx, my)
         elif self._dragging_container and not pyxel.btn(pyxel.MOUSE_BUTTON_LEFT):
+            self._last_active_container = self._dragging_container
             self._dragging_container = None
 
     def _handle_menu_click(self, mx: int, my: int) -> bool:
@@ -429,6 +453,37 @@ class ConnectorViewport:
         new_x, new_y = self._dragging_container.snapped_position(mx, my, self._grid_size, pyxel.width, pyxel.height)
         self._dragging_container.x = new_x
         self._dragging_container.y = new_y
+
+    def _start_suite_overlay_drag(self, mx: int, my: int) -> bool:
+        label = self._suite_label()
+        if not label:
+            return False
+
+        overlay_x, overlay_y, overlay_w, overlay_h = self._suite_overlay_bounds(label)
+        if overlay_x <= mx <= overlay_x + overlay_w and overlay_y <= my <= overlay_y + overlay_h:
+            self._suite_overlay_dragging = True
+            self._suite_overlay_offset_x = mx - overlay_x
+            self._suite_overlay_offset_y = my - overlay_y
+            return True
+
+        return False
+
+    def _update_suite_overlay_drag(self, mx: int, my: int) -> None:
+        label = self._suite_label()
+        overlay_x, overlay_y, overlay_w, overlay_h = self._suite_overlay_bounds(label)
+        self._suite_overlay_x = max(0, min(pyxel.width - overlay_w, mx - self._suite_overlay_offset_x))
+        self._suite_overlay_y = max(0, min(pyxel.height - overlay_h, my - self._suite_overlay_offset_y))
+
+    def _suite_overlay_bounds(self, label: str) -> tuple[int, int, int, int]:
+        padding = 4
+        text_width = len(label) * 4
+        box_width = text_width + padding * 2
+        box_height = 12
+        x = max(0, min(pyxel.width - box_width, self._suite_overlay_x))
+        y = max(0, min(pyxel.height - box_height, self._suite_overlay_y))
+        self._suite_overlay_x = x
+        self._suite_overlay_y = y
+        return x, y, box_width, box_height
 
     def _queue_action(self, action: dict) -> None:
         token = uuid.uuid4().hex
@@ -492,13 +547,9 @@ class ConnectorViewport:
         if not label:
             return
 
-        padding = 4
-        text_width = len(label) * 4
-        box_width = text_width + padding * 2
-        box_height = 12
-        x = 6
-        y = pyxel.height - box_height - 4
+        x, y, box_width, box_height = self._suite_overlay_bounds(label)
 
+        padding = 4
         pyxel.rect(x - 1, y - 1, box_width + 2, box_height + 2, 0)
         pyxel.rect(x, y, box_width, box_height, 1)
         pyxel.rectb(x, y, box_width, box_height, 5)
