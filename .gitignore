@@ -8,6 +8,7 @@ __pycache__/
 
 # Disk images
 *.img
+*.pyxapp
 
 # Test databases
 test_db.sqlite3
@@ -80,6 +81,8 @@ logs/old/*
 # Database backups
 backups/
 data/
+# Allow shipping Pyxel viewport placeholder data for the net monitor console.
+!ocpp/static/ocpp/net_monitor/pyxel_viewport/data/
 !config/data/
 !config/data/ACRONYMS.txt
 local_settings.py
