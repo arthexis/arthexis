@@ -3,7 +3,6 @@ set -e
 
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 LOCK_DIR="$BASE_DIR/locks"
-SKIP_LOCK="$LOCK_DIR/service-start-skip.lck"
 mkdir -p "$LOCK_DIR"
 
 # shellcheck source=scripts/helpers/logging.sh
@@ -32,10 +31,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-echo "Manual start requested; creating one-time skip lock for upgrade checks." \
-  >>"$BASE_DIR/logs/start.log" 2>/dev/null || true
-# Create a short-lived lock so the upcoming start skips upgrade once.
-date +%s > "$SKIP_LOCK"
+echo "Manual start requested." >>"$BASE_DIR/logs/start.log" 2>/dev/null || true
 
 SYSTEMCTL_CMD=()
 if command -v systemctl >/dev/null 2>&1; then

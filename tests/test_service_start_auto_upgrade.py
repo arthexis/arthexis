@@ -94,7 +94,7 @@ def _run_service_start(base: Path, *, extra_env: dict[str, str] | None = None) -
     )
 
 
-def test_service_start_runs_upgrade_with_mode(tmp_path: Path) -> None:
+def test_service_start_ignores_auto_upgrade_lock(tmp_path: Path) -> None:
     base, upgrade_log = _prepare_service_start_tree(tmp_path)
     mode_file = base / "locks" / "auto_upgrade.lck"
     mode_file.write_text("LATEST\n", encoding="utf-8")
@@ -102,12 +102,11 @@ def test_service_start_runs_upgrade_with_mode(tmp_path: Path) -> None:
     result = _run_service_start(base)
 
     assert result.returncode == 0
-    log_lines = upgrade_log.read_text(encoding="utf-8").splitlines()
-    assert any("--no-restart" in line for line in log_lines)
-    assert any("--latest" in line for line in log_lines)
+    assert not upgrade_log.exists() or upgrade_log.read_text(encoding="utf-8").strip() == ""
+    assert mode_file.exists()
 
 
-def test_service_start_honors_skip_lock(tmp_path: Path) -> None:
+def test_service_start_does_not_run_upgrade_when_skip_lock_present(tmp_path: Path) -> None:
     base, upgrade_log = _prepare_service_start_tree(tmp_path)
     mode_file = base / "locks" / "auto_upgrade.lck"
     mode_file.write_text("stable\n", encoding="utf-8")
@@ -121,4 +120,4 @@ def test_service_start_honors_skip_lock(tmp_path: Path) -> None:
 
     assert result.returncode == 0
     assert not upgrade_log.exists() or upgrade_log.read_text(encoding="utf-8").strip() == ""
-    assert not skip_lock.exists()
+    assert skip_lock.exists()
