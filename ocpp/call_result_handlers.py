@@ -697,6 +697,53 @@ async def handle_remote_stop_transaction_result(
     return True
 
 
+async def handle_get_diagnostics_result(
+    consumer: CallResultContext,
+    message_id: str,
+    metadata: dict,
+    payload_data: dict,
+    log_key: str,
+) -> bool:
+    status_value = str(payload_data.get("status") or "").strip()
+    file_name = str(
+        payload_data.get("fileName")
+        or payload_data.get("filename")
+        or ""
+    ).strip()
+    location_value = str(
+        payload_data.get("location")
+        or metadata.get("location")
+        or ""
+    ).strip()
+    message = "GetDiagnostics result"
+    if status_value:
+        message += f": status={status_value}"
+    if file_name:
+        message += f", fileName={file_name}"
+    if location_value:
+        message += f", location={location_value}"
+    store.add_log(log_key, message, log_type="charger")
+
+    def _apply_updates():
+        charger_id = metadata.get("charger_id")
+        if not charger_id:
+            return
+        updates: dict[str, object] = {"diagnostics_timestamp": timezone.now()}
+        if location_value:
+            updates["diagnostics_location"] = location_value
+        elif file_name:
+            updates["diagnostics_location"] = file_name
+        Charger.objects.filter(charger_id=charger_id).update(**updates)
+
+    await database_sync_to_async(_apply_updates)()
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        payload=payload_data,
+    )
+    return True
+
+
 async def handle_request_start_transaction_result(
     consumer: CallResultContext,
     message_id: str,
@@ -729,6 +776,26 @@ async def handle_request_stop_transaction_result(
 ) -> bool:
     status_value = str(payload_data.get("status") or "").strip()
     message = "RequestStopTransaction result"
+    if status_value:
+        message += f": status={status_value}"
+    store.add_log(log_key, message, log_type="charger")
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        payload=payload_data,
+    )
+    return True
+
+
+async def handle_set_charging_profile_result(
+    consumer: CallResultContext,
+    message_id: str,
+    metadata: dict,
+    payload_data: dict,
+    log_key: str,
+) -> bool:
+    status_value = str(payload_data.get("status") or "").strip()
+    message = "SetChargingProfile result"
     if status_value:
         message += f": status={status_value}"
     store.add_log(log_key, message, log_type="charger")
@@ -842,10 +909,12 @@ CALL_RESULT_HANDLERS: dict[str, CallResultHandler] = {
     "CancelReservation": handle_cancel_reservation_result,
     "RemoteStartTransaction": handle_remote_start_transaction_result,
     "RemoteStopTransaction": handle_remote_stop_transaction_result,
+    "GetDiagnostics": handle_get_diagnostics_result,
     "RequestStartTransaction": handle_request_start_transaction_result,
     "RequestStopTransaction": handle_request_stop_transaction_result,
     "Reset": handle_reset_result,
     "ChangeAvailability": handle_change_availability_result,
+    "SetChargingProfile": handle_set_charging_profile_result,
     "SetNetworkProfile": handle_set_network_profile_result,
 }
 

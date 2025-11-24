@@ -450,6 +450,84 @@ class ChargerRefreshManagerNodeTests(TestCase):
         self.assertEqual(charger.manager_node, remote)
 
 
+class CSMSCallResultCoverageTests(TransactionTestCase):
+    def setUp(self):
+        self.charger = Charger.objects.create(charger_id="CALLCOVER", connector_id=1)
+        self.consumer = CSMSConsumer()
+        self.consumer.scope = {"headers": [], "client": ("127.0.0.1", 1234)}
+        self.consumer.charger_id = self.charger.charger_id
+        self.consumer.store_key = store.identity_key(
+            self.charger.charger_id, self.charger.connector_id
+        )
+        self.consumer.connector_value = self.charger.connector_id
+        self.consumer.charger = self.charger
+        self.consumer.aggregate_charger = self.charger
+        self.consumer._consumption_task = None
+        self.consumer._consumption_message_uuid = None
+        self.consumer.send = AsyncMock()
+        store.clear_log(self.consumer.store_key, log_type="charger")
+        self.addCleanup(store.clear_log, self.consumer.store_key, "charger")
+        store.pending_calls.clear()
+        store._pending_call_events.clear()
+        store._pending_call_results.clear()
+        self.addCleanup(store.pending_calls.clear)
+        self.addCleanup(store._pending_call_events.clear)
+        self.addCleanup(store._pending_call_results.clear)
+
+    def test_get_diagnostics_call_result_logs_and_updates(self):
+        message_id = "diag-call-result"
+        location = "https://example.com/diagnostics/upload"
+        store.register_pending_call(
+            message_id,
+            {
+                "action": "GetDiagnostics",
+                "charger_id": self.charger.charger_id,
+                "connector_id": self.charger.connector_id,
+                "log_key": self.consumer.store_key,
+                "location": location,
+            },
+        )
+
+        async_to_sync(self.consumer._handle_call_result)(
+            message_id, {"fileName": "diag.tar.gz"}
+        )
+
+        self.charger.refresh_from_db()
+        self.assertEqual(self.charger.diagnostics_location, location)
+        self.assertIsNotNone(self.charger.diagnostics_timestamp)
+
+        logs = store.get_logs(self.consumer.store_key, log_type="charger")
+        self.assertTrue(
+            any(
+                "GetDiagnostics result" in entry and "diag.tar.gz" in entry
+                for entry in logs
+            )
+        )
+        self.assertIn(message_id, store._pending_call_results)
+
+    def test_set_charging_profile_call_result_logs_status(self):
+        message_id = "set-profile-result"
+        store.register_pending_call(
+            message_id,
+            {
+                "action": "SetChargingProfile",
+                "charger_id": self.charger.charger_id,
+                "connector_id": self.charger.connector_id,
+                "log_key": self.consumer.store_key,
+            },
+        )
+
+        async_to_sync(self.consumer._handle_call_result)(
+            message_id, {"status": "Accepted"}
+        )
+
+        logs = store.get_logs(self.consumer.store_key, log_type="charger")
+        self.assertTrue(
+            any("SetChargingProfile result: status=Accepted" in entry for entry in logs)
+        )
+        self.assertIn(message_id, store._pending_call_results)
+
+
 class CPReservationTests(TransactionTestCase):
     def setUp(self):
         self.location = Location.objects.create(name="Reservation Site")

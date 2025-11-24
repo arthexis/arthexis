@@ -2,6 +2,11 @@
 
 This cookbook captures the backlog of Open Charge Point Protocol (OCPP) features that the Constellation team intends to deliver next. Each entry highlights the scenario we want to enable once the call is implemented so product, QA, and integration partners share the same expectations when prioritising work.
 
+## Recent updates
+
+- Added full OCPP 1.6 CSMS handling for `GetDiagnostics`, `RemoteStartTransaction`, `RemoteStopTransaction`, and `SetChargingProfile`, including call-result/error logging and charger diagnostics timestamp updates.
+- The remaining 1.6 work now concentrates on profile management and scheduling gaps.
+
 ## OCPP 1.6 backlog
 
 ### ClearChargingProfile
@@ -11,14 +16,6 @@ This cookbook captures the backlog of Open Charge Point Protocol (OCPP) features
 ### GetCompositeSchedule
 - Generate predictive energy schedules that combine transaction plans with the site's contracted capacity, allowing the operator to visualise anticipated demand on a per-connector basis.
 - Offer CSV exports that can be imported into utility dashboards so energy teams can perform deeper scenario modelling before approving site expansions.
-
-### GetDiagnostics
-- Pull charger diagnostic archives directly into Constellation so support engineers can review health snapshots without requesting files by e-mail.
-- Trigger follow-up workflows (for example, create a maintenance ticket) automatically when the diagnostic bundle contains known fault signatures.
-
-### SetChargingProfile
-- Publish charging profiles created in Constellation's tariff editor so operators can orchestrate peak shaving and time-of-use incentives from a single interface.
-- Synchronise the selected profile with the live session timeline and raise alerts if the station fails to acknowledge or apply the requested limits.
 
 ## OCPP 2.0.1 checkpoint
 
