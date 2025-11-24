@@ -4,6 +4,7 @@ import sys
 import time as time_module
 import tempfile
 import base64
+from urllib.parse import urljoin
 from collections import deque
 from unittest import mock
 from importlib import util as importlib_util
@@ -8340,6 +8341,24 @@ class LiveUpdateViewTests(TestCase):
             reverse("charger-status", args=[restricted.charger_id])
         )
         self.assertEqual(group_denied.status_code, 404)
+
+
+class NetMonitorConsoleViewTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            username="netmonitor", password="viewport"
+        )
+
+    def test_viewport_src_uses_static_url(self):
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse("net-monitor-console"))
+
+        self.assertEqual(response.status_code, 200)
+        expected_src = urljoin(settings.STATIC_URL, "ocpp/net_monitor/index.html")
+        self.assertEqual(response.context["viewport_src"], expected_src)
 
 
 class StoreLogBufferTests(TestCase):
