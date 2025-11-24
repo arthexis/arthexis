@@ -31,7 +31,7 @@ from tempfile import TemporaryDirectory
 import shutil
 import stat
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone as dt_timezone
 
 from django.test import (
     Client,
@@ -63,7 +63,7 @@ from nodes.tasks import update_all_nodes_information
 from .classifiers import run_default_classifiers
 from .utils import capture_rpi_snapshot, capture_screenshot, save_screenshot
 from .feature_checks import feature_checks
-from nodes import reports
+from nodes import reports, views
 from django.db.utils import DatabaseError
 from .admin import NodeAdmin
 from .models import (
@@ -4518,6 +4518,30 @@ class NetMessageSignatureTests(TestCase):
         self.assertTrue(signature_one)
         self.assertTrue(signature_two)
         self.assertNotEqual(signature_one, signature_two)
+
+
+class NetworkChargerDiagnosticsTests(TestCase):
+    def setUp(self):
+        self.request = RequestFactory().post(reverse("node-network-charger-action"))
+
+    def test_generates_media_bucket_upload_location_when_missing(self):
+        charger = Charger.objects.create(charger_id="DIAG-REMOTE", connector_id=1)
+        fixed_now = datetime(2024, 1, 2, 3, 4, 5, tzinfo=dt_timezone.utc)
+
+        with patch("nodes.views.timezone.now", return_value=fixed_now):
+            payload = views._prepare_diagnostics_upload_payload(self.request, charger, {})
+
+        charger.refresh_from_db()
+        bucket = charger.diagnostics_bucket
+        self.assertIsNotNone(bucket)
+        expected_expiration = fixed_now + timedelta(days=30)
+        self.assertEqual(bucket.expires_at, expected_expiration)
+        expected_location = "http://testserver" + reverse(
+            "protocols:media-bucket-upload", kwargs={"slug": bucket.slug}
+        )
+        self.assertEqual(payload.get("location"), expected_location)
+        self.assertEqual(payload.get("stopTime"), expected_expiration.isoformat())
+        self.assertEqual(charger.diagnostics_location, expected_location)
 
 
 class NetworkChargerActionSecurityTests(TestCase):
