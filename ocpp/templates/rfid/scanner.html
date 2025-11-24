@@ -4,10 +4,10 @@
     {% if toggle_url or admin_view_url or public_view_url or request.user.is_staff %}
       <div class="rfid-mode-toggle">
         {% if request.user.is_staff %}
-          <button id="{{ prefix }}-connect-local" class="button" type="button">{% trans "Local Scanner" %}</button>
           <button id="{{ prefix }}-deep-read" class="button" type="button" aria-pressed="false">{% trans "Deep Read" %}</button>
           <a id="{{ prefix }}-configure" class="button" href="#" style="display:none;"></a>
         {% endif %}
+        <button id="{{ prefix }}-local-request" class="button secondary" type="button">{% trans "Connect Local Scanner" %}</button>
         {% if toggle_url %}
           <a id="{{ prefix }}-mode-toggle" class="button" href="{{ toggle_url }}" data-toggle-url="{{ toggle_url }}">{{ toggle_label }}</a>
         {% endif %}
@@ -22,7 +22,7 @@
         </label>
       </div>
     {% endif %}
-  <p id="{{ prefix }}-status">{% trans "Scanner ready" %}</p>
+  <p id="{{ prefix }}-status">{% trans "Setting up scanner..." %}</p>
   <div id="{{ prefix }}-command-output" class="rfid-command-output" hidden>
     <div class="rfid-command-header">
       <h3>{% trans "External Command Output" %}</h3>
@@ -349,10 +349,10 @@
   const rfidEl = document.getElementById('{{ prefix }}-rfid');
   const releasedEl = document.getElementById('{{ prefix }}-released');
   const referenceEl = document.getElementById('{{ prefix }}-reference');
-  const connectBtn = document.getElementById('{{ prefix }}-connect-local');
   const deepBtn = document.getElementById('{{ prefix }}-deep-read');
   const configureEl = document.getElementById('{{ prefix }}-configure');
   const modeToggleBtn = document.getElementById('{{ prefix }}-mode-toggle');
+  const localRequestBtn = document.getElementById('{{ prefix }}-local-request');
   const deepDetailsEl = document.getElementById('{{ prefix }}-deep-details');
   const keyAEl = document.getElementById('{{ prefix }}-key-a');
   const keyBEl = document.getElementById('{{ prefix }}-key-b');
@@ -400,12 +400,19 @@
     scannerConnected: '{{ _("Scanner Connected")|escapejs }}',
     localConnectedAwaiting: '{{ _("Local scanner connected. Awaiting RFID...")|escapejs }}',
     scannerReady: '{{ _("Scanner ready")|escapejs }}',
+    scannerReadyNetwork: '{{ _("Scanner ready (network)")|escapejs }}',
+    scannerReadyLocal: '{{ _("Scanner ready (local)")|escapejs }}',
+    additionalLocalReady: '{{ _("Local scanner also ready")|escapejs }}',
+    networkReadyAfterLocal: '{{ _("Network scanner ready after local setup")|escapejs }}',
     localDisconnected: '{{ _("Local scanner disconnected")|escapejs }}',
     localConnectFailed: '{{ _("Failed to connect to local scanner")|escapejs }}',
     webSerialUnsupported: '{{ _("Web Serial API is not supported in this browser.")|escapejs }}',
     requestFailed: '{{ _("Request failed")|escapejs }}',
     deepReadFailed: '{{ _("Deep read failed")|escapejs }}',
     attemptingDeepRead: '{{ _("Attempting deep read...")|escapejs }}',
+    settingUpScanner: '{{ _("Setting up scanner...")|escapejs }}',
+    connectingSavedScanner: '{{ _("Connecting to saved local scanner...")|escapejs }}',
+    requestLocalScanner: '{{ _("Requesting local scanner...")|escapejs }}',
     localScanner: '{{ _("Local Scanner")|escapejs }}',
     configureRfid: '{{ _("Configure RFID %(label)s")|escapejs }}',
     rfidStatusState: '{{ _("RFID %(label)s %(state)s")|escapejs }}',
@@ -446,6 +453,9 @@
   let lastLocalAt = 0;
   let lastScanRfid = null;
   let lastScanData = null;
+  let firstReadySource = null;
+  let pollActive = false;
+  let pollTimer = null;
   const historyEntries = tableMode ? new Map() : null;
   let deepReadActive = false;
   let lastDeepDetailsRfid = null;
@@ -958,11 +968,58 @@
     return null;
   }
 
+  function schedulePoll(){
+    if(pollTimer){
+      clearTimeout(pollTimer);
+    }
+    pollTimer = window.setTimeout(poll, 200);
+  }
+
   async function poll(){
+    if(!pollActive){
+      return;
+    }
     try {
       await requestScanData();
     } finally {
-      setTimeout(poll, 200);
+      schedulePoll();
+    }
+  }
+
+  function startPolling(){
+    if(pollActive){
+      return;
+    }
+    pollActive = true;
+    poll();
+  }
+
+  async function prepareNetworkScanner(){
+    const data = await requestScanData();
+    if(data === null){
+      startPolling();
+      return false;
+    }
+    if(!firstReadySource){
+      firstReadySource = 'network';
+      statusEl.textContent = text.scannerReadyNetwork;
+    }
+    startPolling();
+    return true;
+  }
+
+  async function startScannerSetup(){
+    statusEl.textContent = text.settingUpScanner;
+    setupLocalScannerEvents();
+    const localPromise = autoConnectLocalScanner();
+    const networkReady = await prepareNetworkScanner();
+    const localReady = await localPromise;
+    if(networkReady && firstReadySource === 'local'){
+      statusEl.textContent = text.networkReadyAfterLocal;
+    } else if(localReady && firstReadySource === 'network'){
+      statusEl.textContent = text.additionalLocalReady;
+    } else if(!firstReadySource){
+      statusEl.textContent = text.scannerNotDetected;
     }
   }
 
@@ -1070,31 +1127,24 @@
     }
   }
 
-  async function connectLocalScanner(){
-    if(!('serial' in navigator)){
-      showError(text.browserNoSupport);
-      return;
+  async function connectToLocalPort(port){
+    if(!port){
+      return false;
     }
     try {
-      statusEl.textContent = text.selectScanner;
-      const port = await navigator.serial.requestPort();
+      statusEl.textContent = text.connectingSavedScanner;
       await port.open({baudRate: 9600});
       localPort = port;
       localConnected = true;
-      if(connectBtn){
-        connectBtn.disabled = true;
-        connectBtn.textContent = text.scannerConnected;
-      }
       statusEl.textContent = text.localConnectedAwaiting;
-      await readFromLocalPort();
-    } catch(err){
-      if(err && err.name === 'NotFoundError'){
-        statusEl.textContent = text.scannerReady;
-      } else if(localConnected){
-        showError(text.localDisconnected);
-      } else {
-        showError(text.localConnectFailed);
+      if(!firstReadySource){
+        firstReadySource = 'local';
+        statusEl.textContent = text.scannerReadyLocal;
       }
+      await readFromLocalPort();
+      return true;
+    } catch(err){
+      showError(text.localConnectFailed);
     } finally {
       if(localReader){
         try { await localReader.cancel(); } catch(err) { /* ignore */ }
@@ -1103,43 +1153,61 @@
         try { await localPort.close(); } catch(err) { /* ignore */ }
         localPort = null;
       }
-      if(connectBtn){
-        connectBtn.disabled = false;
-        connectBtn.textContent = text.localScanner;
-      }
       if(localConnected){
         statusEl.textContent = text.localDisconnected;
       }
       localConnected = false;
       localReader = null;
     }
+    return false;
   }
 
-  function setupLocalScanner(){
-    if(!connectBtn){
+  async function requestLocalScanner(){
+    if(!('serial' in navigator) || !navigator.serial.requestPort){
+      showError(text.browserNoSupport);
+      return false;
+    }
+    statusEl.textContent = text.requestLocalScanner;
+    try {
+      const port = await navigator.serial.requestPort();
+      return await connectToLocalPort(port);
+    } catch(err){
+      showError(text.localConnectFailed);
+    }
+    return false;
+  }
+
+  async function autoConnectLocalScanner(){
+    if(!('serial' in navigator) || !navigator.serial.getPorts){
+      if(localRequestBtn){
+        localRequestBtn.disabled = true;
+      }
+      return false;
+    }
+    const ports = await navigator.serial.getPorts();
+    if(!ports.length){
+      if(localRequestBtn){
+        localRequestBtn.disabled = false;
+        localRequestBtn.hidden = false;
+      }
+      statusEl.textContent = text.selectScanner;
+      return false;
+    }
+    const port = ports[0];
+    return await connectToLocalPort(port);
+  }
+
+  function setupLocalScannerEvents(){
+    if(!('serial' in navigator) || !navigator.serial.addEventListener){
       return;
     }
-    if(!('serial' in navigator)){
-      connectBtn.disabled = true;
-      connectBtn.title = text.webSerialUnsupported;
-      return;
-    }
-    connectBtn.addEventListener('click', () => {
-      connectLocalScanner();
+    navigator.serial.addEventListener('disconnect', (event) => {
+      if(localPort && event.target === localPort){
+        localPort = null;
+        localConnected = false;
+        showError(text.localDisconnected);
+      }
     });
-    if(navigator.serial.addEventListener){
-      navigator.serial.addEventListener('disconnect', (event) => {
-        if(localPort && event.target === localPort){
-          localPort = null;
-          localConnected = false;
-          if(connectBtn){
-            connectBtn.disabled = false;
-            connectBtn.textContent = text.localScanner;
-          }
-          showError(text.localDisconnected);
-        }
-      });
-    }
   }
 
   if(deepBtn){
@@ -1198,8 +1266,22 @@
       }
     });
   }
-  setupLocalScanner();
-  poll();
+  if(localRequestBtn){
+    localRequestBtn.hidden = true;
+    if(!('serial' in navigator) || !(navigator.serial && navigator.serial.requestPort)){
+      localRequestBtn.disabled = true;
+      localRequestBtn.title = text.webSerialUnsupported;
+    } else {
+      localRequestBtn.addEventListener('click', async () => {
+        localRequestBtn.disabled = true;
+        const connected = await requestLocalScanner();
+        if(!connected){
+          localRequestBtn.disabled = false;
+        }
+      });
+    }
+  }
+  startScannerSetup();
 })();
 </script>
 {% endwith %}

@@ -87,6 +87,27 @@ class BackgroundReaderConfigurationTests(SimpleTestCase):
 
             self.assertFalse(lock.exists())
 
+    def test_stale_lock_removed_for_new_suite(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            lock = Path(temp_dir) / "rfid.lck"
+            lock.write_text("old-suite", encoding="utf-8")
+            with patch("ocpp.rfid.background_reader._lock_path", return_value=lock):
+                active, path = background_reader.lock_file_active()
+
+            self.assertFalse(active)
+            self.assertEqual(path, lock)
+            self.assertFalse(lock.exists())
+
+    def test_current_suite_lock_remains_active(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            lock = Path(temp_dir) / "rfid.lck"
+            lock.write_text(background_reader._suite_marker, encoding="utf-8")
+            with patch("ocpp.rfid.background_reader._lock_path", return_value=lock):
+                active, path = background_reader.lock_file_active()
+
+            self.assertTrue(active)
+            self.assertEqual(path, lock)
+
 
 class ScanNextViewTests(TestCase):
     def setUp(self):
@@ -914,7 +935,7 @@ class ScannerTemplateTests(TestCase):
         self.client.force_login(staff)
         resp = self.client.get(self.url)
         self.assertContains(resp, 'id="rfid-configure"')
-        self.assertContains(resp, 'id="rfid-connect-local"')
+        self.assertContains(resp, 'Setting up scanner')
         self.assertNotContains(resp, 'Restart &amp; Test Scanner')
 
     def test_redirect_for_anonymous(self):
