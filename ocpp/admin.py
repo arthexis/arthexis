@@ -22,7 +22,7 @@ from django import forms
 from django.conf import settings
 from django.contrib.admin.utils import quote
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Q, Max
 from django.db.models.deletion import ProtectedError
 from django.http import Http404, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import redirect
@@ -70,6 +70,7 @@ from .status_display import STATUS_BADGE_MAP, ERROR_OK_VALUES
 from .views import _charger_state, _live_sessions
 from core.admin import SaveBeforeChangeAction
 from core.models import EnergyTariff, RFID as CoreRFID
+from core.form_fields import SchedulePeriodsField
 from core.user_data import EntityModelAdmin
 from nodes.models import Node
 
@@ -92,6 +93,17 @@ class ChargingProfileSendForm(forms.Form):
         label=_("EVCS"),
         help_text=_("Charger that will receive the bundled profile."),
     )
+
+
+class ChargingScheduleForm(forms.ModelForm):
+    charging_schedule_periods = SchedulePeriodsField(
+        label=_("Schedule periods"),
+        help_text=_("Define the periods that make up the charging schedule."),
+    )
+
+    class Meta:
+        model = ChargingSchedule
+        fields = "__all__"
 
 
 class CPReservationForm(forms.ModelForm):
@@ -1338,6 +1350,7 @@ class CPFirmwareDeploymentAdmin(EntityModelAdmin):
 
 class ChargingScheduleInline(admin.StackedInline):
     model = ChargingSchedule
+    form = ChargingScheduleForm
     extra = 0
     min_num = 1
     max_num = 1
@@ -1365,33 +1378,23 @@ class ChargingProfileDispatchInline(admin.TabularInline):
 class ChargingProfileAdmin(EntityModelAdmin):
     actions = ("send_bundled_profile",)
     list_display = (
-        "charger",
         "connector_id",
         "charging_profile_id",
         "purpose",
         "kind",
         "stack_level",
-        "last_status",
         "updated_at",
     )
-    list_filter = ("purpose", "kind", "recurrency_kind", "last_status")
-    search_fields = ("charger__charger_id", "description")
-    ordering = (
-        "charger__charger_id",
-        "connector_id",
-        "-stack_level",
-        "charging_profile_id",
-    )
-    autocomplete_fields = ("charger",)
+    list_filter = ("purpose", "kind", "recurrency_kind")
+    search_fields = ("charging_profile_id", "description")
+    ordering = ("connector_id", "-stack_level", "charging_profile_id")
     inlines = (ChargingScheduleInline, ChargingProfileDispatchInline)
     readonly_fields = (
-        "last_response_payload",
-        "last_response_at",
         "created_at",
         "updated_at",
     )
     fieldsets = (
-        (None, {"fields": ("charger", "connector_id", "description")}),
+        (None, {"fields": ("connector_id", "description")}),
         (
             _("Profile"),
             {
@@ -1407,19 +1410,17 @@ class ChargingProfileAdmin(EntityModelAdmin):
                 )
             },
         ),
-        (
-            _("EVCS response"),
-            {
-                "fields": (
-                    "last_status",
-                    "last_status_info",
-                    "last_response_payload",
-                    "last_response_at",
-                )
-            },
-        ),
         (_("Tracking"), {"fields": ("created_at", "updated_at")}),
     )
+
+    def get_changeform_initial_data(self, request):
+        initial = super().get_changeform_initial_data(request)
+        next_id = (
+            ChargingProfile.objects.aggregate(Max("charging_profile_id"))["charging_profile_id__max"]
+            or 0
+        )
+        initial.setdefault("charging_profile_id", next_id + 1)
+        return initial
 
     @staticmethod
     def _combined_request_payload(
@@ -1461,6 +1462,22 @@ class ChargingProfileAdmin(EntityModelAdmin):
             connector_id=0, schedule_payload=schedule_payload
         )
         return payload, None
+
+    def _validate_units(self, request, charger: Charger, schedule_unit: str | None) -> bool:
+        if schedule_unit is None:
+            return True
+        charger_units = {Charger.EnergyUnit.W, Charger.EnergyUnit.KW}
+        if charger.energy_unit in charger_units and schedule_unit != ChargingProfile.RateUnit.WATT:
+            self.message_user(
+                request,
+                _(
+                    "Use watt-based charging schedules when dispatching to %(charger)s to match its configured units."
+                )
+                % {"charger": charger},
+                level=messages.ERROR,
+            )
+            return False
+        return True
 
     def _send_profile_payload(
         self, request, charger: Charger, payload: dict[str, object]
@@ -1534,6 +1551,13 @@ class ChargingProfileAdmin(EntityModelAdmin):
                     self.message_user(request, error, level=messages.ERROR)
                     return None
                 charger = form.cleaned_data["charger"]
+                schedule_unit = (
+                    payload.get("csChargingProfiles", {})
+                    .get("chargingSchedule", {})
+                    .get("chargingRateUnit")
+                )
+                if not self._validate_units(request, charger, schedule_unit):
+                    return None
                 message_id = self._send_profile_payload(request, charger, payload)
                 if message_id:
                     for profile in profiles:
