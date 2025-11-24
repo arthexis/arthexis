@@ -8,6 +8,7 @@
       "application": ["pages"],
       "path": "/read/",
       "menu": "Cookbooks",
+      "priority": 1,
       "is_default": false,
       "favicon": ""
     }

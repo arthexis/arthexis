@@ -8,6 +8,7 @@
       "application": ["awg"],
       "path": "/awg/",
       "menu": "",
+      "priority": 3,
       "is_default": false,
       "favicon": ""
     }
