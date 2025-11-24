@@ -624,6 +624,40 @@ async def handle_remote_stop_transaction_error(
     return True
 
 
+async def handle_get_diagnostics_error(
+    consumer: CallErrorContext,
+    message_id: str,
+    metadata: dict,
+    error_code: str | None,
+    description: str | None,
+    details: dict | None,
+    log_key: str,
+) -> bool:
+    parts: list[str] = []
+    code_text = (error_code or "").strip()
+    description_text = (description or "").strip()
+    if code_text:
+        parts.append(f"code={code_text}")
+    if description_text:
+        parts.append(f"description={description_text}")
+    details_text = _json_details(details)
+    if details_text:
+        parts.append(f"details={details_text}")
+    message = "GetDiagnostics error"
+    if parts:
+        message += ": " + ", ".join(parts)
+    store.add_log(log_key, message, log_type="charger")
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        success=False,
+        error_code=error_code,
+        error_description=description,
+        error_details=details,
+    )
+    return True
+
+
 async def handle_request_start_transaction_error(
     consumer: CallErrorContext,
     message_id: str,
@@ -668,6 +702,40 @@ async def handle_request_stop_transaction_error(
         suffix = str(description).strip()
         if suffix:
             message += f", description={suffix}"
+    store.add_log(log_key, message, log_type="charger")
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        success=False,
+        error_code=error_code,
+        error_description=description,
+        error_details=details,
+    )
+    return True
+
+
+async def handle_set_charging_profile_error(
+    consumer: CallErrorContext,
+    message_id: str,
+    metadata: dict,
+    error_code: str | None,
+    description: str | None,
+    details: dict | None,
+    log_key: str,
+) -> bool:
+    parts: list[str] = []
+    code_text = (error_code or "").strip()
+    description_text = (description or "").strip()
+    if code_text:
+        parts.append(f"code={code_text}")
+    if description_text:
+        parts.append(f"description={description_text}")
+    details_text = _json_details(details)
+    if details_text:
+        parts.append(f"details={details_text}")
+    message = "SetChargingProfile error"
+    if parts:
+        message += ": " + ", ".join(parts)
     store.add_log(log_key, message, log_type="charger")
     store.record_pending_call_result(
         message_id,
@@ -798,10 +866,12 @@ CALL_ERROR_HANDLERS: dict[str, CallErrorHandler] = {
     "CancelReservation": handle_cancel_reservation_error,
     "RemoteStartTransaction": handle_remote_start_transaction_error,
     "RemoteStopTransaction": handle_remote_stop_transaction_error,
+    "GetDiagnostics": handle_get_diagnostics_error,
     "RequestStartTransaction": handle_request_start_transaction_error,
     "RequestStopTransaction": handle_request_stop_transaction_error,
     "Reset": handle_reset_error,
     "ChangeAvailability": handle_change_availability_error,
+    "SetChargingProfile": handle_set_charging_profile_error,
     "SetNetworkProfile": handle_set_network_profile_error,
 }
 

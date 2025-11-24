@@ -18,8 +18,8 @@
       "total": 10
     },
     "csms_to_cp": {
-      "count": 15,
-      "percent": 78.95,
+      "count": 17,
+      "percent": 89.47,
       "supported": [
         "CancelReservation",
         "ChangeAvailability",
@@ -27,10 +27,14 @@
         "ClearCache",
         "DataTransfer",
         "GetConfiguration",
+        "GetDiagnostics",
         "GetLocalListVersion",
+        "RemoteStartTransaction",
+        "RemoteStopTransaction",
         "ReserveNow",
         "Reset",
         "SendLocalList",
+        "SetChargingProfile",
         "TriggerMessage",
         "UnlockConnector",
         "UpdateFirmware"
@@ -38,8 +42,8 @@
       "total": 19
     },
     "overall": {
-      "count": 24,
-      "percent": 85.71,
+      "count": 26,
+      "percent": 92.86,
       "supported": [
         "Authorize",
         "BootNotification",
@@ -51,12 +55,16 @@
         "DiagnosticsStatusNotification",
         "FirmwareStatusNotification",
         "GetConfiguration",
+        "GetDiagnostics",
         "GetLocalListVersion",
         "Heartbeat",
         "MeterValues",
+        "RemoteStartTransaction",
+        "RemoteStopTransaction",
         "ReserveNow",
         "Reset",
         "SendLocalList",
+        "SetChargingProfile",
         "StartTransaction",
         "StatusNotification",
         "StopTransaction",
@@ -90,6 +98,7 @@
       "ClearCache",
       "DataTransfer",
       "GetConfiguration",
+      "GetDiagnostics",
       "GetLocalListVersion",
       "RemoteStartTransaction",
       "RemoteStopTransaction",
@@ -98,6 +107,7 @@
       "ReserveNow",
       "Reset",
       "SendLocalList",
+      "SetChargingProfile",
       "TriggerMessage",
       "UnlockConnector",
       "UpdateFirmware"

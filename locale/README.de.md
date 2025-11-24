@@ -11,6 +11,10 @@ Besuche den öffentlichen [Changelog-Bericht](https://arthexis.com/changelog/), 
 
 Lies den aktuellen [Developer-Artikel](https://arthexis.com/articles/protoline-integration/) mit den wichtigsten Informationen zum kommenden Release und zum Rollout.
 
+## Neueste Entwicklungen
+
+- Die OCPP-1.6-CSMS-Abdeckung umfasst jetzt das Auslösen, die Protokollierung und aktualisierte Badges für `GetDiagnostics`, `RemoteStartTransaction`, `RemoteStopTransaction` und `SetChargingProfile`, womit 93 % der eindeutigen Operationen unterstützt werden und Diagnose-Uploads nachverfolgt werden.
+
 ## Aktuelle Funktionen
 
 - Kompatibel mit dem [Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/) als zentrales System. Unterstützte Aktionen im Überblick.
