@@ -1069,6 +1069,42 @@ class CSMSConsumerTests(TransactionTestCase):
 
         await communicator.disconnect()
 
+    def test_connect_clears_cached_status_fields(self):
+        snapshot = self._snapshot_store_state()
+        self.addCleanup(self._restore_store_state, snapshot)
+
+        charger = Charger.objects.create(
+            charger_id="CLRSTATUS",
+            last_status="Charging",
+            last_error_code="NoError",
+            last_status_vendor_info={"info": "old"},
+            last_status_timestamp=timezone.now(),
+        )
+        connector = Charger.objects.create(
+            charger_id=charger.charger_id,
+            connector_id=1,
+            last_status="Charging",
+            last_error_code="NoError",
+        )
+
+        async def _connect():
+            communicator = WebsocketCommunicator(application, f"/{charger.charger_id}/")
+            connected, _ = await communicator.connect()
+            self.assertTrue(connected)
+            await communicator.disconnect()
+
+        async_to_sync(_connect)()
+
+        charger.refresh_from_db()
+        connector.refresh_from_db()
+
+        self.assertEqual(charger.last_status, "")
+        self.assertEqual(connector.last_status, "")
+        self.assertEqual(charger.last_error_code, "")
+        self.assertEqual(connector.last_error_code, "")
+        self.assertIsNone(charger.last_status_vendor_info)
+        self.assertIsNone(charger.last_status_timestamp)
+
     def test_request_firmware_snapshot_skips_when_pending_exists(self):
         charger = Charger.objects.create(charger_id="REQPENDING", connector_id=None)
         message = DataTransferMessage.objects.create(
