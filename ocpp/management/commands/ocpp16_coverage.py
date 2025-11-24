@@ -115,16 +115,40 @@ def _implemented_csms_to_cp(app_dir: Path) -> set[str]:
     class Visitor(ast.NodeVisitor):
         def __init__(self) -> None:
             self.actions: set[str] = set()
+            self._constant_stack: list[dict[str, set[str]]] = [dict()]
+
+        def _current_constants(self) -> dict[str, set[str]]:
+            return self._constant_stack[-1]
+
+        def _push_scope(self) -> None:
+            self._constant_stack.append(dict())
+
+        def _pop_scope(self) -> None:
+            self._constant_stack.pop()
 
         def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+            self._push_scope()
             self.generic_visit(node)
+            self._pop_scope()
 
         def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+            self._push_scope()
             self.generic_visit(node)
+            self._pop_scope()
 
         def visit_Assign(self, node: ast.Assign) -> None:
             if not node.targets:
                 return
+
+            if isinstance(node.value, ast.Constant) and isinstance(
+                node.value.value, str
+            ):
+                for target in node.targets:
+                    if isinstance(target, ast.Name):
+                        self._current_constants().setdefault(target.id, set()).add(
+                            node.value.value
+                        )
+
             if not any(
                 isinstance(target, ast.Name) and target.id == "msg"
                 for target in node.targets
@@ -147,10 +171,16 @@ def _implemented_csms_to_cp(app_dir: Path) -> set[str]:
             if not isinstance(payload, ast.List) or len(payload.elts) < 3:
                 return
             action_expr = payload.elts[2]
+            action_values: set[str] = set()
             if isinstance(action_expr, ast.Constant) and isinstance(
                 action_expr.value, str
             ):
-                self.actions.add(action_expr.value)
+                action_values.add(action_expr.value)
+            elif isinstance(action_expr, ast.Name):
+                action_values.update(
+                    self._current_constants().get(action_expr.id, set())
+                )
+            self.actions.update(action_values)
 
     visitor = Visitor()
     visitor.visit(tree)

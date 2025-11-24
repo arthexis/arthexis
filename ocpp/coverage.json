@@ -18,15 +18,14 @@
       "total": 10
     },
     "csms_to_cp": {
-      "count": 16,
-      "percent": 84.21,
+      "count": 15,
+      "percent": 78.95,
       "supported": [
         "CancelReservation",
         "ChangeAvailability",
         "ChangeConfiguration",
         "ClearCache",
         "DataTransfer",
-        "GetDiagnostics",
         "GetConfiguration",
         "GetLocalListVersion",
         "RemoteStartTransaction",
@@ -41,8 +40,8 @@
       "total": 19
     },
     "overall": {
-      "count": 25,
-      "percent": 89.29,
+      "count": 24,
+      "percent": 85.71,
       "supported": [
         "Authorize",
         "BootNotification",
@@ -54,7 +53,6 @@
         "DiagnosticsStatusNotification",
         "FirmwareStatusNotification",
         "GetConfiguration",
-        "GetDiagnostics",
         "GetLocalListVersion",
         "Heartbeat",
         "MeterValues",
@@ -86,7 +84,8 @@
       "SecurityEventNotification",
       "StartTransaction",
       "StatusNotification",
-      "StopTransaction"
+      "StopTransaction",
+      "TransactionEvent"
     ],
     "csms_to_cp": [
       "CancelReservation",
@@ -94,11 +93,12 @@
       "ChangeConfiguration",
       "ClearCache",
       "DataTransfer",
-      "GetDiagnostics",
       "GetConfiguration",
       "GetLocalListVersion",
       "RemoteStartTransaction",
       "RemoteStopTransaction",
+      "RequestStartTransaction",
+      "RequestStopTransaction",
       "ReserveNow",
       "Reset",
       "SendLocalList",
