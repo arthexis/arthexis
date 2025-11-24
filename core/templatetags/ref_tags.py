@@ -52,6 +52,9 @@ def render_footer(context):
         node=context.get("badge_node"),
     )
 
+    if not visible_refs:
+        return {"footer_refs": [], "show_footer": False}
+
     version = ""
     ver_path = Path(settings.BASE_DIR) / "VERSION"
     if ver_path.exists():
@@ -128,6 +131,7 @@ def render_footer(context):
 
     return {
         "footer_refs": visible_refs,
+        "show_footer": True,
         "release_name": release_name,
         "release_url": release_url,
         "request": context.get("request"),

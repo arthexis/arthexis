@@ -13,6 +13,7 @@ from django.test import Client, TestCase, override_settings
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
+from django.utils import timezone
 from unittest.mock import patch, PropertyMock
 
 from core.models import PackageRelease, Reference
@@ -58,6 +59,15 @@ class FooterRenderTests(TestCase):
         if rev_short:
             release_name = f"{release_name}-{rev_short}"
         self.assertContains(response, release_name)
+
+    def test_footer_hidden_when_reference_invalidated(self):
+        ref = Reference.objects.filter(include_in_footer=True).first()
+        ref.validation_status = 503
+        ref.validated_url_at = timezone.now()
+        ref.save(update_fields=["validation_status", "validated_url_at"])
+
+        response = self.client.get(reverse("pages:login"))
+        self.assertNotContains(response, "<footer", html=False)
 
     def test_footer_private_visibility(self):
         Reference.objects.create(

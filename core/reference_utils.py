@@ -65,6 +65,9 @@ def filter_visible_references(
 
     visible_refs: list["Reference"] = []
     for ref in refs:
+        if not ref.is_link_valid():
+            continue
+
         required_roles = {role.pk for role in ref.roles.all()}
         required_features = {feature.pk for feature in ref.features.all()}
         required_sites = {current_site.pk for current_site in ref.sites.all()}
