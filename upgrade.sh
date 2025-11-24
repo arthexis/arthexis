@@ -367,36 +367,49 @@ CLEAN=0
 NO_RESTART=0
 NO_WARN=0
 LOCAL_ONLY=0
+DETACHED=0
+FORWARDED_ARGS=()
 # Parse CLI options controlling the upgrade strategy.
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --latest|--unstable)
       CHANNEL="unstable"
+      FORWARDED_ARGS+=("$1")
       shift
       ;;
     --force)
       FORCE_STOP=1
       FORCE_UPGRADE=1
+      FORWARDED_ARGS+=("$1")
       shift
       ;;
     --clean)
       CLEAN=1
+      FORWARDED_ARGS+=("$1")
       shift
       ;;
     --no-restart)
       NO_RESTART=1
+      FORWARDED_ARGS+=("$1")
       shift
       ;;
     --no-warn)
       NO_WARN=1
+      FORWARDED_ARGS+=("$1")
       shift
       ;;
     --local)
       LOCAL_ONLY=1
+      FORWARDED_ARGS+=("$1")
+      shift
+      ;;
+    --detached)
+      DETACHED=1
       shift
       ;;
     --stable|--normal|--regular)
       CHANNEL="stable"
+      FORWARDED_ARGS+=("$1")
       shift
       ;;
     *)
@@ -405,6 +418,28 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+run_detached_upgrade() {
+  local delegated_script="$BASE_DIR/delegated-upgrade.sh"
+
+  if [ ! -x "$delegated_script" ]; then
+    echo "Detached upgrades require $delegated_script" >&2
+    exit 1
+  fi
+
+  local upgrade_cmd=("$UPGRADE_SCRIPT_PATH")
+  if [ ${#FORWARDED_ARGS[@]} -gt 0 ]; then
+    upgrade_cmd+=("${FORWARDED_ARGS[@]}")
+  fi
+
+  echo "Launching detached upgrade via $delegated_script..."
+  "$delegated_script" "${upgrade_cmd[@]}"
+  exit $?
+}
+
+if (( DETACHED )); then
+  run_detached_upgrade
+fi
 
 mkdir -p "$LOCK_DIR"
 
