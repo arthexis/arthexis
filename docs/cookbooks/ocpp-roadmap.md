@@ -4,7 +4,7 @@ This cookbook captures the backlog of Open Charge Point Protocol (OCPP) features
 
 ## Recent updates
 
-- Added full OCPP 1.6 CSMS handling for `GetDiagnostics`, `RemoteStartTransaction`, `RemoteStopTransaction`, and `SetChargingProfile`, including call-result/error logging and charger diagnostics timestamp updates.
+- Added full OCPP 1.6 CSMS handling and dispatch support for `GetDiagnostics`, `RemoteStartTransaction`, `RemoteStopTransaction`, and `SetChargingProfile`, including call-result/error logging, charger diagnostics timestamp updates, and a refreshed 92.9% coverage badge.
 - The remaining 1.6 work now concentrates on profile management and scheduling gaps.
 
 ## OCPP 1.6 backlog

@@ -13,7 +13,7 @@ Consulta il nuovo [articolo degli sviluppatori](https://arthexis.com/articles/pr
 
 ## Novità
 
-- La copertura CSMS OCPP 1.6 ora comprende `GetDiagnostics`, `RemoteStartTransaction`, `RemoteStopTransaction` e `SetChargingProfile`, portando il catalogo supportato al 96 % con nuovi gestori di risultato/errore e registrazioni nel pannello di amministrazione.
+- La copertura CSMS OCPP 1.6 ora comprende l'invio, la registrazione e l'aggiornamento del badge per `GetDiagnostics`, `RemoteStartTransaction`, `RemoteStopTransaction` e `SetChargingProfile`, portando il supporto delle operazioni uniche al 93 % e monitorando i caricamenti diagnostici.
 
 ## Caratteristiche attuali
 

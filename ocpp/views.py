@@ -48,6 +48,7 @@ from .models import (
     Charger,
     ChargerLogRequest,
     DataTransferMessage,
+    ChargingProfile,
     RFID,
     CPReservation,
     CPFirmware,
@@ -68,6 +69,7 @@ CALL_ACTION_LABELS = {
     "RemoteStopTransaction": _("Remote stop transaction"),
     "RequestStartTransaction": _("Request start transaction"),
     "RequestStopTransaction": _("Request stop transaction"),
+    "GetDiagnostics": _("Get diagnostics"),
     "ChangeAvailability": _("Change availability"),
     "ChangeConfiguration": _("Change configuration"),
     "DataTransfer": _("Data transfer"),
@@ -78,6 +80,7 @@ CALL_ACTION_LABELS = {
     "ClearCache": _("Clear cache"),
     "UnlockConnector": _("Unlock connector"),
     "UpdateFirmware": _("Update firmware"),
+    "SetChargingProfile": _("Set charging profile"),
 }
 
 CALL_EXPECTED_STATUSES: dict[str, set[str] | None] = {
@@ -85,6 +88,7 @@ CALL_EXPECTED_STATUSES: dict[str, set[str] | None] = {
     "RemoteStopTransaction": {"Accepted"},
     "RequestStartTransaction": {"Accepted"},
     "RequestStopTransaction": {"Accepted"},
+    "GetDiagnostics": None,
     "ChangeAvailability": {"Accepted", "Scheduled"},
     "ChangeConfiguration": {"Accepted", "Rejected", "RebootRequired"},
     "DataTransfer": {"Accepted"},
@@ -95,6 +99,7 @@ CALL_EXPECTED_STATUSES: dict[str, set[str] | None] = {
     "ClearCache": {"Accepted", "Rejected"},
     "UnlockConnector": {"Unlocked", "Accepted"},
     "UpdateFirmware": None,
+    "SetChargingProfile": {"Accepted", "Rejected", "NotSupported"},
 }
 
 
@@ -2335,6 +2340,68 @@ def _handle_remote_start(context: ActionContext, data: dict) -> JsonResponse | A
     )
 
 
+def _handle_get_diagnostics(
+    context: ActionContext, data: dict
+) -> JsonResponse | ActionCall:
+    expires_at = None
+    stop_time_raw = data.get("stopTime") or data.get("expiresAt") or data.get("expires_at")
+    if stop_time_raw not in (None, ""):
+        parsed_stop_time = parse_datetime(str(stop_time_raw))
+        if parsed_stop_time is None:
+            return JsonResponse({"detail": "invalid stopTime"}, status=400)
+        if timezone.is_naive(parsed_stop_time):
+            parsed_stop_time = timezone.make_aware(
+                parsed_stop_time, timezone.get_current_timezone()
+            )
+        expires_at = parsed_stop_time
+
+    charger_obj = context.charger
+    if charger_obj is None:
+        return JsonResponse({"detail": "charger not found"}, status=404)
+
+    bucket = charger_obj.ensure_diagnostics_bucket(expires_at=expires_at)
+    upload_path = reverse("protocols:media-bucket-upload", kwargs={"slug": bucket.slug})
+    request_obj = getattr(context, "request", None)
+    if request_obj is not None:
+        location = request_obj.build_absolute_uri(upload_path)
+    else:  # pragma: no cover - fallback for atypical contexts
+        location = upload_path
+    payload: dict[str, object] = {"location": location}
+    if bucket.expires_at:
+        payload["stopTime"] = bucket.expires_at.isoformat()
+
+    message_id = uuid.uuid4().hex
+    ocpp_action = "GetDiagnostics"
+    expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
+    msg = json.dumps([2, message_id, ocpp_action, payload])
+    async_to_sync(context.ws.send)(msg)
+    log_key = context.log_key
+    store.register_pending_call(
+        message_id,
+        {
+            "action": ocpp_action,
+            "charger_id": context.cid,
+            "connector_id": context.connector_value,
+            "log_key": log_key,
+            "location": location,
+            "requested_at": timezone.now(),
+        },
+    )
+    store.schedule_call_timeout(
+        message_id,
+        action=ocpp_action,
+        log_key=log_key,
+        message="GetDiagnostics request timed out",
+    )
+    return ActionCall(
+        msg=msg,
+        message_id=message_id,
+        ocpp_action=ocpp_action,
+        expected_statuses=expected_statuses,
+        log_key=log_key,
+    )
+
+
 def _handle_change_availability(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
     availability_type = data.get("type")
     if availability_type not in {"Operative", "Inoperative"}:
@@ -2927,11 +2994,84 @@ def _handle_update_firmware(context: ActionContext, data: dict) -> JsonResponse 
     )
 
 
+def _handle_set_charging_profile(
+    context: ActionContext, data: dict
+) -> JsonResponse | ActionCall:
+    profile_id = (
+        data.get("profileId")
+        or data.get("profile_id")
+        or data.get("profile")
+        or data.get("chargingProfile")
+    )
+    try:
+        profile_pk = int(profile_id)
+    except (TypeError, ValueError):
+        return JsonResponse({"detail": "profileId required"}, status=400)
+
+    profile = (
+        ChargingProfile.objects.select_related("schedule")
+        .filter(pk=profile_pk)
+        .first()
+    )
+    if profile is None:
+        return JsonResponse({"detail": "charging profile not found"}, status=404)
+
+    connector_value: int | str | None = profile.connector_id
+    connector_raw = data.get("connectorId")
+    if connector_raw not in (None, ""):
+        try:
+            connector_value = int(connector_raw)
+        except (TypeError, ValueError):
+            connector_value = connector_raw
+    elif context.connector_value is not None:
+        connector_value = context.connector_value
+
+    schedule_override = data.get("schedule") or data.get("chargingSchedule")
+    if schedule_override is not None and not isinstance(schedule_override, dict):
+        return JsonResponse({"detail": "schedule must be an object"}, status=400)
+
+    payload = profile.as_set_charging_profile_request(
+        connector_id=connector_value,
+        schedule_payload=schedule_override if isinstance(schedule_override, dict) else None,
+    )
+    message_id = uuid.uuid4().hex
+    ocpp_action = "SetChargingProfile"
+    expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
+    msg = json.dumps([2, message_id, ocpp_action, payload])
+    async_to_sync(context.ws.send)(msg)
+    log_key = context.log_key
+    store.register_pending_call(
+        message_id,
+        {
+            "action": ocpp_action,
+            "charger_id": context.cid,
+            "connector_id": connector_value,
+            "charging_profile_id": profile_pk,
+            "log_key": log_key,
+            "requested_at": timezone.now(),
+        },
+    )
+    store.schedule_call_timeout(
+        message_id,
+        action=ocpp_action,
+        log_key=log_key,
+        message="SetChargingProfile request timed out",
+    )
+    return ActionCall(
+        msg=msg,
+        message_id=message_id,
+        ocpp_action=ocpp_action,
+        expected_statuses=expected_statuses,
+        log_key=log_key,
+    )
+
+
 ACTION_HANDLERS = {
     "get_configuration": _handle_get_configuration,
     "reserve_now": _handle_reserve_now,
     "remote_stop": _handle_remote_stop,
     "remote_start": _handle_remote_start,
+    "get_diagnostics": _handle_get_diagnostics,
     "change_availability": _handle_change_availability,
     "change_configuration": _handle_change_configuration,
     "clear_cache": _handle_clear_cache,
@@ -2943,6 +3083,7 @@ ACTION_HANDLERS = {
     "send_local_list": _handle_send_local_list,
     "get_local_list_version": _handle_get_local_list_version,
     "update_firmware": _handle_update_firmware,
+    "set_charging_profile": _handle_set_charging_profile,
 }
 
 @csrf_exempt

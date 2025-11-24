@@ -71,6 +71,7 @@ from .models import (
     Transaction,
     Charger,
     ChargingProfile,
+    ChargingSchedule,
     ChargerConfiguration,
     ConfigurationKey,
     Simulator,
@@ -272,7 +273,7 @@ class DispatchActionTests(TestCase):
         )
         self.addCleanup(lambda: store.connections.pop(connection_key, None))
         self.addCleanup(lambda: store.clear_pending_calls(charger.charger_id))
-        log_key = store.identity_key(charger.charger_id, charger.connector_id)
+        log_key = store.identity_key(charger.charger_id, None)
         store.clear_log(log_key, log_type="charger")
         self.addCleanup(lambda: store.clear_log(log_key, log_type="charger"))
 
@@ -321,7 +322,7 @@ class DispatchActionTests(TestCase):
         )
         self.addCleanup(lambda: store.connections.pop(connection_key, None))
         self.addCleanup(lambda: store.clear_pending_calls(charger.charger_id))
-        log_key = store.identity_key(charger.charger_id, charger.connector_id)
+        log_key = store.identity_key(charger.charger_id, None)
         store.clear_log(log_key, log_type="charger")
         self.addCleanup(lambda: store.clear_log(log_key, log_type="charger"))
 
@@ -352,6 +353,107 @@ class DispatchActionTests(TestCase):
         metadata = store.pending_calls[message_id]
         self.assertEqual(metadata.get("action"), "GetLocalListVersion")
         self.assertEqual(metadata.get("log_key"), log_key)
+
+    def test_get_diagnostics_dispatches_payload(self):
+        charger = Charger.objects.create(charger_id="DIAGDISPATCH")
+        dummy = DummyWebSocket()
+        connection_key = store.set_connection(
+            charger.charger_id, charger.connector_id, dummy
+        )
+        self.addCleanup(lambda: store.connections.pop(connection_key, None))
+        self.addCleanup(lambda: store.clear_pending_calls(charger.charger_id))
+        log_key = store.identity_key(charger.charger_id, None)
+        store.clear_log(log_key, log_type="charger")
+        self.addCleanup(lambda: store.clear_log(log_key, log_type="charger"))
+
+        request = self.factory.post(
+            f"/chargers/{charger.charger_id}/action/",
+            data=json.dumps({"action": "get_diagnostics"}),
+            content_type="application/json",
+        )
+        request.user = SimpleNamespace(
+            is_authenticated=True,
+            is_superuser=True,
+            is_staff=True,
+        )
+
+        with patch(
+            "ocpp.views._evaluate_pending_call_result", return_value=(True, None, None)
+        ):
+            response = dispatch_action(request, charger.charger_id)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(dummy.sent)
+        frame = json.loads(dummy.sent[-1])
+        self.assertEqual(frame[0], 2)
+        self.assertEqual(frame[2], "GetDiagnostics")
+        payload = frame[3]
+        self.assertIn("location", payload)
+        message_id = frame[1]
+        self.assertIn(message_id, store.pending_calls)
+        metadata = store.pending_calls[message_id]
+        self.assertEqual(metadata.get("action"), "GetDiagnostics")
+        self.assertEqual(metadata.get("log_key"), log_key)
+        self.assertEqual(metadata.get("location"), payload.get("location"))
+
+    def test_set_charging_profile_dispatches_payload(self):
+        charger = Charger.objects.create(charger_id="PROFILESEND", connector_id=1)
+        profile = ChargingProfile.objects.create(
+            charger=charger,
+            connector_id=1,
+            charging_profile_id=5,
+            stack_level=1,
+            purpose=ChargingProfile.Purpose.TX_DEFAULT_PROFILE,
+            kind=ChargingProfile.Kind.ABSOLUTE,
+        )
+        ChargingSchedule.objects.create(
+            profile=profile,
+            charging_rate_unit=ChargingProfile.RateUnit.AMP,
+            charging_schedule_periods=[{"startPeriod": 0, "limit": 16}],
+        )
+        dummy = DummyWebSocket()
+        connection_key = store.set_connection(
+            charger.charger_id, charger.connector_id, dummy
+        )
+        self.addCleanup(lambda: store.connections.pop(connection_key, None))
+        self.addCleanup(lambda: store.clear_pending_calls(charger.charger_id))
+        log_key = store.identity_key(charger.charger_id, None)
+        store.clear_log(log_key, log_type="charger")
+        self.addCleanup(lambda: store.clear_log(log_key, log_type="charger"))
+
+        request = self.factory.post(
+            f"/chargers/{charger.charger_id}/action/",
+            data=json.dumps(
+                {
+                    "action": "set_charging_profile",
+                    "profileId": profile.pk,
+                }
+            ),
+            content_type="application/json",
+        )
+        request.user = SimpleNamespace(
+            is_authenticated=True,
+            is_superuser=True,
+            is_staff=True,
+        )
+
+        with patch(
+            "ocpp.views._evaluate_pending_call_result", return_value=(True, None, None)
+        ):
+            response = dispatch_action(request, charger.charger_id)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(dummy.sent)
+        frame = json.loads(dummy.sent[-1])
+        self.assertEqual(frame[0], 2)
+        self.assertEqual(frame[2], "SetChargingProfile")
+        payload = frame[3]
+        self.assertEqual(payload.get("connectorId"), profile.connector_id)
+        message_id = frame[1]
+        self.assertIn(message_id, store.pending_calls)
+        metadata = store.pending_calls[message_id]
+        self.assertEqual(metadata.get("action"), "SetChargingProfile")
+        self.assertEqual(metadata.get("charging_profile_id"), profile.pk)
+        self.assertEqual(metadata.get("log_key"), log_key)
+
 
 class ChargerFixtureTests(TestCase):
     fixtures = [

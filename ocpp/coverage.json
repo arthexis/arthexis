@@ -42,8 +42,8 @@
       "total": 19
     },
     "overall": {
-      "count": 27,
-      "percent": 96.43,
+      "count": 26,
+      "percent": 92.86,
       "supported": [
         "Authorize",
         "BootNotification",

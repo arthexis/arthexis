@@ -13,7 +13,7 @@ Lies den aktuellen [Developer-Artikel](https://arthexis.com/articles/protoline-i
 
 ## Neueste Entwicklungen
 
-- Die OCPP-1.6-CSMS-Abdeckung umfasst jetzt `GetDiagnostics`, `RemoteStartTransaction`, `RemoteStopTransaction` und `SetChargingProfile`, womit 96 % der Aufrufe unterstützt werden und neue Call-Result-/Error-Handler samt Admin-Protokollen zur Verfügung stehen.
+- Die OCPP-1.6-CSMS-Abdeckung umfasst jetzt das Auslösen, die Protokollierung und aktualisierte Badges für `GetDiagnostics`, `RemoteStartTransaction`, `RemoteStopTransaction` und `SetChargingProfile`, womit 93 % der eindeutigen Operationen unterstützt werden und Diagnose-Uploads nachverfolgt werden.
 
 ## Aktuelle Funktionen
 
