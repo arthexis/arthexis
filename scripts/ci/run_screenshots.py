@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
 import os
 import subprocess
@@ -11,22 +12,28 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
-import django
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
-django.setup()
 
-from pages.screenshot_specs import (  # noqa: E402  - Django setup required
-    ScreenshotSpec,
-    ScreenshotSpecRunner,
-    ScreenshotUnavailable,
-    autodiscover,
-    registry,
-)
+def setup_django() -> bool:
+    if importlib.util.find_spec("django") is None:
+        print(
+            "Django is not installed. Run ./scripts/ci/bootstrap_screenshots.sh or "
+            "./install.sh --terminal --no-start to prepare the environment.",
+            file=sys.stderr,
+        )
+        return False
+    import django
+
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+    try:
+        django.setup()
+    except Exception as exc:  # pragma: no cover - defensive
+        print(f"Failed to initialise Django: {exc}", file=sys.stderr)
+        return False
+    return True
 
 
 @dataclass
@@ -75,7 +82,12 @@ def git_changed_files(base_ref: str | None) -> list[str]:
 
 
 def select_specs(
-    explicit: list[str], changed: Iterable[str], run_all: bool
+    explicit: list[str],
+    changed: Iterable[str],
+    run_all: bool,
+    *,
+    autodiscover,
+    registry,
 ) -> list[ScreenshotSpec]:
     autodiscover()
     if explicit:
@@ -128,6 +140,17 @@ def write_summary(
 
 
 def main(argv: list[str] | None = None) -> int:
+    if not setup_django():
+        return 1
+
+    from pages.screenshot_specs import (
+        ScreenshotSpec,
+        ScreenshotSpecRunner,
+        ScreenshotUnavailable,
+        autodiscover,
+        registry,
+    )
+
     parser = argparse.ArgumentParser(description="Run declarative screenshot specs")
     parser.add_argument("--base-ref", help="Base reference for git diff", default=None)
     parser.add_argument(
@@ -139,7 +162,13 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     changed_files = args.changed_files or git_changed_files(args.base_ref)
-    selected = select_specs(args.specs, changed_files, args.run_all)
+    selected = select_specs(
+        args.specs,
+        changed_files,
+        args.run_all,
+        autodiscover=autodiscover,
+        registry=registry,
+    )
     output_dir = (REPO_ROOT / args.output_dir).resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 
