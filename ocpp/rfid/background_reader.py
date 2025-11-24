@@ -28,6 +28,7 @@ _stop_event = threading.Event()
 _reader = None
 _auto_detect_logged = False
 _last_setup_failure: float | None = None
+_suite_marker = f"{os.getpid()}:{int(time.time())}"
 
 try:  # pragma: no cover - debugging helper not available on all platforms
     import resource
@@ -111,13 +112,45 @@ def lock_file_path() -> Path:
     return _lock_path()
 
 
+def _read_lock_marker(lock: Path) -> str | None:
+    """Return the stored suite marker for a lock file when available."""
+
+    try:
+        contents = lock.read_text(encoding="utf-8").strip()
+        return contents or None
+    except Exception:
+        return None
+
+
+def _lock_matches_current(lock: Path) -> bool:
+    """Return ``True`` when the lock file belongs to this suite instance."""
+
+    marker = _read_lock_marker(lock)
+    return bool(marker and marker == _suite_marker)
+
+
+def lock_file_active() -> tuple[bool, Path]:
+    """Return whether a current-suite lock file exists and its path."""
+
+    lock = lock_file_path()
+    if lock.exists():
+        if _lock_matches_current(lock):
+            return True, lock
+        try:
+            lock.unlink()
+            logger.info("Removed stale RFID lock file from previous suite: %s", lock)
+        except Exception as exc:  # pragma: no cover - defensive filesystem guard
+            logger.debug("Unable to remove stale RFID lock file %s: %s", lock, exc)
+    return False, lock
+
+
 def _mark_scanner_used() -> None:
     """Update the RFID lock file timestamp to record scanner usage."""
 
     lock = _lock_path()
     try:
         lock.parent.mkdir(parents=True, exist_ok=True)
-        lock.touch()
+        lock.write_text(_suite_marker, encoding="utf-8")
     except Exception as exc:  # pragma: no cover - defensive filesystem fallback
         logger.debug("RFID auto-detect: unable to update lock file %s: %s", lock, exc)
 
@@ -203,11 +236,12 @@ def is_configured() -> bool:
     """Return ``True`` if an RFID reader is configured for this node."""
     global _auto_detect_logged
 
-    lock = lock_file_path()
-    if lock.exists():
+    has_lock, lock = lock_file_active()
+    if has_lock:
         return True
 
-    if os.environ.get("RFID_AUTO_DETECT", "").lower() not in {"1", "true", "yes"}:
+    env_flag = os.environ.get("RFID_AUTO_DETECT", "").lower()
+    if env_flag and env_flag not in {"1", "true", "yes"}:
         return False
 
     detected = _auto_detect_configured()
@@ -335,6 +369,7 @@ def start():
     _log_fd_snapshot("start")
     _thread = threading.Thread(target=_worker, name="rfid-reader", daemon=True)
     _thread.start()
+    _mark_scanner_used()
     atexit.register(stop)
 
 
