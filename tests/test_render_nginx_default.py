@@ -49,6 +49,13 @@ def test_generate_config_can_include_ipv6():
     assert "listen [::]:443 ssl;" in config
 
 
+def test_8900_listener_redirects_pathless_requests_to_simulator():
+    config = generate_config("internal", 8888)
+    assert "if ($server_port = 8900)" in config
+    assert "if ($uri = \"/\")" in config
+    assert "return 302 /ocpp/evcs/simulator/;" in config
+
+
 def test_nginx_setup_script_removes_default_site():
     script_path = Path(__file__).resolve().parent.parent / "nginx-setup.sh"
     content = script_path.read_text()
