@@ -18,6 +18,11 @@ if ! "$ROOT_DIR/env-refresh.sh" --clean; then
   exit 1
 fi
 
+# Prefer the freshly created virtualenv if it was added during env-refresh.
+if [ -x "$ROOT_DIR/.venv/bin/python" ]; then
+  PYTHON_BIN="$ROOT_DIR/.venv/bin/python"
+fi
+
 if ! "$PYTHON_BIN" - <<'PY'
 import sys
 try:
