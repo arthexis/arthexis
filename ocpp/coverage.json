@@ -18,8 +18,8 @@
       "total": 10
     },
     "csms_to_cp": {
-      "count": 13,
-      "percent": 68.42,
+      "count": 15,
+      "percent": 78.95,
       "supported": [
         "CancelReservation",
         "ChangeAvailability",
@@ -38,8 +38,8 @@
       "total": 19
     },
     "overall": {
-      "count": 22,
-      "percent": 78.57,
+      "count": 24,
+      "percent": 85.71,
       "supported": [
         "Authorize",
         "BootNotification",
@@ -91,6 +91,10 @@
       "DataTransfer",
       "GetConfiguration",
       "GetLocalListVersion",
+      "RemoteStartTransaction",
+      "RemoteStopTransaction",
+      "RequestStartTransaction",
+      "RequestStopTransaction",
       "ReserveNow",
       "Reset",
       "SendLocalList",
