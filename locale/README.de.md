@@ -7,9 +7,7 @@
 
 Die Arthexis-Konstellation ist eine auf [Django](https://www.djangoproject.com/) basierende [Softwaresuite](https://de.wikipedia.org/wiki/Softwarepaket), die Werkzeuge zur Verwaltung der [Ladeinfrastruktur für Elektrofahrzeuge](https://de.wikipedia.org/wiki/Lades%C3%A4ule) sowie zur Orchestrierung von [energiebezogenen Produkten](https://de.wikipedia.org/wiki/Produkt) und [Dienstleistungen](https://de.wikipedia.org/wiki/Dienstleistung) zentralisiert.
 
-Besuche den öffentlichen [Changelog-Bericht](https://arthexis.com/changelog/), um unveröffentlichte und historische Aktualisierungen direkt aus Git-Commits nachzuvollziehen.
-
-Lies den aktuellen [Developer-Artikel](https://arthexis.com/articles/protoline-integration/) mit den wichtigsten Informationen zum kommenden Release und zum Rollout.
+Besuche den [Changelog-Bericht](https://arthexis.com/changelog/), um vergangene und geplante Funktionen sowie weitere Updates zu entdecken.
 
 ## Neueste Entwicklungen
 
@@ -17,7 +15,7 @@ Lies den aktuellen [Developer-Artikel](https://arthexis.com/articles/protoline-i
 
 ## Aktuelle Funktionen
 
-- Kompatibel mit dem [Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/) als zentrales System. Unterstützte Aktionen im Überblick.
+- Kompatibel mit dem [Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/) standardmäßig, während Ladepunkte auf neuere Protokolle aktualisieren können, wenn sie diese unterstützen.
 
   **Ladepunkt → CSMS**
 
@@ -60,12 +58,13 @@ Lies den aktuellen [Developer-Artikel](https://arthexis.com/articles/protoline-i
   **OCPP-Roadmap.** Die geplante Arbeit für die OCPP-1.6-, 2.0.1- und 2.1-Kataloge findest du im [OCPP-Roadmap-Cookbook](docs/cookbooks/ocpp-roadmap.md).
 
 - Ladepunktreservierungen mit automatischer Anschlusswahl, Verknüpfung zu Energiekonten und RFID-Tags, EVCS-Bestätigung sowie Stornierung über die Leitwarte.
-
-- [API](https://de.wikipedia.org/wiki/Programmierschnittstelle)-Integration mit [Odoo](https://www.odoo.com/), um:
-  - Mitarbeiterzugänge über `res.users` zu synchronisieren
-  - Den Produktkatalog über `product.product` abzufragen
+- [API](https://de.wikipedia.org/wiki/Programmierschnittstelle)-Integration mit [Odoo](https://www.odoo.com/), synchronisierend:
+  - Mitarbeiterzugänge über `res.users`
+  - Den Produktkatalog über `product.product` abfragen
 - Läuft auf [Windows 11](https://www.microsoft.com/windows/windows-11) und [Ubuntu 22.04 LTS](https://releases.ubuntu.com/22.04/)
 - Getestet für den [Raspberry Pi 4 Model B](https://www.raspberrypi.com/products/raspberry-pi-4-model-b/)
+
+Projekt in offener, sehr aktiver Entwicklung.
 
 ## Rollenarchitektur
 
@@ -147,7 +146,9 @@ Terminal-Knoten können direkt mit den untenstehenden Skripten ohne Installation
 
 ## Support
 
-Kontakt per [tecnologia@gelectriic.com](mailto:tecnologia@gelectriic.com) oder besuche unsere [Webseite](https://www.gelectriic.com/) für [professionelle Dienstleistungen](https://de.wikipedia.org/wiki/Dienstleistung) und [kommerziellen Support](https://de.wikipedia.org/wiki/Technischer_Support).
+Die Arthexis-Konstellation befindet sich weiterhin in sehr aktiver Entwicklung und erhält täglich neue Funktionen.
+
+Wenn du unsere Suite für deine Energieprojekte einsetzen möchtest, erreichst du uns unter [tecnologia@gelectriic.com](mailto:tecnologia@gelectriic.com) oder über unsere [Webseite](https://www.gelectriic.com/) für [professionelle Dienstleistungen](https://de.wikipedia.org/wiki/Dienstleistung) und [kommerziellen Support](https://de.wikipedia.org/wiki/Technischer_Support).
 
 ## Projektleitlinien
 

@@ -7,9 +7,7 @@
 
 Constelación Arthexis es una [suite de software](https://es.wikipedia.org/wiki/Suite_de_software) basada en [Django](https://www.djangoproject.com/) que centraliza herramientas para gestionar la [infraestructura de carga de vehículos eléctricos](https://es.wikipedia.org/wiki/Punto_de_recarga) y orquestar [productos](https://es.wikipedia.org/wiki/Producto_(econom%C3%ADa)) y [servicios](https://es.wikipedia.org/wiki/Servicio_(econom%C3%ADa)) relacionados con la [energía](https://es.wikipedia.org/wiki/Energ%C3%ADa).
 
-Visita el [Informe de cambios](https://arthexis.com/changelog/) público para explorar actualizaciones inéditas e históricas generadas directamente desde los commits de git.
-
-Consulta el nuevo [artículo para desarrolladores](https://arthexis.com/articles/protoline-integration/) con los aspectos destacados del próximo lanzamiento y los detalles del despliegue.
+Visita el [Informe de cambios](https://arthexis.com/changelog/) para explorar las funciones pasadas y futuras junto con otras actualizaciones.
 
 ## Novedades
 
@@ -17,7 +15,7 @@ Consulta el nuevo [artículo para desarrolladores](https://arthexis.com/articles
 
 ## Características actuales
 
-- Compatible con el [Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/) como sistema central. Las acciones soportadas se resumen a continuación.
+- Compatible con el [Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/) por defecto, permitiendo que los puntos de carga se actualicen a protocolos más nuevos si los admiten.
 
   **Punto de carga → CSMS**
 
@@ -60,11 +58,13 @@ Consulta el nuevo [artículo para desarrolladores](https://arthexis.com/articles
   **Hoja de ruta OCPP.** Consulta el [cookbook de la hoja de ruta OCPP](docs/cookbooks/ocpp-roadmap.md) para conocer el trabajo planificado de los catálogos OCPP 1.6, 2.0.1 y 2.1.
 
 - Reservas de puntos de carga con asignación automática de conectores, vinculación a cuentas de energía y RFIDs, confirmación del EVCS y cancelación desde el centro de control.
-- Integración de [API](https://es.wikipedia.org/wiki/Interfaz_de_programaci%C3%B3n_de_aplicaciones) con [Odoo](https://www.odoo.com/) para:
-  - Sincronizar credenciales de empleados mediante `res.users`
-  - Consultar el catálogo de productos mediante `product.product`
+- Integración de [API](https://es.wikipedia.org/wiki/Interfaz_de_programaci%C3%B3n_de_aplicaciones) con [Odoo](https://www.odoo.com/), sincronizando:
+  - Credenciales de empleados mediante `res.users`
+  - Consultas al catálogo de productos mediante `product.product`
 - Funciona en [Windows 11](https://www.microsoft.com/es-es/windows/windows-11) y [Ubuntu 22.04 LTS](https://releases.ubuntu.com/22.04/)
 - Probado para la [Raspberry Pi 4 Modelo B](https://www.raspberrypi.com/products/raspberry-pi-4-model-b/)
+
+Proyecto en desarrollo abierto y muy activo.
 
 ## Arquitectura de roles
 
@@ -91,7 +91,7 @@ Constelación Arthexis se distribuye en cuatro roles de nodo que adaptan la plat
       <td valign="top"><strong>Periferia multidispositivo, redes y adquisición de datos</strong><br />Funciones: AP Router, Celery Queue, NGINX Server, RFID Scanner</td>
     </tr>
     <tr>
-      <td valign="top"><strong>Constelación</strong></td>
+      <td valign="top"><strong>Watchtower</strong></td>
       <td valign="top"><strong>Nube multiusuario y orquestación</strong><br />Funciones: Celery Queue, NGINX Server</td>
     </tr>
   </tbody>
@@ -104,7 +104,7 @@ Constelación Arthexis se distribuye en cuatro roles de nodo que adaptan la plat
 - **[Windows](https://es.wikipedia.org/wiki/Microsoft_Windows)**: abre [PowerShell](https://learn.microsoft.com/es-es/powershell/) o [Git Bash](https://gitforwindows.org/) y ejecuta el mismo comando.
 
 ### 2. Iniciar y detener
-Los nodos Terminal pueden iniciarse directamente con los siguientes scripts sin instalar; los roles Control, Satélite y Constelación deben instalarse primero. Ambos métodos escuchan en [`http://localhost:8888/`](http://localhost:8888/) de forma predeterminada.
+Los nodos Terminal pueden iniciarse directamente con los siguientes scripts sin instalar; los roles Control, Satélite y Watchtower deben instalarse primero. Ambos métodos escuchan en [`http://localhost:8888/`](http://localhost:8888/) de forma predeterminada.
 
 - **[VS Code](https://code.visualstudio.com/)**
    - Abre la carpeta y ve al panel **Run and Debug** (`Ctrl+Shift+D`).
@@ -146,7 +146,9 @@ Los nodos Terminal pueden iniciarse directamente con los siguientes scripts sin 
 
 ## Soporte
 
-Contáctenos en [tecnologia@gelectriic.com](mailto:tecnologia@gelectriic.com) o visite nuestro [sitio web](https://www.gelectriic.com/) para [servicios profesionales](https://es.wikipedia.org/wiki/Servicios_profesionales) y [soporte comercial](https://es.wikipedia.org/wiki/Soporte_t%C3%A9cnico).
+Constelación Arthexis sigue en desarrollo muy activo y se agregan nuevas funciones cada día.
+
+Si decides usar nuestra suite para tus proyectos de energía, puedes contactarnos en [tecnologia@gelectriic.com](mailto:tecnologia@gelectriic.com) o visitar nuestro [sitio web](https://www.gelectriic.com/) para [servicios profesionales](https://es.wikipedia.org/wiki/Servicios_profesionales) y [soporte comercial](https://es.wikipedia.org/wiki/Soporte_t%C3%A9cnico).
 
 ## Directrices del proyecto
 
