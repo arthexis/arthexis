@@ -207,6 +207,9 @@ def is_configured() -> bool:
     if lock.exists():
         return True
 
+    if os.environ.get("RFID_AUTO_DETECT", "").lower() not in {"1", "true", "yes"}:
+        return False
+
     detected = _auto_detect_configured()
     if detected and not _auto_detect_logged:
         logger.info(
