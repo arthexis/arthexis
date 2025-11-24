@@ -7,6 +7,7 @@
           <button id="{{ prefix }}-deep-read" class="button" type="button" aria-pressed="false">{% trans "Deep Read" %}</button>
           <a id="{{ prefix }}-configure" class="button" href="#" style="display:none;"></a>
         {% endif %}
+        <button id="{{ prefix }}-local-request" class="button secondary" type="button">{% trans "Connect Local Scanner" %}</button>
         {% if toggle_url %}
           <a id="{{ prefix }}-mode-toggle" class="button" href="{{ toggle_url }}" data-toggle-url="{{ toggle_url }}">{{ toggle_label }}</a>
         {% endif %}
@@ -351,6 +352,7 @@
   const deepBtn = document.getElementById('{{ prefix }}-deep-read');
   const configureEl = document.getElementById('{{ prefix }}-configure');
   const modeToggleBtn = document.getElementById('{{ prefix }}-mode-toggle');
+  const localRequestBtn = document.getElementById('{{ prefix }}-local-request');
   const deepDetailsEl = document.getElementById('{{ prefix }}-deep-details');
   const keyAEl = document.getElementById('{{ prefix }}-key-a');
   const keyBEl = document.getElementById('{{ prefix }}-key-b');
@@ -410,6 +412,7 @@
     attemptingDeepRead: '{{ _("Attempting deep read...")|escapejs }}',
     settingUpScanner: '{{ _("Setting up scanner...")|escapejs }}',
     connectingSavedScanner: '{{ _("Connecting to saved local scanner...")|escapejs }}',
+    requestLocalScanner: '{{ _("Requesting local scanner...")|escapejs }}',
     localScanner: '{{ _("Local Scanner")|escapejs }}',
     configureRfid: '{{ _("Configure RFID %(label)s")|escapejs }}',
     rfidStatusState: '{{ _("RFID %(label)s %(state)s")|escapejs }}',
@@ -994,6 +997,7 @@
   async function prepareNetworkScanner(){
     const data = await requestScanData();
     if(data === null){
+      startPolling();
       return false;
     }
     if(!firstReadySource){
@@ -1123,17 +1127,12 @@
     }
   }
 
-  async function autoConnectLocalScanner(){
-    if(!('serial' in navigator) || !navigator.serial.getPorts){
-      return false;
-    }
-    const ports = await navigator.serial.getPorts();
-    if(!ports.length){
+  async function connectToLocalPort(port){
+    if(!port){
       return false;
     }
     try {
       statusEl.textContent = text.connectingSavedScanner;
-      const port = ports[0];
       await port.open({baudRate: 9600});
       localPort = port;
       localConnected = true;
@@ -1161,6 +1160,41 @@
       localReader = null;
     }
     return false;
+  }
+
+  async function requestLocalScanner(){
+    if(!('serial' in navigator) || !navigator.serial.requestPort){
+      showError(text.browserNoSupport);
+      return false;
+    }
+    statusEl.textContent = text.requestLocalScanner;
+    try {
+      const port = await navigator.serial.requestPort();
+      return await connectToLocalPort(port);
+    } catch(err){
+      showError(text.localConnectFailed);
+    }
+    return false;
+  }
+
+  async function autoConnectLocalScanner(){
+    if(!('serial' in navigator) || !navigator.serial.getPorts){
+      if(localRequestBtn){
+        localRequestBtn.disabled = true;
+      }
+      return false;
+    }
+    const ports = await navigator.serial.getPorts();
+    if(!ports.length){
+      if(localRequestBtn){
+        localRequestBtn.disabled = false;
+        localRequestBtn.hidden = false;
+      }
+      statusEl.textContent = text.selectScanner;
+      return false;
+    }
+    const port = ports[0];
+    return await connectToLocalPort(port);
   }
 
   function setupLocalScannerEvents(){
@@ -1231,6 +1265,21 @@
         updateFromData(lastScanData, {updateHistory: false, triggerActions: false});
       }
     });
+  }
+  if(localRequestBtn){
+    localRequestBtn.hidden = true;
+    if(!('serial' in navigator) || !(navigator.serial && navigator.serial.requestPort)){
+      localRequestBtn.disabled = true;
+      localRequestBtn.title = text.webSerialUnsupported;
+    } else {
+      localRequestBtn.addEventListener('click', async () => {
+        localRequestBtn.disabled = true;
+        const connected = await requestLocalScanner();
+        if(!connected){
+          localRequestBtn.disabled = false;
+        }
+      });
+    }
   }
   startScannerSetup();
 })();
