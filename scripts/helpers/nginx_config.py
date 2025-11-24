@@ -56,6 +56,11 @@ def proxy_block(port: int, *, trailing_slash: bool = True) -> str:
     return textwrap.dedent(
         f"""
         location / {{
+            if ($server_port = 8900) {{
+                if ($uri = "/") {{
+                    return 302 /ocpp/evcs/simulator/;
+                }}
+            }}
             proxy_pass {upstream};
             proxy_intercept_errors on;
             proxy_http_version 1.1;
