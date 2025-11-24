@@ -5,6 +5,7 @@ import logging
 import os
 import queue
 import threading
+import time
 from pathlib import Path
 from typing import Optional
 
@@ -26,6 +27,76 @@ _thread: Optional[threading.Thread] = None
 _stop_event = threading.Event()
 _reader = None
 _auto_detect_logged = False
+_last_setup_failure: float | None = None
+
+try:  # pragma: no cover - debugging helper not available on all platforms
+    import resource
+except Exception:  # pragma: no cover - defensive fallback
+    resource = None
+
+_FD_SNAPSHOT_THRESHOLD = int(os.environ.get("RFID_FD_LOG_THRESHOLD", "400"))
+_FD_SNAPSHOT_INTERVAL = float(os.environ.get("RFID_FD_LOG_INTERVAL", "10"))
+_last_fd_snapshot = 0.0
+_SETUP_BACKOFF_SECONDS = float(os.environ.get("RFID_SETUP_BACKOFF_SECONDS", "30"))
+
+
+def _log_fd_snapshot(label: str) -> None:
+    """Emit a lightweight file descriptor snapshot for debugging leaks."""
+
+    global _last_fd_snapshot
+
+    now = time.monotonic()
+    if _FD_SNAPSHOT_INTERVAL > 0 and now - _last_fd_snapshot < _FD_SNAPSHOT_INTERVAL:
+        return
+
+    fd_dir = Path("/proc/self/fd")
+    if not fd_dir.exists():  # pragma: no cover - platform check
+        return
+
+    try:
+        entries = list(fd_dir.iterdir())
+    except Exception as exc:  # pragma: no cover - defensive logging
+        logger.debug("RFID fd snapshot unavailable (%s): %s", label, exc)
+        return
+
+    count = len(entries)
+    if _FD_SNAPSHOT_INTERVAL > 0:
+        _last_fd_snapshot = now
+
+    limits = ()
+    if resource:
+        try:
+            limits = resource.getrlimit(resource.RLIMIT_NOFILE)
+        except Exception:  # pragma: no cover - defensive guard
+            limits = ()
+
+    samples: list[str] = []
+    for fd_path in entries[:10]:
+        try:
+            samples.append(str(fd_path.resolve()))
+        except Exception as exc:  # pragma: no cover - defensive guard
+            samples.append(f"{fd_path.name}:<error:{exc}>")
+
+    message = (
+        "RFID fd snapshot (%s): count=%s limits=%s sample=%s"
+        % (label, count, limits, samples)
+    )
+    if count >= _FD_SNAPSHOT_THRESHOLD:
+        logger.warning(message)
+    else:
+        logger.debug(message)
+
+
+def _record_setup_failure(reason: str) -> None:
+    """Track setup failures to avoid thrashing hardware when unavailable."""
+
+    global _last_setup_failure
+    _last_setup_failure = time.monotonic()
+    logger.warning(
+        "RFID hardware setup failed (%s); skipping retries for %.1fs",
+        reason,
+        _SETUP_BACKOFF_SECONDS,
+    )
 
 
 def _lock_path() -> Path:
@@ -198,8 +269,12 @@ def _setup_hardware():  # pragma: no cover - hardware dependent
 
 
 def _worker():  # pragma: no cover - background thread
+    global _thread, _last_setup_failure
+
+    _log_fd_snapshot("worker-start")
     if not _setup_hardware():
-        logger.error("RFID hardware setup failed; background reader not running")
+        _record_setup_failure("initialization")
+        _log_fd_snapshot("worker-setup-failed")
         lock = lock_file_path()
         if lock.exists():
             try:
@@ -209,22 +284,42 @@ def _worker():  # pragma: no cover - background thread
                 logger.debug(
                     "Unable to remove RFID lock file %s after setup failure: %s", lock, exc
                 )
+        _thread = None
         return
+    _last_setup_failure = None
+    _log_fd_snapshot("worker-setup-ok")
     # Wait indefinitely until a stop is requested, relying solely on IRQ
     # callbacks to populate the tag queue. This avoids periodic polling and
     # lets the thread sleep until explicitly stopped.
     _stop_event.wait()
+    _log_fd_snapshot("worker-stop-event")
     if GPIO:
         try:
             GPIO.remove_event_detect(IRQ_PIN)
             GPIO.cleanup()
         except Exception:
             pass
+    _thread = None
 
 
 def start():
     """Start the background RFID reader."""
     global _thread
+    now = time.monotonic()
+    if (
+        _last_setup_failure is not None
+        and _SETUP_BACKOFF_SECONDS > 0
+        and now - _last_setup_failure < _SETUP_BACKOFF_SECONDS
+    ):
+        remaining = _SETUP_BACKOFF_SECONDS - (now - _last_setup_failure)
+        logger.info(
+            "RFID background reader start skipped; last setup failure %.1fs ago "
+            "(retry in %.1fs)",
+            now - _last_setup_failure,
+            remaining,
+        )
+        return
+
     if not is_configured():
         logger.debug("RFID not configured; background reader not started")
         return
@@ -234,6 +329,7 @@ def start():
         return
     _stop_event.clear()
     logger.debug("Starting RFID background reader thread")
+    _log_fd_snapshot("start")
     _thread = threading.Thread(target=_worker, name="rfid-reader", daemon=True)
     _thread.start()
     atexit.register(stop)
@@ -241,15 +337,19 @@ def start():
 
 def stop():
     """Stop the background RFID reader and cleanup GPIO."""
+    global _thread
+
     _stop_event.set()
     if _thread:
         _thread.join(timeout=1)
+    _log_fd_snapshot("stop")
     if GPIO:
         try:
             if GPIO.getmode() is not None:  # Only cleanup if GPIO was initialized
                 GPIO.cleanup()
         except Exception:
             pass
+    _thread = None
 
 
 def get_next_tag(timeout: float = 0) -> Optional[dict]:
@@ -266,6 +366,7 @@ def get_next_tag(timeout: float = 0) -> Optional[dict]:
             _mark_scanner_used()
         return result
     except queue.Empty:
+        _log_fd_snapshot("get_next_tag-empty")
         logger.debug("IRQ queue empty; falling back to direct read")
         try:
             from .reader import read_rfid

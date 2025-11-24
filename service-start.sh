@@ -41,6 +41,10 @@ for env_file in *.env; do
   set +a
 done
 
+SOFT_FD_LIMIT="$(ulimit -Sn 2>/dev/null || echo "unknown")"
+HARD_FD_LIMIT="$(ulimit -Hn 2>/dev/null || echo "unknown")"
+echo "Open file limits: soft=${SOFT_FD_LIMIT} hard=${HARD_FD_LIMIT}"
+
 # Collect static files only when their sources change
 STATIC_MD5_FILE="$BASE_DIR/staticfiles.md5"
 if ! STATIC_HASH=$(python scripts/staticfiles_md5.py); then
