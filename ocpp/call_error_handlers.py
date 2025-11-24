@@ -8,7 +8,10 @@ from django.utils import timezone
 
 from . import store
 from .models import (
+    CPCertificate,
+    CPCertificateOperation,
     CPFirmwareDeployment,
+    CPNetworkProfileDeployment,
     CPReservation,
     ChargerLogRequest,
     DataTransferMessage,
@@ -623,6 +626,62 @@ async def handle_remote_stop_transaction_error(
     return True
 
 
+async def handle_request_start_transaction_error(
+    consumer: CallErrorContext,
+    message_id: str,
+    metadata: dict,
+    error_code: str | None,
+    description: str | None,
+    details: dict | None,
+    log_key: str,
+) -> bool:
+    message = "RequestStartTransaction error"
+    if error_code:
+        message += f": code={str(error_code).strip()}"
+    if description:
+        suffix = str(description).strip()
+        if suffix:
+            message += f", description={suffix}"
+    store.add_log(log_key, message, log_type="charger")
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        success=False,
+        error_code=error_code,
+        error_description=description,
+        error_details=details,
+    )
+    return True
+
+
+async def handle_request_stop_transaction_error(
+    consumer: CallErrorContext,
+    message_id: str,
+    metadata: dict,
+    error_code: str | None,
+    description: str | None,
+    details: dict | None,
+    log_key: str,
+) -> bool:
+    message = "RequestStopTransaction error"
+    if error_code:
+        message += f": code={str(error_code).strip()}"
+    if description:
+        suffix = str(description).strip()
+        if suffix:
+            message += f", description={suffix}"
+    store.add_log(log_key, message, log_type="charger")
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        success=False,
+        error_code=error_code,
+        error_description=description,
+        error_details=details,
+    )
+    return True
+
+
 async def handle_reset_error(
     consumer: CallErrorContext,
     message_id: str,
@@ -689,6 +748,248 @@ async def handle_change_availability_error(
     return True
 
 
+async def handle_set_network_profile_error(
+    consumer: CallErrorContext,
+    message_id: str,
+    metadata: dict,
+    error_code: str | None,
+    description: str | None,
+    details: dict | None,
+    log_key: str,
+) -> bool:
+    deployment_pk = metadata.get("deployment_pk")
+
+    def _apply():
+        deployment = CPNetworkProfileDeployment.objects.filter(pk=deployment_pk).first()
+        if not deployment:
+            return
+        detail_text = (description or "").strip()
+        if not detail_text and details:
+            try:
+                detail_text = json.dumps(details, sort_keys=True)
+            except Exception:
+                detail_text = str(details)
+        if not detail_text:
+            detail_text = (error_code or "").strip() or "Error"
+        deployment.mark_status("Error", detail_text, response=details)
+        deployment.completed_at = timezone.now()
+        deployment.save(update_fields=["completed_at", "updated_at"])
+
+    await database_sync_to_async(_apply)()
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        success=False,
+        error_code=error_code,
+        error_description=description,
+        error_details=details,
+    )
+    return True
+
+
+async def handle_install_certificate_error(
+    consumer: CallErrorContext,
+    message_id: str,
+    metadata: dict,
+    error_code: str | None,
+    description: str | None,
+    details: dict | None,
+    log_key: str,
+) -> bool:
+    certificate_pk = metadata.get("certificate_pk")
+    operation_pk = metadata.get("certificate_operation_pk")
+    status_value = (error_code or "Error").strip() or "Error"
+    detail_text = (description or "").strip() or _json_details(details)
+    status_timestamp = timezone.now()
+
+    def _apply():
+        if certificate_pk:
+            certificate = CPCertificate.objects.filter(pk=certificate_pk).first()
+        else:
+            certificate = None
+        if certificate:
+            certificate.status = status_value
+            certificate.status_info = detail_text
+            certificate.status_timestamp = status_timestamp
+            certificate.last_seen_at = status_timestamp
+            certificate.save(
+                update_fields=[
+                    "status",
+                    "status_info",
+                    "status_timestamp",
+                    "last_seen_at",
+                    "updated_at",
+                ]
+            )
+
+        if operation_pk:
+            operation = CPCertificateOperation.objects.filter(pk=operation_pk).first()
+            if operation:
+                operation.mark_status(
+                    status_value,
+                    detail_text,
+                    status_timestamp,
+                    response={
+                        "errorCode": error_code,
+                        "description": description,
+                        "details": details,
+                    },
+                )
+                operation.completed_at = status_timestamp
+                operation.save(update_fields=["completed_at", "updated_at"])
+
+    await database_sync_to_async(_apply)()
+    parts: list[str] = []
+    if error_code:
+        parts.append(f"code={error_code}")
+    if description:
+        parts.append(f"description={description}")
+    if details:
+        parts.append(f"details={_json_details(details)}")
+    message = "InstallCertificate error"
+    if parts:
+        message += ": " + ", ".join(parts)
+    store.add_log(log_key, message, log_type="charger")
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        success=False,
+        error_code=error_code,
+        error_description=description,
+        error_details=details,
+    )
+    return True
+
+
+async def handle_delete_certificate_error(
+    consumer: CallErrorContext,
+    message_id: str,
+    metadata: dict,
+    error_code: str | None,
+    description: str | None,
+    details: dict | None,
+    log_key: str,
+) -> bool:
+    certificate_pk = metadata.get("certificate_pk")
+    operation_pk = metadata.get("certificate_operation_pk")
+    status_value = (error_code or "Error").strip() or "Error"
+    detail_text = (description or "").strip() or _json_details(details)
+    status_timestamp = timezone.now()
+
+    def _apply():
+        certificate = (
+            CPCertificate.objects.filter(pk=certificate_pk).first()
+            if certificate_pk
+            else None
+        )
+        if certificate:
+            certificate.status = status_value
+            certificate.status_info = detail_text
+            certificate.status_timestamp = status_timestamp
+            certificate.last_seen_at = status_timestamp
+            certificate.save(
+                update_fields=[
+                    "status",
+                    "status_info",
+                    "status_timestamp",
+                    "last_seen_at",
+                    "updated_at",
+                ]
+            )
+
+        if operation_pk:
+            operation = CPCertificateOperation.objects.filter(pk=operation_pk).first()
+            if operation:
+                operation.mark_status(
+                    status_value,
+                    detail_text,
+                    status_timestamp,
+                    response={
+                        "errorCode": error_code,
+                        "description": description,
+                        "details": details,
+                    },
+                )
+                operation.completed_at = status_timestamp
+                operation.save(update_fields=["completed_at", "updated_at"])
+
+    await database_sync_to_async(_apply)()
+    parts: list[str] = []
+    if error_code:
+        parts.append(f"code={error_code}")
+    if description:
+        parts.append(f"description={description}")
+    if details:
+        parts.append(f"details={_json_details(details)}")
+    message = "DeleteCertificate error"
+    if parts:
+        message += ": " + ", ".join(parts)
+    store.add_log(log_key, message, log_type="charger")
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        success=False,
+        error_code=error_code,
+        error_description=description,
+        error_details=details,
+    )
+    return True
+
+
+async def handle_get_installed_certificate_ids_error(
+    consumer: CallErrorContext,
+    message_id: str,
+    metadata: dict,
+    error_code: str | None,
+    description: str | None,
+    details: dict | None,
+    log_key: str,
+) -> bool:
+    operation_pk = metadata.get("certificate_operation_pk")
+    status_value = (error_code or "Error").strip() or "Error"
+    detail_text = (description or "").strip() or _json_details(details)
+    status_timestamp = timezone.now()
+
+    def _apply():
+        if operation_pk:
+            operation = CPCertificateOperation.objects.filter(pk=operation_pk).first()
+            if operation:
+                operation.mark_status(
+                    status_value,
+                    detail_text,
+                    status_timestamp,
+                    response={
+                        "errorCode": error_code,
+                        "description": description,
+                        "details": details,
+                    },
+                )
+                operation.completed_at = status_timestamp
+                operation.save(update_fields=["completed_at", "updated_at"])
+
+    await database_sync_to_async(_apply)()
+    parts: list[str] = []
+    if error_code:
+        parts.append(f"code={error_code}")
+    if description:
+        parts.append(f"description={description}")
+    if details:
+        parts.append(f"details={_json_details(details)}")
+    message = "GetInstalledCertificateIds error"
+    if parts:
+        message += ": " + ", ".join(parts)
+    store.add_log(log_key, message, log_type="charger")
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        success=False,
+        error_code=error_code,
+        error_description=description,
+        error_details=details,
+    )
+    return True
+
+
 CALL_ERROR_HANDLERS: dict[str, CallErrorHandler] = {
     "GetCompositeSchedule": handle_get_composite_schedule_error,
     "ChangeConfiguration": handle_change_configuration_error,
@@ -702,8 +1003,14 @@ CALL_ERROR_HANDLERS: dict[str, CallErrorHandler] = {
     "CancelReservation": handle_cancel_reservation_error,
     "RemoteStartTransaction": handle_remote_start_transaction_error,
     "RemoteStopTransaction": handle_remote_stop_transaction_error,
+    "RequestStartTransaction": handle_request_start_transaction_error,
+    "RequestStopTransaction": handle_request_stop_transaction_error,
     "Reset": handle_reset_error,
     "ChangeAvailability": handle_change_availability_error,
+    "SetNetworkProfile": handle_set_network_profile_error,
+    "InstallCertificate": handle_install_certificate_error,
+    "DeleteCertificate": handle_delete_certificate_error,
+    "GetInstalledCertificateIds": handle_get_installed_certificate_ids_error,
 }
 
 

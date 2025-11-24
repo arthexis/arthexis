@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import binascii
 import hashlib
 import json
@@ -254,6 +255,16 @@ class Charger(Entity):
         related_name="chargers",
         help_text=_(
             "Latest GetConfiguration response received from this charge point."
+        ),
+    )
+    network_profile = models.ForeignKey(
+        "CPNetworkProfile",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="chargers",
+        help_text=_(
+            "Last network profile that was successfully applied to this charge point."
         ),
     )
     local_auth_list_version = models.PositiveIntegerField(
@@ -1055,6 +1066,309 @@ class ChargerConfiguration(models.Model):
                 self._prefetched_objects_cache.pop("configuration_entries", None)
 
 
+class CPNetworkProfile(Entity):
+    """Network profile that can be provisioned via SetNetworkProfile."""
+
+    name = models.CharField(_("Name"), max_length=200)
+    description = models.TextField(_("Description"), blank=True)
+    configuration_slot = models.PositiveIntegerField(
+        _("Configuration slot"), default=1, help_text=_("Target configurationSlot.")
+    )
+    connection_data = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=_("connectionData payload for SetNetworkProfile."),
+    )
+    apn = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=_("Optional APN settings to include with the profile."),
+    )
+    vpn = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=_("Optional VPN settings to include with the profile."),
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name", "configuration_slot"]
+        verbose_name = _("CP Network Profile")
+        verbose_name_plural = _("CP Network Profiles")
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return self.name
+
+    def build_payload(self) -> dict[str, object]:
+        payload: dict[str, object] = {
+            "configurationSlot": self.configuration_slot,
+            "connectionData": self.connection_data or {},
+        }
+        if self.apn:
+            payload["apn"] = self.apn
+        if self.vpn:
+            payload["vpn"] = self.vpn
+        return payload
+
+
+class CPNetworkProfileDeployment(Entity):
+    """Track SetNetworkProfile deployments for specific charge points."""
+
+    network_profile = models.ForeignKey(
+        CPNetworkProfile,
+        on_delete=models.CASCADE,
+        related_name="deployments",
+        verbose_name=_("Network profile"),
+    )
+    charger = models.ForeignKey(
+        "Charger",
+        on_delete=models.PROTECT,
+        related_name="network_profile_deployments",
+        verbose_name=_("Charge point"),
+    )
+    node = models.ForeignKey(
+        Node,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="network_profile_deployments",
+        verbose_name=_("Node"),
+    )
+    ocpp_message_id = models.CharField(
+        _("OCPP message ID"), max_length=64, blank=True
+    )
+    status = models.CharField(_("Status"), max_length=32, blank=True)
+    status_info = models.CharField(_("Status details"), max_length=255, blank=True)
+    status_timestamp = models.DateTimeField(_("Status timestamp"), null=True, blank=True)
+    requested_at = models.DateTimeField(_("Requested at"), auto_now_add=True)
+    completed_at = models.DateTimeField(_("Completed at"), null=True, blank=True)
+    request_payload = models.JSONField(default=dict, blank=True)
+    response_payload = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-requested_at"]
+        verbose_name = _("CP Network Profile Deployment")
+        verbose_name_plural = _("CP Network Profile Deployments")
+        indexes = [
+            models.Index(fields=["ocpp_message_id"]),
+        ]
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        if self.pk:
+            return f"{self.network_profile} → {self.charger}"
+        return "Network profile deployment"
+
+    def mark_status(
+        self,
+        status_value: str,
+        status_info: str = "",
+        timestamp: datetime | None = None,
+        *,
+        response: dict | None = None,
+    ) -> None:
+        if timestamp is None:
+            timestamp = timezone.now()
+        updates = {
+            "status": status_value,
+            "status_info": status_info,
+            "status_timestamp": timestamp,
+        }
+        if response is not None:
+            updates["response_payload"] = response
+        CPNetworkProfileDeployment.objects.filter(pk=self.pk).update(**updates)
+        for field, value in updates.items():
+            setattr(self, field, value)
+
+
+class CPCertificate(Entity):
+    """Certificate inventory and enrollment state for charge points."""
+
+    name = models.CharField(_("Name"), max_length=200, blank=True)
+    charger = models.ForeignKey(
+        "Charger",
+        on_delete=models.PROTECT,
+        related_name="certificates",
+        null=True,
+        blank=True,
+        help_text=_("Charge point that owns this certificate."),
+    )
+    certificate_type = models.CharField(
+        _("Certificate type"), max_length=64, blank=True
+    )
+    serial_number = models.CharField(_("Serial number"), max_length=128, blank=True)
+    hash_algorithm = models.CharField(_("Hash algorithm"), max_length=32, blank=True)
+    issuer_name_hash = models.CharField(
+        _("Issuer name hash"), max_length=128, blank=True
+    )
+    subject_name_hash = models.CharField(
+        _("Subject name hash"), max_length=128, blank=True
+    )
+    public_key_hash = models.CharField(
+        _("Public key hash"), max_length=128, blank=True
+    )
+    fingerprint = models.CharField(_("Fingerprint"), max_length=128, blank=True)
+    certificate_data = models.TextField(
+        _("Certificate data"),
+        blank=True,
+        help_text=_(
+            "PEM, base64, or hex-encoded certificate to send with InstallCertificate."
+        ),
+    )
+    ocpp_hash_data = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=_("Raw certificateHashData values reported by the charge point."),
+    )
+    status = models.CharField(_("Status"), max_length=32, blank=True)
+    status_info = models.CharField(_("Status details"), max_length=255, blank=True)
+    status_timestamp = models.DateTimeField(_("Status timestamp"), null=True, blank=True)
+    installed_at = models.DateTimeField(_("Installed at"), null=True, blank=True)
+    removed_at = models.DateTimeField(_("Removed at"), null=True, blank=True)
+    last_seen_at = models.DateTimeField(_("Last seen"), null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["charger", "certificate_type", "serial_number", "id"]
+        verbose_name = _("CP Certificate")
+        verbose_name_plural = _("CP Certificates")
+        indexes = [
+            models.Index(fields=["charger", "certificate_type", "serial_number"]),
+        ]
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        if self.name:
+            return self.name
+        label_parts = [
+            part
+            for part in [self.certificate_type, self.serial_number]
+            if part
+        ]
+        if label_parts:
+            return " / ".join(label_parts)
+        return f"Certificate #{self.pk}" if self.pk else "Certificate"
+
+    def apply_hash_data(self, hash_data: dict | None) -> None:
+        if not hash_data:
+            return
+        self.ocpp_hash_data = hash_data
+        self.hash_algorithm = str(hash_data.get("hashAlgorithm") or "").strip()
+        self.issuer_name_hash = str(hash_data.get("issuerNameHash") or "").strip()
+        self.subject_name_hash = str(hash_data.get("subjectNameHash") or "").strip()
+        self.public_key_hash = str(hash_data.get("publicKeyHash") or "").strip()
+        self.serial_number = str(hash_data.get("serialNumber") or "").strip()
+        self.certificate_type = str(hash_data.get("certificateType") or "").strip()
+
+    def normalized_certificate_value(self) -> str:
+        """Return a base64-encoded certificate value for InstallCertificate."""
+
+        data = (self.certificate_data or "").strip()
+        if not data:
+            return ""
+
+        if "BEGIN CERTIFICATE" in data:
+            body_lines: list[str] = []
+            for line in data.splitlines():
+                line = line.strip()
+                if line.startswith("---") or not line:
+                    continue
+                body_lines.append(line)
+            data = "".join(body_lines)
+
+        decoded: bytes | None = None
+        try:
+            decoded = base64.b64decode(data, validate=True)
+        except (binascii.Error, ValueError):
+            try:
+                decoded = bytes.fromhex(data)
+            except ValueError as exc:
+                raise ValueError(
+                    "Certificate data must be PEM, base64, or hex encoded."
+                ) from exc
+
+        if not decoded:
+            raise ValueError("Certificate data is empty after decoding.")
+
+        return base64.b64encode(decoded).decode()
+
+
+class CPCertificateOperation(Entity):
+    """Track certificate enrollment and inventory operations for a charger."""
+
+    certificate = models.ForeignKey(
+        CPCertificate,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="operations",
+    )
+    charger = models.ForeignKey(
+        "Charger",
+        on_delete=models.PROTECT,
+        related_name="certificate_operations",
+        verbose_name=_("Charge point"),
+    )
+    node = models.ForeignKey(
+        Node,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="certificate_operations",
+        verbose_name=_("Node"),
+    )
+    action = models.CharField(_("Action"), max_length=64)
+    ocpp_message_id = models.CharField(
+        _("OCPP message ID"), max_length=64, blank=True
+    )
+    status = models.CharField(_("Status"), max_length=32, blank=True)
+    status_info = models.CharField(_("Status details"), max_length=255, blank=True)
+    status_timestamp = models.DateTimeField(_("Status timestamp"), null=True, blank=True)
+    requested_at = models.DateTimeField(_("Requested at"), auto_now_add=True)
+    completed_at = models.DateTimeField(_("Completed at"), null=True, blank=True)
+    request_payload = models.JSONField(default=dict, blank=True)
+    response_payload = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-requested_at"]
+        verbose_name = _("CP Certificate Operation")
+        verbose_name_plural = _("CP Certificate Operations")
+        indexes = [
+            models.Index(fields=["ocpp_message_id"]),
+            models.Index(fields=["charger", "action"]),
+        ]
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        if self.pk and self.charger:
+            return f"{self.action} for {self.charger}"
+        return self.action or "Certificate Operation"
+
+    def mark_status(
+        self,
+        status_value: str,
+        status_info: str = "",
+        timestamp: datetime | None = None,
+        *,
+        response: dict | None = None,
+    ) -> None:
+        if timestamp is None:
+            timestamp = timezone.now()
+        updates = {
+            "status": status_value,
+            "status_info": status_info,
+            "status_timestamp": timestamp,
+        }
+        if response is not None:
+            updates["response_payload"] = response
+        type(self).objects.filter(pk=self.pk).update(**updates)
+        for field, value in updates.items():
+            setattr(self, field, value)
+
+
 class ChargingProfile(Entity):
     """Charging profiles dispatched through SetChargingProfile."""
 
@@ -1480,6 +1794,14 @@ class Transaction(Entity):
         max_length=17,
         blank=True,
         help_text=_("Deprecated. Use VID instead."),
+    )
+    ocpp_transaction_id = models.CharField(
+        max_length=128,
+        blank=True,
+        default="",
+        help_text=_(
+            "Transaction identifier reported by the charge point or generated by OCPP."
+        ),
     )
     connector_id = models.PositiveIntegerField(null=True, blank=True)
     meter_start = models.IntegerField(null=True, blank=True)

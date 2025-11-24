@@ -11,9 +11,13 @@ from django.utils.dateparse import parse_datetime
 
 from . import store
 from .models import (
+    CPCertificate,
+    CPCertificateOperation,
     CPFirmwareDeployment,
+    CPNetworkProfileDeployment,
     CPReservation,
     ChargerConfiguration,
+    Charger,
     ChargerLogRequest,
     DataTransferMessage,
     PowerProjection,
@@ -695,6 +699,49 @@ async def handle_remote_stop_transaction_result(
     return True
 
 
+async def handle_request_start_transaction_result(
+    consumer: CallResultContext,
+    message_id: str,
+    metadata: dict,
+    payload_data: dict,
+    log_key: str,
+) -> bool:
+    status_value = str(payload_data.get("status") or "").strip()
+    message = "RequestStartTransaction result"
+    if status_value:
+        message += f": status={status_value}"
+    tx_identifier = payload_data.get("transactionId")
+    if tx_identifier:
+        message += f", transactionId={tx_identifier}"
+    store.add_log(log_key, message, log_type="charger")
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        payload=payload_data,
+    )
+    return True
+
+
+async def handle_request_stop_transaction_result(
+    consumer: CallResultContext,
+    message_id: str,
+    metadata: dict,
+    payload_data: dict,
+    log_key: str,
+) -> bool:
+    status_value = str(payload_data.get("status") or "").strip()
+    message = "RequestStopTransaction result"
+    if status_value:
+        message += f": status={status_value}"
+    store.add_log(log_key, message, log_type="charger")
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        payload=payload_data,
+    )
+    return True
+
+
 async def handle_reset_result(
     consumer: CallResultContext,
     message_id: str,
@@ -741,6 +788,281 @@ async def handle_change_availability_result(
     return True
 
 
+async def handle_set_network_profile_result(
+    consumer: CallResultContext,
+    message_id: str,
+    metadata: dict,
+    payload_data: dict,
+    log_key: str,
+) -> bool:
+    status_value = str(payload_data.get("status") or "").strip() or "Accepted"
+    timestamp_value = _parse_ocpp_timestamp(payload_data.get("timestamp"))
+    deployment_pk = metadata.get("deployment_pk")
+    status_timestamp = timestamp_value or timezone.now()
+
+    def _apply():
+        deployment = CPNetworkProfileDeployment.objects.select_related(
+            "network_profile", "charger"
+        ).filter(pk=deployment_pk)
+        deployment_obj = deployment.first()
+        if deployment_obj:
+            deployment_obj.mark_status(
+                status_value, "", status_timestamp, response=payload_data
+            )
+            deployment_obj.completed_at = timezone.now()
+            deployment_obj.save(update_fields=["completed_at", "updated_at"])
+            if status_value.casefold() == "accepted":
+                Charger.objects.filter(pk=deployment_obj.charger_id).update(
+                    network_profile=deployment_obj.network_profile
+                )
+
+    await database_sync_to_async(_apply)()
+    message = "SetNetworkProfile result"
+    if status_value:
+        message += f": status={status_value}"
+    store.add_log(log_key, message, log_type="charger")
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        payload=payload_data,
+    )
+    return True
+
+
+async def handle_install_certificate_result(
+    consumer: CallResultContext,
+    message_id: str,
+    metadata: dict,
+    payload_data: dict,
+    log_key: str,
+) -> bool:
+    status_value = str(payload_data.get("status") or "").strip() or "Unknown"
+    timestamp_value = _parse_ocpp_timestamp(payload_data.get("timestamp"))
+    certificate_pk = metadata.get("certificate_pk")
+    operation_pk = metadata.get("certificate_operation_pk")
+    charger_pk = metadata.get("charger_pk")
+    hash_data = metadata.get("certificate_hash_data")
+    status_timestamp = timestamp_value or timezone.now()
+
+    def _apply():
+        certificate: CPCertificate | None = None
+        if certificate_pk:
+            certificate = CPCertificate.objects.filter(pk=certificate_pk).first()
+        if not certificate and charger_pk:
+            certificate = CPCertificate.objects.create(
+                charger_id=charger_pk,
+                status=status_value,
+                status_timestamp=status_timestamp,
+                last_seen_at=status_timestamp,
+                is_user_data=True,
+            )
+        if certificate:
+            if hash_data:
+                certificate.apply_hash_data(hash_data)
+            if charger_pk and not certificate.charger_id:
+                certificate.charger_id = charger_pk
+            certificate.status = status_value
+            certificate.status_info = ""
+            certificate.status_timestamp = status_timestamp
+            certificate.last_seen_at = status_timestamp
+            if status_value.casefold() == "accepted":
+                certificate.installed_at = status_timestamp
+                certificate.removed_at = None
+            certificate.save(
+                update_fields=[
+                    "charger",
+                    "certificate_type",
+                    "serial_number",
+                    "hash_algorithm",
+                    "issuer_name_hash",
+                    "subject_name_hash",
+                    "public_key_hash",
+                    "ocpp_hash_data",
+                    "status",
+                    "status_info",
+                    "status_timestamp",
+                    "installed_at",
+                    "removed_at",
+                    "last_seen_at",
+                    "updated_at",
+                ]
+            )
+
+        if operation_pk:
+            operation = CPCertificateOperation.objects.filter(pk=operation_pk).first()
+            if operation:
+                operation.mark_status(status_value, "", status_timestamp, response=payload_data)
+                operation.completed_at = timezone.now()
+                operation.save(update_fields=["completed_at", "updated_at"])
+
+    await database_sync_to_async(_apply)()
+    message = "InstallCertificate result"
+    if status_value:
+        message += f": status={status_value}"
+    store.add_log(log_key, message, log_type="charger")
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        payload=payload_data,
+    )
+    return True
+
+
+async def handle_delete_certificate_result(
+    consumer: CallResultContext,
+    message_id: str,
+    metadata: dict,
+    payload_data: dict,
+    log_key: str,
+) -> bool:
+    status_value = str(payload_data.get("status") or "").strip() or "Unknown"
+    timestamp_value = _parse_ocpp_timestamp(payload_data.get("timestamp"))
+    certificate_pk = metadata.get("certificate_pk")
+    operation_pk = metadata.get("certificate_operation_pk")
+    status_timestamp = timestamp_value or timezone.now()
+
+    def _apply():
+        if certificate_pk:
+            certificate = CPCertificate.objects.filter(pk=certificate_pk).first()
+        else:
+            certificate = None
+        if certificate:
+            certificate.status = status_value or "Deleted"
+            certificate.status_info = ""
+            certificate.status_timestamp = status_timestamp
+            if status_value.casefold() == "accepted":
+                certificate.removed_at = status_timestamp
+            certificate.last_seen_at = status_timestamp
+            certificate.save(
+                update_fields=[
+                    "status",
+                    "status_info",
+                    "status_timestamp",
+                    "removed_at",
+                    "last_seen_at",
+                    "updated_at",
+                ]
+            )
+
+        if operation_pk:
+            operation = CPCertificateOperation.objects.filter(pk=operation_pk).first()
+            if operation:
+                operation.mark_status(status_value, "", status_timestamp, response=payload_data)
+                operation.completed_at = timezone.now()
+                operation.save(update_fields=["completed_at", "updated_at"])
+
+    await database_sync_to_async(_apply)()
+    message = "DeleteCertificate result"
+    if status_value:
+        message += f": status={status_value}"
+    store.add_log(log_key, message, log_type="charger")
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        payload=payload_data,
+    )
+    return True
+
+
+async def handle_get_installed_certificate_ids_result(
+    consumer: CallResultContext,
+    message_id: str,
+    metadata: dict,
+    payload_data: dict,
+    log_key: str,
+) -> bool:
+    status_value = str(payload_data.get("status") or "").strip() or "Unknown"
+    certificate_hashes = payload_data.get("certificateHashData")
+    timestamp_value = _parse_ocpp_timestamp(payload_data.get("timestamp"))
+    operation_pk = metadata.get("certificate_operation_pk")
+    charger_pk = metadata.get("charger_pk")
+    status_timestamp = timestamp_value or timezone.now()
+
+    def _apply_inventory():
+        charger_obj: Charger | None = None
+        if charger_pk:
+            charger_obj = Charger.objects.filter(pk=charger_pk).first()
+        elif getattr(consumer, "charger_id", None):
+            charger_obj = Charger.objects.filter(
+                charger_id=str(consumer.charger_id)
+            ).first()
+
+        if operation_pk:
+            operation = CPCertificateOperation.objects.filter(pk=operation_pk).first()
+            if operation:
+                operation.mark_status(status_value, "", status_timestamp, response=payload_data)
+                operation.completed_at = timezone.now()
+                operation.save(update_fields=["completed_at", "updated_at"])
+                if not charger_obj:
+                    charger_obj = operation.charger
+
+        if not charger_obj:
+            return
+        if status_value.casefold() != "accepted":
+            return
+        if not isinstance(certificate_hashes, list):
+            return
+
+        for entry in certificate_hashes:
+            if not isinstance(entry, dict):
+                continue
+            certificate_type = str(entry.get("certificateType") or "").strip()
+            serial_number = str(entry.get("serialNumber") or "").strip()
+            certificate = CPCertificate.objects.filter(
+                charger=charger_obj,
+                certificate_type=certificate_type,
+                serial_number=serial_number,
+            ).first()
+            if certificate is None:
+                certificate = CPCertificate.objects.create(
+                    charger=charger_obj,
+                    certificate_type=certificate_type,
+                    serial_number=serial_number,
+                    status="Installed",
+                    status_timestamp=status_timestamp,
+                    installed_at=status_timestamp,
+                    last_seen_at=status_timestamp,
+                    ocpp_hash_data=entry,
+                    is_user_data=True,
+                )
+            else:
+                certificate.apply_hash_data(entry)
+                certificate.status = "Installed"
+                certificate.status_timestamp = status_timestamp
+                certificate.installed_at = certificate.installed_at or status_timestamp
+                certificate.removed_at = None
+                certificate.last_seen_at = status_timestamp
+                certificate.save(
+                    update_fields=[
+                        "certificate_type",
+                        "serial_number",
+                        "hash_algorithm",
+                        "issuer_name_hash",
+                        "subject_name_hash",
+                        "public_key_hash",
+                        "ocpp_hash_data",
+                        "status",
+                        "status_timestamp",
+                        "installed_at",
+                        "removed_at",
+                        "last_seen_at",
+                        "updated_at",
+                    ]
+                )
+
+    await database_sync_to_async(_apply_inventory)()
+    message = "GetInstalledCertificateIds result"
+    if status_value:
+        message += f": status={status_value}"
+    store.add_log(log_key, message, log_type="charger")
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        payload=payload_data,
+    )
+    return True
+
+
 CALL_RESULT_HANDLERS: dict[str, CallResultHandler] = {
     "ChangeConfiguration": handle_change_configuration_result,
     "DataTransfer": handle_data_transfer_result,
@@ -756,8 +1078,14 @@ CALL_RESULT_HANDLERS: dict[str, CallResultHandler] = {
     "CancelReservation": handle_cancel_reservation_result,
     "RemoteStartTransaction": handle_remote_start_transaction_result,
     "RemoteStopTransaction": handle_remote_stop_transaction_result,
+    "RequestStartTransaction": handle_request_start_transaction_result,
+    "RequestStopTransaction": handle_request_stop_transaction_result,
     "Reset": handle_reset_result,
     "ChangeAvailability": handle_change_availability_result,
+    "SetNetworkProfile": handle_set_network_profile_result,
+    "InstallCertificate": handle_install_certificate_result,
+    "DeleteCertificate": handle_delete_certificate_result,
+    "GetInstalledCertificateIds": handle_get_installed_certificate_ids_result,
 }
 
 

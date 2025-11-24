@@ -52,6 +52,10 @@ from .models import (
     CPReservation,
     CPFirmware,
     CPFirmwareDeployment,
+    CPCertificate,
+    CPCertificateOperation,
+    CPNetworkProfile,
+    CPNetworkProfileDeployment,
     SecurityEvent,
     ChargerLogRequest,
     WMICode,
@@ -266,6 +270,29 @@ class UploadFirmwareForm(forms.Form):
                 "chargers",
                 _("Select at least one charge point to receive the firmware."),
             )
+        return cleaned
+
+
+class SetNetworkProfileForm(forms.Form):
+    chargers = forms.ModelMultipleChoiceField(
+        label=_("Charge points"),
+        queryset=Charger.objects.none(),
+        help_text=_("Select EVCS units that should receive this network profile."),
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["chargers"].queryset = (
+            Charger.objects.filter(connector_id__isnull=True)
+            .order_by("display_name", "charger_id")
+            .all()
+        )
+
+    def clean(self):
+        cleaned = super().clean()
+        chargers = cleaned.get("chargers")
+        if not chargers:
+            self.add_error("chargers", _("Select at least one charge point."))
         return cleaned
 
 
@@ -1301,6 +1328,601 @@ class CPFirmwareDeploymentAdmin(EntityModelAdmin):
     )
 
 
+class CPCertificateOperationInline(admin.TabularInline):
+    model = CPCertificateOperation
+    extra = 0
+    fields = (
+        "action",
+        "charger",
+        "status",
+        "status_info",
+        "status_timestamp",
+        "requested_at",
+        "completed_at",
+        "ocpp_message_id",
+    )
+    readonly_fields = fields
+    show_change_link = True
+
+
+@admin.register(CPCertificate)
+class CPCertificateAdmin(EntityModelAdmin):
+    actions = [
+        "install_certificate",
+        "delete_certificate",
+        "delete_selected",
+    ]
+    list_display = (
+        "name",
+        "certificate_type",
+        "serial_number",
+        "charger",
+        "status",
+        "last_seen_at",
+        "updated_at",
+    )
+    list_filter = ("certificate_type", "status")
+    search_fields = (
+        "name",
+        "certificate_type",
+        "serial_number",
+        "charger__charger_id",
+        "charger__display_name",
+    )
+    readonly_fields = (
+        "status_timestamp",
+        "installed_at",
+        "removed_at",
+        "last_seen_at",
+        "created_at",
+        "updated_at",
+    )
+    inlines = [CPCertificateOperationInline]
+
+    def _normalized_certificate_value(self, certificate: CPCertificate) -> str:
+        try:
+            value = certificate.normalized_certificate_value()
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
+        if not value:
+            raise ValueError("Certificate data is required to install a certificate.")
+        return value
+
+    def _certificate_hash_data(self, certificate: CPCertificate) -> dict:
+        hash_data = certificate.ocpp_hash_data if isinstance(certificate.ocpp_hash_data, dict) else {}
+        hash_data = dict(hash_data)
+        if certificate.certificate_type and not hash_data.get("certificateType"):
+            hash_data["certificateType"] = certificate.certificate_type
+        field_map = {
+            "hashAlgorithm": "hash_algorithm",
+            "issuerNameHash": "issuer_name_hash",
+            "subjectNameHash": "subject_name_hash",
+            "publicKeyHash": "public_key_hash",
+            "serialNumber": "serial_number",
+        }
+        for field, attr in field_map.items():
+            if not hash_data.get(field):
+                direct_value = getattr(certificate, attr, "")
+                if direct_value:
+                    hash_data[field] = direct_value
+
+        required_fields = (
+            "hashAlgorithm",
+            "issuerNameHash",
+            "subjectNameHash",
+            "publicKeyHash",
+            "serialNumber",
+            "certificateType",
+        )
+        missing = [key for key in required_fields if not str(hash_data.get(key) or "").strip()]
+        if missing:
+            raise ValueError(
+                _("Certificate hash data is missing required field(s): %(fields)s")
+                % {"fields": ", ".join(missing)}
+            )
+
+        normalized = {key: str(hash_data.get(key) or "").strip() for key in required_fields}
+        return normalized
+
+    @admin.action(description=_("Install certificate on charge point"))
+    def install_certificate(self, request, queryset):
+        dispatched = 0
+        for certificate in queryset:
+            charger = certificate.charger
+            if not charger:
+                self.message_user(
+                    request,
+                    _("%(certificate)s is not attached to a charge point.")
+                    % {"certificate": certificate},
+                    level=messages.ERROR,
+                )
+                continue
+            if not certificate.certificate_type:
+                self.message_user(
+                    request,
+                    _("%(certificate)s is missing a certificate type.")
+                    % {"certificate": certificate},
+                    level=messages.ERROR,
+                )
+                continue
+            try:
+                certificate_value = self._normalized_certificate_value(certificate)
+            except ValueError as exc:
+                self.message_user(request, str(exc), level=messages.ERROR)
+                continue
+
+            connection = store.get_connection(charger.charger_id, charger.connector_id)
+            if connection is None:
+                self.message_user(
+                    request,
+                    _("%(charger)s is not currently connected to the platform.")
+                    % {"charger": charger},
+                    level=messages.ERROR,
+                )
+                continue
+
+            ocpp_version = str(getattr(connection, "ocpp_version", "") or "")
+            if not ocpp_version.startswith("ocpp2."):
+                self.message_user(
+                    request,
+                    _("%(charger)s does not use OCPP 2.0.x so InstallCertificate is unsupported.")
+                    % {"charger": charger},
+                    level=messages.ERROR,
+                )
+                continue
+
+            payload = {
+                "certificateType": certificate.certificate_type,
+                "certificate": certificate_value,
+            }
+            message_id = uuid.uuid4().hex
+            operation = CPCertificateOperation.objects.create(
+                certificate=certificate,
+                charger=charger,
+                node=charger.node_origin,
+                action="InstallCertificate",
+                ocpp_message_id=message_id,
+                status="Pending",
+                status_info=_("Awaiting charge point response."),
+                status_timestamp=timezone.now(),
+                request_payload=payload,
+                is_user_data=True,
+            )
+
+            frame = json.dumps([2, message_id, "InstallCertificate", payload])
+            try:
+                async_to_sync(connection.send)(frame)
+            except Exception as exc:  # pragma: no cover - network error
+                operation.mark_status(
+                    "Error",
+                    str(exc),
+                    timezone.now(),
+                    response={"error": str(exc)},
+                )
+                operation.completed_at = timezone.now()
+                operation.save(update_fields=["completed_at", "updated_at"])
+                self.message_user(
+                    request,
+                    _("%(charger)s: failed to send InstallCertificate (%(error)s)")
+                    % {"charger": charger, "error": exc},
+                    level=messages.ERROR,
+                )
+                continue
+
+            log_key = store.identity_key(charger.charger_id, charger.connector_id)
+            store.add_log(log_key, _("Dispatched InstallCertificate request."), log_type="charger")
+            store.register_pending_call(
+                message_id,
+                {
+                    "action": "InstallCertificate",
+                    "charger_id": charger.charger_id,
+                    "connector_id": charger.connector_id,
+                    "charger_pk": charger.pk,
+                    "certificate_pk": certificate.pk,
+                    "certificate_operation_pk": operation.pk,
+                    "certificate_hash_data": certificate.ocpp_hash_data,
+                    "log_key": log_key,
+                },
+            )
+            store.schedule_call_timeout(
+                message_id,
+                action="InstallCertificate",
+                log_key=log_key,
+            )
+            dispatched += 1
+
+        if dispatched:
+            self.message_user(
+                request,
+                ngettext(
+                    "Dispatched InstallCertificate to %(count)s charge point.",
+                    "Dispatched InstallCertificate to %(count)s charge points.",
+                    dispatched,
+                )
+                % {"count": dispatched},
+            )
+
+    @admin.action(description=_("Delete certificate from charge point"))
+    def delete_certificate(self, request, queryset):
+        dispatched = 0
+        for certificate in queryset:
+            charger = certificate.charger
+            if not charger:
+                self.message_user(
+                    request,
+                    _("%(certificate)s is not attached to a charge point.")
+                    % {"certificate": certificate},
+                    level=messages.ERROR,
+                )
+                continue
+            connection = store.get_connection(charger.charger_id, charger.connector_id)
+            if connection is None:
+                self.message_user(
+                    request,
+                    _("%(charger)s is not currently connected to the platform.")
+                    % {"charger": charger},
+                    level=messages.ERROR,
+                )
+                continue
+            ocpp_version = str(getattr(connection, "ocpp_version", "") or "")
+            if not ocpp_version.startswith("ocpp2."):
+                self.message_user(
+                    request,
+                    _("%(charger)s does not use OCPP 2.0.x so DeleteCertificate is unsupported.")
+                    % {"charger": charger},
+                    level=messages.ERROR,
+                )
+                continue
+
+            try:
+                hash_data = self._certificate_hash_data(certificate)
+            except ValueError as exc:
+                self.message_user(request, str(exc), level=messages.ERROR)
+                continue
+
+            payload = {"certificateHashData": hash_data}
+            message_id = uuid.uuid4().hex
+            operation = CPCertificateOperation.objects.create(
+                certificate=certificate,
+                charger=charger,
+                node=charger.node_origin,
+                action="DeleteCertificate",
+                ocpp_message_id=message_id,
+                status="Pending",
+                status_info=_("Awaiting charge point response."),
+                status_timestamp=timezone.now(),
+                request_payload=payload,
+                is_user_data=True,
+            )
+
+            frame = json.dumps([2, message_id, "DeleteCertificate", payload])
+            try:
+                async_to_sync(connection.send)(frame)
+            except Exception as exc:  # pragma: no cover - network error
+                operation.mark_status(
+                    "Error",
+                    str(exc),
+                    timezone.now(),
+                    response={"error": str(exc)},
+                )
+                operation.completed_at = timezone.now()
+                operation.save(update_fields=["completed_at", "updated_at"])
+                self.message_user(
+                    request,
+                    _("%(charger)s: failed to send DeleteCertificate (%(error)s)")
+                    % {"charger": charger, "error": exc},
+                    level=messages.ERROR,
+                )
+                continue
+
+            log_key = store.identity_key(charger.charger_id, charger.connector_id)
+            store.add_log(log_key, _("Dispatched DeleteCertificate request."), log_type="charger")
+            store.register_pending_call(
+                message_id,
+                {
+                    "action": "DeleteCertificate",
+                    "charger_id": charger.charger_id,
+                    "connector_id": charger.connector_id,
+                    "charger_pk": charger.pk,
+                    "certificate_pk": certificate.pk,
+                    "certificate_operation_pk": operation.pk,
+                    "certificate_hash_data": hash_data,
+                    "log_key": log_key,
+                },
+            )
+            store.schedule_call_timeout(
+                message_id,
+                action="DeleteCertificate",
+                log_key=log_key,
+            )
+            dispatched += 1
+
+        if dispatched:
+            self.message_user(
+                request,
+                ngettext(
+                    "Dispatched DeleteCertificate to %(count)s charge point.",
+                    "Dispatched DeleteCertificate to %(count)s charge points.",
+                    dispatched,
+                )
+                % {"count": dispatched},
+            )
+
+
+@admin.register(CPCertificateOperation)
+class CPCertificateOperationAdmin(EntityModelAdmin):
+    list_display = (
+        "action",
+        "charger",
+        "certificate",
+        "status",
+        "status_timestamp",
+        "requested_at",
+        "completed_at",
+    )
+    list_filter = ("action", "status")
+    search_fields = (
+        "certificate__name",
+        "certificate__serial_number",
+        "charger__charger_id",
+        "ocpp_message_id",
+    )
+    readonly_fields = (
+        "certificate",
+        "charger",
+        "node",
+        "action",
+        "ocpp_message_id",
+        "status",
+        "status_info",
+        "status_timestamp",
+        "requested_at",
+        "completed_at",
+        "request_payload",
+        "response_payload",
+        "created_at",
+        "updated_at",
+    )
+
+
+class CPNetworkProfileDeploymentInline(admin.TabularInline):
+    model = CPNetworkProfileDeployment
+    extra = 0
+    fields = (
+        "charger",
+        "status",
+        "status_info",
+        "status_timestamp",
+        "requested_at",
+        "completed_at",
+        "ocpp_message_id",
+    )
+    readonly_fields = fields
+    show_change_link = True
+
+
+@admin.register(CPNetworkProfile)
+class CPNetworkProfileAdmin(EntityModelAdmin):
+    list_display = ("name", "configuration_slot", "created_at", "updated_at")
+    search_fields = ("name",)
+    readonly_fields = ("created_at", "updated_at")
+    actions = ["push_network_profile"]
+    inlines = [CPNetworkProfileDeploymentInline]
+
+    def _format_pending_failure(self, result: dict) -> str:
+        return _format_failure_message(result, action_label=_("Set network profile"))
+
+    def _dispatch_network_profile(
+        self, request, profile: CPNetworkProfile, charger: Charger
+    ) -> bool:
+        connection = store.get_connection(charger.charger_id, charger.connector_id)
+        if connection is None:
+            self.message_user(
+                request,
+                _("%(charger)s is not currently connected to the platform.")
+                % {"charger": charger},
+                level=messages.ERROR,
+            )
+            return False
+
+        ocpp_version = str(getattr(connection, "ocpp_version", "") or "")
+        if not ocpp_version.startswith("ocpp2."):
+            self.message_user(
+                request,
+                _("%(charger)s does not use OCPP 2.0.x so SetNetworkProfile is unsupported.")
+                % {"charger": charger},
+                level=messages.ERROR,
+            )
+            return False
+
+        payload = profile.build_payload()
+        if not payload.get("connectionData"):
+            self.message_user(
+                request,
+                _("%(profile)s is missing connectionData to send to the charge point.")
+                % {"profile": profile},
+                level=messages.ERROR,
+            )
+            return False
+
+        message_id = uuid.uuid4().hex
+        deployment = CPNetworkProfileDeployment.objects.create(
+            network_profile=profile,
+            charger=charger,
+            node=charger.node_origin,
+            ocpp_message_id=message_id,
+            status="Pending",
+            status_info=_("Awaiting charge point response."),
+            status_timestamp=timezone.now(),
+            request_payload=payload,
+            is_user_data=True,
+        )
+
+        frame = json.dumps([2, message_id, "SetNetworkProfile", payload])
+        async_to_sync(connection.send)(frame)
+        log_key = store.identity_key(charger.charger_id, charger.connector_id)
+        store.add_log(
+            log_key, _("Dispatched SetNetworkProfile request."), log_type="charger"
+        )
+        store.register_pending_call(
+            message_id,
+            {
+                "action": "SetNetworkProfile",
+                "charger_id": charger.charger_id,
+                "connector_id": charger.connector_id,
+                "deployment_pk": deployment.pk,
+                "log_key": log_key,
+            },
+        )
+        store.schedule_call_timeout(
+            message_id,
+            action="SetNetworkProfile",
+            log_key=log_key,
+            message="SetNetworkProfile timed out",
+        )
+
+        result = store.wait_for_pending_call(message_id, timeout=15.0)
+        if result is None:
+            deployment.mark_status("Timeout", _("No response received."))
+            deployment.completed_at = timezone.now()
+            deployment.save(update_fields=["completed_at", "updated_at"])
+            self.message_user(
+                request,
+                _(
+                    "The charge point did not respond to the SetNetworkProfile request."
+                ),
+                level=messages.ERROR,
+            )
+            return False
+
+        if not result.get("success", True):
+            detail = self._format_pending_failure(result)
+            deployment.mark_status("Error", detail, response=result.get("payload"))
+            deployment.completed_at = timezone.now()
+            deployment.save(update_fields=["completed_at", "updated_at"])
+            self.message_user(request, detail, level=messages.ERROR)
+            return False
+
+        payload_data = result.get("payload") or {}
+        status_value = str(payload_data.get("status") or "").strip() or "Accepted"
+        deployment.mark_status(status_value, "", timezone.now(), response=payload_data)
+        deployment.completed_at = timezone.now()
+        deployment.save(update_fields=["completed_at", "updated_at"])
+        if status_value.casefold() != "accepted":
+            self.message_user(
+                request,
+                _("SetNetworkProfile for %(charger)s was %(status)s.")
+                % {"charger": charger, "status": status_value},
+                level=messages.ERROR,
+            )
+            return False
+
+        Charger.objects.filter(pk=charger.pk).update(network_profile=profile)
+        self.message_user(
+            request,
+            _("Applied %(profile)s to %(charger)s.")
+            % {"profile": profile, "charger": charger},
+            level=messages.SUCCESS,
+        )
+        return True
+
+    @admin.action(description=_("Push network profile to EVCS"))
+    def push_network_profile(self, request, queryset):
+        selected_ids = request.POST.getlist(helpers.ACTION_CHECKBOX_NAME)
+        if selected_ids:
+            profile_qs = CPNetworkProfile.objects.filter(pk__in=selected_ids)
+            profile_map = {str(obj.pk): obj for obj in profile_qs}
+            profile_list = [profile_map[value] for value in selected_ids if value in profile_map]
+        else:
+            profile_list = list(queryset)
+            selected_ids = [str(obj.pk) for obj in profile_list]
+
+        if not profile_list:
+            self.message_user(
+                request,
+                _("Select at least one network profile to send."),
+                level=messages.ERROR,
+            )
+            return None
+
+        form = SetNetworkProfileForm(request.POST or None)
+        if request.method == "POST" and form.is_valid():
+            chargers = list(form.cleaned_data["chargers"])
+            success_count = 0
+            for profile in profile_list:
+                for charger in chargers:
+                    if self._dispatch_network_profile(request, profile, charger):
+                        success_count += 1
+            if success_count:
+                self.message_user(
+                    request,
+                    ngettext(
+                        "Queued %(count)d network profile update.",
+                        "Queued %(count)d network profile updates.",
+                        success_count,
+                    )
+                    % {"count": success_count},
+                    level=messages.SUCCESS,
+                )
+            return None
+
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "title": _("Push network profile to EVCS"),
+            "profile_list": profile_list,
+            "selected_ids": selected_ids,
+            "action_name": request.POST.get("action", "push_network_profile"),
+            "select_across": request.POST.get("select_across", "0"),
+            "action_checkbox_name": helpers.ACTION_CHECKBOX_NAME,
+            "adminform": helpers.AdminForm(
+                form,
+                [
+                    (None, {"fields": ("chargers",)}),
+                ],
+                {},
+            ),
+            "form": form,
+            "media": self.media + form.media,
+        }
+        return TemplateResponse(
+            request, "admin/ocpp/cpnetworkprofile/push_network_profile.html", context
+        )
+
+
+@admin.register(CPNetworkProfileDeployment)
+class CPNetworkProfileDeploymentAdmin(EntityModelAdmin):
+    list_display = (
+        "network_profile",
+        "charger",
+        "status",
+        "status_timestamp",
+        "requested_at",
+        "completed_at",
+    )
+    list_filter = ("status",)
+    search_fields = (
+        "network_profile__name",
+        "charger__charger_id",
+        "ocpp_message_id",
+    )
+    readonly_fields = (
+        "network_profile",
+        "charger",
+        "node",
+        "ocpp_message_id",
+        "status",
+        "status_info",
+        "status_timestamp",
+        "requested_at",
+        "completed_at",
+        "request_payload",
+        "response_payload",
+        "created_at",
+        "updated_at",
+    )
+
+
 @admin.register(ChargingProfile)
 class ChargingProfileAdmin(EntityModelAdmin):
     list_display = (
@@ -1718,7 +2340,14 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         ),
         (
             "Configuration",
-            {"fields": ("public_display", "require_rfid", "configuration")},
+            {
+                "fields": (
+                    "public_display",
+                    "require_rfid",
+                    "configuration",
+                    "network_profile",
+                )
+            },
         ),
         (
             "Local authorization",
@@ -1815,6 +2444,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         "toggle_rfid_authentication",
         "send_rfid_list_to_evcs",
         "update_rfids_from_evcs",
+        "request_certificate_inventory",
         "recheck_charger_status",
         "setup_cp_diagnostics",
         "request_cp_diagnostics",
@@ -2855,6 +3485,98 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
             self.message_user(
                 request,
                 f"Requested GetLocalListVersion from {requested} charger(s)",
+            )
+
+    @admin.action(description="Request installed certificates (OCPP 2.0.x)")
+    def request_certificate_inventory(self, request, queryset):
+        requested = 0
+        for charger in queryset:
+            connector_value = charger.connector_id
+            connection = store.get_connection(charger.charger_id, connector_value)
+            if connection is None:
+                self.message_user(
+                    request,
+                    _("%(charger)s is not currently connected to the platform.")
+                    % {"charger": charger},
+                    level=messages.ERROR,
+                )
+                continue
+
+            ocpp_version = str(getattr(connection, "ocpp_version", "") or "")
+            if not ocpp_version.startswith("ocpp2."):
+                self.message_user(
+                    request,
+                    _(
+                        "%(charger)s does not use OCPP 2.0.x so GetInstalledCertificateIds is unsupported."
+                    )
+                    % {"charger": charger},
+                    level=messages.ERROR,
+                )
+                continue
+
+            payload: dict[str, object] = {}
+            message_id = uuid.uuid4().hex
+            operation = CPCertificateOperation.objects.create(
+                charger=charger,
+                node=charger.node_origin,
+                action="GetInstalledCertificateIds",
+                ocpp_message_id=message_id,
+                status="Pending",
+                status_info=_("Awaiting charge point response."),
+                status_timestamp=timezone.now(),
+                request_payload=payload,
+                is_user_data=True,
+            )
+
+            frame = json.dumps([2, message_id, "GetInstalledCertificateIds", payload])
+            try:
+                async_to_sync(connection.send)(frame)
+            except Exception as exc:  # pragma: no cover - network error
+                operation.mark_status(
+                    "Error",
+                    str(exc),
+                    timezone.now(),
+                    response={"error": str(exc)},
+                )
+                operation.completed_at = timezone.now()
+                operation.save(update_fields=["completed_at", "updated_at"])
+                self.message_user(
+                    request,
+                    _("%(charger)s: failed to request installed certificates (%(error)s)")
+                    % {"charger": charger, "error": exc},
+                    level=messages.ERROR,
+                )
+                continue
+
+            log_key = store.identity_key(charger.charger_id, connector_value)
+            store.add_log(log_key, _("Requested installed certificates."), log_type="charger")
+            store.register_pending_call(
+                message_id,
+                {
+                    "action": "GetInstalledCertificateIds",
+                    "charger_id": charger.charger_id,
+                    "connector_id": connector_value,
+                    "charger_pk": charger.pk,
+                    "certificate_operation_pk": operation.pk,
+                    "log_key": log_key,
+                },
+            )
+            store.schedule_call_timeout(
+                message_id,
+                action="GetInstalledCertificateIds",
+                log_key=log_key,
+            )
+            requested += 1
+
+        if requested:
+            self.message_user(
+                request,
+                ngettext(
+                    "Requested certificate inventory from %(count)s charge point.",
+                    "Requested certificate inventory from %(count)s charge points.",
+                    requested,
+                )
+                % {"count": requested},
             )
 
     def _dispatch_change_availability(self, request, queryset, availability_type: str):
