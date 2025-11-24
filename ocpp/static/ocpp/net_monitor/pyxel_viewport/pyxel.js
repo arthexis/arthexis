@@ -1,11 +1,12 @@
 const PYODIDE_URL = "https://cdn.jsdelivr.net/pyodide/v0.29.0/full/pyodide.js";
 const PYXEL_WHEEL_PATH = "pyxel-2.5.10-cp38-abi3-emscripten_4_0_9_wasm32.whl";
-const PYXEL_LOGO_PATH = "../docs/images/pyxel_logo_76x32.png";
-const TOUCH_TO_START_PATH = "../docs/images/touch_to_start_114x14.png";
-const CLICK_TO_START_PATH = "../docs/images/click_to_start_114x14.png";
-const GAMEPAD_CROSS_PATH = "../docs/images/gamepad_cross_98x98.png";
-const GAMEPAD_BUTTON_PATH = "../docs/images/gamepad_button_98x98.png";
-const GAMEPAD_MENU_PATH = "../docs/images/gamepad_menu_92x26.png";
+const PYXEL_LOGO_PATH = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y2pYt0AAAAASUVORK5CYII=";
+const TOUCH_TO_START_PATH = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y2pYt0AAAAASUVORK5CYII=";
+const CLICK_TO_START_PATH = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y2pYt0AAAAASUVORK5CYII=";
+const GAMEPAD_CROSS_PATH = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y2pYt0AAAAASUVORK5CYII=";
+const GAMEPAD_BUTTON_PATH = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y2pYt0AAAAASUVORK5CYII=";
+const GAMEPAD_MENU_PATH = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y2pYt0AAAAASUVORK5CYII=";
+const _pyxelAssetPath = (path) => (path.startsWith("data:") ? path : _scriptDir() + path);
 const PYXEL_WORKING_DIRECTORY = "/pyxel_working_directory";
 const PYXEL_WATCH_INFO_FILE = ".pyxel_watch_info";
 const IMPORT_HOOK_PATH = "import_hook.py";
@@ -239,7 +240,7 @@ async function _createScreenElements() {
   // Add image for logo
   let logoImage = document.createElement("img");
   logoImage.id = "pyxel-logo";
-  logoImage.src = _scriptDir() + PYXEL_LOGO_PATH;
+  logoImage.src = _pyxelAssetPath(PYXEL_LOGO_PATH);
   logoImage.tabindex = -1;
   await _waitForEvent(logoImage, "load");
   await new Promise((resolve) => setTimeout(resolve, 50));
@@ -438,9 +439,9 @@ async function _waitForInput() {
 
   let promptImage = document.createElement("img");
   promptImage.id = "pyxel-prompt";
-  promptImage.src =
-    _scriptDir() +
-    (_isTouchDevice() ? TOUCH_TO_START_PATH : CLICK_TO_START_PATH);
+  promptImage.src = _pyxelAssetPath(
+    _isTouchDevice() ? TOUCH_TO_START_PATH : CLICK_TO_START_PATH
+  );
   await _waitForEvent(promptImage, "load");
   pyxelScreen.appendChild(promptImage);
   _updateScreenElementsSize();
@@ -489,7 +490,7 @@ function _addVirtualGamepad(mode) {
   let pyxelScreen = document.querySelector("div#pyxel-screen");
   let gamepadCrossImage = document.createElement("img");
   gamepadCrossImage.id = "pyxel-gamepad-cross";
-  gamepadCrossImage.src = _scriptDir() + GAMEPAD_CROSS_PATH;
+  gamepadCrossImage.src = _pyxelAssetPath(GAMEPAD_CROSS_PATH);
   gamepadCrossImage.tabindex = -1;
   gamepadCrossImage.onload = () => {
     pyxelScreen.appendChild(gamepadCrossImage);
@@ -499,7 +500,7 @@ function _addVirtualGamepad(mode) {
   // Add virtual action buttons
   let gamepadButtonImage = document.createElement("img");
   gamepadButtonImage.id = "pyxel-gamepad-button";
-  gamepadButtonImage.src = _scriptDir() + GAMEPAD_BUTTON_PATH;
+  gamepadButtonImage.src = _pyxelAssetPath(GAMEPAD_BUTTON_PATH);
   gamepadButtonImage.tabindex = -1;
   gamepadButtonImage.onload = () => {
     pyxelScreen.appendChild(gamepadButtonImage);
@@ -509,7 +510,7 @@ function _addVirtualGamepad(mode) {
   // Add virtual menu buttons
   let gamepadMenuImage = document.createElement("img");
   gamepadMenuImage.id = "pyxel-gamepad-menu";
-  gamepadMenuImage.src = _scriptDir() + GAMEPAD_MENU_PATH;
+  gamepadMenuImage.src = _pyxelAssetPath(GAMEPAD_MENU_PATH);
   gamepadMenuImage.tabindex = -1;
   gamepadMenuImage.onload = () => {
     pyxelScreen.appendChild(gamepadMenuImage);
