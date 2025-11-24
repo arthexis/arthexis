@@ -695,6 +695,49 @@ async def handle_remote_stop_transaction_result(
     return True
 
 
+async def handle_request_start_transaction_result(
+    consumer: CallResultContext,
+    message_id: str,
+    metadata: dict,
+    payload_data: dict,
+    log_key: str,
+) -> bool:
+    status_value = str(payload_data.get("status") or "").strip()
+    message = "RequestStartTransaction result"
+    if status_value:
+        message += f": status={status_value}"
+    tx_identifier = payload_data.get("transactionId")
+    if tx_identifier:
+        message += f", transactionId={tx_identifier}"
+    store.add_log(log_key, message, log_type="charger")
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        payload=payload_data,
+    )
+    return True
+
+
+async def handle_request_stop_transaction_result(
+    consumer: CallResultContext,
+    message_id: str,
+    metadata: dict,
+    payload_data: dict,
+    log_key: str,
+) -> bool:
+    status_value = str(payload_data.get("status") or "").strip()
+    message = "RequestStopTransaction result"
+    if status_value:
+        message += f": status={status_value}"
+    store.add_log(log_key, message, log_type="charger")
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        payload=payload_data,
+    )
+    return True
+
+
 async def handle_reset_result(
     consumer: CallResultContext,
     message_id: str,
@@ -756,6 +799,8 @@ CALL_RESULT_HANDLERS: dict[str, CallResultHandler] = {
     "CancelReservation": handle_cancel_reservation_result,
     "RemoteStartTransaction": handle_remote_start_transaction_result,
     "RemoteStopTransaction": handle_remote_stop_transaction_result,
+    "RequestStartTransaction": handle_request_start_transaction_result,
+    "RequestStopTransaction": handle_request_stop_transaction_result,
     "Reset": handle_reset_result,
     "ChangeAvailability": handle_change_availability_result,
 }

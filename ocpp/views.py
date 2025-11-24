@@ -66,6 +66,8 @@ from .status_display import STATUS_BADGE_MAP, ERROR_OK_VALUES
 CALL_ACTION_LABELS = {
     "RemoteStartTransaction": _("Remote start transaction"),
     "RemoteStopTransaction": _("Remote stop transaction"),
+    "RequestStartTransaction": _("Request start transaction"),
+    "RequestStopTransaction": _("Request stop transaction"),
     "ChangeAvailability": _("Change availability"),
     "ChangeConfiguration": _("Change configuration"),
     "DataTransfer": _("Data transfer"),
@@ -81,6 +83,8 @@ CALL_ACTION_LABELS = {
 CALL_EXPECTED_STATUSES: dict[str, set[str] | None] = {
     "RemoteStartTransaction": {"Accepted"},
     "RemoteStopTransaction": {"Accepted"},
+    "RequestStartTransaction": {"Accepted"},
+    "RequestStopTransaction": {"Accepted"},
     "ChangeAvailability": {"Accepted", "Scheduled"},
     "ChangeConfiguration": {"Accepted", "Rejected", "RebootRequired"},
     "DataTransfer": {"Accepted"},
@@ -2242,21 +2246,20 @@ def _handle_remote_stop(context: ActionContext, _data: dict) -> JsonResponse | A
     if not tx_obj:
         return JsonResponse({"detail": "no transaction"}, status=404)
     message_id = uuid.uuid4().hex
+    ocpp_version = str(getattr(context.ws, "ocpp_version", "") or "")
     ocpp_action = "RemoteStopTransaction"
+    payload: dict[str, object] = {"transactionId": tx_obj.pk}
+    if ocpp_version.startswith("ocpp2.0"):
+        tx_identifier = tx_obj.ocpp_transaction_id or str(tx_obj.pk)
+        payload = {"transactionId": str(tx_identifier)}
+        ocpp_action = "RequestStopTransaction"
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
-    msg = json.dumps(
-        [
-            2,
-            message_id,
-            "RemoteStopTransaction",
-            {"transactionId": tx_obj.pk},
-        ]
-    )
+    msg = json.dumps([2, message_id, ocpp_action, payload])
     async_to_sync(context.ws.send)(msg)
     store.register_pending_call(
         message_id,
         {
-            "action": "RemoteStopTransaction",
+            "action": ocpp_action,
             "charger_id": context.cid,
             "connector_id": context.connector_value,
             "log_key": context.log_key,
@@ -2277,7 +2280,22 @@ def _handle_remote_start(context: ActionContext, data: dict) -> JsonResponse | A
     if not isinstance(id_tag, str) or not id_tag.strip():
         return JsonResponse({"detail": "idTag required"}, status=400)
     id_tag = id_tag.strip()
-    payload: dict[str, object] = {"idTag": id_tag}
+    ocpp_version = str(getattr(context.ws, "ocpp_version", "") or "")
+    payload: dict[str, object]
+    ocpp_action = "RemoteStartTransaction"
+    if ocpp_version.startswith("ocpp2.0"):
+        remote_start_id = data.get("remoteStartId")
+        try:
+            remote_start_id_int = int(remote_start_id)
+        except (TypeError, ValueError):
+            remote_start_id_int = int(uuid.uuid4().int % 1_000_000_000)
+        payload = {
+            "idToken": {"idToken": id_tag, "type": "Central"},
+            "remoteStartId": remote_start_id_int,
+        }
+        ocpp_action = "RequestStartTransaction"
+    else:
+        payload = {"idTag": id_tag}
     connector_id = data.get("connectorId")
     if connector_id in ("", None):
         connector_id = None
@@ -2285,20 +2303,23 @@ def _handle_remote_start(context: ActionContext, data: dict) -> JsonResponse | A
         connector_id = context.connector_value
     if connector_id is not None:
         try:
-            payload["connectorId"] = int(connector_id)
+            connector_payload = int(connector_id)
         except (TypeError, ValueError):
-            payload["connectorId"] = connector_id
+            connector_payload = connector_id
+        if ocpp_action == "RequestStartTransaction":
+            payload["evseId"] = connector_payload
+        else:
+            payload["connectorId"] = connector_payload
     if "chargingProfile" in data and data["chargingProfile"] is not None:
         payload["chargingProfile"] = data["chargingProfile"]
     message_id = uuid.uuid4().hex
-    ocpp_action = "RemoteStartTransaction"
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
-    msg = json.dumps([2, message_id, "RemoteStartTransaction", payload])
+    msg = json.dumps([2, message_id, ocpp_action, payload])
     async_to_sync(context.ws.send)(msg)
     store.register_pending_call(
         message_id,
         {
-            "action": "RemoteStartTransaction",
+            "action": ocpp_action,
             "charger_id": context.cid,
             "connector_id": context.connector_value,
             "log_key": context.log_key,
