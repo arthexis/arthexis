@@ -444,6 +444,7 @@
   const totalCountEl = tableMode ? document.getElementById('{{ prefix }}-total-count') : null;
   const isStaff = {{ request.user.is_staff|yesno:"true,false" }};
   const showReleaseInfo = {{ show_release_info|yesno:"true,false" }};
+  const percentLabelWarnings = new Set();
 
   let historyCount = 0;
   let localPort = null;
@@ -485,6 +486,25 @@
       return '';
     }
     return String(value);
+  }
+
+  function sanitizeLabelValue(labelValue){
+    if(labelValue === undefined || labelValue === null){
+      return '';
+    }
+    const labelString = String(labelValue);
+    if(!labelString){
+      return '';
+    }
+    if(labelString.includes('%')){
+      if(!percentLabelWarnings.has(labelString)){
+        console.warn('[RFID] Unexpected % character detected in label; sanitizing for display.', {rawLabel: labelString});
+        percentLabelWarnings.add(labelString);
+      }
+      const cleaned = labelString.replace(/%+/g, '').trim();
+      return cleaned || labelString;
+    }
+    return labelString;
   }
 
   function normalizeEndianness(value){
@@ -806,10 +826,11 @@
     return data.allowed ? text.yes : text.no;
   }
 
-  function buildHistoryCells(data, labelValue, displayRfid){
+  function buildHistoryCells(data, labelValue, displayLabel, displayRfid){
+    const labelText = displayLabel !== undefined ? displayLabel : labelValue;
     const values = [
       new Date().toLocaleTimeString(),
-      labelValue,
+      labelText,
       data.kind || '',
       data.color || '',
       validText(data),
@@ -824,7 +845,7 @@
     return values;
   }
 
-  function appendHistoryRow(data, labelValue, displayRfid){
+  function appendHistoryRow(data, labelValue, displayLabel, displayRfid){
     if(!historyBody){
       return;
     }
@@ -839,7 +860,7 @@
       }
     }
     const row = document.createElement('tr');
-    buildHistoryCells(data, labelValue, displayRfid).forEach((value) => {
+    buildHistoryCells(data, labelValue, displayLabel, displayRfid).forEach((value) => {
       const cell = document.createElement('td');
       cell.textContent = value;
       row.appendChild(cell);
@@ -901,7 +922,8 @@
       lastScanRfid = rfidKey;
     }
     const labelValue = data.label_id === undefined || data.label_id === null ? '' : data.label_id;
-    if(labelEl){ labelEl.textContent = labelValue; }
+    const displayLabel = sanitizeLabelValue(labelValue);
+    if(labelEl){ labelEl.textContent = displayLabel; }
     if(kindEl){ kindEl.textContent = data.kind || ''; }
     if(rfidEl){ rfidEl.textContent = displayRfid || ''; }
     if(colorEl){ colorEl.textContent = data.color || ''; }
@@ -919,7 +941,8 @@
       }
     }
     if(configureEl){
-      configureEl.textContent = formatText(text.configureRfid, {label: labelValue});
+      const labelForText = displayLabel || labelValue;
+      configureEl.textContent = formatText(text.configureRfid, {label: labelForText});
       configureEl.href = adminTemplate ? adminTemplate.replace('0', labelValue) : '#';
       configureEl.style.display = 'inline';
     }
@@ -928,21 +951,21 @@
     if(deepBtn && data.deep_read){
       setDeepReadState(true, {updateStatus: false, clearDetails: false});
     }
-    const hasLabel = Boolean(labelValue);
+    const hasLabel = Boolean(displayLabel || labelValue);
     const okText = data.allowed === undefined ? '' : (data.allowed ? text.okText : text.badText);
     let statusMsg = '';
     if(okText){
       const template = hasLabel ? text.rfidStatusState : text.rfidStateOnly;
-      statusMsg = formatText(template, {label: labelValue, state: okText}).trim();
+      statusMsg = formatText(template, {label: displayLabel || labelValue, state: okText}).trim();
     } else if(hasLabel){
-      statusMsg = formatText(text.rfidStatus, {label: labelValue}).trim();
+      statusMsg = formatText(text.rfidStatus, {label: displayLabel || labelValue}).trim();
     } else {
       statusMsg = text.rfidOnly;
     }
     statusEl.textContent = data.created ? formatText(text.createdStatus, {status: statusMsg}) : statusMsg;
     lastScanData = Object.assign({}, data);
     if(tableMode && opts.updateHistory){
-      appendHistoryRow(data, labelValue, displayRfid);
+      appendHistoryRow(data, labelValue, displayLabel, displayRfid);
     }
   }
 
