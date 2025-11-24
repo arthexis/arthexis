@@ -2673,6 +2673,62 @@ class WatchtowerNavTests(TestCase):
         self.assertContains(resp, 'href="/ocpp/cpms/dashboard/"')
 
 
+class NavPriorityOrderingTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        role, _ = NodeRole.objects.get_or_create(name="Watchtower")
+        Node.objects.update_or_create(
+            mac_address=Node.get_current_mac(),
+            defaults={
+                "hostname": "localhost",
+                "address": "127.0.0.1",
+                "role": role,
+            },
+        )
+        Site.objects.update_or_create(
+            id=1, defaults={"domain": "testserver", "name": "Arthexis"}
+        )
+
+        self.role = role
+        self.applications = {
+            name: Application.objects.get_or_create(name=name)[0]
+            for name in ("pages", "ocpp", "awg", "constellation")
+        }
+
+    def _add_module(
+        self, app_name: str, path: str, menu: str, priority: int, label: str
+    ) -> Module:
+        module = Module.objects.create(
+            node_role=self.role,
+            application=self.applications[app_name],
+            path=path,
+            menu=menu,
+            priority=priority,
+        )
+        Landing.objects.create(module=module, path="/", label=label)
+        return module
+
+    def test_public_nav_orders_by_priority(self):
+        self._add_module("pages", "/read/", "Cookbooks", 1, "Cookbooks")
+        self._add_module("ocpp", "/ocpp/", "Chargers", 2, "Chargers")
+        self._add_module("awg", "/awg/", "", 3, "Calculators")
+        self._add_module(
+            "constellation",
+            "/constellation/",
+            "Constellation",
+            4,
+            "Constellation",
+        )
+
+        response = self.client.get(reverse("pages:index"))
+        nav_labels = [module.menu_label for module in response.context["nav_modules"]]
+
+        self.assertEqual(
+            nav_labels,
+            ["Cookbooks", "Chargers", "Calculators", "Constellation"],
+        )
+
+
 class ReleaseModuleNavTests(TestCase):
     def setUp(self):
         self.client = Client()

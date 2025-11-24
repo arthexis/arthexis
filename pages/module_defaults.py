@@ -15,6 +15,7 @@ ROLE_MODULE_DEFAULTS: Mapping[str, tuple[ModuleDefinition, ...]] = {
             "application": "ocpp",
             "path": "/ocpp/",
             "menu": "Chargers",
+            "priority": 2,
             "landings": (
                 ("/ocpp/cpms/dashboard/", "CPMS Online Dashboard"),
                 ("/ocpp/net-monitor/", "Net Monitor Console"),
@@ -26,6 +27,7 @@ ROLE_MODULE_DEFAULTS: Mapping[str, tuple[ModuleDefinition, ...]] = {
             "application": "awg",
             "path": "/awg/",
             "menu": "",
+            "priority": 3,
             "landings": (
                 ("/awg/", "AWG Cable Calculator"),
                 ("/awg/energy-tariff/", "Energy Tariff Calculator"),
@@ -94,6 +96,7 @@ def reload_default_modules(Application, Module, Landing, NodeRole) -> ReloadSumm
                 defaults={
                     "application": application,
                     "menu": definition["menu"],
+                    "priority": definition.get("priority", 0),
                     "is_seed_data": True,
                     "is_deleted": False,
                 },
@@ -108,6 +111,9 @@ def reload_default_modules(Application, Module, Landing, NodeRole) -> ReloadSumm
             if module.menu != definition["menu"]:
                 module.menu = definition["menu"]  # type: ignore[index]
                 module_updates.append("menu")
+            if module.priority != definition.get("priority", 0):
+                module.priority = definition.get("priority", 0)
+                module_updates.append("priority")
             if getattr(module, "is_deleted", False):
                 module.is_deleted = False
                 module_updates.append("is_deleted")

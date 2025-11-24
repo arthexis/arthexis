@@ -107,6 +107,10 @@ class Module(Entity):
         blank=True,
         help_text="Text used for the navbar pill; defaults to the application name.",
     )
+    priority = models.PositiveIntegerField(
+        default=0,
+        help_text="Lower values appear first in navigation pills.",
+    )
     is_default = models.BooleanField(default=False)
     favicon = models.ImageField(upload_to="modules/favicons/", blank=True)
 

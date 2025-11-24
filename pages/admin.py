@@ -414,9 +414,24 @@ class LandingAdmin(EntityModelAdmin):
 @admin.register(Module)
 class ModuleAdmin(EntityModelAdmin):
     change_list_template = "admin/pages/module/change_list.html"
-    list_display = ("application", "node_role", "path", "menu", "is_default")
+    list_display = (
+        "application",
+        "node_role",
+        "path",
+        "menu",
+        "priority",
+        "is_default",
+    )
     list_filter = ("node_role", "application")
-    fields = ("node_role", "application", "path", "menu", "is_default", "favicon")
+    fields = (
+        "node_role",
+        "application",
+        "path",
+        "menu",
+        "priority",
+        "is_default",
+        "favicon",
+    )
     inlines = [LandingInline]
 
     def get_urls(self):
