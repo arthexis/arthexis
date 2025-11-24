@@ -1210,6 +1210,9 @@ class ChargingProfile(Entity):
         on_delete=models.CASCADE,
         related_name="charging_profiles",
         verbose_name=_("Charger"),
+        null=True,
+        blank=True,
+        help_text=_("Optional default charger context for the profile."),
     )
     connector_id = models.PositiveIntegerField(
         default=0,
@@ -1252,36 +1255,6 @@ class ChargingProfile(Entity):
     )
     valid_from = models.DateTimeField(null=True, blank=True)
     valid_to = models.DateTimeField(null=True, blank=True)
-    start_schedule = models.DateTimeField(
-        null=True,
-        blank=True,
-        help_text=_("Optional schedule start time; defaults to immediate execution."),
-    )
-    duration_seconds = models.PositiveIntegerField(
-        null=True,
-        blank=True,
-        verbose_name=_("Duration (seconds)"),
-    )
-    charging_rate_unit = models.CharField(
-        max_length=2,
-        choices=RateUnit.choices,
-        verbose_name=_("Charging Rate Unit"),
-    )
-    charging_schedule_periods = models.JSONField(
-        default=list,
-        blank=True,
-        help_text=_(
-            "List of schedule periods including start_period, limit, "
-            "number_phases, and phase_to_use values."
-        ),
-    )
-    min_charging_rate = models.DecimalField(
-        max_digits=10,
-        decimal_places=3,
-        null=True,
-        blank=True,
-        verbose_name=_("Minimum Charging Rate"),
-    )
     description = models.CharField(max_length=255, blank=True, default="")
     last_status = models.CharField(max_length=32, blank=True, default="")
     last_status_info = models.CharField(max_length=255, blank=True, default="")
@@ -1301,6 +1274,7 @@ class ChargingProfile(Entity):
             models.UniqueConstraint(
                 fields=["charger", "connector_id", "charging_profile_id"],
                 name="unique_charging_profile_per_connector",
+                condition=Q(charger__isnull=False),
             )
         ]
         verbose_name = _("Charging Profile")
@@ -1308,7 +1282,153 @@ class ChargingProfile(Entity):
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         connector = self.connector_id or 0
-        return f"{self.charger} | {connector} | {self.charging_profile_id}"
+        return (
+            f"{self.charger or 'Unassigned'} | {connector} | "
+            f"{self.charging_profile_id}"
+        )
+
+    def clean(self):
+        super().clean()
+
+        errors: dict[str, list[str]] = {}
+
+        if self.recurrency_kind and self.kind != self.Kind.RECURRING:
+            errors.setdefault("recurrency_kind", []).append(
+                _("Recurrency kind is only valid for recurring profiles.")
+            )
+        if self.kind == self.Kind.RECURRING and not self.recurrency_kind:
+            errors.setdefault("recurrency_kind", []).append(
+                _("Recurring profiles must define a recurrency kind.")
+            )
+        if self.purpose == self.Purpose.TX_PROFILE and not self.transaction_id:
+            errors.setdefault("transaction_id", []).append(
+                _("Transaction ID is required for TxProfile entries.")
+            )
+
+        if self.pk and not getattr(self, "schedule", None):
+            errors.setdefault("schedule", []).append(
+                _("Each charging profile must include a schedule.")
+            )
+
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def _format_datetime(self, value: datetime | None) -> str | None:
+        if value is None:
+            return None
+        if timezone.is_naive(value):
+            return value.isoformat()
+        return timezone.localtime(value).isoformat()
+
+    def _schedule_payload(self) -> dict[str, object]:
+        if not getattr(self, "schedule", None):
+            return {}
+        return self.schedule.as_charging_schedule_payload()
+
+    def as_cs_charging_profile(
+        self, *, schedule_payload: dict[str, object] | None = None
+    ) -> dict[str, object]:
+        payload: dict[str, object] = {
+            "chargingProfileId": self.charging_profile_id,
+            "stackLevel": self.stack_level,
+            "chargingProfilePurpose": self.purpose,
+            "chargingProfileKind": self.kind,
+            "chargingSchedule": schedule_payload or self._schedule_payload(),
+        }
+
+        if self.transaction_id:
+            payload["transactionId"] = self.transaction_id
+        if self.recurrency_kind:
+            payload["recurrencyKind"] = self.recurrency_kind
+        if self.valid_from:
+            payload["validFrom"] = self._format_datetime(self.valid_from)
+        if self.valid_to:
+            payload["validTo"] = self._format_datetime(self.valid_to)
+
+        return payload
+
+    def as_set_charging_profile_request(
+        self,
+        *,
+        connector_id: int | None = None,
+        schedule_payload: dict[str, object] | None = None,
+    ) -> dict[str, object]:
+        connector_value = self.connector_id if connector_id is None else connector_id
+        return {
+            "connectorId": connector_value,
+            "csChargingProfiles": self.as_cs_charging_profile(
+                schedule_payload=schedule_payload
+            ),
+        }
+
+    def matches_clear_filter(
+        self,
+        *,
+        profile_id: int | None = None,
+        connector_id: int | None = None,
+        purpose: str | None = None,
+        stack_level: int | None = None,
+    ) -> bool:
+        if profile_id is not None and self.charging_profile_id != profile_id:
+            return False
+        if connector_id is not None and self.connector_id != connector_id:
+            return False
+        if purpose is not None and self.purpose != purpose:
+            return False
+        if stack_level is not None and self.stack_level != stack_level:
+            return False
+        return True
+
+
+class ChargingSchedule(models.Model):
+    """Charging schedule linked to a :class:`ChargingProfile`."""
+
+    profile = models.OneToOneField(
+        ChargingProfile,
+        on_delete=models.CASCADE,
+        related_name="schedule",
+    )
+    start_schedule = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=_("Optional schedule start time; defaults to immediate execution."),
+    )
+    duration_seconds = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        verbose_name=_("Duration (seconds)"),
+    )
+    charging_rate_unit = models.CharField(
+        max_length=2,
+        choices=ChargingProfile.RateUnit.choices,
+        verbose_name=_("Charging Rate Unit"),
+    )
+    charging_schedule_periods = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=_(
+            "List of schedule periods including start_period, limit, "
+            "number_phases, and phase_to_use values."
+        ),
+    )
+    min_charging_rate = models.DecimalField(
+        max_digits=10,
+        decimal_places=3,
+        null=True,
+        blank=True,
+        verbose_name=_("Minimum Charging Rate"),
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = _("Charging Schedule")
+        verbose_name_plural = _("Charging Schedules")
+        ordering = ["profile_id"]
 
     @staticmethod
     def _coerce_decimal(value: object) -> Decimal | None:
@@ -1415,18 +1535,6 @@ class ChargingProfile(Entity):
 
         errors: dict[str, list[str]] = {}
 
-        if self.recurrency_kind and self.kind != self.Kind.RECURRING:
-            errors.setdefault("recurrency_kind", []).append(
-                _("Recurrency kind is only valid for recurring profiles.")
-            )
-        if self.kind == self.Kind.RECURRING and not self.recurrency_kind:
-            errors.setdefault("recurrency_kind", []).append(
-                _("Recurring profiles must define a recurrency kind.")
-            )
-        if self.purpose == self.Purpose.TX_PROFILE and not self.transaction_id:
-            errors.setdefault("transaction_id", []).append(
-                _("Transaction ID is required for TxProfile entries.")
-            )
         if self.duration_seconds is not None and self.duration_seconds <= 0:
             errors.setdefault("duration_seconds", []).append(
                 _("Duration must be greater than zero when provided.")
@@ -1435,7 +1543,6 @@ class ChargingProfile(Entity):
             errors.setdefault("min_charging_rate", []).append(
                 _("Minimum charging rate must be positive when provided.")
             )
-
         if not self.charging_schedule_periods:
             errors.setdefault("charging_schedule_periods", []).append(
                 _("Provide at least one charging schedule period.")
@@ -1455,7 +1562,9 @@ class ChargingProfile(Entity):
             return value.isoformat()
         return timezone.localtime(value).isoformat()
 
-    def charging_schedule_payload(self) -> dict[str, object]:
+    def as_charging_schedule_payload(
+        self, *, periods: list[dict[str, object]] | None = None
+    ) -> dict[str, object]:
         schedule: dict[str, object] = {
             "chargingRateUnit": self.charging_rate_unit,
             "chargingSchedulePeriod": [
@@ -1473,7 +1582,7 @@ class ChargingProfile(Entity):
                         else {}
                     ),
                 }
-                for period in self.charging_schedule_periods
+                for period in (periods if periods is not None else self.charging_schedule_periods)
             ],
         }
 
@@ -1486,49 +1595,42 @@ class ChargingProfile(Entity):
 
         return schedule
 
-    def as_cs_charging_profile(self) -> dict[str, object]:
-        payload: dict[str, object] = {
-            "chargingProfileId": self.charging_profile_id,
-            "stackLevel": self.stack_level,
-            "chargingProfilePurpose": self.purpose,
-            "chargingProfileKind": self.kind,
-            "chargingSchedule": self.charging_schedule_payload(),
-        }
 
-        if self.transaction_id:
-            payload["transactionId"] = self.transaction_id
-        if self.recurrency_kind:
-            payload["recurrencyKind"] = self.recurrency_kind
-        if self.valid_from:
-            payload["validFrom"] = self._format_datetime(self.valid_from)
-        if self.valid_to:
-            payload["validTo"] = self._format_datetime(self.valid_to)
+class ChargingProfileDispatch(models.Model):
+    """Track where a charging profile has been dispatched."""
 
-        return payload
+    profile = models.ForeignKey(
+        ChargingProfile,
+        on_delete=models.CASCADE,
+        related_name="dispatches",
+    )
+    charger = models.ForeignKey(
+        Charger,
+        on_delete=models.CASCADE,
+        related_name="charging_profile_dispatches",
+    )
+    message_id = models.CharField(max_length=36, blank=True, default="")
+    status = models.CharField(max_length=32, blank=True, default="")
+    status_info = models.CharField(max_length=255, blank=True, default="")
+    request_payload = models.JSONField(default=dict, blank=True)
+    response_payload = models.JSONField(default=dict, blank=True)
+    responded_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
-    def as_set_charging_profile_request(self) -> dict[str, object]:
-        return {
-            "connectorId": self.connector_id,
-            "csChargingProfiles": self.as_cs_charging_profile(),
-        }
+    class Meta:
+        verbose_name = _("Charging Profile Dispatch")
+        verbose_name_plural = _("Charging Profile Dispatches")
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["profile", "charger", "message_id"],
+                name="unique_charging_profile_dispatch_message",
+            )
+        ]
 
-    def matches_clear_filter(
-        self,
-        *,
-        profile_id: int | None = None,
-        connector_id: int | None = None,
-        purpose: str | None = None,
-        stack_level: int | None = None,
-    ) -> bool:
-        if profile_id is not None and self.charging_profile_id != profile_id:
-            return False
-        if connector_id is not None and self.connector_id != connector_id:
-            return False
-        if purpose is not None and self.purpose != purpose:
-            return False
-        if stack_level is not None and self.stack_level != stack_level:
-            return False
-        return True
+    def __str__(self):  # pragma: no cover - simple representation
+        return f"{self.profile} -> {self.charger}" if self.charger else str(self.profile)
 
 
 class PowerProjection(Entity):

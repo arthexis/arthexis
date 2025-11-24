@@ -1,0 +1,40 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls static %}
+
+{% block content %}
+<div class="module">
+  <h1>{% trans "Send bundled charging profile" %}</h1>
+  <p class="help">{% trans "Combine the selected profiles into a single SetChargingProfile request sent to the EVCS (connector 0)." %}</p>
+  <form method="post" novalidate>
+    {% csrf_token %}
+    {% for obj in profiles %}
+      <input type="hidden" name="{{ action_checkbox_name }}" value="{{ obj.pk }}">
+    {% endfor %}
+    <input type="hidden" name="action" value="{{ action_name }}">
+    <input type="hidden" name="select_across" value="{{ select_across }}">
+    <div>
+      {{ adminform.form.non_field_errors }}
+      {% for fieldset in adminform %}
+        <fieldset class="module aligned">
+          {% for line in fieldset %}
+            <div class="form-row">
+              {{ line.errors }}
+              {{ line.field.label_tag }} {{ line.field }}
+              {% if line.field.help_text %}<p class="help">{{ line.field.help_text }}</p>{% endif %}
+            </div>
+          {% endfor %}
+        </fieldset>
+      {% endfor %}
+    </div>
+    <div class="submit-row">
+      <input type="submit" name="apply" class="default" value="{% trans 'Send' %}">
+    </div>
+  </form>
+  <h2>{% trans "Selected profiles" %}</h2>
+  <ul>
+    {% for obj in profiles %}
+      <li>{{ obj }}</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endblock %}

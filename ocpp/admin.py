@@ -39,6 +39,8 @@ from .models import (
     Brand,
     Charger,
     ChargingProfile,
+    ChargingProfileDispatch,
+    ChargingSchedule,
     PowerProjection,
     ChargerConfiguration,
     ConfigurationKey,
@@ -82,6 +84,14 @@ class TransactionExportForm(forms.Form):
 
 class TransactionImportForm(forms.Form):
     file = forms.FileField()
+
+
+class ChargingProfileSendForm(forms.Form):
+    charger = forms.ModelChoiceField(
+        queryset=Charger.objects.all(),
+        label=_("EVCS"),
+        help_text=_("Charger that will receive the bundled profile."),
+    )
 
 
 class CPReservationForm(forms.ModelForm):
@@ -1326,246 +1336,34 @@ class CPFirmwareDeploymentAdmin(EntityModelAdmin):
     )
 
 
-class CPNetworkProfileDeploymentInline(admin.TabularInline):
-    model = CPNetworkProfileDeployment
+class ChargingScheduleInline(admin.StackedInline):
+    model = ChargingSchedule
     extra = 0
-    fields = (
-        "charger",
-        "status",
-        "status_info",
-        "status_timestamp",
-        "requested_at",
-        "completed_at",
-        "ocpp_message_id",
-    )
-    readonly_fields = fields
-    show_change_link = True
+    min_num = 1
+    max_num = 1
 
 
-@admin.register(CPNetworkProfile)
-class CPNetworkProfileAdmin(EntityModelAdmin):
-    list_display = ("name", "configuration_slot", "created_at", "updated_at")
-    search_fields = ("name",)
-    readonly_fields = ("created_at", "updated_at")
-    actions = ["push_network_profile"]
-    inlines = [CPNetworkProfileDeploymentInline]
-
-    def _format_pending_failure(self, result: dict) -> str:
-        return _format_failure_message(result, action_label=_("Set network profile"))
-
-    def _dispatch_network_profile(
-        self, request, profile: CPNetworkProfile, charger: Charger
-    ) -> bool:
-        connection = store.get_connection(charger.charger_id, charger.connector_id)
-        if connection is None:
-            self.message_user(
-                request,
-                _("%(charger)s is not currently connected to the platform.")
-                % {"charger": charger},
-                level=messages.ERROR,
-            )
-            return False
-
-        ocpp_version = str(getattr(connection, "ocpp_version", "") or "")
-        if not ocpp_version.startswith("ocpp2."):
-            self.message_user(
-                request,
-                _("%(charger)s does not use OCPP 2.0.x so SetNetworkProfile is unsupported.")
-                % {"charger": charger},
-                level=messages.ERROR,
-            )
-            return False
-
-        payload = profile.build_payload()
-        if not payload.get("connectionData"):
-            self.message_user(
-                request,
-                _("%(profile)s is missing connectionData to send to the charge point.")
-                % {"profile": profile},
-                level=messages.ERROR,
-            )
-            return False
-
-        message_id = uuid.uuid4().hex
-        deployment = CPNetworkProfileDeployment.objects.create(
-            network_profile=profile,
-            charger=charger,
-            node=charger.node_origin,
-            ocpp_message_id=message_id,
-            status="Pending",
-            status_info=_("Awaiting charge point response."),
-            status_timestamp=timezone.now(),
-            request_payload=payload,
-            is_user_data=True,
-        )
-
-        frame = json.dumps([2, message_id, "SetNetworkProfile", payload])
-        async_to_sync(connection.send)(frame)
-        log_key = store.identity_key(charger.charger_id, charger.connector_id)
-        store.add_log(
-            log_key, _("Dispatched SetNetworkProfile request."), log_type="charger"
-        )
-        store.register_pending_call(
-            message_id,
-            {
-                "action": "SetNetworkProfile",
-                "charger_id": charger.charger_id,
-                "connector_id": charger.connector_id,
-                "deployment_pk": deployment.pk,
-                "log_key": log_key,
-            },
-        )
-        store.schedule_call_timeout(
-            message_id,
-            action="SetNetworkProfile",
-            log_key=log_key,
-            message="SetNetworkProfile timed out",
-        )
-
-        result = store.wait_for_pending_call(message_id, timeout=15.0)
-        if result is None:
-            deployment.mark_status("Timeout", _("No response received."))
-            deployment.completed_at = timezone.now()
-            deployment.save(update_fields=["completed_at", "updated_at"])
-            self.message_user(
-                request,
-                _(
-                    "The charge point did not respond to the SetNetworkProfile request."
-                ),
-                level=messages.ERROR,
-            )
-            return False
-
-        if not result.get("success", True):
-            detail = self._format_pending_failure(result)
-            deployment.mark_status("Error", detail, response=result.get("payload"))
-            deployment.completed_at = timezone.now()
-            deployment.save(update_fields=["completed_at", "updated_at"])
-            self.message_user(request, detail, level=messages.ERROR)
-            return False
-
-        payload_data = result.get("payload") or {}
-        status_value = str(payload_data.get("status") or "").strip() or "Accepted"
-        deployment.mark_status(status_value, "", timezone.now(), response=payload_data)
-        deployment.completed_at = timezone.now()
-        deployment.save(update_fields=["completed_at", "updated_at"])
-        if status_value.casefold() != "accepted":
-            self.message_user(
-                request,
-                _("SetNetworkProfile for %(charger)s was %(status)s.")
-                % {"charger": charger, "status": status_value},
-                level=messages.ERROR,
-            )
-            return False
-
-        Charger.objects.filter(pk=charger.pk).update(network_profile=profile)
-        self.message_user(
-            request,
-            _("Applied %(profile)s to %(charger)s.")
-            % {"profile": profile, "charger": charger},
-            level=messages.SUCCESS,
-        )
-        return True
-
-    @admin.action(description=_("Push network profile to EVCS"))
-    def push_network_profile(self, request, queryset):
-        selected_ids = request.POST.getlist(helpers.ACTION_CHECKBOX_NAME)
-        if selected_ids:
-            profile_qs = CPNetworkProfile.objects.filter(pk__in=selected_ids)
-            profile_map = {str(obj.pk): obj for obj in profile_qs}
-            profile_list = [profile_map[value] for value in selected_ids if value in profile_map]
-        else:
-            profile_list = list(queryset)
-            selected_ids = [str(obj.pk) for obj in profile_list]
-
-        if not profile_list:
-            self.message_user(
-                request,
-                _("Select at least one network profile to send."),
-                level=messages.ERROR,
-            )
-            return None
-
-        form = SetNetworkProfileForm(request.POST or None)
-        if request.method == "POST" and form.is_valid():
-            chargers = list(form.cleaned_data["chargers"])
-            success_count = 0
-            for profile in profile_list:
-                for charger in chargers:
-                    if self._dispatch_network_profile(request, profile, charger):
-                        success_count += 1
-            if success_count:
-                self.message_user(
-                    request,
-                    ngettext(
-                        "Queued %(count)d network profile update.",
-                        "Queued %(count)d network profile updates.",
-                        success_count,
-                    )
-                    % {"count": success_count},
-                    level=messages.SUCCESS,
-                )
-            return None
-
-        context = {
-            **self.admin_site.each_context(request),
-            "opts": self.model._meta,
-            "title": _("Push network profile to EVCS"),
-            "profile_list": profile_list,
-            "selected_ids": selected_ids,
-            "action_name": request.POST.get("action", "push_network_profile"),
-            "select_across": request.POST.get("select_across", "0"),
-            "action_checkbox_name": helpers.ACTION_CHECKBOX_NAME,
-            "adminform": helpers.AdminForm(
-                form,
-                [
-                    (None, {"fields": ("chargers",)}),
-                ],
-                {},
-            ),
-            "form": form,
-            "media": self.media + form.media,
-        }
-        return TemplateResponse(
-            request, "admin/ocpp/cpnetworkprofile/push_network_profile.html", context
-        )
-
-
-@admin.register(CPNetworkProfileDeployment)
-class CPNetworkProfileDeploymentAdmin(EntityModelAdmin):
-    list_display = (
-        "network_profile",
-        "charger",
-        "status",
-        "status_timestamp",
-        "requested_at",
-        "completed_at",
-    )
-    list_filter = ("status",)
-    search_fields = (
-        "network_profile__name",
-        "charger__charger_id",
-        "ocpp_message_id",
-    )
+class ChargingProfileDispatchInline(admin.TabularInline):
+    model = ChargingProfileDispatch
+    extra = 0
+    can_delete = False
     readonly_fields = (
-        "network_profile",
         "charger",
-        "node",
-        "ocpp_message_id",
+        "message_id",
         "status",
         "status_info",
-        "status_timestamp",
-        "requested_at",
-        "completed_at",
         "request_payload",
         "response_payload",
+        "responded_at",
         "created_at",
         "updated_at",
     )
+    fields = readonly_fields
 
 
 @admin.register(ChargingProfile)
 class ChargingProfileAdmin(EntityModelAdmin):
+    actions = ("send_bundled_profile",)
     list_display = (
         "charger",
         "connector_id",
@@ -1585,6 +1383,7 @@ class ChargingProfileAdmin(EntityModelAdmin):
         "charging_profile_id",
     )
     autocomplete_fields = ("charger",)
+    inlines = (ChargingScheduleInline, ChargingProfileDispatchInline)
     readonly_fields = (
         "last_response_payload",
         "last_response_at",
@@ -1609,18 +1408,6 @@ class ChargingProfileAdmin(EntityModelAdmin):
             },
         ),
         (
-            _("Schedule"),
-            {
-                "fields": (
-                    "start_schedule",
-                    "duration_seconds",
-                    "charging_rate_unit",
-                    "min_charging_rate",
-                    "charging_schedule_periods",
-                )
-            },
-        ),
-        (
             _("EVCS response"),
             {
                 "fields": (
@@ -1633,6 +1420,164 @@ class ChargingProfileAdmin(EntityModelAdmin):
         ),
         (_("Tracking"), {"fields": ("created_at", "updated_at")}),
     )
+
+    @staticmethod
+    def _combined_request_payload(
+        profiles: list[ChargingProfile],
+    ) -> tuple[dict[str, object] | None, str | None]:
+        if not profiles:
+            return None, "No profiles selected."
+
+        first = profiles[0]
+        for profile in profiles[1:]:
+            if not getattr(profile, "schedule", None):
+                return None, str(_("All profiles must have a schedule."))
+            if (
+                profile.purpose != first.purpose
+                or profile.kind != first.kind
+                or profile.recurrency_kind != first.recurrency_kind
+                or profile.transaction_id != first.transaction_id
+            ):
+                return None, str(
+                    _(
+                        "Profiles must share the same purpose, kind, recurrency kind, and transaction to bundle."
+                    )
+                )
+            if profile.schedule.charging_rate_unit != first.schedule.charging_rate_unit:
+                return None, str(
+                    _("Profiles must use the same charging rate unit to bundle together.")
+                )
+
+        if not getattr(first, "schedule", None):
+            return None, str(_("Profiles must include a schedule."))
+
+        periods: list[dict[str, object]] = []
+        for profile in profiles:
+            periods.extend(profile.schedule.charging_schedule_periods or [])
+
+        periods.sort(key=lambda entry: entry.get("start_period", 0))
+        schedule_payload = first.schedule.as_charging_schedule_payload(periods=periods)
+        payload = first.as_set_charging_profile_request(
+            connector_id=0, schedule_payload=schedule_payload
+        )
+        return payload, None
+
+    def _send_profile_payload(
+        self, request, charger: Charger, payload: dict[str, object]
+    ) -> str | None:
+        connector_value = 0
+        if charger.is_local:
+            ws = store.get_connection(charger.charger_id, connector_value)
+            if ws is None:
+                self.message_user(
+                    request,
+                    _("%(charger)s is not connected.") % {"charger": charger},
+                    level=messages.ERROR,
+                )
+                return None
+
+            message_id = uuid.uuid4().hex
+            msg = json.dumps([2, message_id, "SetChargingProfile", payload])
+            try:
+                async_to_sync(ws.send)(msg)
+            except Exception as exc:  # pragma: no cover - network error
+                self.message_user(
+                    request,
+                    _(f"{charger}: failed to send SetChargingProfile ({exc})"),
+                    level=messages.ERROR,
+                )
+                return None
+
+            log_key = store.identity_key(charger.charger_id, connector_value)
+            store.add_log(log_key, f"< {msg}", log_type="charger")
+            store.register_pending_call(
+                message_id,
+                {
+                    "action": "SetChargingProfile",
+                    "charger_id": charger.charger_id,
+                    "connector_id": connector_value,
+                    "log_key": log_key,
+                    "requested_at": timezone.now(),
+                },
+            )
+            store.schedule_call_timeout(
+                message_id,
+                action="SetChargingProfile",
+                log_key=log_key,
+            )
+            return message_id
+
+        self.message_user(
+            request,
+            _("Remote profile dispatch is not available for this charger."),
+            level=messages.ERROR,
+        )
+        return None
+
+    @admin.action(description=_("Send bundled profile to EVCS"))
+    def send_bundled_profile(self, request, queryset):
+        profiles = list(queryset.select_related("schedule"))
+        if not profiles:
+            self.message_user(
+                request,
+                _("Select at least one charging profile to dispatch."),
+                level=messages.ERROR,
+            )
+            return None
+
+        selected_ids = request.POST.getlist(helpers.ACTION_CHECKBOX_NAME)
+        if "apply" in request.POST:
+            form = ChargingProfileSendForm(request.POST)
+            if form.is_valid():
+                payload, error = self._combined_request_payload(profiles)
+                if error:
+                    self.message_user(request, error, level=messages.ERROR)
+                    return None
+                charger = form.cleaned_data["charger"]
+                message_id = self._send_profile_payload(request, charger, payload)
+                if message_id:
+                    for profile in profiles:
+                        ChargingProfileDispatch.objects.create(
+                            profile=profile,
+                            charger=charger,
+                            message_id=message_id,
+                            request_payload=payload,
+                            status="Pending",
+                        )
+                    self.message_user(
+                        request,
+                        ngettext(
+                            "Queued %(count)d profile for %(charger)s.",
+                            "Queued %(count)d profiles for %(charger)s.",
+                            len(profiles),
+                        )
+                        % {"count": len(profiles), "charger": charger},
+                        level=messages.SUCCESS,
+                    )
+                return None
+        else:
+            form = ChargingProfileSendForm()
+
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "title": _("Send charging profile to EVCS"),
+            "profiles": profiles,
+            "selected_ids": selected_ids,
+            "action_name": request.POST.get("action", "send_bundled_profile"),
+            "select_across": request.POST.get("select_across", "0"),
+            "action_checkbox_name": helpers.ACTION_CHECKBOX_NAME,
+            "adminform": helpers.AdminForm(
+                form,
+                [(None, {"fields": ("charger",)})],
+                {},
+            ),
+            "form": form,
+            "media": self.media + form.media,
+        }
+        return TemplateResponse(
+            request, "admin/ocpp/chargingprofile/send.html", context
+        )
 
 
 @admin.register(CPReservation)
@@ -2094,6 +2039,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         "set_availability_state_operative",
         "set_availability_state_inoperative",
         "clear_authorization_cache",
+        "clear_charging_profiles",
         "remote_stop_transaction",
         "reset_chargers",
         "create_simulator_for_cp",
@@ -3359,6 +3305,86 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
             self.message_user(
                 request,
                 f"Sent ClearCache to {cleared} charger(s)",
+            )
+
+    @admin.action(description="Clear charging profiles")
+    def clear_charging_profiles(self, request, queryset):
+        cleared = 0
+        local_node = None
+        private_key = None
+        remote_unavailable = False
+        for charger in queryset:
+            connector_value = 0
+            if charger.is_local:
+                ws = store.get_connection(charger.charger_id, connector_value)
+                if ws is None:
+                    self.message_user(
+                        request,
+                        f"{charger}: no active connection",
+                        level=messages.ERROR,
+                    )
+                    continue
+                message_id = uuid.uuid4().hex
+                payload: dict[str, object] = {}
+                msg = json.dumps([2, message_id, "ClearChargingProfile", payload])
+                try:
+                    async_to_sync(ws.send)(msg)
+                except Exception as exc:  # pragma: no cover - network error
+                    self.message_user(
+                        request,
+                        f"{charger}: failed to send ClearChargingProfile ({exc})",
+                        level=messages.ERROR,
+                    )
+                    continue
+                log_key = store.identity_key(charger.charger_id, connector_value)
+                store.add_log(log_key, f"< {msg}", log_type="charger")
+                requested_at = timezone.now()
+                store.register_pending_call(
+                    message_id,
+                    {
+                        "action": "ClearChargingProfile",
+                        "charger_id": charger.charger_id,
+                        "connector_id": connector_value,
+                        "log_key": log_key,
+                        "requested_at": requested_at,
+                    },
+                )
+                store.schedule_call_timeout(
+                    message_id,
+                    action="ClearChargingProfile",
+                    log_key=log_key,
+                )
+                cleared += 1
+                continue
+
+            if not charger.allow_remote:
+                self.message_user(
+                    request,
+                    f"{charger}: remote administration is disabled.",
+                    level=messages.ERROR,
+                )
+                continue
+            if remote_unavailable:
+                continue
+            if local_node is None:
+                local_node, private_key = self._prepare_remote_credentials(request)
+                if not local_node or not private_key:
+                    remote_unavailable = True
+                    continue
+            success, _updates = self._call_remote_action(
+                request,
+                local_node,
+                private_key,
+                charger,
+                "clear-charging-profile",
+            )
+            if success:
+                cleared += 1
+
+        if cleared:
+            self.message_user(
+                request,
+                f"Sent ClearChargingProfile to {cleared} charger(s)",
             )
 
     @admin.action(description="Unlock connector")

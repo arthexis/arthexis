@@ -7,7 +7,7 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase
 from django.utils import timezone
 
-from ocpp.models import Charger, ChargingProfile
+from ocpp.models import Charger, ChargingProfile, ChargingSchedule
 
 
 class ChargingProfileModelTests(TestCase):
@@ -19,7 +19,7 @@ class ChargingProfileModelTests(TestCase):
         valid_to = now + timedelta(hours=2)
         start_schedule = now + timedelta(minutes=15)
 
-        profile = ChargingProfile(
+        profile = ChargingProfile.objects.create(
             charger=self.charger,
             connector_id=1,
             charging_profile_id=7,
@@ -29,6 +29,10 @@ class ChargingProfileModelTests(TestCase):
             transaction_id=42,
             valid_from=now,
             valid_to=valid_to,
+            description="Example profile",
+        )
+        schedule = ChargingSchedule.objects.create(
+            profile=profile,
             start_schedule=start_schedule,
             duration_seconds=1800,
             charging_rate_unit=ChargingProfile.RateUnit.AMP,
@@ -37,14 +41,12 @@ class ChargingProfileModelTests(TestCase):
                 {"start_period": 600, "limit": Decimal("20.5")},
             ],
             min_charging_rate=Decimal("6.0"),
-            description="Example profile",
         )
 
-        profile.save()
-        profile.refresh_from_db()
+        schedule.refresh_from_db()
 
         self.assertEqual(
-            profile.charging_schedule_periods,
+            schedule.charging_schedule_periods,
             [
                 {"start_period": 0, "limit": 16.0, "number_phases": 3},
                 {"start_period": 600, "limit": 20.5},
@@ -80,8 +82,6 @@ class ChargingProfileModelTests(TestCase):
             purpose=ChargingProfile.Purpose.CHARGE_POINT_MAX_PROFILE,
             kind=ChargingProfile.Kind.ABSOLUTE,
             recurrency_kind=ChargingProfile.RecurrencyKind.DAILY,
-            charging_rate_unit=ChargingProfile.RateUnit.WATT,
-            charging_schedule_periods=[{"startPeriod": 0, "limit": 5}],
         )
 
         with self.assertRaises(ValidationError) as excinfo:
@@ -97,8 +97,6 @@ class ChargingProfileModelTests(TestCase):
             stack_level=1,
             purpose=ChargingProfile.Purpose.TX_PROFILE,
             kind=ChargingProfile.Kind.RELATIVE,
-            charging_rate_unit=ChargingProfile.RateUnit.WATT,
-            charging_schedule_periods=[{"startPeriod": 0, "limit": 5}],
         )
 
         with self.assertRaises(ValidationError) as excinfo:
@@ -115,6 +113,9 @@ class ChargingProfileModelTests(TestCase):
             purpose=ChargingProfile.Purpose.TX_DEFAULT_PROFILE,
             kind=ChargingProfile.Kind.RECURRING,
             recurrency_kind=ChargingProfile.RecurrencyKind.WEEKLY,
+        )
+        ChargingSchedule.objects.create(
+            profile=profile,
             charging_rate_unit=ChargingProfile.RateUnit.AMP,
             charging_schedule_periods=[{"startPeriod": 0, "limit": 16}],
         )

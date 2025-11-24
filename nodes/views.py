@@ -1604,6 +1604,40 @@ def _clear_cache_remote(
     return True, "requested ClearCache", {}
 
 
+def _clear_charging_profile_remote(
+    charger: Charger, payload: Mapping | None = None
+) -> tuple[bool, str, dict[str, object]]:
+    connector_value = 0
+    ws = store.get_connection(charger.charger_id, connector_value)
+    if ws is None:
+        return False, "no active connection", {}
+    message_id = uuid.uuid4().hex
+    msg = json.dumps([2, message_id, "ClearChargingProfile", {}])
+    try:
+        async_to_sync(ws.send)(msg)
+    except Exception as exc:
+        return False, f"failed to send ClearChargingProfile ({exc})", {}
+    log_key = store.identity_key(charger.charger_id, connector_value)
+    store.add_log(log_key, f"< {msg}", log_type="charger")
+    requested_at = timezone.now()
+    store.register_pending_call(
+        message_id,
+        {
+            "action": "ClearChargingProfile",
+            "charger_id": charger.charger_id,
+            "connector_id": connector_value,
+            "log_key": log_key,
+            "requested_at": requested_at,
+        },
+    )
+    store.schedule_call_timeout(
+        message_id,
+        action="ClearChargingProfile",
+        log_key=log_key,
+    )
+    return True, "requested ClearChargingProfile", {}
+
+
 def _unlock_connector_remote(
     charger: Charger, payload: Mapping | None = None
 ) -> tuple[bool, str, dict[str, object]]:
@@ -1786,6 +1820,7 @@ REMOTE_ACTIONS = {
     "get-local-list-version": _get_local_list_version_remote,
     "change-availability": _change_availability_remote,
     "clear-cache": _clear_cache_remote,
+    "clear-charging-profile": _clear_charging_profile_remote,
     "unlock-connector": _unlock_connector_remote,
     "set-availability-state": _set_availability_state_remote,
     "remote-stop": _remote_stop_transaction_remote,
