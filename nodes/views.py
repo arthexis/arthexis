@@ -4,6 +4,7 @@ import json
 import re
 import socket
 import uuid
+from datetime import timedelta
 from collections.abc import Mapping
 from django.apps import apps
 from django.conf import settings
@@ -1701,9 +1702,42 @@ def _remote_stop_transaction_remote(
     return True, "remote stop requested", {}
 
 
+def _prepare_diagnostics_upload_payload(
+    request, charger: Charger, payload: Mapping | None
+) -> dict[str, object]:
+    """Ensure a Media Bucket-backed diagnostics location is present."""
+
+    prepared: dict[str, object] = {}
+    if isinstance(payload, Mapping):
+        prepared = dict(payload)
+
+    location = str(prepared.get("location") or "").strip()
+    if location:
+        prepared["location"] = location
+        return prepared
+
+    expires_at = timezone.now() + timedelta(days=30)
+    bucket = charger.ensure_diagnostics_bucket(expires_at=expires_at)
+    upload_path = reverse("protocols:media-bucket-upload", kwargs={"slug": bucket.slug})
+    location = request.build_absolute_uri(upload_path)
+    prepared["location"] = location
+    if bucket.expires_at:
+        prepared.setdefault("stopTime", bucket.expires_at.isoformat())
+
+    Charger.objects.filter(pk=charger.pk).update(
+        diagnostics_bucket=bucket, diagnostics_location=location
+    )
+    charger.diagnostics_bucket = bucket
+    charger.diagnostics_location = location
+    return prepared
+
+
 def _request_diagnostics_remote(
-    charger: Charger, payload: Mapping | None = None
+    charger: Charger, payload: Mapping | None = None, *, request=None
 ) -> tuple[bool, str, dict[str, object]]:
+    if request is not None:
+        payload = _prepare_diagnostics_upload_payload(request, charger, payload)
+
     location = ""
     stop_time_raw = None
     if isinstance(payload, Mapping):
@@ -1829,7 +1863,10 @@ def network_charger_action(request):
     if handler is None:
         return JsonResponse({"detail": "unsupported action"}, status=400)
 
-    success, message, updates = handler(charger, body)
+    if action == "request-diagnostics":
+        success, message, updates = handler(charger, body, request=request)
+    else:
+        success, message, updates = handler(charger, body)
 
     status_code = 200 if success else 409
     status_label = "ok" if success else "error"
