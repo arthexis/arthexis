@@ -148,7 +148,22 @@
         iframe.setAttribute('title', 'Pyxel WASM viewport');
         iframe.setAttribute('allowfullscreen', 'true');
         iframe.style.opacity = '0';
+        let resolved = false;
+        const markMissing = () => {
+          if (resolved) {
+            return;
+          }
+          resolved = true;
+          label.textContent = 'Asset missing';
+          status.querySelector('.status-dot').style.background = '#f87171';
+          placeholder.innerHTML =
+            '<div style="font-weight:600;">Pyxel viewport assets not found.</div><div style="max-width:540px;text-align:center;line-height:1.5;">Place the WebAssembly build produced by <code>pyxel_viewport</code> inside <code>static/ocpp/net_monitor/pyxel_viewport</code> to launch the console.</div>';
+          notifyParent('missing');
+        };
+        const loadTimeout = setTimeout(markMissing, 8000);
         iframe.addEventListener('load', () => {
+          resolved = true;
+          clearTimeout(loadTimeout);
           iframe.style.opacity = '1';
           placeholder.style.display = 'none';
           notice.innerHTML = '<strong>Connected:</strong> The Pyxel viewport is running. If you do not see live data, ensure the backend suite is feeding snapshots to the WASM build.';
@@ -157,10 +172,7 @@
           notifyParent('ready');
         });
         iframe.addEventListener('error', () => {
-          label.textContent = 'Asset missing';
-          status.querySelector('.status-dot').style.background = '#f87171';
-          placeholder.innerHTML = '<div style="font-weight:600;">Pyxel viewport assets not found.</div><div style="max-width:540px;text-align:center;line-height:1.5;">Place the WebAssembly build produced by <code>pyxel_viewport</code> inside <code>static/ocpp/net_monitor/pyxel_viewport</code> to launch the console.</div>';
-          notifyParent('missing');
+          markMissing();
         });
 
         try {
@@ -171,10 +183,7 @@
           notifyParent('loading');
           viewportBody.appendChild(iframe);
         } catch (error) {
-          label.textContent = 'Asset missing';
-          status.querySelector('.status-dot').style.background = '#f87171';
-          placeholder.innerHTML = '<div style="font-weight:600;">Pyxel viewport assets not found.</div><div style="max-width:540px;text-align:center;line-height:1.5;">Place the WebAssembly build produced by <code>pyxel_viewport</code> inside <code>static/ocpp/net_monitor/pyxel_viewport</code> to launch the console.</div>';
-          notifyParent('missing');
+          markMissing();
         }
       })();
     </script>
