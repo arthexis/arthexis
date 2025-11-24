@@ -439,9 +439,9 @@ async function _waitForInput() {
 
   let promptImage = document.createElement("img");
   promptImage.id = "pyxel-prompt";
-  promptImage.src =
-    _scriptDir() +
-    (_isTouchDevice() ? TOUCH_TO_START_PATH : CLICK_TO_START_PATH);
+  promptImage.src = _pyxelAssetPath(
+    _isTouchDevice() ? TOUCH_TO_START_PATH : CLICK_TO_START_PATH
+  );
   await _waitForEvent(promptImage, "load");
   pyxelScreen.appendChild(promptImage);
   _updateScreenElementsSize();
