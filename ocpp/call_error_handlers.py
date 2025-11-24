@@ -623,6 +623,62 @@ async def handle_remote_stop_transaction_error(
     return True
 
 
+async def handle_request_start_transaction_error(
+    consumer: CallErrorContext,
+    message_id: str,
+    metadata: dict,
+    error_code: str | None,
+    description: str | None,
+    details: dict | None,
+    log_key: str,
+) -> bool:
+    message = "RequestStartTransaction error"
+    if error_code:
+        message += f": code={str(error_code).strip()}"
+    if description:
+        suffix = str(description).strip()
+        if suffix:
+            message += f", description={suffix}"
+    store.add_log(log_key, message, log_type="charger")
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        success=False,
+        error_code=error_code,
+        error_description=description,
+        error_details=details,
+    )
+    return True
+
+
+async def handle_request_stop_transaction_error(
+    consumer: CallErrorContext,
+    message_id: str,
+    metadata: dict,
+    error_code: str | None,
+    description: str | None,
+    details: dict | None,
+    log_key: str,
+) -> bool:
+    message = "RequestStopTransaction error"
+    if error_code:
+        message += f": code={str(error_code).strip()}"
+    if description:
+        suffix = str(description).strip()
+        if suffix:
+            message += f", description={suffix}"
+    store.add_log(log_key, message, log_type="charger")
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        success=False,
+        error_code=error_code,
+        error_description=description,
+        error_details=details,
+    )
+    return True
+
+
 async def handle_reset_error(
     consumer: CallErrorContext,
     message_id: str,
@@ -702,6 +758,8 @@ CALL_ERROR_HANDLERS: dict[str, CallErrorHandler] = {
     "CancelReservation": handle_cancel_reservation_error,
     "RemoteStartTransaction": handle_remote_start_transaction_error,
     "RemoteStopTransaction": handle_remote_stop_transaction_error,
+    "RequestStartTransaction": handle_request_start_transaction_error,
+    "RequestStopTransaction": handle_request_stop_transaction_error,
     "Reset": handle_reset_error,
     "ChangeAvailability": handle_change_availability_error,
 }

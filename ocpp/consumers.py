@@ -176,6 +176,18 @@ def _extract_vehicle_identifier(payload: dict) -> tuple[str, str]:
     return vid_value, vin_value
 
 
+async def _get_transaction_by_ocpp_id(
+    charger: Charger, ocpp_transaction_id: str
+) -> Transaction | None:
+    """Return a transaction for the provided OCPP id when stored."""
+
+    if not ocpp_transaction_id:
+        return None
+    return await database_sync_to_async(Transaction.objects.filter(
+        charger=charger, ocpp_transaction_id=ocpp_transaction_id
+    ).first)()
+
+
 class SinkConsumer(AsyncWebsocketConsumer):
     """Accept any message without validation."""
 
@@ -303,6 +315,12 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         preferred_normalized = (preferred or "").strip()
         if preferred_normalized and preferred_normalized in available:
             return preferred_normalized
+        # Prefer the latest OCPP 2.0.1 protocol when the charger requests it,
+        # otherwise fall back to older versions.
+        if "ocpp2.0.1" in available:
+            return "ocpp2.0.1"
+        if "ocpp2.0" in available:
+            return "ocpp2.0"
         # Operational safeguard: never reject a charger solely because it omits
         # or sends an unexpected subprotocol.  We negotiate ``ocpp1.6`` when the
         # charger offers it, but otherwise continue without a subprotocol so we
@@ -356,6 +374,10 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         offered = self.scope.get("subprotocols", [])
         subprotocol = self._select_subprotocol(offered, preferred_version)
         self.preferred_ocpp_version = preferred_version
+        negotiated_version = subprotocol
+        if not negotiated_version and preferred_version in {"ocpp2.0", "ocpp2.0.1"}:
+            negotiated_version = preferred_version
+        self.ocpp_version = negotiated_version or "ocpp1.6"
         if existing_charger and existing_charger.requires_ws_auth:
             credentials, error_code = self._parse_basic_auth_header()
             rejection_reason: str | None = None
@@ -666,6 +688,32 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         self.store_key = new_key
         self.connector_value = connector_value
 
+    async def _ensure_ocpp_transaction_identifier(
+        self, tx_obj: Transaction | None, ocpp_id: str | None = None
+    ) -> None:
+        """Persist a stable OCPP transaction identifier for lookups.
+
+        The identifier is used to link OCPP 2.0.1 TransactionEvent messages to
+        the stored :class:`~ocpp.models.Transaction` even when the websocket
+        session is rebuilt.
+        """
+
+        if not tx_obj:
+            return
+        normalized_id = (ocpp_id or "").strip()
+        if normalized_id and tx_obj.ocpp_transaction_id != normalized_id:
+            tx_obj.ocpp_transaction_id = normalized_id
+            await database_sync_to_async(tx_obj.save)(
+                update_fields=["ocpp_transaction_id"]
+            )
+            return
+        if tx_obj.ocpp_transaction_id:
+            return
+        tx_obj.ocpp_transaction_id = str(tx_obj.pk)
+        await database_sync_to_async(tx_obj.save)(
+            update_fields=["ocpp_transaction_id"]
+        )
+
     async def _ensure_forwarding_context(
         self, charger,
     ) -> tuple[tuple[str, ...], int | None] | None:
@@ -835,7 +883,10 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 )()
             if tx_obj is None:
                 tx_obj = await database_sync_to_async(Transaction.objects.create)(
-                    pk=tx_id, charger=self.charger, start_time=timezone.now()
+                    pk=tx_id,
+                    charger=self.charger,
+                    start_time=timezone.now(),
+                    ocpp_transaction_id=str(tx_id),
                 )
                 store.start_session_log(self.store_key, tx_obj.pk)
                 store.add_session_message(self.store_key, raw_message)
@@ -843,11 +894,21 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         else:
             tx_obj = store.transactions.get(self.store_key)
 
+        await self._ensure_ocpp_transaction_identifier(tx_obj, str(tx_id) if tx_id else None)
+        await self._process_meter_value_entries(
+            payload.get("meterValue"), connector_value, tx_obj
+        )
+
+    async def _process_meter_value_entries(
+        self, meter_values: list[dict] | None, connector_value: int | None, tx_obj
+    ) -> None:
+        """Persist meter value samples and update transaction metrics."""
+
         readings = []
         updated_fields: set[str] = set()
         temperature = None
         temp_unit = ""
-        for mv in payload.get("meterValue", []):
+        for mv in meter_values or []:
             ts = parse_datetime(mv.get("timestamp"))
             values: dict[str, Decimal] = {}
             context = ""
@@ -1630,6 +1691,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             "StatusNotification": self._handle_status_notification_action,
             "Authorize": self._handle_authorize_action,
             "MeterValues": self._handle_meter_values_action,
+            "TransactionEvent": self._handle_transaction_event_action,
             "SecurityEventNotification": self._handle_security_event_notification_action,
             "DiagnosticsStatusNotification": self._handle_diagnostics_status_notification_action,
             "LogStatusNotification": self._handle_log_status_notification_action,
@@ -2014,6 +2076,155 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             store.finalize_log_capture(session_capture)
         return {}
 
+    async def _handle_transaction_event_action(
+        self, payload, msg_id, raw, text_data
+    ):
+        event_type = str(payload.get("eventType") or "").strip().lower()
+        transaction_info = payload.get("transactionInfo") or {}
+        ocpp_tx_id = str(transaction_info.get("transactionId") or "").strip()
+        evse_info = payload.get("evse") or {}
+        connector_hint = evse_info.get("connectorId", evse_info.get("id"))
+        await self._assign_connector(connector_hint)
+        connector_value = self.connector_value
+        timestamp_value = _parse_ocpp_timestamp(payload.get("timestamp"))
+        if timestamp_value is None:
+            timestamp_value = timezone.now()
+
+        id_token = payload.get("idToken") or {}
+        id_tag = ""
+        if isinstance(id_token, dict):
+            id_tag = str(id_token.get("idToken") or "").strip()
+
+        if event_type == "started":
+            tag = None
+            tag_created = False
+            if id_tag:
+                tag, tag_created = await database_sync_to_async(
+                    CoreRFID.register_scan
+                )(id_tag)
+            account = await self._get_account(id_tag)
+            if id_tag and not self.charger.require_rfid:
+                seen_tag = await self._ensure_rfid_seen(id_tag)
+                if seen_tag:
+                    tag = seen_tag
+            authorized = True
+            authorized_via_tag = False
+            if self.charger.require_rfid:
+                if account is not None:
+                    authorized = await database_sync_to_async(account.can_authorize)()
+                elif id_tag and tag and not tag_created and getattr(tag, "allowed", False):
+                    authorized = True
+                    authorized_via_tag = True
+                else:
+                    authorized = False
+            if authorized:
+                if authorized_via_tag and tag:
+                    self._log_unlinked_rfid(tag.rfid)
+                vid_value, vin_value = _extract_vehicle_identifier(payload)
+                tx_obj = await database_sync_to_async(Transaction.objects.create)(
+                    charger=self.charger,
+                    account=account,
+                    rfid=(id_tag or ""),
+                    vid=vid_value,
+                    vin=vin_value,
+                    connector_id=connector_value,
+                    meter_start=transaction_info.get("meterStart"),
+                    start_time=timestamp_value,
+                    received_start_time=timezone.now(),
+                    ocpp_transaction_id=ocpp_tx_id,
+                )
+                await self._ensure_ocpp_transaction_identifier(tx_obj, ocpp_tx_id)
+                store.transactions[self.store_key] = tx_obj
+                store.start_session_log(self.store_key, tx_obj.pk)
+                store.start_session_lock()
+                store.add_session_message(self.store_key, text_data)
+                await self._start_consumption_updates(tx_obj)
+                await self._process_meter_value_entries(
+                    payload.get("meterValue"), connector_value, tx_obj
+                )
+                await self._record_rfid_attempt(
+                    rfid=id_tag or "",
+                    status=RFIDSessionAttempt.Status.ACCEPTED,
+                    account=account,
+                    transaction=tx_obj,
+                )
+                return {"idTokenInfo": {"status": "Accepted"}}
+
+            await self._record_rfid_attempt(
+                rfid=id_tag or "",
+                status=RFIDSessionAttempt.Status.REJECTED,
+                account=account,
+            )
+            return {"idTokenInfo": {"status": "Invalid"}}
+
+        if event_type == "ended":
+            tx_obj = store.transactions.pop(self.store_key, None)
+            if not tx_obj and ocpp_tx_id:
+                tx_obj = await _get_transaction_by_ocpp_id(self.charger, ocpp_tx_id)
+            if not tx_obj and ocpp_tx_id.isdigit():
+                tx_obj = await database_sync_to_async(
+                    Transaction.objects.filter(
+                        pk=int(ocpp_tx_id), charger=self.charger
+                    ).first
+                )()
+            if tx_obj is None:
+                tx_obj = await database_sync_to_async(Transaction.objects.create)(
+                    charger=self.charger,
+                    connector_id=connector_value,
+                    start_time=timestamp_value,
+                    received_start_time=timestamp_value,
+                    ocpp_transaction_id=ocpp_tx_id,
+                )
+            await self._ensure_ocpp_transaction_identifier(tx_obj, ocpp_tx_id)
+            tx_obj.stop_time = timestamp_value
+            tx_obj.received_stop_time = timezone.now()
+            meter_stop_value = transaction_info.get("meterStop")
+            if meter_stop_value is not None:
+                tx_obj.meter_stop = meter_stop_value
+            vid_value, vin_value = _extract_vehicle_identifier(payload)
+            if vid_value:
+                tx_obj.vid = vid_value
+            if vin_value:
+                tx_obj.vin = vin_value
+            await database_sync_to_async(tx_obj.save)()
+            await self._process_meter_value_entries(
+                payload.get("meterValue"), connector_value, tx_obj
+            )
+            await self._update_consumption_message(tx_obj.pk)
+            await self._cancel_consumption_message()
+            store.end_session_log(self.store_key)
+            store.stop_session_lock()
+            return {}
+
+        if event_type == "updated":
+            tx_obj = store.transactions.get(self.store_key)
+            if not tx_obj and ocpp_tx_id:
+                tx_obj = await _get_transaction_by_ocpp_id(self.charger, ocpp_tx_id)
+            if not tx_obj and ocpp_tx_id.isdigit():
+                tx_obj = await database_sync_to_async(
+                    Transaction.objects.filter(
+                        pk=int(ocpp_tx_id), charger=self.charger
+                    ).first
+                )()
+            if tx_obj is None:
+                tx_obj = await database_sync_to_async(Transaction.objects.create)(
+                    charger=self.charger,
+                    connector_id=connector_value,
+                    start_time=timestamp_value,
+                    received_start_time=timezone.now(),
+                    ocpp_transaction_id=ocpp_tx_id,
+                )
+                store.start_session_log(self.store_key, tx_obj.pk)
+                store.add_session_message(self.store_key, text_data)
+                store.transactions[self.store_key] = tx_obj
+            await self._ensure_ocpp_transaction_identifier(tx_obj, ocpp_tx_id)
+            await self._process_meter_value_entries(
+                payload.get("meterValue"), connector_value, tx_obj
+            )
+            return {}
+
+        return {}
+
     async def _handle_start_transaction_action(
         self, payload, msg_id, raw, text_data
     ):
@@ -2057,6 +2268,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 start_time=start_timestamp or received_start,
                 received_start_time=received_start,
             )
+            await self._ensure_ocpp_transaction_identifier(tx_obj)
             store.transactions[self.store_key] = tx_obj
             store.start_session_log(self.store_key, tx_obj.pk)
             store.start_session_lock()
@@ -2101,6 +2313,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 vin=vin_value,
             )
         if tx_obj:
+            await self._ensure_ocpp_transaction_identifier(tx_obj, str(tx_id))
             stop_timestamp = _parse_ocpp_timestamp(payload.get("timestamp"))
             received_stop = timezone.now()
             tx_obj.meter_stop = payload.get("meterStop")
