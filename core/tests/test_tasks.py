@@ -813,6 +813,93 @@ def test_check_github_updates_logs_fetch_failure_details(monkeypatch, tmp_path):
     assert messages == ["Git fetch failed (exit code 128): fatal: forbidden"]
 
 
+def test_broadcast_upgrade_start_message_formats_payload(monkeypatch):
+    """Upgrade start Net Messages should include the timestamp and node name."""
+
+    from core import tasks
+
+    broadcasts: list[tuple[str, str]] = []
+
+    class StubNetMessage:
+        @staticmethod
+        def broadcast(*, subject: str, body: str):
+            broadcasts.append((subject, body))
+
+    class StubNode:
+        hostname = "alpha"
+
+        @staticmethod
+        def get_local():
+            return StubNode()
+
+    monkeypatch.setitem(
+        sys.modules,
+        "nodes.models",
+        SimpleNamespace(NetMessage=StubNetMessage, Node=StubNode),
+    )
+
+    tasks._broadcast_upgrade_start_message("@ 20240102 03:04")
+
+    assert broadcasts == [("Upgrading... @ 20240102 03:04", "alpha")]
+
+
+def test_check_github_updates_broadcasts_upgrade_start(monkeypatch, tmp_path):
+    """Auto-upgrade runs should broadcast a Net Message when starting."""
+
+    from core import tasks
+    import nodes.apps as nodes_apps
+
+    fixed_time = tasks.timezone.make_aware(datetime(2024, 1, 2, 3, 4))
+    monkeypatch.setattr(tasks.timezone, "now", lambda: fixed_time)
+
+    monkeypatch.setitem(
+        sys.modules,
+        "core.notifications",
+        SimpleNamespace(notify=lambda *args, **kwargs: None),
+    )
+    monkeypatch.setattr(nodes_apps, "_startup_notification", lambda: None)
+
+    log_path = tmp_path / "auto-upgrade.log"
+    monkeypatch.setattr(tasks, "_auto_upgrade_log_path", lambda _base: log_path)
+    monkeypatch.setattr(tasks, "_append_auto_upgrade_log", lambda *args, **kwargs: None)
+    monkeypatch.setattr(tasks, "_schedule_health_check", lambda *args, **kwargs: None)
+    monkeypatch.setattr(tasks, "_load_skipped_revisions", lambda base: set())
+    monkeypatch.setattr(tasks, "_resolve_release_severity", lambda version: tasks.SEVERITY_NORMAL)
+    monkeypatch.setattr(tasks, "_delegate_upgrade_via_script", lambda base, args: "unit")
+    monkeypatch.setattr(tasks, "_latest_release", lambda: (None, None))
+    monkeypatch.setattr(tasks, "_current_revision", lambda base: "local-sha")
+    monkeypatch.setattr(tasks, "_read_remote_version", lambda base, branch: "0.0.1")
+    monkeypatch.setattr(tasks, "_read_local_version", lambda base: "0.0.0")
+
+    monkeypatch.setattr(tasks.shutil, "which", lambda command: None)
+
+    def fake_run(command, *args, **kwargs):
+        return CompletedProcess(command, 0)
+
+    def fake_check_output(command, *args, **kwargs):
+        if "rev-parse" in command:
+            if command[-1].startswith("origin/"):
+                return "remote-sha"
+            return "local-sha"
+        return ""
+
+    monkeypatch.setattr(tasks.subprocess, "run", fake_run)
+    monkeypatch.setattr(tasks.subprocess, "check_output", fake_check_output)
+
+    upgrade_stamps: list[str] = []
+    monkeypatch.setattr(
+        tasks,
+        "_broadcast_upgrade_start_message",
+        lambda stamp: upgrade_stamps.append(stamp),
+    )
+
+    with override_settings(BASE_DIR=tmp_path):
+        tasks.check_github_updates()
+
+    expected_stamp = tasks.timezone.localtime(fixed_time).strftime("@ %Y%m%d %H:%M")
+    assert upgrade_stamps == [expected_stamp]
+
+
 @pytest.mark.parametrize(
     "stderr",
     [
