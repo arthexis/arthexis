@@ -38,6 +38,7 @@ Run one of the following from the project root:
 
 ```bash
 ./upgrade.sh --stable   # direct run, useful for local validation
+./upgrade.sh --detached # launches the delegated watcher so the upgrade continues if the console disconnects
 ./delegated-upgrade.sh  # matches the automated delegated path
 ```
 
