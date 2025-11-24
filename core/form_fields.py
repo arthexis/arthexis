@@ -179,14 +179,19 @@ class SchedulePeriodsField(forms.Field):
                 cleaned = getattr(form, "cleaned_data", {}) or {}
                 if cleaned.get("DELETE"):
                     continue
-                periods.append(
-                    {
-                        "start_period": cleaned.get("start_period"),
-                        "limit": cleaned.get("limit"),
-                        "number_phases": cleaned.get("number_phases"),
-                        "phase_to_use": cleaned.get("phase_to_use"),
-                    }
-                )
+                period = {
+                    "start_period": cleaned.get("start_period"),
+                    "limit": cleaned.get("limit"),
+                }
+                number_phases = cleaned.get("number_phases")
+                if number_phases is not None:
+                    period["number_phases"] = number_phases
+
+                phase_to_use = cleaned.get("phase_to_use")
+                if phase_to_use is not None:
+                    period["phase_to_use"] = phase_to_use
+
+                periods.append(period)
             if not periods:
                 raise ValidationError(self.error_messages["invalid"])
             return periods
