@@ -7,9 +7,7 @@
 
 Arthexis Constellation is a [Django](https://www.djangoproject.com/)-based [software suite](https://en.wikipedia.org/wiki/Software_suite) that centralizes tools for managing [electric vehicle charging infrastructure](https://en.wikipedia.org/wiki/Charging_station) and orchestrating [energy](https://en.wikipedia.org/wiki/Energy)-related [products](https://en.wikipedia.org/wiki/Product_(business)) and [services](https://en.wikipedia.org/wiki/Service_(economics)).
 
-Visit the public [Changelog Report](https://arthexis.com/changelog/) to browse unreleased and historical updates generated directly from git commits.
-
-Check out the latest [Developer Article](https://arthexis.com/articles/protoline-integration/) for upcoming release highlights and rollout details.
+Visit our [Changelog Report](https://arthexis.com/changelog/) to browse past and future features and other updates.
 
 ## Latest developments
 
@@ -17,7 +15,7 @@ Check out the latest [Developer Article](https://arthexis.com/articles/protoline
 
 ## Current Features
 
-- Compatible with the [Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/) central system. Supported actions are summarized below.
+- Compatible with the [Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/) by defaut, while allowing Chargering Stations to upgrade to newer protocols if they support them. 
 
   **Charge point → CSMS**
 
@@ -148,7 +146,9 @@ Terminal nodes can start directly with the scripts below without installing; Con
 
 ## Support
 
-Contact us at [tecnologia@gelectriic.com](mailto:tecnologia@gelectriic.com) or visit our [web page](https://www.gelectriic.com/) for [professional services](https://en.wikipedia.org/wiki/Professional_services) and [commercial support](https://en.wikipedia.org/wiki/Technical_support).
+Arthexis Constellation is still under very active development and new features are added every day.
+
+If you decide to use our suite for your energy projects, you may contact us at [tecnologia@gelectriic.com](mailto:tecnologia@gelectriic.com) or visit our [web page](https://www.gelectriic.com/) for [professional services](https://en.wikipedia.org/wiki/Professional_services) and [commercial support](https://en.wikipedia.org/wiki/Technical_support).
 
 ## Project Guidelines
 
