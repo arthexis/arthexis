@@ -2882,7 +2882,7 @@ class ControlNavTests(TestCase):
 
         self.assertIn("header_references", resp.context)
         self.assertTrue(resp.context["header_references"])
-        self.assertContains(resp, "LINKS")
+        self.assertContains(resp, "CONSTELLATION")
         self.assertContains(resp, 'href="https://example.com/console"')
 
     def test_header_links_hidden_when_flag_false(self):
@@ -2928,7 +2928,7 @@ class ControlNavTests(TestCase):
 
         self.assertIn("header_references", resp.context)
         self.assertFalse(resp.context["header_references"])
-        self.assertNotContains(resp, "LINKS")
+        self.assertNotContains(resp, "CONSTELLATION")
 
     def test_readme_pill_visible(self):
         resp = self.client.get(reverse("pages:readme"))
