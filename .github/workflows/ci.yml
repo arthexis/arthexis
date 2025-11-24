@@ -13,7 +13,7 @@ jobs:
       matrix: ${{ steps.plan.outputs.matrix }}
       database_changed: ${{ steps.plan.outputs.database_changed }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
       - uses: actions/setup-python@v6
@@ -53,7 +53,7 @@ jobs:
     if: needs.node-test-matrix.outputs.database_changed == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
         with:
           python-version: '3.x'
@@ -67,7 +67,7 @@ jobs:
   env-refresh:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Run env refresh
         run: |
           # Intentionally avoid --clean so migrations run against existing data
@@ -76,7 +76,7 @@ jobs:
   upgrade-script:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Check upgrade script syntax
         run: |
           bash -n upgrade.sh
