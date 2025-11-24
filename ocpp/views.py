@@ -14,7 +14,6 @@ from django.core.paginator import Paginator
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import redirect_to_login
 from django.utils.translation import gettext_lazy as _, gettext, ngettext
-from django.templatetags.static import static
 from django.utils.text import slugify
 from django.urls import NoReverseMatch, reverse
 from django.conf import settings
@@ -30,6 +29,7 @@ from django.db.models import (
     Value,
 )
 from django.db.models.functions import Coalesce
+from urllib.parse import urljoin
 
 from asgiref.sync import async_to_sync
 
@@ -1398,7 +1398,11 @@ def net_monitor_console(request):
     return render(
         request,
         "ocpp/net_monitor_console.html",
-        {"viewport_src": static("ocpp/net_monitor/index.html")},
+        {
+            "viewport_src": urljoin(
+                settings.STATIC_URL, "ocpp/net_monitor/index.html"
+            )
+        },
     )
 
 
