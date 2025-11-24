@@ -1,0 +1,57 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls %}
+
+{% block extrahead %}
+  {{ block.super }}
+  {{ media }}
+{% endblock %}
+
+{% block breadcrumbs %}
+  <div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a> ›
+    <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a> ›
+    <a href="{% url 'admin:ocpp_cpnetworkprofile_changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a> ›
+    {% trans 'Push network profile to EVCS' %}
+  </div>
+{% endblock %}
+
+{% block content %}
+  <form method="post" novalidate>
+    {% csrf_token %}
+    <input type="hidden" name="action" value="{{ action_name }}">
+    {% if select_across == "1" %}
+      <input type="hidden" name="select_across" value="{{ select_across }}">
+    {% endif %}
+    {% for profile_id in selected_ids %}
+      <input type="hidden" name="{{ action_checkbox_name }}" value="{{ profile_id }}">
+    {% endfor %}
+    {{ adminform.form.non_field_errors }}
+    <div class="module aligned">
+      {% for fieldset in adminform %}
+        {% include "admin/includes/fieldset.html" with heading_level=2 prefix="fieldset" id_prefix=0 id_suffix=forloop.counter0 %}
+      {% endfor %}
+    </div>
+    <div class="module">
+      <h2>
+        {% blocktrans count count=profile_list|length %}
+          Selected network profile ({{ count }})
+        {% plural %}
+          Selected network profiles ({{ count }})
+        {% endblocktrans %}
+      </h2>
+      {% if profile_list %}
+        <ul>
+          {% for profile in profile_list %}
+            <li>{{ profile }}</li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p>{% trans "No network profiles selected." %}</p>
+      {% endif %}
+    </div>
+    <div class="submit-row">
+      <a href="{% url 'admin:ocpp_cpnetworkprofile_changelist' %}" class="button cancel-link">{% trans 'Cancel' %}</a>
+      <button type="submit" name="apply" class="button default">{% trans 'Push network profile' %}</button>
+    </div>
+  </form>
+{% endblock %}
