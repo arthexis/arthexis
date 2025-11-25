@@ -2476,7 +2476,7 @@ class RoleLandingRedirectTests(TestCase):
         module, _ = Module.objects.get_or_create(
             node_role=role,
             application=self.ocpp_app,
-            defaults={"path": "/ocpp/", "menu": "Chargers"},
+            defaults={"path": "/ocpp/", "menu": "Charge Points"},
         )
         if module.path != "/ocpp/":
             module.path = "/ocpp/"
@@ -2710,7 +2710,7 @@ class NavPriorityOrderingTests(TestCase):
 
     def test_public_nav_orders_by_priority(self):
         self._add_module("pages", "/read/", "Cookbooks", 1, "Cookbooks")
-        self._add_module("ocpp", "/ocpp/", "Chargers", 2, "Chargers")
+        self._add_module("ocpp", "/ocpp/", "Charge Points", 2, "Charge Points")
         self._add_module("awg", "/awg/", "", 3, "Calculators")
         self._add_module(
             "constellation",
@@ -2725,7 +2725,7 @@ class NavPriorityOrderingTests(TestCase):
 
         self.assertEqual(
             nav_labels,
-            ["Cookbooks", "Chargers", "Calculators", "Constellation"],
+            ["Cookbooks", "Charge Points", "Calculators", "Constellation"],
         )
 
 
@@ -3405,7 +3405,7 @@ class ModuleAdminReloadActionTests(TestCase):
         chargers = Module.objects.get(node_role=self.role, path="/ocpp/")
         calculators = Module.objects.get(node_role=self.role, path="/awg/")
 
-        self.assertEqual(chargers.menu, "Chargers")
+        self.assertEqual(chargers.menu, "Charge Points")
         self.assertEqual(calculators.menu, "")
         self.assertFalse(getattr(chargers, "is_deleted", False))
         self.assertFalse(getattr(calculators, "is_deleted", False))
@@ -3417,6 +3417,7 @@ class ModuleAdminReloadActionTests(TestCase):
             charger_landings,
             {
                 "/ocpp/cpms/dashboard/",
+                "/ocpp/net-monitor/",
                 "/ocpp/evcs/simulator/",
                 "/ocpp/rfid/validator/",
             },
@@ -3429,7 +3430,7 @@ class ModuleAdminReloadActionTests(TestCase):
         )
         self.assertSetEqual(
             calculator_landings,
-            {"/awg/", "/awg/energy-tariff/"},
+            {"/awg/", "/awg/energy-tariff/", "/awg/future-event/"},
         )
 
     def test_reload_is_idempotent(self):
