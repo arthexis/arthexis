@@ -11,6 +11,7 @@ from io import StringIO
 from django import forms
 from django.contrib import admin, messages
 from django.core import management
+from django.core.exceptions import PermissionDenied
 from django.core.management import BaseCommand, CommandError
 from django.core.paginator import Paginator
 from django.db import connections
@@ -114,6 +115,9 @@ def run_management_command(raw_command: str, user) -> AdminCommandResult:
 
 
 def run_command_view(request: HttpRequest) -> HttpResponse:
+    if not request.user.is_superuser:
+        raise PermissionDenied
+
     form = RunCommandForm(request.POST or None)
     if request.method == "POST" and form.is_valid():
         result = run_management_command(form.cleaned_data["command"], request.user)

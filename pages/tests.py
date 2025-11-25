@@ -1307,6 +1307,36 @@ class AdminRunCommandTests(TransactionTestCase):
         self.assertEqual(page_obj.number, 2)
         self.assertEqual(len(page_obj.object_list), 2)
 
+    def test_run_command_requires_superuser(self):
+        User = get_user_model()
+        staff_user = User.objects.create_user(
+            username="staff", password="pwd", email="staff@example.com", is_staff=True
+        )
+
+        self.client.force_login(staff_user)
+
+        response = self.client.get(reverse("admin:run_command"))
+
+        self.assertEqual(response.status_code, 403)
+
+
+class AdminDashboardVisibilityTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        User = get_user_model()
+        self.staff_user = User.objects.create_user(
+            username="viewer", password="pwd", email="viewer@example.com", is_staff=True
+        )
+        Site.objects.update_or_create(id=1, defaults={"name": "test", "domain": "testserver"})
+
+    def test_run_command_button_hidden_for_non_superuser(self):
+        self.client.force_login(self.staff_user)
+
+        response = self.client.get(reverse("admin:index"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, "Run Command")
+
 
 class AdminModelRuleTemplateTagTests(TestCase):
     def test_model_rule_status_uses_context_cache(self):
