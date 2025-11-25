@@ -1467,6 +1467,8 @@ class ChargingProfileAdmin(EntityModelAdmin):
     def _validate_units(self, request, charger: Charger, schedule_unit: str | None) -> bool:
         if schedule_unit is None:
             return True
+        if schedule_unit == ChargingProfile.RateUnit.AMP:
+            return True
         charger_units = {Charger.EnergyUnit.W, Charger.EnergyUnit.KW}
         if charger.energy_unit in charger_units and schedule_unit != ChargingProfile.RateUnit.WATT:
             self.message_user(

@@ -67,9 +67,9 @@
       const rows = tableBody.querySelectorAll('.horologia-schedule-periods__row');
       rows.forEach((row, index) => {
         row.dataset.rowIndex = index;
-        row.querySelectorAll('input').forEach((input) => {
-          input.name = replacePrefix(input.name, index);
-          input.id = replacePrefix(input.id, index);
+        row.querySelectorAll('input, select, textarea').forEach((element) => {
+          element.name = replacePrefix(element.name, index);
+          element.id = replacePrefix(element.id, index);
         });
       });
       totalFormsInput.value = rows.length;

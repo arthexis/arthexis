@@ -9,7 +9,7 @@ from django import forms
 from django.core.exceptions import ValidationError
 from django.forms import BaseFormSet, formset_factory
 from django.forms.fields import FileField
-from django.forms.widgets import FILE_INPUT_CONTRADICTION, TextInput
+from django.forms.widgets import FILE_INPUT_CONTRADICTION, Select, TextInput
 from django.utils.translation import gettext_lazy as _
 
 from .widgets import AdminBase64FileWidget
@@ -89,11 +89,17 @@ class SchedulePeriodForm(forms.Form):
         label=_("Limit"),
         widget=TextInput(attrs={"size": 10}),
     )
-    number_phases = forms.IntegerField(
-        min_value=1,
+    number_phases = forms.TypedChoiceField(
         required=False,
         label=_("Number of phases"),
-        widget=TextInput(attrs={"size": 6}),
+        coerce=int,
+        empty_value=None,
+        choices=(
+            ("", _("Use charger default")),
+            (1, _("1-phase")),
+            (3, _("3-phase")),
+        ),
+        widget=Select(attrs={"class": "vTextField"}),
     )
     phase_to_use = forms.IntegerField(
         min_value=1,

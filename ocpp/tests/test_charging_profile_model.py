@@ -73,6 +73,29 @@ class ChargingProfileModelTests(TestCase):
         self.assertIn("startSchedule", schedule)
         self.assertEqual(schedule["minChargingRate"], 6.0)
 
+    def test_number_phases_must_match_ocpp_choices(self):
+        profile = ChargingProfile.objects.create(
+            charger=self.charger,
+            connector_id=1,
+            charging_profile_id=9,
+            stack_level=1,
+            purpose=ChargingProfile.Purpose.CHARGE_POINT_MAX_PROFILE,
+            kind=ChargingProfile.Kind.ABSOLUTE,
+        )
+
+        schedule = ChargingSchedule(
+            profile=profile,
+            charging_rate_unit=ChargingProfile.RateUnit.WATT,
+            charging_schedule_periods=[
+                {"startPeriod": 0, "limit": 3200, "numberPhases": 2}
+            ],
+        )
+
+        with self.assertRaises(ValidationError) as excinfo:
+            schedule.full_clean()
+
+        self.assertIn("number_phases must be 1 or 3", str(excinfo.exception))
+
     def test_recurrency_validation_requires_recurring_kind(self):
         profile = ChargingProfile(
             charger=self.charger,
