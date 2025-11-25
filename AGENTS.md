@@ -1,5 +1,5 @@
 # Agent Guidelines
-- Note: do not modify README files unless directed. Use Django's admindocs for app documentation.
+- Do not modify any README files (including translations) unless the task explicitly requests README changes. Use Django's admindocs for app documentation instead.
   - When a README change is requested, update the translated README files in `locale/` (for example `README.es.md`, `README.fr.md`, `README.ru.md`) to keep them in sync.
   - If a requested change would make any README content inaccurate or outdated, update the README and translations accordingly even if the user did not explicitly ask for README edits.
 - Avoid creating new files or directories at the repository root unless the user specifically requests them.
