@@ -81,3 +81,18 @@ jobs:
         run: |
           bash -n upgrade.sh
 
+  pypi-hydration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+      - name: Verify suite packages install from PyPI artifact
+        run: |
+          python -m venv .venv
+          source .venv/bin/activate
+          pip install --upgrade pip
+          pip install .
+          python scripts/test_pypi_hydration.py
+

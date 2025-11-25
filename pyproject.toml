@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "arthexis"
-version = "0.1.33+"
+version = "0.1.33+local"
 description = "Power & Energy Infrastructure"
 requires-python = ">=3.10"
 license = "GPL-3.0-only"
@@ -23,7 +23,19 @@ Repository = "https://github.com/arthexis/arthexis"
 Homepage = "https://arthexis.com"
 
 [tool.setuptools]
-packages = [ "core", "config", "nodes", "ocpp", "pages",]
+packages = [
+  "app",
+  "arthexis",
+  "awg",
+  "config",
+  "core",
+  "nodes",
+  "ocpp",
+  "pages",
+  "protocols",
+  "teams",
+  "utils",
+]
 include-package-data = true
 
 [tool.setuptools.package-data]
