@@ -343,7 +343,7 @@ def _configure_lock_dependent_tasks(config):
     if not lock.exists():
         return
 
-    from django.db import DEFAULT_DB_ALIAS, connections
+    from django.db import connections
 
     from .auto_upgrade import ensure_auto_upgrade_periodic_task
     from .reference_validation import ensure_reference_validation_task
@@ -420,13 +420,8 @@ def _configure_lock_dependent_tasks(config):
         weak=False,
     )
 
-    default_connection = connections[DEFAULT_DB_ALIAS]
-    if default_connection.connection is not None:
-        ensure_auto_upgrade_on_connection(connection=default_connection)
-
-
 def _connect_sqlite_wal():
-    from django.db import DEFAULT_DB_ALIAS, connections
+    from django.db import connections
     from django.db.backends.signals import connection_created
 
     def enable_sqlite_wal(**kwargs):
@@ -442,10 +437,6 @@ def _connect_sqlite_wal():
         dispatch_uid="core.enable_sqlite_wal",
         weak=False,
     )
-
-    default_connection = connections[DEFAULT_DB_ALIAS]
-    if default_connection.connection is not None:
-        enable_sqlite_wal(connection=default_connection)
 
 
 def _configure_github_issue_reporting():
