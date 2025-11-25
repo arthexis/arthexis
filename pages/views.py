@@ -1701,36 +1701,17 @@ def request_invite(request):
                     "link": link
                 }
                 try:
-                    node_error = None
                     node = Node.get_local()
-                    outbox = getattr(node, "email_outbox", None) if node else None
-                    if node:
-                        try:
-                            result = node.send_mail(subject, body, [email])
-                            lead.sent_via_outbox = outbox
-                        except Exception as exc:
-                            node_error = exc
-                            lead.sent_via_outbox = None
-                            logger.exception(
-                                "Node send_mail failed, falling back to default backend"
-                            )
-                            result = mailer.send(
-                                subject, body, [email], settings.DEFAULT_FROM_EMAIL
-                            )
-                    else:
-                        result = mailer.send(
-                            subject, body, [email], settings.DEFAULT_FROM_EMAIL
-                        )
-                        lead.sent_via_outbox = None
+                    result = mailer.send(
+                        subject,
+                        body,
+                        [email],
+                        user=request.user if request.user.is_authenticated else None,
+                        node=node,
+                    )
+                    lead.sent_via_outbox = getattr(result, "outbox", None)
                     lead.sent_on = timezone.now()
-                    if node_error:
-                        lead.error = (
-                            f"Node email send failed: {node_error}. "
-                            "Invite was sent using default mail backend; ensure the "
-                            "node's email service is running or check its configuration."
-                        )
-                    else:
-                        lead.error = ""
+                    lead.error = ""
                     logger.info(
                         "Invitation email sent to %s (user %s): %s", email, user.pk, result
                     )

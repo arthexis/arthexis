@@ -1668,6 +1668,7 @@ class Node(Entity):
             recipient_list,
             from_email,
             outbox=outbox,
+            node=self,
             **kwargs,
         )
 

@@ -140,6 +140,40 @@ def evaluate_node_rules() -> dict[str, object]:
     return rule_success()
 
 
+def evaluate_email_profile_rules() -> dict[str, object]:
+    try:
+        from teams.models import EmailInbox, EmailOutbox
+    except Exception:
+        logger.exception("Unable to import email profile models")
+        return rule_failure(_("Unable to evaluate email configuration."))
+
+    try:
+        inboxes = list(EmailInbox.objects.filter(is_enabled=True))
+        outboxes = list(EmailOutbox.objects.filter(is_enabled=True))
+    except Exception:
+        logger.exception("Unable to query email profiles")
+        return rule_failure(_("Unable to evaluate email configuration."))
+
+    ready_inboxes = [inbox for inbox in inboxes if inbox.is_ready()]
+    ready_outboxes = [outbox for outbox in outboxes if outbox.is_ready()]
+
+    issues: list[str] = []
+    if not inboxes:
+        issues.append(_("At least one Email Inbox must be configured."))
+    elif not ready_inboxes:
+        issues.append(_("Configured Email Inboxes could not complete validation."))
+
+    if not outboxes:
+        issues.append(_("At least one Email Outbox must be configured."))
+    elif not ready_outboxes:
+        issues.append(_("Configured Email Outboxes could not complete validation."))
+
+    if issues:
+        return rule_failure(" ".join(issues))
+
+    return rule_success(_("Email inbox and outbox are validated for this node."))
+
+
 def load_callable(handler_name: str) -> Callable[[], dict[str, object]] | None:
     if not handler_name:
         return None
