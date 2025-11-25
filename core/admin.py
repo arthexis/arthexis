@@ -2697,7 +2697,7 @@ class LocationAdmin(EntityModelAdmin):
 @admin.register(EnergyTariff)
 class EnergyTariffAdmin(EntityModelAdmin):
     list_display = (
-        "contract_type",
+        "contract_type_short",
         "zone",
         "period",
         "unit",
@@ -2714,6 +2714,11 @@ class EnergyTariffAdmin(EntityModelAdmin):
 
     def get_model_perms(self, request):
         return {}
+
+    @admin.display(description=_("Contract type"), ordering="contract_type")
+    def contract_type_short(self, obj):
+        match = re.search(r"\(([^)]+)\)", obj.get_contract_type_display())
+        return match.group(1) if match else obj.get_contract_type_display()
 
 
 class ProductAdminForm(forms.ModelForm):
