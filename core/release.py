@@ -499,6 +499,12 @@ def run_tests(
 
 
 def _write_pyproject(package: Package, version: str, requirements: list[str]) -> None:
+    setuptools_config = {
+        "packages": list(package.packages),
+        "include-package-data": True,
+        "package-data": {pkg: ["**/*"] for pkg in package.packages},
+    }
+
     content = {
         "build-system": {
             "requires": ["setuptools", "wheel"],
@@ -522,9 +528,7 @@ def _write_pyproject(package: Package, version: str, requirements: list[str]) ->
                 "Homepage": package.homepage_url,
             },
         },
-        "tool": {
-            "setuptools": {"packages": list(package.packages)}
-        },
+        "tool": {"setuptools": setuptools_config},
     }
 
     def _dump_toml(data: dict) -> str:
