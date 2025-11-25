@@ -5,10 +5,11 @@ from datetime import datetime, time, timedelta, timezone as dt_timezone
 from functools import lru_cache
 from types import SimpleNamespace
 
+from django.contrib import messages
 from django.http import Http404, HttpResponse, JsonResponse
 from django.http.request import split_domain_port
 from django.views.decorators.csrf import csrf_exempt
-from django.shortcuts import get_object_or_404, render, resolve_url
+from django.shortcuts import get_object_or_404, redirect, render, resolve_url
 from django.template.loader import render_to_string
 from django.core.paginator import Paginator
 from django.contrib.auth.decorators import login_required
@@ -43,6 +44,7 @@ from core.liveupdate import live_update
 from django.utils.dateparse import parse_datetime
 
 from . import store
+from .forms import MaintenanceRequestForm
 from .status_resets import clear_stale_cached_statuses
 from .models import (
     Transaction,
@@ -1414,6 +1416,29 @@ def net_monitor_console(request):
             )
         },
     )
+
+
+@login_required(login_url="pages:login")
+@landing("Maintenance Request")
+def maintenance_request(request):
+    """Allow authenticated users to schedule manual maintenance tasks."""
+
+    form = MaintenanceRequestForm(request.POST or None)
+
+    if request.method == "POST" and form.is_valid():
+        task = form.save(commit=False)
+        task.assigned_user = request.user if request.user.is_authenticated else None
+        task.node = task.node or Node.get_local()
+        task.is_user_data = True
+        task.save()
+        messages.success(
+            request,
+            _("Maintenance request scheduled for %(location)s.")
+            % {"location": task.location or _("the selected location")},
+        )
+        return redirect("maintenance-request")
+
+    return render(request, "ocpp/maintenance_request.html", {"form": form})
 
 
 @login_required(login_url="pages:login")
