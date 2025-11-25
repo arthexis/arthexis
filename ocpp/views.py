@@ -1436,7 +1436,7 @@ def maintenance_request(request):
             _("Maintenance request scheduled for %(location)s.")
             % {"location": task.location or _("the selected location")},
         )
-        return redirect("ocpp:maintenance-request")
+        return redirect("maintenance-request")
 
     return render(request, "ocpp/maintenance_request.html", {"form": form})
 
