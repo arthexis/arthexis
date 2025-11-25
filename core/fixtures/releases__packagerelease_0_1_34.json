@@ -2,7 +2,7 @@
   {
     "model": "core.packagerelease",
     "fields": {
-      "is_seed_data": true,
+      "is_seed_data": false,
       "is_user_data": false,
       "is_deleted": false,
       "package": [
@@ -12,12 +12,12 @@
         "arthexis",
         "arthexis"
       ],
-      "version": "0.1.11",
-      "revision": "2656230b904c3f114d81aee09e12065c4a0c097f",
+      "version": "0.1.34",
+      "revision": "14250e1cfa08ca11ad7a423b7ae5688a8f7b6da0",
       "severity": "normal",
-      "pypi_url": "https://pypi.org/project/arthexis/0.1.11/",
+      "pypi_url": "",
       "github_url": "",
-      "release_on": "2025-09-26T15:15:16.387Z",
+      "release_on": null,
       "scheduled_date": null,
       "scheduled_time": null
     }

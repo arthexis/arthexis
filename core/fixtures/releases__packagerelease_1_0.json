@@ -14,7 +14,9 @@
       "severity": "normal",
       "pypi_url": "",
       "github_url": "",
-      "release_on": null
+      "release_on": null,
+      "scheduled_date": null,
+      "scheduled_time": null
     }
   }
 ]

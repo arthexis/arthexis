@@ -17,7 +17,9 @@
       "severity": "normal",
       "pypi_url": "https://pypi.org/project/arthexis/0.1.13/",
       "github_url": "",
-      "release_on": "2025-10-01T04:19:41.383Z"
+      "release_on": "2025-10-01T04:19:41.383Z",
+      "scheduled_date": null,
+      "scheduled_time": null
     }
   }
 ]
