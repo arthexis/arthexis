@@ -15,7 +15,7 @@ from core import mailer
 from nodes.models import Node
 
 from . import store
-from .forwarding_service import sync_forwarded_charge_points
+from .forwarder import forwarder
 from .models import (
     Charger,
     MeterValue,
@@ -520,7 +520,7 @@ purge_meter_readings = purge_meter_values
 def push_forwarded_charge_points() -> int:
     """Ensure websocket connections exist for forwarded charge points."""
 
-    connected = sync_forwarded_charge_points()
+    connected = forwarder.sync_forwarded_charge_points()
     if not connected:
         logger.debug("Forwarding synchronization completed with no new sessions")
     return connected

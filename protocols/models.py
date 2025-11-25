@@ -13,10 +13,7 @@ from django.utils.translation import gettext_lazy as _
 
 from core.entity import Entity, EntityManager
 from nodes.models import Node
-from ocpp.forwarding_service import (
-    is_target_active,
-    sync_forwarded_charge_points,
-)
+from ocpp.forwarder import forwarder
 
 from .forwarding import (
     attempt_forwarding_probe,
@@ -287,7 +284,7 @@ class CPForwarder(Entity):
             self.enabled = False
         self.sync_chargers()
         super().delete(*args, **kwargs)
-        sync_forwarded_charge_points()
+        forwarder.sync_forwarded_charge_points()
 
     def sync_chargers(self, *, apply_sessions: bool = True) -> None:
         """Apply the forwarder configuration to eligible charge points."""
@@ -311,7 +308,7 @@ class CPForwarder(Entity):
                 is_running=False,
             )
             if apply_sessions:
-                sync_forwarded_charge_points(refresh_forwarders=False)
+                forwarder.sync_forwarded_charge_points(refresh_forwarders=False)
             return
 
         if not self.enabled:
@@ -335,7 +332,7 @@ class CPForwarder(Entity):
                 updates["is_running"] = False
             self._update_fields(**updates)
             if apply_sessions:
-                sync_forwarded_charge_points(refresh_forwarders=False)
+                forwarder.sync_forwarded_charge_points(refresh_forwarders=False)
             return
 
         conflicts = eligible.exclude(
@@ -405,8 +402,8 @@ class CPForwarder(Entity):
             error_message = credential_error
 
         if apply_sessions:
-            sync_forwarded_charge_points(refresh_forwarders=False)
-            session_active = is_target_active(self.target_node_id)
+            forwarder.sync_forwarded_charge_points(refresh_forwarders=False)
+            session_active = forwarder.is_target_active(self.target_node_id)
             targeted_exists = eligible.filter(forwarded_to=self.target_node).exists()
             if session_active:
                 status_parts.append(_("Forwarding websocket is connected."))
