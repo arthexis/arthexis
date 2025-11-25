@@ -27,8 +27,8 @@ packages = [ "core", "config", "nodes", "ocpp", "pages",]
 include-package-data = true
 
 [tool.setuptools.package-data]
-core = ["**/*"]
-config = ["**/*"]
-nodes = ["**/*"]
-ocpp = ["**/*"]
-pages = ["**/*"]
+core = [ "**/*",]
+config = [ "**/*",]
+nodes = [ "**/*",]
+ocpp = [ "**/*",]
+pages = [ "**/*",]
