@@ -112,24 +112,26 @@
       {% translate 'Copy to clipboard' as copy_label %}
       {% with encoded_log=selected_log|urlencode %}
         {% with download_url="?log="|add:encoded_log|add:"&limit="|add:log_limit_choice|add:"&download=1" %}
-          {% include "includes/log_viewer.html" with
-          viewer_prefix="system-log"
-          viewer_wrapper_class=""
-          viewer_heading=viewer_heading
-          log_filename=selected_log
-          log_download_url=download_url
-          log_limit_options=log_limit_options
-          log_limit_index=log_limit_index
-          log_limit_label=log_limit_label
-          log_content=log_content
-          copy_label=copy_label
-          copy_success=copy_success
-          copy_error=copy_error
-          copy_status_class="log-viewer-status"
-          content_class="log-viewer-content"
-          limit_slider_class="log-viewer-limit"
-          limit_slider_log=selected_log
+          {% with
+            viewer_prefix="system-log"
+            viewer_wrapper_class=""
+            viewer_heading=viewer_heading
+            log_filename=selected_log
+            log_download_url=download_url
+            log_limit_options=log_limit_options
+            log_limit_index=log_limit_index
+            log_limit_label=log_limit_label
+            log_content=log_content
+            copy_label=copy_label
+            copy_success=copy_success
+            copy_error=copy_error
+            copy_status_class="log-viewer-status"
+            content_class="log-viewer-content"
+            limit_slider_class="log-viewer-limit"
+            limit_slider_log=selected_log
           %}
+            {% include "includes/log_viewer.html" %}
+          {% endwith %}
         {% endwith %}
       {% endwith %}
     {% endif %}
