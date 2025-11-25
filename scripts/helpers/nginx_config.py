@@ -56,10 +56,12 @@ def proxy_block(port: int, *, trailing_slash: bool = True) -> str:
     return textwrap.dedent(
         f"""
         location / {{
+            set $simulator_redirect "";
             if ($server_port = 8900) {{
-                if ($uri = "/") {{
-                    return 302 /ocpp/evcs/simulator/;
-                }}
+                set $simulator_redirect $uri;
+            }}
+            if ($simulator_redirect = "/") {{
+                return 302 /ocpp/evcs/simulator/;
             }}
             proxy_pass {upstream};
             proxy_intercept_errors on;
