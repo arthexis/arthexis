@@ -1483,8 +1483,16 @@ class ChargingSchedule(models.Model):
             try:
                 if number_phases not in {None, ""}:
                     phases_int = int(number_phases)
-                    if phases_int > 0:
+                    if phases_int in {1, 3}:
                         entry["number_phases"] = phases_int
+                    else:
+                        errors.append(
+                            _(
+                                "Period %(index)s number_phases must be 1 or 3."
+                                % {"index": index}
+                            )
+                        )
+                        continue
             except (TypeError, ValueError):
                 errors.append(
                     _(
