@@ -967,6 +967,10 @@ if [[ $NO_RESTART -eq 0 ]]; then
   fi
 fi
 
+if [ -n "$SERVICE_NAME" ]; then
+  ensure_watchdog_running "$SERVICE_NAME"
+fi
+
 if arthexis_lcd_feature_enabled "$LOCK_DIR"; then
   if ! queue_startup_net_message; then
     echo "Failed to queue startup Net Message" >&2
