@@ -1,5 +1,5 @@
 {% extends "admin/base_site.html" %}
-{% load i18n admin_urls static admin_modify admin_extras %}
+{% load i18n admin_urls static admin_modify admin_extras favorites %}
 
 {% block title %}{% if errors %}{% translate "Error:" %} {% endif %}{{ block.super }}{% endblock %}
 
@@ -23,6 +23,27 @@
 {% block coltype %}colM{% endblock %}
 
 {% block bodyclass %}{{ block.super }} app-{{ opts.app_label }} model-{{ opts.model_name }} change-form{% endblock %}
+
+{% block content_title %}
+  {% favorite_ct_id opts.app_label opts.model_name as ct_id %}
+  {% favorite_map as favorites_map %}
+  {% favorite_from_map favorites_map ct_id as fav %}
+  <div class="content-title-with-favorite">
+    <h1>{{ title }}</h1>
+    {% if ct_id %}
+      <form method="post" action="{% url 'admin:favorite_toggle' ct_id %}" class="favorite-toggle-form">
+        {% csrf_token %}
+        <input type="hidden" name="next" value="{{ request.get_full_path|urlencode }}">
+        {% if fav %}
+          <input type="hidden" name="remove" value="1">
+        {% else %}
+          <input type="hidden" name="user_data" value="on">
+        {% endif %}
+        <button type="submit" class="favorite-star{% if fav %} favorited{% endif %}" title="{% translate 'Toggle favorite' %}" aria-label="{% translate 'Toggle favorite' %}">&#9733;</button>
+      </form>
+    {% endif %}
+  </div>
+{% endblock %}
 
 {% if not is_popup %}
 {% block breadcrumbs %}
