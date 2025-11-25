@@ -93,6 +93,7 @@ class EmailInbox(CoreProfile):
         "password",
         "protocol",
         "use_ssl",
+        "priority",
     )
     username = SigilShortAutoField(
         max_length=255,
@@ -123,11 +124,16 @@ class EmailInbox(CoreProfile):
         ),
     )
     use_ssl = models.BooleanField(default=True)
+    priority = models.IntegerField(
+        default=0,
+        help_text="Higher values are selected first when multiple inboxes are available.",
+    )
 
     class Meta:
         verbose_name = "Email Inbox"
         verbose_name_plural = "Email Inboxes"
         db_table = "core_emailinbox"
+        ordering = ["-priority", "id"]
 
     def test_connection(self):
         """Attempt to connect to the configured mailbox."""
@@ -156,6 +162,16 @@ class EmailInbox(CoreProfile):
             return True
         except Exception as exc:
             raise ValidationError(str(exc))
+
+    def is_ready(self) -> bool:
+        try:
+            self.test_connection()
+            return True
+        except Exception:
+            logger.warning(
+                "EmailInbox %s failed readiness check", self.pk, exc_info=True
+            )
+            return False
 
     def search_messages(
         self,
@@ -379,7 +395,7 @@ class EmailInbox(CoreProfile):
         conn.quit()
         return messages
 
-    def __str__(self) -> str:
+def __str__(self) -> str:
         username = (self.username or "").strip()
         host = (self.host or "").strip()
 
@@ -509,6 +525,7 @@ class EmailOutbox(CoreProfile):
         "use_tls",
         "use_ssl",
         "from_email",
+        "priority",
     )
 
     node = models.OneToOneField(
@@ -554,11 +571,16 @@ class EmailOutbox(CoreProfile):
         default=True,
         help_text="Disable to remove this outbox from automatic selection.",
     )
+    priority = models.IntegerField(
+        default=0,
+        help_text="Higher values are selected first when multiple outboxes are available.",
+    )
 
     class Meta:
         verbose_name = "Email Outbox"
         verbose_name_plural = "Email Outboxes"
         db_table = "nodes_emailoutbox"
+        ordering = ["-priority", "id"]
 
     def __str__(self) -> str:
         address = (self.from_email or "").strip()
@@ -593,8 +615,11 @@ class EmailOutbox(CoreProfile):
             super(CoreProfile, self).clean()
 
     def get_connection(self):
+        backend_path = getattr(
+            settings, "EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend"
+        )
         return get_connection(
-            "django.core.mail.backends.smtp.EmailBackend",
+            backend_path,
             host=self.host,
             port=self.port,
             username=self.username or None,
@@ -620,6 +645,94 @@ class EmailOutbox(CoreProfile):
         if owner:
             return owner
         return str(self.node) if self.node_id else ""
+
+    def is_ready(self) -> bool:
+        try:
+            connection = self.get_connection()
+            connection.open()
+            connection.close()
+            return True
+        except Exception:
+            logger.warning(
+                "EmailOutbox %s failed readiness check", self.pk, exc_info=True
+            )
+            return False
+
+
+def ensure_admin_email_mailboxes():
+    """Create default inbox/outbox entries from Django email settings."""
+
+    from django.contrib.auth import get_user_model
+    from django.db import DatabaseError
+
+    admin_email = (getattr(settings, "DEFAULT_FROM_EMAIL", "") or "").strip()
+    if not admin_email:
+        return None, None
+
+    try:
+        UserModel = get_user_model()
+        owner = (
+            UserModel.objects.filter(is_superuser=True)
+            .order_by("pk")
+            .first()
+        )
+    except Exception:  # pragma: no cover - database not ready
+        owner = None
+
+    try:  # pragma: no cover - optional dependency during setup
+        from nodes.models import Node
+
+        local_node = Node.get_local()
+    except Exception:
+        local_node = None
+
+    outbox_defaults = {
+        "host": getattr(settings, "EMAIL_HOST", ""),
+        "port": getattr(settings, "EMAIL_PORT", 587),
+        "username": getattr(settings, "EMAIL_HOST_USER", admin_email),
+        "password": getattr(settings, "EMAIL_HOST_PASSWORD", ""),
+        "use_tls": getattr(settings, "EMAIL_USE_TLS", False),
+        "use_ssl": getattr(settings, "EMAIL_USE_SSL", False),
+        "from_email": admin_email,
+        "is_enabled": True,
+        "priority": 100,
+    }
+
+    outbox_filters = {"from_email": admin_email}
+    if local_node:
+        outbox_filters = {"node": local_node}
+    elif owner:
+        outbox_filters = {"user": owner}
+
+    inbox_defaults = {
+        "host": getattr(settings, "EMAIL_HOST", ""),
+        "port": 993,
+        "username": admin_email,
+        "password": getattr(settings, "EMAIL_HOST_PASSWORD", ""),
+        "protocol": EmailInbox.IMAP,
+        "use_ssl": True,
+        "priority": 100,
+    }
+
+    try:
+        outbox, _ = EmailOutbox.objects.update_or_create(
+            defaults=outbox_defaults, **outbox_filters
+        )
+    except DatabaseError:  # pragma: no cover - tables may not exist yet
+        outbox = None
+
+    inbox = None
+    if owner:
+        try:
+            inbox, _ = EmailInbox.objects.update_or_create(
+                defaults=inbox_defaults,
+                user=owner,
+                username=admin_email,
+            )
+        except DatabaseError:  # pragma: no cover - tables may not exist yet
+            inbox = None
+
+    return inbox, outbox
 
 
 class OdooProfile(CoreOdooProfile):

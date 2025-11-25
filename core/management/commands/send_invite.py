@@ -6,7 +6,6 @@ from django.urls import reverse
 from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 from django.utils import timezone
-from django.conf import settings
 
 from nodes.models import Node
 from core.models import InviteLead
@@ -28,7 +27,6 @@ class Command(BaseCommand):
             raise CommandError(f"No user found with email {email}")
 
         node = Node.get_local()
-        outbox = getattr(node, "email_outbox", None) if node else None
         used_outbox = None
 
         for user in users:
@@ -43,12 +41,8 @@ class Command(BaseCommand):
             subject = "Your invitation link"
             body = f"Use the following link to access your account: {link}"
             try:
-                if node:
-                    node.send_mail(subject, body, [email])
-                    if outbox:
-                        used_outbox = outbox
-                else:
-                    mailer.send(subject, body, [email], settings.DEFAULT_FROM_EMAIL)
+                result = mailer.send(subject, body, [email], node=node)
+                used_outbox = getattr(result, "outbox", used_outbox)
             except Exception as exc:  # pragma: no cover - log failures
                 self.stderr.write(self.style.WARNING(f"Email send failed: {exc}"))
 

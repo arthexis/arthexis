@@ -39,6 +39,8 @@ _DEFAULT_RULE_HANDLERS = {
     "ocpp.chargerconfiguration": "evaluate_cp_configuration_rules",
     "ocpp.cpfirmware": "evaluate_cp_firmware_rules",
     "nodes.node": "evaluate_node_rules",
+    "teams.emailinbox": "evaluate_email_profile_rules",
+    "teams.emailoutbox": "evaluate_email_profile_rules",
 }
 
 logger = logging.getLogger(__name__)
