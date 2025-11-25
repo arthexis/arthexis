@@ -1,0 +1,12 @@
+[
+  {
+    "model": "teams.taskcategory",
+    "fields": {
+      "name": "Charge Point Maintenance",
+      "description": "Routine upkeep and inspection tasks for charge points.",
+      "default_duration": "02:00:00",
+      "availability": "immediate",
+      "is_seed_data": true
+    }
+  }
+]
