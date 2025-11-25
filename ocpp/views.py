@@ -15,6 +15,7 @@ from django.core.paginator import Paginator
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import redirect_to_login
 from django.utils.translation import gettext_lazy as _, gettext, ngettext
+from django.utils.encoding import force_str
 from django.utils.text import slugify
 from django.urls import NoReverseMatch, reverse
 from django.conf import settings
@@ -1349,7 +1350,10 @@ def dashboard(request):
             and not has_session
             and (charger.last_status or "").strip().casefold() == "charging"
         ):
-            state, color = STATUS_BADGE_MAP["charging"]
+            state_label = force_str(state or "").casefold()
+            available_label = force_str(STATUS_BADGE_MAP["available"][0]).casefold()
+            if state_label != available_label:
+                state, color = STATUS_BADGE_MAP["charging"]
         entry = {
             "charger": charger,
             "state": state,
@@ -1375,12 +1379,13 @@ def dashboard(request):
         parent_entry = group.get("parent")
         if not parent_entry or not group["children"]:
             continue
-        connector_statuses = [
-            (child["charger"].last_status or "").strip().casefold()
+        connector_states = [
+            force_str(child.get("state", "")).strip().casefold()
             for child in group["children"]
             if child["charger"].connector_id is not None
         ]
-        if connector_statuses and all(status == "charging" for status in connector_statuses):
+        charging_state = force_str(STATUS_BADGE_MAP["charging"][0]).casefold()
+        if connector_states and all(state == charging_state for state in connector_states):
             label, badge_color = STATUS_BADGE_MAP["charging"]
             parent_entry["state"] = label
             parent_entry["color"] = badge_color
