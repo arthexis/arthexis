@@ -51,8 +51,10 @@ def test_generate_config_can_include_ipv6():
 
 def test_8900_listener_redirects_pathless_requests_to_simulator():
     config = generate_config("internal", 8888)
+    assert "set $simulator_redirect \"\";" in config
     assert "if ($server_port = 8900)" in config
-    assert "if ($uri = \"/\")" in config
+    assert "set $simulator_redirect $uri;" in config
+    assert "if ($simulator_redirect = \"/\")" in config
     assert "return 302 /ocpp/evcs/simulator/;" in config
 
 
