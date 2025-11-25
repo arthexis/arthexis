@@ -5,17 +5,7 @@ This cookbook captures the backlog of Open Charge Point Protocol (OCPP) features
 ## Recent updates
 
 - Added full OCPP 1.6 CSMS handling and dispatch support for `GetDiagnostics`, `RemoteStartTransaction`, `RemoteStopTransaction`, and `SetChargingProfile`, including call-result/error logging, charger diagnostics timestamp updates, and a refreshed 92.9% coverage badge.
-- The remaining 1.6 work now concentrates on profile management and scheduling gaps.
-
-## OCPP 1.6 backlog
-
-### ClearChargingProfile
-- Allow back-office operators to immediately remove demand-response or load-balancing profiles from a connector when local conditions change (for example, prioritising an emergency vehicle).
-- Provide audit logs that record which operator or automation cleared the profile, the affected transaction, and the timestamp for compliance reviews.
-
-### GetCompositeSchedule
-- Generate predictive energy schedules that combine transaction plans with the site's contracted capacity, allowing the operator to visualise anticipated demand on a per-connector basis.
-- Offer CSV exports that can be imported into utility dashboards so energy teams can perform deeper scenario modelling before approving site expansions.
+- Cleared the remaining OCPP 1.6 backlog by implementing `ClearChargingProfile` with operator/audit tracking and `GetCompositeSchedule` with exportable composite schedules, shifting roadmap attention to 2.x readiness.
 
 ## OCPP 2.0.1 checkpoint
 
