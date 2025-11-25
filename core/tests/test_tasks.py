@@ -840,7 +840,7 @@ def test_broadcast_upgrade_start_message_formats_payload(monkeypatch):
 
     tasks._broadcast_upgrade_start_message("@ 20240102 03:04")
 
-    assert broadcasts == [("Upgrading... @ 20240102 03:04", "alpha")]
+    assert broadcasts == [("Upgrade @ 03:04", "alpha")]
 
 
 def test_check_github_updates_broadcasts_upgrade_start(monkeypatch, tmp_path):
