@@ -1064,7 +1064,7 @@ def _ensure_origin_main_unchanged(log_path: Path) -> None:
 def _next_patch_version(version: str) -> str:
     from packaging.version import InvalidVersion, Version
 
-    cleaned = version.rstrip("+")
+    cleaned = PackageRelease.strip_dev_suffix(version)
     try:
         parsed = Version(cleaned)
     except InvalidVersion:
@@ -1089,8 +1089,8 @@ class DirtyRepository(Exception):
 def _major_minor_version_changed(previous: str, current: str) -> bool:
     """Return ``True`` when the version bump changes major or minor."""
 
-    previous_clean = (previous or "").strip().rstrip("+")
-    current_clean = (current or "").strip().rstrip("+")
+    previous_clean = PackageRelease.strip_dev_suffix((previous or "").strip())
+    current_clean = PackageRelease.strip_dev_suffix((current or "").strip())
     if not previous_clean or not current_clean:
         return False
 
@@ -1231,7 +1231,7 @@ def _step_check_version(release, ctx, log_path: Path, *, user=None) -> None:
     if version_path.exists():
         current = version_path.read_text(encoding="utf-8").strip()
         if current:
-            current_clean = current.rstrip("+") or "0.0.0"
+            current_clean = PackageRelease.strip_dev_suffix(current) or "0.0.0"
             if Version(release.version) < Version(current_clean):
                 raise Exception(
                     f"Version {release.version} is older than existing {current}"

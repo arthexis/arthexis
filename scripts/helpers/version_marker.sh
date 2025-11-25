@@ -7,10 +7,11 @@
 #
 # The function compares the current HEAD revision to the tagged revision for the
 # VERSION's release (without the development marker). When the HEAD revision
-# differs from the release tag, a trailing plus sign is appended to the VERSION
-# file to indicate development changes. When the HEAD revision matches the tag,
-# any trailing plus sign is removed so that packaged releases retain their
-# original version number.
+# differs from the release tag, a ``+d`` suffix is appended to the VERSION file
+# to indicate development changes. When the HEAD revision matches the tag, any
+# trailing development marker is removed so that packaged releases retain their
+# original version number. Legacy versions ending with ``+`` are handled for
+# backward compatibility.
 arthexis_update_version_marker() {
   local repo_root="$1"
   local version_file
@@ -26,14 +27,17 @@ arthexis_update_version_marker() {
     return 0
   fi
 
-  local has_plus=0
-  if [[ "$raw_version" == *"+" ]]; then
-    has_plus=1
-  fi
+  local dev_suffix="+d"
+  local legacy_suffix="+"
+  local has_dev_marker=0
 
   local base_version="$raw_version"
-  if (( has_plus )); then
-    base_version="${raw_version%+}"
+  if [[ "$raw_version" == *"$dev_suffix" ]]; then
+    has_dev_marker=1
+    base_version="${raw_version%$dev_suffix}"
+  elif [[ "$raw_version" == *"$legacy_suffix" ]]; then
+    has_dev_marker=1
+    base_version="${raw_version%$legacy_suffix}"
   fi
   if [ -z "$base_version" ]; then
     return 0
@@ -53,10 +57,10 @@ arthexis_update_version_marker() {
   fi
 
   if [ -n "$tag_rev" ] && [ "$head_rev" != "$tag_rev" ]; then
-    if (( ! has_plus )); then
-      printf '%s+\n' "$base_version" > "$version_file"
+    if (( ! has_dev_marker )); then
+      printf '%s%s\n' "$base_version" "$dev_suffix" > "$version_file"
     fi
-  elif (( has_plus )); then
+  elif (( has_dev_marker )); then
     printf '%s\n' "$base_version" > "$version_file"
   else
     # Ensure the file always ends with a newline.
