@@ -17,9 +17,9 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
 from nodes.models import Node, NodeRole
-from ocpp import forwarding_service
 from ocpp.consumers import CSMSConsumer
 from ocpp import store
+from ocpp.forwarder import ForwardingSession, forwarder
 from ocpp.models import Charger, Transaction
 from protocols.models import CPForwarder
 from ocpp.tasks import push_forwarded_charge_points
@@ -45,12 +45,12 @@ class ForwardingTaskTests(TestCase):
             role=self.role,
             public_endpoint="remote",
         )
-        forwarding_service.clear_sessions()
-        self.addCleanup(forwarding_service.clear_sessions)
+        forwarder.clear_sessions()
+        self.addCleanup(forwarder.clear_sessions)
 
     @patch("protocols.models.send_forwarding_metadata", return_value=(True, None))
     @patch("protocols.models.load_local_node_credentials")
-    @patch("ocpp.forwarding_service.create_connection")
+    @patch("ocpp.forwarder.create_connection")
     def test_push_forwarded_charge_points_establishes_websocket(
         self, mock_create, mock_credentials, _mock_metadata
     ):
@@ -76,7 +76,7 @@ class ForwardingTaskTests(TestCase):
 
         self.assertEqual(connected, 1)
         mock_create.assert_called_once()
-        session = forwarding_service.get_session(charger.pk)
+        session = forwarder.get_session(charger.pk)
         self.assertIsNotNone(session)
         self.assertEqual(session.forwarder_id, forwarder.pk)
         self.assertEqual(
@@ -90,7 +90,7 @@ class ForwardingTaskTests(TestCase):
         self.assertTrue(forwarder.is_running)
         self.assertEqual(forwarder.last_forwarded_at, updated.forwarding_watermark)
 
-    @patch("ocpp.forwarding_service.create_connection")
+    @patch("ocpp.forwarder.create_connection")
     def test_push_forwarded_charge_points_skips_active_session(self, mock_create):
         charger = Charger.objects.create(
             charger_id="CP-2002",
@@ -135,7 +135,7 @@ class ForwardingTaskTests(TestCase):
 
     @patch("protocols.models.send_forwarding_metadata", return_value=(True, None))
     @patch("protocols.models.load_local_node_credentials")
-    @patch("ocpp.forwarding_service.create_connection")
+    @patch("ocpp.forwarder.create_connection")
     def test_sync_updates_existing_session_messages(
         self, mock_create, mock_credentials, _mock_metadata
     ):
@@ -159,7 +159,7 @@ class ForwardingTaskTests(TestCase):
         ):
             push_forwarded_charge_points()
 
-        session = forwarding_service.get_session(charger.pk)
+        session = forwarder.get_session(charger.pk)
         self.assertEqual(
             session.forwarded_messages,
             tuple(forwarder.get_forwarded_messages()),
@@ -175,11 +175,11 @@ class ForwardingTaskTests(TestCase):
         ):
             push_forwarded_charge_points()
 
-        session = forwarding_service.get_session(charger.pk)
+        session = forwarder.get_session(charger.pk)
         self.assertEqual(session.forwarder_id, forwarder.pk)
         self.assertEqual(session.forwarded_messages, ("Authorize",))
 
-    @patch("ocpp.forwarding_service.create_connection", side_effect=WebSocketException("boom"))
+    @patch("ocpp.forwarder.create_connection", side_effect=WebSocketException("boom"))
     def test_push_forwarded_charge_points_reports_failures(self, mock_create):
         charger = Charger.objects.create(
             charger_id="CP-FAIL",
@@ -198,11 +198,11 @@ class ForwardingTaskTests(TestCase):
             result = push_forwarded_charge_points()
 
         self.assertEqual(result, 0)
-        self.assertIsNone(forwarding_service.get_session(charger.pk))
+        self.assertIsNone(forwarder.get_session(charger.pk))
 
     @patch("protocols.models.send_forwarding_metadata", return_value=(True, None))
     @patch("protocols.models.load_local_node_credentials")
-    @patch("ocpp.forwarding_service.create_connection")
+    @patch("ocpp.forwarder.create_connection")
     def test_forwarder_sync_opens_session_without_celery(
         self, mock_create, mock_credentials, _mock_metadata
     ):
@@ -226,7 +226,7 @@ class ForwardingTaskTests(TestCase):
         ):
             forwarder.sync_chargers()
 
-        session = forwarding_service.get_session(charger.pk)
+        session = forwarder.get_session(charger.pk)
         self.assertIsNotNone(session)
         forwarder.refresh_from_db()
         self.assertTrue(forwarder.is_running)
@@ -234,7 +234,7 @@ class ForwardingTaskTests(TestCase):
 
     @patch("protocols.models.send_forwarding_metadata", return_value=(True, None))
     @patch("protocols.models.load_local_node_credentials")
-    @patch("ocpp.forwarding_service.create_connection")
+    @patch("ocpp.forwarder.create_connection")
     def test_forwarder_disable_closes_session(
         self, mock_create, mock_credentials, _mock_metadata
     ):
@@ -258,19 +258,19 @@ class ForwardingTaskTests(TestCase):
         ):
             forwarder.sync_chargers()
 
-        self.assertIsNotNone(forwarding_service.get_session(charger.pk))
+        self.assertIsNotNone(forwarder.get_session(charger.pk))
 
         forwarder.enabled = False
         forwarder.save()
 
-        self.assertIsNone(forwarding_service.get_session(charger.pk))
+        self.assertIsNone(forwarder.get_session(charger.pk))
         forwarder.refresh_from_db()
         self.assertFalse(forwarder.is_running)
         self.assertIn("Cleared forwarding", forwarder.last_status)
 
     @patch("protocols.models.send_forwarding_metadata", return_value=(True, None))
     @patch("protocols.models.load_local_node_credentials")
-    @patch("ocpp.forwarding_service.create_connection")
+    @patch("ocpp.forwarder.create_connection")
     def test_forwarder_delete_closes_session(
         self, mock_create, mock_credentials, _mock_metadata
     ):
@@ -294,11 +294,11 @@ class ForwardingTaskTests(TestCase):
         ):
             forwarder.sync_chargers()
 
-        self.assertIsNotNone(forwarding_service.get_session(charger.pk))
+        self.assertIsNotNone(forwarder.get_session(charger.pk))
 
         forwarder.delete()
 
-        self.assertIsNone(forwarding_service.get_session(charger.pk))
+        self.assertIsNone(forwarder.get_session(charger.pk))
         charger.refresh_from_db()
         self.assertIsNone(charger.forwarded_to)
 
@@ -325,9 +325,9 @@ class ForwardingConsumerSyncTests(TestCase):
         store.connections.clear()
         store.ip_connections.clear()
         store.logs["charger"].clear()
-        forwarding_service.clear_sessions()
+        forwarder.clear_sessions()
 
-    @patch("ocpp.consumers.sync_forwarded_charge_points")
+    @patch("ocpp.consumers.forwarder.sync_forwarded_charge_points")
     def test_reconnect_triggers_forwarding_sync(self, mock_sync):
         mock_sync.return_value = 0
         charger = Charger.objects.create(
@@ -399,8 +399,8 @@ class ForwardingMessageFilterTests(TestCase):
         store.connections.clear()
         store.logs["charger"].clear()
         store.pending_calls.clear()
-        forwarding_service.clear_sessions()
-        self.addCleanup(forwarding_service.clear_sessions)
+        forwarder.clear_sessions()
+        self.addCleanup(forwarder.clear_sessions)
 
     @patch(
         "ocpp.consumers.CSMSConsumer._get_account",
@@ -434,7 +434,7 @@ class ForwardingMessageFilterTests(TestCase):
 
         connection = Mock()
         connection.connected = True
-        session = forwarding_service.ForwardingSession(
+        session = ForwardingSession(
             charger_pk=charger.pk,
             node_id=self.remote.pk,
             url="wss://remote-filter",
@@ -443,7 +443,7 @@ class ForwardingMessageFilterTests(TestCase):
             forwarder_id=forwarder.pk,
             forwarded_messages=tuple(forwarder.get_forwarded_messages()),
         )
-        forwarding_service._FORWARDING_SESSIONS[charger.pk] = session
+        forwarder._sessions[charger.pk] = session
 
         consumer = CSMSConsumer()
         consumer.scope = {"headers": [], "client": ("198.51.100.10", 1234)}

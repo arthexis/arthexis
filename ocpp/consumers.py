@@ -23,11 +23,7 @@ from asgiref.sync import sync_to_async
 from config.offline import requires_network
 
 from . import store
-from .forwarding_service import (
-    get_session as get_forwarding_session,
-    remove_session as remove_forwarding_session,
-    sync_forwarded_charge_points,
-)
+from .forwarder import forwarder
 from .status_resets import STATUS_RESET_UPDATES, clear_cached_statuses
 from .call_error_handlers import dispatch_call_error
 from .call_result_handlers import dispatch_call_result
@@ -475,9 +471,9 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         )
 
         if not created:
-            await database_sync_to_async(sync_forwarded_charge_points)(
-                refresh_forwarders=False
-            )
+            await database_sync_to_async(
+                forwarder.sync_forwarded_charge_points
+            )(refresh_forwarders=False)
 
     async def _get_account(self, id_tag: str) -> CustomerAccount | None:
         """Return the customer account for the provided RFID if valid."""
@@ -797,7 +793,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         charger = self.aggregate_charger or self.charger
         if charger is None or not getattr(charger, "pk", None):
             return
-        session = get_forwarding_session(charger.pk)
+        session = forwarder.get_session(charger.pk)
         if session is None or not session.is_connected:
             return
 
@@ -823,7 +819,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 getattr(charger, "charger_id", charger.pk),
                 exc,
             )
-            remove_forwarding_session(charger.pk)
+            forwarder.remove_session(charger.pk)
             return
 
         timestamp = timezone.now()
