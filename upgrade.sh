@@ -830,7 +830,7 @@ if [[ $VENV_PRESENT -eq 1 ]]; then
   if [[ $FORCE_STOP -eq 1 ]]; then
     STOP_ARGS+=(--force)
   fi
-  if ! ./stop.sh "${STOP_ARGS[@]}"; then
+  if ! ARTHEXIS_SKIP_LCD_STOP=1 ./stop.sh "${STOP_ARGS[@]}"; then
     if [[ $FORCE_STOP -eq 1 ]]; then
       echo "Upgrade aborted even after forcing stop. Resolve active charging sessions before retrying." >&2
     else
@@ -838,11 +838,7 @@ if [[ $VENV_PRESENT -eq 1 ]]; then
     fi
     exit 1
   fi
-
-  if [ -n "$SERVICE_NAME" ] && lcd_systemd_unit_present "$SERVICE_NAME"; then
-    arthexis_stop_systemd_unit_if_present "lcd-${SERVICE_NAME}.service"
   fi
-fi
 
 # Pull latest changes
 if [[ $LOCAL_ONLY -eq 1 ]]; then
