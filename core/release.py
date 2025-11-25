@@ -192,16 +192,66 @@ def _build_in_sanitized_tree(base_dir: Path) -> None:
 
 _RETRYABLE_TWINE_ERRORS = (
     "connectionreseterror",
+    "connection reset",
     "connection aborted",
     "protocolerror",
     "forcibly closed by the remote host",
     "remote host closed the connection",
+    "temporary failure in name resolution",
 )
 
 
 def _is_retryable_twine_error(output: str) -> bool:
     normalized = output.lower()
     return any(marker in normalized for marker in _RETRYABLE_TWINE_ERRORS)
+
+
+def _fetch_pypi_releases(
+    package: Package,
+    *,
+    retries: int = 3,
+    cooldown: float = 2.0,
+) -> dict[str, object]:
+    """Retrieve release metadata from the PyPI JSON API with retries."""
+
+    if requests is None or not network_available():
+        return {}
+
+    url = f"https://pypi.org/pypi/{package.name}/json"
+    last_error: Exception | None = None
+
+    for attempt in range(1, retries + 1):
+        resp = None
+        try:
+            resp = requests.get(url, timeout=10)
+            if resp.ok:
+                return resp.json().get("releases", {})
+            raise ReleaseError(
+                f"PyPI JSON API returned status {resp.status_code} for '{package.name}'"
+            )
+        except ReleaseError:
+            raise
+        except Exception as exc:  # pragma: no cover - network failure
+            last_error = exc
+            if attempt < retries and _is_retryable_twine_error(str(exc)):
+                time.sleep(cooldown)
+                continue
+            raise ReleaseError(
+                f"Failed to reach PyPI JSON API for '{package.name}': {exc}"
+            ) from exc
+        finally:
+            if resp is not None:
+                close = getattr(resp, "close", None)
+                if callable(close):
+                    with contextlib.suppress(Exception):
+                        close()
+
+    if last_error is not None:
+        raise ReleaseError(
+            f"Failed to reach PyPI JSON API for '{package.name}': {last_error}"
+        ) from last_error
+
+    return {}
 
 
 def _upload_with_retries(
@@ -588,28 +638,9 @@ def build(
 
     if dist and twine:
         if not force:
-            try:  # pragma: no cover - requests optional
-                import requests  # type: ignore
-            except Exception:
-                requests = None  # type: ignore
-            if requests is not None:
-                resp = None
-                try:
-                    resp = requests.get(
-                        f"https://pypi.org/pypi/{package.name}/json"
-                    )
-                    if resp.ok:
-                        releases = resp.json().get("releases", {})
-                        if version in releases:
-                            raise ReleaseError(
-                                f"Version {version} already on PyPI"
-                            )
-                finally:
-                    if resp is not None:
-                        close = getattr(resp, "close", None)
-                        if callable(close):
-                            with contextlib.suppress(Exception):
-                                close()
+            releases = _fetch_pypi_releases(package)
+            if version in releases:
+                raise ReleaseError(f"Version {version} already on PyPI")
         creds = (
             creds
             or _manager_credentials()
@@ -703,18 +734,10 @@ def publish(
 
     primary = repository_targets[0]
 
-    if network_available() and primary.verify_availability and requests is not None:
-        resp = None
-        try:
-            resp = requests.get(f"https://pypi.org/pypi/{package.name}/json")
-            if resp.ok and version in resp.json().get("releases", {}):
-                raise ReleaseError(f"Version {version} already on PyPI")
-        finally:
-            if resp is not None:
-                close = getattr(resp, "close", None)
-                if callable(close):
-                    with contextlib.suppress(Exception):
-                        close()
+    if primary.verify_availability:
+        releases = _fetch_pypi_releases(package)
+        if version in releases:
+            raise ReleaseError(f"Version {version} already on PyPI")
 
     if not Path("dist").exists():
         raise ReleaseError("dist directory not found")
