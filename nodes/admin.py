@@ -2500,10 +2500,9 @@ class NetMessageAdmin(EntityModelAdmin):
     list_display = (
         "subject",
         "body",
-        "filter_node",
         "filter_node_role_display",
-        "node_origin",
-        "created",
+        "node_origin_display",
+        "created_date_display",
         "target_limit_display",
         "complete",
     )
@@ -2736,5 +2735,16 @@ class NetMessageAdmin(EntityModelAdmin):
     @admin.display(description="TL", ordering="target_limit")
     def target_limit_display(self, obj):
         return obj.target_limit or ""
+
+    @admin.display(description=_("Node Origin"), ordering="node_origin__name")
+    def node_origin_display(self, obj):
+        return obj.node_origin or ""
+
+    @admin.display(description=_("Created"), ordering="created")
+    def created_date_display(self, obj):
+        created = obj.created
+        if not created:
+            return ""
+        return timezone.localtime(created).date().isoformat()
 
 
