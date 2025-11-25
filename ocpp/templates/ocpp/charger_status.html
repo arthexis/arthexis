@@ -6,7 +6,7 @@
 
 {% block content %}
 <div id="status-content" data-chart-animate="{{ chart_should_animate|yesno:'true,false,false' }}">
-  {% if connector_links %}
+  {% if show_connector_tabs and connector_links %}
   <div class="mb-3">
     <div class="nav nav-pills flex-wrap gap-2">
       {% for link in connector_links %}
@@ -272,7 +272,7 @@
     </div>
   </div>
 
-  {% if charger.connector_id is None and connector_overview %}
+  {% if show_connector_overview_cards %}
   <h2 class="h5">{% trans "Connectors" %}</h2>
   <div class="row g-3 mb-4">
     {% for item in connector_overview %}

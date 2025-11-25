@@ -1856,6 +1856,11 @@ def charger_status(request, cid, connector=None):
     connector_overview = [
         item for item in overview if item["charger"].connector_id is not None
     ]
+    connector_count = len(connector_overview)
+    show_connector_tabs = connector_count > 1
+    show_connector_overview_cards = (
+        charger.connector_id is None and connector_count > 1
+    )
     usage_timeline, usage_timeline_window = _usage_timeline(
         charger, connector_overview
     )
@@ -1928,6 +1933,8 @@ def charger_status(request, cid, connector=None):
         "usage_timeline": usage_timeline,
         "usage_timeline_window": usage_timeline_window,
         "charger_error_code": _visible_error_code(charger.last_error_code),
+        "show_connector_tabs": show_connector_tabs,
+        "show_connector_overview_cards": show_connector_overview_cards,
     },
 )
 
