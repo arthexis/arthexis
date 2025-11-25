@@ -39,6 +39,10 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# Allow callers (such as upgrades) to keep the LCD running a bit longer to
+# display status by skipping the LCD stop step.
+SKIP_LCD_STOP="${ARTHEXIS_SKIP_LCD_STOP:-0}"
+
 # Stop systemd-managed services when present
 if [ -f "$LOCK_DIR/service.lck" ]; then
   SERVICE_NAME="$(cat "$LOCK_DIR/service.lck")"
@@ -65,10 +69,12 @@ if [ -f "$LOCK_DIR/service.lck" ]; then
       pkill -f "celery -A config" || true
     fi
 
-    LCD_SERVICE="lcd-$SERVICE_NAME"
-    if arthexis_lcd_feature_enabled "$LOCK_DIR" || systemctl list-unit-files | awk '{print $1}' | grep -Fxq "${LCD_SERVICE}.service"; then
-      $SUDO systemctl stop "$LCD_SERVICE" || true
-      $SUDO systemctl status "$LCD_SERVICE" --no-pager || true
+    if [ "$SKIP_LCD_STOP" != "1" ] && [ "$SKIP_LCD_STOP" != "true" ]; then
+      LCD_SERVICE="lcd-$SERVICE_NAME"
+      if arthexis_lcd_feature_enabled "$LOCK_DIR" || systemctl list-unit-files | awk '{print $1}' | grep -Fxq "${LCD_SERVICE}.service"; then
+        $SUDO systemctl stop "$LCD_SERVICE" || true
+        $SUDO systemctl status "$LCD_SERVICE" --no-pager || true
+      fi
     fi
 
     exit 0
@@ -84,8 +90,10 @@ else
 fi
 # Also stop any Celery components started by start.sh
 pkill -f "celery -A config" || true
-if arthexis_lcd_feature_enabled "$LOCK_DIR"; then
-  if [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_EMBEDDED" ] || ! command -v systemctl >/dev/null 2>&1; then
-    pkill -f "python -m core\.lcd_screen" || true
+if [ "$SKIP_LCD_STOP" != "1" ] && [ "$SKIP_LCD_STOP" != "true" ]; then
+  if arthexis_lcd_feature_enabled "$LOCK_DIR"; then
+    if [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_EMBEDDED" ] || ! command -v systemctl >/dev/null 2>&1; then
+      pkill -f "python -m core\.lcd_screen" || true
+    fi
   fi
 fi

@@ -67,6 +67,7 @@ from .transactions_io import (
     import_transactions as import_transactions_data,
 )
 from .status_display import STATUS_BADGE_MAP, ERROR_OK_VALUES
+from .status_resets import clear_stale_cached_statuses
 from .views import _charger_state, _live_sessions
 from core.admin import SaveBeforeChangeAction
 from core.models import EnergyTariff, RFID as CoreRFID
@@ -3869,6 +3870,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         return HttpResponseRedirect(change_url)
 
     def changelist_view(self, request, extra_context=None):
+        clear_stale_cached_statuses()
         response = super().changelist_view(request, extra_context=extra_context)
         if hasattr(response, "context_data"):
             cl = response.context_data.get("cl")

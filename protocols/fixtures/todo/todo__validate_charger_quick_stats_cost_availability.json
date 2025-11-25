@@ -5,7 +5,7 @@
       "request": "Validate charger quick stats cost and availability cards",
       "created_on": "2025-01-01T00:00:00Z",
       "url": "/admin/ocpp/charger/",
-      "request_details": "Open Admin → OCPP → Chargers and review the quick stats header. Confirm the Estimated Cost tile shows MXN values when recent charger transactions exist and falls back to a dash when tariffs are missing. Verify the Availability (24h) tile updates as chargers report Operative and Inoperative states within the past day, and that Total kW and Today kW remain visible alongside the new metrics.",
+      "request_details": "Open Admin → OCPP → Charge Points and review the quick stats header. Confirm the Estimated Cost tile shows MXN values when recent charger transactions exist and falls back to a dash when tariffs are missing. Verify the Availability (24h) tile updates as chargers report Operative and Inoperative states within the past day, and that Total kW and Today kW remain visible alongside the new metrics.",
       "done_on": null,
       "is_deleted": false,
       "version": "0.1.33"

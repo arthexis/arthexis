@@ -1029,6 +1029,29 @@ def _normalize_failure_reason(reason: str) -> str:
     return "-".join(tokens[:5])
 
 
+def _broadcast_upgrade_start_message(upgrade_stamp: str) -> None:
+    from nodes.models import NetMessage, Node
+
+    try:
+        node = Node.get_local()
+    except Exception:
+        logger.warning(
+            "Auto-upgrade start Net Message skipped: local node unavailable",
+            exc_info=True,
+        )
+        return
+
+    node_name = getattr(node, "hostname", None) or socket.gethostname() or "node"
+    subject = f"Upgrading... {upgrade_stamp}".strip()
+
+    try:
+        NetMessage.broadcast(subject=subject, body=node_name)
+    except Exception:
+        logger.warning(
+            "Failed to broadcast auto-upgrade start Net Message", exc_info=True
+        )
+
+
 def _send_auto_upgrade_failure_message(
     base_dir: Path, reason: str, failure_count: int
 ) -> None:
@@ -1245,6 +1268,7 @@ def check_github_updates(channel_override: str | None = None) -> None:
         upgrade_stamp = local_timestamp.strftime("@ %Y%m%d %H:%M")
 
         upgrade_was_applied = False
+        args: list[str] = []
 
         if mode == "unstable":
             if local_revision == remote_revision and local_revision:
@@ -1300,6 +1324,9 @@ def check_github_updates(channel_override: str | None = None) -> None:
                 notify("Upgrading...", upgrade_stamp)
             args = ["./upgrade.sh", "--stable"]
             upgrade_was_applied = True
+
+        if upgrade_was_applied:
+            _broadcast_upgrade_start_message(upgrade_stamp)
 
         with log_file.open("a") as fh:
             fh.write(

@@ -5,7 +5,7 @@
       "request": "Verify CP diagnostics bucket upload flow",
       "created_on": "2024-01-01T00:00:00Z",
       "url": "/admin/ocpp/charger/",
-      "request_details": "From the Chargers admin list, select a charge point and run the Request CP diagnostics action. Confirm the success message, check the charger shows an assigned diagnostics bucket, and POST a small diagnostics file to the provided upload endpoint to ensure it appears in the bucket file list. Remove the test artifact afterward if necessary.",
+      "request_details": "From the Charge Points admin list, select a charge point and run the Request CP diagnostics action. Confirm the success message, check the charger shows an assigned diagnostics bucket, and POST a small diagnostics file to the provided upload endpoint to ensure it appears in the bucket file list. Remove the test artifact afterward if necessary.",
       "done_on": null,
       "is_deleted": false,
       "version": "0.1.33"

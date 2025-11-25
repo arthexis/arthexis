@@ -3127,11 +3127,9 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
         "label",
         "rfid",
         "color",
-        "kind",
         "endianness_short",
         "released",
         "allowed",
-        "expiry_date",
         "last_seen_on",
     )
     list_filter = ("color", "endianness", "released", "allowed")

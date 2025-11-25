@@ -47,7 +47,7 @@ Complete the following tasks before touching the CSMS configuration:
 With prerequisites resolved, prepare Arthexis so it recognises the charger immediately when it calls home.
 
 1. **Create or update the location** – In **Admin → Core → Locations**, create the site that will host the charger if it does not already exist. Attach address, timezone, and operator contact details.
-2. **Register the charger** – Open **Admin → OCPP → Chargers** and add the EVCS:
+2. **Register the charger** – Open **Admin → OCPP → Charge Points** and add the EVCS:
    - Set the `Charger ID` to the identifier collected in the pre-flight checklist.
    - Assign the location and, when available, provide a friendly display name.
    - Create connectors that mirror the physical numbering and power characteristics.
@@ -71,7 +71,7 @@ Configure the charger using its local interface (vendor portal, front panel, or 
 Once the charger points to the CSMS, confirm the onboarding succeeded:
 
 1. **Watch the charger log** – Tail `logs/charger.<CHARGER_ID>.log` and look for `Connected` and subsequent OCPP messages when the EVCS boots.
-2. **Check admin status** – In **Admin → OCPP → Chargers**, confirm the charger shows as `Online` and the last heartbeat timestamp is current.
+2. **Check admin status** – In **Admin → OCPP → Charge Points**, confirm the charger shows as `Online` and the last heartbeat timestamp is current.
 3. **Validate authorisation** – Swipe a whitelisted RFID or trigger a remote start from the charger record. The session should move into `Charging` with meter values arriving.
 4. **Send a configuration request** – From the charger admin action menu, run **Fetch configuration from EVCS** to ensure round-trip commands succeed.
 5. **Record acceptance** – Update the location or charger notes with the commissioning date, firmware build, and any deviations from standard settings.
