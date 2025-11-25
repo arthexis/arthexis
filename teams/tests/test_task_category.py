@@ -1,9 +1,9 @@
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
+from django.forms import ModelMultipleChoiceField
 from django.test import TestCase
 
-from core.widgets import OdooProductWidget
 from teams.forms import TaskCategoryAdminForm
 from teams.models import TaskCategory
 
@@ -27,7 +27,7 @@ class TaskCategoryModelTests(TestCase):
 
 
 class TaskCategoryAdminFormTests(TestCase):
-    def test_odoo_product_widget_used(self):
+    def test_odoo_products_field_present(self):
         form = TaskCategoryAdminForm()
-        self.assertIn("odoo_product", form.fields)
-        self.assertIsInstance(form.fields["odoo_product"].widget, OdooProductWidget)
+        self.assertIn("odoo_products", form.fields)
+        self.assertIsInstance(form.fields["odoo_products"], ModelMultipleChoiceField)

@@ -25,6 +25,7 @@ from core.models import (
     GoogleCalendarProfile as CoreGoogleCalendarProfile,
     InviteLead as CoreInviteLead,
     OdooProfile as CoreOdooProfile,
+    Product as CoreProduct,
     Profile as CoreProfile,
     ReleaseManager as CoreReleaseManager,
     SecurityGroup as CoreSecurityGroup,
@@ -395,24 +396,10 @@ class EmailInbox(CoreProfile):
         conn.quit()
         return messages
 
-def __str__(self) -> str:
+    def __str__(self) -> str:
         username = (self.username or "").strip()
-        host = (self.host or "").strip()
-
         if username:
-            if "@" in username:
-                return username
-            if host:
-                return f"{username}@{host}"
             return username
-
-        if host:
-            return host
-
-        owner = self.owner_display()
-        if owner:
-            return owner
-
         return super().__str__()
 
 
@@ -583,29 +570,9 @@ class EmailOutbox(CoreProfile):
         ordering = ["-priority", "id"]
 
     def __str__(self) -> str:
-        address = (self.from_email or "").strip()
-        if address:
-            return address
-
         username = (self.username or "").strip()
-        host = (self.host or "").strip()
         if username:
-            local, sep, domain = username.partition("@")
-            if sep and domain:
-                return username
-            if host:
-                sanitized = username.rstrip("@")
-                if sanitized:
-                    return f"{sanitized}@{host}"
-                return host
             return username
-        if host:
-            return host
-
-        owner = self.owner_display()
-        if owner:
-            return owner
-
         return super().__str__()
 
     def clean(self):
@@ -1077,11 +1044,27 @@ class TaskCategory(Entity):
         validators=[MinValueValidator(Decimal("0"))],
         help_text=_("Estimated fulfillment cost in local currency."),
     )
-    odoo_product = models.JSONField(
-        _("Odoo product"),
-        blank=True,
+    default_duration = models.DurationField(
+        _("Default duration"),
         null=True,
-        help_text=_("Selected product from Odoo (id and name)."),
+        blank=True,
+        help_text=_("Typical time expected to complete tasks in this category."),
+    )
+    manager = models.ForeignKey(
+        "core.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="managed_task_categories",
+        verbose_name=_("Manager"),
+        help_text=_("User responsible for overseeing this category."),
+    )
+    odoo_products = models.ManyToManyField(
+        CoreProduct,
+        related_name="task_categories",
+        verbose_name=_("Odoo products"),
+        blank=True,
+        help_text=_("Relevant Odoo products for this category."),
     )
     availability = models.CharField(
         _("Availability"),
@@ -1127,7 +1110,6 @@ class TaskCategory(Entity):
 class ManualTask(Entity):
     """Manual work scheduled for nodes or locations."""
 
-    title = models.CharField(_("Title"), max_length=200)
     description = models.TextField(
         _("Description"), help_text=_("Detailed summary of the work to perform."),
     )
@@ -1138,7 +1120,7 @@ class ManualTask(Entity):
         null=True,
         related_name="manual_tasks",
         verbose_name=_("Category"),
-        help_text=_("Optional workgroup category for this task."),
+        help_text=_("Select the standardized category for this work."),
     )
     assigned_user = models.ForeignKey(
         "core.User",
@@ -1155,8 +1137,30 @@ class ManualTask(Entity):
         null=True,
         blank=True,
         related_name="assigned_manual_tasks",
-        verbose_name=_("Assigned group"),
-        help_text=_("Optional security group responsible for the task."),
+        verbose_name=_("Potential assignees"),
+        help_text=_("Security group containing users who can fulfill the task."),
+    )
+    manager = models.ForeignKey(
+        "core.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="managed_manual_tasks",
+        verbose_name=_("Manager"),
+        help_text=_("User overseeing the task."),
+    )
+    odoo_products = models.ManyToManyField(
+        CoreProduct,
+        blank=True,
+        related_name="manual_tasks",
+        verbose_name=_("Odoo products"),
+        help_text=_("Products associated with the requested work."),
+    )
+    duration = models.DurationField(
+        _("Expected duration"),
+        null=True,
+        blank=True,
+        help_text=_("Estimated time to complete the task."),
     )
     node = models.ForeignKey(
         "nodes.Node",
@@ -1193,7 +1197,7 @@ class ManualTask(Entity):
     class Meta:
         verbose_name = _("Manual Task")
         verbose_name_plural = _("Manual Tasks")
-        ordering = ("scheduled_start", "title")
+        ordering = ("scheduled_start", "category__name")
         db_table = "core_manualtask"
         constraints = [
             models.CheckConstraint(
@@ -1222,7 +1226,11 @@ class ManualTask(Entity):
             raise ValidationError(errors)
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
-        return self.title
+        if self.category:
+            return self.category.name
+        if self.description:
+            return self.description[:50]
+        return super().__str__()
 
     # Notification helpers -------------------------------------------
 
@@ -1302,7 +1310,8 @@ class ManualTask(Entity):
             template = _("Manual task starts in 3 hours: %(title)s")
         else:
             template = _("Manual task reminder: %(title)s")
-        return template % {"title": self.title}
+        title = self.category.name if self.category else self.description
+        return template % {"title": title or _("Manual task")}
 
     def _notification_body(self) -> str:
         lines = [self.description or ""]

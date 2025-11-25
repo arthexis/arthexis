@@ -373,21 +373,36 @@ class TaskCategoryAdmin(EntityModelAdmin):
         "name",
         "availability_label",
         "cost",
+        "default_duration",
+        "manager",
         "requestor_group",
         "assigned_group",
     )
-    list_filter = ("availability", "requestor_group", "assigned_group")
+    list_filter = (
+        "availability",
+        "requestor_group",
+        "assigned_group",
+        "manager",
+    )
     search_fields = ("name", "description")
-    raw_id_fields = ("requestor_group", "assigned_group")
+    raw_id_fields = ("requestor_group", "assigned_group", "manager")
+    filter_horizontal = ("odoo_products",)
     fieldsets = (
         (None, {"fields": ("name", "description", "image")}),
         (
             _("Fulfillment"),
-            {"fields": ("availability", "cost", "odoo_product")},
+            {
+                "fields": (
+                    "availability",
+                    "cost",
+                    "default_duration",
+                    "odoo_products",
+                )
+            },
         ),
         (
             _("Routing"),
-            {"fields": ("requestor_group", "assigned_group")},
+            {"fields": ("requestor_group", "assigned_group", "manager")},
         ),
     )
 
@@ -395,10 +410,10 @@ class TaskCategoryAdmin(EntityModelAdmin):
 @admin.register(ManualTask)
 class ManualTaskAdmin(EntityModelAdmin):
     list_display = (
-        "title",
         "category",
         "assigned_user",
         "assigned_group",
+        "manager",
         "node",
         "location",
         "scheduled_start",
@@ -407,13 +422,13 @@ class ManualTaskAdmin(EntityModelAdmin):
     )
     list_filter = ("node", "location", "enable_notifications", "category")
     search_fields = (
-        "title",
         "description",
         "node__hostname",
         "location__name",
         "assigned_user__username",
         "assigned_user__email",
         "assigned_group__name",
+        "manager__username",
         "category__name",
     )
     raw_id_fields = (
@@ -421,7 +436,9 @@ class ManualTaskAdmin(EntityModelAdmin):
         "location",
         "assigned_user",
         "assigned_group",
+        "manager",
     )
+    filter_horizontal = ("odoo_products",)
     date_hierarchy = "scheduled_start"
     actions = ("make_cp_reservations",)
     fieldsets = (
@@ -429,11 +446,13 @@ class ManualTaskAdmin(EntityModelAdmin):
             None,
             {
                 "fields": (
-                    "title",
-                    "description",
                     "category",
+                    "description",
+                    "odoo_products",
+                    "duration",
                     "assigned_user",
                     "assigned_group",
+                    "manager",
                     "enable_notifications",
                 )
             },
