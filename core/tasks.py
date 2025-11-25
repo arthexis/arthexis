@@ -1042,7 +1042,9 @@ def _broadcast_upgrade_start_message(upgrade_stamp: str) -> None:
         return
 
     node_name = getattr(node, "hostname", None) or socket.gethostname() or "node"
-    subject = f"Upgrading... {upgrade_stamp}".strip()
+    time_match = re.search(r"(\d{2}:\d{2})", upgrade_stamp)
+    upgrade_time = time_match.group(1) if time_match else upgrade_stamp.replace("@", "").strip()
+    subject = f"Upgrade @ {upgrade_time}".strip()
 
     try:
         NetMessage.broadcast(subject=subject, body=node_name)
