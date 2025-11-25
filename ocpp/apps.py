@@ -8,7 +8,6 @@ from django.db.utils import OperationalError, ProgrammingError
 
 from .status_resets import clear_cached_statuses
 
-
 class OcppConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "ocpp"

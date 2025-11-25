@@ -3683,6 +3683,57 @@ class ChargerLandingTests(TestCase):
         self.user = User.objects.create_user(username="u", password="pwd")
         self.client.force_login(self.user)
 
+    def test_dashboard_clears_stale_statuses_and_lockfile(self):
+        stale = timezone.now() - timedelta(minutes=10)
+        parent = Charger.objects.create(
+            charger_id="STALE-CP",
+            last_status="Charging",
+            last_error_code="NoError",
+            last_status_timestamp=stale,
+            last_status_vendor_info={"vendor": "info"},
+            last_heartbeat=stale,
+        )
+        connector = Charger.objects.create(
+            charger_id=parent.charger_id,
+            connector_id=1,
+            last_status="Charging",
+            last_error_code="NoError",
+            last_heartbeat=stale,
+        )
+        recent = Charger.objects.create(
+            charger_id="FRESH-CP",
+            last_status="Charging",
+            last_error_code="NoError",
+            last_status_timestamp=timezone.now(),
+            last_heartbeat=timezone.now(),
+        )
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            lock_file = Path(tmp_dir) / "charging.lck"
+            lock_file.write_text("")
+            os.utime(lock_file, (stale.timestamp(), stale.timestamp()))
+
+            with mock.patch(
+                "ocpp.status_resets.store.SESSION_LOCK", lock_file
+            ), mock.patch("ocpp.status_resets.store._lock_task", None):
+                response = self.client.get(reverse("ocpp-dashboard"))
+
+        self.assertEqual(response.status_code, 200)
+        parent.refresh_from_db()
+        connector.refresh_from_db()
+        recent.refresh_from_db()
+
+        self.assertEqual(parent.last_status, "")
+        self.assertEqual(connector.last_status, "")
+        self.assertEqual(parent.last_error_code, "")
+        self.assertEqual(connector.last_error_code, "")
+        self.assertIsNone(parent.last_status_vendor_info)
+        self.assertIsNone(parent.last_status_timestamp)
+        self.assertEqual(recent.last_status, "Charging")
+        self.assertEqual(recent.last_error_code, "NoError")
+
+        self.assertFalse(lock_file.exists())
+
     def test_reference_created_and_page_renders(self):
         charger = Charger.objects.create(charger_id="PAGE1")
         self.assertIsNotNone(charger.reference)
