@@ -7,7 +7,7 @@
       "node_role": ["Terminal"],
       "application": ["ocpp"],
       "path": "/ocpp/",
-      "menu": "Chargers",
+      "menu": "Charge Points",
       "priority": 2,
       "is_default": false,
       "favicon": ""

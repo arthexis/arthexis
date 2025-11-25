@@ -10,7 +10,7 @@ def set_module_priorities(apps, schema_editor):
 
     priority_rules = (
         (Q(menu__iexact="Cookbooks"), 1),
-        (Q(menu__iexact="Chargers"), 2),
+        (Q(menu__iexact="Charge Points") | Q(menu__iexact="Chargers"), 2),
         (Q(menu__iexact="Calculators") | Q(application__name__iexact="awg"), 3),
         (
             Q(menu__iexact="Constellation")

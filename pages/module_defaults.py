@@ -14,7 +14,7 @@ ROLE_MODULE_DEFAULTS: Mapping[str, tuple[ModuleDefinition, ...]] = {
         {
             "application": "ocpp",
             "path": "/ocpp/",
-            "menu": "Chargers",
+            "menu": "Charge Points",
             "priority": 2,
             "landings": (
                 ("/ocpp/cpms/dashboard/", "CPMS Online Dashboard"),
