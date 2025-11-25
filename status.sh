@@ -21,7 +21,16 @@ arthexis_suite_reachable() {
     return 1
   fi
 
-  python - "$port" <<'PY'
+  local python_bin
+  if command -v python3 >/dev/null 2>&1; then
+    python_bin=python3
+  elif command -v python >/dev/null 2>&1; then
+    python_bin=python
+  else
+    return 1
+  fi
+
+  "$python_bin" - "$port" <<'PY'
 import socket
 import sys
 
