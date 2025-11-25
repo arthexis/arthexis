@@ -668,6 +668,22 @@ restart_services() {
   return 0
 }
 
+ensure_watchdog_running() {
+  local service_name="$1"
+
+  if [ -z "$service_name" ] || [ "$SERVICE_MANAGEMENT_MODE" != "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
+    return 0
+  fi
+
+  if ! command -v systemctl >/dev/null 2>&1; then
+    echo "Skipping watchdog start; systemctl is unavailable." >&2
+    return 0
+  fi
+
+  echo "Ensuring watchdog service ${service_name}-watchdog is installed and running..."
+  arthexis_install_watchdog_unit "$BASE_DIR" "$LOCK_DIR" "$service_name" "" "$SERVICE_MANAGEMENT_MODE"
+}
+
 upgrade_failure_recovery() {
   local exit_code=$?
 
@@ -945,6 +961,9 @@ if [[ $NO_RESTART -eq 0 ]]; then
     echo "Detected failed restart after upgrade." >&2
     echo "Manual intervention required to restore services." >&2
     exit 1
+  fi
+  if [ -n "$SERVICE_NAME" ]; then
+    ensure_watchdog_running "$SERVICE_NAME"
   fi
 fi
 

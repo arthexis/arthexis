@@ -49,10 +49,10 @@ NODE_ROLE="Terminal"
 REQUIRES_REDIS=false
 START_SERVICES=false
 REPAIR=false
-ENABLE_WATCHDOG=false
+ENABLE_WATCHDOG=true
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--public|--internal] [--port PORT] [--upgrade] [--fixed] [--stable|--regular|--normal|--unstable|--latest] [--satellite] [--terminal] [--control] [--watchtower] [--celery] [--embedded|--systemd] [--lcd-screen|--no-lcd-screen] [--watchdog] [--clean] [--start|--no-start] [--repair]" >&2
+    echo "Usage: $0 [--service NAME] [--public|--internal] [--port PORT] [--upgrade] [--fixed] [--stable|--regular|--normal|--unstable|--latest] [--satellite] [--terminal] [--control] [--watchtower] [--celery] [--embedded|--systemd] [--lcd-screen|--no-lcd-screen] [--watchdog|--no-watchdog] [--clean] [--start|--no-start] [--repair]" >&2
     exit 1
 }
 
@@ -294,6 +294,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --watchdog)
             ENABLE_WATCHDOG=true
+            shift
+            ;;
+        --no-watchdog)
+            ENABLE_WATCHDOG=false
             shift
             ;;
         --embedded)

@@ -5,8 +5,11 @@ SERVICE_NAME="${1:-}"
 BASE_DIR="${ARTHEXIS_BASE_DIR:-$(cd "$(dirname "$0")/../.." && pwd)}"
 LOG_DIR="${ARTHEXIS_LOG_DIR:-$BASE_DIR/logs}"
 LOG_FILE="$LOG_DIR/${SERVICE_NAME:-unknown}-watchdog.log"
-SLEEP_INTERVAL=30
-DOWN_THRESHOLD_SECONDS=600
+LOCK_DIR="${ARTHEXIS_LOCK_DIR:-$BASE_DIR/locks}"
+SLEEP_INTERVAL=60
+START_TIMEOUT_SECONDS=300
+WATCHDOG_NOTE_FILE="/var/tmp/arthexis-watchdog-alerts.log"
+WATCH_TARGETS=()
 
 log() {
   local timestamp
@@ -51,53 +54,106 @@ initialize_logging() {
 }
 
 service_unit_exists() {
-  systemctl list-unit-files | awk '{print $1}' | grep -Fxq "${SERVICE_NAME}.service"
+  local unit="${1:-${SERVICE_NAME}.service}"
+  systemctl list-unit-files | awk '{print $1}' | grep -Fxq "$unit"
 }
 
 ensure_enabled() {
-  if ! systemctl is-enabled --quiet "$SERVICE_NAME"; then
-    log "${SERVICE_NAME} is disabled; enabling."
-    control_with_sudo enable "$SERVICE_NAME" || true
+  local unit="${1:-${SERVICE_NAME}.service}"
+  if ! systemctl is-enabled --quiet "$unit"; then
+    log "${unit} is disabled; enabling."
+    control_with_sudo enable "$unit" || true
   fi
 }
 
 attempt_start() {
-  log "${SERVICE_NAME} is not active; attempting to start."
-  control_with_sudo start "$SERVICE_NAME" || true
+  local unit="${1:-${SERVICE_NAME}.service}"
+  log "${unit} is not active; attempting to start."
+  control_with_sudo start "$unit" || true
 }
 
-restart_system() {
-  log "${SERVICE_NAME} has been down for more than ${DOWN_THRESHOLD_SECONDS}s after restart attempts; rebooting host."
-  control_with_sudo reboot "" || systemctl reboot || sudo reboot || reboot
+leave_admin_notice() {
+  local unit="$1"
+  local message
+  message="${SERVICE_NAME:-arthexis} watchdog could not restore ${unit} after ${START_TIMEOUT_SECONDS}s; manual intervention required."
+
+  log "$message"
+
+  if command -v logger >/dev/null 2>&1; then
+    logger -t "${SERVICE_NAME:-arthexis}-watchdog" "$message" || true
+  fi
+
+  {
+    date --iso-8601=seconds
+    echo "$message"
+    echo ""
+  } >> "$WATCHDOG_NOTE_FILE"
+}
+
+read_watch_targets() {
+  local lock_file
+  lock_file="$LOCK_DIR/systemd_services.lck"
+
+  if [ -f "$lock_file" ]; then
+    mapfile -t WATCH_TARGETS < <(grep -E '\\.service$' "$lock_file" | grep -Ev "^$|watchdog\\.service$")
+  fi
+
+  if [ ${#WATCH_TARGETS[@]} -eq 0 ]; then
+    WATCH_TARGETS=()
+    if [ -n "$SERVICE_NAME" ]; then
+      WATCH_TARGETS+=("${SERVICE_NAME}.service")
+    fi
+  fi
+}
+
+wait_for_active() {
+  local unit="$1"
+  local deadline
+  deadline=$(( $(date +%s) + START_TIMEOUT_SECONDS ))
+
+  while (( $(date +%s) < deadline )); do
+    if systemctl is-active --quiet "$unit"; then
+      return 0
+    fi
+    sleep 5
+  done
+
+  return 1
 }
 
 monitor_service() {
-  local down_since=0
+  local unit
 
   while true; do
-    if ! service_unit_exists; then
-      log "${SERVICE_NAME}.service is not registered; waiting for installation."
+    read_watch_targets
+
+    if [ ${#WATCH_TARGETS[@]} -eq 0 ]; then
+      log "No services registered for watchdog monitoring; retrying later."
       sleep "$SLEEP_INTERVAL"
       continue
     fi
 
-    ensure_enabled
+    for unit in "${WATCH_TARGETS[@]}"; do
+      if ! service_unit_exists "$unit"; then
+        log "${unit} is not registered; skipping until it is available."
+        continue
+      fi
 
-    if systemctl is-active --quiet "$SERVICE_NAME"; then
-      down_since=0
-    else
-      if [ "$down_since" -eq 0 ]; then
-        down_since=$(date +%s)
+      ensure_enabled "$unit"
+
+      if systemctl is-active --quiet "$unit"; then
+        continue
       fi
-      attempt_start
-      local now
-      now=$(date +%s)
-      local downtime
-      downtime=$((now - down_since))
-      if [ "$downtime" -ge "$DOWN_THRESHOLD_SECONDS" ]; then
-        restart_system
+
+      attempt_start "$unit"
+
+      if wait_for_active "$unit"; then
+        log "${unit} restored by watchdog."
+        continue
       fi
-    fi
+
+      leave_admin_notice "$unit"
+    done
 
     sleep "$SLEEP_INTERVAL"
   done
