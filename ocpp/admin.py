@@ -3779,29 +3779,22 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
             counter += 1
         return candidate
 
-    def _simulator_configuration_payload(self, charger: Charger) -> tuple[list[dict[str, object]], list[str]]:
-        configuration_keys: list[dict[str, object]] = []
-        unknown_keys: list[str] = []
+    def _simulator_configuration(self, charger: Charger) -> ChargerConfiguration | None:
         if charger.configuration_id:
-            config = charger.configuration
-            if config:
-                configuration_keys = list(config.configuration_keys)
-                unknown_keys = list(config.unknown_keys or [])
-        return configuration_keys, unknown_keys
+            return charger.configuration
+        return None
 
     def _create_simulator_from_charger(self, charger: Charger) -> Simulator:
         name = self._unique_simulator_name(self._simulator_base_name(charger))
         cp_path_base = self._simulator_cp_path_base(charger)
         cp_path = self._unique_simulator_cp_path(cp_path_base)
-        configuration_keys, unknown_keys = self._simulator_configuration_payload(charger)
         connector_id = charger.connector_id if charger.connector_id is not None else 1
         simulator = Simulator.objects.create(
             name=name,
             cp_path=cp_path,
             serial_number=charger.charger_id,
             connector_id=connector_id,
-            configuration_keys=configuration_keys,
-            configuration_unknown_keys=unknown_keys,
+            configuration=self._simulator_configuration(charger),
         )
         return simulator
 
@@ -4045,14 +4038,10 @@ class SimulatorAdmin(SaveBeforeChangeAction, LogViewAdminMixin, EntityModelAdmin
         (
             "Configuration",
             {
-                "fields": (
-                    "configuration_keys",
-                    "configuration_unknown_keys",
-                ),
+                "fields": ("configuration",),
                 "classes": ("collapse",),
                 "description": (
-                    "Provide JSON lists for configurationKey entries and "
-                    "unknownKey values returned by GetConfiguration."
+                    "Select a CP Configuration to reuse for GetConfiguration responses."
                 ),
             },
         ),

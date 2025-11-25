@@ -4151,18 +4151,7 @@ class ChargerAdminTests(TestCase):
         self.assertEqual(simulator.serial_number, charger.charger_id)
         self.assertEqual(simulator.connector_id, charger.connector_id)
         self.assertEqual(simulator.cp_path, "OCPP/SIMCP-001-2")
-        self.assertEqual(
-            simulator.configuration_keys,
-            [
-                {
-                    "key": "HeartbeatInterval",
-                    "readonly": False,
-                    "value": 60,
-                    "custom": "value",
-                }
-            ],
-        )
-        self.assertEqual(simulator.configuration_unknown_keys, ["GhostKey"])
+        self.assertEqual(simulator.configuration_id, configuration.pk)
         self.assertEqual(
             response["Location"],
             reverse("admin:ocpp_simulator_change", args=[simulator.pk]),
@@ -5525,6 +5514,14 @@ class SimulatorAdminTests(TransactionTestCase):
         self.assertNotIn(sim.pk, store.simulators)
 
     def test_as_config_includes_custom_fields(self):
+        configuration = ChargerConfiguration.objects.create(
+            charger_identifier="SIM3",
+            connector_id=1,
+            unknown_keys=["Bogus"],
+        )
+        configuration.replace_configuration_keys(
+            [{"key": "HeartbeatInterval", "value": "300", "readonly": True}]
+        )
         sim = Simulator.objects.create(
             name="SIM3",
             cp_path="S3",
@@ -5533,10 +5530,7 @@ class SimulatorAdminTests(TransactionTestCase):
             duration=500,
             pre_charge_delay=5,
             vin="WP0ZZZ99999999999",
-            configuration_keys=[
-                {"key": "HeartbeatInterval", "value": "300", "readonly": True}
-            ],
-            configuration_unknown_keys=["Bogus"],
+            configuration=configuration,
         )
         cfg = sim.as_config()
         self.assertEqual(cfg.interval, 3.5)
@@ -5566,10 +5560,7 @@ class SimulatorAdminTests(TransactionTestCase):
             "username": sim.username,
             "password": sim.password,
             "door_open": "on" if overrides.get("door_open", False) else "",
-            "configuration_keys": json.dumps(sim.configuration_keys or []),
-            "configuration_unknown_keys": json.dumps(
-                sim.configuration_unknown_keys or []
-            ),
+            "configuration": sim.configuration_id or "",
             "_save": "Save",
         }
         data.update(overrides)

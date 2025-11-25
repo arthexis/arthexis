@@ -2117,6 +2117,14 @@ class Simulator(Entity):
         default=False,
         help_text=_("Send a DoorOpen error StatusNotification when enabled."),
     )
+    configuration = models.ForeignKey(
+        "ChargerConfiguration",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="simulators",
+        help_text=_("CP Configuration returned for GetConfiguration calls."),
+    )
     configuration_keys = models.JSONField(
         default=list,
         blank=True,
@@ -2162,6 +2170,8 @@ class Simulator(Entity):
     def as_config(self):
         from .simulator import SimulatorConfig
 
+        configuration_keys, configuration_unknown_keys = self._configuration_payload()
+
         return SimulatorConfig(
             host=self.host,
             ws_port=self.ws_port,
@@ -2177,9 +2187,26 @@ class Simulator(Entity):
             repeat=self.repeat,
             username=self.username or None,
             password=self.password or None,
-            configuration_keys=self.configuration_keys or [],
-            configuration_unknown_keys=self.configuration_unknown_keys or [],
+            configuration_keys=configuration_keys,
+            configuration_unknown_keys=configuration_unknown_keys,
         )
+
+    def _configuration_payload(self) -> tuple[list[dict[str, object]], list[str]]:
+        config_keys: list[dict[str, object]] = []
+        unknown_keys: list[str] = []
+        if self.configuration_id:
+            try:
+                configuration = self.configuration
+            except ChargerConfiguration.DoesNotExist:  # pragma: no cover - stale FK
+                configuration = None
+            if configuration:
+                config_keys = list(configuration.configuration_keys)
+                unknown_keys = list(configuration.unknown_keys or [])
+        if not config_keys:
+            config_keys = list(self.configuration_keys or [])
+        if not unknown_keys:
+            unknown_keys = list(self.configuration_unknown_keys or [])
+        return config_keys, unknown_keys
 
     @property
     def ws_url(self) -> str:  # pragma: no cover - simple helper
