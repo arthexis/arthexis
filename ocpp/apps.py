@@ -1,13 +1,15 @@
+import logging
 from pathlib import Path
 
 from django.apps import AppConfig
 from django.conf import settings
 
-
 class OcppConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "ocpp"
     verbose_name = "3. Protocol"
+
+    logger = logging.getLogger(__name__)
 
     def ready(self):  # pragma: no cover - startup side effects
         control_lock = Path(settings.BASE_DIR) / "locks" / "control.lck"

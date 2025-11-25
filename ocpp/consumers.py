@@ -28,6 +28,7 @@ from .forwarding_service import (
     remove_session as remove_forwarding_session,
     sync_forwarded_charge_points,
 )
+from .status_resets import STATUS_RESET_UPDATES, clear_cached_statuses
 from .call_error_handlers import dispatch_call_error
 from .call_result_handlers import dispatch_call_result
 from decimal import Decimal
@@ -460,6 +461,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             )
         await database_sync_to_async(self.charger.refresh_manager_node)()
         self.aggregate_charger = self.charger
+        await self._clear_cached_status_fields()
         location_name = await sync_to_async(
             lambda: self.charger.location.name if self.charger.location else ""
         )()
@@ -520,6 +522,21 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             return tag
 
         return await database_sync_to_async(_ensure)()
+
+    async def _clear_cached_status_fields(self) -> None:
+        """Clear stale status fields for this charger across all connectors."""
+
+        def _clear_for_charger():
+            return clear_cached_statuses([self.charger_id])
+
+        cleared = await database_sync_to_async(_clear_for_charger)()
+        if not cleared:
+            return
+
+        targets = {self.charger, self.aggregate_charger}
+        for target in [t for t in targets if t is not None]:
+            for field, value in STATUS_RESET_UPDATES.items():
+                setattr(target, field, value)
 
     def _log_unlinked_rfid(self, rfid: str) -> None:
         """Record a warning when an RFID is authorized without an account."""

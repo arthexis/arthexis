@@ -43,6 +43,7 @@ from core.liveupdate import live_update
 from django.utils.dateparse import parse_datetime
 
 from . import store
+from .status_resets import clear_stale_cached_statuses
 from .models import (
     Transaction,
     Charger,
@@ -101,6 +102,12 @@ CALL_EXPECTED_STATUSES: dict[str, set[str] | None] = {
     "UpdateFirmware": None,
     "SetChargingProfile": {"Accepted", "Rejected", "NotSupported"},
 }
+
+
+def _clear_stale_statuses_for_view() -> None:
+    """Reset cached charger state when data has gone stale."""
+
+    clear_stale_cached_statuses()
 
 
 @dataclass
@@ -990,6 +997,8 @@ def _diagnostics_payload(charger: Charger) -> dict[str, str | None]:
 @api_login_required
 def charger_list(request):
     """Return a JSON list of known chargers and state."""
+
+    _clear_stale_statuses_for_view()
     data = []
     for charger in _visible_chargers(request.user):
         cid = charger.charger_id
@@ -1197,6 +1206,7 @@ def charger_detail(request, cid, connector=None):
 @live_update()
 def dashboard(request):
     """Landing page listing all known chargers and their status."""
+    _clear_stale_statuses_for_view()
     node = Node.get_local()
     role = node.role if node else None
     role_name = role.name if role else ""
@@ -1574,6 +1584,7 @@ def cp_simulator(request):
 
 def charger_page(request, cid, connector=None):
     """Public landing page for a charger displaying usage guidance or progress."""
+    _clear_stale_statuses_for_view()
     charger, connector_slug = _get_charger(cid, connector)
     access_response = _ensure_charger_access(
         request.user, charger, request=request
