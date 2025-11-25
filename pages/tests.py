@@ -2618,6 +2618,12 @@ class WatchtowerNavTests(TestCase):
                 settings.BASE_DIR,
                 "pages",
                 "fixtures",
+                "watchtower__landing_ocpp_maintenance_request.json",
+            ),
+            Path(
+                settings.BASE_DIR,
+                "pages",
+                "fixtures",
                 "watchtower__landing_ocpp_rfid.json",
             ),
             Path(
@@ -2786,6 +2792,12 @@ class ReleaseModuleNavTests(TestCase):
                 settings.BASE_DIR,
                 "pages",
                 "fixtures",
+                "localhost__landing_ocpp_maintenance_request.json",
+            ),
+            Path(
+                settings.BASE_DIR,
+                "pages",
+                "fixtures",
                 "localhost__landing_ocpp_rfid.json",
             ),
         ]
@@ -2888,6 +2900,12 @@ class ControlNavTests(TestCase):
                 "pages",
                 "fixtures",
                 "control__landing_ocpp_cp_simulator.json",
+            ),
+            Path(
+                settings.BASE_DIR,
+                "pages",
+                "fixtures",
+                "control__landing_ocpp_maintenance_request.json",
             ),
             Path(
                 settings.BASE_DIR,
@@ -3145,6 +3163,12 @@ class SatelliteNavTests(TestCase):
                 settings.BASE_DIR,
                 "pages",
                 "fixtures",
+                "satellite_box__landing_ocpp_maintenance_request.json",
+            ),
+            Path(
+                settings.BASE_DIR,
+                "pages",
+                "fixtures",
                 "satellite_box__landing_ocpp_rfid.json",
             ),
             Path(
@@ -3312,6 +3336,7 @@ class WatchtowerLandingLinkTests(TestCase):
         expected_landings = {
             "CPMS Online Dashboard": "/ocpp/cpms/dashboard/",
             "Net Monitor Console": "/ocpp/net-monitor/",
+            "Maintenance Request": "/ocpp/maintenance/request/",
             "Charge Point Simulator": "/ocpp/evcs/simulator/",
             "RFID Tag Validator": "/ocpp/rfid/validator/",
         }
@@ -3335,6 +3360,9 @@ class WatchtowerLandingLinkTests(TestCase):
         simulator = locked_landings.get("Charge Point Simulator")
         self.assertIsNotNone(simulator)
         self.assertTrue(simulator.nav_is_locked)
+        maintenance_request = locked_landings.get("Maintenance Request")
+        self.assertIsNotNone(maintenance_request)
+        self.assertTrue(maintenance_request.nav_is_locked)
         net_monitor = locked_landings.get("Net Monitor Console")
         self.assertIsNotNone(net_monitor)
         self.assertTrue(net_monitor.nav_is_locked)
