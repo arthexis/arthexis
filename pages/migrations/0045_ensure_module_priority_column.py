@@ -10,7 +10,10 @@ def ensure_module_priority_column(apps, schema_editor):
     Module = apps.get_model("pages", "Module")
     connection = schema_editor.connection
 
-    if connection.introspection.table_name_converter(Module._meta.db_table) not in connection.introspection.table_names():
+    existing_tables = {
+        table_name.casefold() for table_name in connection.introspection.table_names()
+    }
+    if Module._meta.db_table.casefold() not in existing_tables:
         return
 
     if _column_exists(connection, Module._meta.db_table, PRIORITY_COLUMN):
