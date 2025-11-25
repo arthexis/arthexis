@@ -10,7 +10,16 @@ def ensure_module_priority_column(apps, schema_editor):
     Module = apps.get_model("pages", "Module")
     connection = schema_editor.connection
 
-    if connection.introspection.table_name_converter(Module._meta.db_table) not in connection.introspection.table_names():
+    def _normalize_table_name(introspection, table_name: str) -> str:
+        if hasattr(introspection, "table_name_converter"):
+            return introspection.table_name_converter(table_name)
+        if hasattr(introspection, "identifier_converter"):
+            return introspection.identifier_converter(table_name)
+        return table_name
+
+    table_name = _normalize_table_name(connection.introspection, Module._meta.db_table)
+
+    if table_name not in connection.introspection.table_names():
         return
 
     if _column_exists(connection, Module._meta.db_table, PRIORITY_COLUMN):
