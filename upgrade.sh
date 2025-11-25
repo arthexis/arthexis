@@ -540,6 +540,28 @@ wait_for_service_active() {
   return 1
 }
 
+service_was_active() {
+  local service_name="$1"
+
+  if [ -z "$service_name" ]; then
+    return 1
+  fi
+
+  if [ ${#SYSTEMCTL_CMD[@]} -gt 0 ] && \
+     "${SYSTEMCTL_CMD[@]}" list-unit-files | awk '{print $1}' | grep -Fxq "${service_name}.service"; then
+    if "${SYSTEMCTL_CMD[@]}" is-active --quiet "$service_name"; then
+      return 0
+    fi
+    return 1
+  fi
+
+  if pgrep -f "manage.py runserver" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  return 1
+}
+
 # Restart core, LCD, and Celery services while respecting systemd when available.
 restart_services() {
   echo "Restarting services..."
@@ -697,6 +719,11 @@ upgrade_failure_recovery() {
     exit "$exit_code"
   fi
 
+  if [[ ${SERVICE_WAS_ACTIVE:-1} -eq 0 ]]; then
+    echo "Automatic recovery skipped because services were stopped before the upgrade." >&2
+    exit "$exit_code"
+  fi
+
   if ! restart_services; then
     echo "Automatic recovery could not restore services; manual intervention required." >&2
   fi
@@ -839,6 +866,11 @@ auto_realign_branch_for_role "$NODE_ROLE_NAME" "$BRANCH"
 VENV_PRESENT=1
 [ -d .venv ] || VENV_PRESENT=0
 
+SERVICE_WAS_ACTIVE=0
+if service_was_active "$SERVICE_NAME"; then
+  SERVICE_WAS_ACTIVE=1
+fi
+
 # Stop running instance only if the node is installed
 if [[ $VENV_PRESENT -eq 1 ]]; then
   echo "Stopping running instance..."
@@ -956,18 +988,26 @@ elif [ -n "$SERVICE_NAME" ] && [ "$NODE_ROLE_NAME" = "Control" ] && [ "$SERVICE_
   arthexis_install_lcd_service_unit "$BASE_DIR" "$LOCK_DIR" "$SERVICE_NAME"
 fi
 
+SHOULD_RESTART_AFTER_UPGRADE=1
+if [ -n "$SERVICE_NAME" ] && [[ $SERVICE_WAS_ACTIVE -eq 0 ]]; then
+  SHOULD_RESTART_AFTER_UPGRADE=0
+fi
+
 if [[ $NO_RESTART -eq 0 ]]; then
-  if ! restart_services; then
+  if [[ $SHOULD_RESTART_AFTER_UPGRADE -eq 0 ]]; then
+    if [ -n "$SERVICE_NAME" ]; then
+      echo "Service $SERVICE_NAME was not running before upgrade; skipping automatic restart."
+    else
+      echo "Skipping automatic restart because services were not running before upgrade."
+    fi
+  elif ! restart_services; then
     echo "Detected failed restart after upgrade." >&2
     echo "Manual intervention required to restore services." >&2
     exit 1
   fi
-  if [ -n "$SERVICE_NAME" ]; then
-    ensure_watchdog_running "$SERVICE_NAME"
-  fi
 fi
 
-if [ -n "$SERVICE_NAME" ]; then
+if [ -n "$SERVICE_NAME" ] && [[ $NO_RESTART -eq 0 ]] && [[ $SHOULD_RESTART_AFTER_UPGRADE -eq 1 ]]; then
   ensure_watchdog_running "$SERVICE_NAME"
 fi
 
