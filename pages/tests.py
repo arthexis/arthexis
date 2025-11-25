@@ -80,6 +80,7 @@ from core.admin import ProfileAdminMixin
 from pages.odoo import forward_chat_message
 from pages.whatsapp import forward_chat_message as forward_whatsapp_message
 from core.models import (
+    AdminCommandResult,
     AdminHistory,
     ClientReport,
     CustomerAccount,
@@ -110,6 +111,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, Mock, call, patch
 from types import SimpleNamespace
 from django.core.management import call_command
+from django.core.management.base import BaseCommand
 import re
 from django.contrib.contenttypes.models import ContentType
 from django.http import HttpResponse
@@ -1217,6 +1219,93 @@ class AdminDashboardAppListTests(TestCase):
         self.assertContains(
             resp, "Missing EVCS heartbeat within the last hour for EVCS-LATE."
         )
+
+
+class AdminRunCommandTests(TransactionTestCase):
+    def setUp(self):
+        self.client = Client()
+        User = get_user_model()
+        self.admin = User.objects.create_superuser(
+            username="runner", password="pwd", email="runner@example.com"
+        )
+        self.client.force_login(self.admin)
+        Site.objects.update_or_create(id=1, defaults={"name": "test", "domain": "testserver"})
+
+    def _dummy_command(self, raise_error=False):
+        class DummyCommand(BaseCommand):
+            help = "Dummy command for tests"
+            requires_system_checks = []
+
+            def add_arguments(self, parser):
+                parser.add_argument("--flag", action="store_true")
+
+            def handle(self, *args, **options):
+                if raise_error:
+                    raise RuntimeError("boom")
+                self.stdout.write("OK")
+                if options.get("flag"):
+                    self.stdout.write("FLAG")
+
+        return DummyCommand()
+
+    @patch("core.admin_commands.resolve_sigils")
+    @patch("core.admin_commands.management.load_command_class")
+    @patch("core.admin_commands.management.get_commands")
+    def test_run_command_records_output(self, mock_get_commands, mock_load_command_class, mock_resolve_sigils):
+        mock_resolve_sigils.side_effect = lambda value: "dummy --flag"
+        mock_get_commands.return_value = {"dummy": "tests"}
+        mock_load_command_class.return_value = self._dummy_command()
+
+        response = self.client.post(reverse("admin:run_command"), {"command": "dummy"}, follow=True)
+
+        self.assertEqual(response.status_code, 200)
+        result = AdminCommandResult.objects.latest("created_at")
+        self.assertEqual(result.command, "dummy")
+        self.assertEqual(result.command_name, "dummy")
+        self.assertEqual(result.resolved_command, "dummy --flag")
+        self.assertTrue(result.success)
+        self.assertIn("FLAG", result.stdout)
+        self.assertContains(response, "FLAG")
+        self.assertGreaterEqual(result.runtime.total_seconds(), 0)
+
+    @patch("core.admin_commands.resolve_sigils")
+    @patch("core.admin_commands.management.load_command_class")
+    @patch("core.admin_commands.management.get_commands")
+    def test_run_command_captures_traceback_on_error(
+        self, mock_get_commands, mock_load_command_class, mock_resolve_sigils
+    ):
+        mock_resolve_sigils.return_value = "dummy"
+        mock_get_commands.return_value = {"dummy": "tests"}
+        mock_load_command_class.return_value = self._dummy_command(raise_error=True)
+
+        response = self.client.post(reverse("admin:run_command"), {"command": "dummy"}, follow=True)
+
+        self.assertEqual(response.status_code, 200)
+        result = AdminCommandResult.objects.latest("created_at")
+        self.assertFalse(result.success)
+        self.assertIn("RuntimeError", result.traceback)
+        self.assertContains(response, "RuntimeError")
+
+    def test_history_paginates_results(self):
+        for index in range(12):
+            AdminCommandResult.objects.create(
+                command=f"cmd{index}",
+                resolved_command=f"cmd{index}",
+                command_name=f"cmd{index}",
+                stdout="",
+                stderr="",
+                traceback="",
+                runtime=timedelta(seconds=index),
+                exit_code=0 if index % 2 == 0 else 1,
+                success=index % 2 == 0,
+            )
+
+        resp = self.client.get(reverse("admin:run_command"), {"page": 2})
+
+        self.assertEqual(resp.status_code, 200)
+        page_obj = resp.context["page_obj"]
+        self.assertEqual(page_obj.number, 2)
+        self.assertEqual(len(page_obj.object_list), 2)
 
 
 class AdminModelRuleTemplateTagTests(TestCase):
