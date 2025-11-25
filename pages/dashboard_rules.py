@@ -145,14 +145,18 @@ def evaluate_email_profile_rules() -> dict[str, object]:
         from teams.models import EmailInbox, EmailOutbox
     except Exception:
         logger.exception("Unable to import email profile models")
-        return rule_failure(_("Unable to evaluate email configuration."))
+        return rule_failure(
+            _("Unable to evaluate email configuration due to an import failure."),
+        )
 
     try:
         inboxes = list(EmailInbox.objects.filter(is_enabled=True))
         outboxes = list(EmailOutbox.objects.filter(is_enabled=True))
     except Exception:
         logger.exception("Unable to query email profiles")
-        return rule_failure(_("Unable to evaluate email configuration."))
+        return rule_failure(
+            _("Unable to evaluate email configuration due to a database error."),
+        )
 
     ready_inboxes = [inbox for inbox in inboxes if inbox.is_ready()]
     ready_outboxes = [outbox for outbox in outboxes if outbox.is_ready()]
