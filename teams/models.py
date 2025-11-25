@@ -395,24 +395,10 @@ class EmailInbox(CoreProfile):
         conn.quit()
         return messages
 
-def __str__(self) -> str:
+    def __str__(self) -> str:
         username = (self.username or "").strip()
-        host = (self.host or "").strip()
-
         if username:
-            if "@" in username:
-                return username
-            if host:
-                return f"{username}@{host}"
             return username
-
-        if host:
-            return host
-
-        owner = self.owner_display()
-        if owner:
-            return owner
-
         return super().__str__()
 
 
@@ -583,29 +569,9 @@ class EmailOutbox(CoreProfile):
         ordering = ["-priority", "id"]
 
     def __str__(self) -> str:
-        address = (self.from_email or "").strip()
-        if address:
-            return address
-
         username = (self.username or "").strip()
-        host = (self.host or "").strip()
         if username:
-            local, sep, domain = username.partition("@")
-            if sep and domain:
-                return username
-            if host:
-                sanitized = username.rstrip("@")
-                if sanitized:
-                    return f"{sanitized}@{host}"
-                return host
             return username
-        if host:
-            return host
-
-        owner = self.owner_display()
-        if owner:
-            return owner
-
         return super().__str__()
 
     def clean(self):
