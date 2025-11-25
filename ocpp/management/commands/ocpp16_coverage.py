@@ -108,83 +108,89 @@ def _implemented_cp_to_csms(app_dir: Path) -> set[str]:
     return visitor.actions
 
 
-def _implemented_csms_to_cp(app_dir: Path) -> set[str]:
-    source = (app_dir / "views.py").read_text(encoding="utf-8")
-    tree = ast.parse(source)
+class _CsmsToCpVisitor(ast.NodeVisitor):
+    def __init__(self) -> None:
+        self.actions: set[str] = set()
+        self._constant_stack: list[dict[str, set[str]]] = [dict()]
 
-    class Visitor(ast.NodeVisitor):
-        def __init__(self) -> None:
-            self.actions: set[str] = set()
-            self._constant_stack: list[dict[str, set[str]]] = [dict()]
+    def _current_constants(self) -> dict[str, set[str]]:
+        return self._constant_stack[-1]
 
-        def _current_constants(self) -> dict[str, set[str]]:
-            return self._constant_stack[-1]
+    def _push_scope(self) -> None:
+        self._constant_stack.append(dict())
 
-        def _push_scope(self) -> None:
-            self._constant_stack.append(dict())
+    def _pop_scope(self) -> None:
+        self._constant_stack.pop()
 
-        def _pop_scope(self) -> None:
-            self._constant_stack.pop()
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        self._push_scope()
+        self.generic_visit(node)
+        self._pop_scope()
 
-        def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
-            self._push_scope()
-            self.generic_visit(node)
-            self._pop_scope()
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        self._push_scope()
+        self.generic_visit(node)
+        self._pop_scope()
 
-        def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
-            self._push_scope()
-            self.generic_visit(node)
-            self._pop_scope()
+    def visit_Assign(self, node: ast.Assign) -> None:
+        if not node.targets:
+            return
 
-        def visit_Assign(self, node: ast.Assign) -> None:
-            if not node.targets:
-                return
+        if isinstance(node.value, ast.Constant) and isinstance(
+            node.value.value, str
+        ):
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    self._current_constants().setdefault(target.id, set()).add(
+                        node.value.value
+                    )
 
-            if isinstance(node.value, ast.Constant) and isinstance(
-                node.value.value, str
-            ):
-                for target in node.targets:
-                    if isinstance(target, ast.Name):
-                        self._current_constants().setdefault(target.id, set()).add(
-                            node.value.value
-                        )
+        if not any(
+            isinstance(target, ast.Name) and target.id == "msg"
+            for target in node.targets
+        ):
+            return
+        value = node.value
+        if not isinstance(value, ast.Call):
+            return
+        func = value.func
+        if not (
+            isinstance(func, ast.Attribute)
+            and isinstance(func.value, ast.Name)
+            and func.value.id == "json"
+            and func.attr == "dumps"
+        ):
+            return
+        if not value.args:
+            return
+        payload = value.args[0]
+        if not isinstance(payload, ast.List) or len(payload.elts) < 3:
+            return
+        action_expr = payload.elts[2]
+        action_values: set[str] = set()
+        if isinstance(action_expr, ast.Constant) and isinstance(
+            action_expr.value, str
+        ):
+            action_values.add(action_expr.value)
+        elif isinstance(action_expr, ast.Name):
+            action_values.update(self._current_constants().get(action_expr.id, set()))
+        self.actions.update(action_values)
 
-            if not any(
-                isinstance(target, ast.Name) and target.id == "msg"
-                for target in node.targets
-            ):
-                return
-            value = node.value
-            if not isinstance(value, ast.Call):
-                return
-            func = value.func
-            if not (
-                isinstance(func, ast.Attribute)
-                and isinstance(func.value, ast.Name)
-                and func.value.id == "json"
-                and func.attr == "dumps"
-            ):
-                return
-            if not value.args:
-                return
-            payload = value.args[0]
-            if not isinstance(payload, ast.List) or len(payload.elts) < 3:
-                return
-            action_expr = payload.elts[2]
-            action_values: set[str] = set()
-            if isinstance(action_expr, ast.Constant) and isinstance(
-                action_expr.value, str
-            ):
-                action_values.add(action_expr.value)
-            elif isinstance(action_expr, ast.Name):
-                action_values.update(
-                    self._current_constants().get(action_expr.id, set())
-                )
-            self.actions.update(action_values)
 
-    visitor = Visitor()
-    visitor.visit(tree)
+def _collect_csms_to_cp_actions(source: str) -> set[str]:
+    visitor = _CsmsToCpVisitor()
+    visitor.visit(ast.parse(source))
     return visitor.actions
+
+
+def _implemented_csms_to_cp(app_dir: Path) -> set[str]:
+    actions: set[str] = set()
+    for filename in ("views.py", "admin.py", "tasks.py"):
+        path = app_dir / filename
+        if not path.exists():
+            continue
+        actions.update(_collect_csms_to_cp_actions(path.read_text(encoding="utf-8")))
+    return actions
 
 
 class Command(BaseCommand):
