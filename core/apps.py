@@ -252,6 +252,7 @@ def _register_admin_and_post_migrate_handlers(config):
     from django.db.models.signals import post_migrate
 
     from .admin_history import patch_admin_history
+    from .admin_commands import patch_admin_command_runner
     from .environment import patch_admin_environment_view
     from .sigil_builder import (
         generate_model_sigils,
@@ -282,6 +283,7 @@ def _register_admin_and_post_migrate_handlers(config):
     patch_admin_environment_view()
     patch_admin_sigil_builder_view()
     patch_admin_history()
+    patch_admin_command_runner()
 
 
 def _patch_entity_deserialization():

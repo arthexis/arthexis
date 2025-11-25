@@ -1,0 +1,225 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  <style>
+    .command-runner {
+      display: grid;
+      grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+      gap: 1.25rem;
+    }
+    .command-runner .module {
+      margin: 0;
+    }
+    .command-form .form-row {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+    .command-form .help {
+      color: var(--body-quiet-color);
+      margin: 0;
+    }
+    .command-form .errorlist {
+      margin: 0;
+    }
+    .command-meta {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 0.75rem;
+      margin: 1rem 0;
+    }
+    .command-meta__item {
+      padding: 0.75rem;
+      border-radius: 8px;
+      background: var(--darkened-bg);
+    }
+    .command-meta__label {
+      display: block;
+      font-size: 0.85rem;
+      color: var(--body-quiet-color);
+      margin-bottom: 0.35rem;
+    }
+    .command-meta__value {
+      font-weight: 600;
+      word-break: break-all;
+    }
+    .command-output details {
+      margin-bottom: 0.75rem;
+      border: 1px solid var(--hairline-color);
+      border-radius: 6px;
+      background: var(--darkened-bg);
+      padding: 0.5rem 0.75rem;
+    }
+    .command-output summary {
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .command-output pre {
+      white-space: pre-wrap;
+      margin: 0.5rem 0 0;
+      padding: 0.75rem;
+      border-radius: 6px;
+      background: var(--body-bg);
+      border: 1px solid var(--hairline-color);
+      overflow-x: auto;
+    }
+    .history-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .history-table th,
+    .history-table td {
+      padding: 0.5rem 0.75rem;
+      text-align: left;
+      border-bottom: 1px solid var(--hairline-color);
+    }
+    .history-table .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.15rem 0.5rem;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+    .history-table .status--success {
+      background: rgba(46, 160, 67, 0.15);
+      color: #2ea043;
+    }
+    .history-table .status--error {
+      background: rgba(240, 129, 15, 0.15);
+      color: #f0810f;
+    }
+    .history-table .history-command {
+      font-family: var(--font-family-monospace);
+      max-width: 28ch;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      display: inline-block;
+    }
+    .pagination {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      margin-top: 0.75rem;
+    }
+    .pagination a {
+      text-decoration: none;
+    }
+    @media (max-width: 992px) {
+      .command-runner {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+  <div id="content-main" class="command-runner">
+    <div class="module">
+      <h2>{% trans "Run Command" %}</h2>
+      <form method="post" class="command-form">
+        {% csrf_token %}
+        <div class="form-row">
+          {{ form.command.label_tag }}
+          {{ form.command }}
+          {% if form.command.help_text %}
+            <p class="help">{{ form.command.help_text }}</p>
+          {% endif %}
+          {{ form.command.errors }}
+        </div>
+        <div style="margin-top:0.75rem;">
+          <button type="submit" class="button default">{% trans "Run" %}</button>
+        </div>
+      </form>
+      {% if result %}
+        <div class="command-meta">
+          <div class="command-meta__item">
+            <span class="command-meta__label">{% trans "Status" %}</span>
+            <span class="command-meta__value">{% if result.success %}{% trans "Success" %}{% else %}{% trans "Failed" %}{% endif %}</span>
+          </div>
+          <div class="command-meta__item">
+            <span class="command-meta__label">{% trans "Runtime" %}</span>
+            <span class="command-meta__value">{{ result.runtime }}</span>
+          </div>
+          <div class="command-meta__item">
+            <span class="command-meta__label">{% trans "Executed" %}</span>
+            <span class="command-meta__value">{{ result.created_at|date:"SHORT_DATETIME_FORMAT" }}</span>
+          </div>
+          <div class="command-meta__item">
+            <span class="command-meta__label">{% trans "Run by" %}</span>
+            <span class="command-meta__value">{{ result.user|default:_('System') }}</span>
+          </div>
+        </div>
+        <div class="command-meta" style="margin-top:0;">
+          <div class="command-meta__item" style="grid-column: 1 / -1;">
+            <span class="command-meta__label">{% trans "Resolved command" %}</span>
+            <span class="command-meta__value">{{ result.resolved_command }}</span>
+          </div>
+        </div>
+        <div class="command-output">
+          <details open>
+            <summary>{% trans "Standard output" %}</summary>
+            <pre>{{ result.stdout|default:_('No output') }}</pre>
+          </details>
+          <details {% if result.stderr %}open{% endif %}>
+            <summary>{% trans "Standard error" %}</summary>
+            <pre>{{ result.stderr|default:_('No errors reported') }}</pre>
+          </details>
+          {% if result.traceback %}
+            <details open>
+              <summary>{% trans "Traceback" %}</summary>
+              <pre>{{ result.traceback }}</pre>
+            </details>
+          {% endif %}
+        </div>
+      {% endif %}
+    </div>
+    <div class="module">
+      <h2>{% trans "Command History" %}</h2>
+      {% if page_obj.object_list %}
+        <table class="history-table">
+          <thead>
+            <tr>
+              <th>{% trans "Command" %}</th>
+              <th>{% trans "Ran" %}</th>
+              <th>{% trans "Runtime" %}</th>
+              <th>{% trans "Status" %}</th>
+              <th>{% trans "View" %}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for entry in page_obj.object_list %}
+              <tr>
+                <td><span class="history-command" title="{{ entry.resolved_command }}">{{ entry.resolved_command }}</span></td>
+                <td>{{ entry.created_at|date:"SHORT_DATETIME_FORMAT" }}</td>
+                <td>{{ entry.runtime }}</td>
+                <td>
+                  <span class="status {% if entry.success %}status--success{% else %}status--error{% endif %}">
+                    {% if entry.success %}✔{% else %}✖{% endif %}
+                    {% if entry.success %}{% trans "Success" %}{% else %}{% trans "Failed" %}{% endif %}
+                  </span>
+                </td>
+                <td><a href="{% url 'admin:run_command' %}?result={{ entry.pk }}&page={{ page_obj.number }}">{% trans "View" %}</a></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        <div class="pagination">
+          {% if page_obj.has_previous %}
+            <a href="{% url 'admin:run_command' %}?page={{ page_obj.previous_page_number }}">{% trans "Previous" %}</a>
+          {% endif %}
+          <span>{% blocktrans %}Page {{ page_obj.number }} of {{ paginator.num_pages }}{% endblocktrans %}</span>
+          {% if page_obj.has_next %}
+            <a href="{% url 'admin:run_command' %}?page={{ page_obj.next_page_number }}">{% trans "Next" %}</a>
+          {% endif %}
+        </div>
+      {% else %}
+        <p>{% trans "No commands have been run yet." %}</p>
+      {% endif %}
+    </div>
+  </div>
+{% endblock %}

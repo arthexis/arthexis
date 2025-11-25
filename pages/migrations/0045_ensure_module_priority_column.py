@@ -6,20 +6,26 @@ from django.db import migrations
 PRIORITY_COLUMN = "priority"
 
 
+def _identifier_converter(connection):
+    introspection = connection.introspection
+    return getattr(introspection, "table_name_converter", None) or getattr(
+        introspection, "identifier_converter", lambda value: value
+    )
+
+
+def _table_names(connection):
+    converter = _identifier_converter(connection)
+    return {converter(name) for name in connection.introspection.table_names()}
+
+
 def ensure_module_priority_column(apps, schema_editor):
     Module = apps.get_model("pages", "Module")
     connection = schema_editor.connection
 
-    def _normalize_table_name(introspection, table_name: str) -> str:
-        if hasattr(introspection, "table_name_converter"):
-            return introspection.table_name_converter(table_name)
-        if hasattr(introspection, "identifier_converter"):
-            return introspection.identifier_converter(table_name)
-        return table_name
+    converter = _identifier_converter(connection)
+    normalized_table_name = converter(Module._meta.db_table)
 
-    table_name = _normalize_table_name(connection.introspection, Module._meta.db_table)
-
-    if table_name not in connection.introspection.table_names():
+    if normalized_table_name not in _table_names(connection):
         return
 
     if _column_exists(connection, Module._meta.db_table, PRIORITY_COLUMN):
