@@ -23,18 +23,20 @@ class MaintenanceRequestForm(forms.ModelForm):
     class Meta:
         model = ManualTask
         fields = [
-            "title",
+            "category",
             "description",
+            "duration",
             "location",
             "scheduled_start",
             "scheduled_end",
             "enable_notifications",
         ]
         widgets = {
-            "title": forms.TextInput(attrs={"class": "form-control"}),
+            "category": forms.Select(attrs={"class": "form-select"}),
             "description": forms.Textarea(
                 attrs={"rows": 4, "class": "form-control"}
             ),
+            "duration": forms.TextInput(attrs={"class": "form-control"}),
             "location": forms.Select(attrs={"class": "form-select"}),
             "enable_notifications": forms.CheckboxInput(
                 attrs={"class": "form-check-input"}
@@ -45,6 +47,7 @@ class MaintenanceRequestForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["location"].required = True
         self.fields["location"].queryset = Location.objects.order_by("name")
+        self.fields["category"].required = True
         self.fields["scheduled_start"].widget.attrs.setdefault(
             "class", "form-control"
         )

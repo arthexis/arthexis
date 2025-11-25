@@ -29,11 +29,14 @@ class ManualTaskModelTests(TestCase):
         self.location = Location.objects.create(name="Depot")
         self.start = timezone.now()
         self.end = self.start + timedelta(hours=1)
+        self.category = TaskCategory.objects.create(
+            name="Maintenance", default_duration=timedelta(hours=2)
+        )
 
     def test_requires_node_or_location(self):
         task = ManualTask(
-            title="Inspect Router",
             description="Check wiring and record status.",
+            category=self.category,
             scheduled_start=self.start,
             scheduled_end=self.end,
         )
@@ -44,8 +47,8 @@ class ManualTaskModelTests(TestCase):
 
     def test_enforces_schedule_order(self):
         task = ManualTask(
-            title="Review Firmware",
             description="Validate upgrade plan.",
+            category=self.category,
             node=self.node,
             scheduled_start=self.end,
             scheduled_end=self.start,
@@ -56,8 +59,8 @@ class ManualTaskModelTests(TestCase):
 
     def test_can_assign_to_node_and_location(self):
         task = ManualTask(
-            title="Calibrate Charger",
             description="Confirm output settings.",
+            category=self.category,
             node=self.node,
             location=self.location,
             scheduled_start=self.start,
@@ -65,25 +68,23 @@ class ManualTaskModelTests(TestCase):
         )
         task.full_clean()
         task.save()
-        self.assertEqual(str(task), "Calibrate Charger")
+        self.assertEqual(str(task), "Maintenance")
         self.assertEqual(ManualTask.objects.count(), 1)
         saved = ManualTask.objects.get()
         self.assertEqual(saved.node, self.node)
         self.assertEqual(saved.location, self.location)
 
     def test_can_assign_category(self):
-        category = TaskCategory.objects.create(name="Maintenance")
         task = ManualTask(
-            title="Inspect Charger",
             description="Verify connectors are clean.",
+            category=self.category,
             node=self.node,
             scheduled_start=self.start,
             scheduled_end=self.end,
-            category=category,
         )
         task.full_clean()
         task.save()
-        self.assertEqual(task.category, category)
+        self.assertEqual(task.category, self.category)
 
 
 class ManualTaskNotificationTests(TestCase):
@@ -105,6 +106,7 @@ class ManualTaskNotificationTests(TestCase):
             hostname="notifier",
             mac_address="AA:BB:CC:DD:EE:10",
         )
+        self.category = TaskCategory.objects.create(name="Maintenance")
         EmailOutbox.objects.create(
             node=self.node,
             user=get_user_model().objects.create_user(
@@ -133,8 +135,8 @@ class ManualTaskNotificationTests(TestCase):
             "teams.models.mailer.can_send_email", return_value=True
         ):
             ManualTask.objects.create(
-                title="Prep",
                 description="Prep chargers",
+                category=self.category,
                 node=self.node,
                 scheduled_start=start,
                 scheduled_end=end,
@@ -149,8 +151,8 @@ class ManualTaskNotificationTests(TestCase):
             "teams.models.mailer.can_send_email", return_value=True
         ):
             ManualTask.objects.create(
-                title="Prep",
                 description="Prep chargers",
+                category=self.category,
                 node=self.node,
                 scheduled_start=start,
                 scheduled_end=end,
@@ -161,8 +163,8 @@ class ManualTaskNotificationTests(TestCase):
 
     def test_send_notification_email_combines_recipients(self):
         task = ManualTask.objects.create(
-            title="Inspect",
             description="Inspect chargers",
+            category=self.category,
             node=self.node,
             scheduled_start=timezone.now() + timedelta(hours=4),
             scheduled_end=timezone.now() + timedelta(hours=5),
@@ -208,6 +210,7 @@ class ManualTaskAdminActionTests(TestCase):
         self.account.rfids.add(self.rfid)
         self.start = timezone.now() + timedelta(hours=2)
         self.end = self.start + timedelta(minutes=90)
+        self.category = TaskCategory.objects.create(name="Charge Point Maintenance")
 
     def _build_request(self):
         factory = RequestFactory()
@@ -219,8 +222,8 @@ class ManualTaskAdminActionTests(TestCase):
 
     def test_make_cp_reservations_action_creates_reservation(self):
         task = ManualTask.objects.create(
-            title="Reserve Slot",
             description="Reserve connector",
+            category=self.category,
             node=self.node,
             location=self.location,
             scheduled_start=self.start,

@@ -5,7 +5,6 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.utils.translation import gettext_lazy as _
 
 from core.models import SecurityGroup, TOTPDeviceSettings
-from core.widgets import OdooProductWidget
 from django_otp.plugins.otp_totp.models import TOTPDevice
 
 from .models import SlackBotProfile, TaskCategory
@@ -211,5 +210,4 @@ class TaskCategoryAdminForm(forms.ModelForm):
     class Meta:
         model = TaskCategory
         fields = "__all__"
-        widgets = {"odoo_product": OdooProductWidget}
 
