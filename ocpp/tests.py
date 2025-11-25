@@ -8153,13 +8153,31 @@ class LiveUpdateViewTests(TestCase):
 
     def test_dashboard_aggregate_shows_charging_when_all_connectors_busy(self):
         aggregate = Charger.objects.create(
-            charger_id="DASHAGG-CHG", last_status="Available"
+            charger_id="DASHAGG-CHG",
+            last_status="Available",
+            last_heartbeat=timezone.now(),
         )
         conn1 = Charger.objects.create(
-            charger_id=aggregate.charger_id, connector_id=1, last_status="Charging"
+            charger_id=aggregate.charger_id,
+            connector_id=1,
+            last_status="Charging",
+            last_heartbeat=timezone.now(),
         )
         conn2 = Charger.objects.create(
-            charger_id=aggregate.charger_id, connector_id=2, last_status="Charging"
+            charger_id=aggregate.charger_id,
+            connector_id=2,
+            last_status="Charging",
+            last_heartbeat=timezone.now(),
+        )
+        Transaction.objects.create(
+            charger=conn1,
+            start_time=timezone.now(),
+            meter_start=0,
+        )
+        Transaction.objects.create(
+            charger=conn2,
+            start_time=timezone.now(),
+            meter_start=0,
         )
 
         resp = self.client.get(reverse("ocpp-dashboard"))
@@ -8187,13 +8205,21 @@ class LiveUpdateViewTests(TestCase):
 
     def test_dashboard_aggregate_shows_available_when_any_connector_free(self):
         aggregate = Charger.objects.create(
-            charger_id="DASHAGG-AVL", last_status="Charging"
+            charger_id="DASHAGG-AVL",
+            last_status="Charging",
+            last_heartbeat=timezone.now(),
         )
         Charger.objects.create(
-            charger_id=aggregate.charger_id, connector_id=1, last_status="Charging"
+            charger_id=aggregate.charger_id,
+            connector_id=1,
+            last_status="Charging",
+            last_heartbeat=timezone.now(),
         )
         Charger.objects.create(
-            charger_id=aggregate.charger_id, connector_id=2, last_status="Available"
+            charger_id=aggregate.charger_id,
+            connector_id=2,
+            last_status="Available",
+            last_heartbeat=timezone.now(),
         )
 
         resp = self.client.get(reverse("ocpp-dashboard"))
@@ -8208,6 +8234,38 @@ class LiveUpdateViewTests(TestCase):
             and item["charger"].connector_id is None
         )
         self.assertEqual(aggregate_entry["state"], available_label)
+
+    def test_dashboard_aggregate_uses_connector_display_state(self):
+        aggregate = Charger.objects.create(
+            charger_id="DASHAGG-STATE",
+            last_status="Charging",
+            last_heartbeat=timezone.now(),
+        )
+        connector = Charger.objects.create(
+            charger_id=aggregate.charger_id,
+            connector_id=1,
+            last_status="Charging",
+            last_heartbeat=timezone.now(),
+        )
+
+        resp = self.client.get(reverse("ocpp-dashboard"))
+        self.assertEqual(resp.status_code, 200)
+        context = resp.context or getattr(resp, "context_data", None)
+        self.assertIsNotNone(context)
+        available_label = force_str(STATUS_BADGE_MAP["available"][0])
+        aggregate_entry = next(
+            item
+            for item in context["chargers"]
+            if item["charger"].pk == aggregate.pk
+        )
+        connector_entry = next(
+            item
+            for item in context["chargers"]
+            if item["charger"].pk == connector.pk
+        )
+
+        self.assertEqual(aggregate_entry["state"], available_label)
+        self.assertEqual(connector_entry["state"], available_label)
 
     def test_dashboard_connector_treats_finishing_as_available_without_session(self):
         charger = Charger.objects.create(
