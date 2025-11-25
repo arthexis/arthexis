@@ -2436,8 +2436,8 @@ class PackageReleaseCurrentTests(TestCase):
         self.package.save()
         self.assertFalse(self.release.is_current)
 
-    def test_is_current_false_when_version_has_plus(self):
-        self.version_path.write_text("1.0.0+")
+    def test_is_current_false_when_version_has_dev_suffix(self):
+        self.version_path.write_text("1.0.0+d")
         self.assertFalse(self.release.is_current)
 
 
@@ -2450,7 +2450,12 @@ class PackageReleaseRevisionTests(TestCase):
             revision="abcdef123456",
         )
 
-    def test_matches_revision_ignores_plus_suffix(self):
+    def test_matches_revision_ignores_dev_suffix(self):
+        self.assertTrue(
+            PackageRelease.matches_revision("1.0.0+d", "abcdef123456")
+        )
+
+    def test_matches_revision_ignores_legacy_plus_suffix(self):
         self.assertTrue(
             PackageRelease.matches_revision("1.0.0+", "abcdef123456")
         )

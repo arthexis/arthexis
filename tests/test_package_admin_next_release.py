@@ -41,7 +41,7 @@ class PackageAdminPrepareTests(TestCase):
     @patch("core.admin.requests.get")
     def test_local_version_bumps_patch(self, mock_get):
         mock_get.return_value = self._mock_pypi("0.1.8")
-        self.version_file.write_text("0.1.9+dev")
+        self.version_file.write_text("0.1.9+d")
         self.admin._prepare(self.factory.get("/"), self.package)
         release = PackageRelease.objects.get(package=self.package)
         self.assertEqual(release.version, "0.1.10")
@@ -49,7 +49,7 @@ class PackageAdminPrepareTests(TestCase):
     @patch("core.admin.requests.get")
     def test_local_version_with_epoch_preserves_epoch(self, mock_get):
         mock_get.return_value = self._mock_pypi("1!0.1")
-        self.version_file.write_text("1!0.1+dev")
+        self.version_file.write_text("1!0.1+d")
         self.admin._prepare(self.factory.get("/"), self.package)
         release = PackageRelease.objects.get(package=self.package)
         self.assertEqual(release.version, "1!0.1.1")

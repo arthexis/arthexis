@@ -4509,6 +4509,9 @@ class Package(Entity):
 class PackageRelease(Entity):
     """Store metadata for a specific package version."""
 
+    DEV_SUFFIX = "+d"
+    LEGACY_DEV_SUFFIX = "+"
+
     _PATCH_BITS = 12
     _MINOR_BITS = 12
     _PATCH_MASK = (1 << _PATCH_BITS) - 1
@@ -4543,7 +4546,7 @@ class PackageRelease(Entity):
         if "+" not in text:
             return text
 
-        cleaned = text.rstrip("+")
+        cleaned = PackageRelease.strip_dev_suffix(text)
         try:
             parsed = Version(cleaned)
         except InvalidVersion:
@@ -4556,6 +4559,14 @@ class PackageRelease(Entity):
             return cleaned or text
 
         return PackageRelease._format_patch_with_epoch(parsed)
+
+    @staticmethod
+    def strip_dev_suffix(version: str) -> str:
+        text = (version or "").strip()
+        for suffix in (PackageRelease.DEV_SUFFIX, PackageRelease.LEGACY_DEV_SUFFIX):
+            if text.endswith(suffix):
+                return text[: -len(suffix)]
+        return text
 
     class Severity(models.TextChoices):
         NORMAL = "normal", _("Normal")
@@ -5000,9 +5011,7 @@ class PackageRelease(Entity):
         callers continue operating without raising secondary errors.
         """
 
-        version = (version or "").strip()
-        if version.endswith("+"):
-            version = version.rstrip("+")
+        version = cls.strip_dev_suffix((version or "").strip())
         revision = (revision or "").strip()
         if not version or not revision:
             return True
