@@ -5936,3 +5936,60 @@ msgstr "%(title)s für %(start)s bis %(end)s."
 #: core/models.py:3200
 msgid "%(title)s %(start)s - %(end)s"
 msgstr "%(title)s %(start)s - %(end)s"
+
+#: ocpp/templates/ocpp/maintenance_request.html:4
+#: ocpp/templates/ocpp/maintenance_request.html:11
+msgid "Maintenance Request"
+msgstr "Wartungsanfrage"
+
+#: ocpp/templates/ocpp/maintenance_request.html:12
+msgid "Schedule a manual maintenance task for a specific location."
+msgstr "Planen Sie eine manuelle Wartungsaufgabe für einen bestimmten Standort."
+
+#: ocpp/templates/ocpp/maintenance_request.html:23
+msgid "Title"
+msgstr "Titel"
+
+#: ocpp/templates/ocpp/maintenance_request.html:30
+msgid "Description"
+msgstr "Beschreibung"
+
+#: ocpp/templates/ocpp/maintenance_request.html:37
+msgid "Location"
+msgstr "Standort"
+
+#: ocpp/templates/ocpp/maintenance_request.html:45
+msgid "Scheduled start"
+msgstr "Geplanter Beginn"
+
+#: ocpp/templates/ocpp/maintenance_request.html:52
+msgid "Scheduled end"
+msgstr "Geplantes Ende"
+
+#: ocpp/templates/ocpp/maintenance_request.html:61
+msgid "Email reminders"
+msgstr "E-Mail-Erinnerungen"
+
+#: ocpp/templates/ocpp/maintenance_request.html:66
+msgid "Schedule Task"
+msgstr "Aufgabe planen"
+
+#: ocpp/templates/ocpp/maintenance_request.html:74
+msgid "How it works"
+msgstr "So funktioniert es"
+
+#: ocpp/templates/ocpp/maintenance_request.html:76
+msgid "Select the location that requires on-site maintenance."
+msgstr "Wählen Sie den Standort aus, der eine Wartung vor Ort benötigt."
+
+#: ocpp/templates/ocpp/maintenance_request.html:77
+msgid "Provide a clear title and description for the task."
+msgstr "Geben Sie einen eindeutigen Titel und eine Beschreibung für die Aufgabe an."
+
+#: ocpp/templates/ocpp/maintenance_request.html:78
+msgid "Choose the expected start and end window for the work."
+msgstr "Wählen Sie das erwartete Start- und Endfenster für die Arbeit."
+
+#: ocpp/templates/ocpp/maintenance_request.html:79
+msgid "Enable email reminders to notify assigned contacts when available."
+msgstr "Aktivieren Sie E-Mail-Erinnerungen, um zugewiesene Kontakte bei Verfügbarkeit zu benachrichtigen."

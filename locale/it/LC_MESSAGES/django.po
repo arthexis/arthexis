@@ -5932,3 +5932,60 @@ msgstr "%(title)s da %(start)s a %(end)s."
 #: core/models.py:3200
 msgid "%(title)s %(start)s - %(end)s"
 msgstr "%(title)s %(start)s - %(end)s"
+
+#: ocpp/templates/ocpp/maintenance_request.html:4
+#: ocpp/templates/ocpp/maintenance_request.html:11
+msgid "Maintenance Request"
+msgstr "Richiesta di manutenzione"
+
+#: ocpp/templates/ocpp/maintenance_request.html:12
+msgid "Schedule a manual maintenance task for a specific location."
+msgstr "Pianifica un intervento di manutenzione manuale per una posizione specifica."
+
+#: ocpp/templates/ocpp/maintenance_request.html:23
+msgid "Title"
+msgstr "Titolo"
+
+#: ocpp/templates/ocpp/maintenance_request.html:30
+msgid "Description"
+msgstr "Descrizione"
+
+#: ocpp/templates/ocpp/maintenance_request.html:37
+msgid "Location"
+msgstr "Posizione"
+
+#: ocpp/templates/ocpp/maintenance_request.html:45
+msgid "Scheduled start"
+msgstr "Inizio pianificato"
+
+#: ocpp/templates/ocpp/maintenance_request.html:52
+msgid "Scheduled end"
+msgstr "Fine pianificata"
+
+#: ocpp/templates/ocpp/maintenance_request.html:61
+msgid "Email reminders"
+msgstr "Promemoria email"
+
+#: ocpp/templates/ocpp/maintenance_request.html:66
+msgid "Schedule Task"
+msgstr "Pianifica attività"
+
+#: ocpp/templates/ocpp/maintenance_request.html:74
+msgid "How it works"
+msgstr "Come funziona"
+
+#: ocpp/templates/ocpp/maintenance_request.html:76
+msgid "Select the location that requires on-site maintenance."
+msgstr "Seleziona la posizione che richiede manutenzione in loco."
+
+#: ocpp/templates/ocpp/maintenance_request.html:77
+msgid "Provide a clear title and description for the task."
+msgstr "Fornisci un titolo chiaro e una descrizione per l’attività."
+
+#: ocpp/templates/ocpp/maintenance_request.html:78
+msgid "Choose the expected start and end window for the work."
+msgstr "Scegli la finestra di inizio e fine prevista per il lavoro."
+
+#: ocpp/templates/ocpp/maintenance_request.html:79
+msgid "Enable email reminders to notify assigned contacts when available."
+msgstr "Abilita i promemoria email per avvisare i contatti assegnati quando disponibili."
