@@ -69,7 +69,7 @@ UPGRADE_CHANNEL_CHOICES: dict[str, dict[str, object]] = {
     "unstable": {"override": "unstable", "label": _("Unstable")},
     # Legacy aliases
     "normal": {"override": "stable", "label": _("Stable")},
-    "latest": {"override": "unstable", "label": _("Unstable")},
+    "latest": {"override": "latest", "label": _("Latest")},
 }
 
 
@@ -219,6 +219,66 @@ def _format_timestamp(dt: datetime | None) -> str:
     return date_format(localized, "DATETIME_FORMAT")
 
 
+def _predict_auto_upgrade_next_run(task) -> str:
+    """Return a display-ready next-run timestamp for *task*."""
+
+    if not task:
+        return ""
+
+    if not getattr(task, "enabled", False):
+        return str(_("Disabled"))
+
+    try:
+        schedule = task.schedule
+    except Exception:
+        return ""
+
+    if schedule is None:
+        return ""
+
+    try:
+        now = schedule.maybe_make_aware(schedule.now())
+    except Exception:
+        try:
+            now = timezone.localtime()
+        except Exception:
+            now = timezone.now()
+
+    start_time = getattr(task, "start_time", None)
+    if start_time is not None:
+        try:
+            candidate_start = schedule.maybe_make_aware(start_time)
+        except Exception:
+            candidate_start = (
+                timezone.make_aware(start_time, timezone.get_current_timezone())
+                if timezone.is_naive(start_time)
+                else start_time
+            )
+        if candidate_start and candidate_start > now:
+            return _format_timestamp(candidate_start)
+
+    last_run_at = getattr(task, "last_run_at", None)
+    if last_run_at is not None:
+        try:
+            reference = schedule.maybe_make_aware(last_run_at)
+        except Exception:
+            reference = (
+                timezone.make_aware(last_run_at, timezone.get_current_timezone())
+                if timezone.is_naive(last_run_at)
+                else last_run_at
+            )
+    else:
+        reference = now
+
+    try:
+        remaining = schedule.remaining_estimate(reference)
+    except Exception:
+        return ""
+
+    next_run = now + remaining
+    return _format_timestamp(next_run)
+
+
 def _auto_upgrade_next_check() -> str:
     """Return the human-readable timestamp for the next auto-upgrade check."""
 
@@ -240,48 +300,7 @@ def _auto_upgrade_next_check() -> str:
     except Exception:  # pragma: no cover - database unavailable
         return ""
 
-    if not task.enabled:
-        return str(_("Disabled"))
-
-    schedule = task.schedule
-    if schedule is None:
-        return ""
-
-    now = schedule.maybe_make_aware(schedule.now())
-
-    start_time = task.start_time
-    if start_time is not None:
-        try:
-            candidate_start = schedule.maybe_make_aware(start_time)
-        except Exception:
-            candidate_start = (
-                timezone.make_aware(start_time)
-                if timezone.is_naive(start_time)
-                else start_time
-            )
-        if candidate_start and candidate_start > now:
-            return _format_timestamp(candidate_start)
-
-    last_run_at = task.last_run_at
-    if last_run_at is not None:
-        try:
-            reference = schedule.maybe_make_aware(last_run_at)
-        except Exception:
-            reference = (
-                timezone.make_aware(last_run_at)
-                if timezone.is_naive(last_run_at)
-                else last_run_at
-            )
-    else:
-        reference = now
-
-    try:
-        remaining = schedule.remaining_estimate(reference)
-    except Exception:
-        return ""
-
-    next_run = now + remaining
-    return _format_timestamp(next_run)
+    return _predict_auto_upgrade_next_run(task)
 
 
 def _read_auto_upgrade_mode(base_dir: Path) -> dict[str, object]:
@@ -696,7 +715,7 @@ def _load_auto_upgrade_schedule() -> dict[str, object]:
         except Exception:  # pragma: no cover - schedule string conversion failed
             info["schedule"] = ""
 
-    info["next_run"] = _auto_upgrade_next_check()
+    info["next_run"] = _predict_auto_upgrade_next_run(task)
     return info
 
 
@@ -1198,15 +1217,15 @@ def _build_auto_upgrade_report(
     raw_mode_value = str(mode_info.get("mode", "stable"))
     normalized_mode = raw_mode_value.lower() or "stable"
     resolved_mode = {
-        "latest": "unstable",
         "version": "stable",
         "normal": "stable",
         "regular": "stable",
     }.get(normalized_mode, normalized_mode)
     if not resolved_mode:
         resolved_mode = "stable"
-    is_unstable_mode = resolved_mode == "unstable"
+    is_unstable_mode = resolved_mode in {"unstable", "latest"}
     is_stable_mode = resolved_mode == "stable"
+    is_latest_mode = normalized_mode == "latest"
 
     revision_details = _prepare_revision_info(revision_info)
 
@@ -1217,6 +1236,7 @@ def _build_auto_upgrade_report(
         "channel": resolved_mode,
         "is_unstable_mode": is_unstable_mode,
         "is_stable_mode": is_stable_mode,
+        "is_latest": is_latest_mode,
         "lock_exists": bool(mode_info.get("lock_exists", False)),
         "read_error": bool(mode_info.get("read_error", False)),
         "mode_file": str(_auto_upgrade_mode_file(base_dir)),
@@ -1930,7 +1950,9 @@ def _system_trigger_upgrade_check_view(request):
     override_value = channel_choice.get("override")
     channel_override = override_value if isinstance(override_value, str) else None
     channel_label = None
-    if channel_override:
+    if requested_channel == "stable":
+        channel_override = None
+    elif channel_override:
         channel_label = str(channel_choice["label"])
 
     base_dir = Path(settings.BASE_DIR)
