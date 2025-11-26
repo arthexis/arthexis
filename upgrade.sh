@@ -38,6 +38,8 @@ trap log_upgrade_exit EXIT
 # shellcheck source=scripts/helpers/service_manager.sh
 . "$BASE_DIR/scripts/helpers/service_manager.sh"
 arthexis_resolve_log_dir "$BASE_DIR" LOG_DIR || exit 1
+# Prefer python3 but fall back to python when only the legacy binary is available.
+PYTHON_BIN="$(command -v python3 || command -v python || true)"
 # Capture stdout/stderr to a timestamped log for later review.
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 exec > >(tee "$LOG_FILE")
@@ -138,7 +140,12 @@ reset_safe_git_changes() {
 }
 
 queue_startup_net_message() {
-  python - "$BASE_DIR" <<'PY'
+  if [ -z "$PYTHON_BIN" ]; then
+    echo "Python interpreter not found; cannot queue startup notification." >&2
+    return 1
+  fi
+
+  "$PYTHON_BIN" - "$BASE_DIR" <<'PY'
 import sys
 from pathlib import Path
 
@@ -361,8 +368,8 @@ install_requirements_if_changed() {
   fi
 
   if [ "$new_hash" != "$stored_hash" ]; then
-    if [ -f "$PIP_INSTALL_HELPER" ] && command -v python >/dev/null 2>&1; then
-      python "$PIP_INSTALL_HELPER" -r "$req_file"
+    if [ -f "$PIP_INSTALL_HELPER" ] && [ -n "$PYTHON_BIN" ]; then
+      "$PYTHON_BIN" "$PIP_INSTALL_HELPER" -r "$req_file"
     else
       pip install -r "$req_file"
     fi
