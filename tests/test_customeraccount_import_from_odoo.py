@@ -4,7 +4,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from core.models import CustomerAccount, OdooProfile, User
+from core.models import CustomerAccount, OdooProfile, SecurityGroup, User
 
 
 class CustomerAccountImportFromOdooTests(TestCase):
@@ -100,6 +100,55 @@ class CustomerAccountImportFromOdooTests(TestCase):
         self.assertRedirects(
             response, reverse("admin:core_customeraccount_changelist")
         )
+
+    @patch.object(OdooProfile, "execute")
+    def test_import_assigns_security_group_to_new_user(self, mock_execute):
+        self._create_profile()
+        mock_execute.return_value = [
+            {
+                "id": 11,
+                "name": "John Smith",
+                "email": "john@example.com",
+                "phone": "123",  # ensure phone stored when available
+                "mobile": "",  # ignore empty
+                "city": "Chicago",
+                "country_id": [30, "USA"],
+            }
+        ]
+        url = reverse("admin:core_customeraccount_import_from_odoo")
+        self.client.post(
+            url,
+            {"perform_search": "1", "customer_ids": ["11"], "import_action": "import"},
+        )
+        account = CustomerAccount.objects.get()
+        group = SecurityGroup.objects.get(name="Odoo User")
+        self.assertTrue(account.user.groups.filter(pk=group.pk).exists())
+
+    @patch.object(OdooProfile, "execute")
+    def test_import_attaches_security_group_to_existing_user(self, mock_execute):
+        self._create_profile()
+        existing_user = User.objects.create_user("jane", email="jane@example.com")
+        mock_execute.return_value = [
+            {
+                "id": 12,
+                "name": "Jane Smith",
+                "email": "jane@example.com",
+                "phone": "",  # no phone update expected
+                "mobile": "",
+                "city": "Austin",
+                "country_id": [20, "USA"],
+            }
+        ]
+        url = reverse("admin:core_customeraccount_import_from_odoo")
+        self.client.post(
+            url,
+            {"perform_search": "1", "customer_ids": ["12"], "import_action": "import"},
+        )
+        group = SecurityGroup.objects.get(name="Odoo User")
+        existing_user.refresh_from_db()
+        account = CustomerAccount.objects.get()
+        self.assertEqual(account.user, existing_user)
+        self.assertTrue(existing_user.groups.filter(pk=group.pk).exists())
 
     @patch.object(OdooProfile, "execute")
     def test_import_skips_existing_user_account(self, mock_execute):
