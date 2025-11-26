@@ -9,10 +9,6 @@ Costellazione Arthexis è una [suite software](https://it.wikipedia.org/wiki/Sui
 
 Visita il [Report del changelog](https://arthexis.com/changelog/) per esplorare funzionalità passate e future insieme ad altri aggiornamenti.
 
-## Novità
-
-- La copertura CSMS OCPP 1.6 ora comprende l'invio, la registrazione e l'aggiornamento del badge per `GetDiagnostics`, `RemoteStartTransaction`, `RemoteStopTransaction` e `SetChargingProfile`, portando il supporto delle operazioni uniche al 93 % e monitorando i caricamenti diagnostici.
-
 ## Caratteristiche attuali
 
 - Compatibile con l'[Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/) per impostazione predefinita, consentendo ai punti di ricarica di aggiornarsi ai protocolli più recenti se li supportano.

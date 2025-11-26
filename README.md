@@ -9,10 +9,6 @@ Arthexis Constellation is a [Django](https://www.djangoproject.com/)-based [soft
 
 Visit our [Changelog Report](https://arthexis.com/changelog/) to browse past and future features and other updates.
 
-## Latest developments
-
-- OCPP 1.6 CSMS coverage now includes dispatch, logging, and badge updates for `GetDiagnostics`, `RemoteStartTransaction`, `RemoteStopTransaction`, and `SetChargingProfile`, lifting unique operation support to 93% while tracking diagnostics uploads.
-
 ## Current Features
 
 - Compatible with the [Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/) by defaut, while allowing Chargering Stations to upgrade to newer protocols if they support them. 
