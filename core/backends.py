@@ -139,7 +139,7 @@ def verify_user_totp_token(
     requires_password = False
 
     for device in devices:
-        device_requires_password = totp_device_requires_password(device) and enforce_password
+        device_requires_password = enforce_password or totp_device_requires_password(device)
         requires_password = requires_password or device_requires_password
 
         if device_requires_password and not password_valid:
