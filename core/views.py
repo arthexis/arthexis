@@ -35,6 +35,7 @@ from django.template.loader import get_template
 from django.test import signals
 
 from utils import revision
+from nodes.models import NetMessage, Node
 from nodes.utils import save_screenshot
 from utils.api import api_login_required
 
@@ -615,6 +616,28 @@ def _handle_release_restart(
     if not request.GET.get("restart"):
         return None
 
+    return _reset_release_progress(
+        request,
+        release,
+        session_key,
+        lock_path,
+        restart_path,
+        log_dir,
+        clean_repo=True,
+    )
+
+
+def _reset_release_progress(
+    request,
+    release: PackageRelease,
+    session_key: str,
+    lock_path: Path,
+    restart_path: Path,
+    log_dir: Path,
+    *,
+    clean_repo: bool,
+    message_text: str | None = None,
+):
     count = 0
     if restart_path.exists():
         try:
@@ -623,7 +646,8 @@ def _handle_release_restart(
             count = 0
     restart_path.parent.mkdir(parents=True, exist_ok=True)
     restart_path.write_text(str(count + 1), encoding="utf-8")
-    _clean_repo()
+    if clean_repo:
+        _clean_repo()
     release.pypi_url = ""
     release.release_on = None
     release.save(update_fields=["pypi_url", "release_on"])
@@ -633,6 +657,8 @@ def _handle_release_restart(
     pattern = f"pr.{release.package.name}.v{release.version}*.log"
     for f in log_dir.glob(pattern):
         f.unlink()
+    if message_text:
+        messages.info(request, message_text)
     return redirect(request.path)
 
 
@@ -760,6 +786,48 @@ def _prepare_logging(
         ctx["log_dir_warning_logged"] = True
 
     return ctx, log_path, step_count
+
+
+def _build_artifacts_stale(
+    ctx: dict, step_count: int, steps: Sequence[tuple[str, object]]
+) -> bool:
+    build_step_index = next(
+        (index for index, (name, _) in enumerate(steps) if name == "Build release artifacts"),
+        None,
+    )
+    if build_step_index is None:
+        return False
+    if step_count <= build_step_index:
+        return False
+    if step_count >= len(steps) and not ctx.get("error"):
+        return False
+
+    build_revision = (ctx.get("build_revision") or "").strip()
+    if not build_revision:
+        return False
+
+    current_revision = _current_git_revision()
+    if current_revision and current_revision != build_revision:
+        return True
+
+    return _working_tree_dirty()
+
+
+def _broadcast_release_message(release: PackageRelease) -> None:
+    subject = f"Release v{release.version}"
+    try:
+        node = Node.get_local()
+    except Exception:
+        node = None
+    node_label = str(node) if node else "unknown"
+    body = f"@ {node_label}"
+    try:
+        NetMessage.broadcast(subject=subject, body=body)
+    except Exception:
+        logger.exception(
+            "Failed to broadcast release Net Message",
+            extra={"subject": subject, "body": body},
+        )
 
 
 def _handle_dirty_repository_action(request, ctx: dict, log_path: Path):
@@ -924,6 +992,26 @@ def _format_path(path: Path) -> str:
 def _git_stdout(args: Sequence[str]) -> str:
     proc = subprocess.run(args, check=True, capture_output=True, text=True)
     return (proc.stdout or "").strip()
+
+
+def _current_git_revision() -> str:
+    try:
+        return _git_stdout(["git", "rev-parse", "HEAD"])
+    except Exception:
+        return ""
+
+
+def _working_tree_dirty() -> bool:
+    try:
+        status = subprocess.run(
+            ["git", "status", "--porcelain"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except Exception:
+        return False
+    return bool((status.stdout or "").strip())
 
 
 def _has_remote(remote: str) -> bool:
@@ -1352,6 +1440,7 @@ def _step_promote_build(release, ctx, log_path: Path, *, user=None) -> None:
     from . import release as release_utils
 
     _append_log(log_path, "Generating build files")
+    ctx.pop("build_revision", None)
     if ctx.get("dry_run"):
         _append_log(log_path, "Dry run: skipping build promotion")
         return
@@ -1405,6 +1494,7 @@ def _step_promote_build(release, ctx, log_path: Path, *, user=None) -> None:
     else:
         new_log = log_path
     ctx["log"] = new_log.name
+    ctx["build_revision"] = _current_git_revision()
     _append_log(new_log, "Build complete")
 
 
@@ -1954,6 +2044,18 @@ def release_progress(request, pk: int, action: str):
         step_count,
     )
 
+    if _build_artifacts_stale(ctx, step_count, steps):
+        return _reset_release_progress(
+            request,
+            release,
+            session_key,
+            lock_path,
+            restart_path,
+            log_dir,
+            clean_repo=False,
+            message_text=_("Source changes detected after build. Restarting publish workflow."),
+        )
+
     ctx = _handle_dirty_repository_action(request, ctx, log_path)
 
     fixtures_step_index = next(
@@ -1979,6 +2081,10 @@ def release_progress(request, pk: int, action: str):
 
     error = ctx.get("error")
     done = step_count >= len(steps) and not error
+
+    if done and not ctx.get("release_net_message_sent"):
+        _broadcast_release_message(release)
+        ctx["release_net_message_sent"] = True
 
     show_log = ctx.get("started") or step_count > 0 or done or ctx.get("error")
     if show_log and log_path.exists():
