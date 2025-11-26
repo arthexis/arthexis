@@ -5,13 +5,19 @@
   {{ block.super }}
   {{ media }}
   <style>
+    .send-net-message-fields {
+      max-width: 72rem;
+      margin: 0 auto;
+    }
+
     .send-net-message-fields .module {
       width: 100%;
+      box-sizing: border-box;
     }
 
     .filters-fieldset .filters-grid {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
       gap: 0.5rem 1rem;
       margin-bottom: 0.75rem;
     }
@@ -37,9 +43,17 @@
 
     .send-net-message-fields .module .form-row .flex-container {
       width: 100%;
+      flex-wrap: wrap;
+      gap: 0.5rem 1rem;
     }
 
     .send-net-message-fields .module .form-row .flex-container:not(.checkbox-row) > label {
+      min-width: 12rem;
+      flex: 0 0 12rem;
+    }
+
+    .send-net-message-fields .module .form-row .flex-container:not(.checkbox-row) > *:not(label) {
+      flex: 1 1 18rem;
       min-width: 12rem;
     }
 
