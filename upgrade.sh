@@ -81,6 +81,49 @@ configure_nginx_site() {
 
 ensure_git_safe_directory
 
+reset_safe_git_changes() {
+  # Discard known auto-generated files that should not block rebases.
+  local safe_rebase_files=(
+    "VERSION"
+  )
+
+  if ! command -v git >/dev/null 2>&1; then
+    return 0
+  fi
+
+  local status_output
+  if ! status_output=$(git status --porcelain 2>/dev/null); then
+    return 0
+  fi
+
+  local reset_candidates=()
+  while IFS= read -r status_line; do
+    [[ -z "$status_line" ]] && continue
+
+    local path
+    path="${status_line:3}"
+    path="${path%% -> *}"
+
+    for safe_file in "${safe_rebase_files[@]}"; do
+      if [ "$path" = "$safe_file" ]; then
+        reset_candidates+=("$path")
+        break
+      fi
+    done
+  done <<< "$status_output"
+
+  if [ ${#reset_candidates[@]} -gt 0 ]; then
+    echo "Discarding local changes for safe-to-replace files: ${reset_candidates[*]}"
+    git checkout -- "${reset_candidates[@]}" 2>/dev/null || \
+      git restore "${reset_candidates[@]}" 2>/dev/null || true
+  fi
+
+  if git status --porcelain 2>/dev/null | grep -q '^[ MADRCU?]'; then
+    echo "Uncommitted changes detected; please commit or stash before upgrading." >&2
+    exit 1
+  fi
+}
+
 queue_startup_net_message() {
   python - "$BASE_DIR" <<'PY'
 import sys
@@ -838,6 +881,7 @@ REMOTE_VERSION="$LOCAL_VERSION"
 if [[ $LOCAL_ONLY -eq 1 ]]; then
   echo "Local refresh requested; skipping remote update check."
 else
+  reset_safe_git_changes
   echo "Checking repository for updates..."
   git fetch origin "$BRANCH"
   if git cat-file -e "origin/$BRANCH:VERSION" 2>/dev/null; then
