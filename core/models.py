@@ -9,6 +9,7 @@ from django.db.models.functions import Lower, Length
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.utils.translation import gettext_lazy as _, gettext, override
+from django.utils.html import format_html
 from django.core.validators import (
     MaxValueValidator,
     MinValueValidator,
@@ -30,6 +31,7 @@ from datetime import (
 import contextlib
 import logging
 import json
+import base64
 from decimal import Decimal
 from django.contrib.contenttypes.models import ContentType
 import hashlib
@@ -2089,6 +2091,28 @@ class RFID(Entity):
 
     def __str__(self):  # pragma: no cover - simple representation
         return str(self.label_id)
+
+    def qr_test_link(self) -> str:
+        """Return a link that previews this RFID value as a QR code."""
+
+        if not self.rfid:
+            return ""
+        qr = qrcode.QRCode(box_size=6, border=2)
+        qr.add_data(self.rfid)
+        qr.make(fit=True)
+        image = qr.make_image(fill_color="black", back_color="white")
+        buffer = BytesIO()
+        image.save(buffer, format="PNG")
+        data_uri = "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode(
+            "ascii"
+        )
+        return format_html(
+            '<a href="{}" target="_blank" rel="noopener">{}</a>',
+            data_uri,
+            _("Open QR preview"),
+        )
+
+    qr_test_link.short_description = _("QR test link")
 
     @classmethod
     def normalize_code(cls, value: str) -> str:

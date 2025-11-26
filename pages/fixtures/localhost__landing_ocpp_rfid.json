@@ -7,7 +7,7 @@
       "is_deleted": false,
       "module": ["Terminal", "/ocpp/"],
       "path": "/ocpp/rfid/validator/",
-      "label": "RFID Tag Validator",
+      "label": "Identity Validator",
       "enabled": true,
       "description": ""
     }

@@ -2720,14 +2720,14 @@ class RoleLandingRedirectTests(TestCase):
 
     def test_control_redirects_to_rfid(self):
         target = self._configure_role_landing(
-            "Control", "/ocpp/rfid/validator/", "RFID Tag Validator"
+            "Control", "/ocpp/rfid/validator/", "Identity Validator"
         )
         resp = self.client.get(reverse("pages:index"))
         self.assertRedirects(resp, target, fetch_redirect_response=False)
 
     def test_security_group_redirect_takes_priority(self):
         self._configure_role_landing(
-            "Control", "/ocpp/rfid/validator/", "RFID Tag Validator"
+            "Control", "/ocpp/rfid/validator/", "Identity Validator"
         )
         role = self.node.role
         group = SecurityGroup.objects.create(name="Operators")
@@ -2746,7 +2746,7 @@ class RoleLandingRedirectTests(TestCase):
 
     def test_user_redirect_overrides_group_with_higher_priority(self):
         self._configure_role_landing(
-            "Control", "/ocpp/rfid/validator/", "RFID Tag Validator"
+            "Control", "/ocpp/rfid/validator/", "Identity Validator"
         )
         role = self.node.role
         group = SecurityGroup.objects.create(name="Operators")
@@ -2841,6 +2841,12 @@ class WatchtowerNavTests(TestCase):
             ),
         ]
         call_command("loaddata", *map(str, fixtures))
+        feature, _ = NodeFeature.objects.get_or_create(
+            slug="rfid-scanner", defaults={"display": "RFID Scanner"}
+        )
+        node = Node.get_local()
+        if node:
+            NodeFeatureAssignment.objects.get_or_create(node=node, feature=feature)
 
     def test_rfid_pill_hidden(self):
         resp = self.client.get(reverse("pages:index"))
@@ -2866,7 +2872,7 @@ class WatchtowerNavTests(TestCase):
             if module.menu_label.upper() == "CHARGERS"
         )
         landing_labels = [landing.label for landing in ocpp_module.enabled_landings]
-        self.assertIn("RFID Tag Validator", landing_labels)
+        self.assertIn("Identity Validator", landing_labels)
 
     @override_settings(ALLOWED_HOSTS=["testserver", "arthexis.com"])
     def test_cookbooks_pill_visible_for_arthexis(self):
@@ -3543,6 +3549,12 @@ class WatchtowerLandingLinkTests(TestCase):
             path="/ocpp/",
         )
         self.ocpp_module.create_landings()
+        feature, _ = NodeFeature.objects.get_or_create(
+            slug="rfid-scanner", defaults={"display": "RFID Scanner"}
+        )
+        node = Node.get_local()
+        if node:
+            NodeFeatureAssignment.objects.get_or_create(node=node, feature=feature)
 
     def _get_ocpp_module(self, response):
         for module in response.context["nav_modules"]:
@@ -3562,7 +3574,7 @@ class WatchtowerLandingLinkTests(TestCase):
             "Net Monitor Console": "/ocpp/net-monitor/",
             "Maintenance Request": "/ocpp/maintenance/request/",
             "Charge Point Simulator": "/ocpp/evcs/simulator/",
-            "RFID Tag Validator": "/ocpp/rfid/validator/",
+            "Identity Validator": "/ocpp/rfid/validator/",
         }
         for label, path in expected_landings.items():
             with self.subTest(label=label):

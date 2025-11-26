@@ -21,7 +21,7 @@ ROLE_MODULE_DEFAULTS: Mapping[str, tuple[ModuleDefinition, ...]] = {
                 ("/ocpp/net-monitor/", "Net Monitor Console"),
                 ("/ocpp/maintenance/request/", "Maintenance Request"),
                 ("/ocpp/evcs/simulator/", "Charge Point Simulator"),
-                ("/ocpp/rfid/validator/", "RFID Tag Validator"),
+                ("/ocpp/rfid/validator/", "Identity Validator"),
             ),
         },
         {

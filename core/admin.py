@@ -3612,7 +3612,7 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
         "toggle_selected_allowed",
         "create_account_from_rfid",
     ]
-    readonly_fields = ("added_on", "last_seen_on", "reversed_uid")
+    readonly_fields = ("added_on", "last_seen_on", "reversed_uid", "qr_test_link")
     form = RFIDForm
 
     def get_import_resource_kwargs(self, request, form=None, **kwargs):

@@ -3,7 +3,7 @@ from django.db import migrations
 
 RFID_PATH = "/ocpp/rfid/"
 OCPP_PATH = "/ocpp/"
-RFID_LABEL = "RFID Scanner"
+RFID_LABEL = "Identity Validator"
 
 
 def _manager(model, name):

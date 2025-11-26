@@ -23,6 +23,15 @@
       </div>
     {% endif %}
   <p id="{{ prefix }}-status">{% trans "Setting up scanner..." %}</p>
+  <div id="{{ prefix }}-camera-panel" class="rfid-camera" hidden>
+    <div class="rfid-camera-header">
+      <h3>{% trans "Camera Scanner" %}</h3>
+      <p id="{{ prefix }}-camera-status" class="rfid-camera-status"></p>
+    </div>
+    <div class="rfid-camera-preview">
+      <video id="{{ prefix }}-camera-preview" playsinline muted></video>
+    </div>
+  </div>
   <div id="{{ prefix }}-command-output" class="rfid-command-output" hidden>
     <div class="rfid-command-header">
       <h3>{% trans "External Command Output" %}</h3>
@@ -230,6 +239,36 @@
   color: #b91c1c;
 }
 
+#{{ prefix }}-scanner .rfid-camera {
+  margin: 1em 0;
+  padding: 0.75em 1em;
+  border: 1px solid var(--rfid-table-border);
+  border-radius: 0.5rem;
+  background: var(--rfid-row-alt-bg);
+}
+
+#{{ prefix }}-scanner .rfid-camera-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75em;
+  margin-bottom: 0.5em;
+}
+
+#{{ prefix }}-scanner .rfid-camera-status {
+  margin: 0;
+  font-size: 0.95em;
+  color: var(--rfid-row-text);
+}
+
+#{{ prefix }}-scanner .rfid-camera-preview video {
+  width: 100%;
+  max-height: 320px;
+  border-radius: 0.5rem;
+  object-fit: cover;
+  background: #0f172a;
+}
+
 #{{ prefix }}-scanner .field {
   display: flex;
   margin: 0.5em 0;
@@ -353,6 +392,9 @@
   const configureEl = document.getElementById('{{ prefix }}-configure');
   const modeToggleBtn = document.getElementById('{{ prefix }}-mode-toggle');
   const localRequestBtn = document.getElementById('{{ prefix }}-local-request');
+  const cameraPanel = document.getElementById('{{ prefix }}-camera-panel');
+  const cameraStatusEl = document.getElementById('{{ prefix }}-camera-status');
+  const cameraPreview = document.getElementById('{{ prefix }}-camera-preview');
   const deepDetailsEl = document.getElementById('{{ prefix }}-deep-details');
   const keyAEl = document.getElementById('{{ prefix }}-key-a');
   const keyBEl = document.getElementById('{{ prefix }}-key-b');
@@ -370,6 +412,8 @@
   const tableMode = {% if table_mode %}true{% else %}false{% endif %};
   const baseScanUrl = '{{ scan_url|escapejs }}';
   const defaultEndianness = ('{{ default_endianness|default:"BIG"|upper|escapejs }}' || 'BIG').toUpperCase();
+  const cameraEnabled = {{ camera_enabled|default:False|yesno:"true,false" }};
+  const rfidFeatureEnabled = {{ rfid_feature_enabled|default:False|yesno:"true,false" }};
   let requestedEndianness = defaultEndianness;
 
   const text = {
@@ -407,6 +451,10 @@
     localDisconnected: '{{ _("Local scanner disconnected")|escapejs }}',
     localConnectFailed: '{{ _("Failed to connect to local scanner")|escapejs }}',
     webSerialUnsupported: '{{ _("Web Serial API is not supported in this browser.")|escapejs }}',
+    cameraUnavailable: '{{ _("Camera unavailable for scanning")|escapejs }}',
+    cameraUnsupported: '{{ _("Camera QR detection is not supported in this browser.")|escapejs }}',
+    cameraScanning: '{{ _("Camera scanner active")|escapejs }}',
+    cameraDetectedValue: '{{ _("QR code scanned")|escapejs }}',
     requestFailed: '{{ _("Request failed")|escapejs }}',
     deepReadFailed: '{{ _("Deep read failed")|escapejs }}',
     attemptingDeepRead: '{{ _("Attempting deep read...")|escapejs }}',
@@ -457,6 +505,11 @@
   let firstReadySource = null;
   let pollActive = false;
   let pollTimer = null;
+  let barcodeDetector = null;
+  let cameraStream = null;
+  let cameraScanTimer = null;
+  let lastQrValue = null;
+  let lastQrAt = 0;
   const historyEntries = tableMode ? new Map() : null;
   let deepReadActive = false;
   let lastDeepDetailsRfid = null;
@@ -519,6 +572,109 @@
 
   function getRequestedEndianness(){
     return requestedEndianness === 'LITTLE' ? 'LITTLE' : 'BIG';
+  }
+
+  function updateCameraStatus(message){
+    if(!cameraPanel || !cameraStatusEl){
+      return;
+    }
+    cameraPanel.hidden = false;
+    cameraStatusEl.textContent = message || '';
+  }
+
+  function stopCameraScanner(){
+    if(cameraScanTimer){
+      clearTimeout(cameraScanTimer);
+      cameraScanTimer = null;
+    }
+    if(cameraStream){
+      cameraStream.getTracks().forEach((track) => track.stop());
+      cameraStream = null;
+    }
+  }
+
+  function scheduleCameraScan(){
+    if(cameraScanTimer){
+      clearTimeout(cameraScanTimer);
+    }
+    cameraScanTimer = window.setTimeout(scanCameraFrame, 350);
+  }
+
+  function handleCameraValue(rawValue){
+    if(!rawValue){
+      return;
+    }
+    const cleaned = rawValue.replace(/[^0-9A-Fa-f]/g, '').toUpperCase();
+    if(!cleaned){
+      return;
+    }
+    const now = Date.now();
+    if(cleaned === lastQrValue && now - lastQrAt < 1200){
+      return;
+    }
+    lastQrValue = cleaned;
+    lastQrAt = now;
+    updateCameraStatus(text.cameraDetectedValue);
+    sendLocalScan(cleaned);
+  }
+
+  async function scanCameraFrame(){
+    if(!cameraEnabled || !barcodeDetector){
+      return;
+    }
+    if(!cameraPreview || cameraPreview.readyState < HTMLMediaElement.HAVE_CURRENT_DATA){
+      scheduleCameraScan();
+      return;
+    }
+    try {
+      const detections = await barcodeDetector.detect(cameraPreview);
+      if(Array.isArray(detections)){
+        const match = detections.find((code) => code && code.rawValue);
+        if(match && match.rawValue){
+          handleCameraValue(match.rawValue);
+        }
+      }
+    } catch(err){
+      console.warn('[RFID] camera detection failed', err);
+    }
+    scheduleCameraScan();
+  }
+
+  async function setupCameraScanner(){
+    if(!cameraEnabled || !cameraPanel){
+      return false;
+    }
+    updateCameraStatus('');
+    if(!('BarcodeDetector' in window)){
+      updateCameraStatus(text.cameraUnsupported);
+      return false;
+    }
+    try {
+      if(typeof BarcodeDetector.getSupportedFormats === 'function'){
+        const formats = await BarcodeDetector.getSupportedFormats();
+        if(Array.isArray(formats) && formats.length && !formats.includes('qr_code')){
+          updateCameraStatus(text.cameraUnsupported);
+          return false;
+        }
+      }
+      if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+        updateCameraStatus(text.cameraUnavailable);
+        return false;
+      }
+      barcodeDetector = new BarcodeDetector({formats: ['qr_code']});
+      cameraStream = await navigator.mediaDevices.getUserMedia({video: {facingMode: 'environment'}});
+      if(cameraPreview){
+        cameraPreview.srcObject = cameraStream;
+        await cameraPreview.play();
+      }
+      updateCameraStatus(text.cameraScanning);
+      scheduleCameraScan();
+      return true;
+    } catch(err){
+      console.warn('[RFID] Unable to start camera scanner', err);
+      updateCameraStatus(text.cameraUnavailable);
+    }
+    return false;
   }
 
   function convertEndianness(value, fromEndian, toEndian){
@@ -1033,16 +1189,27 @@
 
   async function startScannerSetup(){
     statusEl.textContent = text.settingUpScanner;
-    setupLocalScannerEvents();
-    const localPromise = autoConnectLocalScanner();
-    const networkReady = await prepareNetworkScanner();
+    if(rfidFeatureEnabled){
+      setupLocalScannerEvents();
+    }
+    const localPromise = rfidFeatureEnabled
+      ? autoConnectLocalScanner()
+      : Promise.resolve(false);
+    const networkReady = rfidFeatureEnabled
+      ? await prepareNetworkScanner()
+      : false;
     const localReady = await localPromise;
     if(networkReady && firstReadySource === 'local'){
       statusEl.textContent = text.networkReadyAfterLocal;
     } else if(localReady && firstReadySource === 'network'){
       statusEl.textContent = text.additionalLocalReady;
-    } else if(!firstReadySource){
+    } else if(!firstReadySource && rfidFeatureEnabled){
       statusEl.textContent = text.scannerNotDetected;
+    } else if(!rfidFeatureEnabled && cameraEnabled){
+      statusEl.textContent = text.cameraScanning;
+    }
+    if(cameraEnabled){
+      void setupCameraScanner();
     }
   }
 
@@ -1290,20 +1457,23 @@
     });
   }
   if(localRequestBtn){
-    localRequestBtn.hidden = true;
-    if(!('serial' in navigator) || !(navigator.serial && navigator.serial.requestPort)){
-      localRequestBtn.disabled = true;
-      localRequestBtn.title = text.webSerialUnsupported;
-    } else {
-      localRequestBtn.addEventListener('click', async () => {
+    localRequestBtn.hidden = !rfidFeatureEnabled;
+    if(rfidFeatureEnabled){
+      if(!('serial' in navigator) || !(navigator.serial && navigator.serial.requestPort)){
         localRequestBtn.disabled = true;
-        const connected = await requestLocalScanner();
-        if(!connected){
-          localRequestBtn.disabled = false;
-        }
-      });
+        localRequestBtn.title = text.webSerialUnsupported;
+      } else {
+        localRequestBtn.addEventListener('click', async () => {
+          localRequestBtn.disabled = true;
+          const connected = await requestLocalScanner();
+          if(!connected){
+            localRequestBtn.disabled = false;
+          }
+        });
+      }
     }
   }
+  window.addEventListener('beforeunload', stopCameraScanner);
   startScannerSetup();
 })();
 </script>
