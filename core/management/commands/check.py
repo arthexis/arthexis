@@ -3,8 +3,9 @@ from __future__ import annotations
 import argparse
 from collections import OrderedDict
 
-from django.core.management import BaseCommand, CommandError, call_command
+from django.core.management import CommandError, call_command
 from django.core.management import get_commands, load_command_class
+from django.core.management.commands.check import Command as SystemCheckCommand
 
 
 CHECK_COMMANDS = OrderedDict(
@@ -22,31 +23,47 @@ CHECK_COMMANDS = OrderedDict(
 )
 
 
-class Command(BaseCommand):
+class Command(SystemCheckCommand):
     """Provide a single entry point for running maintenance checks."""
 
     help = "Run a specific maintenance check or list the available checks"
 
     def add_arguments(self, parser):
+        # Include Django's built-in system check arguments so this command can
+        # be used transparently by the test runner and other tooling that
+        # expect the standard interface.
+        super().add_arguments(parser)
+
         parser.add_argument(
             "target",
             nargs="?",
-            help="Which check to run. Omit to list available checks.",
+            help="Which check to run. Omit to run system checks.",
         )
         parser.add_argument(
             "command_args",
             nargs=argparse.REMAINDER,
             help="Arguments to forward to the selected check command.",
         )
+        parser.add_argument(
+            "--list",
+            action="store_true",
+            dest="list_checks",
+            help="List available maintenance checks.",
+        )
 
     def handle(self, *args, **options):
         checks = self._resolve_checks()
-        target = options.get("target")
-        forwarded_args = options.get("command_args") or []
+        target = options.pop("target", None)
+        forwarded_args = options.pop("command_args", None) or []
+        list_checks = options.pop("list_checks", False)
 
         if target is None:
-            self._print_available_checks(checks)
-            return
+            if list_checks:
+                self._print_available_checks(checks)
+                return
+            # Fall back to Django's built-in system checks so this command
+            # remains compatible with the default test runner API.
+            return super().handle(*args, **options)
 
         normalized_target = target.replace("-", "_")
         if normalized_target not in checks:

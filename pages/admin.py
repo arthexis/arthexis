@@ -34,6 +34,7 @@ from .utils import landing_leads_supported
 
 from .models import (
     SiteBadge,
+    SiteTemplate,
     Application,
     SiteProxy,
     DeveloperArticle,
@@ -142,8 +143,8 @@ class SiteAdmin(DjangoSiteAdmin):
     form = SiteForm
     inlines = [SiteBadgeInline]
     change_list_template = "admin/sites/site/change_list.html"
-    fields = ("domain", "name", "managed", "require_https")
-    list_display = ("domain", "name", "managed", "require_https")
+    fields = ("domain", "name", "template", "managed", "require_https")
+    list_display = ("domain", "name", "template", "managed", "require_https")
     list_filter = (ManagedSiteListFilter, RequireHttpsListFilter)
     actions = ["capture_screenshot"]
 
@@ -316,6 +317,52 @@ class SiteAdmin(DjangoSiteAdmin):
 
 admin.site.unregister(Site)
 admin.site.register(SiteProxy, SiteAdmin)
+
+
+@admin.register(SiteTemplate)
+class SiteTemplateAdmin(EntityModelAdmin):
+    list_display = (
+        "name",
+        "palette",
+        "primary_color",
+        "accent_color",
+        "support_color",
+    )
+    search_fields = ("name",)
+    fieldsets = (
+        (
+            None,
+            {
+                "fields": (
+                    "name",
+                    ("primary_color", "primary_color_emphasis"),
+                    ("accent_color", "accent_color_emphasis"),
+                    ("support_color", "support_color_emphasis", "support_text_color"),
+                )
+            },
+        ),
+    )
+
+    @staticmethod
+    def _render_swatch(color: str):  # pragma: no cover - admin rendering
+        return format_html(
+            '<span style="display:inline-block;width:1.35rem;height:1.35rem;'
+            'border-radius:0.35rem;border:1px solid rgba(0,0,0,0.12);'
+            'background:{};margin-right:0.2rem;"></span>',
+            color,
+        )
+
+    @admin.display(description=_("Preview"))
+    def palette(self, obj):  # pragma: no cover - admin rendering
+        return format_html(
+            "{}{}{}{}{}{}",
+            self._render_swatch(obj.primary_color),
+            self._render_swatch(obj.primary_color_emphasis),
+            self._render_swatch(obj.accent_color),
+            self._render_swatch(obj.accent_color_emphasis),
+            self._render_swatch(obj.support_color),
+            self._render_swatch(obj.support_color_emphasis),
+        )
 
 
 @admin.register(DeveloperArticle)
