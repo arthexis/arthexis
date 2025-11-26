@@ -692,6 +692,32 @@ class AdminSitePasswordChangeTests(TestCase):
         )
 
 
+class UserTemporaryExpirationTests(TestCase):
+    def test_expired_temporary_user_deactivates_and_rejects_password(self):
+        expired = timezone.now() - timedelta(hours=1)
+        user = User.objects.create_user(
+            username="temp-expired",
+            password="TempPass123!",
+            temporary_expires_at=expired,
+        )
+
+        self.assertFalse(user.check_password("TempPass123!"))
+        user.refresh_from_db()
+        self.assertFalse(user.is_active)
+
+    def test_future_temporary_user_allows_password_check(self):
+        future = timezone.now() + timedelta(hours=1)
+        user = User.objects.create_user(
+            username="temp-active",
+            password="TempPass123!",
+            temporary_expires_at=future,
+        )
+
+        self.assertTrue(user.check_password("TempPass123!"))
+        user.refresh_from_db()
+        self.assertTrue(user.is_active)
+
+
 class AllowedRFIDTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username="eve", password="secret")
@@ -1413,19 +1439,21 @@ class ReleaseProcessTests(TestCase):
             {"path": "core/models.py", "status": "M", "status_label": "Modified"}
         ]
         ctx: dict = {}
-        with self.assertRaises(core_views.DirtyRepository):
-            _step_check_version(self.release, ctx, Path("rel.log"))
-        self.assertEqual(
-            ctx["dirty_files"],
-            [
-                {
-                    "path": "core/models.py",
-                    "status": "M",
-                    "status_label": "Modified",
-                }
-            ],
-        )
-        sync_main.assert_called_once_with(Path("rel.log"))
+        log_path = Path("rel.log")
+        try:
+            with self.assertRaises(core_views.DirtyRepository):
+                _step_check_version(self.release, ctx, log_path)
+            self.assertEqual(
+                ctx["dirty_files"],
+                [
+                    {
+                        "path": "core/models.py",
+                        "status": "M",
+                        "status_label": "Modified",
+                    }
+                ],
+            )
+            sync_main.assert_called_once_with(log_path)
         finally:
             log_path.unlink(missing_ok=True)
 

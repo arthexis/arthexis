@@ -39,6 +39,7 @@ from import_export.forms import (
     SelectableFieldsExportForm,
 )
 from import_export.widgets import ForeignKeyWidget
+from django.contrib.auth.forms import UserCreationForm
 from django.contrib.auth.models import Group
 from django.templatetags.static import static
 from django.utils import timezone, translation
@@ -144,6 +145,19 @@ def _include_require_2fa(fieldsets):
         if "is_active" in fields and "require_2fa" not in fields:
             insert_at = fields.index("is_active") + 1
             fields.insert(insert_at, "require_2fa")
+            opts["fields"] = tuple(fields)
+        updated.append((name, opts))
+    return tuple(updated)
+
+
+def _include_temporary_expiration(fieldsets):
+    updated = []
+    for name, options in fieldsets:
+        opts = options.copy()
+        fields = list(opts.get("fields", ()))
+        if "is_active" in fields and "temporary_expires_at" not in fields:
+            insert_at = fields.index("is_active") + 1
+            fields.insert(insert_at, "temporary_expires_at")
             opts["fields"] = tuple(fields)
         updated.append((name, opts))
     return tuple(updated)
@@ -993,6 +1007,17 @@ class CustomerAccountRFIDInline(admin.TabularInline):
     extra = 0
     verbose_name = "RFID"
     verbose_name_plural = "RFIDs"
+
+
+class UserCreationWithExpirationForm(UserCreationForm):
+    class Meta(UserCreationForm.Meta):
+        model = User
+        fields = ("username", "temporary_expires_at")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if "temporary_expires_at" in self.fields:
+            self.fields["temporary_expires_at"].required = False
 
 
 class UserChangeRFIDForm(forms.ModelForm):
@@ -1938,9 +1963,26 @@ class UserPhoneNumberInline(admin.TabularInline):
 @admin.register(User)
 class UserAdmin(UserDatumAdminMixin, DjangoUserAdmin):
     form = UserChangeRFIDForm
-    fieldsets = _include_require_2fa(_append_operate_as(DjangoUserAdmin.fieldsets))
-    add_fieldsets = _include_require_2fa(
-        _append_operate_as(DjangoUserAdmin.add_fieldsets)
+    add_form = UserCreationWithExpirationForm
+    fieldsets = _include_temporary_expiration(
+        _include_require_2fa(_append_operate_as(DjangoUserAdmin.fieldsets))
+    )
+    add_fieldsets = (
+        (
+            None,
+            {
+                "classes": ("wide",),
+                "fields": (
+                    "username",
+                    "temporary_expires_at",
+                    "password1",
+                    "password2",
+                ),
+            },
+        ),
+    )
+    add_fieldsets = _include_temporary_expiration(
+        _include_require_2fa(_append_operate_as(add_fieldsets))
     )
     inlines = USER_PROFILE_INLINES + [UserPhoneNumberInline]
     change_form_template = "admin/user_profile_change_form.html"
