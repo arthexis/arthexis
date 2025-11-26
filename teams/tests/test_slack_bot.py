@@ -233,6 +233,25 @@ class SlackBotProfileWizardTests(TestCase):
         SLACK_CLIENT_SECRET="secret",
         SLACK_SIGNING_SECRET="signing",
         SLACK_BOT_SCOPES="commands,chat:write",
+        SLACK_REDIRECT_URL="https://example.com/slack/callback/",
+    )
+    def test_wizard_uses_configured_redirect_url(self):
+        response = self.client.get(
+            reverse("admin:teams_slackbotprofile_bot_creation_wizard")
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(
+            "redirect_uri=https%3A%2F%2Fexample.com%2Fslack%2Fcallback%2F",
+            response["Location"],
+        )
+
+    @override_settings(
+        SLACK_CLIENT_ID="client",
+        SLACK_CLIENT_SECRET="secret",
+        SLACK_SIGNING_SECRET="signing",
+        SLACK_BOT_SCOPES="commands,chat:write",
+        SLACK_REDIRECT_URL="https://example.com/slack/callback/",
     )
     @mock.patch("teams.admin.requests.post")
     @mock.patch("teams.admin.Node.get_local")
@@ -260,6 +279,11 @@ class SlackBotProfileWizardTests(TestCase):
         self.assertEqual(profile.bot_token, "xoxb-new-token")
         self.assertEqual(profile.bot_user_id, "B123")
         self.assertEqual(profile.default_channels, ["C123"])
+        called_kwargs = mock_post.call_args.kwargs
+        self.assertEqual(
+            called_kwargs["data"]["redirect_uri"],
+            "https://example.com/slack/callback/",
+        )
         self.assertRedirects(
             response,
             reverse("admin:teams_slackbotprofile_change", args=[profile.pk]),

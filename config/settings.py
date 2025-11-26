@@ -673,6 +673,7 @@ SLACK_BOT_SCOPES = os.environ.get(
     "SLACK_BOT_SCOPES",
     "commands,chat:write,chat:write.public",
 )
+SLACK_REDIRECT_URL = os.environ.get("SLACK_REDIRECT_URL", "")
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
