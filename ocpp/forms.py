@@ -48,10 +48,15 @@ class MaintenanceRequestForm(forms.ModelForm):
         self.fields["location"].required = True
         self.fields["location"].queryset = Location.objects.order_by("name")
         self.fields["category"].required = True
+        self.fields["description"].label = _("Requestor Comments")
         self.fields["scheduled_start"].widget.attrs.setdefault(
             "class", "form-control"
         )
         self.fields["scheduled_end"].widget.attrs.setdefault("class", "form-control")
+        if not self.is_bound:
+            locations = self.fields["location"].queryset
+            if locations.count() == 1:
+                self.initial.setdefault("location", locations.first())
         if not self.initial.get("scheduled_start"):
             now = timezone.localtime()
             self.initial.setdefault("scheduled_start", now)
