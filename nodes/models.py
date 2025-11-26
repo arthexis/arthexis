@@ -1595,7 +1595,7 @@ class Node(Entity):
 
         if celery_enabled:
             schedule, _ = IntervalSchedule.objects.get_or_create(
-                every=1, period=IntervalSchedule.HOURS
+                every=12, period=IntervalSchedule.HOURS
             )
             PeriodicTask.objects.update_or_create(
                 name=task_name,
