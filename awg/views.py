@@ -13,7 +13,6 @@ from django.contrib.auth.decorators import login_required
 from django.shortcuts import redirect, render
 from django.template.response import TemplateResponse
 from django.test import signals as test_signals
-from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
 from django.utils.translation import gettext as _, gettext_lazy as _lazy
 
@@ -563,7 +562,6 @@ def find_awg(
     return results[0][1]
 
 
-@csrf_exempt
 @landing(_lazy("AWG Cable Calculator"))
 def calculator(request):
     """Display the AWG calculator form and results using a template."""
@@ -815,7 +813,6 @@ def _calculate_energy_tariff_totals(
     }
 
 
-@csrf_exempt
 @landing(_lazy("Energy Tariff Calculator"))
 @login_required(login_url="pages:login")
 def energy_tariff_calculator(request):
