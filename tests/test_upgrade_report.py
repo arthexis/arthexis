@@ -389,7 +389,7 @@ class UpgradeReportTests(SimpleTestCase):
             "core.system._get_auto_upgrade_periodic_task",
             return_value=(dummy_task, True, ""),
         ), mock.patch(
-            "core.system._auto_upgrade_next_check",
+            "core.system._predict_auto_upgrade_next_run",
             return_value="Soon",
         ), mock.patch(
             "core.system._read_auto_upgrade_failure_count",
@@ -420,6 +420,69 @@ class UpgradeReportTests(SimpleTestCase):
                 mock.call("admin:django_celery_beat_intervalschedule_change", 24),
             ]
         )
+
+    def test_load_auto_upgrade_schedule_calculates_next_run(self):
+        now = timezone.now()
+
+        class DummySchedule:
+            def __init__(self, base_time):
+                self.base_time = base_time
+
+            def __str__(self) -> str:
+                return "every minute"
+
+            def now(self):
+                return self.base_time
+
+            def maybe_make_aware(self, value):
+                return value
+
+            def remaining_estimate(self, reference):
+                self.reference = reference
+                return timedelta(minutes=30)
+
+        class DummyTask:
+            def __init__(self, schedule):
+                self.enabled = True
+                self.one_off = False
+                self.queue = "default"
+                self.total_run_count = 0
+                self.description = ""
+                self.task = system.AUTO_UPGRADE_TASK_PATH
+                self.name = system.AUTO_UPGRADE_TASK_NAME
+                self.start_time = None
+                self.last_run_at = now - timedelta(minutes=5)
+                self.expires = None
+                self._schedule = schedule
+                self.pk = None
+                self.interval_id = None
+                self.crontab_id = None
+                self.solar_id = None
+                self.clocked_id = None
+
+            @property
+            def schedule(self):
+                return self._schedule
+
+        dummy_task = DummyTask(DummySchedule(now))
+        expected_next_run = system._format_timestamp(now + timedelta(minutes=30))
+
+        with mock.patch(
+            "core.system._get_auto_upgrade_periodic_task",
+            return_value=(dummy_task, True, ""),
+        ), mock.patch(
+            "core.system._resolve_auto_upgrade_schedule_links",
+            return_value={
+                "task_admin_url": "",
+                "config_admin_url": "",
+                "config_type": "",
+            },
+        ), mock.patch(
+            "core.system._read_auto_upgrade_failure_count", return_value=0
+        ):
+            info = system._load_auto_upgrade_schedule()
+
+        self.assertEqual(info["next_run"], expected_next_run)
 
     def test_get_auto_upgrade_periodic_task_recovers_after_error(self):
         dummy_task = object()
