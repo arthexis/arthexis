@@ -345,6 +345,7 @@ class Node(Entity):
         "celery-queue": "celery.lck",
         "nginx-server": "nginx_mode.lck",
     }
+    CONNECTIVITY_MONITOR_ROLES = {"Control", "Satellite"}
     RPI_CAMERA_DEVICE = Path("/dev/video0")
     RPI_CAMERA_BINARIES = ("rpicam-hello", "rpicam-still", "rpicam-vid")
     AP_ROUTER_SSID = "gelectriic-ap"
@@ -1453,6 +1454,7 @@ class Node(Entity):
         self._sync_upstream_poll_task(celery_enabled)
         self._sync_net_message_purge_task(celery_enabled)
         self._sync_node_update_task(celery_enabled)
+        self._sync_connectivity_monitor_task(celery_enabled)
 
     def _sync_screenshot_task(self, enabled: bool):
         from django_celery_beat.models import IntervalSchedule, PeriodicTask
@@ -1645,6 +1647,35 @@ class Node(Entity):
             PeriodicTask.objects.filter(
                 name__in=periodic_task_name_variants(raw_task_name)
             ).update(enabled=False)
+
+    def _sync_connectivity_monitor_task(self, celery_enabled: bool):
+        if not self.is_local:
+            return
+
+        from django_celery_beat.models import IntervalSchedule, PeriodicTask
+
+        raw_task_name = "nodes_monitor_network_connectivity"
+        task_name = normalize_periodic_task_name(
+            PeriodicTask.objects, raw_task_name
+        )
+
+        role_name = getattr(getattr(self, "role", None), "name", None)
+        if celery_enabled and role_name in self.CONNECTIVITY_MONITOR_ROLES:
+            schedule, _ = IntervalSchedule.objects.get_or_create(
+                every=10, period=IntervalSchedule.MINUTES
+            )
+            PeriodicTask.objects.update_or_create(
+                name=task_name,
+                defaults={
+                    "interval": schedule,
+                    "task": "nodes.tasks.monitor_network_connectivity",
+                    "enabled": True,
+                },
+            )
+        else:
+            PeriodicTask.objects.filter(
+                name__in=periodic_task_name_variants(raw_task_name)
+            ).delete()
 
     def send_mail(
         self,

@@ -1,11 +1,14 @@
 import base64
 import json
 import logging
+import shutil
+import subprocess
 from datetime import timedelta
 from pathlib import Path
 
 import requests
 from celery import shared_task
+from django.core.cache import cache
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from django.contrib import admin
@@ -15,6 +18,78 @@ from .models import ContentSample, NetMessage, Node, PendingNetMessage
 from .utils import capture_screenshot, save_screenshot
 
 logger = logging.getLogger(__name__)
+
+
+PING_FAILURE_CACHE_KEY = "nodes:connectivity:wlan1_failures"
+PING_FAILURE_THRESHOLD = 3
+PING_TARGET = "8.8.8.8"
+PING_TIMEOUT_SECONDS = 5
+PING_INTERFACE = "wlan1"
+
+
+def _ping_target(target: str = PING_TARGET) -> tuple[bool, str]:
+    """Return ``True`` when ``target`` is reachable via ICMP ping."""
+
+    ping_path = shutil.which("ping")
+    if not ping_path:
+        return (False, "ping binary not available")
+
+    try:
+        result = subprocess.run(
+            [
+                ping_path,
+                "-n",
+                "-c",
+                "1",
+                "-W",
+                str(PING_TIMEOUT_SECONDS),
+                target,
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=PING_TIMEOUT_SECONDS + 1,
+        )
+    except Exception as exc:  # pragma: no cover - unexpected execution failure
+        return (False, f"ping failed: {exc}")
+
+    if result.returncode == 0:
+        return (True, result.stdout.strip())
+    return (False, result.stderr.strip() or result.stdout.strip())
+
+
+def _reset_wlan_interface(interface: str = PING_INTERFACE) -> dict[str, object]:
+    """Attempt to reset ``interface`` using ``nmcli`` commands."""
+
+    nmcli_path = shutil.which("nmcli")
+    if not nmcli_path:
+        return {"ok": False, "message": "nmcli not available"}
+
+    commands = (
+        [nmcli_path, "device", "disconnect", interface],
+        [nmcli_path, "device", "connect", interface],
+    )
+
+    for command in commands:
+        try:
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=Node.NMCLI_TIMEOUT,
+            )
+        except Exception as exc:  # pragma: no cover - unexpected execution failure
+            return {"ok": False, "message": f"command error: {exc}"}
+
+        if result.returncode != 0:
+            return {
+                "ok": False,
+                "message": result.stderr.strip() or result.stdout.strip(),
+                "command": " ".join(command),
+            }
+
+    return {"ok": True, "message": f"Reset {interface} with nmcli"}
 
 
 @shared_task
@@ -243,3 +318,36 @@ def purge_stale_net_messages(retention_hours: int = 24) -> int:
     )
 
     return message_count + pending_count
+
+
+@shared_task
+def monitor_network_connectivity() -> dict[str, object]:
+    """Ping a known address and attempt to remediate repeated failures."""
+
+    local = Node.get_local()
+    if not local:
+        return {"skipped": True, "reason": "Local node not registered"}
+
+    if not local.has_feature("celery-queue"):
+        return {"skipped": True, "reason": "Local node missing celery-queue feature"}
+
+    role_name = getattr(getattr(local, "role", None), "name", None)
+    if role_name not in Node.CONNECTIVITY_MONITOR_ROLES:
+        return {"skipped": True, "reason": "Connectivity monitoring not enabled for role"}
+
+    success, detail = _ping_target()
+    if success:
+        cache.set(PING_FAILURE_CACHE_KEY, 0, None)
+        return {"ok": True, "detail": detail, "failures": 0}
+
+    failures = cache.get(PING_FAILURE_CACHE_KEY, 0) + 1
+    cache.set(PING_FAILURE_CACHE_KEY, failures, None)
+    result: dict[str, object] = {"ok": False, "detail": detail, "failures": failures}
+
+    if failures >= PING_FAILURE_THRESHOLD:
+        remediation = _reset_wlan_interface()
+        result["remediation"] = remediation
+        if remediation.get("ok"):
+            cache.set(PING_FAILURE_CACHE_KEY, 0, None)
+
+    return result

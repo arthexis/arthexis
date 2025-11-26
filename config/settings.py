@@ -157,6 +157,19 @@ for address in discover_local_ip_addresses():
         ALLOWED_HOSTS.append(address)
 
 
+CACHE_LOCATION = os.environ.get("DJANGO_CACHE_DIR", str(BASE_DIR / "cache"))
+with contextlib.suppress(OSError):
+    os.makedirs(CACHE_LOCATION, exist_ok=True)
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.filebased.FileBasedCache",
+        "LOCATION": CACHE_LOCATION,
+        "TIMEOUT": None,
+    }
+}
+
+
 # Allow CSRF origin verification for hosts within allowed subnets.
 _original_origin_verified = CsrfViewMiddleware._origin_verified
 _original_check_referer = CsrfViewMiddleware._check_referer
