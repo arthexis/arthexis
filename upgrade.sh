@@ -605,6 +605,28 @@ service_was_active() {
   return 1
 }
 
+lcd_service_was_active() {
+  local service_name="$1"
+
+  if [ -z "$service_name" ]; then
+    return 1
+  fi
+
+  if [ ${#SYSTEMCTL_CMD[@]} -gt 0 ] && \
+     "${SYSTEMCTL_CMD[@]}" list-unit-files | awk '{print $1}' | grep -Fxq "lcd-${service_name}.service"; then
+    if "${SYSTEMCTL_CMD[@]}" is-active --quiet "lcd-${service_name}"; then
+      return 0
+    fi
+    return 1
+  fi
+
+  if pgrep -f "python -m core\\.lcd_screen" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  return 1
+}
+
 # Restart core, LCD, and Celery services while respecting systemd when available.
 restart_services() {
   echo "Restarting services..."
@@ -731,6 +753,29 @@ restart_services() {
   nohup ./start.sh >/dev/null 2>&1 &
   echo "Services restart triggered"
   return 0
+}
+
+restart_lcd_service() {
+  local service_name="$1"
+
+  if [ -z "$service_name" ]; then
+    return 0
+  fi
+
+  if [ ${#SYSTEMCTL_CMD[@]} -eq 0 ] || [ "$SERVICE_MANAGEMENT_MODE" != "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
+    return 0
+  fi
+
+  local lcd_service
+  lcd_service="lcd-$service_name"
+
+  if ! "${SYSTEMCTL_CMD[@]}" list-unit-files | awk '{print $1}' | grep -Fxq "${lcd_service}.service"; then
+    return 0
+  fi
+
+  echo "Restarting LCD service ${lcd_service}..."
+  "${SYSTEMCTL_CMD[@]}" restart "$lcd_service" || return 1
+  wait_for_service_active "$lcd_service" 1
 }
 
 ensure_watchdog_running() {
@@ -914,6 +959,11 @@ SERVICE_WAS_ACTIVE=0
 if service_was_active "$SERVICE_NAME"; then
   SERVICE_WAS_ACTIVE=1
 fi
+LCD_WAS_ACTIVE=0
+if lcd_service_was_active "$SERVICE_NAME"; then
+  LCD_WAS_ACTIVE=1
+fi
+LCD_RESTART_REQUIRED=$LCD_WAS_ACTIVE
 
 # Stop running instance only if the node is installed
 if [[ $VENV_PRESENT -eq 1 ]]; then
@@ -1048,11 +1098,20 @@ if [[ $NO_RESTART -eq 0 ]]; then
     echo "Detected failed restart after upgrade." >&2
     echo "Manual intervention required to restore services." >&2
     exit 1
+  else
+    LCD_RESTART_REQUIRED=0
   fi
 fi
 
 if [ -n "$SERVICE_NAME" ] && [[ $NO_RESTART -eq 0 ]] && [[ $SHOULD_RESTART_AFTER_UPGRADE -eq 1 ]]; then
   ensure_watchdog_running "$SERVICE_NAME"
+fi
+
+if [ -n "$SERVICE_NAME" ] && [[ $NO_RESTART -eq 0 ]] && [[ $LCD_RESTART_REQUIRED -eq 1 ]]; then
+  if ! restart_lcd_service "$SERVICE_NAME"; then
+    echo "LCD service lcd-$SERVICE_NAME did not restart cleanly after upgrade." >&2
+    exit 1
+  fi
 fi
 
 if arthexis_lcd_feature_enabled "$LOCK_DIR"; then
