@@ -15,3 +15,7 @@ def test_mdns_variant_is_generated():
     assert "gway-001" in variants
     assert "gway-001.arthexis" in variants
     assert "gway-001.local" in variants
+
+
+def test_mobile_subdomain_is_allowed():
+    assert "m.arthexis.com" in settings.ALLOWED_HOSTS

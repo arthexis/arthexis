@@ -104,6 +104,7 @@ ALLOWED_HOSTS = [
     "192.168.0.0/16",
     "arthexis.com",
     "www.arthexis.com",
+    "m.arthexis.com",
 ]
 
 
