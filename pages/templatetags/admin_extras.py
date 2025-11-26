@@ -137,25 +137,25 @@ def admin_profile_url(context, user) -> str:
 
 @register.simple_tag
 def last_net_message() -> dict[str, object]:
-    """Return the most recent NetMessage for the admin dashboard."""
+    """Return the most recent NetMessage with content for the admin dashboard."""
 
     try:
-        entry = (
+        entries = (
             NetMessage.objects.order_by("-created")
-            .values("subject", "body")
-            .first()
+            .values("subject", "body")[:25]
         )
     except DatabaseError:
         return {"text": "", "has_content": False}
 
-    if not entry:
-        return {"text": "", "has_content": False}
+    for entry in entries:
+        subject = (entry.get("subject") or "").strip()
+        body = (entry.get("body") or "").strip()
+        parts = [part for part in (subject, body) if part]
+        if parts:
+            text = " — ".join(parts)
+            return {"text": text, "has_content": True}
 
-    subject = (entry.get("subject") or "").strip()
-    body = (entry.get("body") or "").strip()
-    parts = [part for part in (subject, body) if part]
-    text = " — ".join(parts) if parts else ""
-    return {"text": text, "has_content": bool(parts)}
+    return {"text": "", "has_content": False}
 
 @register.simple_tag(takes_context=True)
 def model_admin_actions(context, app_label, model_name):
