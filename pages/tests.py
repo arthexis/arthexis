@@ -1168,6 +1168,16 @@ class AdminDashboardAppListTests(TestCase):
         self.assertContains(resp, "Latest — Signal ready")
         self.assertNotContains(resp, gettext("No net messages available"))
 
+    def test_dashboard_skips_blank_net_message(self):
+        NetMessage.objects.all().delete()
+        NetMessage.objects.create(subject="Filled", body="Reachable")
+        NetMessage.objects.create(subject="", body="  ")
+
+        resp = self.client.get(reverse("admin:index"))
+
+        self.assertContains(resp, "Filled — Reachable")
+        self.assertNotContains(resp, gettext("No net messages available"))
+
     def test_dashboard_shows_placeholder_without_net_message(self):
         NetMessage.objects.all().delete()
 
