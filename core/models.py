@@ -425,6 +425,11 @@ class User(Entity, AbstractUser):
             "Designates whether this user should be treated as active. Unselect this instead of deleting customer accounts."
         ),
     )
+    require_2fa = models.BooleanField(
+        _("require 2FA"),
+        default=False,
+        help_text=_("Require both a password and authenticator code to sign in."),
+    )
 
     def __str__(self):
         return self.username

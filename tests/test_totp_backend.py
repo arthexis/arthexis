@@ -15,7 +15,12 @@ pytestmark = pytest.mark.django_db
 
 
 def create_staff_user_with_device(
-    *, confirmed=True, name=TOTP_DEVICE_NAME, is_active=True, allow_passwordless=False
+    *,
+    confirmed=True,
+    name=TOTP_DEVICE_NAME,
+    is_active=True,
+    allow_passwordless=False,
+    require_2fa=False,
 ):
     User = get_user_model()
     unique_suffix = uuid.uuid4().hex
@@ -31,6 +36,9 @@ def create_staff_user_with_device(
         name=name,
         confirmed=confirmed,
     )
+    if require_2fa:
+        user.require_2fa = True
+        user.save(update_fields=["require_2fa"])
     if allow_passwordless:
         TOTPDeviceSettings.objects.create(
             device=device,
@@ -91,6 +99,34 @@ def test_authenticate_allows_passwordless_device():
 
     backend = TOTPBackend()
     result = backend.authenticate(None, username=user.username, otp_token=token)
+
+    assert result is not None
+    assert result.pk == user.pk
+    assert getattr(result, "otp_device") == device
+
+
+def test_authenticate_requires_password_when_user_requires_2fa():
+    user, device = create_staff_user_with_device(
+        allow_passwordless=True, require_2fa=True
+    )
+    token = _current_token(device)
+
+    backend = TOTPBackend()
+    result = backend.authenticate(None, username=user.username, otp_token=token)
+
+    assert result is None
+
+
+def test_authenticate_allows_password_when_user_requires_2fa_with_passwordless_device():
+    user, device = create_staff_user_with_device(
+        allow_passwordless=True, require_2fa=True
+    )
+    token = _current_token(device)
+
+    backend = TOTPBackend()
+    result = backend.authenticate(
+        None, username=user.username, otp_token=token, password="password123"
+    )
 
     assert result is not None
     assert result.pk == user.pk

@@ -67,9 +67,11 @@ def totp_device_requires_password(device):
     return not totp_device_allows_passwordless(device)
 
 
-def totp_devices_require_password(devices):
+def totp_devices_require_password(devices, *, enforce=True):
     """Return True when any device requires a password alongside the OTP."""
 
+    if not enforce:
+        return False
     return any(totp_device_requires_password(device) for device in devices)
 
 
@@ -120,7 +122,9 @@ def _get_or_clone_device_for_user(device, user, settings_obj):
     return cloned
 
 
-def verify_user_totp_token(user, token: str, password: str | None = None):
+def verify_user_totp_token(
+    user, token: str, password: str | None = None, *, enforce_password: bool | None = None
+):
     """Verify a TOTP token against all of the user's available devices."""
 
     group_ids = set(user.groups.values_list("id", flat=True))
@@ -129,11 +133,13 @@ def verify_user_totp_token(user, token: str, password: str | None = None):
         return None, {"error": "missing_device", "requires_password": False}
 
     password_value = password or ""
+    if enforce_password is None:
+        enforce_password = bool(getattr(user, "require_2fa", False))
     password_valid = bool(password_value and user.check_password(password_value))
     requires_password = False
 
     for device in devices:
-        device_requires_password = totp_device_requires_password(device)
+        device_requires_password = enforce_password or totp_device_requires_password(device)
         requires_password = requires_password or device_requires_password
 
         if device_requires_password and not password_valid:
