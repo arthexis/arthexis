@@ -668,6 +668,31 @@
         </div>
         <p class="chart-link"><a id="viewhistory-mini-link" href="{% url 'admin:pages_viewhistory_traffic_graph' %}">{% translate 'Open full report' %}</a></p>
     </div>
+    <div class="module" id="recent-model-structure-module">
+        <h2>{% translate 'Recently Updated Models' %}</h2>
+        {% recent_model_structure_changes 5 as recent_model_migrations %}
+        {% if recent_model_migrations %}
+        <ul class="actionlist recent-model-list">
+            {% for entry in recent_model_migrations %}
+            <li>
+                {% if entry.admin_url %}
+                    <a class="recent-action-object" href="{{ entry.admin_url }}">{{ entry.label }}</a>
+                {% else %}
+                    <span class="recent-action-object">{{ entry.label }}</span>
+                {% endif %}
+                <div class="recent-action-meta mini quiet">
+                    <span class="recent-action-model">{% filter capfirst %}{{ entry.app_label }}{% endfilter %}</span>
+                    {% if entry.applied %}
+                        <time class="recent-action-timestamp" datetime="{{ entry.applied|date:'c' }}">{{ entry.applied|localtime|date:"SHORT_DATETIME_FORMAT" }}</time>
+                    {% endif %}
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p>{% translate 'No recent model structure changes.' %}</p>
+        {% endif %}
+    </div>
     <div class="module" id="recent-actions-module">
         <h2>{% translate 'Recent actions' %}</h2>
         <h3>{% translate 'My actions' %}</h3>
