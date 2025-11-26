@@ -4,6 +4,8 @@
 #
 # Arguments:
 #   $1 - Repository root containing the VERSION file
+#   $2 - Optional flag indicating whether to force the development marker even
+#        when the HEAD revision matches the tagged release
 #
 # The function compares the current HEAD revision to the tagged revision for the
 # VERSION's release (without the development marker). When the HEAD revision
@@ -14,6 +16,7 @@
 # backward compatibility.
 arthexis_update_version_marker() {
   local repo_root="$1"
+  local force_dev_marker="${2:-0}"
   local version_file
   version_file="$repo_root/VERSION"
 
@@ -56,7 +59,14 @@ arthexis_update_version_marker() {
     tag_rev=""
   fi
 
+  local needs_dev_marker=0
   if [ -n "$tag_rev" ] && [ "$head_rev" != "$tag_rev" ]; then
+    needs_dev_marker=1
+  elif (( force_dev_marker )); then
+    needs_dev_marker=1
+  fi
+
+  if (( needs_dev_marker )); then
     if (( ! has_dev_marker )); then
       printf '%s%s\n' "$base_version" "$dev_suffix" > "$version_file"
     fi
