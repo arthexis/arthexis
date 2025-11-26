@@ -388,6 +388,11 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         return payload, encoded, display_expires
 
     def generate_registration_credentials(self, request):
+        if not (
+            self.has_add_permission(request) and self.has_change_permission(request)
+        ):
+            raise PermissionDenied
+
         payload, encoded, expires_at = self._build_cli_registration_payload(request)
         context = {
             **self.admin_site.each_context(request),
