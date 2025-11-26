@@ -260,3 +260,6 @@ AUTO_UPGRADE
 
 # Local working directory
 work/
+
+# Runtime cache directory
+cache/

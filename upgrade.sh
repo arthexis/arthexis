@@ -87,9 +87,22 @@ reset_safe_git_changes() {
     "VERSION"
   )
 
+  # Remove generated working directories that should stay untracked.
+  local safe_generated_paths=(
+    "cache"
+  )
+
   if ! command -v git >/dev/null 2>&1; then
     return 0
   fi
+
+  local generated_path
+  for generated_path in "${safe_generated_paths[@]}"; do
+    if [ -e "$generated_path" ]; then
+      echo "Removing generated path $generated_path before upgrading..."
+      rm -rf -- "$generated_path"
+    fi
+  done
 
   local status_output
   if ! status_output=$(git status --porcelain 2>/dev/null); then
