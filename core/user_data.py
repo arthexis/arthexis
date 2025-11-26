@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from functools import lru_cache
 from pathlib import Path
 from io import BytesIO
@@ -29,6 +30,9 @@ from django.utils.translation import gettext as _
 from django.utils.http import url_has_allowed_host_and_scheme
 
 from .entity import Entity
+
+
+logger = logging.getLogger(__name__)
 
 
 def _data_root(user=None) -> Path:
@@ -363,7 +367,9 @@ def _fixture_targets_installed_apps(data) -> bool:
     return True
 
 
-def _load_fixture(path: Path, *, mark_user_data: bool = True) -> bool:
+def _load_fixture(
+    path: Path, *, mark_user_data: bool = True, verbosity: int = 0
+) -> bool:
     """Load a fixture from *path* and optionally flag loaded entities."""
 
     text = None
@@ -394,7 +400,17 @@ def _load_fixture(path: Path, *, mark_user_data: bool = True) -> bool:
                     return False
 
     try:
-        call_command("loaddata", str(path), ignorenonexistent=True)
+        verbosity_level = max(0, int(verbosity))
+    except (TypeError, ValueError):
+        verbosity_level = 0
+
+    try:
+        call_command(
+            "loaddata",
+            str(path),
+            ignorenonexistent=True,
+            verbosity=verbosity_level,
+        )
     except Exception:
         return False
 
@@ -449,10 +465,14 @@ def load_shared_user_fixtures(*, force: bool = False, user=None) -> None:
         return
     root = _data_root(user)
     paths = sorted(root.glob("*.json"), key=_fixture_sort_key)
+    loaded = 0
     for path in paths:
         if _is_user_fixture(path):
             continue
-        _load_fixture(path)
+        if _load_fixture(path):
+            loaded += 1
+    if loaded:
+        logger.info("Loaded %d shared user data fixture(s)", loaded)
     _shared_fixtures_loaded = True
 
 
@@ -460,10 +480,15 @@ def load_user_fixtures(user, *, include_shared: bool = False) -> None:
     if include_shared:
         load_shared_user_fixtures(user=user)
     paths = sorted(_data_dir(user).glob("*.json"), key=_fixture_sort_key)
+    loaded = 0
     for path in paths:
         if _is_user_fixture(path):
             continue
-        _load_fixture(path)
+        if _load_fixture(path):
+            loaded += 1
+    if loaded:
+        username = _username_for(user) or "unknown user"
+        logger.info("Loaded %d user data fixture(s) for %s", loaded, username)
 
 
 @receiver(user_logged_in)
