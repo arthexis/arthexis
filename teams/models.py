@@ -94,6 +94,7 @@ class EmailInbox(CoreProfile):
         "password",
         "protocol",
         "use_ssl",
+        "is_enabled",
         "priority",
     )
     username = SigilShortAutoField(
@@ -125,6 +126,10 @@ class EmailInbox(CoreProfile):
         ),
     )
     use_ssl = models.BooleanField(default=True)
+    is_enabled = models.BooleanField(
+        default=True,
+        help_text="Disable to remove this inbox from automatic selection.",
+    )
     priority = models.IntegerField(
         default=0,
         help_text="Higher values are selected first when multiple inboxes are available.",
