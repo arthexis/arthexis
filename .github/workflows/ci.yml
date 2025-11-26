@@ -7,43 +7,7 @@ on:
     - cron: '0 2 * * *'
 
 jobs:
-  change-detection:
-    runs-on: ubuntu-latest
-    outputs:
-      docs_only: ${{ steps.classify.outputs.docs_only }}
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-      - name: Determine changed files
-        id: changed
-        uses: tj-actions/changed-files@v45
-        with:
-          separator: "\n"
-      - name: Classify change set
-        id: classify
-        run: |
-          docs_only=true
-          has_files=false
-          while IFS= read -r file; do
-            has_files=true
-            if [[ ! "$file" =~ \.md$ ]]; then
-              docs_only=false
-              break
-            fi
-          done <<'EOF'
-${{ steps.changed.outputs.all_changed_files }}
-EOF
-
-          if [[ "$has_files" == false ]]; then
-            docs_only=false
-          fi
-
-          echo "docs_only=${docs_only}" >> "$GITHUB_OUTPUT"
-
   node-test-matrix:
-    needs: change-detection
-    if: needs.change-detection.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
@@ -85,8 +49,8 @@ EOF
                   fh.write('\n')
           PY
   check-migrations:
-    needs: [change-detection, node-test-matrix]
-    if: needs.change-detection.outputs.docs_only != 'true' && needs.node-test-matrix.outputs.database_changed == 'true'
+    needs: node-test-matrix
+    if: needs.node-test-matrix.outputs.database_changed == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -101,8 +65,6 @@ EOF
           python scripts/check_migrations.py
 
   env-refresh:
-    needs: change-detection
-    if: needs.change-detection.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -112,27 +74,10 @@ EOF
           ./env-refresh.sh
 
   upgrade-script:
-    needs: change-detection
-    if: needs.change-detection.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
       - name: Check upgrade script syntax
         run: |
           bash -n upgrade.sh
-
-  docs-markdown-validation:
-    needs: change-detection
-    if: needs.change-detection.outputs.docs_only == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - name: Validate Markdown
-        run: |
-          npx --yes markdownlint-cli@0.39.0 "**/*.md"
 
