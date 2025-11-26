@@ -3,7 +3,8 @@ from pathlib import Path
 
 from django.apps import AppConfig
 from django.conf import settings
-from django.db import connection
+from django.db import connections
+from django.db.backends.signals import connection_created
 from django.db.utils import OperationalError, ProgrammingError
 
 from .status_resets import clear_cached_statuses
@@ -14,9 +15,14 @@ class OcppConfig(AppConfig):
     verbose_name = "3. Protocol"
 
     logger = logging.getLogger(__name__)
+    _cleared_cached_statuses = False
 
     def ready(self):  # pragma: no cover - startup side effects
-        self._clear_cached_statuses()
+        connection_created.connect(
+            self._clear_statuses_on_connection,
+            dispatch_uid="ocpp.apps.clear_cached_statuses",
+            weak=False,
+        )
 
         control_lock = Path(settings.BASE_DIR) / "locks" / "control.lck"
         rfid_lock = Path(settings.BASE_DIR) / "locks" / "rfid.lck"
@@ -31,9 +37,26 @@ class OcppConfig(AppConfig):
 
         tag_scanned.connect(_notify, weak=False)
 
-    def _clear_cached_statuses(self) -> None:
+    def _clear_statuses_on_connection(self, sender, connection, **kwargs):
+        if self._cleared_cached_statuses:
+            return
+
+        if connection.alias != "default":
+            return
+
+        self._cleared_cached_statuses = True
+        try:
+            self._clear_cached_statuses(connection)
+        finally:
+            connection_created.disconnect(
+                receiver=self._clear_statuses_on_connection,
+                dispatch_uid="ocpp.apps.clear_cached_statuses",
+            )
+
+    def _clear_cached_statuses(self, connection=None) -> None:
         """Reset persisted status fields on startup to avoid stale values."""
 
+        connection = connection or connections["default"]
         try:
             with connection.cursor() as cursor:
                 tables = set(connection.introspection.table_names(cursor))
