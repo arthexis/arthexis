@@ -321,6 +321,20 @@ admin.site.register(SiteProxy, SiteAdmin)
 
 @admin.register(SiteTemplate)
 class SiteTemplateAdmin(EntityModelAdmin):
+    class SiteTemplateAdminForm(forms.ModelForm):
+        class Meta:
+            model = SiteTemplate
+            fields = "__all__"
+            widgets = {
+                "primary_color": forms.TextInput(attrs={"type": "color"}),
+                "primary_color_emphasis": forms.TextInput(attrs={"type": "color"}),
+                "accent_color": forms.TextInput(attrs={"type": "color"}),
+                "accent_color_emphasis": forms.TextInput(attrs={"type": "color"}),
+                "support_color": forms.TextInput(attrs={"type": "color"}),
+                "support_color_emphasis": forms.TextInput(attrs={"type": "color"}),
+                "support_text_color": forms.TextInput(attrs={"type": "color"}),
+            }
+
     list_display = (
         "name",
         "palette",
@@ -328,6 +342,7 @@ class SiteTemplateAdmin(EntityModelAdmin):
         "accent_color",
         "support_color",
     )
+    form = SiteTemplateAdminForm
     search_fields = ("name",)
     fieldsets = (
         (
