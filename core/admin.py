@@ -2493,6 +2493,20 @@ class EnergyTransactionInline(admin.TabularInline):
     autocomplete_fields = ["tariff"]
 
 
+class OdooCustomerSearchForm(forms.Form):
+    name = forms.CharField(required=False, label=_("Name contains"))
+    email = forms.CharField(required=False, label=_("Email contains"))
+    phone = forms.CharField(required=False, label=_("Phone contains"))
+    limit = forms.IntegerField(
+        required=False,
+        min_value=1,
+        max_value=200,
+        initial=50,
+        label=_("Result limit"),
+        help_text=_("Limit the number of Odoo customers returned per search."),
+    )
+
+
 @admin.register(CustomerAccount)
 class CustomerAccountAdmin(EntityModelAdmin):
     change_list_template = "admin/core/customeraccount/change_list.html"
@@ -2546,6 +2560,13 @@ class CustomerAccountAdmin(EntityModelAdmin):
             },
         ),
         (
+            "CRM",
+            {
+                "fields": ("odoo_customer",),
+                "classes": ("collapse",),
+            },
+        ),
+        (
             "Energy Summary",
             {
                 "fields": (
@@ -2590,6 +2611,11 @@ class CustomerAccountAdmin(EntityModelAdmin):
                 self.admin_site.admin_view(self.onboard_details),
                 name="core_customeraccount_onboard_details",
             ),
+            path(
+                "import-from-odoo/",
+                self.admin_site.admin_view(self.import_from_odoo_view),
+                name="core_customeraccount_import_from_odoo",
+            ),
         ]
         return custom + urls
 
@@ -2633,6 +2659,302 @@ class CustomerAccountAdmin(EntityModelAdmin):
         context = self.admin_site.each_context(request)
         context.update({"form": form})
         return render(request, "core/onboard_details.html", context)
+
+    def _odoo_profile_admin(self):
+        return self.admin_site._registry.get(OdooProfile)
+
+    @staticmethod
+    def _simplify_customer(customer: dict[str, Any]) -> dict[str, Any]:
+        country = ""
+        country_info = customer.get("country_id")
+        if isinstance(country_info, (list, tuple)) and len(country_info) > 1:
+            country = country_info[1]
+        return {
+            "id": customer.get("id"),
+            "name": customer.get("name", ""),
+            "email": customer.get("email", ""),
+            "phone": customer.get("phone", ""),
+            "mobile": customer.get("mobile", ""),
+            "city": customer.get("city", ""),
+            "country": country,
+        }
+
+    @staticmethod
+    def _customer_fields() -> list[str]:
+        return ["name", "email", "phone", "mobile", "city", "country_id"]
+
+    def _build_customer_domain(self, cleaned_data: dict[str, Any]) -> list[list[str]]:
+        domain: list[list[str]] = [["customer_rank", ">", 0]]
+        if cleaned_data.get("name"):
+            domain.append(["name", "ilike", cleaned_data["name"]])
+        if cleaned_data.get("email"):
+            domain.append(["email", "ilike", cleaned_data["email"]])
+        if cleaned_data.get("phone"):
+            domain.append(["phone", "ilike", cleaned_data["phone"]])
+        return domain
+
+    @staticmethod
+    def _build_unique_account_name(base: str) -> str:
+        base_name = (base or "").strip().upper() or "ODOO CUSTOMER"
+        candidate = base_name
+        suffix = 1
+        while CustomerAccount.objects.filter(name=candidate).exists():
+            suffix += 1
+            candidate = f"{base_name}-{suffix}"
+        return candidate
+
+    def _record_odoo_error(
+        self,
+        request,
+        context: dict[str, Any],
+        exc: Exception,
+        profile: OdooProfile,
+    ) -> None:
+        logger.exception(
+            "Failed to fetch Odoo customers for user %s (profile_id=%s, host=%s, database=%s)",
+            getattr(getattr(request, "user", None), "pk", None),
+            getattr(profile, "pk", None),
+            getattr(profile, "host", None),
+            getattr(profile, "database", None),
+        )
+        context["error"] = _("Unable to fetch customers from Odoo.")
+        if getattr(request.user, "is_superuser", False):
+            fault = getattr(exc, "faultString", "")
+            message = str(exc)
+            details = [
+                f"Host: {getattr(profile, 'host', '')}",
+                f"Database: {getattr(profile, 'database', '')}",
+                f"User ID: {getattr(profile, 'odoo_uid', '')}",
+            ]
+            if fault and fault != message:
+                details.append(f"Fault: {fault}")
+            if message:
+                details.append(f"Exception: {type(exc).__name__}: {message}")
+            else:
+                details.append(f"Exception type: {type(exc).__name__}")
+            context["debug_error"] = "\n".join(details)
+
+    def _fetch_odoo_customers(
+        self, profile: OdooProfile, cleaned_data: dict[str, Any]
+    ) -> list[dict[str, Any]]:
+        limit = cleaned_data.get("limit") or 50
+        customers = profile.execute(
+            "res.partner",
+            "search_read",
+            self._build_customer_domain(cleaned_data),
+            fields=self._customer_fields(),
+            limit=limit,
+        )
+        return [self._simplify_customer(customer) for customer in customers]
+
+    def _fetch_customers_by_id(
+        self, profile: OdooProfile, identifiers: list[int]
+    ) -> list[dict[str, Any]]:
+        if not identifiers:
+            return []
+        customers = profile.execute(
+            "res.partner",
+            "search_read",
+            [["id", "in", identifiers]],
+            fields=self._customer_fields(),
+            limit=len(identifiers),
+        )
+        return [self._simplify_customer(customer) for customer in customers]
+
+    def _ensure_user_for_customer(
+        self, customer: dict[str, Any]
+    ) -> User | None:
+        UserModel = get_user_model()
+        email = (customer.get("email") or "").strip()
+        name = (customer.get("name") or "").strip()
+        if not email and not name:
+            return None
+
+        if email:
+            existing = UserModel.objects.filter(email__iexact=email).first()
+            if existing:
+                return existing
+
+        base_username = email.split("@")[0] if email else slugify(name)
+        if not base_username:
+            base_username = f"odoo-{customer.get('id') or 'customer'}"
+
+        candidate = base_username[:150]
+        suffix = 1
+        while UserModel.objects.filter(username=candidate).exists():
+            candidate = f"{base_username[:140]}-{suffix}"
+            suffix += 1
+
+        user = UserModel.objects.create_user(username=candidate, email=email)
+        updates = []
+        if name:
+            parts = name.split(" ", 1)
+            user.first_name = parts[0]
+            updates.append("first_name")
+            if len(parts) > 1:
+                user.last_name = parts[1]
+                updates.append("last_name")
+        if email:
+            updates.append("email")
+        if updates:
+            user.save(update_fields=updates)
+        return user
+
+    def _import_selected_customers(
+        self,
+        request,
+        profile: OdooProfile,
+        customers: list[dict[str, Any]],
+        action: str,
+        context: dict[str, Any],
+    ) -> HttpResponseBase | None:
+        if not self.has_add_permission(request):
+            context["form_error"] = _(
+                "You do not have permission to add customer accounts."
+            )
+            return None
+
+        raw_ids = request.POST.getlist("customer_ids")
+        if not raw_ids:
+            context["form_error"] = _("Select one or more customers to import.")
+            return None
+
+        try:
+            identifiers = [int(value) for value in raw_ids]
+        except (TypeError, ValueError):
+            context["form_error"] = _("Invalid customer selection.")
+            return None
+
+        known = {customer.get("id"): customer for customer in customers if customer.get("id")}
+        missing = [identifier for identifier in identifiers if identifier not in known]
+        if missing:
+            try:
+                fetched = self._fetch_customers_by_id(profile, missing)
+            except Exception as exc:  # pragma: no cover - defensive fallback
+                self._record_odoo_error(request, context, exc, profile)
+                return None
+            for customer in fetched:
+                known[customer.get("id")] = customer
+
+        created = 0
+        skipped = 0
+        for identifier in identifiers:
+            customer = known.get(identifier)
+            if not customer:
+                continue
+
+            existing = self.model.objects.filter(odoo_customer__id=identifier).first()
+            if existing:
+                skipped += 1
+                continue
+
+            account_name = self._build_unique_account_name(
+                customer.get("name") or f"Odoo Customer {identifier}"
+            )
+            user = self._ensure_user_for_customer(customer)
+            account = self.model.objects.create(
+                name=account_name,
+                user=user,
+                odoo_customer={
+                    "id": identifier,
+                    "name": customer.get("name", ""),
+                    "email": customer.get("email", ""),
+                    "phone": customer.get("phone", ""),
+                    "mobile": customer.get("mobile", ""),
+                    "city": customer.get("city", ""),
+                    "country": customer.get("country", ""),
+                },
+            )
+            self.log_addition(request, account, "Imported customer from Odoo")
+            created += 1
+
+        if created:
+            self.message_user(
+                request,
+                ngettext(
+                    "Imported %(count)d customer account from Odoo.",
+                    "Imported %(count)d customer accounts from Odoo.",
+                    created,
+                )
+                % {"count": created},
+                level=messages.SUCCESS,
+            )
+
+        if skipped:
+            self.message_user(
+                request,
+                ngettext(
+                    "Skipped %(count)d customer already imported.",
+                    "Skipped %(count)d customers already imported.",
+                    skipped,
+                )
+                % {"count": skipped},
+                level=messages.WARNING,
+            )
+
+        if action == "import":
+            return HttpResponseRedirect(
+                reverse("admin:core_customeraccount_changelist")
+            )
+        return None
+
+    def import_from_odoo_view(self, request):
+        opts = self.model._meta
+        search_form = OdooCustomerSearchForm(request.POST or None)
+        context = self.admin_site.each_context(request)
+        context.update(
+            {
+                "opts": opts,
+                "title": _("Import from Odoo"),
+                "has_credentials": False,
+                "profile_url": None,
+                "customers": [],
+                "credential_error": None,
+                "error": None,
+                "debug_error": None,
+                "form_error": None,
+                "searched": False,
+                "selected_ids": request.POST.getlist("customer_ids"),
+                "search_form": search_form,
+            }
+        )
+
+        profile_admin = self._odoo_profile_admin()
+        if profile_admin is not None:
+            context["profile_url"] = profile_admin.get_my_profile_url(request)
+
+        profile = getattr(request.user, "odoo_profile", None)
+        if not profile or not profile.is_verified:
+            context["credential_error"] = _(
+                "Configure your CRM employee credentials before importing customers."
+            )
+            return TemplateResponse(
+                request, "admin/core/customeraccount/import_from_odoo.html", context
+            )
+
+        context["has_credentials"] = True
+        customers: list[dict[str, Any]] = []
+        action = request.POST.get("import_action")
+
+        if request.method == "POST" and search_form.is_valid():
+            context["searched"] = True
+            try:
+                customers = self._fetch_odoo_customers(profile, search_form.cleaned_data)
+            except Exception as exc:
+                self._record_odoo_error(request, context, exc, profile)
+            else:
+                context["customers"] = customers
+
+            if action in ("import", "continue") and not context.get("error"):
+                response = self._import_selected_customers(
+                    request, profile, customers, action, context
+                )
+                if response is not None:
+                    return response
+
+        return TemplateResponse(
+            request, "admin/core/customeraccount/import_from_odoo.html", context
+        )
 
 
 @admin.register(EnergyCredit)
