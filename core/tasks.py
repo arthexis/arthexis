@@ -20,6 +20,11 @@ import requests
 
 from celery import shared_task
 from core import github_issues
+from core.auto_upgrade import (
+    AUTO_UPGRADE_FALLBACK_INTERVAL,
+    AUTO_UPGRADE_INTERVAL_MINUTES,
+    DEFAULT_AUTO_UPGRADE_MODE,
+)
 from . import release_workflow
 from core.auto_upgrade_failover import clear_failover_lock, write_failover_lock
 from django.conf import settings
@@ -32,6 +37,7 @@ AUTO_UPGRADE_SKIP_LOCK_NAME = "auto_upgrade_skip_revisions.lck"
 AUTO_UPGRADE_NETWORK_FAILURE_LOCK_NAME = "auto_upgrade_network_failures.lck"
 AUTO_UPGRADE_NETWORK_FAILURE_THRESHOLD = 3
 AUTO_UPGRADE_FAILURE_LOCK_NAME = "auto_upgrade_failures.lck"
+AUTO_UPGRADE_RECENCY_LOCK_NAME = "auto_upgrade_last_run.lck"
 STABLE_AUTO_UPGRADE_START = datetime_time(hour=19, minute=30)
 STABLE_AUTO_UPGRADE_END = datetime_time(hour=5, minute=30)
 WATCH_UPGRADE_BINARY = Path("/usr/local/bin/watch-upgrade")
@@ -147,6 +153,64 @@ def _append_auto_upgrade_log(base_dir: Path, message: str) -> None:
             fh.write(f"{timestamp} {message}\n")
     except Exception:  # pragma: no cover - best effort logging only
         logger.warning("Failed to append auto-upgrade log entry: %s", message)
+
+
+def _recency_lock_path(base_dir: Path) -> Path:
+    return base_dir / "locks" / AUTO_UPGRADE_RECENCY_LOCK_NAME
+
+
+def _record_auto_upgrade_timestamp(base_dir: Path) -> None:
+    lock_path = _recency_lock_path(base_dir)
+    try:
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        lock_path.write_text(timezone.now().isoformat(), encoding="utf-8")
+    except OSError:
+        logger.warning("Failed to update auto-upgrade recency lockfile")
+
+
+def _auto_upgrade_ran_recently(base_dir: Path, interval_minutes: int) -> bool:
+    lock_path = _recency_lock_path(base_dir)
+    try:
+        raw_value = lock_path.read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        return False
+    except OSError:
+        logger.warning("Failed to read auto-upgrade recency lockfile")
+        return False
+
+    if not raw_value:
+        return False
+
+    try:
+        recorded_time = datetime.fromisoformat(raw_value)
+    except ValueError:
+        logger.warning(
+            "Invalid auto-upgrade recency lockfile contents: %s", raw_value
+        )
+        return False
+
+    if timezone.is_naive(recorded_time):
+        recorded_time = timezone.make_aware(recorded_time)
+
+    return recorded_time > timezone.now() - timedelta(minutes=interval_minutes)
+
+
+def _resolve_auto_upgrade_interval_minutes(mode: str) -> int:
+    interval_minutes = AUTO_UPGRADE_INTERVAL_MINUTES.get(
+        mode, AUTO_UPGRADE_FALLBACK_INTERVAL
+    )
+
+    override_interval = os.environ.get("ARTHEXIS_UPGRADE_FREQ")
+    if override_interval:
+        try:
+            parsed_interval = int(override_interval)
+        except ValueError:
+            parsed_interval = None
+        else:
+            if parsed_interval > 0:
+                interval_minutes = parsed_interval
+
+    return interval_minutes
 
 
 def _detect_path_owner(base_dir: Path) -> tuple[str | None, str | None]:
@@ -1150,7 +1214,7 @@ def check_github_updates(channel_override: str | None = None) -> None:
     """Check the GitHub repo for updates and upgrade if needed."""
     base_dir = _project_base_dir()
     mode_file = base_dir / "locks" / "auto_upgrade.lck"
-    mode = "stable"
+    mode = DEFAULT_AUTO_UPGRADE_MODE
     admin_override = channel_override is not None
     reset_network_failures = True
     failure_recorded = False
@@ -1184,6 +1248,8 @@ def check_github_updates(channel_override: str | None = None) -> None:
             "normal": "stable",
             "regular": "stable",
         }.get(mode, mode)
+
+        interval_minutes = _resolve_auto_upgrade_interval_minutes(mode)
 
         if mode == "stable" and not admin_override:
             now_local = timezone.localtime(timezone.now())
@@ -1331,7 +1397,23 @@ def check_github_updates(channel_override: str | None = None) -> None:
             upgrade_was_applied = True
 
         if upgrade_was_applied:
+            if _auto_upgrade_ran_recently(base_dir, interval_minutes):
+                _append_auto_upgrade_log(
+                    base_dir,
+                    (
+                        "Skipping auto-upgrade; last run was less than "
+                        f"{interval_minutes} minutes ago"
+                    ),
+                )
+                _ensure_runtime_services(
+                    base_dir,
+                    restart_if_active=False,
+                    revert_on_failure=False,
+                )
+                return
+
             _broadcast_upgrade_start_message(local_revision, remote_revision)
+            _record_auto_upgrade_timestamp(base_dir)
 
         with log_file.open("a") as fh:
             fh.write(
