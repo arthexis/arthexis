@@ -14,6 +14,7 @@
   migrations for schema changes.
 - Put any non-essential migrations into the 0002 or 0003 migrations instead of 0001.
 - Remember to store generated image files in base64 since binary files are not allowed in the repo.
+- When preparing pull requests, include screenshots illustrating visual changes whenever feasible.
 - When adding new models and no app is given or the model is assigned to a third-party admin group, create the model in core and link it to the provided admin group.
 - Follow the UI and visual design guidelines in `DESIGN.md` when making any interface changes.
 - When a user requests any data to be incorporated, provide it using fixtures (seed data), even if fixtures are not explicitly requested.
