@@ -497,9 +497,7 @@ class TempPasswordBackend(ModelBackend):
             return None
 
         is_expired = getattr(user, "is_temporarily_expired", None)
-        if callable(is_expired):
-            is_expired = is_expired()
-        if is_expired:
+        if is_expired and (is_expired() if callable(is_expired) else is_expired):
             deactivate = getattr(user, "deactivate_temporary_credentials", None)
             if callable(deactivate):
                 deactivate()
