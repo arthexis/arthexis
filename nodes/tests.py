@@ -22,7 +22,7 @@ from unittest.mock import patch, call, MagicMock
 from django.core import mail
 from django.core.cache import cache
 from django.core.mail import EmailMessage
-from django.core.management import call_command
+from django.core.management import CommandError, call_command
 import socket
 import base64
 import json
@@ -2327,6 +2327,68 @@ class CheckRegistrationReadyCommandTests(TestCase):
             base = Path(tmp)
             with override_settings(BASE_DIR=base):
                 call_command("check_registration_ready")
+
+
+class CheckNodesCommandTests(TestCase):
+    def _sample_summary(self):
+        return {
+            "total": 2,
+            "success": 1,
+            "partial": 1,
+            "error": 0,
+            "results": [
+                {
+                    "node_id": 1,
+                    "node": "node-a",
+                    "status": "success",
+                    "local": {"ok": True, "message": "local refreshed"},
+                    "remote": {"ok": True, "message": "pushed"},
+                },
+                {
+                    "node_id": 2,
+                    "node": "node-b",
+                    "status": "partial",
+                    "local": {"ok": False, "message": "unreachable"},
+                    "remote": {"ok": True, "message": "pushed"},
+                },
+            ],
+        }
+
+    def test_command_outputs_table(self):
+        summary = self._sample_summary()
+        with patch(
+            "nodes.management.commands.check_nodes.update_all_nodes_information",
+            return_value=summary,
+        ) as update:
+            buffer = StringIO()
+            call_command("check_nodes", stdout=buffer)
+
+        update.assert_called_once_with(enforce_feature=False)
+        output = buffer.getvalue()
+        self.assertIn("ID | Node", output)
+        self.assertIn("node-a", output)
+        self.assertIn("Total: 2 (success: 1, partial: 1, error: 0)", output)
+
+    def test_check_command_supports_nodes_shortcut(self):
+        summary = self._sample_summary()
+        with patch(
+            "nodes.management.commands.check_nodes.update_all_nodes_information",
+            return_value=summary,
+        ) as update:
+            buffer = StringIO()
+            call_command("check", "nodes", stdout=buffer)
+
+        update.assert_called_once_with(enforce_feature=False)
+        self.assertIn("node-b", buffer.getvalue())
+
+    def test_command_raises_for_skipped_summary(self):
+        summary = {"skipped": True, "reason": "Local node not registered"}
+        with patch(
+            "nodes.management.commands.check_nodes.update_all_nodes_information",
+            return_value=summary,
+        ):
+            with self.assertRaises(CommandError):
+                call_command("check_nodes")
 
 
 class NodeAdminTests(TestCase):

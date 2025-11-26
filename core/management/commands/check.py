@@ -15,6 +15,7 @@ CHECK_COMMANDS = OrderedDict(
         ("lcd-diagnostics", "lcd_check"),
         ("next-upgrade", "check_next_upgrade"),
         ("pypi", "check_pypi"),
+        ("nodes", "check_nodes"),
         ("registration-ready", "check_registration_ready"),
         ("rfid", "check_rfid"),
         ("rfid-scan", "rfid_check"),
@@ -55,7 +56,25 @@ class Command(SystemCheckCommand):
         checks = self._resolve_checks()
         target = options.pop("target", None)
         forwarded_args = options.pop("command_args", None) or []
+        app_labels = options.get("app_labels") or []
+        positional_args = list(args)
         list_checks = options.pop("list_checks", False)
+
+        if target is None and app_labels:
+            candidate = app_labels[0]
+            normalized_candidate = candidate.replace("-", "_")
+            if normalized_candidate in checks:
+                target = candidate
+                forwarded_args = app_labels[1:] + forwarded_args
+                options["app_labels"] = []
+
+        if target is None and positional_args:
+            candidate = positional_args[0]
+            normalized_candidate = candidate.replace("-", "_")
+            if normalized_candidate in checks:
+                target = candidate
+                forwarded_args = positional_args[1:] + forwarded_args
+                positional_args = []
 
         if target is None:
             if list_checks:
@@ -63,7 +82,7 @@ class Command(SystemCheckCommand):
                 return
             # Fall back to Django's built-in system checks so this command
             # remains compatible with the default test runner API.
-            return super().handle(*args, **options)
+            return super().handle(*positional_args, **options)
 
         normalized_target = target.replace("-", "_")
         if normalized_target not in checks:
@@ -73,7 +92,12 @@ class Command(SystemCheckCommand):
             )
 
         command_name = checks[normalized_target]["command_name"]
-        call_command(command_name, *forwarded_args)
+        call_command(
+            command_name,
+            *forwarded_args,
+            stdout=self.stdout,
+            stderr=self.stderr,
+        )
 
     def _resolve_checks(self) -> OrderedDict[str, dict[str, str]]:
         """Pair target aliases with their command names and help text."""
