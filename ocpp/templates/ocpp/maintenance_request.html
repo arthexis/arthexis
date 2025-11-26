@@ -20,14 +20,14 @@
             </div>
           {% endif %}
           <div class="mb-3">
-            <label class="form-label" for="id_title">{% trans "Title" %}</label>
-            {{ form.title }}
-            {% if form.title.errors %}
-              <div class="invalid-feedback d-block">{{ form.title.errors|join:" " }}</div>
+            <label class="form-label" for="id_category">{% trans "Task Category" %}</label>
+            {{ form.category }}
+            {% if form.category.errors %}
+              <div class="invalid-feedback d-block">{{ form.category.errors|join:" " }}</div>
             {% endif %}
           </div>
           <div class="mb-3">
-            <label class="form-label" for="id_description">{% trans "Description" %}</label>
+            <label class="form-label" for="id_description">{% trans "Requestor Comments" %}</label>
             {{ form.description }}
             {% if form.description.errors %}
               <div class="invalid-feedback d-block">{{ form.description.errors|join:" " }}</div>
@@ -74,7 +74,7 @@
         <h2 class="h5 mb-3">{% trans "How it works" %}</h2>
         <ul class="list-unstyled small text-muted mb-0">
           <li class="mb-2">{% trans "Select the location that requires on-site maintenance." %}</li>
-          <li class="mb-2">{% trans "Provide a clear title and description for the task." %}</li>
+          <li class="mb-2">{% trans "Choose the appropriate task category and add your comments." %}</li>
           <li class="mb-2">{% trans "Choose the expected start and end window for the work." %}</li>
           <li class="mb-0">{% trans "Enable email reminders to notify assigned contacts when available." %}</li>
         </ul>

@@ -1116,7 +1116,8 @@ class ManualTask(Entity):
     """Manual work scheduled for nodes or locations."""
 
     description = models.TextField(
-        _("Description"), help_text=_("Detailed summary of the work to perform."),
+        _("Requestor Comments"),
+        help_text=_("Detailed summary of the work to perform."),
     )
     category = models.ForeignKey(
         "teams.TaskCategory",
