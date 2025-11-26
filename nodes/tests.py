@@ -2046,6 +2046,85 @@ class NodeRegisterCurrentTests(TestCase):
             PeriodicTask.objects.filter(name=task_name).exists()
         )
 
+    def test_connectivity_monitor_task_syncs_for_target_roles(self):
+        feature, _ = NodeFeature.objects.get_or_create(
+            slug="celery-queue", defaults={"display": "Celery Queue"}
+        )
+        control_role, _ = NodeRole.objects.get_or_create(name="Control")
+        terminal_role, _ = NodeRole.objects.get_or_create(name="Terminal")
+        satellite_role, _ = NodeRole.objects.get_or_create(name="Satellite")
+
+        raw_name = "nodes_monitor_network_connectivity"
+        task_name = slugify_task_name(raw_name)
+        PeriodicTask.objects.filter(
+            name__in=periodic_task_name_variants(raw_name)
+        ).delete()
+
+        node, _ = Node.objects.update_or_create(
+            mac_address=Node.get_current_mac(),
+            defaults={
+                "hostname": socket.gethostname(),
+                "address": "127.0.0.1",
+                "port": 9345,
+                "role": control_role,
+                "base_path": settings.BASE_DIR,
+            },
+        )
+
+        NodeFeatureAssignment.objects.get_or_create(node=node, feature=feature)
+
+        task = PeriodicTask.objects.get(name=task_name)
+        self.assertEqual(task.interval.every, 10)
+        self.assertEqual(task.interval.period, IntervalSchedule.MINUTES)
+
+        node.role = terminal_role
+        node.save()
+        self.assertFalse(
+            PeriodicTask.objects.filter(name=task_name).exists()
+        )
+
+        node.role = satellite_role
+        node.save()
+        NodeFeatureAssignment.objects.get_or_create(node=node, feature=feature)
+        self.assertTrue(
+            PeriodicTask.objects.filter(name=task_name).exists()
+        )
+
+    def test_monitor_network_connectivity_remediates_after_failures(self):
+        feature, _ = NodeFeature.objects.get_or_create(
+            slug="celery-queue", defaults={"display": "Celery Queue"}
+        )
+        role, _ = NodeRole.objects.get_or_create(name="Control")
+        node, _ = Node.objects.update_or_create(
+            mac_address=Node.get_current_mac(),
+            defaults={
+                "hostname": socket.gethostname(),
+                "address": "127.0.0.1",
+                "port": 9346,
+                "role": role,
+                "base_path": settings.BASE_DIR,
+            },
+        )
+        NodeFeatureAssignment.objects.get_or_create(node=node, feature=feature)
+        cache.delete(node_tasks.PING_FAILURE_CACHE_KEY)
+
+        with patch("nodes.tasks.Node.get_local", return_value=node), patch(
+            "nodes.tasks._ping_target",
+            side_effect=[(False, "unreachable"), (False, "unreachable"), (False, "unreachable")],
+        ) as ping_target, patch(
+            "nodes.tasks._reset_wlan_interface", return_value={"ok": True, "message": "reset"}
+        ) as reset_interface:
+            node_tasks.monitor_network_connectivity()
+            node_tasks.monitor_network_connectivity()
+            result = node_tasks.monitor_network_connectivity()
+
+        self.assertEqual(ping_target.call_count, 3)
+        self.assertEqual(reset_interface.call_count, 1)
+        self.assertFalse(result["ok"])
+        self.assertEqual(result["failures"], 3)
+        self.assertIn("remediation", result)
+        self.assertEqual(cache.get(node_tasks.PING_FAILURE_CACHE_KEY), 0)
+
     def test_net_message_purge_task_syncs_with_feature(self):
         feature, _ = NodeFeature.objects.get_or_create(
             slug="celery-queue", defaults={"display": "Celery Queue"}
