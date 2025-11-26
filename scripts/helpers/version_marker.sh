@@ -67,3 +67,72 @@ arthexis_update_version_marker() {
     printf '%s\n' "$raw_version" > "$version_file"
   fi
 }
+
+# Append the development marker to the VERSION file before committing changes
+# that do not already update the version number. This ensures that any commit
+# created after a tagged release automatically carries the ``+d`` suffix unless
+# the developer explicitly staged a new version string.
+#
+# Arguments:
+#   $1 - Repository root containing the VERSION file
+arthexis_prepare_dev_version_marker() {
+  local repo_root="$1"
+  local version_file
+  version_file="$repo_root/VERSION"
+
+  if [ ! -f "$version_file" ]; then
+    return 0
+  fi
+
+  if git -C "$repo_root" diff --cached --name-only --diff-filter=ACMRTUXB | grep -qx "VERSION"; then
+    return 0
+  fi
+
+  local raw_version
+  raw_version=$(tr -d '\r\n' < "$version_file")
+  if [ -z "$raw_version" ]; then
+    return 0
+  fi
+
+  local dev_suffix="+d"
+  local legacy_suffix="+"
+  local has_dev_marker=0
+
+  local base_version="$raw_version"
+  if [[ "$raw_version" == *"$dev_suffix" ]]; then
+    has_dev_marker=1
+    base_version="${raw_version%$dev_suffix}"
+  elif [[ "$raw_version" == *"$legacy_suffix" ]]; then
+    has_dev_marker=1
+    base_version="${raw_version%$legacy_suffix}"
+  fi
+  if [ -z "$base_version" ]; then
+    return 0
+  fi
+
+  local head_rev
+  if ! head_rev=$(git -C "$repo_root" rev-parse HEAD 2>/dev/null); then
+    return 0
+  fi
+
+  if git -C "$repo_root" diff --cached --quiet --exit-code; then
+    return 0
+  fi
+
+  if (( has_dev_marker )); then
+    return 0
+  fi
+
+  local tag_ref="v${base_version}"
+  local tag_rev=""
+  if git -C "$repo_root" rev-parse --verify --quiet "${tag_ref}^{commit}" >/dev/null 2>&1; then
+    tag_rev=$(git -C "$repo_root" rev-parse "${tag_ref}^{commit}" 2>/dev/null)
+  fi
+
+  if [ -z "$tag_rev" ]; then
+    return 0
+  fi
+
+  printf '%s%s\n' "$base_version" "$dev_suffix" > "$version_file"
+  git -C "$repo_root" add "$version_file"
+}
