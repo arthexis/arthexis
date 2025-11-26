@@ -230,8 +230,12 @@ def _summarize_update_results(local_result: dict | None, remote_result: dict | N
 
 
 @shared_task
-def update_all_nodes_information() -> dict:
-    """Invoke the admin "Update nodes" workflow for every node."""
+def update_all_nodes_information(enforce_feature: bool = True) -> dict:
+    """Invoke the admin "Update nodes" workflow for every node.
+
+    When ``enforce_feature`` is False the celery-queue requirement is skipped to
+    allow manual refreshes from management commands.
+    """
 
     summary = {
         "total": 0,
@@ -255,7 +259,7 @@ def update_all_nodes_information() -> dict:
         summary["reason"] = "Local node not registered"
         return summary
 
-    if not local_node.has_feature("celery-queue"):
+    if enforce_feature and not local_node.has_feature("celery-queue"):
         logger.info(
             "Skipping hourly node refresh; local node missing celery-queue feature"
         )
