@@ -49,6 +49,8 @@ class EmailInboxAdminFormTests(TestCase):
             "password": "",
             "protocol": EmailInbox.IMAP,
             "use_ssl": True,
+            "is_enabled": True,
+            "priority": 0,
         }
         form = EmailInboxAdminForm(data, instance=inbox)
         self.assertTrue(form.is_valid(), form.errors)
@@ -67,6 +69,8 @@ class EmailInboxAdminFormTests(TestCase):
             "password": "newpass",
             "protocol": EmailInbox.IMAP,
             "use_ssl": True,
+            "is_enabled": True,
+            "priority": 0,
         }
         form = EmailInboxAdminForm(data, instance=inbox)
         self.assertTrue(form.is_valid(), form.errors)
@@ -93,6 +97,8 @@ class EmailInboxAdminFormTests(TestCase):
             "password": "",
             "protocol": EmailInbox.IMAP,
             "use_ssl": True,
+            "is_enabled": True,
+            "priority": 0,
         }
         form = EmailInboxAdminForm(data, instance=inbox)
         self.assertTrue(form.is_valid(), form.errors)
@@ -266,6 +272,7 @@ class EmailCollectorInlineTests(TestCase):
             "password": "p",
             "protocol": EmailInbox.IMAP,
             "use_ssl": "on",
+            "priority": 0,
             "collectors-TOTAL_FORMS": "2",
             "collectors-INITIAL_FORMS": "0",
             "collectors-MIN_NUM_FORMS": "0",

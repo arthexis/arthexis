@@ -1782,6 +1782,8 @@ PROFILE_INLINE_CONFIG = {
             "password",
             "protocol",
             "use_ssl",
+            "is_enabled",
+            "priority",
         ),
     },
     EmailOutbox: {
@@ -2363,7 +2365,7 @@ class EmailSearchForm(forms.Form):
 
 class EmailInboxAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdmin):
     form = EmailInboxAdminForm
-    list_display = ("owner_label", "username", "host", "protocol")
+    list_display = ("owner_label", "username", "host", "protocol", "is_enabled")
     actions = ["test_connection", "search_inbox", "test_collectors"]
     change_actions = ["test_collectors_action", "my_profile_action"]
     changelist_actions = ["my_profile"]
@@ -2406,7 +2408,7 @@ class EmailInboxAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdmi
         ("Credentials", {"fields": ("username", "password")}),
         (
             "Configuration",
-            {"fields": ("host", "port", "protocol", "use_ssl")},
+            {"fields": ("host", "port", "protocol", "use_ssl", "is_enabled", "priority")},
         ),
     )
 
