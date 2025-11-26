@@ -1,3 +1,4 @@
+import ast
 import io
 import json
 
@@ -151,3 +152,79 @@ def test_ocpp16_coverage_command_outputs_summary_and_badge(tmp_path, monkeypatch
     stderr_output = stderr.getvalue()
     assert "coverage is incomplete" in stderr_output
     assert "Command completed without failure." in stderr_output
+
+
+def test_collect_actions_from_compare_handles_reversed_operands():
+    node = next(
+        (
+            child
+            for child in ast.walk(
+                ast.parse(
+                    """
+if "UnlockConnector" == action:
+    pass
+"""
+                )
+            )
+            if isinstance(child, ast.Compare)
+        ),
+        None,
+    )
+
+    assert node is not None
+    assert ocpp16_coverage._collect_actions_from_compare(node, "action") == {
+        "UnlockConnector"
+    }
+
+
+def test_collect_actions_from_dict_requires_matching_target():
+    node = next(
+        (
+            child
+            for child in ast.walk(
+                ast.parse(
+                    """
+action_handlers = {"Heartbeat": None}
+irrelevant = {"Reset": None}
+"""
+                )
+            )
+            if isinstance(child, ast.Assign)
+            and any(
+                isinstance(target, ast.Name) and target.id == "action_handlers"
+                for target in child.targets
+            )
+        ),
+        None,
+    )
+
+    assert node is not None
+    assert ocpp16_coverage._collect_actions_from_dict(node, "action_handlers") == {
+        "Heartbeat"
+    }
+
+
+def test_collect_csms_to_cp_actions_track_separate_function_scopes():
+    source = """
+import json
+
+def reset():
+    action_name = "Reset"
+    msg = json.dumps([2, "reset", action_name, {}])
+    return msg
+
+def unlock():
+    action_name = "UnlockConnector"
+    def nested():
+        nested_action = "RemoteStopTransaction"
+        msg = json.dumps([2, "nested", nested_action, {}])
+        return msg
+    msg = json.dumps([2, "unlock", action_name, {}])
+    return msg
+"""
+
+    assert ocpp16_coverage._collect_csms_to_cp_actions(source) == {
+        "Reset",
+        "UnlockConnector",
+        "RemoteStopTransaction",
+    }
