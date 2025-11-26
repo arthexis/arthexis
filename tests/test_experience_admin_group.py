@@ -32,5 +32,6 @@ class ExperienceAdminGroupTests(TestCase):
         response = self.client.get(reverse("admin:index"))
         self.assertContains(response, "7. Experience")
         self.assertContains(response, "References")
+        self.assertContains(response, "Site Templates")
         self.assertContains(response, "Custom Sigils")
         self.assertContains(response, "View Histories")
