@@ -201,7 +201,7 @@ class EnergyTariffAdmin(EntityModelAdmin):
     def season_label(self, obj):
         return obj.get_season_display()
 
-    @admin.display(description=_("Contract type"), ordering="contract_type")
+    @admin.display(description=_("Contract"), ordering="contract_type")
     def contract_type_label(self, obj):
         display_value = obj.get_contract_type_display()
         if "(" in display_value and display_value.endswith(")"):
