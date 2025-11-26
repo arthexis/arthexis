@@ -143,10 +143,97 @@ document.addEventListener('DOMContentLoaded', function () {
 {% if request.user.is_authenticated and request.user.is_staff %}
 {% include "core/version_check.html" %}
 {% endif %}
+<script id="admin-breadcrumb-copy">
+document.addEventListener('DOMContentLoaded', function () {
+    const breadcrumbs = document.querySelector('.breadcrumbs');
+    if (!breadcrumbs || breadcrumbs.dataset.copyEnhanced === '1') {
+        return;
+    }
+
+    const breadcrumbText = breadcrumbs.textContent.replace(/\s+/g, ' ').trim();
+    if (!breadcrumbText) {
+        return;
+    }
+
+    const copyLabel = '{% translate "Copy" %}';
+    const copiedLabel = '{% translate "Copied" %}';
+    const copyErrorLabel = '{% translate "Copy failed" %}';
+
+    function copyText(value) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            return navigator.clipboard.writeText(value);
+        }
+
+        return new Promise(function (resolve, reject) {
+            const textarea = document.createElement('textarea');
+            textarea.value = value;
+            textarea.setAttribute('readonly', '');
+            textarea.style.position = 'absolute';
+            textarea.style.left = '-9999px';
+            document.body.appendChild(textarea);
+            const selection = document.getSelection();
+            const selected = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+            textarea.select();
+
+            try {
+                document.execCommand('copy');
+                resolve();
+            } catch (error) {
+                reject(error);
+            }
+
+            document.body.removeChild(textarea);
+
+            if (selected && selection) {
+                selection.removeAllRanges();
+                selection.addRange(selected);
+            }
+        });
+    }
+
+    function setStatus(label) {
+        breadcrumbsCopyLink.textContent = label;
+        window.setTimeout(function () {
+            breadcrumbsCopyLink.textContent = copyLabel;
+        }, 2000);
+    }
+
+    const breadcrumbsCopyLink = document.createElement('a');
+    breadcrumbsCopyLink.href = '#';
+    breadcrumbsCopyLink.className = 'breadcrumbs__copy-link';
+    breadcrumbsCopyLink.textContent = copyLabel;
+    breadcrumbsCopyLink.dataset.breadcrumbCopy = '1';
+    breadcrumbsCopyLink.setAttribute('role', 'button');
+    breadcrumbsCopyLink.setAttribute('aria-label', '{% translate "Copy breadcrumb to clipboard" %}');
+
+    breadcrumbs.dataset.copyEnhanced = '1';
+    breadcrumbs.dataset.breadcrumbText = breadcrumbText;
+    breadcrumbs.appendChild(breadcrumbsCopyLink);
+
+    breadcrumbsCopyLink.addEventListener('click', function (event) {
+        event.preventDefault();
+        const breadcrumbLabel = breadcrumbs.dataset.breadcrumbText || breadcrumbText;
+        const copyValue = `In ${breadcrumbLabel} (${window.location.href})`;
+
+        copyText(copyValue)
+            .then(function () {
+                setStatus(copiedLabel);
+            })
+            .catch(function () {
+                setStatus(copyErrorLabel);
+            });
+    });
+});
+</script>
 {% endblock %}
 {% block extrastyle %}
 {{ block.super }}
 <style>
+.breadcrumbs__copy-link {
+    margin-left: 0.5rem;
+    font-size: 0.875rem;
+}
+
 :root {
     --user-story-card-bg: var(--body-bg, #ffffff);
     --user-story-card-fg: var(--body-fg, #212529);
