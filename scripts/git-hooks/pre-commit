@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+version_rel="VERSION"
+version_path="$repo_root/$version_rel"
+
+if [ ! -f "$version_path" ]; then
+  exit 0
+fi
+
+if git diff --cached --name-only -- "$version_rel" | grep -q .; then
+  exit 0
+fi
+
+helper="$repo_root/scripts/helpers/version_marker.sh"
+if [ ! -r "$helper" ]; then
+  echo "version marker helper not found at $helper" >&2
+  exit 0
+fi
+# shellcheck source=scripts/helpers/version_marker.sh
+. "$helper"
+
+raw_version=$(tr -d '\r\n' < "$version_path")
+if [ -z "$raw_version" ]; then
+  exit 0
+fi
+
+dev_suffix="+d"
+legacy_suffix="+"
+base_version="$raw_version"
+if [[ "$raw_version" == *"$dev_suffix" ]]; then
+  base_version="${raw_version%$dev_suffix}"
+elif [[ "$raw_version" == *"$legacy_suffix" ]]; then
+  base_version="${raw_version%$legacy_suffix}"
+fi
+if [ -z "$base_version" ]; then
+  exit 0
+fi
+
+staged_non_version=$(git diff --cached --name-only -- | grep -v "^${version_rel}$" || true)
+force_dev_marker=0
+
+if [ -n "$staged_non_version" ]; then
+  if head_rev=$(git -C "$repo_root" rev-parse HEAD 2>/dev/null); then
+    if git -C "$repo_root" rev-parse --verify --quiet "v${base_version}^{commit}" >/dev/null 2>&1; then
+      tag_rev=$(git -C "$repo_root" rev-parse "v${base_version}^{commit}" 2>/dev/null || true)
+      if [ -n "$tag_rev" ] && [ "$head_rev" = "$tag_rev" ]; then
+        force_dev_marker=1
+      fi
+    fi
+  fi
+fi
+
+before_hash=$(git hash-object "$version_path")
+arthexis_update_version_marker "$repo_root" "$force_dev_marker"
+after_hash=$(git hash-object "$version_path")
+
+if [ "$before_hash" != "$after_hash" ]; then
+  git add "$version_rel"
+  echo "Updated $version_rel to include development marker" >&2
+fi

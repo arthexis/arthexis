@@ -241,6 +241,41 @@ def get_app_list_with_protocol_forwarder(self, request, app_label=None):
     else:
         result = full_list
 
+    if result is not full_list:
+        # On protocol-forwarder nodes we collapse the Protocols app into OCPP.
+        # When the Protocols entry has models, Django returns only ``merged_list``
+        # (without the untouched items from ``full_list``). That list may omit the
+        # Experience group, which carries ``SiteTemplate``. Pull the original
+        # Experience entry back in so the dashboard shows those models.
+        experience_app_label = ExperienceReference._meta.app_label
+        experience_entry = next(
+            (
+                entry
+                for entry in result
+                if entry.get("app_label") == experience_app_label
+            ),
+            None,
+        )
+        full_experience_entry = next(
+            (
+                entry
+                for entry in full_list
+                if entry.get("app_label") == experience_app_label
+            ),
+            None,
+        )
+
+        if full_experience_entry:
+            if experience_entry is None:
+                result.append(full_experience_entry)
+            else:
+                existing = {model.get("object_name") for model in experience_entry["models"]}
+                for model in full_experience_entry.get("models", []):
+                    object_name = model.get("object_name")
+                    if object_name not in existing:
+                        experience_entry["models"].append(model)
+                experience_entry["models"].sort(key=lambda model: model["name"])
+
     if app_label:
         return [entry for entry in result if entry.get("app_label") == app_label]
     return result

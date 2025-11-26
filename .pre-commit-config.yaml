@@ -1,6 +1,13 @@
 repos:
   - repo: local
     hooks:
+      - id: version-marker
+        name: Ensure development version marker
+        entry: scripts/git-hooks/pre-commit-version-marker.sh
+        language: system
+        pass_filenames: false
+        stages: [commit]
+        always_run: true
       - id: black
         name: black
         entry: black
