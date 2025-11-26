@@ -7,7 +7,7 @@
       "is_deleted": false,
       "module": ["Watchtower", "/ocpp/"],
       "path": "/ocpp/rfid/",
-      "label": "RFID Tag Validator",
+      "label": "Identity Validator",
       "enabled": true,
       "description": ""
     }

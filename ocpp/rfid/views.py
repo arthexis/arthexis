@@ -6,7 +6,7 @@ from django.urls import reverse
 from django.views.decorators.http import require_POST
 from django.contrib.auth.views import redirect_to_login
 from django.contrib.admin.views.decorators import staff_member_required
-from nodes.models import Node
+from nodes.models import Node, NodeFeature
 from pages.utils import landing
 
 from .scanner import scan_sources, enable_deep_read_mode
@@ -23,6 +23,18 @@ def _request_wants_json(request):
         return True
     # Fallback for older callers that mark AJAX requests without Accept headers.
     return request.headers.get("x-requested-with") == "XMLHttpRequest"
+
+
+def _feature_enabled(slug: str) -> bool:
+    """Return ``True`` when the feature identified by ``slug`` is active."""
+
+    feature = NodeFeature.objects.filter(slug=slug).first()
+    if not feature:
+        return False
+    try:
+        return bool(feature.is_enabled)
+    except Exception:
+        return False
 
 
 def scan_next(request):
@@ -65,7 +77,7 @@ def scan_deep(_request):
     return JsonResponse(result, status=status)
 
 
-@landing("RFID Tag Validator")
+@landing("Identity Validator")
 def reader(request):
     """Public page to scan RFID tags."""
     node = Node.get_local()
@@ -78,6 +90,8 @@ def reader(request):
         )
 
     table_mode, toggle_url, toggle_label = build_mode_toggle(request)
+    rfid_feature_enabled = _feature_enabled("rfid-scanner")
+    camera_feature_enabled = _feature_enabled("rpi-camera")
 
     context = {
         "scan_url": reverse("rfid-scan-next"),
@@ -86,6 +100,8 @@ def reader(request):
         "toggle_label": toggle_label,
         "show_release_info": request.user.is_staff,
         "default_endianness": RFID.BIG_ENDIAN,
+        "camera_enabled": camera_feature_enabled,
+        "rfid_feature_enabled": rfid_feature_enabled,
     }
     if request.user.is_staff:
         context["admin_change_url_template"] = reverse(
@@ -94,3 +110,6 @@ def reader(request):
         context["deep_read_url"] = reverse("rfid-scan-deep")
         context["admin_view_url"] = reverse("admin:core_rfid_scan")
     return render(request, "rfid/reader.html", context)
+
+
+reader.required_features_any = frozenset({"rfid-scanner", "rpi-camera"})

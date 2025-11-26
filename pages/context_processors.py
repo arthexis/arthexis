@@ -57,6 +57,19 @@ def nav_links(request):
         user_group_names = set(user.groups.values_list("name", flat=True))
     else:
         user_group_names = set()
+    feature_cache: dict[str, bool] = {}
+
+    def feature_is_enabled(slug: str) -> bool:
+        if slug in feature_cache:
+            return feature_cache[slug]
+        feature = NodeFeature.objects.filter(slug=slug).first()
+        try:
+            enabled = bool(feature and feature.is_enabled)
+        except Exception:
+            enabled = False
+        feature_cache[slug] = enabled
+        return enabled
+
     for module in modules:
         landings = []
         seen_paths: set[str] = set()
@@ -70,6 +83,12 @@ def nav_links(request):
             except Resolver404:
                 continue
             view_func = match.func
+            required_features_any = getattr(
+                view_func, "required_features_any", frozenset()
+            )
+            if required_features_any:
+                if not any(feature_is_enabled(slug) for slug in required_features_any):
+                    continue
             requires_login = bool(getattr(view_func, "login_required", False))
             if not requires_login and hasattr(view_func, "login_url"):
                 requires_login = True

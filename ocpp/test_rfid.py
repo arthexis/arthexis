@@ -981,6 +981,14 @@ class ScannerTemplateTests(TestCase):
         self.assertNotContains(resp, 'id="rfid-deep-read"')
 
 
+class RFIDQRPreviewTests(SimpleTestCase):
+    def test_qr_link_is_data_uri(self):
+        tag = RFID(rfid="A1B2C3D4")
+        link = tag.qr_test_link()
+        self.assertIn("data:image/png;base64,", link)
+        self.assertIn("Open QR preview", link)
+
+
 class ReaderPollingTests(SimpleTestCase):
     def _mock_reader_no_tag(self):
         class MockReader:
