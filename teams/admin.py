@@ -203,6 +203,16 @@ class SlackBotProfileAdmin(DjangoObjectActions, EntityModelAdmin):
     bot_creation_wizard.label = _("Bot Creation Wizard")
     bot_creation_wizard.short_description = _("Bot Creation Wizard")
 
+    def _slack_callback_url(self, request):
+        configured = getattr(settings, "SLACK_REDIRECT_URL", "") or ""
+        configured = configured.strip()
+        if configured:
+            return configured
+
+        return request.build_absolute_uri(
+            reverse("admin:teams_slackbotprofile_bot_creation_callback")
+        )
+
     def _slack_oauth_settings(self, request):
         session_config = {}
         if request is not None:
@@ -229,9 +239,7 @@ class SlackBotProfileAdmin(DjangoObjectActions, EntityModelAdmin):
     def bot_creation_wizard_view(self, request):
         client_id, client_secret, signing_secret, scopes = self._slack_oauth_settings(request)
         changelist_url = reverse("admin:teams_slackbotprofile_changelist")
-        callback_url = request.build_absolute_uri(
-            reverse("admin:teams_slackbotprofile_bot_creation_callback")
-        )
+        callback_url = self._slack_callback_url(request)
 
         if request.method == "POST":
             form = SlackBotWizardSetupForm(request.POST)
@@ -328,9 +336,7 @@ class SlackBotProfileAdmin(DjangoObjectActions, EntityModelAdmin):
             )
             return HttpResponseRedirect(changelist_url)
 
-        redirect_uri = request.build_absolute_uri(
-            reverse("admin:teams_slackbotprofile_bot_creation_callback")
-        )
+        redirect_uri = self._slack_callback_url(request)
         response = None
         try:
             response = requests.post(
