@@ -37,9 +37,39 @@
     .slack-wizard__form .aligned label {
       width: 220px;
     }
+    .slack-wizard__form .field-box {
+      align-items: center;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    .slack-wizard__form .field-box input[type="text"],
+    .slack-wizard__form .field-box input[type="password"],
+    .slack-wizard__form .field-box input[type="email"],
+    .slack-wizard__form .field-box textarea {
+      max-width: 100%;
+      width: min(100%, 620px);
+    }
     .slack-wizard__form .help {
       color: var(--body-quiet-color);
       margin: 0.1rem 0 0.35rem;
+    }
+    .slack-wizard__status {
+      align-items: center;
+      color: var(--success-fg, #2e7d32);
+      display: inline-flex;
+      font-weight: 600;
+      gap: 0.35rem;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+    .slack-wizard__status::before {
+      content: "\2713";
+      font-size: 1rem;
+      line-height: 1;
+    }
+    .slack-wizard__status.is-valid {
+      opacity: 1;
     }
     .slack-wizard__actions {
       margin-top: 1rem;
@@ -53,6 +83,47 @@
       }
     }
   </style>
+{% endblock %}
+
+{% block extrahead %}
+  {{ block.super }}
+  <script>
+    document.addEventListener("DOMContentLoaded", () => {
+      const validators = {
+        id_client_id: (value) => /^(\d{9,})\.(\d{9,})$/.test(value.trim()),
+        id_client_secret: (value) => /^[A-Za-z0-9]{20,}$/.test(value.trim()),
+        id_signing_secret: (value) => /^[A-Za-z0-9]{32}$/.test(value.trim()),
+        id_scopes: (value) => {
+          const trimmed = value.trim();
+          return (
+            trimmed === "" ||
+            /^[A-Za-z0-9_:\-]+(\s*,\s*[A-Za-z0-9_:\-]+)*$/.test(trimmed)
+          );
+        },
+      };
+
+      Object.entries(validators).forEach(([fieldId, validator]) => {
+        const input = document.getElementById(fieldId);
+        if (!input) {
+          return;
+        }
+
+        const status = document.createElement("span");
+        status.className = "slack-wizard__status";
+        status.setAttribute("aria-live", "polite");
+        status.textContent = "Format looks good";
+        input.insertAdjacentElement("afterend", status);
+
+        const updateStatus = () => {
+          const isValid = validator(input.value);
+          status.classList.toggle("is-valid", isValid);
+        };
+
+        input.addEventListener("input", updateStatus);
+        updateStatus();
+      });
+    });
+  </script>
 {% endblock %}
 
 {% block content %}
