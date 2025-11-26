@@ -46,6 +46,7 @@ from pages.models import (
     Landing,
     Module,
     RoleLanding,
+    SiteTemplate,
     SiteBadge,
     SiteProxy,
     Favorite,
@@ -3424,6 +3425,29 @@ class PowerNavTests(TestCase):
             landing.path.rstrip("/") or "/" for landing in power_module.enabled_landings
         ]
         self.assertEqual(len(normalized_paths), len(set(normalized_paths)))
+
+    def test_site_template_provided_in_context(self):
+        template = SiteTemplate.objects.create(
+            name="Test Template",
+            primary_color="#112233",
+            primary_color_emphasis="#223344",
+            accent_color="#445566",
+            accent_color_emphasis="#556677",
+            support_color="#667788",
+            support_color_emphasis="#778899",
+            support_text_color="#ffffff",
+        )
+        site = Site.objects.get(domain="testserver")
+        site.template = template
+        site.save(update_fields=["template"])
+
+        request = RequestFactory().get("/", HTTP_HOST="testserver")
+        request.user = AnonymousUser()
+        request.session = self.client.session
+
+        context = nav_links(request)
+
+        self.assertEqual(context["site_template"], template)
 
 
 class WatchtowerLandingLinkTests(TestCase):

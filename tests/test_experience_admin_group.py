@@ -4,6 +4,7 @@ from django.urls import reverse
 from django.contrib.admin.sites import site
 
 from core.admin import ExperienceReference
+from pages.models import SiteTemplate
 from core.models import CustomSigil
 
 
@@ -19,6 +20,8 @@ class ExperienceAdminGroupTests(TestCase):
         registry = site._registry
         self.assertIn(ExperienceReference, registry)
         self.assertEqual(registry[ExperienceReference].model._meta.app_label, "pages")
+        self.assertIn(SiteTemplate, registry)
+        self.assertEqual(registry[SiteTemplate].model._meta.app_label, "pages")
 
     def test_custom_sigil_registered(self):
         registry = site._registry

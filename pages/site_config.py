@@ -41,6 +41,17 @@ _FIELD_DEFINITIONS: tuple[tuple[str, models.Field], ...] = (
             ),
         ),
     ),
+    (
+        "template",
+        models.ForeignKey(
+            "pages.SiteTemplate",
+            on_delete=models.SET_NULL,
+            related_name="sites",
+            null=True,
+            blank=True,
+            verbose_name=_("Template"),
+        ),
+    ),
 )
 
 

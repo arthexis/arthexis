@@ -8,6 +8,44 @@
     <title>{% block title %}{{ badge_site_name|default:"Arthexis" }} {% trans "Constellation" %}{% endblock %}</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
+      {% with template=site_template %}
+      :root {
+        --site-primary: {{ template.primary_color|default:"#0d6efd" }};
+        --site-primary-strong: {{ template.primary_color_emphasis|default:"#0b5ed7" }};
+        --site-primary-rgb: {{ template.primary_rgb|default:"13, 110, 253" }};
+        --site-accent: {{ template.accent_color|default:"#facc15" }};
+        --site-accent-strong: {{ template.accent_color_emphasis|default:"#fb923c" }};
+        --site-accent-rgb: {{ template.accent_rgb|default:"250, 204, 21" }};
+        --site-support: {{ template.support_color|default:"#15803d" }};
+        --site-support-strong: {{ template.support_color_emphasis|default:"#34d399" }};
+        --site-support-rgb: {{ template.support_rgb|default:"21, 128, 61" }};
+        --site-support-text: {{ template.support_text_color|default:"#f0fdf4" }};
+        --bs-primary: var(--site-primary);
+        --bs-primary-rgb: var(--site-primary-rgb);
+        --bs-link-color: var(--site-primary);
+        --bs-link-hover-color: var(--site-primary-strong);
+      }
+      .btn-primary {
+        --bs-btn-bg: var(--site-primary);
+        --bs-btn-border-color: var(--site-primary);
+        --bs-btn-hover-bg: var(--site-primary-strong);
+        --bs-btn-hover-border-color: var(--site-primary-strong);
+        --bs-btn-active-bg: var(--site-primary-strong);
+        --bs-btn-active-border-color: var(--site-primary-strong);
+        --bs-btn-focus-shadow-rgb: var(--site-primary-rgb);
+      }
+      .btn-outline-primary {
+        --bs-btn-color: var(--site-primary);
+        --bs-btn-border-color: var(--site-primary);
+        --bs-btn-hover-bg: var(--site-primary);
+        --bs-btn-hover-border-color: var(--site-primary);
+        --bs-btn-active-bg: var(--site-primary-strong);
+        --bs-btn-active-border-color: var(--site-primary-strong);
+        --bs-btn-focus-shadow-rgb: var(--site-primary-rgb);
+        --bs-btn-hover-color: var(--site-support-text, #fff);
+        --bs-btn-active-color: var(--site-support-text, #fff);
+      }
+      {% endwith %}
       html[data-bs-theme='light'] {
         --bs-body-bg: #f8f9fa;
       }
@@ -265,7 +303,11 @@
         height: 3rem;
         border-radius: 50%;
         border: 0;
-        background: linear-gradient(135deg, #facc15, #fb923c);
+        background: linear-gradient(
+          135deg,
+          var(--site-accent),
+          var(--site-accent-strong)
+        );
         color: #1f2937;
         display: flex;
         align-items: center;
@@ -359,10 +401,10 @@
       .user-story-rating label:hover,
       .user-story-rating label:focus-visible,
       .user-story-rating label:hover ~ label {
-        color: #fbbf24;
+        color: var(--site-accent);
       }
       .user-story-rating input:checked ~ label {
-        color: #f59e0b;
+        color: var(--site-accent-strong);
       }
       .user-story-rating label:active {
         transform: scale(0.95);
@@ -404,8 +446,12 @@
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        background: linear-gradient(135deg, #15803d, #34d399);
-        color: #f0fdf4;
+        background: linear-gradient(
+          135deg,
+          var(--site-support),
+          var(--site-support-strong)
+        );
+        color: var(--site-support-text);
         box-shadow: 0 1.25rem 2.5rem rgba(15, 23, 42, 0.35);
         transition: transform 0.2s ease, box-shadow 0.2s ease;
       }
@@ -566,19 +612,27 @@
         gap: 0.75rem;
       }
       .chat-actions .chat-session-hint {
-        color: rgba(21, 94, 49, 0.65);
+        color: rgba(var(--site-support-rgb), 0.65);
       }
       .chat-form .btn-primary {
-        background: linear-gradient(135deg, #15803d, #22c55e);
-        border-color: #15803d;
-        color: #052e16;
+        background: linear-gradient(
+          135deg,
+          var(--site-support),
+          var(--site-support-strong)
+        );
+        border-color: var(--site-support);
+        color: var(--site-support-text);
         box-shadow: 0 0.75rem 1.5rem rgba(15, 23, 42, 0.25);
       }
       .chat-form .btn-primary:hover,
       .chat-form .btn-primary:focus-visible {
-        background: linear-gradient(135deg, #166534, #16a34a);
-        border-color: #166534;
-        color: #f0fdf4;
+        background: linear-gradient(
+          135deg,
+          var(--site-support-strong),
+          var(--site-support)
+        );
+        border-color: var(--site-support-strong);
+        color: var(--site-support-text);
       }
       .chat-session-hint {
         font-size: 0.75rem;
