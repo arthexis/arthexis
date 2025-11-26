@@ -163,7 +163,7 @@
         <div class="command-output">
           <details open>
             <summary>{% trans "Standard output" %}</summary>
-            <pre>{{ result.stdout|default:_('No output') }}</pre>
+            <pre>{{ result.stdout|default:_('No output')|linebreaksbr }}</pre>
           </details>
           <details {% if result.stderr %}open{% endif %}>
             <summary>{% trans "Standard error" %}</summary>
