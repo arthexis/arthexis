@@ -14,6 +14,9 @@ arthexis_detect_service_mode() {
   local lock_dir="$1"
   local default_mode="$ARTHEXIS_SERVICE_MODE_EMBEDDED"
 
+  local systemd_dir
+  systemd_dir="${SYSTEMD_DIR:-/etc/systemd/system}"
+
   if [ -z "$lock_dir" ]; then
     echo "$default_mode"
     return
@@ -30,6 +33,26 @@ arthexis_detect_service_mode() {
         return
         ;;
     esac
+  fi
+
+  local service_lock
+  service_lock="$lock_dir/service.lck"
+  if [ -f "$service_lock" ]; then
+    local service_name
+    service_name=$(tr -d '\r\n' < "$service_lock")
+    if [ -n "$service_name" ]; then
+      if command -v systemctl >/dev/null 2>&1; then
+        if systemctl list-unit-files | awk '{print $1}' | grep -Fxq "${service_name}.service"; then
+          echo "$ARTHEXIS_SERVICE_MODE_SYSTEMD"
+          return
+        fi
+      fi
+
+      if [ -f "${systemd_dir}/${service_name}.service" ]; then
+        echo "$ARTHEXIS_SERVICE_MODE_SYSTEMD"
+        return
+      fi
+    fi
   fi
 
   echo "$default_mode"
