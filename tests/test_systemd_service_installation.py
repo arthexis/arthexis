@@ -220,3 +220,40 @@ def test_detect_service_mode_prefers_existing_systemd_units(tmp_path: Path) -> N
 
     result = subprocess.check_output(["bash", "-c", command], text=True).strip()
     assert result == "systemd"
+
+
+@pytest.mark.parametrize(
+    "unit_name",
+    [
+        "lcd-gway.service",
+        "gway-watchdog.service",
+    ],
+)
+def test_detect_service_mode_prefers_existing_systemd_dependents(
+    tmp_path: Path, unit_name: str
+) -> None:
+    stubs_dir = tmp_path / "bin"
+    stubs_dir.mkdir()
+    _prepare_stubs(stubs_dir)
+
+    base_dir = tmp_path / "svc"
+    lock_dir = base_dir / "locks"
+    lock_dir.mkdir(parents=True)
+    service_name = "gway"
+    (lock_dir / "service.lck").write_text(f"{service_name}\n", encoding="utf-8")
+
+    systemd_dir = tmp_path / "systemd"
+    systemd_dir.mkdir()
+    (systemd_dir / unit_name).write_text("[Unit]\n", encoding="utf-8")
+
+    command = textwrap.dedent(
+        f"""
+        export SYSTEMD_DIR='{systemd_dir}'
+        export PATH='{stubs_dir}':"$PATH"
+        . '{REPO_ROOT / 'scripts/helpers/service_manager.sh'}'
+        arthexis_detect_service_mode '{lock_dir}'
+        """
+    )
+
+    result = subprocess.check_output(["bash", "-c", command], text=True).strip()
+    assert result == "systemd"

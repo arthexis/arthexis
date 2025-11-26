@@ -41,17 +41,29 @@ arthexis_detect_service_mode() {
     local service_name
     service_name=$(tr -d '\r\n' < "$service_lock")
     if [ -n "$service_name" ]; then
-      if command -v systemctl >/dev/null 2>&1; then
-        if systemctl list-unit-files | awk '{print $1}' | grep -Fxq "${service_name}.service"; then
+      local candidate_units
+      candidate_units=(
+        "${service_name}.service"
+        "celery-${service_name}.service"
+        "celery-beat-${service_name}.service"
+        "lcd-${service_name}.service"
+        "${service_name}-watchdog.service"
+      )
+
+      local unit_name
+      for unit_name in "${candidate_units[@]}"; do
+        if command -v systemctl >/dev/null 2>&1; then
+          if systemctl list-unit-files | awk '{print $1}' | grep -Fxq "$unit_name"; then
+            echo "$ARTHEXIS_SERVICE_MODE_SYSTEMD"
+            return
+          fi
+        fi
+
+        if [ -f "${systemd_dir}/${unit_name}" ]; then
           echo "$ARTHEXIS_SERVICE_MODE_SYSTEMD"
           return
         fi
-      fi
-
-      if [ -f "${systemd_dir}/${service_name}.service" ]; then
-        echo "$ARTHEXIS_SERVICE_MODE_SYSTEMD"
-        return
-      fi
+      done
     fi
   fi
 
