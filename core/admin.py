@@ -543,7 +543,14 @@ class ReleaseManagerAdminForm(forms.ModelForm):
 @admin.register(ReleaseManager)
 class ReleaseManagerAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdmin):
     form = ReleaseManagerAdminForm
-    list_display = ("owner", "pypi_username", "pypi_url", "secondary_pypi_url")
+    list_display = (
+        "owner",
+        "has_github_credentials",
+        "has_pypi_credentials",
+        "pypi_username",
+        "pypi_url",
+        "secondary_pypi_url",
+    )
     actions = ["test_credentials"]
     change_actions = ["test_credentials_action", "my_profile_action"]
     changelist_actions = ["my_profile"]
@@ -577,6 +584,18 @@ class ReleaseManagerAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModel
         return obj.owner_display()
 
     owner.short_description = "Owner"
+
+    def has_github_credentials(self, obj):
+        return obj.to_git_credentials() is not None
+
+    has_github_credentials.boolean = True
+    has_github_credentials.short_description = "GitHub"
+
+    def has_pypi_credentials(self, obj):
+        return obj.to_credentials() is not None
+
+    has_pypi_credentials.boolean = True
+    has_pypi_credentials.short_description = "PyPI"
 
     def _test_credentials(self, request, manager):
         creds = manager.to_credentials()
