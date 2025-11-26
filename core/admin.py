@@ -2852,18 +2852,28 @@ class CustomerAccountAdmin(EntityModelAdmin):
                 customer.get("name") or f"Odoo Customer {identifier}"
             )
             user = self._ensure_user_for_customer(customer)
+            odoo_customer = {
+                "id": identifier,
+                "name": customer.get("name", ""),
+                "email": customer.get("email", ""),
+                "phone": customer.get("phone", ""),
+                "mobile": customer.get("mobile", ""),
+                "city": customer.get("city", ""),
+                "country": customer.get("country", ""),
+            }
+            if user:
+                existing_for_user = self.model.objects.filter(user=user).first()
+                if existing_for_user:
+                    if existing_for_user.odoo_customer != odoo_customer:
+                        existing_for_user.odoo_customer = odoo_customer
+                        existing_for_user.save(update_fields=["odoo_customer"])
+                    skipped += 1
+                    continue
+
             account = self.model.objects.create(
                 name=account_name,
                 user=user,
-                odoo_customer={
-                    "id": identifier,
-                    "name": customer.get("name", ""),
-                    "email": customer.get("email", ""),
-                    "phone": customer.get("phone", ""),
-                    "mobile": customer.get("mobile", ""),
-                    "city": customer.get("city", ""),
-                    "country": customer.get("country", ""),
-                },
+                odoo_customer=odoo_customer,
             )
             self.log_addition(request, account, "Imported customer from Odoo")
             created += 1

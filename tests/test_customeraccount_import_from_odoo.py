@@ -100,3 +100,51 @@ class CustomerAccountImportFromOdooTests(TestCase):
         self.assertRedirects(
             response, reverse("admin:core_customeraccount_changelist")
         )
+
+    @patch.object(OdooProfile, "execute")
+    def test_import_skips_existing_user_account(self, mock_execute):
+        self._create_profile()
+        user = User.objects.create_user("jane", email="jane@example.com")
+        existing_account = CustomerAccount.objects.create(
+            name="Existing Jane", user=user
+        )
+        mock_execute.return_value = [
+            {
+                "id": 10,
+                "name": "Jane Doe",
+                "email": "jane@example.com",
+                "phone": "555-1234",
+                "mobile": "555-5678",
+                "city": "Austin",
+                "country_id": [20, "USA"],
+            }
+        ]
+
+        url = reverse("admin:core_customeraccount_import_from_odoo")
+        response = self.client.post(
+            url,
+            {
+                "perform_search": "1",
+                "customer_ids": ["10"],
+                "import_action": "import",
+            },
+        )
+
+        existing_account.refresh_from_db()
+        self.assertEqual(CustomerAccount.objects.count(), 1)
+        self.assertEqual(existing_account.user, user)
+        self.assertEqual(
+            existing_account.odoo_customer,
+            {
+                "id": 10,
+                "name": "Jane Doe",
+                "email": "jane@example.com",
+                "phone": "555-1234",
+                "mobile": "555-5678",
+                "city": "Austin",
+                "country": "USA",
+            },
+        )
+        self.assertRedirects(
+            response, reverse("admin:core_customeraccount_changelist")
+        )
