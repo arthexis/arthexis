@@ -203,7 +203,11 @@ class EnergyTariffAdmin(EntityModelAdmin):
 
     @admin.display(description=_("Contract type"), ordering="contract_type")
     def contract_type_label(self, obj):
-        return obj.get_contract_type_display()
+        display_value = obj.get_contract_type_display()
+        if "(" in display_value and display_value.endswith(")"):
+            return display_value.split("(", 1)[1][:-1]
+
+        return display_value
 
     @admin.display(description=_("Period"), ordering="period")
     def period_label(self, obj):
