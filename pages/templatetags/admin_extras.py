@@ -140,7 +140,7 @@ def last_net_message() -> dict[str, object]:
     """Return the most recent NetMessage with content for the admin dashboard."""
 
     try:
-        entries = (
+        entries = list(
             NetMessage.objects.order_by("-created")
             .values("subject", "body")[:25]
         )
