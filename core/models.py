@@ -2584,6 +2584,11 @@ class CustomerAccount(Entity):
         null=True,
         blank=True,
     )
+    odoo_customer = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="Selected customer from Odoo (id, name, and contact details)",
+    )
     rfids = models.ManyToManyField(
         "RFID",
         blank=True,
