@@ -2724,6 +2724,16 @@ class CustomerAccountAdmin(EntityModelAdmin):
             candidate = f"{base_name}-{suffix}"
         return candidate
 
+    @staticmethod
+    def _odoo_security_group() -> SecurityGroup:
+        group, _ = SecurityGroup.objects.get_or_create(name="Odoo User")
+        return group
+
+    def _ensure_odoo_user_group(self, user: User) -> None:
+        group = self._odoo_security_group()
+        if not user.groups.filter(pk=group.pk).exists():
+            user.groups.add(group)
+
     def _record_odoo_error(
         self,
         request,
@@ -2794,6 +2804,7 @@ class CustomerAccountAdmin(EntityModelAdmin):
         if email:
             existing = UserModel.objects.filter(email__iexact=email).first()
             if existing:
+                self._ensure_odoo_user_group(existing)
                 return existing
 
         base_username = email.split("@")[0] if email else slugify(name)
@@ -2807,6 +2818,7 @@ class CustomerAccountAdmin(EntityModelAdmin):
             suffix += 1
 
         user = UserModel.objects.create_user(username=candidate, email=email)
+        self._ensure_odoo_user_group(user)
         updates = []
         if name:
             parts = name.split(" ", 1)
@@ -2866,6 +2878,8 @@ class CustomerAccountAdmin(EntityModelAdmin):
 
             existing = self.model.objects.filter(odoo_customer__id=identifier).first()
             if existing:
+                if existing.user_id:
+                    self._ensure_odoo_user_group(existing.user)
                 skipped += 1
                 continue
 
@@ -2885,6 +2899,7 @@ class CustomerAccountAdmin(EntityModelAdmin):
             if user:
                 existing_for_user = self.model.objects.filter(user=user).first()
                 if existing_for_user:
+                    self._ensure_odoo_user_group(user)
                     if existing_for_user.odoo_customer != odoo_customer:
                         existing_for_user.odoo_customer = odoo_customer
                         existing_for_user.save(update_fields=["odoo_customer"])

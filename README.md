@@ -54,9 +54,7 @@ Visit our [Changelog Report](https://arthexis.com/changelog/) to browse past and
   **OCPP roadmap.** Explore the upcoming OCPP 1.6, 2.0.1, and 2.1 catalogue work in the [OCPP roadmap cookbook](docs/cookbooks/ocpp-roadmap.md).
 
 - Charge point reservations with automated connector assignment, energy account and RFID linkage, EVCS confirmation tracking, and control-center cancellation support.
-- [API](https://en.wikipedia.org/wiki/API) integration with [Odoo](https://www.odoo.com/), syncing:
-  - Employee credentials via `res.users`
-  - Product catalog lookups via `product.product`
+- Review the [Odoo API Integrations Cookbook](docs/cookbooks/odoo-integrations.md) for details on syncing employee credentials via `res.users` and product catalog lookups via `product.product`.
 - Runs on [Windows 11](https://www.microsoft.com/windows/windows-11) and [Ubuntu 22.04 LTS](https://releases.ubuntu.com/22.04/)
 - Tested for the [Raspberry Pi 4 Model B](https://www.raspberrypi.com/products/raspberry-pi-4-model-b/)
 

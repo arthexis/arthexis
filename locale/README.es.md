@@ -54,9 +54,7 @@ Visita el [Informe de cambios](https://arthexis.com/changelog/) para explorar la
   **Hoja de ruta OCPP.** Consulta el [cookbook de la hoja de ruta OCPP](docs/cookbooks/ocpp-roadmap.md) para conocer el trabajo planificado de los catálogos OCPP 1.6, 2.0.1 y 2.1.
 
 - Reservas de puntos de carga con asignación automática de conectores, vinculación a cuentas de energía y RFIDs, confirmación del EVCS y cancelación desde el centro de control.
-- Integración de [API](https://es.wikipedia.org/wiki/Interfaz_de_programaci%C3%B3n_de_aplicaciones) con [Odoo](https://www.odoo.com/), sincronizando:
-  - Credenciales de empleados mediante `res.users`
-  - Consultas al catálogo de productos mediante `product.product`
+- Consulta el [cookbook de integración de API con Odoo](docs/cookbooks/odoo-integrations.md) para ver cómo sincronizamos credenciales de empleados mediante `res.users` y consultas al catálogo de productos mediante `product.product`.
 - Funciona en [Windows 11](https://www.microsoft.com/es-es/windows/windows-11) y [Ubuntu 22.04 LTS](https://releases.ubuntu.com/22.04/)
 - Probado para la [Raspberry Pi 4 Modelo B](https://www.raspberrypi.com/products/raspberry-pi-4-model-b/)
 
