@@ -8,7 +8,10 @@ from django import template
 from django.apps import apps
 from django.contrib import admin
 from django.contrib.contenttypes.models import ContentType
-from django.db import DatabaseError
+from django.db import DatabaseError, OperationalError, ProgrammingError, connection
+from django.db.migrations.loader import MigrationLoader
+from django.db.migrations.operations.models import ModelOperation
+from django.db.migrations.recorder import MigrationRecorder
 from django.db.models import Count, Exists, OuterRef, Q
 from django.db.models import Model
 from django.conf import settings
@@ -156,6 +159,82 @@ def last_net_message() -> dict[str, object]:
             return {"text": text, "has_content": True}
 
     return {"text": "", "has_content": False}
+
+
+@register.simple_tag
+def recent_model_structure_changes(limit: int = 5) -> list[dict[str, object]]:
+    """Return the most recent models with structural migrations applied.
+
+    Only migrations that alter model structures are considered. Data-only
+    migrations (such as fixtures or RunPython operations) are ignored.
+    """
+
+    try:
+        recorder = MigrationRecorder(connection)
+        loader = MigrationLoader(connection)
+    except (DatabaseError, OperationalError, ProgrammingError):
+        return []
+
+    try:
+        applied = recorder.migration_qs.order_by("-applied").values_list(
+            "app", "name", "applied"
+        )
+    except DatabaseError:
+        return []
+
+    results: list[dict[str, object]] = []
+    seen: set[tuple[str, str]] = set()
+
+    for app_label, migration_name, applied_at in applied:
+        migration = loader.disk_migrations.get((app_label, migration_name))
+        if not migration:
+            continue
+
+        for operation in migration.operations:
+            if not isinstance(operation, ModelOperation):
+                continue
+
+            model_name = getattr(operation, "model_name", None)
+            if not model_name:
+                continue
+
+            key = (app_label, model_name.lower())
+            if key in seen:
+                continue
+
+            label = capfirst(model_name.replace("_", " "))
+            admin_url = ""
+
+            try:
+                model = apps.get_model(app_label, model_name)
+            except LookupError:
+                model = None
+
+            if model:
+                label = capfirst(model._meta.verbose_name)
+                model_admin = admin.site._registry.get(model)
+                if model_admin:
+                    try:
+                        admin_url = reverse(
+                            f"admin:{model._meta.app_label}_{model._meta.model_name}_changelist"
+                        )
+                    except NoReverseMatch:
+                        admin_url = ""
+
+            results.append(
+                {
+                    "label": label,
+                    "app_label": app_label,
+                    "applied": applied_at,
+                    "admin_url": admin_url,
+                }
+            )
+            seen.add(key)
+
+            if len(results) >= limit:
+                return results
+
+    return results
 
 @register.simple_tag(takes_context=True)
 def model_admin_actions(context, app_label, model_name):

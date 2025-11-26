@@ -31,6 +31,7 @@ from django.contrib.sessions.backends.db import SessionStore
 from django.core.exceptions import DisallowedHost
 from django.core.cache import cache
 from django.db import connection
+from django.db import migrations, models
 import socket
 from django.db import connection
 from asgiref.sync import async_to_sync, sync_to_async
@@ -1158,6 +1159,36 @@ class AdminDashboardAppListTests(TestCase):
         resp = self.client.get(reverse("admin:index"))
         self.assertContains(resp, "5. Horologia</a>")
 
+    @patch("pages.templatetags.admin_extras.recent_model_structure_changes")
+    def test_dashboard_shows_recent_model_updates_above_recent_actions(self, recent_models):
+        timestamp = timezone.now()
+        recent_models.return_value = [
+            {
+                "label": "Widget",
+                "app_label": "core",
+                "applied": timestamp,
+                "admin_url": "/admin/core/widget/",
+            },
+            {
+                "label": "Gadget",
+                "app_label": "core",
+                "applied": timestamp - timedelta(minutes=5),
+                "admin_url": "",
+            },
+        ]
+
+        resp = self.client.get(reverse("admin:index"))
+
+        self.assertContains(resp, gettext("Recently Updated Models"))
+        self.assertContains(resp, "Widget")
+        self.assertContains(resp, "Gadget")
+
+        content = resp.content.decode()
+        self.assertLess(
+            content.index(gettext("Recently Updated Models")),
+            content.index(gettext("Recent actions")),
+        )
+
     def test_dashboard_shows_last_net_message(self):
         NetMessage.objects.all().delete()
         NetMessage.objects.create(subject="Older", body="First body")
@@ -1502,6 +1533,46 @@ class AdminModelRuleTemplateTagTests(TestCase):
 
         self.assertTrue(status["success"])
         self.assertEqual(status["message"], gettext("All rules met."))
+
+
+class RecentModelStructureChangesTests(TestCase):
+    def _mock_migration_queryset(self, entries):
+        migration_qs = Mock()
+        migration_qs.order_by.return_value = migration_qs
+        migration_qs.values_list.return_value = entries
+        return migration_qs
+
+    @patch("pages.templatetags.admin_extras.MigrationLoader")
+    @patch("pages.templatetags.admin_extras.MigrationRecorder")
+    def test_recent_model_structure_changes_ignore_data_only_migrations(
+        self, recorder_cls, loader_cls
+    ):
+        applied_at = timezone.now()
+        recorder = recorder_cls.return_value
+        recorder.migration_qs = self._mock_migration_queryset(
+            [
+                ("core", "0002_create_widget", applied_at),
+                ("core", "0003_data_update", applied_at - timedelta(minutes=1)),
+            ]
+        )
+
+        create_model = migrations.CreateModel(
+            name="Widget",
+            fields=[("id", models.AutoField(primary_key=True))],
+        )
+        run_python = migrations.RunPython(migrations.RunPython.noop)
+
+        loader = loader_cls.return_value
+        loader.disk_migrations = {
+            ("core", "0002_create_widget"): SimpleNamespace(operations=[create_model]),
+            ("core", "0003_data_update"): SimpleNamespace(operations=[run_python]),
+        }
+
+        results = admin_extras.recent_model_structure_changes()
+
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["label"], "Widget")
+        self.assertEqual(results[0]["app_label"], "core")
 
 
 class RelatedAdminModelsTagTests(TestCase):
