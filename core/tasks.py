@@ -192,7 +192,7 @@ def _auto_upgrade_ran_recently(base_dir: Path, interval_minutes: int) -> bool:
     if timezone.is_naive(recorded_time):
         recorded_time = timezone.make_aware(recorded_time)
 
-    return recorded_time >= timezone.now() - timedelta(minutes=interval_minutes)
+    return recorded_time > timezone.now() - timedelta(minutes=interval_minutes)
 
 
 def _resolve_auto_upgrade_interval_minutes(mode: str) -> int:

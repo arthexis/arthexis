@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from subprocess import CompletedProcess
 from types import SimpleNamespace
@@ -672,6 +672,70 @@ def test_check_github_updates_skips_recent_auto_upgrade(monkeypatch, tmp_path):
     tasks.check_github_updates()
 
     assert any(
+        "last run was less than" in message for message in log_messages
+    )
+
+
+def test_check_github_updates_allows_boundary_recency(monkeypatch, tmp_path):
+    """Auto-upgrade should proceed once the full interval has elapsed."""
+
+    from core import tasks
+    from django.utils import timezone
+
+    base_dir = tmp_path / "node"
+    locks = base_dir / "locks"
+    logs = base_dir / "logs"
+    locks.mkdir(parents=True)
+    logs.mkdir(parents=True)
+
+    reference_time = timezone.make_aware(datetime(2024, 1, 1, 0, 0))
+    interval_minutes = tasks.AUTO_UPGRADE_INTERVAL_MINUTES["stable"]
+
+    (locks / "auto_upgrade.lck").write_text("stable")
+    (locks / "auto_upgrade_last_run.lck").write_text(
+        (reference_time - timedelta(minutes=interval_minutes)).isoformat()
+    )
+
+    monkeypatch.setattr(tasks.timezone, "now", lambda: reference_time)
+    monkeypatch.setattr(tasks, "_project_base_dir", lambda: base_dir)
+    monkeypatch.setattr(tasks, "_load_skipped_revisions", lambda base: set())
+    monkeypatch.setattr(tasks, "_latest_release", lambda: (None, None))
+    monkeypatch.setattr(
+        tasks, "_resolve_release_severity", lambda version: tasks.SEVERITY_NORMAL
+    )
+    monkeypatch.setattr(tasks, "_schedule_health_check", lambda *args, **kwargs: None)
+    monkeypatch.setattr(tasks, "_reset_network_failure_count", lambda _base: None)
+
+    log_messages: list[str] = []
+    log_path = logs / "auto-upgrade.log"
+    monkeypatch.setattr(tasks, "_auto_upgrade_log_path", lambda _base: log_path)
+    monkeypatch.setattr(
+        tasks, "_append_auto_upgrade_log", lambda _base, message: log_messages.append(message)
+    )
+
+    def fake_run(command, *args, **kwargs):
+        return CompletedProcess(command, 0)
+
+    def fake_check_output(command, *args, **kwargs):
+        if command[-1].startswith("origin/"):
+            return "remote-sha"
+        return "local-sha"
+
+    monkeypatch.setattr(tasks.subprocess, "run", fake_run)
+    monkeypatch.setattr(tasks.subprocess, "check_output", fake_check_output)
+
+    delegated_calls: list[tuple[Path, list[str]]] = []
+
+    def record_delegate(base: Path, args: list[str]) -> str:
+        delegated_calls.append((base, args))
+        return "auto-upgrade.service"
+
+    monkeypatch.setattr(tasks, "_delegate_upgrade_via_script", record_delegate)
+
+    tasks.check_github_updates()
+
+    assert delegated_calls == [(base_dir, ["./upgrade.sh", "--stable"])]
+    assert not any(
         "last run was less than" in message for message in log_messages
     )
 
