@@ -4764,6 +4764,30 @@ class StartupNotificationTests(TestCase):
         self.assertEqual(lines[1], "1.2.3+ r111111")
         self.assertEqual(lines[2], "net-message")
 
+    def test_startup_notification_skips_release_check_during_init(self):
+        from nodes.apps import _startup_notification
+
+        with TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            lock_file = tmp_path / "locks" / "lcd_screen.lck"
+            (tmp_path / "locks" / "lcd_screen_enabled.lck").parent.mkdir()
+            (tmp_path / "locks" / "lcd_screen_enabled.lck").touch()
+            with self.settings(BASE_DIR=tmp_path):
+                with patch(
+                    "nodes.startup_notifications.revision.get_revision",
+                    return_value="1" * 40,
+                ):
+                    with patch(
+                        "nodes.startup_notifications._should_mark_nonrelease"
+                    ) as mock_should_mark:
+                        _startup_notification(
+                            lock_file=lock_file, allow_db_lookup=False
+                        )
+
+            self.assertTrue(lock_file.exists())
+
+        mock_should_mark.assert_not_called()
+
 
 class NotificationManagerTests(TestCase):
     def test_send_writes_trimmed_lines(self):
