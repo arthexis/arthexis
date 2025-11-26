@@ -31,6 +31,18 @@ This runbook guides administrators through creating a Slack app for Arthexis Con
 4. Copy the **Bot User OAuth Token** (starts with `xoxb-`). Arthexis uses it to call Slack APIs.
 5. Visit **App Home → About** and note the **Bot User ID** (starts with `U` or `B`). Slack also returns it automatically when Arthexis validates the credentials.
 
+### Token mapping quick reference
+
+Slack’s dashboard may show multiple token types after installation. Use the table below to match them to Arthexis fields:
+
+| Slack portal item | Value begins with | Store in Arthexis |
+| --- | --- | --- |
+| **Signing Secret** (Basic Information → App Credentials) | — | **Signing secret** |
+| **Bot User OAuth Token** (OAuth & Permissions → OAuth Tokens for Your Workspace) | `xoxb-` | **Bot token** |
+| **Workspace Access Token** / **Refresh Token** (App Credentials) | `xoxa-` / `xoxe-` | Not used; Arthexis does not consume these short-lived tokens |
+
+> ℹ️ If Slack only shows Access/Refresh tokens, expand **OAuth & Permissions** and install the app to generate the bot token. Arthexis requires the `xoxb-` bot token and the signing secret; it does not support refreshing short-lived app tokens.
+
 ## 4. Register the slash command
 
 1. Open **Features → Slash Commands** and click **Create New Command**.
