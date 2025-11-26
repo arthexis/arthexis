@@ -9,10 +9,6 @@ Die Arthexis-Konstellation ist eine auf [Django](https://www.djangoproject.com/)
 
 Besuche den [Changelog-Bericht](https://arthexis.com/changelog/), um vergangene und geplante Funktionen sowie weitere Updates zu entdecken.
 
-## Neueste Entwicklungen
-
-- Die OCPP-1.6-CSMS-Abdeckung umfasst jetzt das Auslösen, die Protokollierung und aktualisierte Badges für `GetDiagnostics`, `RemoteStartTransaction`, `RemoteStopTransaction` und `SetChargingProfile`, womit 93 % der eindeutigen Operationen unterstützt werden und Diagnose-Uploads nachverfolgt werden.
-
 ## Aktuelle Funktionen
 
 - Kompatibel mit dem [Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/) standardmäßig, während Ladepunkte auf neuere Protokolle aktualisieren können, wenn sie diese unterstützen.
