@@ -61,7 +61,9 @@ def _should_mark_nonrelease(version: str, current_revision: str) -> bool:
         return False
 
 
-def build_startup_message(base_dir: Path, port: str | None = None) -> tuple[str, str]:
+def build_startup_message(
+    base_dir: Path, port: str | None = None, *, allow_db_lookup: bool = True
+) -> tuple[str, str]:
     host = socket.gethostname()
     port_value = port or os.environ.get("PORT", "8888")
 
@@ -79,7 +81,9 @@ def build_startup_message(base_dir: Path, port: str | None = None) -> tuple[str,
     body = version
     if body:
         normalized = body.lstrip("vV") or body
-        needs_marker = _should_mark_nonrelease(normalized, revision_value)
+        needs_marker = allow_db_lookup and _should_mark_nonrelease(
+            normalized, revision_value
+        )
         if needs_marker and not normalized.endswith("+"):
             body = f"{body}+"
     if rev_short:
@@ -105,9 +109,15 @@ def render_lcd_payload(
 
 
 def queue_startup_message(
-    *, base_dir: Path, port: str | None = None, lock_file: Path | None = None
+    *,
+    base_dir: Path,
+    port: str | None = None,
+    lock_file: Path | None = None,
+    allow_db_lookup: bool = True,
 ) -> Path:
-    subject, body = build_startup_message(base_dir=base_dir, port=port)
+    subject, body = build_startup_message(
+        base_dir=base_dir, port=port, allow_db_lookup=allow_db_lookup
+    )
     payload = render_lcd_payload(subject, body, net_message=True)
 
     target = lock_file or (Path(base_dir) / "locks" / "lcd_screen.lck")
