@@ -814,7 +814,7 @@ def test_check_github_updates_logs_fetch_failure_details(monkeypatch, tmp_path):
 
 
 def test_broadcast_upgrade_start_message_formats_payload(monkeypatch):
-    """Upgrade start Net Messages should include the timestamp and node name."""
+    """Upgrade start Net Messages should include the node name and revisions."""
 
     from core import tasks
 
@@ -838,9 +838,9 @@ def test_broadcast_upgrade_start_message_formats_payload(monkeypatch):
         SimpleNamespace(NetMessage=StubNetMessage, Node=StubNode),
     )
 
-    tasks._broadcast_upgrade_start_message("@ 20240102 03:04")
+    tasks._broadcast_upgrade_start_message("old-sha", "new-sha")
 
-    assert broadcasts == [("Upgrade @ 03:04", "alpha")]
+    assert broadcasts == [("Upgrade @ alpha", "old-sha - new-sha")]
 
 
 def test_check_github_updates_broadcasts_upgrade_start(monkeypatch, tmp_path):
@@ -886,18 +886,17 @@ def test_check_github_updates_broadcasts_upgrade_start(monkeypatch, tmp_path):
     monkeypatch.setattr(tasks.subprocess, "run", fake_run)
     monkeypatch.setattr(tasks.subprocess, "check_output", fake_check_output)
 
-    upgrade_stamps: list[str] = []
+    upgrade_starts: list[tuple[str | None, str | None]] = []
     monkeypatch.setattr(
         tasks,
         "_broadcast_upgrade_start_message",
-        lambda stamp: upgrade_stamps.append(stamp),
+        lambda local, remote: upgrade_starts.append((local, remote)),
     )
 
     with override_settings(BASE_DIR=tmp_path):
         tasks.check_github_updates()
 
-    expected_stamp = tasks.timezone.localtime(fixed_time).strftime("@ %Y%m%d %H:%M")
-    assert upgrade_stamps == [expected_stamp]
+    assert upgrade_starts == [("local-sha", "remote-sha")]
 
 
 @pytest.mark.parametrize(
