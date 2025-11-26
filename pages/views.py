@@ -1244,12 +1244,16 @@ def authenticator_login_check(request):
             status=404,
         )
 
-    requires_password = totp_devices_require_password(devices)
+    enforce_password = bool(getattr(user, "require_2fa", False))
     allows_passwordless = totp_devices_allow_passwordless(devices)
+    requires_password = enforce_password or totp_devices_require_password(
+        devices, enforce=enforce_password
+    )
+    password_optional = requires_password and allows_passwordless and not enforce_password
     return JsonResponse(
         {
             "requires_password": requires_password,
-            "password_optional": requires_password and allows_passwordless,
+            "password_optional": password_optional,
             "username": user.get_username(),
         }
     )

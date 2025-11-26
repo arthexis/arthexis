@@ -91,16 +91,26 @@ class AuthenticatorLoginForm(AuthenticationForm):
                 devices = list(get_user_totp_devices(user))
                 if not devices:
                     raise self.get_invalid_token_error()
-                requires_password = totp_devices_require_password(devices)
+                enforce_password = bool(getattr(user, "require_2fa", False))
                 allows_passwordless = totp_devices_allow_passwordless(devices)
+                requires_password = enforce_password or totp_devices_require_password(
+                    devices, enforce=enforce_password
+                )
+                password_optional = (
+                    requires_password and allows_passwordless and not enforce_password
+                )
                 self.cleaned_data["otp_requires_password"] = (
                     "1" if requires_password else "0"
                 )
                 self.cleaned_data["otp_password_optional"] = (
-                    "1" if requires_password and allows_passwordless else "0"
+                    "1" if password_optional else "0"
                 )
                 password = self.cleaned_data.get("password") or ""
-                device, result = verify_user_totp_token(user, token, password)
+                if requires_password and not password and not password_optional:
+                    raise self.get_password_required_error()
+                device, result = verify_user_totp_token(
+                    user, token, password, enforce_password=enforce_password
+                )
                 if device is None:
                     error_code = (result or {}).get("error")
                     if error_code == "password_required":
@@ -126,6 +136,30 @@ class AuthenticatorLoginForm(AuthenticationForm):
                 )
                 if self.user_cache is None:
                     raise self.get_invalid_login_error()
+                if getattr(self.user_cache, "require_2fa", False):
+                    token = (
+                        (self.cleaned_data.get("otp_token") or "")
+                        .strip()
+                        .replace(" ", "")
+                    )
+                    if not token:
+                        raise self.get_token_required_error()
+                    device, result = verify_user_totp_token(
+                        self.user_cache,
+                        token,
+                        password,
+                        enforce_password=True,
+                    )
+                    if device is None:
+                        error_code = (result or {}).get("error")
+                        if error_code == "invalid_password":
+                            raise self.get_invalid_login_error()
+                        raise self.get_invalid_token_error()
+                    if device.user_id != self.user_cache.pk:
+                        device.user = self.user_cache
+                        device.user_id = self.user_cache.pk
+                    self.cleaned_data["otp_token"] = token
+                    self.verified_device = device
             self.confirm_login_allowed(self.user_cache)
 
         return self.cleaned_data

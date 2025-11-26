@@ -136,6 +136,19 @@ def _append_operate_as(fieldsets):
     return tuple(updated)
 
 
+def _include_require_2fa(fieldsets):
+    updated = []
+    for name, options in fieldsets:
+        opts = options.copy()
+        fields = list(opts.get("fields", ()))
+        if "is_active" in fields and "require_2fa" not in fields:
+            insert_at = fields.index("is_active") + 1
+            fields.insert(insert_at, "require_2fa")
+            opts["fields"] = tuple(fields)
+        updated.append((name, opts))
+    return tuple(updated)
+
+
 # Add object links for small datasets in changelist view
 original_changelist_view = admin.ModelAdmin.changelist_view
 
@@ -1925,8 +1938,10 @@ class UserPhoneNumberInline(admin.TabularInline):
 @admin.register(User)
 class UserAdmin(UserDatumAdminMixin, DjangoUserAdmin):
     form = UserChangeRFIDForm
-    fieldsets = _append_operate_as(DjangoUserAdmin.fieldsets)
-    add_fieldsets = _append_operate_as(DjangoUserAdmin.add_fieldsets)
+    fieldsets = _include_require_2fa(_append_operate_as(DjangoUserAdmin.fieldsets))
+    add_fieldsets = _include_require_2fa(
+        _append_operate_as(DjangoUserAdmin.add_fieldsets)
+    )
     inlines = USER_PROFILE_INLINES + [UserPhoneNumberInline]
     change_form_template = "admin/user_profile_change_form.html"
     _skip_entity_user_datum = True

@@ -45,9 +45,6 @@
       {{ form.otp_requires_password }}
       {{ form.otp_password_optional }}
       <div class="mb-3{% if current_method != 'otp' or otp_ready == '1' %} d-none{% endif %}" data-otp-precheck>
-        <div class="alert alert-info mb-3" role="status">
-          {% trans "Enter your username and continue so we can check your authenticator settings." %}
-        </div>
         <div class="alert alert-danger d-none" role="alert" data-otp-precheck-error></div>
         <button
           type="button"
