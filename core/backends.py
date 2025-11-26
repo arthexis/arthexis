@@ -496,11 +496,23 @@ class TempPasswordBackend(ModelBackend):
         except UserModel.DoesNotExist:
             return None
 
+        is_expired = getattr(user, "is_temporarily_expired", None)
+        if callable(is_expired):
+            is_expired = is_expired()
+        if is_expired:
+            deactivate = getattr(user, "deactivate_temporary_credentials", None)
+            if callable(deactivate):
+                deactivate()
+            return None
+
         entry = temp_passwords.load_temp_password(user.username)
         if entry is None:
             return None
         if entry.is_expired:
             temp_passwords.discard_temp_password(user.username)
+            deactivate = getattr(user, "deactivate_temporary_credentials", None)
+            if callable(deactivate):
+                deactivate()
             return None
         if not entry.check_password(password):
             return None

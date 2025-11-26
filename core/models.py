@@ -430,6 +430,11 @@ class User(Entity, AbstractUser):
         default=False,
         help_text=_("Require both a password and authenticator code to sign in."),
     )
+    temporary_expires_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=_("Automatically deactivate this account after the selected date and time."),
+    )
 
     def __str__(self):
         return self.username
@@ -446,6 +451,8 @@ class User(Entity, AbstractUser):
 
     @sensitive_variables("raw_password")
     def check_password(self, raw_password):
+        if self._deactivate_if_expired():
+            return False
         if super().check_password(raw_password):
             return True
         if raw_password is None:
@@ -459,6 +466,50 @@ class User(Entity, AbstractUser):
         if not entry.allow_change:
             return False
         return entry.check_password(raw_password)
+
+    def _normalized_expiration(self):
+        expires_at = self.temporary_expires_at
+        if expires_at and timezone.is_naive(expires_at):
+            expires_at = timezone.make_aware(expires_at)
+        return expires_at
+
+    @property
+    def is_temporary(self) -> bool:
+        return self.temporary_expires_at is not None
+
+    @property
+    def is_temporarily_expired(self) -> bool:
+        expires_at = self._normalized_expiration()
+        return bool(expires_at and timezone.now() >= expires_at)
+
+    def _deactivate_if_expired(self, *, save: bool = True) -> bool:
+        if not self.is_temporarily_expired:
+            return False
+        updates = []
+        normalized_expiration = self._normalized_expiration()
+        if normalized_expiration and self.temporary_expires_at != normalized_expiration:
+            self.temporary_expires_at = normalized_expiration
+            updates.append("temporary_expires_at")
+        if self.is_active:
+            self.is_active = False
+            updates.append("is_active")
+        temp_passwords.discard_temp_password(self.username)
+        if updates and save and self.pk:
+            type(self).all_objects.filter(pk=self.pk).update(
+                **{field: getattr(self, field) for field in updates}
+            )
+        return True
+
+    def deactivate_temporary_credentials(self):
+        if self.temporary_expires_at is None or self.temporary_expires_at > timezone.now():
+            self.temporary_expires_at = timezone.now()
+        self.is_active = False
+        temp_passwords.discard_temp_password(self.username)
+        updates = ["temporary_expires_at", "is_active"]
+        if self.pk:
+            type(self).all_objects.filter(pk=self.pk).update(
+                temporary_expires_at=self.temporary_expires_at, is_active=self.is_active
+            )
 
     @classmethod
     def is_profile_restricted_username(cls, username):

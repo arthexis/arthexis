@@ -742,6 +742,29 @@ def _add_cors_headers(request, response):
     return response
 
 
+def _coerce_bool(value) -> bool:
+    if isinstance(value, str):
+        return value.lower() in {"1", "true", "yes", "on"}
+    return bool(value)
+
+
+def _authenticate_basic_credentials(request):
+    header = request.META.get("HTTP_AUTHORIZATION", "")
+    if not header.startswith("Basic "):
+        return None
+    try:
+        encoded = header.split(" ", 1)[1]
+        decoded = base64.b64decode(encoded).decode("utf-8")
+        username, password = decoded.split(":", 1)
+    except Exception:
+        return None
+    user = authenticate(request=request, username=username, password=password)
+    if user is not None:
+        request.user = user
+        request._cached_user = user
+    return user
+
+
 def _node_display_name(node: Node) -> str:
     """Return a human-friendly name for ``node`` suitable for messaging."""
 
@@ -790,6 +813,10 @@ def register_node(request):
     except json.JSONDecodeError:
         data = request.POST
 
+    authenticated_user = getattr(request, "user", None)
+    if not getattr(authenticated_user, "is_authenticated", False):
+        authenticated_user = _authenticate_basic_credentials(request)
+
     if hasattr(data, "getlist"):
         raw_features = data.getlist("features")
         if not raw_features:
@@ -828,6 +855,8 @@ def register_node(request):
     relation_value = (
         Node.normalize_relation(raw_relation) if relation_present else None
     )
+
+    deactivate_user = _coerce_bool(data.get("deactivate_user"))
 
     if not hostname or not mac_address:
         response = JsonResponse(
@@ -877,6 +906,12 @@ def register_node(request):
     if not verified and not request.user.is_authenticated:
         response = JsonResponse({"detail": "authentication required"}, status=401)
         return _add_cors_headers(request, response)
+
+    if not verified and request.user.is_authenticated:
+        required_perms = ("nodes.add_node", "nodes.change_node")
+        if not request.user.has_perms(required_perms):
+            response = JsonResponse({"detail": "permission denied"}, status=403)
+            return _add_cors_headers(request, response)
 
     trusted_requested = data.get("trusted")
     trusted_allowed = bool(trusted_requested) and (
@@ -1017,6 +1052,10 @@ def register_node(request):
                 "detail": f"Node already exists (id: {node.id})",
             }
         )
+        if deactivate_user:
+            deactivate = getattr(request.user, "deactivate_temporary_credentials", None)
+            if callable(deactivate):
+                deactivate()
         return _add_cors_headers(request, response)
 
     if features is not None and (verified or request.user.is_authenticated):
@@ -1041,6 +1080,10 @@ def register_node(request):
     _announce_visitor_join(node, relation_value)
 
     response = JsonResponse({"id": node.id, "uuid": str(node.uuid)})
+    if deactivate_user:
+        deactivate = getattr(request.user, "deactivate_temporary_credentials", None)
+        if callable(deactivate):
+            deactivate()
     return _add_cors_headers(request, response)
 
 

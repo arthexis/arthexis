@@ -857,6 +857,65 @@ class NodeGetLocalTests(TestCase):
         self.assertEqual(data["detail"], "authentication required")
         self.assertEqual(response["Access-Control-Allow-Origin"], "http://example.com")
 
+    def test_register_node_requires_node_permissions_for_basic_auth(self):
+        self.client.logout()
+        User = get_user_model()
+        user = User.objects.create_user(
+            username="limited",
+            password="TempPass123!",
+            is_staff=True,
+        )
+        credentials = base64.b64encode(b"limited:TempPass123!").decode()
+        payload = {
+            "hostname": "visitor",
+            "address": "127.0.0.1",
+            "port": 8888,
+            "mac_address": "aa:bb:cc:dd:ee:99",
+        }
+        response = self.client.post(
+            reverse("register-node"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            HTTP_AUTHORIZATION=f"Basic {credentials}",
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(Node.objects.filter(mac_address="aa:bb:cc:dd:ee:99").exists())
+
+    def test_register_node_basic_auth_deactivates_temporary_user(self):
+        self.client.logout()
+        User = get_user_model()
+        expires_at = timezone.now() + timedelta(hours=1)
+        user = User.objects.create_user(
+            username="cli-temp",
+            password="TempPass123!",
+            is_staff=True,
+            temporary_expires_at=expires_at,
+        )
+        permissions = Permission.objects.filter(
+            codename__in=["add_node", "change_node"],
+            content_type__app_label=Node._meta.app_label,
+            content_type__model=Node._meta.model_name,
+        )
+        user.user_permissions.set(permissions)
+        credentials = base64.b64encode(b"cli-temp:TempPass123!").decode()
+        payload = {
+            "hostname": "visitor",
+            "address": "127.0.0.1",
+            "port": 8888,
+            "mac_address": "aa:bb:cc:dd:ee:98",
+            "deactivate_user": True,
+        }
+        response = self.client.post(
+            reverse("register-node"),
+            data=json.dumps(payload),
+            content_type="application/json",
+            HTTP_AUTHORIZATION=f"Basic {credentials}",
+        )
+        self.assertEqual(response.status_code, 200)
+        user.refresh_from_db()
+        self.assertFalse(user.is_active)
+        self.assertLessEqual(user.temporary_expires_at, timezone.now())
+
     def test_register_node_allows_preflight_without_authentication(self):
         self.client.logout()
         response = self.client.options(

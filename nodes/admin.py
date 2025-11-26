@@ -6,6 +6,8 @@ from django.conf import settings
 from django.contrib import admin, messages
 from django.contrib.admin import helpers
 from django.contrib.admin.widgets import FilteredSelectMultiple
+from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Permission
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
 from django.db import models
@@ -25,6 +27,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.utils.html import format_html, format_html_join
 from django.utils.translation import gettext_lazy as _, ngettext
+from datetime import timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import urlsplit, urlunsplit
@@ -55,6 +58,7 @@ from .reports import (
     iter_report_periods,
     resolve_period,
 )
+from core import temp_passwords
 from core.admin import EmailOutboxAdminForm, SaveBeforeChangeAction
 from protocols.models import CPForwarder
 from .models import (
@@ -340,6 +344,69 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         "export_rfids_to_selected",
         "send_net_message",
     ]
+
+    def _create_registration_user(self):
+        UserModel = get_user_model()
+        expires_at = timezone.now() + timedelta(hours=1)
+        manager = getattr(UserModel, "all_objects", UserModel._default_manager)
+        for _ in range(5):
+            username = f"node-register-{uuid.uuid4().hex[:12]}"
+            if not manager.filter(username=username).exists():
+                break
+        user = manager.create(
+            username=username,
+            is_staff=True,
+            is_superuser=False,
+            temporary_expires_at=expires_at,
+        )
+        password = temp_passwords.generate_password()
+        user.set_password(password)
+        user.save()
+        permissions = Permission.objects.filter(
+            content_type__app_label=Node._meta.app_label,
+            content_type__model=Node._meta.model_name,
+            codename__in=["add_node", "change_node"],
+        )
+        user.user_permissions.set(permissions)
+        return user, password, expires_at
+
+    def _build_cli_registration_payload(self, request):
+        user, password, expires_at = self._create_registration_user()
+        register_url = request.build_absolute_uri(reverse("register-node"))
+        info_url = request.build_absolute_uri(reverse("node-info"))
+        display_expires = timezone.localtime(expires_at)
+        payload = {
+            "username": user.username,
+            "password": password,
+            "register": register_url,
+            "info": info_url,
+            "expires_at": display_expires.isoformat(),
+        }
+        encoded = base64.urlsafe_b64encode(json.dumps(payload).encode("utf-8")).decode(
+            "utf-8"
+        )
+        return payload, encoded, display_expires
+
+    def generate_registration_credentials(self, request):
+        if not request.user.has_perms(
+            ["nodes.add_node", "nodes.change_node"]
+        ):
+            raise PermissionDenied
+        payload, encoded, expires_at = self._build_cli_registration_payload(request)
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "title": _("CLI registration token"),
+            "payload": payload,
+            "encoded": encoded,
+            "expires_at": expires_at,
+        }
+        return render(
+            request,
+            "admin/nodes/node/register_cli_credentials.html",
+            context,
+        )
+
     change_actions = ["update_node_action"]
     inlines = [NodeFeatureAssignmentInline]
 
@@ -457,6 +524,11 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
                 name="nodes_node_register_current",
             ),
             path(
+                "register-cli/",
+                self.admin_site.admin_view(self.generate_registration_credentials),
+                name="nodes_node_generate_registration_credentials",
+            ),
+            path(
                 "register-visitor/",
                 self.admin_site.admin_view(self.register_visitor_view),
                 name="nodes_node_register_visitor",
@@ -473,6 +545,17 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             ),
         ]
         return custom + urls
+
+    def get_changelist_actions(self, request):
+        parent = getattr(super(), "get_changelist_actions", None)
+        actions = []
+        if callable(parent):
+            parent_actions = parent(request)
+            if parent_actions:
+                actions.extend(parent_actions)
+        if "generate_registration_credentials" not in actions:
+            actions.append("generate_registration_credentials")
+        return actions
 
     def register_current(self, request):
         """Create or update this host and offer browser node registration."""
@@ -1869,6 +1952,12 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
 
     update_node_action.label = _("Update Node")
     update_node_action.short_description = _("Update Node")
+
+
+NodeAdmin.generate_registration_credentials.label = _(
+    "Register visiting node via CLI"
+)
+NodeAdmin.generate_registration_credentials.requires_queryset = False
 
 
 class EmailOutboxAdmin(EntityModelAdmin):
