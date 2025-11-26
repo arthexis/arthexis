@@ -9,7 +9,7 @@ Costellazione Arthexis è una [suite software](https://it.wikipedia.org/wiki/Sui
 
 Visita il [Report del changelog](https://arthexis.com/changelog/) per esplorare funzionalità passate e future insieme ad altri aggiornamenti.
 
-## Caratteristiche attuali
+## Caratteristiche della suite
 
 - Compatibile con l'[Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/) per impostazione predefinita, consentendo ai punti di ricarica di aggiornarsi ai protocolli più recenti se li supportano.
 

@@ -9,7 +9,7 @@ Die Arthexis-Konstellation ist eine auf [Django](https://www.djangoproject.com/)
 
 Besuche den [Changelog-Bericht](https://arthexis.com/changelog/), um vergangene und geplante Funktionen sowie weitere Updates zu entdecken.
 
-## Aktuelle Funktionen
+## Suite-Funktionen
 
 - Kompatibel mit dem [Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/) standardmäßig, während Ladepunkte auf neuere Protokolle aktualisieren können, wenn sie diese unterstützen.
 

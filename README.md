@@ -9,7 +9,7 @@ Arthexis Constellation is a [Django](https://www.djangoproject.com/)-based [soft
 
 Visit our [Changelog Report](https://arthexis.com/changelog/) to browse past and future features and other updates.
 
-## Current Features
+## Suite Features
 
 - Compatible with the [Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/) by defaut, while allowing Chargering Stations to upgrade to newer protocols if they support them. 
 
