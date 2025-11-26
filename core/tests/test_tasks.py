@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from subprocess import CompletedProcess
 from types import SimpleNamespace
@@ -622,6 +622,124 @@ def test_check_github_updates_allows_stable_critical_patch(monkeypatch, tmp_path
     )
 
 
+def test_check_github_updates_skips_recent_auto_upgrade(monkeypatch, tmp_path):
+    """Auto-upgrade should wait at least one interval between runs."""
+
+    from core import tasks
+    from django.utils import timezone
+
+    base_dir = tmp_path / "node"
+    locks = base_dir / "locks"
+    logs = base_dir / "logs"
+    locks.mkdir(parents=True)
+    logs.mkdir(parents=True)
+
+    (locks / "auto_upgrade.lck").write_text("latest")
+    (locks / "auto_upgrade_last_run.lck").write_text(timezone.now().isoformat())
+
+    monkeypatch.setattr(tasks, "_project_base_dir", lambda: base_dir)
+    monkeypatch.setattr(tasks, "_load_skipped_revisions", lambda base: set())
+    monkeypatch.setattr(tasks, "_latest_release", lambda: (None, None))
+    monkeypatch.setattr(
+        tasks, "_resolve_release_severity", lambda version: tasks.SEVERITY_NORMAL
+    )
+    monkeypatch.setattr(tasks, "_schedule_health_check", lambda *args, **kwargs: None)
+    monkeypatch.setattr(tasks, "_reset_network_failure_count", lambda _base: None)
+
+    log_messages: list[str] = []
+    log_path = logs / "auto-upgrade.log"
+    monkeypatch.setattr(tasks, "_auto_upgrade_log_path", lambda _base: log_path)
+    monkeypatch.setattr(
+        tasks, "_append_auto_upgrade_log", lambda _base, message: log_messages.append(message)
+    )
+
+    def fake_run(command, *args, **kwargs):
+        return CompletedProcess(command, 0)
+
+    def fake_check_output(command, *args, **kwargs):
+        if command[-1].startswith("origin/"):
+            return "remote-sha"
+        return "local-sha"
+
+    monkeypatch.setattr(tasks.subprocess, "run", fake_run)
+    monkeypatch.setattr(tasks.subprocess, "check_output", fake_check_output)
+
+    def explode_delegate(*args, **kwargs):
+        raise AssertionError("Upgrade should not run when within recency window")
+
+    monkeypatch.setattr(tasks, "_delegate_upgrade_via_script", explode_delegate)
+
+    tasks.check_github_updates()
+
+    assert any(
+        "last run was less than" in message for message in log_messages
+    )
+
+
+def test_check_github_updates_allows_boundary_recency(monkeypatch, tmp_path):
+    """Auto-upgrade should proceed once the full interval has elapsed."""
+
+    from core import tasks
+    from django.utils import timezone
+
+    base_dir = tmp_path / "node"
+    locks = base_dir / "locks"
+    logs = base_dir / "logs"
+    locks.mkdir(parents=True)
+    logs.mkdir(parents=True)
+
+    reference_time = timezone.make_aware(datetime(2024, 1, 1, 0, 0))
+    interval_minutes = tasks.AUTO_UPGRADE_INTERVAL_MINUTES["stable"]
+
+    (locks / "auto_upgrade.lck").write_text("stable")
+    (locks / "auto_upgrade_last_run.lck").write_text(
+        (reference_time - timedelta(minutes=interval_minutes)).isoformat()
+    )
+
+    monkeypatch.setattr(tasks.timezone, "now", lambda: reference_time)
+    monkeypatch.setattr(tasks, "_project_base_dir", lambda: base_dir)
+    monkeypatch.setattr(tasks, "_load_skipped_revisions", lambda base: set())
+    monkeypatch.setattr(tasks, "_latest_release", lambda: (None, None))
+    monkeypatch.setattr(
+        tasks, "_resolve_release_severity", lambda version: tasks.SEVERITY_NORMAL
+    )
+    monkeypatch.setattr(tasks, "_schedule_health_check", lambda *args, **kwargs: None)
+    monkeypatch.setattr(tasks, "_reset_network_failure_count", lambda _base: None)
+
+    log_messages: list[str] = []
+    log_path = logs / "auto-upgrade.log"
+    monkeypatch.setattr(tasks, "_auto_upgrade_log_path", lambda _base: log_path)
+    monkeypatch.setattr(
+        tasks, "_append_auto_upgrade_log", lambda _base, message: log_messages.append(message)
+    )
+
+    def fake_run(command, *args, **kwargs):
+        return CompletedProcess(command, 0)
+
+    def fake_check_output(command, *args, **kwargs):
+        if command[-1].startswith("origin/"):
+            return "remote-sha"
+        return "local-sha"
+
+    monkeypatch.setattr(tasks.subprocess, "run", fake_run)
+    monkeypatch.setattr(tasks.subprocess, "check_output", fake_check_output)
+
+    delegated_calls: list[tuple[Path, list[str]]] = []
+
+    def record_delegate(base: Path, args: list[str]) -> str:
+        delegated_calls.append((base, args))
+        return "auto-upgrade.service"
+
+    monkeypatch.setattr(tasks, "_delegate_upgrade_via_script", record_delegate)
+
+    tasks.check_github_updates()
+
+    assert delegated_calls == [(base_dir, ["./upgrade.sh", "--stable"])]
+    assert not any(
+        "last run was less than" in message for message in log_messages
+    )
+
+
 def test_check_github_updates_restarts_dev_server(monkeypatch, tmp_path):
     """Nodes without systemd should restart the development server after upgrade."""
 
@@ -814,7 +932,7 @@ def test_check_github_updates_logs_fetch_failure_details(monkeypatch, tmp_path):
 
 
 def test_broadcast_upgrade_start_message_formats_payload(monkeypatch):
-    """Upgrade start Net Messages should include the timestamp and node name."""
+    """Upgrade start Net Messages should include the node name and revisions."""
 
     from core import tasks
 
@@ -838,9 +956,9 @@ def test_broadcast_upgrade_start_message_formats_payload(monkeypatch):
         SimpleNamespace(NetMessage=StubNetMessage, Node=StubNode),
     )
 
-    tasks._broadcast_upgrade_start_message("@ 20240102 03:04")
+    tasks._broadcast_upgrade_start_message("old-sha", "new-sha")
 
-    assert broadcasts == [("Upgrade @ 03:04", "alpha")]
+    assert broadcasts == [("Upgrade @ alpha", "old-sha - new-sha")]
 
 
 def test_check_github_updates_broadcasts_upgrade_start(monkeypatch, tmp_path):
@@ -886,18 +1004,17 @@ def test_check_github_updates_broadcasts_upgrade_start(monkeypatch, tmp_path):
     monkeypatch.setattr(tasks.subprocess, "run", fake_run)
     monkeypatch.setattr(tasks.subprocess, "check_output", fake_check_output)
 
-    upgrade_stamps: list[str] = []
+    upgrade_starts: list[tuple[str | None, str | None]] = []
     monkeypatch.setattr(
         tasks,
         "_broadcast_upgrade_start_message",
-        lambda stamp: upgrade_stamps.append(stamp),
+        lambda local, remote: upgrade_starts.append((local, remote)),
     )
 
     with override_settings(BASE_DIR=tmp_path):
         tasks.check_github_updates()
 
-    expected_stamp = tasks.timezone.localtime(fixed_time).strftime("@ %Y%m%d %H:%M")
-    assert upgrade_stamps == [expected_stamp]
+    assert upgrade_starts == [("local-sha", "remote-sha")]
 
 
 @pytest.mark.parametrize(
