@@ -6,7 +6,7 @@ from pathlib import Path
 from nodes.models import Node, NodeFeature
 from core.models import Reference
 from core.reference_utils import filter_visible_references
-from .models import Module
+from .models import Module, SiteTemplate
 
 _FAVICON_DIR = Path(settings.BASE_DIR) / "pages" / "fixtures" / "data"
 _FAVICON_FILENAMES = {
@@ -158,6 +158,12 @@ def nav_links(request):
     )
     chat_socket_path = getattr(settings, "PAGES_CHAT_SOCKET_PATH", "/ws/pages/chat/")
 
+    site_template = None
+    if site:
+        site_template = getattr(site, "template", None)
+    if site_template is None:
+        site_template = SiteTemplate.objects.order_by("name").first()
+
     return {
         "nav_modules": valid_modules,
         "favicon_url": favicon_url,
@@ -165,4 +171,5 @@ def nav_links(request):
         "login_url": resolve_url(settings.LOGIN_URL),
         "chat_enabled": chat_enabled,
         "chat_socket_path": chat_socket_path,
+        "site_template": site_template,
     }
