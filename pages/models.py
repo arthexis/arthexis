@@ -38,6 +38,10 @@ from django.core.exceptions import ValidationError
 
 from core import github_issues
 from .tasks import create_user_story_github_issue
+from .site_config import ensure_site_fields
+
+
+ensure_site_fields()
 
 
 logger = logging.getLogger(__name__)

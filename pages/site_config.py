@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Callable
 from pathlib import Path
 
 from django.apps import apps
 from django.conf import settings
 from django.contrib.sites.models import Site
+from django.core.exceptions import FieldDoesNotExist
 from django.db import DatabaseError, models
 from django.db.models.signals import post_delete, post_migrate, post_save
 from django.dispatch import receiver
@@ -18,10 +20,10 @@ from django.utils.translation import gettext_lazy as _
 logger = logging.getLogger(__name__)
 
 
-_FIELD_DEFINITIONS: tuple[tuple[str, models.Field], ...] = (
+_FIELD_DEFINITIONS: tuple[tuple[str, Callable[[], models.Field]], ...] = (
     (
         "managed",
-        models.BooleanField(
+        lambda: models.BooleanField(
             default=False,
             db_default=False,
             verbose_name=_("Managed by local NGINX"),
@@ -32,7 +34,7 @@ _FIELD_DEFINITIONS: tuple[tuple[str, models.Field], ...] = (
     ),
     (
         "require_https",
-        models.BooleanField(
+        lambda: models.BooleanField(
             default=False,
             db_default=False,
             verbose_name=_("Require HTTPS"),
@@ -43,7 +45,7 @@ _FIELD_DEFINITIONS: tuple[tuple[str, models.Field], ...] = (
     ),
     (
         "template",
-        models.ForeignKey(
+        lambda: models.ForeignKey(
             "pages.SiteTemplate",
             on_delete=models.SET_NULL,
             related_name="sites",
@@ -113,9 +115,10 @@ def update_local_nginx_scripts() -> None:
 
 def _install_fields() -> None:
     for name, field in _FIELD_DEFINITIONS:
-        if hasattr(Site, name):
-            continue
-        Site.add_to_class(name, field.clone())
+        try:
+            Site._meta.get_field(name)
+        except FieldDoesNotExist:
+            Site.add_to_class(name, field())
 
 
 def ensure_site_fields() -> None:
