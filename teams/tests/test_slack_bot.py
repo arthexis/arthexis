@@ -6,7 +6,6 @@ from unittest import mock
 
 from django.contrib.admin.sites import AdminSite
 from django.contrib.auth import get_user_model
-from django.contrib.messages import get_messages
 from django.core.exceptions import ValidationError
 from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
@@ -271,13 +270,77 @@ class SlackBotProfileWizardTests(TestCase):
         SLACK_CLIENT_SECRET="",
         SLACK_SIGNING_SECRET="",
     )
-    def test_wizard_requires_configuration(self):
+    def test_wizard_prompts_for_configuration(self):
         response = self.client.get(
             reverse("admin:teams_slackbotprofile_bot_creation_wizard"),
-            follow=True,
         )
 
-        messages = list(get_messages(response.wsgi_request))
-        self.assertTrue(
-            any("Configure SLACK_CLIENT_ID" in str(message) for message in messages)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Slack bot wizard")
+        self.assertContains(response, "client_id")
+
+    @override_settings(
+        SLACK_CLIENT_ID="",
+        SLACK_CLIENT_SECRET="",
+        SLACK_SIGNING_SECRET="",
+    )
+    def test_wizard_accepts_manual_configuration(self):
+        response = self.client.post(
+            reverse("admin:teams_slackbotprofile_bot_creation_wizard"),
+            {
+                "client_id": "manual-client",
+                "client_secret": "manual-secret",
+                "signing_secret": "manual-signing",
+                "scopes": "commands,chat:write",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("client_id=manual-client", response["Location"])
+        session_config = self.client.session.get("slack_bot_wizard_config")
+        self.assertEqual(session_config["client_secret"], "manual-secret")
+        self.assertTrue(self.client.session.get("slack_bot_wizard_state"))
+
+    @override_settings(
+        SLACK_CLIENT_ID="",
+        SLACK_CLIENT_SECRET="",
+        SLACK_SIGNING_SECRET="",
+    )
+    @mock.patch("teams.admin.requests.post")
+    @mock.patch("teams.admin.Node.get_local")
+    def test_callback_uses_session_configuration(self, mock_get_local, mock_post):
+        mock_get_local.return_value = self.node
+        session = self.client.session
+        session["slack_bot_wizard_state"] = "state-token"
+        session["slack_bot_wizard_config"] = {
+            "client_id": "manual-client",
+            "client_secret": "manual-secret",
+            "signing_secret": "manual-signing",
+            "scopes": "commands",
+        }
+        session.save()
+        mock_response = mock.Mock()
+        mock_response.json.return_value = {
+            "ok": True,
+            "access_token": "xoxb-new-token",
+            "bot_user_id": "B123",
+            "team": {"id": "TNEW"},
+            "incoming_webhook": {"channel_id": "C123"},
+        }
+        mock_post.return_value = mock_response
+
+        response = self.client.get(
+            reverse("admin:teams_slackbotprofile_bot_creation_callback"),
+            {"state": "state-token", "code": "auth-code"},
+        )
+
+        profile = SlackBotProfile.objects.get(team_id="TNEW")
+        self.assertEqual(profile.bot_token, "xoxb-new-token")
+        mock_post.assert_called_once()
+        called_kwargs = mock_post.call_args.kwargs
+        self.assertEqual(called_kwargs["data"]["client_id"], "manual-client")
+        self.assertEqual(called_kwargs["data"]["client_secret"], "manual-secret")
+        self.assertRedirects(
+            response,
+            reverse("admin:teams_slackbotprofile_change", args=[profile.pk]),
         )

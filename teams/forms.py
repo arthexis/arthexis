@@ -206,6 +206,37 @@ class SlackBotProfileAdminForm(forms.ModelForm):
                 widget.attrs.setdefault("placeholder", placeholder)
 
 
+class SlackBotWizardSetupForm(forms.Form):
+    client_id = forms.CharField(
+        label=_("Slack Client ID"),
+        help_text=_("Copy from your Slack app's Basic Information page."),
+    )
+    client_secret = forms.CharField(
+        label=_("Slack Client Secret"),
+        help_text=_("Copy from your Slack app's Basic Information page."),
+    )
+    signing_secret = forms.CharField(
+        label=_("Slack Signing Secret"),
+        help_text=_("Copy from your Slack app's Basic Information page."),
+    )
+    scopes = forms.CharField(
+        label=_("OAuth Scopes"),
+        required=False,
+        help_text=_(
+            "Comma-separated scopes to request for the bot. "
+            "Defaults to chat access when left blank."
+        ),
+    )
+
+    def clean(self):
+        cleaned_data = super().clean()
+        for key in ("client_id", "client_secret", "signing_secret", "scopes"):
+            value = cleaned_data.get(key)
+            if isinstance(value, str):
+                cleaned_data[key] = value.strip()
+        return cleaned_data
+
+
 class TaskCategoryAdminForm(forms.ModelForm):
     class Meta:
         model = TaskCategory

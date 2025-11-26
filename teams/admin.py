@@ -3,6 +3,7 @@ from django.contrib import admin, messages
 from django.contrib.admin.sites import NotRegistered
 from django.core.exceptions import ValidationError
 from django.http import HttpResponseRedirect
+from django.template.response import TemplateResponse
 from django.urls import path, reverse
 from urllib.parse import urlencode
 import contextlib
@@ -49,6 +50,7 @@ from nodes.models import Node
 
 from .forms import (
     SlackBotProfileAdminForm,
+    SlackBotWizardSetupForm,
     TOTPDeviceAdminForm,
     TOTPDeviceCalibrationActionForm,
     TaskCategoryAdminForm,
@@ -129,6 +131,9 @@ class GoogleCalendarProfileAdminProxy(GoogleCalendarProfileAdmin):
 
 @admin.register(SlackBotProfile)
 class SlackBotProfileAdmin(DjangoObjectActions, EntityModelAdmin):
+    WIZARD_SESSION_KEY = "slack_bot_wizard_config"
+    DEFAULT_SCOPE = "commands,chat:write,chat:write.public"
+
     list_display = ("__str__", "team_id", "node", "is_enabled")
     list_filter = ("is_enabled",)
     search_fields = ("team_id", "bot_user_id", "node__hostname")
@@ -198,11 +203,18 @@ class SlackBotProfileAdmin(DjangoObjectActions, EntityModelAdmin):
     bot_creation_wizard.label = _("Bot Creation Wizard")
     bot_creation_wizard.short_description = _("Bot Creation Wizard")
 
-    def _slack_oauth_settings(self):
-        client_id = getattr(settings, "SLACK_CLIENT_ID", "") or ""
-        client_secret = getattr(settings, "SLACK_CLIENT_SECRET", "") or ""
-        signing_secret = getattr(settings, "SLACK_SIGNING_SECRET", "") or ""
-        scopes = getattr(settings, "SLACK_BOT_SCOPES", "") or ""
+    def _slack_oauth_settings(self, request):
+        session_config = {}
+        if request is not None:
+            session_config = request.session.get(self.WIZARD_SESSION_KEY, {}) or {}
+        client_id = session_config.get("client_id") or getattr(settings, "SLACK_CLIENT_ID", "") or ""
+        client_secret = session_config.get("client_secret") or getattr(
+            settings, "SLACK_CLIENT_SECRET", ""
+        )
+        signing_secret = session_config.get("signing_secret") or getattr(
+            settings, "SLACK_SIGNING_SECRET", ""
+        )
+        scopes = session_config.get("scopes") or getattr(settings, "SLACK_BOT_SCOPES", "") or ""
         return client_id.strip(), client_secret.strip(), signing_secret.strip(), scopes.strip()
 
     def _get_owner_kwargs(self, request):
@@ -215,24 +227,59 @@ class SlackBotProfileAdmin(DjangoObjectActions, EntityModelAdmin):
         return {}
 
     def bot_creation_wizard_view(self, request):
-        client_id, client_secret, signing_secret, scopes = self._slack_oauth_settings()
+        client_id, client_secret, signing_secret, scopes = self._slack_oauth_settings(request)
         changelist_url = reverse("admin:teams_slackbotprofile_changelist")
-        if not (client_id and client_secret and signing_secret):
-            self.message_user(
-                request,
-                _(
-                    "Configure SLACK_CLIENT_ID, SLACK_CLIENT_SECRET, and SLACK_SIGNING_SECRET to use the bot creation wizard."
-                ),
-                level=messages.ERROR,
-            )
-            return HttpResponseRedirect(changelist_url)
-
-        redirect_uri = request.build_absolute_uri(
+        callback_url = request.build_absolute_uri(
             reverse("admin:teams_slackbotprofile_bot_creation_callback")
         )
+
+        if request.method == "POST":
+            form = SlackBotWizardSetupForm(request.POST)
+            if form.is_valid():
+                request.session[self.WIZARD_SESSION_KEY] = form.cleaned_data
+                client_id = form.cleaned_data.get("client_id")
+                client_secret = form.cleaned_data.get("client_secret")
+                signing_secret = form.cleaned_data.get("signing_secret")
+                scopes = form.cleaned_data.get("scopes")
+            else:
+                return TemplateResponse(
+                    request,
+                    "admin/teams/slack_bot_wizard.html",
+                    {
+                        "title": _("Connect a Slack bot"),
+                        "opts": SlackBotProfile._meta,
+                        "form": form,
+                        "changelist_url": changelist_url,
+                        "default_scope": self.DEFAULT_SCOPE,
+                        "callback_url": callback_url,
+                    },
+                )
+        if not (client_id and client_secret and signing_secret):
+            form = SlackBotWizardSetupForm(
+                initial={
+                    "client_id": client_id,
+                    "client_secret": client_secret,
+                    "signing_secret": signing_secret,
+                    "scopes": scopes or self.DEFAULT_SCOPE,
+                }
+            )
+            return TemplateResponse(
+                request,
+                "admin/teams/slack_bot_wizard.html",
+                {
+                    "title": _("Connect a Slack bot"),
+                    "opts": SlackBotProfile._meta,
+                    "form": form,
+                    "changelist_url": changelist_url,
+                    "default_scope": self.DEFAULT_SCOPE,
+                    "callback_url": callback_url,
+                },
+            )
+
+        redirect_uri = callback_url
         state = secrets.token_urlsafe(32)
         request.session["slack_bot_wizard_state"] = state
-        scope_param = scopes or "commands,chat:write,chat:write.public"
+        scope_param = scopes or self.DEFAULT_SCOPE
         params = {
             "client_id": client_id,
             "scope": scope_param,
@@ -272,7 +319,7 @@ class SlackBotProfileAdmin(DjangoObjectActions, EntityModelAdmin):
             )
             return HttpResponseRedirect(changelist_url)
 
-        client_id, client_secret, signing_secret, scopes = self._slack_oauth_settings()
+        client_id, client_secret, signing_secret, scopes = self._slack_oauth_settings(request)
         if not (client_id and client_secret and signing_secret):
             self.message_user(
                 request,
@@ -355,6 +402,8 @@ class SlackBotProfileAdmin(DjangoObjectActions, EntityModelAdmin):
             team_id=team_id,
             defaults=defaults,
         )
+
+        request.session.pop(self.WIZARD_SESSION_KEY, None)
 
         self.message_user(
             request,
