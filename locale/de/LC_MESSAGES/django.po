@@ -513,6 +513,7 @@ msgstr ""
 #: core/admin.py:570 core/templates/admin/core/odoo_quote_report.html:113
 #: core/templates/admin/core/product/fetch_odoo.html:54
 #: core/templates/admin/system_upgrade_report.html:158
+#: ocpp/templates/ocpp/maintenance_request.html:30
 #: pages/templates/admin_doc/model_index.html:31
 msgid "Description"
 msgstr ""
@@ -3688,6 +3689,7 @@ msgstr ""
 msgid "Security groups that can view this charge point."
 msgstr ""
 
+#: core/models.py:3650
 #: ocpp/models.py:269 ocpp/templates/admin/ocpp/location/change_form.html:9
 msgid "Charge Point"
 msgstr "Ladepunkt"
@@ -4023,6 +4025,7 @@ msgid "Reported"
 msgstr ""
 
 #: ocpp/templates/ocpp/charger_status.html:83
+#: ocpp/templates/ocpp/maintenance_request.html:37
 msgid "Location"
 msgstr ""
 
@@ -5905,10 +5908,6 @@ msgstr "Verbrauchsbericht"
 msgid "Period: %(start)s to %(end)s"
 msgstr "Zeitraum: %(start)s bis %(end)s"
 
-#: core/models.py:3650
-msgid "Charge Point"
-msgstr "Ladepunkt"
-
 #: core/models.py:3652
 msgid "%(name)s (Serial: %(serial)s)"
 msgstr "%(name)s (Seriennummer: %(serial)s)"
@@ -5949,14 +5948,6 @@ msgstr "Planen Sie eine manuelle Wartungsaufgabe für einen bestimmten Standort.
 #: ocpp/templates/ocpp/maintenance_request.html:23
 msgid "Title"
 msgstr "Titel"
-
-#: ocpp/templates/ocpp/maintenance_request.html:30
-msgid "Description"
-msgstr "Beschreibung"
-
-#: ocpp/templates/ocpp/maintenance_request.html:37
-msgid "Location"
-msgstr "Standort"
 
 #: ocpp/templates/ocpp/maintenance_request.html:45
 msgid "Scheduled start"
