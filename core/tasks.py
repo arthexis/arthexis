@@ -1029,7 +1029,9 @@ def _normalize_failure_reason(reason: str) -> str:
     return "-".join(tokens[:5])
 
 
-def _broadcast_upgrade_start_message(upgrade_stamp: str) -> None:
+def _broadcast_upgrade_start_message(
+    local_revision: str | None, remote_revision: str | None
+) -> None:
     from nodes.models import NetMessage, Node
 
     try:
@@ -1042,12 +1044,13 @@ def _broadcast_upgrade_start_message(upgrade_stamp: str) -> None:
         return
 
     node_name = getattr(node, "hostname", None) or socket.gethostname() or "node"
-    time_match = re.search(r"(\d{2}:\d{2})", upgrade_stamp)
-    upgrade_time = time_match.group(1) if time_match else upgrade_stamp.replace("@", "").strip()
-    subject = f"Upgrade @ {upgrade_time}".strip()
+    subject = f"Upgrade @ {node_name}".strip()
+    previous_revision = local_revision or "-"
+    next_revision = remote_revision or "-"
+    body = f"{previous_revision} - {next_revision}"
 
     try:
-        NetMessage.broadcast(subject=subject, body=node_name)
+        NetMessage.broadcast(subject=subject, body=body)
     except Exception:
         logger.warning(
             "Failed to broadcast auto-upgrade start Net Message", exc_info=True
@@ -1328,7 +1331,7 @@ def check_github_updates(channel_override: str | None = None) -> None:
             upgrade_was_applied = True
 
         if upgrade_was_applied:
-            _broadcast_upgrade_start_message(upgrade_stamp)
+            _broadcast_upgrade_start_message(local_revision, remote_revision)
 
         with log_file.open("a") as fh:
             fh.write(
