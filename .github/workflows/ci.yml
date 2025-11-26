@@ -83,7 +83,32 @@ EOF
                       features = entry['features'] or 'baseline only'
                       fh.write(f"| {entry['role']} | {features} |\n")
                   fh.write('\n')
-          PY
+        PY
+
+  node-tests:
+    name: Node tests (${{ matrix.role }})
+    needs: [change-detection, node-test-matrix]
+    if: needs.change-detection.outputs.docs_only != 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJson(needs.node-test-matrix.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      - name: Run pytest
+        env:
+          NODE_ROLE: ${{ matrix.role }}
+          NODE_FEATURES: ${{ matrix.features }}
+        run: |
+          pytest
   check-migrations:
     needs: [change-detection, node-test-matrix]
     if: needs.change-detection.outputs.docs_only != 'true' && needs.node-test-matrix.outputs.database_changed == 'true'
