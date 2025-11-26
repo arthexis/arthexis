@@ -4,10 +4,13 @@ import io
 import json
 from datetime import timedelta
 
+import pytest
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import AuthenticationForm
 from django.core.management import call_command
+from django.core.management.base import CommandError
+from django.db.utils import OperationalError
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.test import Client, RequestFactory
@@ -42,6 +45,25 @@ def test_temp_password_command_creates_lockfile(tmp_path, monkeypatch):
         expires_at = timezone.make_aware(expires_at)
     delta = expires_at - timezone.now()
     assert timedelta(minutes=59) <= delta <= timedelta(hours=1, minutes=1)
+
+
+def test_temp_password_command_handles_missing_require_2fa(tmp_path, monkeypatch):
+    monkeypatch.setattr(settings, "TEMP_PASSWORD_LOCK_DIR", str(tmp_path), raising=False)
+    monkeypatch.setattr(temp_passwords, "generate_password", lambda length=16: "TempPass123")
+
+    User = get_user_model()
+
+    class FakeQuerySet:
+        def order_by(self, *_args, **_kwargs):  # pragma: no cover - trivial passthrough
+            raise OperationalError("no such column: core_user.require_2fa")
+
+    fake_qs = FakeQuerySet()
+    monkeypatch.setattr(User._default_manager, "filter", lambda **_kwargs: fake_qs)
+    if hasattr(User, "all_objects"):
+        monkeypatch.setattr(User.all_objects, "filter", lambda **_kwargs: fake_qs)
+
+    with pytest.raises(CommandError, match="require_2fa"):
+        call_command("temp_password", "alice@example.com")
 
 
 def test_temp_password_command_allows_change_flag(tmp_path, monkeypatch):

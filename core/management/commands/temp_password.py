@@ -5,6 +5,7 @@ from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
+from django.db.utils import OperationalError
 from django.utils import timezone
 
 from core import temp_passwords
@@ -88,5 +89,13 @@ class Command(BaseCommand):
             queryset = manager.filter(username__iexact=identifier)
             if not queryset.exists():
                 queryset = manager.filter(email__iexact=identifier)
-        return list(queryset.order_by("username"))
+        try:
+            return list(queryset.order_by("username"))
+        except OperationalError as exc:
+            if "require_2fa" in str(exc):
+                raise CommandError(
+                    "The database schema is out of date. Run migrations to add the "
+                    "`require_2fa` column before generating temporary passwords."
+                ) from exc
+            raise
 
