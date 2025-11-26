@@ -24,7 +24,9 @@ jobs:
         id: classify
         run: |
           docs_only=true
+          has_files=false
           while IFS= read -r file; do
+            has_files=true
             if [[ ! "$file" =~ \.md$ ]]; then
               docs_only=false
               break
@@ -32,6 +34,10 @@ jobs:
           done <<'EOF'
 ${{ steps.changed.outputs.all_changed_files }}
 EOF
+
+          if [[ "$has_files" == false ]]; then
+            docs_only=false
+          fi
 
           echo "docs_only=${docs_only}" >> "$GITHUB_OUTPUT"
 
