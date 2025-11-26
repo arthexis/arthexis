@@ -419,6 +419,7 @@ class ModuleAdmin(EntityModelAdmin):
         "node_role",
         "path",
         "menu",
+        "landings_count",
         "priority",
         "is_default",
     )
@@ -444,6 +445,14 @@ class ModuleAdmin(EntityModelAdmin):
             ),
         ]
         return custom + urls
+
+    def get_queryset(self, request):
+        queryset = super().get_queryset(request)
+        return queryset.annotate(landing_count=Count("landings", distinct=True))
+
+    @admin.display(description=_("Landings"), ordering="landing_count")
+    def landings_count(self, obj):
+        return obj.landing_count
 
     def reload_default_modules_view(self, request):
         if request.method != "POST":
