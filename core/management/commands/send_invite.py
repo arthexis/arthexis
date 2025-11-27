@@ -28,7 +28,7 @@ class Command(BaseCommand):
             raise CommandError(f"No user found with email {email}")
 
         node = Node.get_local()
-        used_outbox = getattr(node, "email_outbox", None)
+        used_outbox = None
 
         for user in users:
             uid = urlsafe_base64_encode(force_bytes(user.pk))
@@ -42,11 +42,17 @@ class Command(BaseCommand):
             subject = "Your invitation link"
             body = f"Use the following link to access your account: {link}"
             try:
-                result = mailer.send(subject, body, [email], node=node)
-                used_outbox = (
-                    getattr(result, "outbox", used_outbox)
-                    or getattr(node, "email_outbox", used_outbox)
-                )
+                if node and getattr(node, "email_outbox_id", None):
+                    result = mailer.send(
+                        subject,
+                        body,
+                        [email],
+                        node=node,
+                        outbox=node.email_outbox,
+                    )
+                    used_outbox = getattr(result, "outbox", None) or node.email_outbox
+                else:
+                    send_mail(subject, body, None, [email])
             except Exception as exc:  # pragma: no cover - log failures
                 self.stderr.write(self.style.WARNING(f"Email send failed: {exc}"))
                 send_mail(subject, body, None, [email])

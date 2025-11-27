@@ -88,6 +88,27 @@ def _env_bool(name: str, default: bool) -> bool:
     return default
 
 
+def _env_int(name: str, default: int, *, allow_mcp_prefix: bool = False) -> int:
+    """Return an integer environment value with optional MCP_ prefix handling."""
+
+    value = os.environ.get(name)
+    if value is None:
+        return default
+
+    normalized = value.strip()
+    if allow_mcp_prefix:
+        while normalized.upper().startswith("MCP_"):
+            normalized = normalized[4:]
+            normalized = normalized.lstrip()
+
+    normalized = normalized.rstrip("/")
+
+    if not normalized.isdigit():
+        raise ImproperlyConfigured(f"{name} must be a numeric value")
+
+    return int(normalized)
+
+
 DEBUG = _env_bool("DEBUG", False)
 
 # Disable NetMessage propagation when running maintenance commands that should
