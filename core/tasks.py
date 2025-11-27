@@ -1097,6 +1097,12 @@ def _resolve_upgrade_subject() -> str:
     from nodes.models import Node
 
     fallback_name = socket.gethostname() or "node"
+    def _short_revision(revision: str | None) -> str:
+        if not revision:
+            return "-"
+        trimmed = str(revision)
+        return trimmed[-6:] if len(trimmed) > 6 else trimmed
+
     try:
         node = Node.get_local()
     except Exception:
@@ -1116,8 +1122,10 @@ def _broadcast_upgrade_start_message(
     from nodes.models import NetMessage
 
     subject = _resolve_upgrade_subject()
-    previous_revision = local_revision or "-"
     next_revision = remote_revision or "-"
+    node_name = getattr(node, "hostname", None) or socket.gethostname() or "node"
+    previous_revision = _short_revision(local_revision)
+    next_revision = _short_revision(remote_revision)
     body = f"{previous_revision} - {next_revision}"
 
     try:
