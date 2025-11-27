@@ -226,6 +226,12 @@ class SlackBotProfileWizardTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertIn("slack.com/oauth/v2/authorize", response["Location"])
         self.assertIn("client_id=client", response["Location"])
+        parsed = urllib.parse.urlparse(response["Location"])
+        redirect_param = urllib.parse.parse_qs(parsed.query).get("redirect_uri")
+        self.assertEqual(
+            redirect_param,
+            [self.client.build_absolute_uri(reverse("teams:slack-bot-callback"))],
+        )
         self.assertTrue(self.client.session.get("slack_bot_wizard_state"))
 
     @override_settings(
@@ -311,7 +317,7 @@ class SlackBotProfileWizardTests(TestCase):
         mock_post.return_value = mock_response
 
         response = self.client.get(
-            reverse("admin:teams_slackbotprofile_bot_creation_callback"),
+            reverse("teams:slack-bot-callback"),
             {"state": "state-token", "code": "auth-code"},
         )
 
@@ -394,7 +400,7 @@ class SlackBotProfileWizardTests(TestCase):
         mock_post.return_value = mock_response
 
         response = self.client.get(
-            reverse("admin:teams_slackbotprofile_bot_creation_callback"),
+            reverse("teams:slack-bot-callback"),
             {"state": "state-token", "code": "auth-code"},
         )
 

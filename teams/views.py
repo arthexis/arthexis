@@ -3,6 +3,7 @@ import hmac
 import logging
 import time
 
+from django.contrib import admin
 from django.http import HttpResponse, JsonResponse
 from django.utils.decorators import method_decorator
 from django.utils.translation import gettext_lazy as _
@@ -11,10 +12,22 @@ from django.views.decorators.csrf import csrf_exempt
 
 from nodes.models import NetMessage, Node
 
+from .admin import SlackBotProfileAdmin
+
 from .models import SlackBotProfile, SlackApiError
 
 
 logger = logging.getLogger(__name__)
+
+
+class SlackBotOAuthCallbackView(View):
+    """Handle the Slack OAuth callback using the admin wizard logic."""
+
+    http_method_names = ["get"]
+
+    def get(self, request, *args, **kwargs):
+        admin_view = SlackBotProfileAdmin(SlackBotProfile, admin.site)
+        return admin_view.bot_creation_callback_view(request)
 
 
 @method_decorator(csrf_exempt, name="dispatch")
