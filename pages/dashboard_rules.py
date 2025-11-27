@@ -17,6 +17,11 @@ DEFAULT_SUCCESS_MESSAGE = _("All rules met.")
 SUCCESS_ICON = "\u2713"
 ERROR_ICON = "\u2717"
 
+# Keep dashboard rule messaging consistent: success responses should use
+# ``DEFAULT_SUCCESS_MESSAGE`` and error text should stay short enough to fit
+# dashboard UI constraints. Extend new rules with the same uniform success
+# message and concise error strings rather than introducing custom phrases.
+
 
 def rule_success(message: str = DEFAULT_SUCCESS_MESSAGE) -> dict[str, object]:
     return {"success": True, "message": message, "icon": SUCCESS_ICON}
