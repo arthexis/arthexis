@@ -128,7 +128,9 @@ def _sigil_builder_view(request):
             "show_result": show_result,
         }
     )
-    return TemplateResponse(request, "admin/sigil_builder.html", context)
+    response = TemplateResponse(request, "admin/sigil_builder.html", context)
+    response.render()
+    return response
 
 
 def patch_admin_sigil_builder_view() -> None:

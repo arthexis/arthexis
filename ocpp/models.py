@@ -473,7 +473,7 @@ class Charger(Entity):
                 name="charger_unique_without_connector",
             ),
             models.CheckConstraint(
-                check=(
+                condition=(
                     models.Q(ws_auth_user__isnull=True)
                     | models.Q(ws_auth_group__isnull=True)
                 ),

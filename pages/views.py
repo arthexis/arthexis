@@ -1726,7 +1726,9 @@ def request_invite(request):
             if lead.sent_on or lead.error:
                 lead.save(update_fields=["sent_on", "error", "sent_via_outbox"])
             sent = True
-    return render(request, "pages/request_invite.html", {"form": form, "sent": sent})
+    return TemplateResponse(
+        request, "pages/request_invite.html", {"form": form, "sent": sent}
+    )
 
 
 class InvitationPasswordForm(forms.Form):

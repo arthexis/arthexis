@@ -21,7 +21,10 @@ def _cleanup_switch_role_state(repo_root: Path) -> None:
     lock_dir = repo_root / "locks"
     if lock_dir.exists():
         for child in lock_dir.iterdir():
-            child.unlink(missing_ok=True)
+            if child.is_dir():
+                shutil.rmtree(child, ignore_errors=True)
+            else:
+                child.unlink(missing_ok=True)
         lock_dir.rmdir()
     _cleanup_switch_role_artifacts(repo_root)
 
