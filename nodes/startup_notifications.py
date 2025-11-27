@@ -80,16 +80,13 @@ def build_startup_message(
     revision_value = (revision.get_revision() or "").strip()
     rev_short = revision_value[-6:] if revision_value else ""
 
-    body = version
-    if body:
-        normalized = body.lstrip("vV") or body
-        needs_marker = allow_db_lookup and _should_mark_nonrelease(
-            normalized, revision_value
-        )
-        if needs_marker and not normalized.endswith("+"):
-            body = f"{body}+"
+    body_parts = []
+    if version:
+        body_parts.append(version)
     if rev_short:
-        body = f"{body} r{rev_short}" if body else f"r{rev_short}"
+        body_parts.append(rev_short)
+
+    body = " ".join(body_parts)
 
     subject = f"{host}:{port_value}".strip()
     return subject, body.strip()
