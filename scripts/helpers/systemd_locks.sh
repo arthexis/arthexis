@@ -63,6 +63,7 @@ arthexis_install_lcd_service_unit() {
 Description=LCD screen updater service for Arthexis
 After=${service_name}.service network-online.target
 Wants=${service_name}.service
+PartOf=${service_name}.service
 Wants=network-online.target
 
 [Service]
@@ -77,6 +78,7 @@ User=$lcd_service_user
 
 [Install]
 WantedBy=multi-user.target
+WantedBy=${service_name}.service
 SERVICEEOF
 
   sudo systemctl daemon-reload
