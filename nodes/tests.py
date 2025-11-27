@@ -140,7 +140,6 @@ class NodeTests(TestCase):
         self.user = User.objects.create_user(username="nodeuser", password="pwd")
         self.client.force_login(self.user)
         NodeRole.objects.get_or_create(name="Terminal")
-        NodeRole.objects.get_or_create(name="Interface")
 
 
 class NodeGetLocalDatabaseUnavailableTests(SimpleTestCase):
@@ -564,14 +563,14 @@ class NodeGetLocalTests(TestCase):
         node = Node.objects.get(mac_address="aa:bb:cc:dd:ee:07")
         self.assertEqual(node.constellation_ip, "10.88.0.42")
 
-    def test_register_node_assigns_interface_role_and_returns_uuid(self):
-        NodeRole.objects.get_or_create(name="Interface")
+    def test_register_node_assigns_terminal_role_and_returns_uuid(self):
+        NodeRole.objects.get_or_create(name="Terminal")
         private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
         public_bytes = private_key.public_key().public_bytes(
             encoding=serialization.Encoding.PEM,
             format=serialization.PublicFormat.SubjectPublicKeyInfo,
         ).decode()
-        token = "interface-token"
+        token = "terminal-token"
         signature = base64.b64encode(
             private_key.sign(
                 token.encode(),
@@ -584,14 +583,14 @@ class NodeGetLocalTests(TestCase):
         ).decode()
         mac = "aa:bb:cc:dd:ee:99"
         payload = {
-            "hostname": "interface",
+            "hostname": "terminal",
             "address": "127.0.0.1",
             "port": 8443,
             "mac_address": mac,
             "public_key": public_bytes,
             "token": token,
             "signature": signature,
-            "role": "Interface",
+            "role": "Terminal",
         }
         response = self.client.post(
             reverse("register-node"),
@@ -602,7 +601,7 @@ class NodeGetLocalTests(TestCase):
         data = response.json()
         self.assertIn("uuid", data)
         node = Node.objects.get(mac_address=mac)
-        self.assertEqual(node.role.name, "Interface")
+        self.assertEqual(node.role.name, "Terminal")
 
     def test_register_node_feature_toggle(self):
         NodeFeature.objects.get_or_create(
@@ -5283,7 +5282,7 @@ class NodeFeatureFixtureTests(TestCase):
         self.assertEqual(role_names, {"Satellite"})
 
     def test_chat_bridge_fixture_defaults_to_core_roles(self):
-        for name in ("Control", "Interface", "Watchtower"):
+        for name in ("Control", "Terminal", "Watchtower"):
             NodeRole.objects.get_or_create(name=name)
 
         fixture_path = (
@@ -5295,7 +5294,7 @@ class NodeFeatureFixtureTests(TestCase):
 
         feature = NodeFeature.objects.get(slug="chat-bridge")
         role_names = set(feature.roles.values_list("name", flat=True))
-        self.assertEqual(role_names, {"Control", "Interface", "Watchtower"})
+        self.assertEqual(role_names, {"Control", "Terminal", "Watchtower"})
 
 
 class NodeFeatureTests(TestCase):

@@ -5438,7 +5438,7 @@ class ChatWidgetViewTests(TestCase):
         Site.objects.update_or_create(
             id=1, defaults={"domain": "example.com", "name": "Example"}
         )
-        self.role, _ = NodeRole.objects.get_or_create(name="Interface")
+        self.role, _ = NodeRole.objects.get_or_create(name="Terminal")
 
     def _enable_chat_feature(self):
         node, _ = Node.objects.get_or_create(
@@ -5479,7 +5479,7 @@ class AdminChatWidgetTests(TestCase):
         Site.objects.update_or_create(
             id=1, defaults={"domain": "example.com", "name": "Example"}
         )
-        role, _ = NodeRole.objects.get_or_create(name="Interface")
+        role, _ = NodeRole.objects.get_or_create(name="Terminal")
         node, _ = Node.objects.get_or_create(
             mac_address=Node.get_current_mac(),
             defaults={
