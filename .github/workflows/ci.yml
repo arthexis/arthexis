@@ -7,65 +7,6 @@ on:
     - cron: '0 2 * * *'
 
 jobs:
-  change-detection:
-    runs-on: ubuntu-latest
-    outputs:
-      docs_only: ${{ steps.classify.outputs.docs_only }}
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-      - name: Classify changes
-        id: classify
-        env:
-          BASE_REF: ${{ github.base_ref || github.event.repository.default_branch || 'main' }}
-        run: |
-          if git rev-parse --is-shallow-repository; then
-            git fetch origin "$BASE_REF" --no-tags --prune --unshallow
-          else
-            git fetch origin "$BASE_REF" --no-tags --prune
-          fi
-
-          MERGE_BASE="$(git merge-base "origin/$BASE_REF" HEAD)"
-          if [ -z "$MERGE_BASE" ]; then
-            echo "Unable to determine merge base between origin/$BASE_REF and HEAD" >&2
-            exit 1
-          fi
-
-          CHANGED_FILES="$(git diff --name-only "$MERGE_BASE"...HEAD)"
-
-          DOCS_ONLY=true
-          if [ -z "$CHANGED_FILES" ]; then
-            DOCS_ONLY=false
-          else
-            for file in $CHANGED_FILES; do
-              case "$file" in
-                *.md|*.markdown|*.mdown|*.mdx|*.txt|*.text)
-                  ;;
-                *)
-                  DOCS_ONLY=false
-                  break
-                  ;;
-              esac
-            done
-          fi
-
-          echo "docs_only=$DOCS_ONLY" >> "$GITHUB_OUTPUT"
-
-          if [ -n "$GITHUB_STEP_SUMMARY" ]; then
-            {
-              echo "### Change detection"
-              echo "Base ref: $BASE_REF"
-              echo "Docs only: $DOCS_ONLY"
-              if [ -n "$CHANGED_FILES" ]; then
-                echo "\nChanged files:"
-                printf ' - %s\n' $CHANGED_FILES
-              else
-                echo "\nNo changed files detected."
-              fi
-            } >> "$GITHUB_STEP_SUMMARY"
-          fi
-
   node-test-matrix:
     runs-on: ubuntu-latest
     outputs:
@@ -110,8 +51,7 @@ jobs:
 
   node-tests:
     name: Node tests (${{ matrix.role }})
-    needs: [change-detection, node-test-matrix]
-    if: needs.change-detection.outputs.docs_only != 'true'
+    needs: [node-test-matrix]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
