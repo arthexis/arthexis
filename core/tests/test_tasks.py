@@ -1197,6 +1197,34 @@ def test_check_github_updates_records_failures(monkeypatch, tmp_path):
     assert failure_reasons == ["NETWORK"]
 
 
+def test_send_auto_upgrade_failure_message_subject_uses_time(monkeypatch, tmp_path):
+    """Auto-upgrade failure subjects should omit the date."""
+
+    from core import tasks
+    import nodes.models as nodes_models
+
+    fixed_now = tasks.timezone.make_aware(datetime(2025, 11, 27, 12, 3))
+    monkeypatch.setattr(tasks.timezone, "now", lambda: fixed_now)
+    monkeypatch.setattr(tasks.timezone, "localtime", lambda value=None: fixed_now)
+
+    monkeypatch.setattr(
+        nodes_models.Node,
+        "get_local",
+        classmethod(lambda cls: SimpleNamespace(hostname="gway-001")),
+    )
+
+    broadcasts: list[tuple[str, str]] = []
+
+    def fake_broadcast(*, subject: str, body: str):
+        broadcasts.append((subject, body))
+
+    monkeypatch.setattr(nodes_models.NetMessage, "broadcast", fake_broadcast)
+
+    tasks._send_auto_upgrade_failure_message(tmp_path, "NAMEERROR", 2)
+
+    assert broadcasts == [("gway-001 12:03", "NAMEERROR x2")]
+
+
 def test_check_github_updates_skips_reboot_when_charge_point_active(
     monkeypatch, tmp_path
 ):
