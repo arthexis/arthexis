@@ -123,6 +123,16 @@ urlpatterns = [
         admin.site.admin_view(pages_views.admin_model_graph),
         name="admin-model-graph",
     ),
+    path(
+        "admin/dashboard/model-status/<str:app_label>/<str:model_name>/",
+        admin.site.admin_view(pages_views.dashboard_model_status),
+        name="admin-dashboard-model-status",
+    ),
+    path(
+        "admin/dashboard/net-message/",
+        admin.site.admin_view(pages_views.dashboard_net_message),
+        name="admin-dashboard-net-message",
+    ),
     path("version/", core_views.version_info, name="version-info"),
     path(
         "admin/core/releases/<int:pk>/<str:action>/",

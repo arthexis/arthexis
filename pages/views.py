@@ -333,6 +333,11 @@ def _resolve_work_asset(user, path: str) -> Path:
         raise Http404("Asset not found")
     return asset_resolved
 from pages.utils import landing
+from pages.templatetags.admin_extras import (
+    _load_badge_counters,
+    _load_model_rule_status,
+    last_net_message,
+)
 from core.liveupdate import live_update
 from django_otp import login as otp_login
 from django_otp.plugins.otp_totp.models import TOTPDevice
@@ -2356,6 +2361,33 @@ def admin_user_tools(request):
         "admin/includes/user_tools.html",
         {"user_tools_return_url": return_url},
     )
+
+
+@staff_member_required
+@never_cache
+def dashboard_model_status(request, app_label: str, model_name: str):
+    badges, badges_loading = _load_badge_counters(
+        app_label, model_name, compute_if_missing=True
+    )
+    rule, rule_loading = _load_model_rule_status(
+        app_label, model_name, compute_if_missing=True
+    )
+
+    return JsonResponse(
+        {
+            "badges": badges,
+            "badges_loading": badges_loading,
+            "rule": rule,
+            "rule_loading": rule_loading,
+        }
+    )
+
+
+@staff_member_required
+@never_cache
+def dashboard_net_message(request):
+    message = last_net_message()
+    return JsonResponse({"message": message})
 
 
 def admin_manual_list(request):

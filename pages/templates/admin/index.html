@@ -69,6 +69,9 @@
     .admin-home-net-message__content--empty {
         color: var(--body-quiet-color);
     }
+    .admin-home-net-message__content--loading {
+        color: var(--body-quiet-color);
+    }
     .admin-home-actions {
         display: flex;
         align-items: center;
@@ -161,52 +164,6 @@
         margin-bottom: 10px;
         padding-left: 18px;
     }
-    #google-calendar-module {
-        margin-bottom: 16px;
-    }
-    #google-calendar-module .calendar-event-list {
-        list-style: none;
-        padding: 0 16px 8px;
-        margin: 0;
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-    }
-    #google-calendar-module .calendar-event {
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-    }
-    #google-calendar-module .calendar-event-title {
-        font-weight: 600;
-        text-decoration: none;
-        color: inherit;
-    }
-    #google-calendar-module .calendar-event-title:focus,
-    #google-calendar-module .calendar-event-title:hover {
-        text-decoration: underline;
-    }
-    #google-calendar-module .calendar-event-time,
-    #google-calendar-module .calendar-event-location {
-        padding: 0;
-        margin: 0;
-        color: var(--body-quiet-color);
-    }
-    #google-calendar-module .calendar-empty,
-    #google-calendar-module .calendar-link {
-        padding: 0 16px 16px;
-        margin: 0;
-    }
-    #google-calendar-module .calendar-link a {
-        color: var(--body-quiet-color);
-        text-decoration: none;
-        font-weight: 600;
-    }
-    #google-calendar-module .calendar-link a:focus,
-    #google-calendar-module .calendar-link a:hover {
-        text-decoration: underline;
-        color: var(--link-fg);
-    }
     .dashboard-side .actionlist .recent-action-object {
         display: inline-flex;
         align-items: baseline;
@@ -234,6 +191,16 @@
         flex: 0 0 auto;
         white-space: nowrap;
         font-variant-numeric: tabular-nums;
+    }
+    .model-status-group {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+    }
+    .model-status-loading {
+        font-size: 0.85rem;
+        color: var(--body-quiet-color);
     }
     #release-manager-module {
         margin-bottom: 16px;
@@ -572,12 +539,11 @@
     </p>
   </div>
 {% endif %}
-{% last_net_message as admin_last_net_message %}
 <div id="admin-home-header">
   <h1>Home</h1>
-  <div class="admin-home-net-message" role="status" aria-live="polite">
+  <div class="admin-home-net-message" role="status" aria-live="polite" data-net-message-url="{% url 'admin-dashboard-net-message' %}">
     <a class="admin-home-net-message__label admin-home-net-message__link" href="{% url 'admin:nodes_netmessage_send' %}">{% translate 'Net message' %}</a>
-    <span class="admin-home-net-message__content{% if not admin_last_net_message.has_content %} admin-home-net-message__content--empty{% endif %}" title="{% if admin_last_net_message.has_content %}{{ admin_last_net_message.text }}{% else %}{% translate 'No net messages available' %}{% endif %}">{% if admin_last_net_message.has_content %}{{ admin_last_net_message.text }}{% else %}{% translate 'No net messages available' %}{% endif %}</span>
+    <span class="admin-home-net-message__content admin-home-net-message__content--loading" data-net-message>{% translate 'Loading net message…' %}</span>
   </div>
   <div class="admin-home-actions">
     <a class="button" href="{% url 'admin:seed_data' %}">{% translate 'Seed Data' %}</a>
@@ -603,42 +569,6 @@
     {% include "admin/dashboard_app_list.html" with app_list=app_list %}
   </div>
 <div class="dashboard-side" id="recent-boxes">
-    {% user_google_calendar as google_calendar %}
-    {% if google_calendar %}
-    <div class="module" id="google-calendar-module">
-        <h2>{{ google_calendar.title }}</h2>
-        {% if google_calendar.events %}
-        <ul class="calendar-event-list">
-            {% for event in google_calendar.events %}
-            <li class="calendar-event">
-                {% if event.html_link %}
-                <a class="calendar-event-title" href="{{ event.html_link }}" target="_blank" rel="noopener noreferrer">
-                    {{ event.summary|default:_('Untitled event') }}
-                </a>
-                {% else %}
-                <span class="calendar-event-title">{{ event.summary|default:_('Untitled event') }}</span>
-                {% endif %}
-                <p class="calendar-event-time">
-                    {% if event.all_day %}
-                        {{ event.start|localtime|date:"DATE_FORMAT" }}
-                    {% else %}
-                        {{ event.start|localtime|date:"SHORT_DATETIME_FORMAT" }}
-                    {% endif %}
-                </p>
-                {% if event.location %}
-                <p class="calendar-event-location">{{ event.location }}</p>
-                {% endif %}
-            </li>
-            {% endfor %}
-        </ul>
-        {% else %}
-        <p class="calendar-empty">{% translate 'No upcoming events' %}</p>
-        {% endif %}
-        {% if google_calendar.calendar_url %}
-        <p class="calendar-link"><a href="{{ google_calendar.calendar_url }}" target="_blank" rel="noopener noreferrer">{% translate 'Open full calendar' %}</a></p>
-        {% endif %}
-    </div>
-    {% endif %}
     <div class="module" id="viewhistory-mini-module">
         <h2>{% translate 'Public site traffic' %}</h2>
         <div class="chart-wrapper">
@@ -646,31 +576,6 @@
             <p id="viewhistory-mini-empty" class="quiet" hidden>{% translate 'No visit data yet.' %}</p>
         </div>
         <p class="chart-link"><a id="viewhistory-mini-link" href="{% url 'admin:pages_viewhistory_traffic_graph' %}">{% translate 'Open full report' %}</a></p>
-    </div>
-    <div class="module" id="recent-model-structure-module">
-        <h2>{% translate 'Recently Updated Models' %}</h2>
-        {% recent_model_structure_changes 5 as recent_model_migrations %}
-        {% if recent_model_migrations %}
-        <ul class="actionlist recent-model-list">
-            {% for entry in recent_model_migrations %}
-            <li>
-                {% if entry.admin_url %}
-                    <a class="recent-action-object" href="{{ entry.admin_url }}">{{ entry.label }}</a>
-                {% else %}
-                    <span class="recent-action-object">{{ entry.label }}</span>
-                {% endif %}
-                <div class="recent-action-meta mini quiet">
-                    <span class="recent-action-model">{% filter capfirst %}{{ entry.app_label }}{% endfilter %}</span>
-                    {% if entry.applied %}
-                        <time class="recent-action-timestamp" datetime="{{ entry.applied|date:'c' }}">{{ entry.applied|localtime|date:"SHORT_DATETIME_FORMAT" }}</time>
-                    {% endif %}
-                </div>
-            </li>
-            {% endfor %}
-        </ul>
-        {% else %}
-        <p>{% translate 'No recent model structure changes.' %}</p>
-        {% endif %}
     </div>
     <div class="module" id="recent-actions-module">
         <h2>{% translate 'Recent actions' %}</h2>
@@ -944,5 +849,112 @@
         });
       });
     })();
+  </script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const renderBadges = (container, badges) => {
+        if (!container) return;
+        container.innerHTML = '';
+        if (!Array.isArray(badges)) return;
+        badges.forEach((badge) => {
+          const badgeEl = document.createElement('span');
+          if (badge.css_class) {
+            badgeEl.className = badge.css_class;
+          }
+          if (badge.label) {
+            badgeEl.setAttribute('aria-label', badge.label);
+            badgeEl.title = badge.label;
+          }
+          badgeEl.textContent = badge.primary || '';
+          if (badge.secondary) {
+            badgeEl.textContent = `${badgeEl.textContent} ${badge.separator || ''} ${badge.secondary}`.trim();
+          }
+          container.appendChild(badgeEl);
+        });
+      };
+
+      const renderRule = (container, rule) => {
+        if (!container) return;
+        container.innerHTML = '';
+        if (!rule) return;
+        const wrapper = document.createElement('span');
+        wrapper.className = 'model-rule-status';
+        if (rule.success) {
+          wrapper.classList.add('model-rule-status--success');
+        } else {
+          wrapper.classList.add('model-rule-status--error');
+        }
+        const icon = document.createElement('span');
+        icon.className = 'model-rule-status__icon';
+        icon.setAttribute('aria-hidden', 'true');
+        icon.textContent = rule.icon || '';
+        const message = document.createElement('span');
+        message.className = 'model-rule-status__message';
+        message.textContent = rule.message || '';
+        wrapper.appendChild(icon);
+        wrapper.appendChild(message);
+        container.appendChild(wrapper);
+      };
+
+      document.querySelectorAll('tr[data-model-status-url]').forEach((row) => {
+        const badgesLoading = row.dataset.badgesLoading === 'true';
+        const rulesLoading = row.dataset.rulesLoading === 'true';
+        const statusUrl = row.dataset.modelStatusUrl;
+
+        if (!statusUrl || (!badgesLoading && !rulesLoading)) {
+          return;
+        }
+
+        const loadingLabel = row.querySelector('.model-status-loading');
+        if (loadingLabel) {
+          loadingLabel.hidden = false;
+        }
+
+        fetch(statusUrl, { headers: { 'Accept': 'application/json' } })
+          .then((response) => (response.ok ? response.json() : null))
+          .then((data) => {
+            if (!data) {
+              return;
+            }
+
+            renderBadges(row.querySelector('[data-model-badges]'), data.badges);
+            renderRule(row.querySelector('[data-model-rule]'), data.rule);
+
+            if (loadingLabel) {
+              loadingLabel.hidden = true;
+            }
+          })
+          .catch(() => {
+            if (loadingLabel) {
+              loadingLabel.hidden = true;
+            }
+          });
+      });
+
+      const netMessageContainer = document.querySelector('[data-net-message]');
+      const netMessageUrl = document.querySelector('[data-net-message-url]');
+      if (netMessageContainer && netMessageUrl) {
+        fetch(netMessageUrl.dataset.netMessageUrl, { headers: { 'Accept': 'application/json' } })
+          .then((response) => (response.ok ? response.json() : null))
+          .then((data) => {
+            const message = data?.message;
+            const hasContent = message?.has_content;
+            const text = hasContent ? message.text : '{% translate "No net messages available" %}';
+            netMessageContainer.textContent = text;
+            netMessageContainer.classList.toggle('admin-home-net-message__content--empty', !hasContent);
+            netMessageContainer.classList.remove('admin-home-net-message__content--loading');
+            if (hasContent && message?.text) {
+              netMessageContainer.title = message.text;
+            } else {
+              netMessageContainer.removeAttribute('title');
+            }
+          })
+          .catch(() => {
+            netMessageContainer.textContent = '{% translate "No net messages available" %}';
+            netMessageContainer.classList.add('admin-home-net-message__content--empty');
+            netMessageContainer.classList.remove('admin-home-net-message__content--loading');
+          });
+      }
+    });
   </script>
 {% endblock %}

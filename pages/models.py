@@ -23,7 +23,7 @@ from pages.dashboard_rules import (
 )
 from core.models import Lead, SecurityGroup, OdooProfile
 from django.contrib.sites.models import Site
-from nodes.models import ContentSample, NodeRole
+from nodes.models import BadgeCounter, ContentSample, NodeRole
 from django.apps import apps as django_apps
 from django.utils import timezone
 from django.utils.text import slugify
@@ -33,6 +33,7 @@ from importlib import import_module
 from django.urls import URLPattern, reverse
 from django.conf import settings
 from django.contrib.contenttypes.models import ContentType
+from django.core.cache import cache
 from django.core.validators import MaxLengthValidator, MaxValueValidator, MinValueValidator
 from django.core.exceptions import ValidationError
 
@@ -1370,6 +1371,17 @@ class DashboardRule(Entity):
     def natural_key(self):  # pragma: no cover - simple representation
         return (self.name,)
 
+    @classmethod
+    def cache_key_for_model(cls, app_label: str, model_name: str) -> str:
+        return f"dashboard-rule:{app_label.lower()}.{model_name.lower()}"
+
+    @classmethod
+    def invalidate_model_cache(cls, model_or_content_type):
+        content_type = BadgeCounter._content_type_for(model_or_content_type)
+        if content_type is None:
+            return
+        cache.delete(cls.cache_key_for_model(content_type.app_label, content_type.model))
+
     def clean(self):
         super().clean()
         errors = {}
@@ -1387,6 +1399,15 @@ class DashboardRule(Entity):
 
         if errors:
             raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        self.invalidate_model_cache(self.content_type)
+
+    def delete(self, *args, **kwargs):
+        content_type = self.content_type
+        super().delete(*args, **kwargs)
+        self.invalidate_model_cache(content_type)
 
     def evaluate(self) -> dict[str, object]:
         if self.implementation == self.Implementation.PYTHON:

@@ -30,6 +30,7 @@ from pages.models import DashboardRule
 register = template.Library()
 
 _BADGE_CACHE_TIMEOUT = getattr(settings, "ADMIN_DASHBOARD_BADGE_TIMEOUT", 300)
+_RULE_CACHE_TIMEOUT = getattr(settings, "ADMIN_DASHBOARD_RULE_TIMEOUT", 300)
 _CACHE_MISS = object()
 _MODEL_RULES_CACHE_KEY = "_model_rule_status_cache"
 _DEFAULT_RULE_HANDLERS = {
@@ -40,6 +41,88 @@ _DEFAULT_RULE_HANDLERS = {
     "teams.emailinbox": "evaluate_email_profile_rules",
     "teams.emailoutbox": "evaluate_email_profile_rules",
 }
+
+
+def _content_type_for_model(app_label: str, model_name: str) -> ContentType | None:
+    try:
+        return ContentType.objects.get(app_label=app_label, model=model_name.lower())
+    except ContentType.DoesNotExist:
+        return None
+
+
+def _load_badge_counters(
+    app_label: str, model_name: str, *, compute_if_missing: bool = False
+) -> tuple[list[dict[str, object]], bool]:
+    content_type = _content_type_for_model(app_label, model_name)
+    if content_type is None:
+        return [], False
+
+    global_cache_key = BadgeCounter.cache_key_for_content_type(content_type.pk)
+    cached_counters = cache.get(global_cache_key, _CACHE_MISS)
+    if cached_counters is not _CACHE_MISS:
+        return cached_counters, False
+
+    if not compute_if_missing:
+        return [], True
+
+    counters: list[dict[str, object]] = []
+    queryset = BadgeCounter.objects.filter(
+        content_type=content_type, is_enabled=True
+    ).order_by("priority", "pk")
+    for counter in queryset:
+        display = counter.build_display()
+        if display:
+            counters.append(display)
+    cache.set(global_cache_key, counters, _BADGE_CACHE_TIMEOUT)
+    return counters, False
+
+
+def _load_model_rule_status(
+    app_label: str, model_name: str, *, compute_if_missing: bool = False
+) -> tuple[dict[str, object] | None, bool]:
+    cache_key = DashboardRule.cache_key_for_model(app_label, model_name)
+    cached = cache.get(cache_key, _CACHE_MISS)
+    if cached is not _CACHE_MISS:
+        return cached, False
+
+    if not compute_if_missing:
+        return None, True
+
+    normalized_key = f"{app_label}.{model_name}".lower()
+    rule = (
+        DashboardRule.objects.select_related("content_type")
+        .filter(
+            content_type__app_label=app_label,
+            content_type__model=model_name.lower(),
+        )
+        .first()
+    )
+
+    if rule is None:
+        handler_name = _DEFAULT_RULE_HANDLERS.get(normalized_key)
+        handler = load_callable(handler_name) if handler_name else None
+        if handler:
+            try:
+                result = handler()
+            except Exception:
+                logger.exception(
+                    "Dashboard rule handler failed", extra={"model": normalized_key}
+                )
+                result = rule_failure(_("Unable to evaluate dashboard rule."))
+        else:
+            result = None
+    else:
+        try:
+            result = rule.evaluate()
+        except Exception:
+            logger.exception(
+                "Dashboard rule evaluation failed",
+                extra={"model": normalized_key, "rule_id": rule.pk},
+            )
+            result = rule_failure(_("Unable to evaluate dashboard rule."))
+
+    cache.set(cache_key, result, _RULE_CACHE_TIMEOUT)
+    return result, False
 
 logger = logging.getLogger(__name__)
 
@@ -501,32 +584,10 @@ def badge_counters(context, app_label: str, model_name: str) -> list[dict[str, o
     if cache_key in cache_map:
         return cache_map[cache_key]
 
-    try:
-        content_type = ContentType.objects.get(
-            app_label=app_label, model=model_name.lower()
-        )
-    except ContentType.DoesNotExist:
-        counters: list[dict[str, object]] = []
-        cache_map[cache_key] = counters
-        return counters
-
-    global_cache_key = BadgeCounter.cache_key_for_content_type(content_type.pk)
-    cached_counters = cache.get(global_cache_key, _CACHE_MISS)
-    if cached_counters is _CACHE_MISS:
-        counters: list[dict[str, object]] = []
-        queryset = BadgeCounter.objects.filter(
-            content_type=content_type, is_enabled=True
-        ).order_by("priority", "pk")
-        for counter in queryset:
-            display = counter.build_display()
-            if display:
-                counters.append(display)
-        cache.set(global_cache_key, counters, _BADGE_CACHE_TIMEOUT)
-    else:
-        counters = cached_counters
-
-    cache_map[cache_key] = counters
-    return counters
+    counters, loading = _load_badge_counters(app_label, model_name)
+    response = {"badges": counters, "loading": loading}
+    cache_map[cache_key] = response
+    return response
 
 
 @register.simple_tag(takes_context=True)
@@ -543,40 +604,10 @@ def model_rule_status(context, app_label: str, model_name: str):
     if normalized_key in cache_map:
         return cache_map[normalized_key]
 
-    rule = (
-        DashboardRule.objects.select_related("content_type")
-        .filter(
-            content_type__app_label=app_label,
-            content_type__model=model_name.lower(),
-        )
-        .first()
-    )
-
-    if rule is None:
-        handler_name = _DEFAULT_RULE_HANDLERS.get(normalized_key)
-        handler = load_callable(handler_name) if handler_name else None
-        if handler:
-            try:
-                result = handler()
-            except Exception:
-                logger.exception(
-                    "Dashboard rule handler failed", extra={"model": normalized_key}
-                )
-                result = rule_failure(_("Unable to evaluate dashboard rule."))
-        else:
-            result = None
-    else:
-        try:
-            result = rule.evaluate()
-        except Exception:
-            logger.exception(
-                "Dashboard rule evaluation failed",
-                extra={"model": normalized_key, "rule_id": rule.pk},
-            )
-            result = rule_failure(_("Unable to evaluate dashboard rule."))
-
-    cache_map[normalized_key] = result
-    return result
+    status, loading = _load_model_rule_status(app_label, model_name)
+    response = {"rule": status, "loading": loading}
+    cache_map[normalized_key] = response
+    return response
 
 
 @register.simple_tag(takes_context=True)

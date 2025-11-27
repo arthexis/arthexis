@@ -1160,77 +1160,51 @@ class AdminDashboardAppListTests(TestCase):
         resp = self.client.get(reverse("admin:index"))
         self.assertContains(resp, "5. Horologia</a>")
 
-    @patch("pages.templatetags.admin_extras.recent_model_structure_changes")
-    def test_dashboard_shows_recent_model_updates_above_recent_actions(self, recent_models):
-        timestamp = timezone.now()
-        recent_models.return_value = [
-            {
-                "label": "Widget",
-                "app_label": "core",
-                "applied": timestamp,
-                "admin_url": "/admin/core/widget/",
-            },
-            {
-                "label": "Gadget",
-                "app_label": "core",
-                "applied": timestamp - timedelta(minutes=5),
-                "admin_url": "",
-            },
-        ]
-
-        resp = self.client.get(reverse("admin:index"))
-
-        self.assertContains(resp, gettext("Recently Updated Models"))
-        self.assertContains(resp, "Widget")
-        self.assertContains(resp, "Gadget")
-
-        content = resp.content.decode()
-        self.assertLess(
-            content.index(gettext("Recently Updated Models")),
-            content.index(gettext("Recent actions")),
-        )
-
-    def test_dashboard_shows_last_net_message(self):
+    def test_dashboard_net_message_endpoint_returns_latest_message(self):
         NetMessage.objects.all().delete()
         NetMessage.objects.create(subject="Older", body="First body")
         NetMessage.objects.create(subject="Latest", body="Signal ready")
 
-        resp = self.client.get(reverse("admin:index"))
+        resp = self.client.get(reverse("admin-dashboard-net-message"))
 
-        self.assertContains(resp, gettext("Net message"))
-        self.assertContains(resp, "Latest — Signal ready")
-        self.assertNotContains(resp, gettext("No net messages available"))
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.json()
+        self.assertTrue(payload["message"]["has_content"])
+        self.assertIn("Latest", payload["message"]["text"])
 
-    def test_dashboard_skips_blank_net_message(self):
+    def test_dashboard_net_message_endpoint_ignores_blank_entries(self):
         NetMessage.objects.all().delete()
         NetMessage.objects.create(subject="Filled", body="Reachable")
         NetMessage.objects.create(subject="", body="  ")
 
+        resp = self.client.get(reverse("admin-dashboard-net-message"))
+
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.json()
+        self.assertTrue(payload["message"]["has_content"])
+        self.assertIn("Filled", payload["message"]["text"])
+
+    def test_dashboard_shows_loading_state_when_rules_and_badges_deferred(self):
         resp = self.client.get(reverse("admin:index"))
 
-        self.assertContains(resp, "Filled — Reachable")
-        self.assertNotContains(resp, gettext("No net messages available"))
+        self.assertContains(resp, gettext("Loading status…"))
 
-    def test_dashboard_shows_placeholder_without_net_message(self):
-        NetMessage.objects.all().delete()
-
-        resp = self.client.get(reverse("admin:index"))
-
-        self.assertContains(resp, gettext("No net messages available"))
-
-    def test_dashboard_shows_model_rules_success_message(self):
+    def test_dashboard_model_rule_success_via_endpoint(self):
         charger = Charger.objects.create(
             charger_id="EVCS-100", last_heartbeat=timezone.now()
         )
         ChargerConfiguration.objects.create(charger_identifier="EVCS-100")
         CPFirmware.objects.create(source_charger=charger, payload_json={})
 
-        resp = self.client.get(reverse("admin:index"))
+        resp = self.client.get(
+            reverse("admin-dashboard-model-status", args=["ocpp", "Charger"])
+        )
 
-        self.assertContains(resp, "model-rule-status--success")
-        self.assertContains(resp, gettext("All rules met."))
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.json()
+        self.assertTrue(payload["rule"]["success"])
 
-    def test_dashboard_shows_model_rules_failure_message(self):
+    def test_dashboard_model_rule_failure_via_endpoint(self):
         healthy = Charger.objects.create(
             charger_id="EVCS-OK", last_heartbeat=timezone.now()
         )
@@ -1241,14 +1215,14 @@ class AdminDashboardAppListTests(TestCase):
             last_heartbeat=timezone.now() - timedelta(hours=2),
         )
 
-        resp = self.client.get(reverse("admin:index"))
-
-        self.assertContains(resp, "model-rule-status--error")
-        self.assertContains(resp, "Missing CP Configuration for EVCS-MISS.")
-        self.assertContains(resp, "Missing CP Firmware for EVCS-MISS.")
-        self.assertContains(
-            resp, "Missing EVCS heartbeat within the last hour for EVCS-MISS."
+        resp = self.client.get(
+            reverse("admin-dashboard-model-status", args=["ocpp", "Charger"])
         )
+
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.json()
+        self.assertFalse(payload["rule"]["success"])
+        self.assertIn("EVCS-MISS", payload["rule"]["message"])
 
     def test_dashboard_shows_evcs_heartbeat_failure_message(self):
         Charger.objects.create(
@@ -1652,66 +1626,6 @@ class AdminSidebarTests(TestCase):
         url = reverse("admin:nodes_node_changelist")
         resp = self.client.get(url)
         self.assertContains(resp, 'id="admin-collapsible-apps"')
-
-
-class AdminGoogleCalendarSidebarTests(TestCase):
-    def setUp(self):
-        self.client = Client()
-        User = get_user_model()
-        self.admin = User.objects.create_superuser(
-            username="calendar_admin", password="pwd", email="admin@example.com"
-        )
-        self.client.force_login(self.admin)
-        Site.objects.update_or_create(
-            id=1, defaults={"name": "test", "domain": "testserver"}
-        )
-        Node.objects.create(hostname="testserver", address="127.0.0.1")
-
-    def test_calendar_module_hidden_without_profile(self):
-        resp = self.client.get(reverse("admin:index"))
-        self.assertNotContains(resp, 'id="google-calendar-module"', html=False)
-
-    @patch("core.models.GoogleCalendarProfile.fetch_events")
-    def test_calendar_module_shows_events_for_user(self, fetch_events):
-        fetch_events.return_value = [
-            {
-                "summary": "Standup",
-                "start": timezone.now(),
-                "end": None,
-                "all_day": False,
-                "html_link": "https://calendar.google.com/event",
-                "location": "HQ",
-            }
-        ]
-        GoogleCalendarProfile.objects.create(
-            user=self.admin,
-            calendar_id="example@group.calendar.google.com",
-            api_key="secret",
-            display_name="Team Calendar",
-        )
-
-        resp = self.client.get(reverse("admin:index"))
-
-        self.assertContains(resp, 'id="google-calendar-module"', html=False)
-        self.assertContains(resp, "Standup")
-        self.assertContains(resp, "Open full calendar")
-        fetch_events.assert_called_once()
-
-    @patch("core.models.GoogleCalendarProfile.fetch_events")
-    def test_calendar_module_uses_group_profile(self, fetch_events):
-        fetch_events.return_value = []
-        group = SecurityGroup.objects.create(name="Calendar Group")
-        self.admin.groups.add(group)
-        GoogleCalendarProfile.objects.create(
-            group=group,
-            calendar_id="group@calendar.google.com",
-            api_key="secret",
-        )
-
-        resp = self.client.get(reverse("admin:index"))
-
-        self.assertContains(resp, 'id="google-calendar-module"', html=False)
-        fetch_events.assert_called_once()
 
 
 class ViewHistoryLoggingTests(TestCase):
