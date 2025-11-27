@@ -328,6 +328,10 @@ class SlackBotProfileAdmin(DjangoObjectActions, EntityModelAdmin):
         return {}
 
     def bot_creation_wizard_view(self, request):
+        if request.method != "POST":
+            request.session.pop(self.WIZARD_SESSION_KEY, None)
+            request.session.pop("slack_bot_wizard_state", None)
+
         (
             client_id,
             client_secret,

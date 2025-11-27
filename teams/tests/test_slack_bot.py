@@ -228,10 +228,8 @@ class SlackBotProfileWizardTests(TestCase):
         self.assertIn("client_id=client", response["Location"])
         parsed = urllib.parse.urlparse(response["Location"])
         redirect_param = urllib.parse.parse_qs(parsed.query).get("redirect_uri")
-        self.assertEqual(
-            redirect_param,
-            [self.client.build_absolute_uri(reverse("teams:slack-bot-callback"))],
-        )
+        expected_redirect = f"http://testserver{reverse('teams:slack-bot-callback')}"
+        self.assertEqual(redirect_param, [expected_redirect])
         self.assertTrue(self.client.session.get("slack_bot_wizard_state"))
 
     @override_settings(
@@ -370,6 +368,31 @@ class SlackBotProfileWizardTests(TestCase):
         session_config = self.client.session.get("slack_bot_wizard_config")
         self.assertEqual(session_config["client_secret"], "manual-secret")
         self.assertTrue(self.client.session.get("slack_bot_wizard_state"))
+
+    @override_settings(
+        SLACK_CLIENT_ID="",
+        SLACK_CLIENT_SECRET="",
+        SLACK_SIGNING_SECRET="",
+    )
+    def test_wizard_resets_session_on_new_visit(self):
+        session = self.client.session
+        session["slack_bot_wizard_config"] = {
+            "client_id": "stored-client",
+            "client_secret": "stored-secret",
+            "signing_secret": "stored-signing",
+            "scopes": "commands",
+        }
+        session["slack_bot_wizard_state"] = "stored-state"
+        session.save()
+
+        response = self.client.get(
+            reverse("admin:teams_slackbotprofile_bot_creation_wizard"),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Slack bot wizard")
+        self.assertIsNone(self.client.session.get("slack_bot_wizard_config"))
+        self.assertIsNone(self.client.session.get("slack_bot_wizard_state"))
 
     @override_settings(
         SLACK_CLIENT_ID="",
