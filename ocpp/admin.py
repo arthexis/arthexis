@@ -2074,7 +2074,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         "delete_selected",
     ]
 
-    @admin.action(description=_("View in Site"), requires_queryset=False)
+    @admin.action(description=_("View in Site"))
     def view_charge_point_dashboard(self, request, queryset=None):
         return HttpResponseRedirect(reverse("ocpp-dashboard"))
 
