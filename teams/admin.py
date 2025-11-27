@@ -3,10 +3,12 @@ from django.contrib import admin, messages
 from django.contrib.admin.sites import NotRegistered
 from django.core.exceptions import ValidationError
 from django.http import HttpResponseRedirect
+from django.http.request import split_domain_port
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse, urlunparse
 import contextlib
+import ipaddress
 import secrets
 import requests
 from django.utils import formats, timezone
@@ -203,15 +205,69 @@ class SlackBotProfileAdmin(DjangoObjectActions, EntityModelAdmin):
     bot_creation_wizard.label = _("Bot Creation Wizard")
     bot_creation_wizard.short_description = _("Bot Creation Wizard")
 
+    def _is_ip_address(self, host: str) -> bool:
+        try:
+            ipaddress.ip_address(host)
+            return True
+        except ValueError:
+            return False
+
+    def _slack_callback_host(self, request):
+        raw_host = ""
+        port = ""
+        try:
+            raw_host = request.get_host()
+            port = request.get_port()
+        except Exception:  # pragma: no cover - defensive
+            raw_host = ""
+            port = ""
+
+        domain, explicit_port = split_domain_port(raw_host)
+        host = (domain or "").strip()
+        port = (explicit_port or port or "").strip()
+
+        if self._is_ip_address(host):
+            node = getattr(request, "node", None) or Node.get_local()
+            for candidate in (
+                getattr(node, "network_hostname", ""),
+                getattr(node, "hostname", ""),
+            ):
+                candidate = (candidate or "").strip()
+                if candidate and self._is_domain_like(candidate):
+                    host = candidate
+                    break
+
+        return host, port
+
+    def _is_domain_like(self, host: str) -> bool:
+        if not host:
+            return False
+        host = host.strip()
+        if host.lower() == "localhost":
+            return False
+        if self._is_ip_address(host):
+            return False
+        return "." in host
+
     def _slack_callback_url(self, request):
         configured = getattr(settings, "SLACK_REDIRECT_URL", "") or ""
         configured = configured.strip()
         if configured:
             return configured
 
-        return request.build_absolute_uri(
-            reverse("admin:teams_slackbotprofile_bot_creation_callback")
-        )
+        host, port = self._slack_callback_host(request)
+        callback_path = reverse("admin:teams_slackbotprofile_bot_creation_callback")
+        scheme = "https" if request.is_secure() else "http"
+
+        if host:
+            netloc = host
+            default_port = "443" if scheme == "https" else "80"
+            port = port or ""
+            if port and port != default_port:
+                netloc = f"{host}:{port}"
+            return urlunparse((scheme, netloc, callback_path, "", "", ""))
+
+        return request.build_absolute_uri(callback_path)
 
     def _slack_oauth_settings(self, request):
         session_config = {}
@@ -225,7 +281,39 @@ class SlackBotProfileAdmin(DjangoObjectActions, EntityModelAdmin):
             settings, "SLACK_SIGNING_SECRET", ""
         )
         scopes = session_config.get("scopes") or getattr(settings, "SLACK_BOT_SCOPES", "") or ""
-        return client_id.strip(), client_secret.strip(), signing_secret.strip(), scopes.strip()
+        return (
+            client_id.strip(),
+            client_secret.strip(),
+            signing_secret.strip(),
+            scopes.strip(),
+            session_config,
+        )
+
+    def _wizard_response(
+        self,
+        request,
+        form,
+        changelist_url,
+        callback_url,
+        callback_host_error=False,
+    ):
+        parsed = urlparse(callback_url)
+        callback_host = parsed.hostname or ""
+        return TemplateResponse(
+            request,
+            "admin/teams/slack_bot_wizard.html",
+            {
+                "title": _("Connect a Slack bot"),
+                "opts": SlackBotProfile._meta,
+                "form": form,
+                "changelist_url": changelist_url,
+                "default_scope": self.DEFAULT_SCOPE,
+                "callback_url": callback_url,
+                "callback_host": callback_host,
+                "callback_host_error": callback_host_error,
+                "disable_submit": callback_host_error,
+            },
+        )
 
     def _get_owner_kwargs(self, request):
         owner = getattr(request, "node", None) or Node.get_local()
@@ -237,9 +325,16 @@ class SlackBotProfileAdmin(DjangoObjectActions, EntityModelAdmin):
         return {}
 
     def bot_creation_wizard_view(self, request):
-        client_id, client_secret, signing_secret, scopes = self._slack_oauth_settings(request)
+        (
+            client_id,
+            client_secret,
+            signing_secret,
+            scopes,
+            session_config,
+        ) = self._slack_oauth_settings(request)
         changelist_url = reverse("admin:teams_slackbotprofile_changelist")
         callback_url = self._slack_callback_url(request)
+        callback_host_error = self._is_ip_address(urlparse(callback_url).hostname or "")
 
         if request.method == "POST":
             form = SlackBotWizardSetupForm(request.POST)
@@ -249,18 +344,17 @@ class SlackBotProfileAdmin(DjangoObjectActions, EntityModelAdmin):
                 client_secret = form.cleaned_data.get("client_secret")
                 signing_secret = form.cleaned_data.get("signing_secret")
                 scopes = form.cleaned_data.get("scopes")
+                callback_url = self._slack_callback_url(request)
+                callback_host_error = self._is_ip_address(
+                    urlparse(callback_url).hostname or ""
+                )
             else:
-                return TemplateResponse(
+                return self._wizard_response(
                     request,
-                    "admin/teams/slack_bot_wizard.html",
-                    {
-                        "title": _("Connect a Slack bot"),
-                        "opts": SlackBotProfile._meta,
-                        "form": form,
-                        "changelist_url": changelist_url,
-                        "default_scope": self.DEFAULT_SCOPE,
-                        "callback_url": callback_url,
-                    },
+                    form,
+                    changelist_url,
+                    callback_url,
+                    callback_host_error,
                 )
         if not (client_id and client_secret and signing_secret):
             form = SlackBotWizardSetupForm(
@@ -271,17 +365,23 @@ class SlackBotProfileAdmin(DjangoObjectActions, EntityModelAdmin):
                     "scopes": scopes or self.DEFAULT_SCOPE,
                 }
             )
-            return TemplateResponse(
+            return self._wizard_response(
                 request,
-                "admin/teams/slack_bot_wizard.html",
-                {
-                    "title": _("Connect a Slack bot"),
-                    "opts": SlackBotProfile._meta,
-                    "form": form,
-                    "changelist_url": changelist_url,
-                    "default_scope": self.DEFAULT_SCOPE,
-                    "callback_url": callback_url,
-                },
+                form,
+                changelist_url,
+                callback_url,
+                callback_host_error,
+            )
+
+        if callback_host_error:
+            initial_data = session_config or {"scopes": scopes or self.DEFAULT_SCOPE}
+            form = SlackBotWizardSetupForm(initial=initial_data)
+            return self._wizard_response(
+                request,
+                form,
+                changelist_url,
+                callback_url,
+                callback_host_error,
             )
 
         redirect_uri = callback_url
@@ -327,7 +427,9 @@ class SlackBotProfileAdmin(DjangoObjectActions, EntityModelAdmin):
             )
             return HttpResponseRedirect(changelist_url)
 
-        client_id, client_secret, signing_secret, scopes = self._slack_oauth_settings(request)
+        client_id, client_secret, signing_secret, scopes, _session_config = self._slack_oauth_settings(
+            request
+        )
         if not (client_id and client_secret and signing_secret):
             self.message_user(
                 request,
