@@ -1,8 +1,8 @@
 import logging
 
 from django.apps import AppConfig
+from django.core.signals import request_started
 from django.db import DatabaseError
-from django.db.backends.signals import connection_created
 
 
 logger = logging.getLogger(__name__)
@@ -19,13 +19,13 @@ class PagesConfig(AppConfig):
         from . import site_config
 
         site_config.ready()
-        connection_created.connect(
-            self._handle_connection_created,
-            dispatch_uid="pages_view_history_connection_created",
+        request_started.connect(
+            self._handle_request_started,
+            dispatch_uid="pages_view_history_request_started",
             weak=False,
         )
 
-    def _handle_connection_created(self, sender, connection, **kwargs):
+    def _handle_request_started(self, sender, **kwargs):
         if self._view_history_purged:
             return
         self._view_history_purged = True
