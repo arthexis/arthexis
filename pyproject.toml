@@ -32,3 +32,8 @@ config = [ "**/*",]
 nodes = [ "**/*",]
 ocpp = [ "**/*",]
 pages = [ "**/*",]
+
+[tool.pytest.ini_options]
+markers = [
+    "timeout: mark tests that enforce runtime limits",
+]

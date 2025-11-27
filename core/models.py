@@ -4484,7 +4484,7 @@ class ReleaseManager(Profile):
         verbose_name_plural = "Release Managers"
         constraints = [
             models.CheckConstraint(
-                check=(
+                condition=(
                     (Q(user__isnull=False) & Q(group__isnull=True))
                     | (Q(user__isnull=True) & Q(group__isnull=False))
                 ),

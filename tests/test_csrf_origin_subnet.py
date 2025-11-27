@@ -13,6 +13,8 @@ from django.middleware.csrf import CsrfViewMiddleware
 from django.test import RequestFactory, TestCase
 from django.test.utils import override_settings
 
+from config.settings import _candidate_origin_tuples, _get_allowed_hosts
+
 
 class CSRFOriginSubnetTests(TestCase):
     def setUp(self):

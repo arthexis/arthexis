@@ -796,7 +796,7 @@ class SlackBotProfile(CoreProfile):
                 name="slackbotprofile_team_id_unique",
             ),
             models.CheckConstraint(
-                check=(
+                condition=(
                     (Q(user__isnull=False) & Q(group__isnull=True))
                     | (Q(user__isnull=True) & Q(group__isnull=False))
                     | (Q(user__isnull=True) & Q(group__isnull=True) & Q(node__isnull=False))
