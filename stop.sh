@@ -23,21 +23,92 @@ if ! $SUDO true 2>/dev/null; then
 fi
 
 ALL=false
+FORCE=false
 DEFAULT_PORT="$(arthexis_detect_backend_port "$BASE_DIR")"
 PORT="$DEFAULT_PORT"
 
 while [[ $# -gt 0 ]]; do
-  case "$1" in
-    --all)
-      ALL=true
-      shift
-      ;;
-    *)
-      PORT="$1"
-      shift
-      ;;
-  esac
-done
+    case "$1" in
+      --all)
+        ALL=true
+        shift
+        ;;
+      --force)
+        FORCE=true
+        shift
+        ;;
+      *)
+        PORT="$1"
+        shift
+        ;;
+    esac
+  done
+
+CHARGING_LOCK="$LOCK_DIR/charging.lck"
+
+if [ -n "${ARTHEXIS_STOP_DB_PATH:-}" ]; then
+  DB_PATH="$ARTHEXIS_STOP_DB_PATH"
+  LOCK_MAX_AGE=${CHARGING_LOCK_MAX_AGE_SECONDS:-300}
+  STALE_AFTER=${CHARGING_SESSION_STALE_AFTER_SECONDS:-86400}
+
+  SESSION_COUNTS=$(python3 - <<'PY'
+import os
+import sqlite3
+import time
+from datetime import datetime
+
+db_path = os.environ.get("ARTHEXIS_STOP_DB_PATH")
+stale_after = int(os.environ.get("CHARGING_SESSION_STALE_AFTER_SECONDS", "86400"))
+now = time.time()
+active = 0
+stale = 0
+
+def to_epoch(value: str | None):
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value).timestamp()
+    except Exception:
+        return None
+
+if db_path and os.path.exists(db_path):
+    conn = sqlite3.connect(db_path)
+    cur = conn.execute(
+        "SELECT start_time, received_start_time, stop_time, connector_id FROM ocpp_transaction"
+    )
+    for start_time, received_start_time, stop_time, connector_id in cur.fetchall():
+        if connector_id is None or stop_time is not None:
+            continue
+        active += 1
+        ts = to_epoch(received_start_time) or to_epoch(start_time)
+        if ts is not None and now - ts > stale_after:
+            stale += 1
+    conn.close()
+
+print(f"{active} {stale}")
+PY
+  )
+  read -r ACTIVE_COUNT STALE_COUNT <<<"$SESSION_COUNTS"
+
+  if [ "${ACTIVE_COUNT:-0}" -gt 0 ]; then
+    if [ -f "$CHARGING_LOCK" ]; then
+      LOCK_AGE=$(( $(date +%s) - $(stat -c %Y "$CHARGING_LOCK") ))
+      if [ "$LOCK_MAX_AGE" -ge 0 ] && [ "$LOCK_AGE" -gt "$LOCK_MAX_AGE" ]; then
+        echo "Charging lock appears stale; continuing shutdown."
+      elif [ "${STALE_COUNT:-0}" -gt 0 ]; then
+        echo "Found ${STALE_COUNT} session(s) without recent activity; removing charging lock."
+        rm -f "$CHARGING_LOCK"
+      elif [ "$FORCE" = true ]; then
+        echo "Active charging sessions detected but --force supplied; continuing shutdown."
+      else
+        echo "Active charging sessions detected; aborting stop." >&2
+        exit 1
+      fi
+    else
+      echo "Active charging sessions detected but no charging lock present; assuming the sessions are stale."
+    fi
+  fi
+fi
 
 # Allow callers (such as upgrades) to keep the LCD running a bit longer to
 # display status by skipping the LCD stop step.

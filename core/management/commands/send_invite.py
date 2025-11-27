@@ -29,6 +29,8 @@ class Command(BaseCommand):
 
         node = Node.get_local()
         used_outbox = None
+        if node and getattr(node, "email_outbox_id", None):
+            used_outbox = node.email_outbox
 
         for user in users:
             uid = urlsafe_base64_encode(force_bytes(user.pk))
