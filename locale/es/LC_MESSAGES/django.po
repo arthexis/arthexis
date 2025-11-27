@@ -3293,8 +3293,8 @@ msgid "Download public key"
 msgstr ""
 
 #: nodes/templates/admin/nodes/node/change_list.html:8
-msgid "Register current host"
-msgstr "Registrar anfitrión actual"
+msgid "Register local host"
+msgstr "Registrar anfitrión local"
 
 #: nodes/templates/admin/nodes/node/change_list.html:14
 msgid "Register visitor node"
