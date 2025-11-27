@@ -42,6 +42,14 @@ class LockPayload(NamedTuple):
     net_message: bool
 
 
+class DisplayState(NamedTuple):
+    pad1: str
+    pad2: str
+    steps: int
+    index: int
+    scroll_sec: float
+
+
 def _read_lock_file() -> LockPayload:
     try:
         lines = LOCK_FILE.read_text(encoding="utf-8").splitlines()
@@ -287,23 +295,31 @@ def _send_net_message_from_lock(
 
 
 def _display(lcd: CharLCD1602, line1: str, line2: str, scroll_ms: int) -> None:
+    state = _prepare_display_state(line1, line2, scroll_ms)
+    _advance_display(lcd, state)
+
+
+def _prepare_display_state(line1: str, line2: str, scroll_ms: int) -> DisplayState:
     scroll_sec = max(scroll_ms, 0) / 1000.0
     text1 = line1[:64]
     text2 = line2[:64]
     pad1 = text1 + " " * 16 if len(text1) > 16 else text1.ljust(16)
     pad2 = text2 + " " * 16 if len(text2) > 16 else text2.ljust(16)
-    steps = max(len(pad1) - 15, len(pad2) - 15)
-    for i in range(steps):
-        if _shutdown_requested():
-            break
-        segment1 = pad1[i : i + 16]
-        segment2 = pad2[i : i + 16]
-        lcd.write(0, 0, segment1.ljust(16))
-        lcd.write(0, 1, segment2.ljust(16))
-        if _shutdown_requested():
-            break
-        if scroll_sec:
-            time.sleep(scroll_sec)
+    steps = max(len(pad1) - 15, len(pad2) - 15, 1)
+    return DisplayState(pad1, pad2, steps, 0, scroll_sec)
+
+
+def _advance_display(lcd: CharLCD1602, state: DisplayState) -> DisplayState:
+    if _shutdown_requested():
+        return state
+
+    segment1 = state.pad1[state.index : state.index + 16]
+    segment2 = state.pad2[state.index : state.index + 16]
+    lcd.write(0, 0, segment1.ljust(16))
+    lcd.write(0, 1, segment2.ljust(16))
+
+    next_index = (state.index + 1) % state.steps
+    return state._replace(index=next_index)
 
 
 def main() -> None:  # pragma: no cover - hardware dependent
@@ -311,6 +327,7 @@ def main() -> None:  # pragma: no cover - hardware dependent
     last_lock_mtime = 0.0
     lock_payload: LockPayload = LockPayload("", "", DEFAULT_SCROLL_MS, False)
     last_display: tuple[str, str, int, str] | None = None
+    display_state: DisplayState | None = None
     last_net_message: tuple[str, str] | None = None
 
     signal.signal(signal.SIGTERM, _request_shutdown)
@@ -319,6 +336,8 @@ def main() -> None:  # pragma: no cover - hardware dependent
 
     try:
         while True:
+            sleep_duration = 0.5
+
             if _handle_shutdown_request(lcd):
                 break
 
@@ -342,17 +361,23 @@ def main() -> None:  # pragma: no cover - hardware dependent
                         lcd = CharLCD1602()
                         lcd.init_lcd()
                     lcd.clear()
-                    _display(lcd, line1, line2, speed)
+                    display_state = _prepare_display_state(line1, line2, speed)
                     last_display = current_display
                     if source == "lock-file" and _lock_file_matches(lock_payload, last_lock_mtime):
                         _clear_lock_file()
+
+                if lcd and display_state:
+                    display_state = _advance_display(lcd, display_state)
+                    sleep_duration = display_state.scroll_sec or sleep_duration
             except LCDUnavailableError as exc:
                 logger.warning("LCD unavailable: %s", exc)
                 lcd = None
+                display_state = None
             except Exception as exc:
                 logger.warning("LCD update failed: %s", exc)
                 lcd = None
-            time.sleep(0.5)
+                display_state = None
+            time.sleep(sleep_duration)
     finally:
         _blank_display(lcd)
         _reset_shutdown_flag()
