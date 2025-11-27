@@ -95,7 +95,7 @@ jobs:
                       features = entry['features'] or 'baseline only'
                       fh.write(f"| {entry['role']} | {features} |\n")
                   fh.write('\n')
-        PY
+          PY
 
   node-tests:
     name: Node tests (${{ matrix.role }})
