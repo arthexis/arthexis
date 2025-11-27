@@ -5,7 +5,7 @@ from django.core.exceptions import ValidationError
 from django.http import HttpResponseRedirect
 from django.http.request import split_domain_port
 from django.template.response import TemplateResponse
-from django.urls import path, reverse
+from django.urls import NoReverseMatch, path, reverse
 from urllib.parse import urlencode, urlparse, urlunparse
 import contextlib
 import ipaddress
@@ -256,7 +256,10 @@ class SlackBotProfileAdmin(DjangoObjectActions, EntityModelAdmin):
             return configured
 
         host, port = self._slack_callback_host(request)
-        callback_path = reverse("admin:teams_slackbotprofile_bot_creation_callback")
+        try:
+            callback_path = reverse("teams:slack-bot-callback")
+        except NoReverseMatch:  # pragma: no cover - url configuration integrity
+            callback_path = reverse("admin:teams_slackbotprofile_bot_creation_callback")
         scheme = "https" if request.is_secure() else "http"
 
         if host:
