@@ -41,7 +41,10 @@ from ocpp.rfid.constants import (
 )
 
 
-pytestmark = [pytest.mark.feature("rfid-scanner")]
+pytestmark = [
+    pytest.mark.feature("rfid-scanner"),
+    pytest.mark.feature("rpi-camera"),
+]
 
 
 class BackgroundReaderConfigurationTests(SimpleTestCase):
