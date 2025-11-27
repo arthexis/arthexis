@@ -926,18 +926,18 @@ if [[ "$BRANCH" == "HEAD" ]]; then
   TARGET_BRANCH=$(determine_default_branch)
   if [[ -z "$TARGET_BRANCH" ]]; then
     echo "Unable to determine branch to switch to while detached." >&2
-    echo "Please create or select a branch and rerun the upgrade." >&2
-    exit 1
-  fi
-
-  if git show-ref --verify --quiet "refs/heads/$TARGET_BRANCH"; then
-    git switch "$TARGET_BRANCH" >/dev/null
+    echo "Continuing in detached HEAD state; upgrade steps will run without switching branches." >&2
+    BRANCH="HEAD"
   else
-    git switch -c "$TARGET_BRANCH" "origin/$TARGET_BRANCH" >/dev/null
-  fi
+    if git show-ref --verify --quiet "refs/heads/$TARGET_BRANCH"; then
+      git switch "$TARGET_BRANCH" >/dev/null
+    else
+      git switch -c "$TARGET_BRANCH" "origin/$TARGET_BRANCH" >/dev/null
+    fi
 
-  BRANCH="$TARGET_BRANCH"
-  echo "Switched to branch $BRANCH." >&2
+    BRANCH="$TARGET_BRANCH"
+    echo "Switched to branch $BRANCH." >&2
+  fi
 fi
 LOCAL_VERSION="0"
 [ -f VERSION ] && LOCAL_VERSION=$(tr -d '\r\n' < VERSION)

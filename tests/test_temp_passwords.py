@@ -25,6 +25,7 @@ def test_temp_password_command_creates_lockfile(tmp_path, monkeypatch):
     monkeypatch.setattr(temp_passwords, "generate_password", lambda length=16: "TempPass123")
 
     User = get_user_model()
+    User.objects.filter(username="alice").delete()
     user = User.objects.create_user(username="alice", email="alice@example.com", password="irrelevant")
 
     output = io.StringIO()

@@ -12,6 +12,7 @@ BASE_DIR="$SCRIPT_DIR"
 . "$BASE_DIR/scripts/helpers/ports.sh"
 
 usage() {
+    local status=${1:-1}
     cat <<'USAGE'
 Usage: ./nginx-setup.sh [--mode MODE] [--port PORT] [--role ROLE] [--ip6] [--remove] [--no-reload]
 
@@ -19,7 +20,7 @@ Configures the nginx site definition for the current Arthexis installation.
 By default the script reads the desired settings from lock files written by
 install.sh. Use the flags above to override the persisted values.
 USAGE
-    exit 1
+    exit "$status"
 }
 
 MODE_OVERRIDE=""
@@ -59,7 +60,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         -h|--help)
-            usage
+            usage 0
             ;;
         *)
             usage

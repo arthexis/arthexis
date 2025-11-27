@@ -1505,11 +1505,44 @@ class SocialProfile(Profile):
         help_text=_("Optional Discord channel identifier used for default messaging."),
     )
 
+    def clean(self):
+        super().clean()
+
+        if self.network == self.Network.DISCORD:
+            for field_name in (
+                "application_id",
+                "guild_id",
+                "public_key",
+                "bot_token",
+                "default_channel_id",
+            ):
+                value = getattr(self, field_name, "")
+                if isinstance(value, str):
+                    trimmed = value.strip()
+                    if trimmed != value:
+                        setattr(self, field_name, trimmed)
+
+            errors = {}
+            for required in ("application_id", "guild_id", "bot_token"):
+                if not getattr(self, required):
+                    errors[required] = _("This field is required for Discord profiles.")
+            if errors:
+                raise ValidationError(errors)
+
+        if self.network == self.Network.BLUESKY:
+            errors = {}
+            if not self.handle:
+                errors["handle"] = _("Please provide the Bluesky handle to verify.")
+            if not self.domain:
+                errors["domain"] = _("Please provide the Bluesky domain to verify.")
+            if errors:
+                raise ValidationError(errors)
+
     def __str__(self) -> str:  # pragma: no cover - simple representation
         if self.network == self.Network.DISCORD:
             if self.guild_id:
-                return f"Discord guild {self.guild_id}"
-            return "Discord"
+                return f"{self.guild_id}@discord"
+            return "discord"
 
         if self.network == self.Network.BLUESKY:
             if self.handle:

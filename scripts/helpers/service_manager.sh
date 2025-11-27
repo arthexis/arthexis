@@ -5,6 +5,9 @@ ARTHEXIS_SERVICE_MODE_SYSTEMD="systemd"
 ARTHEXIS_LCD_FEATURE_LOCK="lcd_screen_enabled.lck"
 ARTHEXIS_LCD_RUNTIME_LOCK="lcd_screen.lck"
 
+# shellcheck source=scripts/helpers/systemd_locks.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/systemd_locks.sh"
+
 _arthexis_service_mode_lock_file() {
   local lock_dir="$1"
   printf "%s/service_mode.lck" "$lock_dir"

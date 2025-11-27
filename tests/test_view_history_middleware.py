@@ -42,7 +42,9 @@ def test_view_history_records_landing_lead(mock_supported, mock_referer):
     landing.track_leads = True
     landing.save(update_fields=["track_leads"])
 
-    user = get_user_model().objects.create_user(username="alice", password="secret")
+    user = get_user_model().objects.create_user(
+        username="view-history-alice", password="secret"
+    )
     request = rf.get("/landing/?utm=1")
     request.user = user
     request.session = {}
