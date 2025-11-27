@@ -362,6 +362,53 @@ class CameraSnapshotTriggerTests(SimpleTestCase):
         self.assertGreaterEqual(mock_close.call_count, 2)
 
 
+
+class CameraScannerTests(SimpleTestCase):
+    @patch("ocpp.rfid.camera._camera_feature_enabled", return_value=False)
+    @patch("ocpp.rfid.camera.capture_rpi_snapshot")
+    def test_scan_skips_when_feature_disabled(self, mock_capture, _mock_enabled):
+        result = camera.scan_camera_qr()
+
+        self.assertEqual(result, {"rfid": None, "label_id": None})
+        mock_capture.assert_not_called()
+
+    @patch("ocpp.rfid.camera._camera_feature_enabled", return_value=True)
+    @patch("ocpp.rfid.camera.capture_rpi_snapshot", side_effect=RuntimeError("boom"))
+    def test_scan_reports_capture_error(self, _mock_capture, _mock_enabled):
+        result = camera.scan_camera_qr()
+
+        self.assertEqual(result, {"error": "boom"})
+
+    @patch("ocpp.rfid.reader.validate_rfid_value")
+    @patch("ocpp.rfid.camera._decode_qr_payload")
+    @patch("ocpp.rfid.camera.capture_rpi_snapshot")
+    @patch("ocpp.rfid.camera._camera_feature_enabled", return_value=True)
+    def test_scan_validates_payload(
+        self,
+        _mock_enabled,
+        mock_capture,
+        mock_decode,
+        mock_validate,
+    ):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            snapshot = Path(temp_dir) / "qr.jpg"
+            snapshot.write_bytes(b"data")
+            mock_capture.return_value = snapshot
+            mock_decode.return_value = "ABC123"
+            mock_validate.return_value = {"rfid": "ABC123", "label_id": 9}
+
+            result = camera.scan_camera_qr(endianness="LITTLE")
+
+            mock_decode.assert_called_once_with(snapshot)
+            mock_validate.assert_called_once_with(
+                "ABC123", kind="QR", endianness="LITTLE"
+            )
+            self.assertEqual(result["rfid"], "ABC123")
+            self.assertEqual(result.get("label_id"), 9)
+            self.assertEqual(result.get("source"), "camera")
+            self.assertFalse(snapshot.exists())
+
+
 class ValidateRfidValueTests(SimpleTestCase):
     @patch("ocpp.rfid.reader.timezone.now")
     @patch("ocpp.rfid.reader.notify_async")

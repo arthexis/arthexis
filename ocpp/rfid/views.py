@@ -13,6 +13,7 @@ from .scanner import scan_sources, enable_deep_read_mode
 from .reader import validate_rfid_value
 from core.models import RFID
 from .utils import build_mode_toggle
+from .camera import scan_camera_qr
 
 
 def _request_wants_json(request):
@@ -43,6 +44,10 @@ def scan_next(request):
     node = Node.get_local()
     role_name = node.role.name if node and node.role else ""
     allow_anonymous = role_name == "Control"
+    rfid_feature_enabled = _feature_enabled("rfid-scanner")
+    camera_feature_enabled = _feature_enabled("rpi-camera")
+    prefer_camera = request.GET.get("source") == "camera"
+    camera_only_mode = camera_feature_enabled and not rfid_feature_enabled
 
     if request.method != "POST" and not request.user.is_authenticated and not allow_anonymous:
         if _request_wants_json(request):
@@ -63,7 +68,10 @@ def scan_next(request):
         result = validate_rfid_value(rfid, kind=kind, endianness=endianness)
     else:
         endianness = request.GET.get("endianness")
-        result = scan_sources(request, endianness=endianness)
+        if prefer_camera or camera_only_mode:
+            result = scan_camera_qr(endianness=endianness)
+        else:
+            result = scan_sources(request, endianness=endianness)
     status = 500 if result.get("error") else 200
     return JsonResponse(result, status=status)
 
@@ -92,6 +100,7 @@ def reader(request):
     table_mode, toggle_url, toggle_label = build_mode_toggle(request)
     rfid_feature_enabled = _feature_enabled("rfid-scanner")
     camera_feature_enabled = _feature_enabled("rpi-camera")
+    camera_only_mode = camera_feature_enabled and not rfid_feature_enabled
 
     context = {
         "scan_url": reverse("rfid-scan-next"),
@@ -102,6 +111,7 @@ def reader(request):
         "default_endianness": RFID.BIG_ENDIAN,
         "camera_enabled": camera_feature_enabled,
         "rfid_feature_enabled": rfid_feature_enabled,
+        "camera_only_mode": camera_only_mode,
     }
     if request.user.is_staff:
         context["admin_change_url_template"] = reverse(
