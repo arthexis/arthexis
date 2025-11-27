@@ -1093,11 +1093,10 @@ def _normalize_failure_reason(reason: str) -> str:
     return "-".join(tokens[:5])
 
 
-def _broadcast_upgrade_start_message(
-    local_revision: str | None, remote_revision: str | None
-) -> None:
-    from nodes.models import NetMessage, Node
+def _resolve_upgrade_subject() -> str:
+    from nodes.models import Node
 
+    fallback_name = socket.gethostname() or "node"
     def _short_revision(revision: str | None) -> str:
         if not revision:
             return "-"
@@ -1108,13 +1107,23 @@ def _broadcast_upgrade_start_message(
         node = Node.get_local()
     except Exception:
         logger.warning(
-            "Auto-upgrade start Net Message skipped: local node unavailable",
-            exc_info=True,
+            "Auto-upgrade notification node lookup failed", exc_info=True
         )
-        return
+        node_name = fallback_name
+    else:
+        node_name = getattr(node, "hostname", None) or fallback_name
 
+    return f"Upgrade @ {node_name}".strip()
+
+
+def _broadcast_upgrade_start_message(
+    local_revision: str | None, remote_revision: str | None
+) -> None:
+    from nodes.models import NetMessage
+
+    subject = _resolve_upgrade_subject()
+    next_revision = remote_revision or "-"
     node_name = getattr(node, "hostname", None) or socket.gethostname() or "node"
-    subject = f"Upgrade @ {node_name}".strip()
     previous_revision = _short_revision(local_revision)
     next_revision = _short_revision(remote_revision)
     body = f"{previous_revision} - {next_revision}"
@@ -1342,6 +1351,7 @@ def check_github_updates(channel_override: str | None = None) -> None:
         local_revision = _current_revision(base_dir)
 
         local_timestamp = timezone.localtime(timezone.now())
+        upgrade_subject = _resolve_upgrade_subject()
         upgrade_stamp = local_timestamp.strftime("@ %Y%m%d %H:%M")
 
         upgrade_was_applied = False
@@ -1357,7 +1367,7 @@ def check_github_updates(channel_override: str | None = None) -> None:
                 return
 
             if notify:
-                notify("Upgrading...", upgrade_stamp)
+                notify(upgrade_subject, upgrade_stamp)
             args = ["./upgrade.sh", "--latest"]
             upgrade_was_applied = True
         else:
@@ -1398,7 +1408,7 @@ def check_github_updates(channel_override: str | None = None) -> None:
                     return
 
             if notify:
-                notify("Upgrading...", upgrade_stamp)
+                notify(upgrade_subject, upgrade_stamp)
             args = ["./upgrade.sh", "--stable"]
             upgrade_was_applied = True
 
