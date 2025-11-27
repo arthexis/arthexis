@@ -53,11 +53,7 @@
 
   {% if model.admin_url and show_changelinks %}
     <td class="change-link-cell{% if model.view_only %} change-link-cell--view-only{% endif %}" data-label="{% translate 'Change or view list link' %}">
-      {% if model.view_only %}
-        <a href="{{ model.admin_url }}" class="viewlink" aria-describedby="{{ row_dom_id }}">{% translate 'View' %}</a>
-      {% else %}
-        <a href="{{ model.admin_url }}" class="changelink" aria-describedby="{{ row_dom_id }}" target="_blank" rel="noopener noreferrer">{% translate 'Change' %} {{ fav.custom_label|default:model.name }}</a>
-      {% endif %}
+      
     </td>
   {% elif show_changelinks %}
     <td class="change-link-cell" data-label="{% translate 'Change or view list link' %}"></td>
