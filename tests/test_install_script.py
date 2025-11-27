@@ -135,3 +135,12 @@ def test_install_script_cleans_services_and_artifacts_on_clean_install():
     assert 'if [ "$CLEAN" = true ]; then' in content
     assert "remove_systemd_unit_if_present" in content
     assert "find \"$LOG_DIR\" -type f ! -samefile \"$LOG_FILE\" -delete" in content
+
+
+def test_install_script_resets_service_units_on_repair():
+    script_path = Path(__file__).resolve().parent.parent / "install.sh"
+    content = script_path.read_text()
+
+    assert "reset_service_units_for_repair" in content
+    assert 'if [ "$REPAIR" = true ] && [ -n "$SERVICE" ]; then' in content
+    assert 'reset_service_units_for_repair "$SERVICE"' in content

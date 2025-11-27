@@ -175,6 +175,63 @@ arthexis_remove_celery_unit_stack() {
   arthexis_remove_systemd_unit_if_present "$lock_dir" "celery-beat-${service_name}.service"
 }
 
+arthexis_service_unit_names() {
+  local service_name="$1"
+  local include_celery="${2:-false}"
+  local include_lcd="${3:-false}"
+  local include_watchdog="${4:-false}"
+
+  if [ -z "$service_name" ]; then
+    return 0
+  fi
+
+  local -a units=("${service_name}.service")
+  if [ "$include_celery" = true ]; then
+    units+=("celery-${service_name}.service" "celery-beat-${service_name}.service")
+  fi
+  if [ "$include_lcd" = true ]; then
+    units+=("lcd-${service_name}.service")
+  fi
+  if [ "$include_watchdog" = true ]; then
+    units+=("${service_name}-watchdog.service")
+  fi
+
+  printf "%s\n" "${units[@]}"
+}
+
+arthexis_stop_service_unit_stack() {
+  local service_name="$1"
+  local include_celery="${2:-false}"
+  local include_lcd="${3:-false}"
+  local include_watchdog="${4:-false}"
+
+  if [ -z "$service_name" ]; then
+    return 0
+  fi
+
+  local unit
+  while IFS= read -r unit; do
+    arthexis_stop_systemd_unit_if_present "$unit"
+  done < <(arthexis_service_unit_names "$service_name" "$include_celery" "$include_lcd" "$include_watchdog")
+}
+
+arthexis_remove_service_unit_stack() {
+  local lock_dir="$1"
+  local service_name="$2"
+  local include_celery="${3:-false}"
+  local include_lcd="${4:-false}"
+  local include_watchdog="${5:-false}"
+
+  if [ -z "$service_name" ]; then
+    return 0
+  fi
+
+  local unit
+  while IFS= read -r unit; do
+    arthexis_remove_systemd_unit_if_present "$lock_dir" "$unit"
+  done < <(arthexis_service_unit_names "$service_name" "$include_celery" "$include_lcd" "$include_watchdog")
+}
+
 _arthexis_lcd_feature_lock_file() {
   local lock_dir="$1"
 

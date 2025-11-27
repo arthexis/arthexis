@@ -1233,9 +1233,7 @@ class AdminDashboardAppListTests(TestCase):
         resp = self.client.get(reverse("admin:index"))
 
         self.assertContains(resp, "model-rule-status--error")
-        self.assertContains(
-            resp, "Missing EVCS heartbeat within the last hour for EVCS-LATE."
-        )
+        self.assertContains(resp, "Heartbeat overdue: EVCS-LATE.")
 
 
 class AdminRunCommandTests(TransactionTestCase):
@@ -1420,7 +1418,7 @@ class AdminModelRuleTemplateTagTests(TestCase):
         status = admin_extras.model_rule_status(context, "nodes", "Node")
 
         self.assertFalse(status["success"])
-        self.assertIn("At least one upstream node is required.", status["message"])
+        self.assertIn("Need an upstream node.", status["message"])
 
     def test_model_rule_status_for_watchtower_skips_upstream_requirement(self):
         mac = Node.get_current_mac()
@@ -1484,7 +1482,7 @@ class AdminModelRuleTemplateTagTests(TestCase):
         status = admin_extras.model_rule_status(context, "nodes", "Node")
 
         self.assertFalse(status["success"])
-        self.assertIn("Local node is missing an assigned role.", status["message"])
+        self.assertIn("Local node missing a role.", status["message"])
 
     def test_model_rule_status_for_nodes_succeeds_when_all_checks_pass(self):
         mac = Node.get_current_mac()

@@ -12,7 +12,7 @@ def test_build_startup_message_trims_whitespace(monkeypatch, tmp_path):
     subject, body = sn.build_startup_message(tmp_path, allow_db_lookup=False)
 
     assert subject == "demo-host:9999"
-    assert body == "v1.2.3 r123456"
+    assert body == "v1.2.3 123456"
 
 
 def test_render_lcd_payload_trims_lines():
