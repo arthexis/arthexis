@@ -1,5 +1,4 @@
 from datetime import datetime, timedelta
-import time
 
 import pytest
 
@@ -194,19 +193,45 @@ def test_handle_shutdown_request_noop_without_signal():
 def test_display_breaks_on_shutdown(monkeypatch):
     lcd_screen._reset_shutdown_flag()
 
-    writes: list[str] = []
-    sleeps: list[float] = []
+    writes: list[tuple[int, int, str]] = []
 
     class FakeLCD:
         def write(self, x: int, y: int, text: str):
-            writes.append(text)
+            writes.append((x, y, text))
             if len(writes) == 2:
                 lcd_screen._request_shutdown(None, None)
 
-    monkeypatch.setattr(time, "sleep", lambda seconds: sleeps.append(seconds))
-
     lcd = FakeLCD()
-    lcd_screen._display(lcd, "a" * 64, "b" * 64, 1000)
+    state = lcd_screen._prepare_display_state("a" * 64, "b" * 64, 1000)
+
+    state = lcd_screen._advance_display(lcd, state)
+    state = lcd_screen._advance_display(lcd, state)
 
     assert len(writes) == 2
-    assert sleeps == []
+
+
+def test_display_loops_segments(monkeypatch):
+    lcd_screen._reset_shutdown_flag()
+
+    cycles: list[tuple[str, str]] = []
+
+    class FakeLCD:
+        def __init__(self):
+            self.buffer: list[str] = []
+
+        def write(self, x: int, y: int, text: str):
+            self.buffer.append(text)
+            if len(self.buffer) == 2:
+                line1, line2 = self.buffer
+                cycles.append((line1, line2))
+                self.buffer.clear()
+
+    lcd = FakeLCD()
+    state = lcd_screen._prepare_display_state(
+        "SCROLLING MESSAGE!", "SECOND LINE OF TEXT", 200
+    )
+
+    for _ in range(state.steps + 1):
+        state = lcd_screen._advance_display(lcd, state)
+
+    assert cycles[0] == cycles[-1]
