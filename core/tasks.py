@@ -1151,7 +1151,7 @@ def _send_auto_upgrade_failure_message(
         return
 
     node_name = getattr(node, "hostname", None) or socket.gethostname() or "node"
-    timestamp = timezone.localtime(timezone.now()).strftime("%Y-%m-%d %H:%M")
+    timestamp = timezone.localtime(timezone.now()).strftime("%H:%M")
     subject = f"{node_name} {timestamp}"
     body = f"{reason} x{failure_count}"
 
