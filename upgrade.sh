@@ -155,6 +155,44 @@ base_dir = Path(sys.argv[1])
 queue_startup_message(base_dir=base_dir)
 PY
 }
+
+broadcast_upgrade_start_net_message() {
+  local local_revision="$1"
+  local remote_revision="$2"
+
+  if [ -z "$PYTHON_BIN" ]; then
+    return 0
+  fi
+
+  "$PYTHON_BIN" - "$BASE_DIR" "$local_revision" "$remote_revision" <<'PY'
+import os
+import sys
+from pathlib import Path
+
+base_dir = Path(sys.argv[1])
+local_rev = sys.argv[2] or None
+remote_rev = sys.argv[3] or None
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+sys.path.insert(0, str(base_dir))
+
+try:
+    import django
+    django.setup()
+except Exception:
+    sys.exit(0)
+
+try:
+    from core.tasks import _broadcast_upgrade_start_message
+except Exception:
+    sys.exit(0)
+
+try:
+    _broadcast_upgrade_start_message(local_rev, remote_rev)
+except Exception:
+    sys.exit(1)
+PY
+}
 SERVICE_MANAGEMENT_MODE="$(arthexis_detect_service_mode "$LOCK_DIR")"
 UPGRADE_IN_PROGRESS_LOCK="$LOCK_DIR/upgrade_in_progress.lck"
 # Discover managed service if not explicitly recorded.
@@ -941,19 +979,23 @@ if [[ "$BRANCH" == "HEAD" ]]; then
 fi
 LOCAL_VERSION="0"
 [ -f VERSION ] && LOCAL_VERSION=$(tr -d '\r\n' < VERSION)
+LOCAL_REVISION="$(git rev-parse HEAD 2>/dev/null || echo "")"
 
 REMOTE_VERSION="$LOCAL_VERSION"
+REMOTE_REVISION="$LOCAL_REVISION"
 if [[ $LOCAL_ONLY -eq 1 ]]; then
   echo "Local refresh requested; skipping remote update check."
 else
   reset_safe_git_changes
   echo "Checking repository for updates..."
   git fetch origin "$BRANCH"
+  REMOTE_REVISION="$(git rev-parse "origin/$BRANCH" 2>/dev/null || echo "$REMOTE_REVISION")"
   if git cat-file -e "origin/$BRANCH:VERSION" 2>/dev/null; then
     REMOTE_VERSION=$(git show "origin/$BRANCH:VERSION" | tr -d '\r\n')
   fi
 fi
 
+UPGRADE_PLANNED=1
 if [[ "$LOCAL_VERSION" == "$REMOTE_VERSION" ]]; then
   if [[ $LOCAL_ONLY -eq 1 ]]; then
     echo "Proceeding with local refresh despite matching version $LOCAL_VERSION."
@@ -984,6 +1026,14 @@ if lcd_service_was_active "$SERVICE_NAME"; then
   LCD_WAS_ACTIVE=1
 fi
 LCD_RESTART_REQUIRED=$LCD_WAS_ACTIVE
+
+if [[ $SERVICE_WAS_ACTIVE -eq 1 ]] && [[ $UPGRADE_PLANNED -eq 1 ]]; then
+  if [[ -n "$LOCAL_REVISION" || -n "$REMOTE_REVISION" ]]; then
+    if ! broadcast_upgrade_start_net_message "$LOCAL_REVISION" "$REMOTE_REVISION"; then
+      echo "Warning: failed to broadcast upgrade Net Message" >&2
+    fi
+  fi
+fi
 
 # Stop running instance only if the node is installed
 if [[ $VENV_PRESENT -eq 1 ]]; then
