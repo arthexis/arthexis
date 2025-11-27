@@ -131,6 +131,11 @@
     <div class="module">
       <h2>{% trans "Connect a Slack bot" %}</h2>
       <p>{% trans "Provide the OAuth details from your Slack app so the wizard can start the authorization flow." %}</p>
+      {% if callback_host_error %}
+        <p class="errornote">
+          {% blocktrans with host=callback_host %}Slack authorization requires a domain-based callback URL. Configure this node with a hostname instead of {{ host }} to continue.{% endblocktrans %}
+        </p>
+      {% endif %}
       <form method="post" novalidate class="slack-wizard__form">
         {% csrf_token %}
         <div>
@@ -147,7 +152,12 @@
           {% endfor %}
         </div>
         <div class="slack-wizard__actions">
-          <input type="submit" value="{% trans 'Continue to Slack' %}" class="default" />
+          <input type="submit" value="{% trans 'Continue to Slack' %}" class="default" {% if disable_submit %}disabled aria-disabled="true"{% endif %} />
+          {% if callback_host_error %}
+            <p class="help">
+              {% trans "Set a public domain for this node so the redirect URL matches your Slack app configuration." %}
+            </p>
+          {% endif %}
           <a class="button" href="{{ changelist_url }}">{% trans "Cancel" %}</a>
         </div>
       </form>

@@ -251,6 +251,46 @@ class SlackBotProfileWizardTests(TestCase):
         SLACK_CLIENT_SECRET="secret",
         SLACK_SIGNING_SECRET="signing",
         SLACK_BOT_SCOPES="commands,chat:write",
+        ALLOWED_HOSTS=["testserver", "10.0.0.1"],
+    )
+    def test_wizard_requires_domain_when_host_is_ip(self):
+        response = self.client.get(
+            reverse("admin:teams_slackbotprofile_bot_creation_wizard"),
+            HTTP_HOST="10.0.0.1:8888",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "domain-based callback URL")
+        self.assertContains(response, "Continue to Slack")
+        self.assertContains(response, "disabled")
+
+    @override_settings(
+        SLACK_CLIENT_ID="client",
+        SLACK_CLIENT_SECRET="secret",
+        SLACK_SIGNING_SECRET="signing",
+        SLACK_BOT_SCOPES="commands,chat:write",
+        ALLOWED_HOSTS=["testserver", "10.0.0.1", "node.example.com"],
+    )
+    @mock.patch("teams.admin.Node.get_local")
+    def test_wizard_prefers_network_hostname_over_ip_host(self, mock_get_local):
+        self.node.network_hostname = "node.example.com"
+        self.node.save(update_fields=["network_hostname"])
+        mock_get_local.return_value = self.node
+
+        response = self.client.get(
+            reverse("admin:teams_slackbotprofile_bot_creation_wizard"),
+            HTTP_HOST="10.0.0.1:8888",
+        )
+
+        self.assertEqual(response.status_code, 302)
+        location = urllib.parse.unquote(response["Location"])
+        self.assertIn("node.example.com:8888", location)
+
+    @override_settings(
+        SLACK_CLIENT_ID="client",
+        SLACK_CLIENT_SECRET="secret",
+        SLACK_SIGNING_SECRET="signing",
+        SLACK_BOT_SCOPES="commands,chat:write",
         SLACK_REDIRECT_URL="https://example.com/slack/callback/",
     )
     @mock.patch("teams.admin.requests.post")
