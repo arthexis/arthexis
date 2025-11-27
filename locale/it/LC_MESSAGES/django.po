@@ -3248,7 +3248,7 @@ msgid "Download public key"
 msgstr ""
 
 #: nodes/templates/admin/nodes/node/change_list.html:8
-msgid "Register current host"
+msgid "Register local host"
 msgstr ""
 
 #: nodes/templates/admin/nodes/node/change_list.html:14

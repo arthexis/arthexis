@@ -5,7 +5,7 @@
     {% if request.user.is_superuser %}
         <li>
             <a href="{% url 'admin:nodes_node_register_current' %}" class="addlink">
-                {% trans 'Register current host' %}
+                {% trans 'Register local host' %}
             </a>
         </li>
     {% endif %}
