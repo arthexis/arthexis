@@ -1,4 +1,5 @@
 import os
+import os
 import subprocess
 import textwrap
 from pathlib import Path
@@ -120,6 +121,31 @@ def test_install_service_writes_expected_units(tmp_path: Path) -> None:
     }
 
 
+def test_service_unit_names_include_optional_components() -> None:
+    command = textwrap.dedent(
+        f"""
+        . '{REPO_ROOT / 'scripts/helpers/service_manager.sh'}'
+        arthexis_service_unit_names 'gway' true true true
+        """
+    )
+
+    result = subprocess.run(
+        ["bash", "-c", command],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    units = set(result.stdout.splitlines())
+    assert units == {
+        "gway.service",
+        "celery-gway.service",
+        "celery-beat-gway.service",
+        "lcd-gway.service",
+        "gway-watchdog.service",
+    }
+
+
 def test_update_systemd_service_user_overwrites_and_inserts(tmp_path: Path) -> None:
     stubs_dir = tmp_path / "bin"
     stubs_dir.mkdir()
@@ -192,6 +218,53 @@ def test_update_systemd_service_user_overwrites_and_inserts(tmp_path: Path) -> N
     beat_content = beat_file.read_text(encoding="utf-8")
     assert f"User={service_user}" in beat_content
     assert beat_content.index("User=") > beat_content.index("[Service]")
+
+
+def test_remove_service_unit_stack_clears_known_units(tmp_path: Path) -> None:
+    stubs_dir = tmp_path / "bin"
+    stubs_dir.mkdir()
+    _prepare_stubs(stubs_dir)
+
+    base_dir = tmp_path / "svc"
+    base_dir.mkdir()
+    lock_dir = base_dir / "locks"
+    lock_dir.mkdir()
+
+    systemd_dir = tmp_path / "systemd"
+    systemd_dir.mkdir()
+
+    unit_files = [
+        systemd_dir / "gway.service",
+        systemd_dir / "celery-gway.service",
+        systemd_dir / "celery-beat-gway.service",
+        systemd_dir / "lcd-gway.service",
+        systemd_dir / "gway-watchdog.service",
+    ]
+    for file in unit_files:
+        file.write_text("dummy", encoding="utf-8")
+
+    lock_file = lock_dir / "systemd_services.lck"
+    lock_file.write_text("\n".join([file.name for file in unit_files]), encoding="utf-8")
+
+    env = os.environ.copy()
+    env["PATH"] = f"{stubs_dir}:{env['PATH']}"
+    env["SYSTEMD_DIR"] = str(systemd_dir)
+
+    command = textwrap.dedent(
+        f"""
+        export SYSTEMD_DIR='{systemd_dir}'
+        PATH='{stubs_dir}:$PATH'
+        . '{REPO_ROOT / 'scripts/helpers/service_manager.sh'}'
+        arthexis_remove_service_unit_stack '{lock_dir}' 'gway' true true true
+        """
+    )
+
+    subprocess.run(["bash", "-c", command], check=True, env=env, text=True)
+
+    for file in unit_files:
+        assert not file.exists()
+
+    assert not lock_file.exists() or not lock_file.read_text(encoding="utf-8").strip()
 
 
 def test_detect_service_mode_prefers_existing_systemd_units(tmp_path: Path) -> None:

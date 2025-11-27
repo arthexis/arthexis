@@ -60,12 +60,7 @@ usage() {
 stop_existing_units_for_repair() {
     local service_name="$1"
 
-    arthexis_stop_systemd_unit_if_present "${service_name}.service"
-
-    if [ "$ENABLE_CELERY" = true ]; then
-        arthexis_stop_systemd_unit_if_present "celery-${service_name}.service"
-        arthexis_stop_systemd_unit_if_present "celery-beat-${service_name}.service"
-    fi
+    arthexis_stop_service_unit_stack "$service_name" "$ENABLE_CELERY" "$ENABLE_LCD_SCREEN" "$ENABLE_WATCHDOG"
 }
 
 clean_previous_installation_state() {
@@ -93,11 +88,9 @@ clean_previous_installation_state() {
     fi
 
     if [ -n "$service_name" ]; then
-        arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${service_name}.service"
+        arthexis_remove_service_unit_stack "$LOCK_DIR" "$service_name" true true true
         arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${service_name}-upgrade-guard.service"
         arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${service_name}-upgrade-guard.timer"
-        arthexis_remove_celery_unit_stack "$LOCK_DIR" "$service_name"
-        arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "lcd-${service_name}.service"
     fi
 
     if [ ${#recorded_units[@]} -gt 0 ]; then
@@ -127,6 +120,23 @@ clean_previous_installation_state() {
     rm -f "$LOCK_DIR"/*.lck "$LOCK_DIR"/*.lock "$LOCK_DIR"/*.tmp "$LOCK_DIR"/service.lck
     rm -f "$SYSTEMD_UNITS_LOCK"
     rm -f "$BASE_DIR/requirements.md5" "$BASE_DIR/redis.env" "$BASE_DIR/debug.env"
+}
+
+reset_service_units_for_repair() {
+    local service_name="$1"
+
+    if [ -z "$service_name" ]; then
+        return 0
+    fi
+
+    arthexis_remove_service_unit_stack "$LOCK_DIR" "$service_name" "$ENABLE_CELERY" "$ENABLE_LCD_SCREEN" "$ENABLE_WATCHDOG"
+
+    if [ -f "$SYSTEMD_UNITS_LOCK" ]; then
+        while IFS= read -r recorded_unit; do
+            [ -z "$recorded_unit" ] && continue
+            arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "$recorded_unit"
+        done < "$SYSTEMD_UNITS_LOCK"
+    fi
 }
 
 # Dependency checks for nginx and redis, populating redis.env when appropriate.
@@ -438,6 +448,10 @@ elif [ -f "$DB_FILE" ]; then
 fi
 mkdir -p "$LOCK_DIR"
 arthexis_record_service_mode "$LOCK_DIR" "$SERVICE_MANAGEMENT_MODE"
+
+if [ "$REPAIR" = true ] && [ -n "$SERVICE" ]; then
+    reset_service_units_for_repair "$SERVICE"
+fi
 
 if [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_EMBEDDED" ]; then
     if [ -n "$SERVICE" ]; then
