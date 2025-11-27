@@ -4843,7 +4843,7 @@ class StartupNotificationTests(TestCase):
             lines = lock_file.read_text(encoding="utf-8").splitlines()
 
         self.assertEqual(lines[0], "host:9000")
-        self.assertTrue(lines[1].startswith("1.2.3 r"))
+        self.assertEqual(lines[1], "1.2.3 123456")
         self.assertEqual(lines[2], "net-message")
 
     def test_startup_notification_skips_when_feature_disabled(self):
@@ -4882,7 +4882,7 @@ class StartupNotificationTests(TestCase):
             lines = lock_file.read_text(encoding="utf-8").splitlines()
 
         self.assertEqual(lines[0], "host:9000")
-        self.assertEqual(lines[1], "1.2.3+ r111111")
+        self.assertEqual(lines[1], "1.2.3 111111")
         self.assertEqual(lines[2], "net-message")
 
     def test_startup_notification_skips_release_check_during_init(self):
