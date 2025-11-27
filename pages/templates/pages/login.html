@@ -88,7 +88,9 @@
         <div class="form-text">{% trans "Enter the code from your authenticator app." %}</div>
       </div>
       {% if next %}<input type="hidden" name="next" value="{{ next }}">{% endif %}
-      <button type="submit" class="btn btn-primary w-100">{% trans "Log in" %}</button>
+      <div data-submit-group>
+        <button type="submit" class="btn btn-primary w-100">{% trans "Log in" %}</button>
+      </div>
     </form>
     {% if passkey_login_enabled %}
     <div class="mt-3" data-passkey-container>
@@ -142,6 +144,7 @@
   const otpPrecheck = form?.querySelector('[data-otp-precheck]');
   const otpPrecheckButton = form?.querySelector('[data-otp-precheck-button]');
   const otpPrecheckError = form?.querySelector('[data-otp-precheck-error]');
+  const submitGroup = form?.querySelector('[data-submit-group]');
   const authMethodField = form?.querySelector('input[name="{{ form.auth_method.html_name }}"]');
   const otpReadyField = form?.querySelector('input[name="{{ form.otp_ready.html_name }}"]');
   const otpRequiresPasswordField = form?.querySelector('input[name="{{ form.otp_requires_password.html_name }}"]');
@@ -192,10 +195,12 @@
       otpInput?.removeAttribute('required');
       passwordGroup?.classList.add('d-none');
       passwordInput?.removeAttribute('required');
+      submitGroup?.classList.add('d-none');
       return;
     }
     otpPrecheck?.classList.add('d-none');
     otpGroup?.classList.remove('d-none');
+    submitGroup?.classList.remove('d-none');
     if (otpInput) {
       otpInput.setAttribute('required', 'required');
     }
@@ -243,6 +248,7 @@
       if (toggle && otpLabel) {
         toggle.textContent = otpLabel;
       }
+      submitGroup?.classList.remove('d-none');
     }
   };
 
