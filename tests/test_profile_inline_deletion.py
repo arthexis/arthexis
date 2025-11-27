@@ -6,13 +6,12 @@ import re
 
 from core.admin import PROFILE_INLINE_CONFIG, ProfileInlineFormSet
 from core.models import (
-    EmailInbox,
     OdooProfile,
     OpenPayProfile,
     ReleaseManager,
     SecurityGroup as CoreSecurityGroup,
 )
-from teams.models import EmailOutbox
+from teams.models import EmailInbox, EmailOutbox
 from teams.models import SecurityGroup as TeamsSecurityGroup
 
 

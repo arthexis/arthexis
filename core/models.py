@@ -856,7 +856,7 @@ class OdooProfile(Profile):
         verbose_name_plural = _("CRM Employees")
         constraints = [
             models.CheckConstraint(
-                check=(
+                condition=(
                     (Q(user__isnull=False) & Q(group__isnull=True))
                     | (Q(user__isnull=True) & Q(group__isnull=False))
                 ),
@@ -1233,7 +1233,7 @@ class OpenPayProfile(Profile):
         verbose_name_plural = _("Payment Processors")
         constraints = [
             models.CheckConstraint(
-                check=(
+                condition=(
                     (Q(user__isnull=False) & Q(group__isnull=True))
                     | (Q(user__isnull=True) & Q(group__isnull=False))
                 ),
@@ -1267,7 +1267,7 @@ class GoogleCalendarProfile(Profile):
         verbose_name_plural = _("Google Calendars")
         constraints = [
             models.CheckConstraint(
-                check=(
+                condition=(
                     (Q(user__isnull=False) & Q(group__isnull=True))
                     | (Q(user__isnull=True) & Q(group__isnull=False))
                 ),
@@ -1539,7 +1539,7 @@ class SocialProfile(Profile):
                 name="socialprofile_network_domain",
             ),
             models.CheckConstraint(
-                check=(
+                condition=(
                     (Q(user__isnull=False) & Q(group__isnull=True))
                     | (Q(user__isnull=True) & Q(group__isnull=False))
                 ),

@@ -16,7 +16,8 @@ from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 from django.urls import reverse
 from core.models import InviteLead
-from nodes.models import Node, EmailOutbox
+from nodes.models import Node
+from teams.models import EmailOutbox
 from django.core import mail
 from django.test import override_settings
 

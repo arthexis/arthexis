@@ -1,6 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.contrib.auth.tokens import default_token_generator
 from core import mailer
+from django.core.mail import send_mail
 from django.core.management.base import BaseCommand, CommandError
 from django.urls import reverse
 from django.utils.encoding import force_bytes
@@ -27,7 +28,7 @@ class Command(BaseCommand):
             raise CommandError(f"No user found with email {email}")
 
         node = Node.get_local()
-        used_outbox = None
+        used_outbox = getattr(node, "email_outbox", None)
 
         for user in users:
             uid = urlsafe_base64_encode(force_bytes(user.pk))
@@ -42,9 +43,13 @@ class Command(BaseCommand):
             body = f"Use the following link to access your account: {link}"
             try:
                 result = mailer.send(subject, body, [email], node=node)
-                used_outbox = getattr(result, "outbox", used_outbox)
+                used_outbox = (
+                    getattr(result, "outbox", used_outbox)
+                    or getattr(node, "email_outbox", used_outbox)
+                )
             except Exception as exc:  # pragma: no cover - log failures
                 self.stderr.write(self.style.WARNING(f"Email send failed: {exc}"))
+                send_mail(subject, body, None, [email])
 
             self.stdout.write(link)
 
