@@ -66,11 +66,6 @@
     {% block object-tools %}
         <ul class="object-tools">
           {% block object-tools-items %}
-            {% if opts.app_label == "ocpp" and opts.model_name == "charger" %}
-              <li>
-                <a href="{% url 'ocpp-dashboard' %}" class="viewlink">{% trans "View in Site" %}</a>
-              </li>
-            {% endif %}
             {% change_list_object_tools %}
           {% endblock %}
         </ul>

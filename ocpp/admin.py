@@ -2070,8 +2070,24 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         "remote_stop_transaction",
         "reset_chargers",
         "create_simulator_for_cp",
+        "view_charge_point_dashboard",
         "delete_selected",
     ]
+
+    @admin.action(description=_("View in Site"))
+    def view_charge_point_dashboard(self, request, queryset=None):
+        return HttpResponseRedirect(reverse("ocpp-dashboard"))
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path(
+                "view-in-site/",
+                self.admin_site.admin_view(self.view_charge_point_dashboard),
+                name="ocpp_charger_view_charge_point_dashboard",
+            ),
+        ]
+        return custom + urls
 
     class DiagnosticsDownloadError(Exception):
         """Raised when diagnostics downloads fail."""
