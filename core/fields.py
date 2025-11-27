@@ -2,6 +2,7 @@ from dataclasses import dataclass
 import ast
 import re
 
+from django.core.exceptions import AppRegistryNotReady
 from django.db import models
 from django.db.models.fields import DeferredAttribute
 from django.utils.translation import gettext_lazy as _
@@ -101,6 +102,17 @@ _FORBIDDEN_KEYWORDS = re.compile(
 )
 
 
+def _error_message(message: str, params: dict[str, str] | None = None) -> str:
+    """Safely build an error message even if Django apps are not ready."""
+
+    params = params or {}
+    try:
+        translated = _(message)
+        return translated % params if params else translated
+    except AppRegistryNotReady:
+        return message % params if params else message
+
+
 def _tokenize_condition(expression: str) -> list[str]:
     """Split a condition expression into SQL-style tokens."""
 
@@ -125,7 +137,7 @@ def _tokenize_condition(expression: str) -> list[str]:
                 index += 1
             else:
                 raise ConditionEvaluationError(
-                    _("Unterminated string literal in condition.")
+                    _error_message("Unterminated string literal in condition.")
                 )
             tokens.append(expression[start:index])
             continue
@@ -161,7 +173,7 @@ def _tokenize_condition(expression: str) -> list[str]:
                     expression[index + 1] in {"+", "-"} and exp_index == index + 2
                 ):
                     raise ConditionEvaluationError(
-                        _("Invalid numeric literal in condition.")
+                        _error_message("Invalid numeric literal in condition.")
                     )
                 index = exp_index
             tokens.append(expression[start:index])
@@ -175,8 +187,10 @@ def _tokenize_condition(expression: str) -> list[str]:
             tokens.append(expression[start:index])
             continue
         raise ConditionEvaluationError(
-            _("Unsupported character %(character)r in condition.")
-            % {"character": char}
+            _error_message(
+                "Unsupported character %(character)r in condition.",
+                {"character": char},
+            )
         )
     return tokens
 
@@ -230,8 +244,10 @@ def _convert_tokens_to_python(tokens: list[str]) -> list[str]:
             python_tokens.append("False")
         else:
             raise ConditionEvaluationError(
-                _("Unsupported token in condition: %(token)s")
-                % {"token": token}
+                _error_message(
+                    "Unsupported token in condition: %(token)s",
+                    {"token": token},
+                )
             )
         index += 1
     return python_tokens
@@ -248,6 +264,28 @@ _ALLOWED_AST_NODES = (
     ast.Constant,
     ast.Tuple,
     ast.List,
+    ast.And,
+    ast.Or,
+    ast.Not,
+    ast.UAdd,
+    ast.USub,
+    ast.Add,
+    ast.Sub,
+    ast.Mult,
+    ast.Div,
+    ast.Mod,
+    ast.FloorDiv,
+    ast.Pow,
+    ast.Eq,
+    ast.NotEq,
+    ast.Lt,
+    ast.LtE,
+    ast.Gt,
+    ast.GtE,
+    ast.Is,
+    ast.IsNot,
+    ast.In,
+    ast.NotIn,
 )
 
 _ALLOWED_BOOL_OPS = (ast.And, ast.Or)
@@ -282,30 +320,32 @@ def _validate_condition_ast(tree: ast.AST) -> None:
     for node in ast.walk(tree):
         if not isinstance(node, _ALLOWED_AST_NODES):
             raise ConditionEvaluationError(
-                _("Unsupported expression in condition.")
+                _error_message("Unsupported expression in condition.")
             )
         if isinstance(node, ast.BoolOp) and not isinstance(node.op, _ALLOWED_BOOL_OPS):
             raise ConditionEvaluationError(
-                _("Unsupported boolean operator in condition.")
+                _error_message("Unsupported boolean operator in condition.")
             )
         if isinstance(node, ast.UnaryOp) and not isinstance(node.op, _ALLOWED_UNARY_OPS):
             raise ConditionEvaluationError(
-                _("Unsupported unary operator in condition.")
+                _error_message("Unsupported unary operator in condition.")
             )
         if isinstance(node, ast.BinOp) and not isinstance(node.op, _ALLOWED_BIN_OPS):
             raise ConditionEvaluationError(
-                _("Unsupported arithmetic operator in condition.")
+                _error_message("Unsupported arithmetic operator in condition.")
             )
         if isinstance(node, ast.Compare):
             for op in node.ops:
                 if not isinstance(op, _ALLOWED_CMP_OPS):
                     raise ConditionEvaluationError(
-                        _("Unsupported comparison operator in condition.")
+                        _error_message("Unsupported comparison operator in condition.")
                     )
         if isinstance(node, ast.Name) and node.id not in _ALLOWED_NAMES:
             raise ConditionEvaluationError(
-                _("Unknown identifier in condition: %(name)s")
-                % {"name": node.id}
+                _error_message(
+                    "Unknown identifier in condition: %(name)s",
+                    {"name": node.id},
+                )
             )
 
 
@@ -314,17 +354,19 @@ def _evaluate_sql_condition(expression: str) -> bool:
 
     if ";" in expression:
         raise ConditionEvaluationError(
-            _("Semicolons are not allowed in conditions."),
+            _error_message("Semicolons are not allowed in conditions."),
         )
     if _COMMENT_PATTERN.search(expression):
         raise ConditionEvaluationError(
-            _("SQL comments are not allowed in conditions."),
+            _error_message("SQL comments are not allowed in conditions."),
         )
     match = _FORBIDDEN_KEYWORDS.search(expression)
     if match:
         raise ConditionEvaluationError(
-            _("Disallowed keyword in condition: %(keyword)s")
-            % {"keyword": match.group(1)},
+            _error_message(
+                "Disallowed keyword in condition: %(keyword)s",
+                {"keyword": match.group(1)},
+            ),
         )
 
     tokens = _tokenize_condition(expression)
@@ -335,7 +377,7 @@ def _evaluate_sql_condition(expression: str) -> bool:
         tree = ast.parse(python_expression, mode="eval")
     except SyntaxError as exc:
         raise ConditionEvaluationError(
-            _("Invalid condition expression.")
+            _error_message("Invalid condition expression.")
         ) from exc
 
     _validate_condition_ast(tree)
