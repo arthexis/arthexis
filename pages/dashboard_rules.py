@@ -134,7 +134,7 @@ def evaluate_node_rules() -> dict[str, object]:
         recent_cutoff = timezone.now() - timedelta(hours=24)
         if not upstream_nodes.filter(last_seen__gte=recent_cutoff).exists():
             return rule_failure(
-                _("No upstream nodes have checked in within the last 24 hours."),
+                _("No check-ins in last 24 hours."),
             )
 
     return rule_success()
