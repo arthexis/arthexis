@@ -931,6 +931,62 @@ def test_check_github_updates_logs_fetch_failure_details(monkeypatch, tmp_path):
     assert messages == ["Git fetch failed (exit code 128): fatal: forbidden"]
 
 
+def test_check_github_updates_skips_when_ci_failing(monkeypatch, tmp_path):
+    """Auto-upgrade should defer when the CI is not passing."""
+
+    from core import tasks
+
+    base_dir = tmp_path / "node"
+    locks = base_dir / "locks"
+    logs = base_dir / "logs"
+    locks.mkdir(parents=True)
+    logs.mkdir(parents=True)
+
+    (base_dir / "VERSION").write_text("0.0.0")
+    (locks / "auto_upgrade.lck").write_text("latest")
+
+    log_messages: list[str] = []
+    failure_reasons: list[str] = []
+    service_calls: list[tuple[tuple, dict]] = []
+
+    monkeypatch.setattr(tasks, "_project_base_dir", lambda: base_dir)
+    monkeypatch.setattr(tasks, "_auto_upgrade_log_path", lambda _base: logs / "auto-upgrade.log")
+    monkeypatch.setattr(tasks, "_append_auto_upgrade_log", lambda _base, message: log_messages.append(message))
+    monkeypatch.setattr(tasks, "_record_auto_upgrade_failure", lambda _base, reason: failure_reasons.append(reason))
+    monkeypatch.setattr(tasks, "_load_skipped_revisions", lambda _base: set())
+    monkeypatch.setattr(tasks, "_schedule_health_check", lambda *args, **kwargs: None)
+    monkeypatch.setattr(tasks, "_reset_network_failure_count", lambda _base: None)
+    monkeypatch.setattr(tasks, "_resolve_release_severity", lambda version: tasks.SEVERITY_NORMAL)
+    monkeypatch.setattr(tasks, "_read_remote_version", lambda base, branch: "0.0.1")
+    monkeypatch.setattr(tasks, "_read_local_version", lambda base: "0.0.0")
+    monkeypatch.setattr(tasks, "_ci_status_for_revision", lambda _base, _rev: "failure")
+    monkeypatch.setattr(tasks.shutil, "which", lambda command: None)
+
+    def record_services(*args, **kwargs):
+        service_calls.append((args, kwargs))
+
+    monkeypatch.setattr(tasks, "_ensure_runtime_services", record_services)
+
+    monkeypatch.setattr(
+        tasks.subprocess,
+        "run",
+        lambda command, **kwargs: subprocess.CompletedProcess(command, 0),
+    )
+
+    def fake_check_output(command, **kwargs):
+        if command[-1].startswith("origin/"):
+            return "remote-sha"
+        return "local-sha"
+
+    monkeypatch.setattr(tasks.subprocess, "check_output", fake_check_output)
+
+    tasks.check_github_updates()
+
+    assert any("CI status is failure" in message for message in log_messages)
+    assert failure_reasons == ["CI-FAILING"]
+    assert service_calls
+
+
 def test_broadcast_upgrade_start_message_formats_payload(monkeypatch):
     """Upgrade start Net Messages should include the node name and revisions."""
 
