@@ -253,7 +253,7 @@ def test_remove_service_unit_stack_clears_known_units(tmp_path: Path) -> None:
     command = textwrap.dedent(
         f"""
         export SYSTEMD_DIR='{systemd_dir}'
-        PATH='{stubs_dir}:$PATH'
+        PATH="{stubs_dir}:$PATH"
         . '{REPO_ROOT / 'scripts/helpers/service_manager.sh'}'
         arthexis_remove_service_unit_stack '{lock_dir}' 'gway' true true true
         """
