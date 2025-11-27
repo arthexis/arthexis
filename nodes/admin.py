@@ -370,44 +370,6 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         user.user_permissions.set(permissions)
         return user, password, expires_at
 
-    def _build_cli_registration_payload(self, request):
-        user, password, expires_at = self._create_registration_user()
-        register_url = request.build_absolute_uri(reverse("register-node"))
-        info_url = request.build_absolute_uri(reverse("node-info"))
-        display_expires = timezone.localtime(expires_at)
-        payload = {
-            "username": user.username,
-            "password": password,
-            "register": register_url,
-            "info": info_url,
-            "expires_at": display_expires.isoformat(),
-        }
-        encoded = base64.urlsafe_b64encode(json.dumps(payload).encode("utf-8")).decode(
-            "utf-8"
-        )
-        return payload, encoded, display_expires
-
-    def generate_registration_credentials(self, request):
-        if not (
-            self.has_add_permission(request) and self.has_change_permission(request)
-        ):
-            raise PermissionDenied
-
-        payload, encoded, expires_at = self._build_cli_registration_payload(request)
-        context = {
-            **self.admin_site.each_context(request),
-            "opts": self.model._meta,
-            "title": _("CLI registration token"),
-            "payload": payload,
-            "encoded": encoded,
-            "expires_at": expires_at,
-        }
-        return render(
-            request,
-            "admin/nodes/node/register_cli_credentials.html",
-            context,
-        )
-
     change_actions = ["update_node_action"]
     inlines = [NodeFeatureAssignmentInline]
 
@@ -525,11 +487,6 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
                 name="nodes_node_register_current",
             ),
             path(
-                "register-cli/",
-                self.admin_site.admin_view(self.generate_registration_credentials),
-                name="nodes_node_generate_registration_credentials",
-            ),
-            path(
                 "register-visitor/",
                 self.admin_site.admin_view(self.register_visitor_view),
                 name="nodes_node_register_visitor",
@@ -546,17 +503,6 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             ),
         ]
         return custom + urls
-
-    def get_changelist_actions(self, request):
-        parent = getattr(super(), "get_changelist_actions", None)
-        actions = []
-        if callable(parent):
-            parent_actions = parent(request)
-            if parent_actions:
-                actions.extend(parent_actions)
-        if "generate_registration_credentials" not in actions:
-            actions.append("generate_registration_credentials")
-        return actions
 
     def register_current(self, request):
         """Create or update this host and offer browser node registration."""
@@ -1953,13 +1899,6 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
 
     update_node_action.label = _("Update Node")
     update_node_action.short_description = _("Update Node")
-
-
-NodeAdmin.generate_registration_credentials.label = _(
-    "Register visiting node via CLI"
-)
-NodeAdmin.generate_registration_credentials.requires_queryset = False
-
 
 class EmailOutboxAdmin(EntityModelAdmin):
     form = EmailOutboxAdminForm
