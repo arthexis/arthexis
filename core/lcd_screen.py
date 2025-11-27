@@ -1,17 +1,18 @@
 """Standalone LCD screen updater.
 
 The script polls ``locks/lcd_screen.lck`` for up to two lines of text and
-writes them to the attached LCD1602 display. If either line exceeds 16
-characters the text scrolls horizontally. A third line in the lock file
-can define the scroll speed in milliseconds per character (default 1000
-ms). When the suite service stops or the OS schedules a shutdown/reboot
-the updater temporarily overrides the lock file content to surface the
-alert directly on the display.
+writes them to the attached LCD1602 display. Each row scrolls
+independently when it exceeds 16 characters; shorter rows remain static.
+A third line in the lock file can define the scroll speed in milliseconds
+per character (default 1000 ms). When the suite service stops or the OS
+schedules a shutdown/reboot the updater temporarily overrides the lock
+file content to surface the alert directly on the display.
 """
 
 from __future__ import annotations
 
 import logging
+import math
 import os
 import shutil
 import signal
@@ -45,9 +46,12 @@ class LockPayload(NamedTuple):
 class DisplayState(NamedTuple):
     pad1: str
     pad2: str
-    steps: int
-    index: int
+    steps1: int
+    steps2: int
+    index1: int
+    index2: int
     scroll_sec: float
+    cycle: int
 
 
 def _read_lock_file() -> LockPayload:
@@ -305,21 +309,24 @@ def _prepare_display_state(line1: str, line2: str, scroll_ms: int) -> DisplaySta
     text2 = line2[:64]
     pad1 = text1 + " " * 16 if len(text1) > 16 else text1.ljust(16)
     pad2 = text2 + " " * 16 if len(text2) > 16 else text2.ljust(16)
-    steps = max(len(pad1) - 15, len(pad2) - 15, 1)
-    return DisplayState(pad1, pad2, steps, 0, scroll_sec)
+    steps1 = max(len(pad1) - 15, 1)
+    steps2 = max(len(pad2) - 15, 1)
+    cycle = math.lcm(steps1, steps2)
+    return DisplayState(pad1, pad2, steps1, steps2, 0, 0, scroll_sec, cycle)
 
 
 def _advance_display(lcd: CharLCD1602, state: DisplayState) -> DisplayState:
     if _shutdown_requested():
         return state
 
-    segment1 = state.pad1[state.index : state.index + 16]
-    segment2 = state.pad2[state.index : state.index + 16]
+    segment1 = state.pad1[state.index1 : state.index1 + 16]
+    segment2 = state.pad2[state.index2 : state.index2 + 16]
     lcd.write(0, 0, segment1.ljust(16))
     lcd.write(0, 1, segment2.ljust(16))
 
-    next_index = (state.index + 1) % state.steps
-    return state._replace(index=next_index)
+    next_index1 = (state.index1 + 1) % state.steps1
+    next_index2 = (state.index2 + 1) % state.steps2
+    return state._replace(index1=next_index1, index2=next_index2)
 
 
 def main() -> None:  # pragma: no cover - hardware dependent

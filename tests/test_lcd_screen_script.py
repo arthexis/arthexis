@@ -231,7 +231,7 @@ def test_display_loops_segments(monkeypatch):
         "SCROLLING MESSAGE!", "SECOND LINE OF TEXT", 200
     )
 
-    for _ in range(state.steps + 1):
+    for _ in range(state.cycle + 1):
         state = lcd_screen._advance_display(lcd, state)
 
     assert cycles[0] == cycles[-1]
