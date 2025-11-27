@@ -13,7 +13,18 @@ def favorite_ct_id(app_label, model_name):
         model = apps.get_model(app_label, model_name)
     except LookupError:
         return None
-    ct = ContentType.objects.get_for_model(model)
+    opts = getattr(model, "_meta", None)
+    if opts is None:
+        return None
+
+    # ContentType uses an internal cache that can retain stale entries if a
+    # row is deleted during tests. Clear the cache before ensuring the
+    # ContentType exists to recreate missing rows reliably.
+    ContentType.objects.clear_cache()
+    ct, _ = ContentType.objects.get_or_create(
+        app_label=opts.app_label,
+        model=opts.model_name,
+    )
     return ct.id
 
 

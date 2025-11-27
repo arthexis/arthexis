@@ -1350,7 +1350,10 @@ def favorite_toggle(request, ct_id):
             },
         )
 
-    return HttpResponseNotAllowed(["POST"])
+    if next_url:
+        return HttpResponseNotAllowed(["POST"])
+
+    return redirect("admin:index")
 
 
 def favorite_list(request):
