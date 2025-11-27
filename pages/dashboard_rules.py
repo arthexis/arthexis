@@ -50,8 +50,8 @@ def evaluate_cp_configuration_rules() -> dict[str, object] | None:
     if missing:
         evcs_list = _format_evcs_list(missing)
         message = ngettext(
-            "Missing CP Configuration for %(evcs)s.",
-            "Missing CP Configurations for %(evcs)s.",
+            "Missing CP config: %(evcs)s.",
+            "Missing CP configs: %(evcs)s.",
             len(missing),
         ) % {"evcs": evcs_list}
         return rule_failure(message)
@@ -79,8 +79,8 @@ def evaluate_cp_firmware_rules() -> dict[str, object] | None:
     if missing:
         evcs_list = _format_evcs_list(missing)
         message = ngettext(
-            "Missing CP Firmware for %(evcs)s.",
-            "Missing CP Firmware for %(evcs)s.",
+            "Missing firmware: %(evcs)s.",
+            "Missing firmware: %(evcs)s.",
             len(missing),
         ) % {"evcs": evcs_list}
         return rule_failure(message)
@@ -107,8 +107,8 @@ def evaluate_evcs_heartbeat_rules() -> dict[str, object] | None:
     if missing:
         evcs_list = _format_evcs_list(missing)
         message = ngettext(
-            "Missing EVCS heartbeat within the last hour for %(evcs)s.",
-            "Missing EVCS heartbeats within the last hour for %(evcs)s.",
+            "Heartbeat overdue: %(evcs)s.",
+            "Heartbeat overdue: %(evcs)s.",
             len(missing),
         ) % {"evcs": evcs_list}
         return rule_failure(message)
@@ -122,14 +122,14 @@ def evaluate_node_rules() -> dict[str, object]:
         return rule_failure(_("Local node record is missing."))
 
     if not getattr(local_node, "role_id", None):
-        return rule_failure(_("Local node is missing an assigned role."))
+        return rule_failure(_("Local node missing a role."))
 
     is_watchtower = (local_node.role.name or "").lower() == "watchtower"
 
     if not is_watchtower:
         upstream_nodes = Node.objects.filter(current_relation=Node.Relation.UPSTREAM)
         if not upstream_nodes.exists():
-            return rule_failure(_("At least one upstream node is required."))
+            return rule_failure(_("Need an upstream node."))
 
         recent_cutoff = timezone.now() - timedelta(hours=24)
         if not upstream_nodes.filter(last_seen__gte=recent_cutoff).exists():
@@ -145,37 +145,33 @@ def evaluate_email_profile_rules() -> dict[str, object]:
         from teams.models import EmailInbox, EmailOutbox
     except Exception:
         logger.exception("Unable to import email profile models")
-        return rule_failure(
-            _("Unable to evaluate email configuration due to an import failure."),
-        )
+        return rule_failure(_("Email check failed: import err."))
 
     try:
         inboxes = list(EmailInbox.objects.filter(is_enabled=True))
         outboxes = list(EmailOutbox.objects.filter(is_enabled=True))
     except Exception:
         logger.exception("Unable to query email profiles")
-        return rule_failure(
-            _("Unable to evaluate email configuration due to a database error."),
-        )
+        return rule_failure(_("Email check failed: db error."))
 
     ready_inboxes = [inbox for inbox in inboxes if inbox.is_ready()]
     ready_outboxes = [outbox for outbox in outboxes if outbox.is_ready()]
 
     issues: list[str] = []
     if not inboxes:
-        issues.append(_("At least one Email Inbox must be configured."))
+        issues.append(_("Configure an Email Inbox."))
     elif not ready_inboxes:
-        issues.append(_("Configured Email Inboxes could not complete validation."))
+        issues.append(_("Email Inbox validation failed."))
 
     if not outboxes:
-        issues.append(_("At least one Email Outbox must be configured."))
+        issues.append(_("Configure an Email Outbox."))
     elif not ready_outboxes:
-        issues.append(_("Configured Email Outboxes could not complete validation."))
+        issues.append(_("Email Outbox validation failed."))
 
     if issues:
-        return rule_failure(" ".join(issues))
+        return rule_failure(" ".join(str(issue) for issue in issues))
 
-    return rule_success(_("Email inbox and outbox are validated for this node."))
+    return rule_success()
 
 
 def load_callable(handler_name: str) -> Callable[[], dict[str, object]] | None:
