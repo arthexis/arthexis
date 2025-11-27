@@ -95,4 +95,4 @@ webauthn==2.7.0
 whitenoise==6.11.0
 plyer==2.1.0; sys_platform == "win32"
 wsproto==1.2.0
-zope.interface==8.0.1
+zope.interface==8.1.1
