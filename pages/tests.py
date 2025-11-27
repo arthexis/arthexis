@@ -144,6 +144,7 @@ from nodes.models import (
     NodeFeature,
     NodeFeatureAssignment,
     NetMessage,
+    BadgeCounter,
 )
 from teams.models import EmailOutbox
 from django.contrib.auth.models import AnonymousUser
@@ -4271,7 +4272,7 @@ class FavoriteTests(TestCase):
         resp = self.client.get(reverse("admin:index"))
         content = resp.content.decode()
 
-        self.assertIn('class="lead-open-badge"', content)
+        self.assertIn('badge-counter lead-open-badge', content)
         self.assertIn('title="2 open leads"', content)
         self.assertIn('aria-label="2 open leads"', content)
 
@@ -4287,6 +4288,7 @@ class FavoriteTests(TestCase):
         ) % {"released_allowed": 1, "registered": 2}
 
         self.assertContains(resp, expected)
+        self.assertContains(resp, "badge-counter rfid-release-badge")
         self.assertContains(resp, f'title="{badge_label}"')
         self.assertContains(resp, f'aria-label="{badge_label}"')
 
@@ -4307,7 +4309,7 @@ class FavoriteTests(TestCase):
         ) % {"available": 1, "total": 2, "missing": 1}
 
         self.assertContains(resp, expected)
-        self.assertContains(resp, 'class="charger-availability-badge"')
+        self.assertContains(resp, "badge-counter charger-availability-badge")
         self.assertContains(resp, f'title="{badge_label}"')
         self.assertContains(resp, f'aria-label="{badge_label}"')
 
@@ -4323,7 +4325,7 @@ class FavoriteTests(TestCase):
         resp = self.client.get(reverse("admin:index"))
 
         content = resp.content.decode()
-        self.assertIn('class="node-count-badge"', content)
+        self.assertIn('badge-counter node-count-badge', content)
         self.assertIn('title="2 nodes known to this deployment"', content)
         self.assertIn('aria-label="2 nodes known to this deployment"', content)
         self.assertIn('>2<', content)
@@ -4332,56 +4334,13 @@ class FavoriteTests(TestCase):
         rule_index = content.index("model-rule-status")
         self.assertLess(badge_index, rule_index)
 
-    def test_lead_open_count_uses_cache_across_requests(self):
-        InviteLead.objects.create(email="cached@example.com")
+    def test_badge_counters_use_cache_and_invalidate(self):
+        node_ct = ContentType.objects.get_by_natural_key("nodes", "node")
 
-        first_context = Context({})
-        with self.assertNumQueries(1):
-            count = admin_extras.lead_open_count(
-                first_context, "teams", "InviteLead"
-            )
-        self.assertEqual(count, 1)
+        counters = admin_extras.badge_counters(Context({}), "nodes", "Node")
+        self.assertTrue(counters)
+        initial_value = counters[0]["primary"]
 
-        second_context = Context({})
-        with self.assertNumQueries(0):
-            cached_count = admin_extras.lead_open_count(
-                second_context, "teams", "InviteLead"
-            )
-        self.assertEqual(cached_count, 1)
-
-    def test_rfid_release_stats_uses_cache_across_requests(self):
-        RFID.objects.create(rfid="ABCDEF01", released=True, allowed=True)
-        RFID.objects.create(rfid="ABCDEF02", released=False, allowed=True)
-
-        first_context = Context({})
-        with self.assertNumQueries(1):
-            stats = admin_extras.rfid_release_stats(first_context)
-        self.assertEqual(stats["released_allowed"], 1)
-        self.assertEqual(stats["total"], 2)
-
-        second_context = Context({})
-        with self.assertNumQueries(0):
-            cached_stats = admin_extras.rfid_release_stats(second_context)
-        self.assertEqual(cached_stats["released_allowed"], 1)
-        self.assertEqual(cached_stats["total"], 2)
-
-    def test_charger_availability_stats_uses_cache_across_requests(self):
-        Charger.objects.create(
-            charger_id="CP-100", connector_id=1, last_status="Available"
-        )
-        Charger.objects.create(charger_id="CP-100", last_status="Available")
-
-        first_context = Context({})
-        admin_extras.charger_availability_stats(first_context)
-
-        second_context = Context({})
-        with self.assertNumQueries(0):
-            cached_stats = admin_extras.charger_availability_stats(second_context)
-
-        self.assertEqual(cached_stats["available_with_cp_number"], 1)
-        self.assertEqual(cached_stats["available_total"], 2)
-
-    def test_node_known_count_uses_cache_across_requests(self):
         Node.objects.create(
             hostname="cached-node",
             address="10.0.0.3",
@@ -4390,15 +4349,12 @@ class FavoriteTests(TestCase):
             current_relation=Node.Relation.UPSTREAM,
         )
 
-        first_context = Context({})
-        with self.assertNumQueries(1):
-            count = admin_extras.node_known_count(first_context)
+        cached = admin_extras.badge_counters(Context({}), "nodes", "Node")
+        self.assertEqual(cached[0]["primary"], initial_value)
 
-        second_context = Context({})
-        with self.assertNumQueries(0):
-            cached_count = admin_extras.node_known_count(second_context)
-
-        self.assertEqual(cached_count, count)
+        BadgeCounter.invalidate_model_cache(node_ct)
+        refreshed = admin_extras.badge_counters(Context({}), "nodes", "Node")
+        self.assertNotEqual(refreshed[0]["primary"], initial_value)
 
     def test_dashboard_charge_point_badge_ignores_aggregator(self):
         Charger.objects.create(charger_id="CP-AGG", last_status="Available")
@@ -4417,7 +4373,7 @@ class FavoriteTests(TestCase):
         ) % {"available": 2}
 
         self.assertContains(resp, expected)
-        self.assertContains(resp, 'class="charger-availability-badge"')
+        self.assertContains(resp, "badge-counter charger-availability-badge")
         self.assertContains(resp, f'title="{badge_label}"')
         self.assertContains(resp, f'aria-label="{badge_label}"')
 
@@ -4427,8 +4383,7 @@ class FavoriteTests(TestCase):
 
         resp = self.client.get(reverse("admin:teams_invitelead_changelist"))
 
-        self.assertNotContains(resp, "lead-open-badge")
-        self.assertNotContains(resp, "rfid-release-badge")
+        self.assertNotContains(resp, "badge-counter")
 
     def test_dashboard_includes_google_calendar_module(self):
         GoogleCalendarProfile.objects.create(
