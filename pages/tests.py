@@ -1488,7 +1488,7 @@ class AdminModelRuleTemplateTagTests(TestCase):
 
         self.assertFalse(status["success"])
         self.assertIn(
-            "No upstream nodes have checked in within the last 24 hours.",
+            "No check-ins in last 24 hours.",
             status["message"],
         )
 
