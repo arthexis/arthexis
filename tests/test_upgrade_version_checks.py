@@ -238,3 +238,44 @@ def test_upgrade_recovers_from_stale_remote_tracking_ref(tmp_path: Path) -> None
     assert "Detected stale remote-tracking ref for origin/work" in result.stdout
     assert "Already on version" in result.stdout
     assert not stop_marker.exists()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="requires POSIX-compatible shell")
+def test_non_terminal_role_discards_local_changes(tmp_path: Path) -> None:
+    clone, _ = _setup_clone(tmp_path)
+    _prepare_test_scripts(clone)
+
+    role_file = clone / "locks" / "role.lck"
+    role_file.write_text("Control", encoding="utf-8")
+
+    tracked_path = clone / "core" / "__init__.py"
+    original_tracked = tracked_path.read_text(encoding="utf-8")
+    tracked_path.write_text(original_tracked + "\n# local change\n", encoding="utf-8")
+
+    untracked_path = clone / "local-note.txt"
+    untracked_path.write_text("temporary", encoding="utf-8")
+
+    result = subprocess.run(
+        ["bash", "./upgrade.sh", "--no-restart"],
+        cwd=clone,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert "Non-terminal role Control detected unstashed changes" in result.stdout
+    assert tracked_path.read_text(encoding="utf-8") == original_tracked
+    assert not untracked_path.exists()
+
+    status = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=clone,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        check=True,
+    )
+
+    assert status.stdout.strip() == ""
