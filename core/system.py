@@ -703,7 +703,12 @@ def _load_auto_upgrade_schedule() -> dict[str, object]:
         run_count = int(getattr(task, "total_run_count", 0) or 0)
     except (TypeError, ValueError):
         run_count = 0
-    info["total_run_count"] = run_count
+    try:
+        failure_count = int(info.get("failure_count", 0) or 0)
+    except (TypeError, ValueError):
+        failure_count = 0
+    info["failure_count"] = failure_count
+    info["total_run_count"] = 0 if failure_count else run_count
 
     try:
         schedule_obj = task.schedule
