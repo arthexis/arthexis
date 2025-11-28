@@ -99,8 +99,33 @@ def admin_profile_url(context, user) -> str:
     if request is None or user is None or not getattr(user, "pk", None):
         return ""
 
+    def model_profile_url(model):
+        model_admin = admin.site._registry.get(model)
+        if not model_admin:
+            return ""
+
+        obj = _admin_model_instance(model_admin, request, user)
+        if obj is None:
+            return ""
+
+        if not _admin_has_access(model_admin, request, obj):
+            return ""
+
+        try:
+            return _admin_change_url(model_admin.model, user)
+        except NoReverseMatch:
+            return ""
+
+    teams_user = None
+    try:
+        teams_user = apps.get_model("teams", "User")
+    except LookupError:
+        pass
+
+    if teams_user and teams_user in admin.site._registry:
+        return model_profile_url(teams_user)
+
     candidate_models = (
-        ("teams", "User"),
         ("core", "User"),
         ("auth", "User"),
     )
@@ -111,21 +136,9 @@ def admin_profile_url(context, user) -> str:
         except LookupError:
             continue
 
-        model_admin = admin.site._registry.get(model)
-        if not model_admin:
-            continue
-
-        obj = _admin_model_instance(model_admin, request, user)
-        if obj is None:
-            continue
-
-        if not _admin_has_access(model_admin, request, obj):
-            continue
-
-        try:
-            return _admin_change_url(model_admin.model, user)
-        except NoReverseMatch:
-            continue
+        url = model_profile_url(model)
+        if url:
+            return url
 
     return ""
 
