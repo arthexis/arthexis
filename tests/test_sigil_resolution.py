@@ -1,3 +1,4 @@
+import json
 import os
 from unittest import mock
 from django.contrib.auth import get_user_model
@@ -487,3 +488,73 @@ class SigilResolutionTests(TestCase):
     def test_unknown_sigil_without_gway_returns_literal(self):
         result = resolve_sigils_in_text("[unknown.sigil]")
         self.assertEqual(result, "[unknown.sigil]")
+
+    def test_entity_method_and_property_resolution(self):
+        ct = ContentType.objects.get_for_model(OdooProfile)
+        root = SigilRoot.objects.filter(prefix="ODOO").first()
+        if not root:
+            root = SigilRoot.objects.create(
+                prefix="ODOO", context_type=SigilRoot.Context.ENTITY, content_type=ct
+            )
+
+        def dynamic_method(self, first="a", second="b"):
+            return f"{first}:{second}"
+
+        OdooProfile.dynamic_method = dynamic_method
+        OdooProfile.dynamic_value = property(lambda self: f"dyn-{self.username}")
+        self.addCleanup(lambda: delattr(OdooProfile, "dynamic_method"))
+        self.addCleanup(lambda: delattr(OdooProfile, "dynamic_value"))
+
+        profile = OdooProfile.objects.create(
+            user=self.user,
+            host="h",
+            database="db",
+            username="odoo",
+            password="secret",
+        )
+
+        resolved_method = resolve_sigils_in_text(
+            f"[{root.prefix}={profile.pk}.DYNAMIC-METHOD=hello,world]"
+        )
+        self.assertEqual(resolved_method, "hello:world")
+
+        resolved_property = resolve_sigils_in_text(
+            f"[{root.prefix}={profile.pk}.dynamic-value]"
+        )
+        self.assertEqual(resolved_property, f"dyn-{profile.username}")
+
+    def test_aggregate_and_manager_resolution_without_filter(self):
+        ct = ContentType.objects.get_for_model(OdooProfile)
+        root = SigilRoot.objects.filter(prefix="ODOO").first()
+        if not root:
+            root = SigilRoot.objects.create(
+                prefix="ODOO", context_type=SigilRoot.Context.ENTITY, content_type=ct
+            )
+
+        OdooProfile.objects.create(
+            user=self.user,
+            host="h",
+            database="db",
+            username="one",
+            password="secret",
+            odoo_uid=1,
+        )
+        OdooProfile.objects.create(
+            user=self.user,
+            host="h2",
+            database="db2",
+            username="two",
+            password="secret",
+            odoo_uid=2,
+        )
+
+        resolved_count = resolve_sigils_in_text(f"[{root.prefix}=:count]")
+        self.assertEqual(resolved_count, str(OdooProfile.objects.count()))
+
+        resolved_total = resolve_sigils_in_text(f"[{root.prefix}=odoo_uid:total]")
+        self.assertEqual(resolved_total, "3.0")
+
+        resolved_first = resolve_sigils_in_text(f"[{root.prefix}=first]")
+        decoded = json.loads(resolved_first)
+        self.assertEqual(len(decoded), 1)
+        self.assertEqual(decoded[0]["fields"]["username"], "one")
