@@ -266,5 +266,8 @@ AUTO_UPGRADE
 # Local working directory
 work/
 
+# Local simulator state
+ocpp/simulator.json
+
 # Runtime cache directory
 cache/
