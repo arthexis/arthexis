@@ -74,6 +74,7 @@ def _prepare_role_environment(role_name: str) -> None:
     "role_name, requires_login",
     [("Watchtower", False), ("Control", True)],
 )
+@pytest.mark.role("Control")
 def test_navigation_landings_return_success(role_name, requires_login):
     ViewHistory.objects.all().delete()
     navigation_client = Client()

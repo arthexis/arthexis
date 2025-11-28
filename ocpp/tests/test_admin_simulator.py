@@ -1,5 +1,6 @@
 from unittest.mock import MagicMock, patch
 
+import pytest
 from django.contrib.admin import AdminSite
 from django.contrib.auth import get_user_model
 from django.contrib.messages.storage.fallback import FallbackStorage
@@ -8,6 +9,9 @@ from django.test import RequestFactory, TestCase
 from ocpp import store
 from ocpp.admin import SimulatorAdmin
 from ocpp.models import Simulator
+
+
+pytestmark = [pytest.mark.role("Control")]
 
 
 class SimulatorAdminDefaultActionTests(TestCase):
