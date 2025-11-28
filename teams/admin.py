@@ -23,7 +23,6 @@ from django_otp.models import VerifyNotAllowed
 from awg.admin import PowerLeadAdmin as CorePowerLeadAdmin
 from core.admin import (
     InviteLeadAdmin,
-    UserAdmin as CoreUserAdmin,
     SecurityGroupAdmin,
     EmailInboxAdmin,
     EmailCollectorAdmin,
@@ -33,7 +32,6 @@ from core.admin import (
 )
 from core.models import (
     InviteLead as CoreInviteLead,
-    User as CoreUser,
     SecurityGroup as CoreSecurityGroup,
     ReleaseManager as CoreReleaseManager,
     OdooProfile as CoreOdooProfile,
@@ -59,7 +57,6 @@ from .forms import (
 )
 from .models import (
     InviteLead,
-    User,
     SecurityGroup,
     EmailInbox,
     EmailCollector,
@@ -83,11 +80,6 @@ except NotRegistered:
 
 @admin.register(InviteLead)
 class InviteLeadAdminProxy(InviteLeadAdmin):
-    pass
-
-
-@admin.register(User)
-class UserAdminProxy(CoreUserAdmin):
     pass
 
 

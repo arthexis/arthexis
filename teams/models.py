@@ -61,14 +61,6 @@ class PowerLead(CorePowerLead):
         verbose_name_plural = CorePowerLead._meta.verbose_name_plural
 
 
-class User(CoreUser):
-    class Meta:
-        proxy = True
-        app_label = "teams"
-        verbose_name = CoreUser._meta.verbose_name
-        verbose_name_plural = CoreUser._meta.verbose_name_plural
-
-
 class SecurityGroup(CoreSecurityGroup):
     class Meta:
         proxy = True
