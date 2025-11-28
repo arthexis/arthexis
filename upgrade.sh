@@ -64,6 +64,26 @@ ensure_git_safe_directory() {
   git config --global --add safe.directory "$BASE_DIR" >/dev/null 2>&1 || true
 }
 
+pip_requires_break_system_packages() {
+  local python_bin="$1"
+
+  if [ -z "$python_bin" ] || ! command -v "$python_bin" >/dev/null 2>&1; then
+    return 1
+  fi
+
+  "$python_bin" - <<'PY'
+from pathlib import Path
+import sys
+
+version = f"python{sys.version_info.major}.{sys.version_info.minor}"
+candidates = [
+    Path(sys.base_prefix) / "EXTERNALLY-MANAGED",
+    Path(sys.base_prefix) / "lib" / version / "EXTERNALLY-MANAGED",
+]
+sys.exit(0 if any(path.exists() for path in candidates) else 1)
+PY
+}
+
 configure_nginx_site() {
   local setup_script="$BASE_DIR/nginx-setup.sh"
 
@@ -406,10 +426,19 @@ install_requirements_if_changed() {
   fi
 
   if [ "$new_hash" != "$stored_hash" ]; then
+    local pip_env=()
+    local pip_flags=()
+    if [ -n "$PYTHON_BIN" ] && pip_requires_break_system_packages "$PYTHON_BIN"; then
+      pip_env+=("PIP_BREAK_SYSTEM_PACKAGES=1")
+      pip_flags+=("--break-system-packages")
+    fi
+
     if [ -f "$PIP_INSTALL_HELPER" ] && [ -n "$PYTHON_BIN" ]; then
-      "$PYTHON_BIN" "$PIP_INSTALL_HELPER" -r "$req_file"
+      "${pip_env[@]}" "$PYTHON_BIN" "$PIP_INSTALL_HELPER" -r "$req_file" "${pip_flags[@]}"
+    elif [ -n "$PYTHON_BIN" ]; then
+      "${pip_env[@]}" "$PYTHON_BIN" -m pip install -r "$req_file" "${pip_flags[@]}"
     else
-      pip install -r "$req_file"
+      "${pip_env[@]}" pip install -r "$req_file" "${pip_flags[@]}"
     fi
     echo "$new_hash" > "$md5_file"
   else
@@ -1095,7 +1124,13 @@ fi
 if [ $VENV_PRESENT -eq 1 ]; then
   # shellcheck disable=SC1091
   source .venv/bin/activate
-  pip install --upgrade pip
+  pip_install_env=()
+  pip_install_flags=()
+  if pip_requires_break_system_packages python; then
+    pip_install_env+=("PIP_BREAK_SYSTEM_PACKAGES=1")
+    pip_install_flags+=("--break-system-packages")
+  fi
+  "${pip_install_env[@]}" python -m pip install --upgrade pip "${pip_install_flags[@]}"
   install_requirements_if_changed
   python manage.py migrate --noinput
   if ls data/*.json >/dev/null 2>&1; then
