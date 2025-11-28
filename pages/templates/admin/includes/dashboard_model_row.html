@@ -63,7 +63,7 @@
   {% if model.admin_url and show_changelinks %}
     <td>
       <div class="change-link-cell{% if model.view_only %} change-link-cell--view-only{% endif %}" data-label="{% translate 'Change or view list link' %}">
-        <a href="{{ model.admin_url }}" class="{% if model.view_only %}viewlink{% else %}changelink{% endif %}" aria-describedby="{{ row_dom_id }}"{% if model.admin_url in request.path|urlencode %} aria-current="page"{% endif %}>
+        <a href="{{ model.admin_url }}" class="{% if model.view_only %}viewlink{% else %}changelink{% endif %}" aria-describedby="{{ row_dom_id }}" target="_blank" rel="noreferrer noopener"{% if model.admin_url in request.path|urlencode %} aria-current="page"{% endif %}>
           {% if model.view_only %}
             {% translate 'View' %}
           {% else %}
