@@ -101,6 +101,27 @@ def _prepare_test_scripts(base: Path) -> tuple[Path, Path]:
     return stop_marker, env_marker
 
 
+def _write_git_shim(path: Path, marker: Path, branch: str) -> None:
+    real_git = shutil.which("git") or "git"
+    path.write_text(
+        "#!/usr/bin/env bash\n"
+        f"REAL_GIT=\"{real_git}\"\n"
+        "MARKER=\"${FETCH_REFLOCK_MARKER:-}\"\n"
+        "REMOTE=\"${FETCH_REFLOCK_REMOTE:-origin}\"\n"
+        f"BRANCH=\"${{FETCH_REFLOCK_BRANCH:-{branch}}}\"\n"
+        "if [ \"${SIMULATE_FETCH_REFLOCK:-0}\" = \"1\" ] && [ \"$1\" = \"fetch\" ] && [ -n \"$MARKER\" ] && [ ! -f \"$MARKER\" ]; then\n"
+        "  current=\"$($REAL_GIT rev-parse --verify \"refs/remotes/${REMOTE}/${BRANCH}\" 2>/dev/null || echo 0000000000000000000000000000000000000000)\"\n"
+        "  echo \"!\\t${current}..deadbeef ${BRANCH} -> ${REMOTE}/${BRANCH} (unable to update local ref)\"\n"
+        "  echo \"error: cannot lock ref 'refs/remotes/${REMOTE}/${BRANCH}': is at ${current} but expected deadbeef\" >&2\n"
+        "  touch \"$MARKER\"\n"
+        "  exit 1\n"
+        "fi\n"
+        "exec \"$REAL_GIT\" \"$@\"\n",
+        encoding="utf-8",
+    )
+    path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+
 @pytest.mark.skipif(os.name != "posix", reason="requires POSIX-compatible shell")
 def test_upgrade_skips_when_versions_match(tmp_path: Path) -> None:
     clone, _ = _setup_clone(tmp_path)
@@ -180,3 +201,40 @@ def test_upgrade_rerun_lock_continues_when_versions_match(tmp_path: Path) -> Non
     assert "continuing upgrade" in result.stdout
     assert stop_marker.exists()
     assert env_marker.exists()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="requires POSIX-compatible shell")
+def test_upgrade_recovers_from_stale_remote_tracking_ref(tmp_path: Path) -> None:
+    clone, _ = _setup_clone(tmp_path)
+    stop_marker, _ = _prepare_test_scripts(clone)
+
+    git_shim_dir = tmp_path / "bin"
+    git_shim_dir.mkdir()
+    marker = tmp_path / "fetch_marker"
+    _write_git_shim(git_shim_dir / "git", marker, "work")
+
+    env = os.environ.copy()
+    env.update(
+        {
+            "PATH": f"{git_shim_dir}:{env['PATH']}",
+            "SIMULATE_FETCH_REFLOCK": "1",
+            "FETCH_REFLOCK_MARKER": str(marker),
+            "FETCH_REFLOCK_BRANCH": "work",
+        }
+    )
+
+    result = subprocess.run(
+        ["bash", "./upgrade.sh", "--no-restart"],
+        cwd=clone,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        check=False,
+        env=env,
+    )
+
+    assert result.returncode == 0
+    assert marker.exists()
+    assert "Detected stale remote-tracking ref for origin/work" in result.stdout
+    assert "Already on version" in result.stdout
+    assert not stop_marker.exists()
