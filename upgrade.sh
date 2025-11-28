@@ -663,9 +663,28 @@ trap cleanup_upgrade_progress_lock EXIT INT TERM
 UPGRADE_RERUN_LOCK="$LOCK_DIR/upgrade_rerun_required.lck"
 RERUN_AFTER_SELF_UPDATE=0
 RERUN_TARGET_VERSION=""
+RERUN_SERVICE_WAS_ACTIVE=0
+RERUN_LCD_WAS_ACTIVE=0
 if [ -f "$UPGRADE_RERUN_LOCK" ]; then
   RERUN_AFTER_SELF_UPDATE=1
-  RERUN_TARGET_VERSION=$(tr -d '\r\n' < "$UPGRADE_RERUN_LOCK")
+  while IFS= read -r rerun_line; do
+    case "$rerun_line" in
+      REMOTE_VERSION=*)
+        RERUN_TARGET_VERSION="${rerun_line#REMOTE_VERSION=}"
+        ;;
+      SERVICE_WAS_ACTIVE=*)
+        RERUN_SERVICE_WAS_ACTIVE="${rerun_line#SERVICE_WAS_ACTIVE=}"
+        ;;
+      LCD_WAS_ACTIVE=*)
+        RERUN_LCD_WAS_ACTIVE="${rerun_line#LCD_WAS_ACTIVE=}"
+        ;;
+      *)
+        if [ -z "$RERUN_TARGET_VERSION" ]; then
+          RERUN_TARGET_VERSION="$(printf '%s' "$rerun_line" | tr -d '\r\n')"
+        fi
+        ;;
+    esac
+  done < "$UPGRADE_RERUN_LOCK"
   rm -f "$UPGRADE_RERUN_LOCK"
 fi
 
@@ -1129,9 +1148,13 @@ VENV_PRESENT=1
 SERVICE_WAS_ACTIVE=0
 if service_was_active "$SERVICE_NAME"; then
   SERVICE_WAS_ACTIVE=1
+elif [[ $RERUN_AFTER_SELF_UPDATE -eq 1 ]] && [[ ${RERUN_SERVICE_WAS_ACTIVE:-0} -eq 1 ]]; then
+  SERVICE_WAS_ACTIVE=1
 fi
 LCD_WAS_ACTIVE=0
 if lcd_service_was_active "$SERVICE_NAME"; then
+  LCD_WAS_ACTIVE=1
+elif [[ $RERUN_AFTER_SELF_UPDATE -eq 1 ]] && [[ ${RERUN_LCD_WAS_ACTIVE:-0} -eq 1 ]]; then
   LCD_WAS_ACTIVE=1
 fi
 LCD_RESTART_REQUIRED=$LCD_WAS_ACTIVE
@@ -1175,7 +1198,11 @@ else
   fi
   if [ -n "$INITIAL_UPGRADE_HASH" ] && [ -n "$POST_PULL_UPGRADE_HASH" ] && \
      [ "$POST_PULL_UPGRADE_HASH" != "$INITIAL_UPGRADE_HASH" ]; then
-    printf '%s\n' "$REMOTE_VERSION" > "$UPGRADE_RERUN_LOCK"
+    {
+      printf 'REMOTE_VERSION=%s\n' "$REMOTE_VERSION"
+      printf 'SERVICE_WAS_ACTIVE=%s\n' "$SERVICE_WAS_ACTIVE"
+      printf 'LCD_WAS_ACTIVE=%s\n' "$LCD_WAS_ACTIVE"
+    } > "$UPGRADE_RERUN_LOCK"
     echo "upgrade.sh was updated during git pull; please run the upgrade again to use the new script." >&2
     exit "$UPGRADE_RERUN_EXIT_CODE"
   fi
