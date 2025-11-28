@@ -14,7 +14,6 @@ urlpatterns = [
         views.readme_asset,
         name="readme-asset",
     ),
-    path("read/<path:doc>/edit/", views.readme_edit, name="readme-edit"),
     path("read/", views.readme, name="readme"),
     path("read/<path:doc>", views.readme, name="readme-document"),
     path("articles/<slug:slug>/", views.developer_article_detail, name="developer-article"),
