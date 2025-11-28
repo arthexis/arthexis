@@ -45,6 +45,17 @@
             "noDebug": true
         },
         {
+            "name": "Test Server",
+            "type": "python",
+            "request": "launch",
+            "python": "${workspaceFolder}/.venv/bin/python",
+            "windows": {
+                "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe"
+            },
+            "program": "${workspaceFolder}/scripts/test_server.py",
+            "noDebug": true
+        },
+        {
             "name": "Pyxel viewport",
             "type": "python",
             "request": "launch",
