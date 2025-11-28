@@ -10,6 +10,7 @@ from django.db.models import Q
 from django.utils import timezone
 
 from . import store
+from .status_display import ERROR_OK_VALUES
 
 
 # Fields to reset when clearing stale status information.
@@ -49,7 +50,24 @@ def clear_stale_cached_statuses(max_age: timedelta = timedelta(minutes=5)) -> in
     stale_chargers = charger_model.objects.filter(
         Q(last_heartbeat__isnull=True) | Q(last_heartbeat__lt=cutoff)
     )
-    updated = stale_chargers.update(**STATUS_RESET_UPDATES)
+
+    placeholder_error_filter = Q(last_error_code__isnull=True) | Q(
+        last_error_code__exact=""
+    )
+    for ok_value in ERROR_OK_VALUES:
+        if not ok_value:
+            continue
+        placeholder_error_filter |= Q(last_error_code__iexact=ok_value)
+
+    non_placeholder_fields = {
+        key: value for key, value in STATUS_RESET_UPDATES.items() if key != "last_error_code"
+    }
+    updated = stale_chargers.exclude(placeholder_error_filter).update(
+        **non_placeholder_fields
+    )
+    updated += stale_chargers.filter(placeholder_error_filter).update(
+        **STATUS_RESET_UPDATES
+    )
 
     lock = store.SESSION_LOCK
     if lock.exists():
