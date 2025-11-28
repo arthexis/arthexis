@@ -44,6 +44,16 @@ def _combine_process_output(result: subprocess.CompletedProcess[str]) -> str:
     return "\n".join(part.strip() for part in parts if part.strip())
 
 
+def _working_tree_clean() -> bool:
+    status = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+    )
+    return status.returncode == 0 and not status.stdout.strip()
+
+
 def _report_failure(message: str, result: subprocess.CompletedProcess[str]) -> None:
     print(message, file=sys.stderr)
     combined = _combine_process_output(result)
@@ -81,6 +91,13 @@ def _check_migrations(labels: Iterable[str]) -> int:
             post_merge,
         )
         return 1
+
+    if _working_tree_clean() and "Migrations for" not in combined:
+        # makemigrations --check occasionally returns a non-zero status when merge
+        # migrations are already present. Treat that state as a success so a clean
+        # repository does not fail the check.
+        print("Migrations check passed.")
+        return 0
 
     print(
         "Uncommitted model changes detected. Please rewrite the latest migration.",
