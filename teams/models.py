@@ -18,7 +18,7 @@ from django.utils import formats, timezone
 from django.utils.translation import gettext_lazy as _
 
 from core import mailer
-from core.entity import Entity
+from core.entity import Entity, EntityAllManager, EntityManager
 from core.fields import SigilShortAutoField
 from core.models import (
     EmailArtifact,
@@ -1006,6 +1006,11 @@ class SlackBotProfile(CoreProfile):
         return self.profile_fields
 
 
+class TaskCategoryManager(EntityManager):
+    def get_by_natural_key(self, name):
+        return self.get(name=name)
+
+
 class TaskCategory(Entity):
     """Standardized categories for manual work assignments."""
 
@@ -1089,6 +1094,9 @@ class TaskCategory(Entity):
         help_text=_("Security group typically assigned to this work."),
     )
 
+    objects = TaskCategoryManager()
+    all_objects = EntityAllManager()
+
     class Meta:
         verbose_name = _("Task Category")
         verbose_name_plural = _("Task Categories")
@@ -1097,6 +1105,11 @@ class TaskCategory(Entity):
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.name
+
+    def natural_key(self):  # pragma: no cover - simple representation
+        return (self.name,)
+
+    natural_key.dependencies = []  # type: ignore[attr-defined]
 
     def availability_label(self) -> str:  # pragma: no cover - admin helper
         return self.get_availability_display()
