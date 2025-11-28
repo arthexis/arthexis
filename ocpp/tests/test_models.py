@@ -789,6 +789,7 @@ class ChargerConfigurationKeyTests(TestCase):
         )
 
 
+@pytest.mark.role("Control")
 def test_simulator_as_config_defaults(simulator: Simulator):
     config = simulator.as_config()
 
@@ -799,6 +800,7 @@ def test_simulator_as_config_defaults(simulator: Simulator):
     assert config.configuration_unknown_keys == []
 
 
+@pytest.mark.role("Control")
 def test_simulator_ws_url_port_and_slash_handling(simulator: Simulator):
     simulator.host = "localhost"
     simulator.ws_port = 9000
@@ -813,6 +815,7 @@ def test_simulator_ws_url_port_and_slash_handling(simulator: Simulator):
     assert simulator.ws_url == "ws://localhost/SIM/"
 
 
+@pytest.mark.role("Control")
 def test_simulator_allows_single_default(simulator: Simulator):
     simulator.default = True
     simulator.full_clean()

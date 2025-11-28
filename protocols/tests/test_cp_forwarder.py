@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 
+import pytest
 import tests.conftest  # noqa: F401
 from unittest.mock import patch
 
@@ -13,6 +14,9 @@ from ocpp.models import Charger
 from protocols.admin import CPForwarderForm
 from protocols.forwarding import send_forwarding_metadata
 from protocols.models import CPForwarder
+
+
+pytestmark = [pytest.mark.role("Satellite")]
 
 
 class CPForwarderTests(TestCase):

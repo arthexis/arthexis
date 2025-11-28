@@ -4,6 +4,7 @@ import sys
 import time as time_module
 import tempfile
 import base64
+import pytest
 from urllib.parse import urljoin
 from collections import deque
 from unittest import mock
@@ -4008,6 +4009,7 @@ class ChargerLandingTests(TestCase):
         store.clear_log(log_id, log_type="charger")
 
 
+@pytest.mark.role("Control")
 class SimulatorLandingTests(TestCase):
     def setUp(self):
         role, _ = NodeRole.objects.get_or_create(name="Terminal")
@@ -4114,6 +4116,7 @@ class ChargerAdminTests(TestCase):
         self.assertTrue(charger_optional.require_rfid)
         self.assertContains(response, "Updated RFID authentication")
 
+    @pytest.mark.role("Control")
     def test_create_simulator_for_cp_action_creates_simulator(self):
         charger = Charger.objects.create(
             charger_id="SIMCP-001",
@@ -4157,6 +4160,7 @@ class ChargerAdminTests(TestCase):
             reverse("admin:ocpp_simulator_change", args=[simulator.pk]),
         )
 
+    @pytest.mark.role("Control")
     def test_create_simulator_for_cp_action_generates_unique_fields(self):
         Simulator.objects.create(name="Lobby Charger Simulator", cp_path="SIMCP-001-2")
         charger_one = Charger.objects.create(
@@ -5379,6 +5383,7 @@ class TransactionAdminTests(TestCase):
         self.assertContains(resp, str(reading.value))
 
 
+@pytest.mark.role("Control")
 class SimulatorAdminTests(TransactionTestCase):
     def setUp(self):
         self.client = Client()
@@ -6101,6 +6106,7 @@ class MeterReadingTests(TransactionTestCase):
         await communicator.disconnect()
 
 
+@pytest.mark.role("Control")
 class ChargePointSimulatorTests(TransactionTestCase):
     async def test_simulator_sends_messages(self):
         received = []
@@ -7532,6 +7538,7 @@ class DispatchActionViewTests(TestCase):
         self.assertEqual(response.json().get("sent"), self.ws.sent[0])
 
 
+@pytest.mark.role("Control")
 class SimulatorStateMappingTests(TestCase):
     def tearDown(self):
         _simulators[1] = SimulatorState()
@@ -8387,6 +8394,7 @@ class LiveUpdateViewTests(TestCase):
         self.assertAlmostEqual(stats["total_kw"], 4.0, places=2)
         self.assertAlmostEqual(stats["today_kw"], 3.0, places=2)
 
+    @pytest.mark.role("Control")
     def test_cp_simulator_uses_htmx_refresh(self):
         resp = self.client.get(reverse("cp-simulator"))
 
