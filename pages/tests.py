@@ -4113,6 +4113,16 @@ class FavoriteTests(TestCase):
         fav = Favorite.objects.get(user=self.user, content_type=ct)
         self.assertEqual(fav.priority, 7)
 
+    def test_favorite_toggle_submission_clears_content_type_cache(self):
+        ct = ContentType.objects.get_by_natural_key("pages", "application")
+        url = reverse("admin:favorite_toggle", args=[ct.id])
+
+        with patch("pages.admin.ContentType.objects.clear_cache") as clear_cache:
+            response = self.client.post(url, {"priority": "1"})
+
+        self.assertRedirects(response, reverse("admin:index"))
+        clear_cache.assert_called_once_with()
+
     def test_cancel_link_uses_next(self):
         ct = ContentType.objects.get_by_natural_key("pages", "application")
         next_url = reverse("admin:pages_application_changelist")
@@ -4183,6 +4193,17 @@ class FavoriteTests(TestCase):
         self.assertRedirects(resp, url)
         fav.refresh_from_db()
         self.assertEqual(fav.priority, 12)
+
+    def test_favorite_list_submission_clears_content_type_cache(self):
+        ct = ContentType.objects.get_by_natural_key("pages", "application")
+        fav = Favorite.objects.create(user=self.user, content_type=ct, priority=3)
+        url = reverse("admin:favorite_list")
+
+        with patch("pages.admin.ContentType.objects.clear_cache") as clear_cache:
+            response = self.client.post(url, {f"priority_{fav.pk}": "5"})
+
+        self.assertRedirects(response, url)
+        clear_cache.assert_called_once_with()
 
     def test_dashboard_includes_favorites_and_user_data(self):
         fav_ct = ContentType.objects.get_by_natural_key("pages", "application")
@@ -4385,6 +4406,18 @@ class FavoriteTests(TestCase):
                 pk=new_id, app_label="pages", model="application"
             ).exists()
         )
+
+    def test_favorite_ct_id_does_not_clear_cache(self):
+        from pages.templatetags.favorites import favorite_ct_id
+
+        with patch(
+            "pages.templatetags.favorites.ContentType.objects.clear_cache"
+        ) as clear_cache:
+            ct_id = favorite_ct_id("pages", "Application")
+
+        clear_cache.assert_not_called()
+        expected_ct = ContentType.objects.get_by_natural_key("pages", "application")
+        self.assertEqual(ct_id, expected_ct.id)
 
     def test_dashboard_uses_change_label(self):
         ct = ContentType.objects.get_by_natural_key("pages", "application")
