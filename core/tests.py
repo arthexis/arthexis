@@ -75,7 +75,7 @@ from core.views import (
     _step_publish,
 )
 from core import views as core_views
-from core import public_wifi
+from core import public_wifi, temp_passwords
 
 
 class DefaultAdminTests(TestCase):
@@ -578,6 +578,57 @@ class UserAdminLoginRFIDTests(TestCase):
         )
         account = CustomerAccount.objects.get(user=self.user)
         self.assertTrue(account.rfids.filter(pk=tag.pk).exists())
+
+
+class UserAdminGuestLoginActionTests(TestCase):
+    def setUp(self):
+        self.client = Client()
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp_dir.cleanup)
+        self.settings_override = override_settings(
+            TEMP_PASSWORD_LOCK_DIR=self.temp_dir.name
+        )
+        self.settings_override.__enter__()
+        self.addCleanup(self.settings_override.__exit__, None, None, None)
+        self.admin = User.objects.create_superuser(
+            username="admin", email="admin@example.com", password="adminpass"
+        )
+        self.client.force_login(self.admin)
+
+    def test_guest_login_action_creates_and_logs_in_user(self):
+        existing_ids = set(User.objects.values_list("pk", flat=True))
+        with patch("core.admin.temp_passwords.generate_password", return_value="TempGuest123"):
+            response = self.client.get(
+                reverse("admin:core_user_login_as_guest_user"), follow=True
+            )
+
+        self.assertEqual(response.status_code, 200)
+        new_users = User.objects.exclude(pk__in=existing_ids)
+        self.assertEqual(new_users.count(), 1)
+        guest_user = new_users.first()
+        self.addCleanup(temp_passwords.discard_temp_password, guest_user.username)
+
+        self.assertTrue(guest_user.is_staff)
+        self.assertFalse(guest_user.is_superuser)
+        self.assertIsNotNone(guest_user.temporary_expires_at)
+
+        expected_expires = timezone.now() + temp_passwords.DEFAULT_EXPIRATION
+        self.assertAlmostEqual(
+            guest_user.temporary_expires_at,
+            expected_expires,
+            delta=timedelta(minutes=1),
+        )
+
+        entry = temp_passwords.load_temp_password(guest_user.username)
+        self.assertIsNotNone(entry)
+        self.assertFalse(entry.is_expired)
+        self.assertTrue(entry.check_password("TempGuest123"))
+
+        self.assertEqual(response.wsgi_request.user.pk, guest_user.pk)
+        messages_list = list(get_messages(response.wsgi_request))
+        self.assertTrue(
+            any("Logged in as" in message.message for message in messages_list)
+        )
 
 
 class AdminSitePasswordChangeTests(TestCase):
