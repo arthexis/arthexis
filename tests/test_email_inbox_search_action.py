@@ -132,6 +132,7 @@ class EmailInboxSearchTests(TestCase):
         return_value=[{"subject": "S", "from": "F", "body": "B", "date": ""}],
     )
     def test_admin_action(self, mock_search):
+        User.all_objects.filter(username="admin").delete()
         admin = User.objects.create(username="admin", is_staff=True, is_superuser=True)
         inbox = EmailInbox.objects.create(
             user=admin,
