@@ -33,6 +33,23 @@ def test_run_tests_uses_environment(monkeypatch: pytest.MonkeyPatch, tmp_path: P
     assert calls[0]["env"].get("DJANGO_SETTINGS_MODULE") == "config.settings"
 
 
+def test_run_migrations_delegates_to_env_refresh(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    calls: list[dict[str, object]] = []
+
+    def fake_run_env_refresh(base_dir: Path, *, latest: bool) -> bool:
+        calls.append({"base_dir": base_dir, "latest": latest})
+        return True
+
+    monkeypatch.setattr(test_server.migration_server, "run_env_refresh", fake_run_env_refresh)
+
+    result = test_server.run_migrations(tmp_path, latest=False)
+
+    assert result is True
+    assert calls == [{"base_dir": tmp_path, "latest": False}]
+
+
 def test_main_runs_until_keyboard_interrupt(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     sequence: list[str] = []
 
@@ -44,6 +61,10 @@ def test_main_runs_until_keyboard_interrupt(monkeypatch: pytest.MonkeyPatch, tmp
         sequence.append("wait")
         raise KeyboardInterrupt
 
+    def fake_run_migrations(_: Path, *, latest: bool) -> bool:
+        sequence.append(f"migrate:{latest}")
+        return True
+
     def fake_run_tests(_: Path, *, use_last_failed: bool) -> bool:
         sequence.append(f"run:{use_last_failed}")
         return False
@@ -51,9 +72,43 @@ def test_main_runs_until_keyboard_interrupt(monkeypatch: pytest.MonkeyPatch, tmp
     monkeypatch.setattr(test_server, "BASE_DIR", tmp_path)
     monkeypatch.setattr(test_server.migration_server, "collect_source_mtimes", fake_collect)
     monkeypatch.setattr(test_server.migration_server, "wait_for_changes", fake_wait_for_changes)
+    monkeypatch.setattr(test_server, "run_migrations", fake_run_migrations)
     monkeypatch.setattr(test_server, "run_tests", fake_run_tests)
 
     result = test_server.main([])
 
     assert result == 0
-    assert sequence == ["collect", "run:False", "wait"]
+    assert sequence == ["collect", "migrate:True", "run:False", "wait"]
+
+
+def test_main_skips_tests_when_migrations_fail(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    sequence: list[str] = []
+
+    def fake_collect(_: Path):
+        sequence.append("collect")
+        return {}
+
+    def fake_wait_for_changes(_: Path, __: dict[str, int], **___: object):
+        sequence.append("wait")
+        raise KeyboardInterrupt
+
+    def fake_run_migrations(_: Path, *, latest: bool) -> bool:
+        sequence.append("migrate")
+        return False
+
+    def fake_run_tests(_: Path, *, use_last_failed: bool) -> bool:
+        sequence.append("run")
+        return True
+
+    monkeypatch.setattr(test_server, "BASE_DIR", tmp_path)
+    monkeypatch.setattr(test_server.migration_server, "collect_source_mtimes", fake_collect)
+    monkeypatch.setattr(test_server.migration_server, "wait_for_changes", fake_wait_for_changes)
+    monkeypatch.setattr(test_server, "run_migrations", fake_run_migrations)
+    monkeypatch.setattr(test_server, "run_tests", fake_run_tests)
+
+    result = test_server.main([])
+
+    assert result == 0
+    assert sequence == ["collect", "migrate", "wait"]
