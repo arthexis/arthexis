@@ -6,9 +6,29 @@
 set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PIP_INSTALL_HELPER="$SCRIPT_DIR/scripts/helpers/pip_install.py"
+# Normalize helper scripts that might have been checked out with Windows line endings
+sanitize_helper_newlines() {
+  local target="$1"
+  if [ ! -f "$target" ]; then
+    return 0
+  fi
+
+  if LC_ALL=C grep -q $'\r' "$target"; then
+    if command -v perl >/dev/null 2>&1; then
+      perl -pi -e 's/\r$//' "$target"
+    else
+      local tmp
+      tmp="$(mktemp)"
+      tr -d '\r' <"$target" >"$tmp" && cat "$tmp" >"$target"
+      rm -f "$tmp"
+    fi
+  fi
+}
 # shellcheck source=scripts/helpers/logging.sh
+sanitize_helper_newlines "$SCRIPT_DIR/scripts/helpers/logging.sh"
 . "$SCRIPT_DIR/scripts/helpers/logging.sh"
 # shellcheck source=scripts/helpers/systemd_locks.sh
+sanitize_helper_newlines "$SCRIPT_DIR/scripts/helpers/systemd_locks.sh"
 . "$SCRIPT_DIR/scripts/helpers/systemd_locks.sh"
 
 if [ -z "${ARTHEXIS_RUN_AS_USER:-}" ]; then
