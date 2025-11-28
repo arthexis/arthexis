@@ -93,6 +93,11 @@ def _check_migrations(labels: Iterable[str]) -> int:
 
 def main() -> int:
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+    # Prefer the lightweight SQLite backend during migration checks to avoid
+    # spending time probing unavailable PostgreSQL instances. The environment
+    # variable can still be overridden by callers that want to target a
+    # specific database engine.
+    os.environ.setdefault("ARTHEXIS_FORCE_DB_BACKEND", "sqlite")
     django.setup()
     labels = _local_app_labels()
     return _check_migrations(labels)
