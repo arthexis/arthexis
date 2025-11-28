@@ -3866,16 +3866,16 @@ class ClientReport(Entity):
                         if end_dt and timezone.is_naive(end_dt):
                             end_dt = timezone.make_aware(end_dt, timezone.utc)
 
-                normalized_rows.append(
-                    {
-                        "connector": row.get("connector"),
-                        "connector_label": row.get("connector_label"),
-                        "connector_order": row.get("connector_order"),
-                        "rfid_label": row.get("rfid_label"),
-                        "account_name": row.get("account_name"),
-                        "start_kwh": row.get("start_kwh"),
-                        "end_kwh": row.get("end_kwh"),
-                        "session_kwh": row.get("session_kwh"),
+                    normalized_rows.append(
+                        {
+                            "connector": row.get("connector"),
+                            "connector_label": row.get("connector_label"),
+                            "connector_order": row.get("connector_order"),
+                            "rfid_label": row.get("rfid_label"),
+                            "account_name": row.get("account_name"),
+                            "start_kwh": row.get("start_kwh"),
+                            "end_kwh": row.get("end_kwh"),
+                            "session_kwh": row.get("session_kwh"),
                             "start": start_dt,
                             "end": end_dt,
                             "start_display": ClientReport._format_session_datetime(
@@ -4028,16 +4028,20 @@ class ClientReport(Entity):
         from django.template.loader import render_to_string
 
         candidates: list[str] = []
+
+        requested = (language_code or "").strip().replace("_", "-")
+        base_language = requested.split("-", 1)[0] if requested else ""
         normalized = cls.normalize_language(language_code)
-        if normalized:
-            candidates.append(normalized)
+
+        for code in (requested, base_language, normalized):
+            if code:
+                candidates.append(code)
 
         default_code = default_report_language()
-        if default_code and default_code not in candidates:
+        if default_code:
             candidates.append(default_code)
 
-        if "en" not in candidates:
-            candidates.append("en")
+        candidates.append("en")
 
         for code in dict.fromkeys(candidates):
             template_name = f"core/reports/client_report_pdf/{code}.json"
