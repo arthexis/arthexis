@@ -89,11 +89,11 @@ Supported options:
 | `--latest` / `--unstable` | Follows the unstable channel, upgrading whenever the origin/main revision changes even if `VERSION` remains the same.【F:upgrade.sh†L249-L285】【F:upgrade.sh†L520-L550】 |
 | `--stable` / `--regular` / `--normal` | Uses the stable channel, aligning with release revisions and the 24-hour auto-upgrade cadence.【F:upgrade.sh†L249-L285】【F:upgrade.sh†L520-L550】 |
 | `--clean` | Deletes `db.sqlite3` (and any `db_*.sqlite3` snapshots) after confirmation so migrations start from a blank database.【F:upgrade.sh†L122-L167】【F:upgrade.sh†L420-L444】 |
-| `--no-restart` | Prevents the helper from stopping services or relaunching them afterwards. Handy when you only want to refresh the working tree.【F:upgrade.sh†L123-L144】【F:upgrade.sh†L404-L419】【F:upgrade.sh†L514-L551】 |
+| `--start` / `--no-start` | Forces services to start after the upgrade (even if they were previously stopped) or keeps them offline afterwards; `--no-start` also accepts the legacy `--no-restart` alias.【F:upgrade.sh†L123-L144】【F:upgrade.sh†L404-L419】【F:upgrade.sh†L514-L551】 |
 | `--no-warn` | Skips interactive confirmation before destructive database operations (used with `--clean` or uninstall flows).【F:upgrade.sh†L122-L167】 |
 
 Additional behaviour:
-- Before applying migrations it refreshes Nginx maintenance assets, optionally clears the database, reruns `env-refresh.sh`, migrates legacy systemd configurations, and restarts services unless `--no-restart` was requested.【F:upgrade.sh†L404-L551】
+- Before applying migrations it refreshes Nginx maintenance assets, optionally clears the database, reruns `env-refresh.sh`, migrates legacy systemd configurations, and restarts services unless `--no-start`/`--no-restart` was requested.【F:upgrade.sh†L404-L551】
 - After restarting, it updates desktop shortcuts so GUI launchers stay current.【F:upgrade.sh†L552-L555】
 
 ### 3.2 Windows: `upgrade.bat`

@@ -575,6 +575,7 @@ FORCE_STOP=0
 FORCE_UPGRADE=0
 CLEAN=0
 NO_RESTART=0
+FORCE_START=0
 NO_WARN=0
 LOCAL_ONLY=0
 DETACHED=0
@@ -598,8 +599,15 @@ while [[ $# -gt 0 ]]; do
       FORWARDED_ARGS+=("$1")
       shift
       ;;
-    --no-restart)
+    --no-start|--no-restart)
       NO_RESTART=1
+      FORCE_START=0
+      FORWARDED_ARGS+=("$1")
+      shift
+      ;;
+    --start)
+      FORCE_START=1
+      NO_RESTART=0
       FORWARDED_ARGS+=("$1")
       shift
       ;;
@@ -989,11 +997,11 @@ upgrade_failure_recovery() {
   echo "Upgrade failed with exit code ${exit_code}; attempting to restore services..." >&2
 
   if [[ $NO_RESTART -eq 1 ]]; then
-    echo "Automatic recovery skipped because --no-restart was provided." >&2
+    echo "Automatic recovery skipped because --no-start/--no-restart was provided." >&2
     exit "$exit_code"
   fi
 
-  if [[ ${SERVICE_WAS_ACTIVE:-1} -eq 0 ]]; then
+  if [[ ${SERVICE_WAS_ACTIVE:-1} -eq 0 ]] && [[ $FORCE_START -eq 0 ]]; then
     echo "Automatic recovery skipped because services were stopped before the upgrade." >&2
     exit "$exit_code"
   fi
@@ -1302,6 +1310,9 @@ fi
 SHOULD_RESTART_AFTER_UPGRADE=1
 if [ -n "$SERVICE_NAME" ] && [[ $SERVICE_WAS_ACTIVE -eq 0 ]]; then
   SHOULD_RESTART_AFTER_UPGRADE=0
+fi
+if [[ $FORCE_START -eq 1 ]]; then
+  SHOULD_RESTART_AFTER_UPGRADE=1
 fi
 
 if [[ $NO_RESTART -eq 0 ]]; then
