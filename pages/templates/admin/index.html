@@ -530,7 +530,7 @@
             text-align: left;
         }
 
-        .dashboard-main .module td[data-label]::before {
+        .dashboard-main .module [data-label]::before {
             content: attr(data-label);
             font-size: 0.75rem;
             font-weight: 600;
@@ -539,11 +539,11 @@
             color: var(--body-quiet-color);
         }
 
-        .dashboard-main .module td.change-link-cell {
+        .dashboard-main .module .change-link-cell {
             display: none;
         }
 
-        .dashboard-main .module td.change-link-cell.change-link-cell--view-only {
+        .dashboard-main .module .change-link-cell.change-link-cell--view-only {
             display: flex;
         }
 
