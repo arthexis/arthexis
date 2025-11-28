@@ -938,6 +938,62 @@ def _resolve_github_slug(base_dir: Path) -> str | None:
     return _parse_github_slug(remote_url)
 
 
+def _fetch_ci_workflow_status(repo_slug: str, branch: str, workflow: str = "ci.yml") -> str | None:
+    """Return the latest completed CI workflow status for ``branch`` when available."""
+
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "arthexis-auto-upgrade",
+    }
+
+    token = os.environ.get("GITHUB_TOKEN", "")
+    if isinstance(token, str):
+        cleaned = token.strip()
+        if cleaned:
+            headers["Authorization"] = f"token {cleaned}"
+
+    url = f"https://api.github.com/repos/{repo_slug}/actions/workflows/{workflow}/runs"
+
+    response = None
+    try:
+        response = requests.get(
+            url,
+            headers=headers,
+            params={"branch": branch, "status": "completed", "per_page": 1},
+            timeout=10,
+        )
+    except requests.RequestException:
+        logger.warning("Failed to query CI workflow status for %s", repo_slug, exc_info=True)
+        return None
+
+    try:
+        if response is None or response.status_code != 200:
+            logger.warning(
+                "CI workflow status request for %s returned %s",
+                repo_slug,
+                getattr(response, "status_code", "<unknown>"),
+            )
+            return None
+
+        try:
+            payload = response.json()
+        except ValueError:
+            return None
+
+        runs = payload.get("workflow_runs")
+        if not isinstance(runs, list) or not runs:
+            return None
+
+        conclusion = runs[0].get("conclusion")
+        return conclusion.lower() if isinstance(conclusion, str) else None
+    finally:
+        if response is not None:
+            close = getattr(response, "close", None)
+            if callable(close):
+                with contextlib.suppress(Exception):
+                    close()
+
+
 def _fetch_ci_status(repo_slug: str, revision: str) -> str | None:
     """Return the combined CI status for ``revision`` when available."""
 
@@ -983,12 +1039,16 @@ def _fetch_ci_status(repo_slug: str, revision: str) -> str | None:
                     close()
 
 
-def _ci_status_for_revision(base_dir: Path, revision: str) -> str | None:
-    """Return the CI status value for ``revision`` when available."""
+def _ci_status_for_revision(base_dir: Path, revision: str, branch: str = "main") -> str | None:
+    """Return the CI status value aligned with the main branch badge when available."""
 
     repo_slug = _resolve_github_slug(base_dir)
     if not repo_slug:
         return None
+
+    branch_status = _fetch_ci_workflow_status(repo_slug, branch or "main")
+    if branch_status:
+        return branch_status
 
     return _fetch_ci_status(repo_slug, revision)
 
@@ -1499,7 +1559,7 @@ def check_github_updates(channel_override: str | None = None) -> None:
             )
             return
 
-        ci_status = _ci_status_for_revision(base_dir, remote_revision)
+        ci_status = _ci_status_for_revision(base_dir, remote_revision, branch=branch)
         if ci_status and ci_status != "success":
             _append_auto_upgrade_log(
                 base_dir,
