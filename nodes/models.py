@@ -378,6 +378,8 @@ class Node(Entity):
         help_text="Optional profile providing metadata for automation tasks.",
     )
 
+    preferred_port: int = int(os.environ.get("PORT", 8888))
+
     FEATURE_LOCK_MAP = {
         "lcd-screen": "lcd_screen.lck",
         "rfid-scanner": "rfid.lck",
@@ -557,6 +559,18 @@ class Node(Entity):
             return None
         ordered = cls.order_ipv4_addresses(cleaned)
         return ",".join(ordered)
+
+    @classmethod
+    def get_preferred_port(cls) -> int:
+        """Return the port configured when the instance started."""
+
+        try:
+            port = int(cls.preferred_port)
+        except (TypeError, ValueError):
+            return 8888
+        if port <= 0 or port > 65535:
+            return 8888
+        return port
 
     def get_ipv4_addresses(self) -> list[str]:
         stored = self.ipv4_address or ""
@@ -920,7 +934,7 @@ class Node(Entity):
         ipv6_address = cls._select_preferred_ip(ipv6_candidates) or ""
 
         preferred_contact = ipv4_address or ipv6_address or direct_address or "127.0.0.1"
-        port = int(os.environ.get("PORT", 8888))
+        port = cls.get_preferred_port()
         base_path = str(settings.BASE_DIR)
         ver_path = Path(settings.BASE_DIR) / "VERSION"
         installed_version = ver_path.read_text().strip() if ver_path.exists() else ""
