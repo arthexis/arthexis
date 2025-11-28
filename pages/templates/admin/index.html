@@ -639,6 +639,25 @@
         {% endif %}
     </div>
     {% endif %}
+    <div class="module" id="admin-history-module">
+        <h2>{% translate "Recently viewed admin pages" %}</h2>
+        {% with history_list=request.user.admin_history.all %}
+          {% if history_list %}
+            <ul class="actionlist">
+              {% for entry in history_list|slice:":5" %}
+                <li>
+                  <a class="recent-action-object" href="{{ entry.url }}">{{ entry.admin_label|capfirst }}</a>
+                  <div class="recent-action-meta mini quiet">
+                    <time class="recent-action-timestamp" datetime="{{ entry.visited_at|date:'c' }}">{{ entry.visited_at|localtime|date:"SHORT_DATETIME_FORMAT" }}</time>
+                  </div>
+                </li>
+              {% endfor %}
+            </ul>
+          {% else %}
+            <p class="quiet">{% translate "No admin pages visited yet." %}</p>
+          {% endif %}
+        {% endwith %}
+    </div>
     <div class="module" id="viewhistory-mini-module">
         <h2>{% translate 'Public site traffic' %}</h2>
         <div class="chart-wrapper">
