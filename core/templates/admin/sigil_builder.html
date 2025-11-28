@@ -5,6 +5,13 @@
 <div id="content-main">
   <form method="post" enctype="multipart/form-data" style="margin-bottom:1em;">
     {% csrf_token %}
+    {% if errors %}
+    <ul class="errorlist">
+      {% for error in errors %}
+      <li>{{ error }}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
     {% if show_sigils_input %}
     <label for="sigils_text">{% trans "Sigils" %}</label>
     <textarea name="sigils_text" id="sigils_text" rows="10" cols="80" style="width:100%;">{{ sigils_text }}</textarea>
