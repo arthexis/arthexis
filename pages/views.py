@@ -778,11 +778,35 @@ def _relative_readme_path(readme_file: Path, root_base: Path) -> str | None:
         return None
 
 
+def _split_html_sections(html: str, keep_sections: int) -> tuple[str, str]:
+    """Return ``keep_sections`` leading sections and the remaining HTML."""
+
+    if keep_sections < 1:
+        return "", html
+
+    heading_matches = list(re.finditer(r"<h[1-6]\\b[^>]*>", html, flags=re.IGNORECASE))
+    if len(heading_matches) <= keep_sections:
+        return html, ""
+
+    split_index = heading_matches[keep_sections].start()
+    return html[:split_index], html[split_index:]
+
+
 def _render_readme(request, role, doc: str | None = None, force_footer: bool = False):
     lang = getattr(request, "LANGUAGE_CODE", "")
     lang = lang.replace("_", "-").lower()
     document = _locate_readme_document(role, doc, lang)
     html, toc_html = _render_document_file(document.file)
+    full_document = request.GET.get("full") == "1"
+    initial_content, remaining_content = _split_html_sections(html, 2)
+    if full_document:
+        initial_content = html
+        remaining_content = ""
+
+    if request.headers.get("HX-Request") == "true" and request.GET.get("fragment") == "remaining":
+        response = HttpResponse(remaining_content)
+        patch_vary_headers(response, ["Accept-Language", "Cookie"])
+        return response
     relative_path = _relative_readme_path(document.file, document.root_base)
     user = getattr(request, "user", None)
     can_edit = bool(
@@ -797,10 +821,22 @@ def _render_readme(request, role, doc: str | None = None, force_footer: bool = F
             edit_url = reverse("pages:readme-edit", kwargs={"doc": relative_path})
         except NoReverseMatch:
             edit_url = None
+    base_query = request.GET.copy()
+    base_query.pop("fragment", None)
+    base_query.pop("full", None)
+    fragment_query = base_query.copy()
+    fragment_query["fragment"] = "remaining"
+    fragment_url = f"{request.path}?{fragment_query.urlencode()}"
+    full_query = base_query.copy()
+    full_query["full"] = "1"
+    full_document_url = f"{request.path}?{full_query.urlencode()}"
     context = {
-        "content": html,
+        "content": initial_content,
         "title": document.title,
         "toc": toc_html,
+        "has_remaining_sections": bool(remaining_content.strip()),
+        "fragment_url": fragment_url,
+        "full_document_url": full_document_url,
         "page_url": request.build_absolute_uri(),
         "edit_url": edit_url,
         "force_footer": force_footer,

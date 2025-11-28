@@ -33,11 +33,33 @@
         </a>
       </div>
     {% endif %}
-    <div class="markdown-body">
+    <div class="markdown-body" id="reader-content">
       {{ content|safe }}
+      {% if has_remaining_sections %}
+        <div
+          id="reader-remaining-loader"
+          class="reader-remaining-loader my-4"
+          hx-get="{{ fragment_url }}"
+          hx-trigger="load"
+          hx-swap="outerHTML"
+        >
+          <div class="d-flex align-items-center gap-2 text-muted">
+            <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+            <span>{% trans "Loading remaining sections…" %}</span>
+          </div>
+          <noscript>
+            <a class="btn btn-outline-primary btn-sm mt-3" href="{{ full_document_url }}">
+              {% trans "Load full document" %}
+            </a>
+          </noscript>
+        </div>
+      {% endif %}
     </div>
   </div>
 </div>
+{% if has_remaining_sections %}
+<script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
+{% endif %}
 <script>
   (function () {
     const RELOAD_DELAY = 5 * 60 * 1000;
