@@ -539,6 +539,82 @@ class UserDatumAdminMixin(admin.ModelAdmin):
             context["is_seed_datum"] = False
         return super().render_change_form(request, context, add, change, form_url, obj)
 
+    def get_actions(self, request):
+        actions = super().get_actions(request)
+        if not _supports_user_datum(self.model):
+            return actions
+
+        action = self.get_action("toggle_selected_user_data")
+        if action is not None:
+            actions.setdefault("toggle_selected_user_data", action)
+        return actions
+
+    @admin.action(description=_("Toggle selected User Data"))
+    def toggle_selected_user_data(self, request, queryset):
+        if not _supports_user_datum(self.model):
+            messages.warning(
+                request,
+                _("User data is not available for this model."),
+            )
+            return
+
+        manager = getattr(self.model, "all_objects", self.model._default_manager)
+        toggled = 0
+        skipped = 0
+
+        for obj in queryset:
+            target_user = _resolve_fixture_user(obj, request.user)
+            allow_user_data = _user_allows_user_data(target_user)
+            if getattr(obj, "is_user_data", False):
+                manager.filter(pk=obj.pk).update(is_user_data=False)
+                obj.is_user_data = False
+                delete_user_fixture(obj, target_user)
+                handler = getattr(self, "user_datum_deleted", None)
+                if callable(handler):
+                    handler(request, obj)
+                toggled += 1
+                continue
+
+            if not allow_user_data:
+                skipped += 1
+                continue
+
+            manager.filter(pk=obj.pk).update(is_user_data=True)
+            obj.is_user_data = True
+            dump_user_fixture(obj, target_user)
+            handler = getattr(self, "user_datum_saved", None)
+            if callable(handler):
+                handler(request, obj)
+            toggled += 1
+
+        if toggled:
+            opts = self.model._meta
+            self.message_user(
+                request,
+                ngettext(
+                    "Toggled user data for %(count)d %(verbose_name)s.",
+                    "Toggled user data for %(count)d %(verbose_name_plural)s.",
+                    toggled,
+                )
+                % {
+                    "count": toggled,
+                    "verbose_name": opts.verbose_name,
+                    "verbose_name_plural": opts.verbose_name_plural,
+                },
+                level=messages.SUCCESS,
+            )
+        if skipped:
+            self.message_user(
+                request,
+                ngettext(
+                    "Skipped %(count)d object because user data is not available.",
+                    "Skipped %(count)d objects because user data is not available.",
+                    skipped,
+                )
+                % {"count": skipped},
+                level=messages.WARNING,
+            )
+
 
 class EntityModelAdmin(UserDatumAdminMixin, admin.ModelAdmin):
     """ModelAdmin base class for :class:`Entity` models."""
