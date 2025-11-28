@@ -2150,6 +2150,28 @@ class Simulator(Entity):
         # promote a new default without having to manually demote the
         # previous one first.
 
+    def validate_constraints(self, exclude=None):
+        """Allow promoting a new default without pre-validation conflicts."""
+
+        try:
+            super().validate_constraints(exclude=exclude)
+        except ValidationError as exc:
+            if not self.default:
+                raise
+
+            remaining_errors: dict[str, list[str]] = {}
+            for field, messages in exc.message_dict.items():
+                filtered = [
+                    message
+                    for message in messages
+                    if "unique_default_simulator" not in message
+                ]
+                if filtered:
+                    remaining_errors[field] = filtered
+
+            if remaining_errors:
+                raise ValidationError(remaining_errors)
+
     def save(self, *args, **kwargs):
         if self.default and not self.is_deleted:
             type(self).all_objects.filter(default=True, is_deleted=False).exclude(

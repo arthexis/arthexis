@@ -95,6 +95,27 @@ class StubVenv:
     log: Path
 
 
+@pytest.fixture
+def db():
+    """Lightweight database fixture mirroring ``pytest-django``'s ``db``.
+
+    The project intentionally avoids the pytest-django plugin, but a handful of
+    tests still expect the ``db`` fixture to flush state and provide database
+    access. ``TransactionTestCase`` exposes the same setup/teardown helpers used
+    by Django's own test runner, so reusing them keeps each test isolated
+    without introducing a new dependency.
+    """
+
+    from django.test import TransactionTestCase
+
+    case = TransactionTestCase(methodName="__init__")
+    case._pre_setup()
+    try:
+        yield
+    finally:
+        case._post_teardown()
+
+
 def create_stub_venv(repo: Path) -> StubVenv:
     """Write a fake ``.venv/bin/python`` that captures module invocations.
 
