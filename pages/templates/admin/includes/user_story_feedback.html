@@ -179,6 +179,40 @@
         .join('\n');
     };
 
+    const copyReportToClipboard = async text => {
+      if (!text) {
+        return false;
+      }
+
+      if (window.isSecureContext && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+        try {
+          await navigator.clipboard.writeText(text);
+          return true;
+        } catch (clipboardError) {
+          // continue to fallback
+        }
+      }
+
+      const fallbackField = document.createElement('textarea');
+      fallbackField.value = text;
+      fallbackField.setAttribute('readonly', '');
+      fallbackField.style.position = 'absolute';
+      fallbackField.style.left = '-9999px';
+      document.body.appendChild(fallbackField);
+      fallbackField.select();
+      fallbackField.setSelectionRange(0, fallbackField.value.length);
+
+      let copied = false;
+      try {
+        copied = document.execCommand('copy');
+      } catch (fallbackError) {
+        copied = false;
+      }
+
+      fallbackField.remove();
+      return copied;
+    };
+
     const setCharCount = () => {
       if (counter && commentField) {
         counter.textContent = commentField.value.length;
@@ -272,6 +306,7 @@
       const formData = new FormData(form);
       const shouldCopy = Boolean(copyCheckbox && copyCheckbox.checked);
       const toonReport = shouldCopy ? buildToonReport(formData) : '';
+      const copyAttempt = shouldCopy && toonReport ? copyReportToClipboard(toonReport) : Promise.resolve(false);
 
       try {
         const response = await fetch(form.action, {
@@ -285,25 +320,19 @@
         if (response.ok) {
           form.reset();
           setCharCount();
+          const copySucceeded = shouldCopy ? await copyAttempt : false;
           if (successAlert) {
-            successAlert.textContent = defaultSuccessMessage;
+            successAlert.textContent = copySucceeded
+              ? `${defaultSuccessMessage} ${copySuccessMessage}`
+              : defaultSuccessMessage;
             successAlert.classList.remove('d-none');
             successAlert.removeAttribute('hidden');
           }
 
-          if (shouldCopy && toonReport) {
-            try {
-              await navigator.clipboard.writeText(toonReport);
-              if (successAlert) {
-                successAlert.textContent = `${defaultSuccessMessage} ${copySuccessMessage}`;
-              }
-            } catch (copyError) {
-              if (errorAlert) {
-                errorAlert.textContent = copyFailureMessage;
-                errorAlert.classList.remove('d-none');
-                errorAlert.removeAttribute('hidden');
-              }
-            }
+          if (shouldCopy && !copySucceeded && errorAlert) {
+            errorAlert.textContent = copyFailureMessage;
+            errorAlert.classList.remove('d-none');
+            errorAlert.removeAttribute('hidden');
           }
         } else {
           const data = await response.json().catch(() => ({}));
