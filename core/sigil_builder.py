@@ -91,6 +91,7 @@ def _sigil_builder_view(request):
                     }
                 )
 
+    errors: list[str] = []
     sigils_text = ""
     resolved_text = ""
     show_sigils_input = True
@@ -100,8 +101,16 @@ def _sigil_builder_view(request):
         source_text = sigils_text
         upload = request.FILES.get("sigils_file")
         if upload:
-            source_text = upload.read().decode("utf-8", errors="ignore")
-            show_sigils_input = False
+            if not hasattr(upload, "read"):
+                errors.append(_("Uploaded file could not be processed."))
+            elif getattr(upload, "size", None) in (None, 0):
+                errors.append(_("Uploaded file is empty."))
+            else:
+                try:
+                    source_text = upload.read().decode("utf-8", errors="ignore")
+                    show_sigils_input = False
+                except Exception:
+                    errors.append(_("Unable to read uploaded file."))
         else:
             single = request.POST.get("sigil", "")
             if single:
@@ -109,10 +118,10 @@ def _sigil_builder_view(request):
                     f"[{single}]" if not single.startswith("[") else single
                 )
                 sigils_text = source_text
-        if source_text:
+        if source_text and not errors:
             resolved_text = resolve_sigils_in_text(source_text)
             show_result = True
-        if upload:
+        if upload and not errors:
             sigils_text = ""
 
     context = admin.site.each_context(request)
@@ -124,6 +133,7 @@ def _sigil_builder_view(request):
             "auto_fields": auto_fields,
             "sigils_text": sigils_text,
             "resolved_text": resolved_text,
+            "errors": errors,
             "show_sigils_input": show_sigils_input,
             "show_result": show_result,
         }
