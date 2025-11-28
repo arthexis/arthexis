@@ -409,7 +409,24 @@ def _run_upgrade_command(
             )
             return None, False
 
-    subprocess.run(args, cwd=base_dir, check=True)
+    command = args if os.name != "nt" else ["cmd", "/c", *args]
+
+    try:
+        subprocess.run(command, cwd=base_dir, check=True)
+    except OSError as exc:  # pragma: no cover - platform-specific
+        logger.warning(
+            "Inline auto-upgrade launch failed; will retry on next cycle",
+            exc_info=True,
+        )
+        _append_auto_upgrade_log(
+            base_dir,
+            (
+                "Inline auto-upgrade launch failed "
+                f"({exc}); will retry on next cycle"
+            ),
+        )
+        return None, False
+
     return None, True
 
 
