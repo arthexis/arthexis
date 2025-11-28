@@ -6,6 +6,7 @@ app_name = "pages"
 
 urlpatterns = [
     path("", views.index, name="index"),
+    path("footer/", views.footer_fragment, name="footer-fragment"),
     path("docs/", views.readme_docs_redirect, name="docs-redirect"),
     path("docs/<path:doc>", views.readme_docs_redirect, name="docs-document-redirect"),
     path(

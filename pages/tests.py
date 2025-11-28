@@ -5690,3 +5690,40 @@ class WhatsAppWebhookTests(TestCase):
             self.url, data=json.dumps(payload), content_type="application/json"
         )
         self.assertEqual(response.status_code, 503)
+
+
+class FooterFragmentTests(TestCase):
+    def test_footer_fragment_renders_references(self):
+        Reference.objects.create(
+            alt_text="Docs",
+            value="https://example.com",
+            include_in_footer=True,
+        )
+
+        response = self.client.get(reverse("pages:footer-fragment"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Docs")
+        self.assertContains(response, "https://example.com")
+
+    def test_footer_fragment_respects_force_parameter(self):
+        forced_response = self.client.get(
+            f"{reverse('pages:footer-fragment')}?force=1"
+        )
+
+        self.assertEqual(forced_response.status_code, 200)
+        self.assertContains(forced_response, "arthexis")
+
+    def test_base_template_uses_lazy_footer_placeholder(self):
+        response = self.client.get(reverse("pages:readme"))
+        footer_url = reverse("pages:footer-fragment")
+
+        self.assertContains(response, 'id="footer-placeholder"')
+        self.assertContains(response, footer_url)
+        self.assertContains(response, 'hx-trigger="revealed"')
+
+    def test_index_page_passes_force_flag_to_footer_request(self):
+        response = self.client.get(reverse("pages:index"))
+        forced_footer_url = f"{reverse('pages:footer-fragment')}?force=1"
+
+        self.assertContains(response, forced_footer_url)

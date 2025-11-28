@@ -1012,7 +1012,30 @@
         </div>
       </div>
     </div>
-    {% render_footer %}
+    <div
+      id="footer-placeholder"
+      class="footer-placeholder container mt-5 border-top pt-3"
+      hx-get="{% url 'pages:footer-fragment' %}{% if force_footer %}?force=1{% endif %}"
+      hx-trigger="revealed"
+      hx-swap="outerHTML"
+    >
+      <div class="text-center text-muted py-4">
+        <div
+          class="spinner-border spinner-border-sm"
+          role="status"
+          aria-label="{% trans 'Loading footer' %}"
+        ></div>
+        <span class="ms-2">{% trans "Loading footer..." %}</span>
+      </div>
+    </div>
+    <noscript>
+      {% render_footer %}
+    </noscript>
+    <script
+      src="https://unpkg.com/htmx.org@1.9.12"
+      integrity="sha384-OLBgp1GsljhM2TJ+sbHjaiH9txEUvgdDTAzHv2P24donTt6/529l+9Ua0vFImLlb"
+      crossorigin="anonymous"
+    ></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
     {% if chat_enabled %}

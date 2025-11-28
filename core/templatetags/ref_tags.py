@@ -18,43 +18,21 @@ register = template.Library()
 INSTANCE_START = timezone.now()
 
 
-@register.simple_tag
-def ref_img(value, size=200, alt=None):
-    """Return an <img> tag with the stored reference image for the value."""
-    ref, created = Reference.objects.get_or_create(
-        value=value, defaults={"alt_text": alt or value}
-    )
-    alt_text = alt or ref.alt_text or "reference"
-    if ref.alt_text != alt_text:
-        ref.alt_text = alt_text
-    ref.uses += 1
-    ref.save()
-    return format_html(
-        '<img src="{}" width="{}" height="{}" alt="{}" />',
-        ref.image.url,
-        size,
-        size,
-        ref.alt_text,
-    )
+def build_footer_context(*, request=None, badge_site=None, badge_node=None, force_footer=False):
+    """Return footer rendering context shared across templates and API views."""
 
-
-@register.inclusion_tag("core/footer.html", takes_context=True)
-def render_footer(context):
-    """Render footer links for references marked to appear there."""
     refs = Reference.objects.filter(include_in_footer=True).prefetch_related(
         "roles", "features", "sites"
     )
-    request = context.get("request")
-    force_footer = bool(context.get("force_footer"))
     visible_refs = filter_visible_references(
         refs,
         request=request,
-        site=context.get("badge_site"),
-        node=context.get("badge_node"),
+        site=badge_site,
+        node=badge_node,
     )
 
     if not visible_refs and not force_footer:
-        return {"footer_refs": [], "show_footer": False}
+        return {"footer_refs": [], "request": request, "show_footer": False}
 
     version = ""
     ver_path = Path(settings.BASE_DIR) / "VERSION"
@@ -135,6 +113,38 @@ def render_footer(context):
         "show_footer": True,
         "release_name": release_name,
         "release_url": release_url,
-        "request": context.get("request"),
+        "request": request,
         "fresh_since": fresh_since,
     }
+
+
+@register.simple_tag
+def ref_img(value, size=200, alt=None):
+    """Return an <img> tag with the stored reference image for the value."""
+    ref, created = Reference.objects.get_or_create(
+        value=value, defaults={"alt_text": alt or value}
+    )
+    alt_text = alt or ref.alt_text or "reference"
+    if ref.alt_text != alt_text:
+        ref.alt_text = alt_text
+    ref.uses += 1
+    ref.save()
+    return format_html(
+        '<img src="{}" width="{}" height="{}" alt="{}" />',
+        ref.image.url,
+        size,
+        size,
+        ref.alt_text,
+    )
+
+
+@register.inclusion_tag("core/footer.html", takes_context=True)
+def render_footer(context):
+    """Render footer links for references marked to appear there."""
+
+    return build_footer_context(
+        request=context.get("request"),
+        badge_site=context.get("badge_site"),
+        badge_node=context.get("badge_node"),
+        force_footer=bool(context.get("force_footer")),
+    )

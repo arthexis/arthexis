@@ -55,6 +55,7 @@ from django.utils.http import (
 )
 from django_otp import DEVICE_ID_SESSION_KEY
 from core import changelog, mailer, passkeys, public_wifi
+from core.templatetags.ref_tags import build_footer_context
 from core.backends import (
     TOTP_DEVICE_NAME,
     get_user_totp_devices,
@@ -63,7 +64,7 @@ from core.backends import (
 )
 from django.utils.translation import gettext as _
 from django.views.decorators.csrf import csrf_exempt, csrf_protect, ensure_csrf_cookie
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_GET, require_POST
 from django.core.cache import cache
 from django.views.decorators.cache import never_cache
 from django.utils.cache import patch_cache_control, patch_vary_headers
@@ -808,6 +809,20 @@ def _render_readme(request, role, doc: str | None = None, force_footer: bool = F
     response = render(request, "pages/readme.html", context)
     patch_vary_headers(response, ["Accept-Language", "Cookie"])
     return response
+
+
+@require_GET
+def footer_fragment(request):
+    """Return the footer markup for lazy-loading via HTMX."""
+
+    force_footer = request.GET.get("force") in {"1", "true", "True"}
+    context = build_footer_context(
+        request=request,
+        badge_site=getattr(request, "badge_site", None),
+        badge_node=getattr(request, "badge_node", None),
+        force_footer=force_footer,
+    )
+    return TemplateResponse(request, "core/footer.html", context)
 
 
 def readme_docs_redirect(request, doc: str | None = None):
