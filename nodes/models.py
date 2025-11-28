@@ -4,6 +4,7 @@ from collections.abc import Iterable
 import inspect
 from copy import deepcopy
 from dataclasses import dataclass
+from typing import Optional
 from django.db import models
 from django.apps import apps
 from django.db.models import Q
@@ -300,6 +301,8 @@ class Node(Entity):
     """Information about a running node in the network."""
 
     DEFAULT_BADGE_COLOR = "#28a745"
+    _LOCAL_CACHE_TIMEOUT = timedelta(seconds=60)
+    _local_cache: dict[str, tuple[Optional["Node"], datetime]] = {}
     ROLE_BADGE_COLORS = {
         "Watchtower": "#daa520",  # goldenrod
         "Constellation": "#daa520",  # legacy alias
@@ -816,15 +819,27 @@ class Node(Entity):
     def get_local(cls):
         """Return the node representing the current host if it exists."""
         mac = cls.get_current_mac()
+        now = timezone.now()
+
+        cached = cls._local_cache.get(mac)
+        if cached:
+            node, expires_at = cached
+            if expires_at > now:
+                return node
+
         try:
             node = cls.objects.filter(mac_address__iexact=mac).first()
             if node:
+                cls._local_cache[mac] = (node, now + cls._LOCAL_CACHE_TIMEOUT)
                 return node
-            return (
+            node = (
                 cls.objects.filter(current_relation=cls.Relation.SELF)
                 .filter(mac_address__in=["", None])
                 .first()
             )
+            if node:
+                cls._local_cache[mac] = (node, now + cls._LOCAL_CACHE_TIMEOUT)
+            return node
         except DatabaseError:
             logger.debug("nodes.Node.get_local skipped: database unavailable", exc_info=True)
             return None
