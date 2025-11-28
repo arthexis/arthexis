@@ -1333,6 +1333,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             "register_url": reverse("register-node"),
             "visitor_info_url": f"{visitor_base}/nodes/info/",
             "visitor_register_url": f"{visitor_base}/nodes/register/",
+            "change_url_template": reverse("admin:nodes_node_change", args=[0]),
         }
         return render(request, "admin/nodes/node/register_visitor.html", context)
 

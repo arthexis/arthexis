@@ -55,6 +55,7 @@ from core.celery_utils import (
 )
 from django.conf import settings
 from django.utils import timezone
+from django.utils.html import escapejs
 from urllib.parse import quote, urlparse
 from dns import resolver as dns_resolver
 from . import dns as dns_utils
@@ -2507,6 +2508,18 @@ class NodeAdminTests(TestCase):
                     f"const visitorRegisterUrl = \"{expected_base}/nodes/register/\";",
                     content,
                 )
+
+    def test_register_visitor_exposes_change_url_template(self):
+        response = self.client.get(reverse("admin:nodes_node_register_visitor"))
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode()
+        template_url = reverse("admin:nodes_node_change", args=[0])
+        escaped_template = escapejs(template_url)
+        self.assertIn(
+            f'const changeUrlTemplate = "{escaped_template}";',
+            content,
+        )
+        self.assertIn("Configure local visitor node", content)
 
     def test_node_feature_list_shows_default_action_when_enabled(self):
         node = self._create_local_node()
