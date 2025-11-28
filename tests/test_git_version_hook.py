@@ -5,7 +5,12 @@ import shutil
 import stat
 import subprocess
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+pytestmark = pytest.mark.role("Control")
 
 
 def test_pre_commit_appends_dev_marker_after_release(tmp_path: Path) -> None:

@@ -7,6 +7,9 @@ from core import views as core_views
 from core.models import Package, PackageRelease
 
 
+pytestmark = pytest.mark.role("Control")
+
+
 @pytest.mark.django_db
 def test_promote_skips_push_when_authentication_missing(tmp_path, monkeypatch):
     package = Package.objects.create(name="pkg-auth", is_active=True)
