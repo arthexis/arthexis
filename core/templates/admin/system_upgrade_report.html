@@ -18,13 +18,10 @@
     justify-content: space-between;
     gap: 1rem;
     margin-bottom: 1rem;
+    flex-wrap: wrap;
   }
 
   .upgrade-report .upgrade-report-header h2 {
-    margin: 0;
-  }
-
-  .upgrade-report .upgrade-report-trigger {
     margin: 0;
   }
 
@@ -33,6 +30,7 @@
     flex-wrap: wrap;
     align-items: stretch;
     gap: 0.5rem;
+    justify-content: flex-end;
   }
 
   .upgrade-report .upgrade-action-button {
@@ -45,34 +43,21 @@
     flex: 1 1 8rem;
   }
 
-  .upgrade-report .upgrade-report-check {
+  .upgrade-report .upgrade-report-action-group {
     display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    margin: 0.25rem 0 0;
     flex-wrap: wrap;
-  }
-
-  .upgrade-report .upgrade-report-check .button {
-    width: auto;
-  }
-
-  .upgrade-report .upgrade-report-check .help {
+    gap: 0.5rem;
     margin: 0;
   }
 
-  .upgrade-report .revision-refresh-button {
-    flex: 0 0 auto;
-    padding: 0.35rem;
-    width: 2.25rem;
-    height: 2.25rem;
-    min-height: 2.25rem;
-    border-radius: 999px;
+  .upgrade-report .upgrade-report-action-group form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
   }
 
-  .upgrade-report .revision-refresh-icon {
-    width: 1.1rem;
-    height: 1.1rem;
+  .upgrade-report .precheck-button {
+    flex: 0 0 auto;
   }
 </style>
 {% endblock %}
@@ -82,35 +67,47 @@
   <div class="module upgrade-report">
     <div class="upgrade-report-header">
       <h2>{% trans "Upgrade Report" %}</h2>
-      <form method="post" action="{% url 'admin:system-upgrade-run-check' %}" class="upgrade-report-trigger">
-        {% csrf_token %}
-        {% if report.settings.is_stable_mode %}
-        {% blocktrans trimmed asvar unstable_confirm_message %}
-          This node is configured for stable updates. Continue with an unstable upgrade?
-        {% endblocktrans %}
-        {% endif %}
-        <div class="upgrade-report-actions">
-          <button
-            type="submit"
-            name="channel"
-            value="unstable"
-            class="button default upgrade-action-button"
+      <div class="upgrade-report-actions">
+        <div class="upgrade-report-action-group">
+          <form method="post" action="{% url 'admin:system-upgrade-run-check' %}" class="upgrade-report-trigger">
+            {% csrf_token %}
             {% if report.settings.is_stable_mode %}
-            onclick="return confirm('{{ unstable_confirm_message|escapejs }}');"
+            {% blocktrans trimmed asvar unstable_confirm_message %}
+              This node is configured for stable updates. Continue with an unstable upgrade?
+            {% endblocktrans %}
             {% endif %}
-          >
-            {% trans "Upgrade Immediately (Unstable)" %}
-          </button>
-          <button
-            type="submit"
-            name="channel"
-            value="stable"
-            class="button upgrade-action-button"
-          >
-            {% trans "Upgrade on Next Release (Stable)" %}
-          </button>
+            <div class="upgrade-report-action-group">
+              <button
+                type="submit"
+                name="channel"
+                value="unstable"
+                class="button default upgrade-action-button"
+                {% if report.settings.is_stable_mode %}
+                onclick="return confirm('{{ unstable_confirm_message|escapejs }}');"
+                {% endif %}
+              >
+                {% trans "Upgrade Immediately (Unstable)" %}
+              </button>
+              <button
+                type="submit"
+                name="channel"
+                value="stable"
+                class="button upgrade-action-button"
+              >
+                {% trans "Upgrade on Next Release (Stable)" %}
+              </button>
+            </div>
+          </form>
         </div>
-      </form>
+        <div class="upgrade-report-action-group">
+          <form method="post" action="{% url 'admin:system-upgrade-check-revision' %}">
+            {% csrf_token %}
+            <button type="submit" class="button upgrade-action-button precheck-button">
+              {% trans "Pre-Upgrade Checks" %}
+            </button>
+          </form>
+        </div>
+      </div>
     </div>
     {% with report=auto_upgrade_report %}
     <div class="upgrade-report-section">
@@ -160,32 +157,24 @@
             <p class="errornote">{{ report.settings.origin_revision_error }}</p>
           {% endif %}
         </dd>
-        {% translate "Check Last Revision" as check_revision_label %}
         <dt>{% trans "Revision checks" %}</dt>
         <dd>
-          <form method="post" action="{% url 'admin:system-upgrade-check-revision' %}" class="upgrade-report-check">
-            {% csrf_token %}
-            <button
-              type="submit"
-              class="button upgrade-action-button revision-refresh-button"
-              aria-label="{{ check_revision_label }}"
-              title="{{ check_revision_label }}"
-            >
-              <svg
-                viewBox="0 0 20 20"
-                aria-hidden="true"
-                focusable="false"
-                class="revision-refresh-icon"
-              >
-                <path d="M3.3 10a6.7 6.7 0 0111.4-4.7l1.2-1.2v4.4h-4.4l1.6-1.6A4.7 4.7 0 005 10a4.7 4.7 0 004.7 4.7c1.2 0 2.3-.46 3.1-1.3l1.4 1.4A6.7 6.7 0 013.3 10z" />
-              </svg>
-            </button>
-            {% if report.settings.revision_checked_label %}
-              <p class="help">{% blocktrans %}Last checked {{ report.settings.revision_checked_label }}.{% endblocktrans %}</p>
-            {% else %}
-              <p class="help">{% trans "Revision details are retrieved on demand." %}</p>
-            {% endif %}
-          </form>
+          {% if report.settings.revision_checked_label %}
+            <p class="help">{% blocktrans %}Last checked {{ report.settings.revision_checked_label }}.{% endblocktrans %}</p>
+          {% else %}
+            <p class="help">{% trans "Run Pre-Upgrade Checks to refresh revision details." %}</p>
+          {% endif %}
+        </dd>
+        <dt>{% trans "CI status" %}</dt>
+        <dd>
+          {% if report.settings.ci_status %}
+            <code>{{ report.settings.ci_status }}</code>
+          {% else %}
+            <em>{% trans "Unavailable" %}</em>
+          {% endif %}
+          {% if not report.settings.revision_checked_label %}
+            <p class="help">{% trans "Run Pre-Upgrade Checks to retrieve the current CI status." %}</p>
+          {% endif %}
         </dd>
         <dt>{% trans "Task" %}</dt>
         <dd>

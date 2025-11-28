@@ -154,12 +154,14 @@ class UpgradeReportTests(SimpleTestCase):
                 ) as mock_check_output:
                     mock_check_output.side_effect = ["localrev\n", "originrev\n"]
                     revision_info = system._load_upgrade_revision_info(base)
+                    revision_info["ci_status"] = "success"
                     report = system._build_auto_upgrade_report(
                         limit=1, revision_info=revision_info
                     )
 
         self.assertEqual(report["settings"]["local_revision"], "localrev")
         self.assertEqual(report["settings"]["origin_revision"], "originrev")
+        self.assertEqual(report["settings"]["ci_status"], "success")
         self.assertFalse(report["settings"]["origin_revision_error"])
         mock_run.assert_has_calls(
             [
@@ -242,6 +244,7 @@ class UpgradeReportTests(SimpleTestCase):
         revision_loader.assert_not_called()
         self.assertEqual(report["settings"]["local_revision"], "")
         self.assertEqual(report["settings"]["origin_revision"], "")
+        self.assertEqual(report["settings"]["ci_status"], "")
 
     def test_revision_check_view_stores_session_data(self):
         request = self.factory.post(reverse("admin:system-upgrade-check-revision"))
@@ -257,13 +260,17 @@ class UpgradeReportTests(SimpleTestCase):
             with mock.patch(
                 "core.system._load_upgrade_revision_info",
                 return_value=revision_payload,
-            ) as loader:
+            ) as loader, mock.patch(
+                "core.tasks._ci_status_for_revision", return_value="pending"
+            ) as ci_status:
                 response = system._system_upgrade_revision_check_view(request)
 
         loader.assert_called_once()
+        ci_status.assert_called_once()
         stored = request.session.get(system.UPGRADE_REVISION_SESSION_KEY)
         self.assertEqual(stored["local_revision"], "abc")
         self.assertIn("revision_checked_at", stored)
+        self.assertEqual(stored["ci_status"], "pending")
         self.assertEqual(response.status_code, 302)
 
     def test_suite_uptime_uses_datetime_timezone(self):

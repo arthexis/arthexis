@@ -460,6 +460,7 @@ def _prepare_revision_info(
         "origin_revision_error": "",
         "revision_checked_at": None,
         "revision_checked_label": "",
+        "ci_status": "",
     }
 
     if not revision_info:
@@ -471,6 +472,7 @@ def _prepare_revision_info(
         "origin_revision_error": str(
             revision_info.get("origin_revision_error", "")
         ),
+        "ci_status": str(revision_info.get("ci_status", "")),
     })
 
     checked_value = revision_info.get("revision_checked_at") or revision_info.get(
@@ -2006,10 +2008,24 @@ def _system_upgrade_revision_check_view(request):
     revision_info = _load_upgrade_revision_info(base_dir)
     revision_info["revision_checked_at"] = timezone.now().isoformat()
 
+    origin_revision = str(revision_info.get("origin_revision", ""))
+    ci_status = ""
+    if origin_revision:
+        try:
+            # CI status is retrieved on demand to avoid unnecessary API calls.
+            from core.tasks import _ci_status_for_revision
+
+            ci_status = _ci_status_for_revision(base_dir, origin_revision) or ""
+        except Exception:  # pragma: no cover - unexpected failure path
+            logger.exception("Unable to fetch CI status for revision %s", origin_revision)
+            ci_status = ""
+
+    revision_info["ci_status"] = ci_status
+
     if hasattr(request, "session"):
         request.session[UPGRADE_REVISION_SESSION_KEY] = revision_info
 
-    messages.success(request, _("Revision information refreshed."))
+    messages.success(request, _("Pre-upgrade checks refreshed."))
 
     return _upgrade_redirect(request, reverse("admin:system-upgrade-report"))
 
