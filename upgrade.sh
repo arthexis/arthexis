@@ -98,6 +98,37 @@ sys.exit(0 if any(path.exists() for path in candidates) else 1)
 PY
 }
 
+ensure_virtualenv() {
+  local venv_dir="$BASE_DIR/.venv"
+  local venv_python="$venv_dir/bin/python"
+  local creator="$PYTHON_BIN"
+
+  if [ -x "$venv_python" ]; then
+    PYTHON_BIN="$venv_python"
+    return 0
+  fi
+
+  if [ -z "$creator" ] || ! command -v "$creator" >/dev/null 2>&1; then
+    creator="$(command -v python3 || command -v python || true)"
+  fi
+
+  if [ -z "$creator" ]; then
+    echo "Python interpreter not found; cannot create virtual environment at $venv_dir." >&2
+    return 1
+  fi
+
+  echo "Creating virtual environment at $venv_dir..."
+  "$creator" -m venv "$venv_dir"
+
+  if [ ! -x "$venv_python" ]; then
+    echo "Failed to create virtual environment at $venv_dir." >&2
+    return 1
+  fi
+
+  PYTHON_BIN="$venv_python"
+  return 0
+}
+
 configure_nginx_site() {
   local setup_script="$BASE_DIR/nginx-setup.sh"
 
@@ -426,6 +457,7 @@ cleanup_non_terminal_git_state() {
 install_requirements_if_changed() {
   local req_file="$BASE_DIR/requirements.txt"
   local md5_file="$BASE_DIR/requirements.md5"
+  local venv_python="$BASE_DIR/.venv/bin/python"
   local new_hash=""
   local stored_hash=""
 
@@ -434,29 +466,23 @@ install_requirements_if_changed() {
     return
   fi
 
+  if ! ensure_virtualenv; then
+    echo "Virtual environment Python not found; run ./install.sh before upgrading dependencies." >&2
+    return 1
+  fi
+
+  local python_bin="$venv_python"
+
   new_hash=$(md5sum "$req_file" | awk '{print $1}')
   if [ -f "$md5_file" ]; then
     stored_hash=$(cat "$md5_file")
   fi
 
   if [ "$new_hash" != "$stored_hash" ]; then
-    if [ -n "$PYTHON_BIN" ] && pip_requires_break_system_packages "$PYTHON_BIN"; then
-      cat >&2 <<'MSG'
-System Python is externally managed. To avoid modifying system packages, activate
-the virtual environment and install dependencies manually:
-
-  source .venv/bin/activate
-  python -m pip install -r requirements.txt
-MSG
-      return 1
-    fi
-
-    if [ -f "$PIP_INSTALL_HELPER" ] && [ -n "$PYTHON_BIN" ]; then
-      "$PYTHON_BIN" "$PIP_INSTALL_HELPER" -r "$req_file"
-    elif [ -n "$PYTHON_BIN" ]; then
-      "$PYTHON_BIN" -m pip install -r "$req_file"
+    if [ -f "$PIP_INSTALL_HELPER" ]; then
+      "$python_bin" "$PIP_INSTALL_HELPER" -r "$req_file"
     else
-      pip install -r "$req_file"
+      "$python_bin" -m pip install -r "$req_file"
     fi
     echo "$new_hash" > "$md5_file"
   else
@@ -1122,10 +1148,14 @@ fi
 # Update the development marker to reflect the new revision.
 arthexis_update_version_marker "$BASE_DIR"
 
-# Exit after pulling if the node isn't installed
+# Create virtual environment automatically if missing
 if [ $VENV_PRESENT -eq 0 ]; then
-  echo "Virtual environment not found. Run ./install.sh to install the node. Skipping remaining steps." >&2
-  exit 0
+  if ensure_virtualenv; then
+    VENV_PRESENT=1
+  else
+    echo "Virtual environment not found and automatic creation failed. Run ./install.sh to install the node." >&2
+    exit 1
+  fi
 fi
 
 configure_nginx_site
