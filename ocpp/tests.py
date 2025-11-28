@@ -4061,6 +4061,39 @@ class SimulatorLandingTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertIn(login_url, response.url)
 
+    @mock.patch("ocpp.views.NetMessage")
+    @mock.patch("ocpp.views._start_simulator")
+    def test_cp_simulator_start_broadcasts_net_message(
+        self, mock_start, mock_net_message
+    ):
+        simulator = Simulator.objects.create(
+            name="Starter",
+            cp_path="SIMSTART",
+            pre_charge_delay=3.5,
+            default=True,
+            host="ws.target",
+            ws_port=9900,
+        )
+        mock_start.return_value = (True, "Connected", "/tmp/sim.log")
+
+        self.client.force_login(self.user)
+        response = self.client.post(
+            reverse("cp-simulator"),
+            {
+                "action": "start",
+                "host": "ws.target",
+                "ws_port": "9900",
+                "cp_path": simulator.cp_path,
+                "pre_charge_delay": simulator.pre_charge_delay,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        mock_start.assert_called_once()
+        mock_net_message.broadcast.assert_called_once_with(
+            subject="Starter 3.5s", body="ws://ws.target:9900/SIMSTART"
+        )
+
 
 class ChargerAdminTests(TestCase):
     def setUp(self):
