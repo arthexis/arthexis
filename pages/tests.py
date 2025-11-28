@@ -35,6 +35,7 @@ import socket
 from asgiref.sync import async_to_sync, sync_to_async
 from channels.testing import WebsocketCommunicator
 from pages import site_config
+from pages.favorites_cache import user_favorites_cache_key
 from pages.models import (
     Application,
     ChatMessage,
@@ -4182,6 +4183,37 @@ class FavoriteTests(TestCase):
         resp = self.client.get(reverse("admin:index"))
         self.assertContains(resp, reverse("admin:pages_application_changelist"))
         self.assertContains(resp, reverse("admin:nodes_noderole_changelist"))
+
+    def test_dashboard_favorites_cache_cleared_on_update(self):
+        ct = ContentType.objects.get_by_natural_key("pages", "application")
+        Favorite.objects.create(
+            user=self.user, content_type=ct, custom_label="Apps"
+        )
+
+        cache_key = user_favorites_cache_key(
+            self.user.pk, show_changelinks=True, show_model_badges=True
+        )
+        index_url = reverse("admin:index")
+
+        initial_response = self.client.get(index_url)
+        self.assertEqual(initial_response.status_code, 200)
+        cached_block = cache.get(cache_key)
+        self.assertIsInstance(cached_block, str)
+        self.assertIn("Apps", cached_block)
+
+        toggle_url = reverse("admin:favorite_toggle", args=[ct.id])
+        response = self.client.post(toggle_url, {"custom_label": "Updated Apps"})
+        self.assertRedirects(
+            response, reverse("admin:index"), fetch_redirect_response=False
+        )
+        self.assertIsNone(cache.get(cache_key))
+
+        refreshed_response = self.client.get(index_url)
+        self.assertEqual(refreshed_response.status_code, 200)
+        refreshed_block = cache.get(cache_key)
+        self.assertIsInstance(refreshed_block, str)
+        self.assertIn("Updated Apps", refreshed_block)
+        self.assertNotEqual(cached_block, refreshed_block)
 
     def test_dashboard_shows_open_lead_badge(self):
         InviteLead.objects.create(email="open1@example.com")
