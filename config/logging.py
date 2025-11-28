@@ -33,7 +33,12 @@ class ActiveAppFileHandler(TimedRotatingFileHandler):
             if self.stream:
                 self.stream.close()
             self.stream = self._open()
-        super().emit(record)
+        try:
+            super().emit(record)
+        finally:
+            if self.stream and not self.stream.closed:
+                self.stream.close()
+                self.stream = None
 
     def rotation_filename(self, default_name: str) -> str:
         """Place rotated logs inside the old log directory."""
