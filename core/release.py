@@ -156,22 +156,42 @@ def _run(
 def _export_tracked_files(base_dir: Path, destination: Path) -> None:
     """Copy tracked files into ``destination`` preserving modifications."""
 
-    proc = subprocess.run(
-        ["git", "ls-files", "-z"],
-        capture_output=True,
-        check=True,
-        cwd=base_dir,
-    )
-    for entry in proc.stdout.split(b"\0"):
-        if not entry:
-            continue
-        relative = Path(entry.decode("utf-8"))
-        source_path = base_dir / relative
-        if not source_path.exists():
-            continue
-        target_path = destination / relative
-        target_path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source_path, target_path)
+    def _copy_working_tree() -> None:
+        for path in base_dir.rglob("*"):
+            if any(part == ".git" for part in path.parts):
+                continue
+            relative = path.relative_to(base_dir)
+            target_path = destination / relative
+            if path.is_dir():
+                target_path.mkdir(parents=True, exist_ok=True)
+                continue
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(path, target_path)
+
+    if not _is_git_repository(base_dir):
+        _copy_working_tree()
+        return
+
+    with contextlib.suppress(subprocess.CalledProcessError, FileNotFoundError):
+        proc = subprocess.run(
+            ["git", "ls-files", "-z"],
+            capture_output=True,
+            check=True,
+            cwd=base_dir,
+        )
+        for entry in proc.stdout.split(b"\0"):
+            if not entry:
+                continue
+            relative = Path(entry.decode("utf-8"))
+            source_path = base_dir / relative
+            if not source_path.exists():
+                continue
+            target_path = destination / relative
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source_path, target_path)
+        return
+
+    _copy_working_tree()
 
 
 def _build_in_sanitized_tree(base_dir: Path) -> None:
@@ -295,7 +315,23 @@ def _upload_with_retries(
     raise ReleaseError(last_output)
 
 
+def _is_git_repository(base_dir: Path) -> bool:
+    try:
+        proc = subprocess.run(
+            ["git", "rev-parse", "--is-inside-work-tree"],
+            capture_output=True,
+            text=True,
+            cwd=base_dir,
+        )
+    except FileNotFoundError:
+        return False
+    return proc.returncode == 0 and proc.stdout.strip().lower() == "true"
+
+
 def _git_clean() -> bool:
+    if not _is_git_repository(Path.cwd()):
+        return True
+
     proc = subprocess.run(
         ["git", "status", "--porcelain"], capture_output=True, text=True
     )
