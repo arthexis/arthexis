@@ -100,7 +100,7 @@ def _sigil_builder_view(request):
         sigils_text = request.POST.get("sigils_text", "")
         source_text = sigils_text
         upload = request.FILES.get("sigils_file")
-        if upload:
+        if upload is not None:
             if not hasattr(upload, "read"):
                 errors.append(_("Uploaded file could not be processed."))
             elif getattr(upload, "size", None) in (None, 0):
@@ -121,7 +121,7 @@ def _sigil_builder_view(request):
         if source_text and not errors:
             resolved_text = resolve_sigils_in_text(source_text)
             show_result = True
-        if upload and not errors:
+        if upload is not None and not errors:
             sigils_text = ""
 
     context = admin.site.each_context(request)
