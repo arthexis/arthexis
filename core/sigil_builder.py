@@ -14,6 +14,17 @@ from .sigil_resolver import (
 )
 
 
+class SigilBuilderResponse(TemplateResponse):
+    @property
+    def context(self):
+        return self.context_data
+
+    @context.setter
+    def context(self, value):
+        if value is not None:
+            self.context_data = value
+
+
 def generate_model_sigils(**kwargs) -> None:
     """Ensure built-in configuration SigilRoot entries exist."""
     SigilRoot = apps.get_model("core", "SigilRoot")
@@ -138,7 +149,7 @@ def _sigil_builder_view(request):
             "show_result": show_result,
         }
     )
-    response = TemplateResponse(request, "admin/sigil_builder.html", context)
+    response = SigilBuilderResponse(request, "admin/sigil_builder.html", context)
     response.render()
     return response
 
