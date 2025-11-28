@@ -15,9 +15,14 @@ class ClientReportPdfTemplateTests(TestCase):
         self.assertEqual(labels.get("report_totals"), "Totales del informe")
         self.assertEqual(labels.get("charge_point"), "Punto de carga")
 
+    def test_load_pdf_template_falls_back_to_default_language(self):
+        labels = ClientReport._load_pdf_template("pt-br")
+        self.assertEqual(labels.get("report_totals"), "Report totals")
+        self.assertEqual(labels.get("charge_point"), "Charge Point")
+
 
 class ClientReportPdfRenderingTests(TestCase):
-    def test_render_pdf_uses_language_template(self):
+    def _render_report_paragraphs(self, language: str | None) -> list[str]:
         user = get_user_model().objects.create_user(
             username="pdf-user", password="pwd"
         )
@@ -39,7 +44,7 @@ class ClientReportPdfRenderingTests(TestCase):
             },
             owner=user,
             disable_emails=True,
-            language="es",
+            language=language,
             title="",
         )
 
@@ -64,8 +69,28 @@ class ClientReportPdfRenderingTests(TestCase):
 
                 report.render_pdf(target)
 
+        return paragraphs
+
+    def test_render_pdf_uses_language_template(self):
+        paragraphs = self._render_report_paragraphs(language="es")
         self.assertTrue(any("Informe de consumo" in text for text in paragraphs))
         self.assertTrue(any("Período:" in text for text in paragraphs))
         self.assertTrue(any("(Serie: XYZ)" in text for text in paragraphs))
         self.assertTrue(any("Totales del informe" in text for text in paragraphs))
         self.assertTrue(any("kW totales" in text for text in paragraphs))
+
+    def test_render_pdf_uses_default_language_when_missing(self):
+        paragraphs = self._render_report_paragraphs(language="pt-br")
+        self.assertTrue(any("Consumer Report" in text for text in paragraphs))
+        self.assertTrue(any("Period:" in text for text in paragraphs))
+        self.assertTrue(any("(Serial: XYZ)" in text for text in paragraphs))
+        self.assertTrue(any("Report totals" in text for text in paragraphs))
+        self.assertTrue(any("Total kW" in text for text in paragraphs))
+
+    def test_render_pdf_respects_default_language_template(self):
+        paragraphs = self._render_report_paragraphs(language="en")
+        self.assertTrue(any("Consumer Report" in text for text in paragraphs))
+        self.assertTrue(any("Period:" in text for text in paragraphs))
+        self.assertTrue(any("(Serial: XYZ)" in text for text in paragraphs))
+        self.assertTrue(any("Report totals" in text for text in paragraphs))
+        self.assertTrue(any("Total kW" in text for text in paragraphs))
