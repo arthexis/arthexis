@@ -71,14 +71,14 @@
             </div>
             <div class="col-sm-6 col-md-4">
               <div class="mb-2">
-                <label class="form-label" for="kw_min{{ idx }}">Energy Min (kW)</label>
-                <input id="kw_min{{ idx }}" name="kw_min" value="{{ form_params.kw_min|default_if_none:'' }}" class="form-control form-control-sm">
+                <label class="form-label" for="average_kwh{{ idx }}">Average kWh</label>
+                <input id="average_kwh{{ idx }}" name="average_kwh" value="{{ form_params.average_kwh|default_if_none:'' }}" class="form-control form-control-sm">
               </div>
             </div>
             <div class="col-sm-6 col-md-4">
               <div class="mb-2">
-                <label class="form-label" for="kw_max{{ idx }}">Energy Max (kW)</label>
-                <input id="kw_max{{ idx }}" name="kw_max" value="{{ form_params.kw_max|default_if_none:'' }}" class="form-control form-control-sm">
+                <label class="form-label" for="amperage{{ idx }}">Amperage (A)</label>
+                <input id="amperage{{ idx }}" name="amperage" value="{{ form_params.amperage|default_if_none:'' }}" class="form-control form-control-sm">
               </div>
             </div>
             <div class="col-sm-6 col-md-4">

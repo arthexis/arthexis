@@ -180,8 +180,8 @@ async def simulate_cp(
     serial_number: str,
     connector_id: int,
     duration: int,
-    kw_min: float,
-    kw_max: float,
+    average_kwh: float,
+    amperage: float,
     pre_charge_delay: float,
     session_count: float,
     interval: float = 5.0,
@@ -345,10 +345,13 @@ async def simulate_cp(
             state.phase = "Available"
 
             meter_start = random.randint(1000, 2000)
-            actual_duration = random.uniform(duration * 0.75, duration * 1.25)
-            steps = max(1, int(actual_duration / interval))
-            step_min = max(1, int((kw_min * 1000) / steps))
-            step_max = max(1, int((kw_max * 1000) / steps))
+            steps = max(1, int(duration / interval))
+
+            def _jitter(value: float) -> float:
+                return value * random.uniform(0.95, 1.05)
+
+            target_kwh = _jitter(average_kwh)
+            step_avg = (target_kwh * 1000) / steps if steps else target_kwh * 1000
 
             # optional pre‑charge delay while still sending heartbeats
             if pre_charge_delay > 0:
@@ -361,9 +364,9 @@ async def simulate_cp(
                     await _recv()
                     await asyncio.sleep(5)
                     if time.monotonic() - last_mv >= 30:
-                        idle_step = max(2, int(step_max / 100))
+                        idle_step = max(2, int(step_avg / 100))
                         next_meter += random.randint(0, idle_step)
-                        next_kw = next_meter / 1000.0
+                        next_kwh = next_meter / 1000.0
                         await _send(
                             [
                                 2,
@@ -373,19 +376,19 @@ async def simulate_cp(
                                     "connectorId": connector_id,
                                     "meterValue": [
                                         {
-                                            "timestamp": time.strftime(
-                                                "%Y-%m-%dT%H:%M:%S"
-                                            )
-                                            + "Z",
-                                            "sampledValue": [
-                                                {
-                                                    "value": f"{next_kw:.3f}",
-                                                    "measurand": "Energy.Active.Import.Register",
-                                                    "unit": "kW",
-                                                    "context": "Sample.Clock",
-                                                }
-                                            ],
-                                        }
+                                                "timestamp": time.strftime(
+                                                    "%Y-%m-%dT%H:%M:%S"
+                                                )
+                                                + "Z",
+                                                "sampledValue": [
+                                                    {
+                                                        "value": f"{next_kwh:.3f}",
+                                                        "measurand": "Energy.Active.Import.Register",
+                                                        "unit": "kWh",
+                                                        "context": "Sample.Clock",
+                                                    }
+                                                ],
+                                            }
                                     ],
                                 },
                             ]
@@ -417,11 +420,14 @@ async def simulate_cp(
             listener = asyncio.create_task(listen())
 
             meter = meter_start
-            for _ in range(steps):
+            start_time = time.monotonic()
+            while time.monotonic() - start_time < duration:
                 if stop_event.is_set():
                     break
-                meter += random.randint(step_min, step_max)
-                meter_kw = meter / 1000.0
+                inc = _jitter(step_avg)
+                meter += max(1, int(inc))
+                meter_kwh = meter / 1000.0
+                current_amp = _jitter(amperage)
                 await _send(
                     [
                         2,
@@ -432,20 +438,26 @@ async def simulate_cp(
                             "transactionId": tx_id,
                             "meterValue": [
                                 {
-                                    "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S")
-                                    + "Z",
-                                    "sampledValue": [
-                                        {
-                                            "value": f"{meter_kw:.3f}",
-                                            "measurand": "Energy.Active.Import.Register",
-                                            "unit": "kW",
-                                            "context": "Sample.Periodic",
-                                        }
-                                    ],
-                                }
-                            ],
-                        },
-                    ]
+                                        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S")
+                                        + "Z",
+                                        "sampledValue": [
+                                              {
+                                                  "value": f"{meter_kwh:.3f}",
+                                                  "measurand": "Energy.Active.Import.Register",
+                                                  "unit": "kWh",
+                                                  "context": "Sample.Periodic",
+                                              },
+                                            {
+                                                "value": f"{current_amp:.3f}",
+                                                "measurand": "Current.Import",
+                                                "unit": "A",
+                                                "context": "Sample.Periodic",
+                                            },
+                                        ],
+                                    }
+                                ],
+                            },
+                        ]
                 )
                 state.last_message = "MeterValues"
                 await asyncio.sleep(interval)
@@ -482,9 +494,9 @@ async def simulate_cp(
                 state.last_message = "Heartbeat"
                 await asyncio.sleep(5)
                 if time.monotonic() - last_mv >= 30:
-                    idle_step = max(2, int(step_max / 100))
+                    idle_step = max(2, int(step_avg / 100))
                     next_meter += random.randint(0, idle_step)
-                    next_kw = next_meter / 1000.0
+                    next_kwh = next_meter / 1000.0
                     await _send(
                         [
                             2,
@@ -498,9 +510,9 @@ async def simulate_cp(
                                         + "Z",
                                         "sampledValue": [
                                             {
-                                                "value": f"{next_kw:.3f}",
+                                                "value": f"{next_kwh:.3f}",
                                                 "measurand": "Energy.Active.Import.Register",
-                                                "unit": "kW",
+                                                "unit": "kWh",
                                                 "context": "Sample.Clock",
                                             }
                                         ],
@@ -554,8 +566,8 @@ def simulate(
     serial_number: str = "",
     connector_id: int = 1,
     duration: int = 600,
-    kw_min: float = 30.0,
-    kw_max: float = 60.0,
+    average_kwh: float = 60.0,
+    amperage: float = 90.0,
     pre_charge_delay: float = 0.0,
     repeat: object = False,
     threads: Optional[int] = None,
@@ -588,8 +600,8 @@ def simulate(
         "serial_number": serial_number,
         "connector_id": connector_id,
         "duration": duration,
-        "kw_min": kw_min,
-        "kw_max": kw_max,
+        "average_kwh": average_kwh,
+        "amperage": amperage,
         "pre_charge_delay": pre_charge_delay,
         "repeat": repeat,
         "threads": threads,
@@ -618,8 +630,8 @@ def simulate(
                 serial_number,
                 connector_id,
                 duration,
-                kw_min,
-                kw_max,
+                average_kwh,
+                amperage,
                 pre_charge_delay,
                 session_count,
                 interval,
@@ -641,8 +653,8 @@ def simulate(
                     serial_number,
                     connector_id,
                     duration,
-                    kw_min,
-                    kw_max,
+                    average_kwh,
+                    amperage,
                     pre_charge_delay,
                     session_count,
                     interval,
@@ -694,8 +706,8 @@ def simulate(
                 serial_number,
                 connector_id,
                 duration,
-                kw_min,
-                kw_max,
+                average_kwh,
+                amperage,
                 pre_charge_delay,
                 session_count,
                 interval,
@@ -721,8 +733,8 @@ def simulate(
                     serial_number,
                     connector_id,
                     duration,
-                    kw_min,
-                    kw_max,
+                    average_kwh,
+                    amperage,
                     pre_charge_delay,
                     session_count,
                     interval,

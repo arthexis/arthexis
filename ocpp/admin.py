@@ -4030,7 +4030,8 @@ class SimulatorAdmin(SaveBeforeChangeAction, LogViewAdminMixin, EntityModelAdmin
         "ws_port",
         "ws_url",
         "interval",
-        "kw_max_display",
+        "average_kwh_display",
+        "amperage",
         "running",
         "log_link",
     )
@@ -4045,7 +4046,7 @@ class SimulatorAdmin(SaveBeforeChangeAction, LogViewAdminMixin, EntityModelAdmin
                     ("host", "ws_port"),
                     "rfid",
                     ("duration", "interval", "pre_charge_delay"),
-                    "kw_max",
+                    ("average_kwh", "amperage"),
                     ("repeat", "door_open"),
                     ("username", "password"),
                 )
@@ -4072,21 +4073,21 @@ class SimulatorAdmin(SaveBeforeChangeAction, LogViewAdminMixin, EntityModelAdmin
 
     log_type = "simulator"
 
-    @admin.display(description="kW Max", ordering="kw_max")
-    def kw_max_display(self, obj):
-        """Display ``kw_max`` with a dot decimal separator for Spanish locales."""
+    @admin.display(description="Average kWh", ordering="average_kwh")
+    def average_kwh_display(self, obj):
+        """Display ``average_kwh`` with a dot decimal separator for Spanish locales."""
 
         language = translation.get_language() or ""
         if language.startswith("es"):
             return formats.number_format(
-                obj.kw_max,
+                obj.average_kwh,
                 decimal_pos=2,
                 use_l10n=False,
                 force_grouping=False,
             )
 
         return formats.number_format(
-            obj.kw_max,
+            obj.average_kwh,
             decimal_pos=2,
             use_l10n=True,
             force_grouping=False,

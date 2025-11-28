@@ -30,8 +30,8 @@ class SimulatorConfig:
     # WebSocket path for the charge point. Defaults to just the charger ID at the root.
     cp_path: str = "CPX/"
     duration: int = 600
-    kw_min: float = 30.0
-    kw_max: float = 60.0
+    average_kwh: float = 60.0
+    amperage: float = 90.0
     interval: float = 5.0
     pre_charge_delay: float = 10.0
     repeat: bool = False
@@ -558,7 +558,7 @@ class ChargePointSimulator:
                                                 {
                                                     "value": "0",
                                                     "measurand": "Energy.Active.Import.Register",
-                                                    "unit": "kW",
+                                                    "unit": "kWh",
                                                 }
                                             ],
                                         }
@@ -599,16 +599,21 @@ class ChargePointSimulator:
 
             meter = meter_start
             steps = max(1, int(cfg.duration / cfg.interval))
-            target_kwh = cfg.kw_max * random.uniform(0.9, 1.1)
-            step_avg = (target_kwh * 1000) / steps
+
+            def _jitter(value: float) -> float:
+                return value * random.uniform(0.95, 1.05)
+
+            target_kwh = _jitter(cfg.average_kwh)
+            step_avg = (target_kwh * 1000) / steps if steps else target_kwh * 1000
 
             start_time = time.monotonic()
             while time.monotonic() - start_time < cfg.duration:
                 if self._stop_event.is_set():
                     break
-                inc = random.gauss(step_avg, step_avg * 0.05)
+                inc = _jitter(step_avg)
                 meter += max(1, int(inc))
-                meter_kw = meter / 1000.0
+                meter_kwh = meter / 1000.0
+                amperage = _jitter(cfg.amperage)
                 await send(
                     json.dumps(
                         [
@@ -625,10 +630,15 @@ class ChargePointSimulator:
                                         ),
                                         "sampledValue": [
                                             {
-                                                "value": f"{meter_kw:.3f}",
+                                                "value": f"{meter_kwh:.3f}",
                                                 "measurand": "Energy.Active.Import.Register",
-                                                "unit": "kW",
-                                            }
+                                                "unit": "kWh",
+                                            },
+                                            {
+                                                "value": f"{amperage:.3f}",
+                                                "measurand": "Current.Import",
+                                                "unit": "A",
+                                            },
                                         ],
                                     }
                                 ],
