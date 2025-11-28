@@ -573,6 +573,9 @@ deactivate
 # If a service name was provided, install a systemd unit and persist its name
 if [ -n "$SERVICE" ]; then
     echo "$SERVICE" > "$LOCK_DIR/service.lck"
+    if [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
+        arthexis_record_systemd_unit "$LOCK_DIR" "${SERVICE}.service"
+    fi
     EXEC_CMD="$BASE_DIR/service-start.sh"
     arthexis_install_service_stack "$BASE_DIR" "$LOCK_DIR" "$SERVICE" "$ENABLE_CELERY" "$EXEC_CMD" "$SERVICE_MANAGEMENT_MODE" "$ENABLE_WATCHDOG"
 fi
