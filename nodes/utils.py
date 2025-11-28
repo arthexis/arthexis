@@ -5,6 +5,7 @@ import logging
 import shutil
 import subprocess
 import uuid
+import threading
 
 from django.conf import settings
 from selenium import webdriver
@@ -26,6 +27,7 @@ AUDIO_DIR = settings.LOG_DIR / "audio"
 logger = logging.getLogger(__name__)
 
 _FIREFOX_BINARY_CANDIDATES = ("firefox", "firefox-esr", "firefox-bin")
+_CAMERA_LOCK = threading.Lock()
 
 
 def _find_firefox_binary() -> str | None:
@@ -108,6 +110,10 @@ def capture_rpi_snapshot(timeout: int = 10) -> Path:
     timestamp = datetime.utcnow()
     unique_suffix = uuid.uuid4().hex
     filename = CAMERA_DIR / f"{timestamp:%Y%m%d%H%M%S}-{unique_suffix}.jpg"
+    acquired = _CAMERA_LOCK.acquire(timeout=timeout)
+    if not acquired:
+        raise RuntimeError("Camera is busy. Wait for the current capture to finish.")
+
     try:
         result = subprocess.run(
             [tool_path, "-o", str(filename), "-t", "1"],
@@ -119,6 +125,8 @@ def capture_rpi_snapshot(timeout: int = 10) -> Path:
     except Exception as exc:  # pragma: no cover - depends on camera stack
         logger.error("Failed to invoke %s: %s", tool_path, exc)
         raise RuntimeError(f"Snapshot capture failed: {exc}") from exc
+    finally:
+        _CAMERA_LOCK.release()
     if result.returncode != 0:
         error = (result.stderr or result.stdout or "Snapshot capture failed").strip()
         logger.error("rpicam-still exited with %s: %s", result.returncode, error)
