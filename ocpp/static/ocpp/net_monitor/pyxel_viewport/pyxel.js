@@ -19,6 +19,8 @@ window.pyxelContext = {
   params: null,
 };
 
+let _pyxelControls = null;
+
 let _virtualGamepadStates = [
   false, // Up
   false, // Down
@@ -126,6 +128,32 @@ async function resetPyxel() {
   }, 0);
 }
 
+async function pausePyxel() {
+  if (!window.pyxelContext.initialized || !window.pyxelContext.pyodide) {
+    return;
+  }
+
+  window.pyxelContext.pyodide._module._emscripten_pause_main_loop();
+
+  let audioContext = window.pyxelContext.pyodide?._module?.SDL2?.audioContext;
+  if (audioContext && audioContext.state === "running") {
+    await audioContext.suspend();
+  }
+}
+
+async function resumePyxel() {
+  if (!window.pyxelContext.initialized || !window.pyxelContext.pyodide) {
+    return;
+  }
+
+  let audioContext = window.pyxelContext.pyodide?._module?.SDL2?.audioContext;
+  if (audioContext && audioContext.state === "suspended") {
+    await audioContext.resume();
+  }
+
+  window.pyxelContext.pyodide._module._emscripten_resume_main_loop();
+}
+
 function _initialize() {
   _setIcon();
   _setStyleSheet();
@@ -218,33 +246,33 @@ function _waitForEvent(target, ...events) {
 }
 
 async function _createScreenElements() {
-  let pyxelScreen = document.querySelector("div#pyxel-screen");
-  if (!pyxelScreen) {
-    pyxelScreen = document.createElement("div");
-    pyxelScreen.id = "pyxel-screen";
-    if (!document.body) {
-      document.body = document.createElement("body");
-    }
-    document.body.appendChild(pyxelScreen);
-  }
+  let { stage, screen, controls } = _ensurePlaybackUI();
 
-  pyxelScreen.oncontextmenu = (event) => event.preventDefault();
+  screen.oncontextmenu = (event) => event.preventDefault();
   window.addEventListener("resize", _updateScreenElementsSize);
 
   // Add canvas for SDL2
-  let sdl2Canvas = document.createElement("canvas");
-  sdl2Canvas.id = "canvas";
-  sdl2Canvas.tabindex = -1;
-  pyxelScreen.appendChild(sdl2Canvas);
+  let sdl2Canvas = stage.querySelector("canvas#canvas");
+  if (!sdl2Canvas) {
+    sdl2Canvas = document.createElement("canvas");
+    sdl2Canvas.id = "canvas";
+    sdl2Canvas.tabindex = -1;
+    stage.appendChild(sdl2Canvas);
+  }
 
   // Add image for logo
-  let logoImage = document.createElement("img");
-  logoImage.id = "pyxel-logo";
-  logoImage.src = _pyxelAssetPath(PYXEL_LOGO_PATH);
-  logoImage.tabindex = -1;
-  await _waitForEvent(logoImage, "load");
-  await new Promise((resolve) => setTimeout(resolve, 50));
-  pyxelScreen.appendChild(logoImage);
+  let logoImage = stage.querySelector("img#pyxel-logo");
+  if (!logoImage) {
+    logoImage = document.createElement("img");
+    logoImage.id = "pyxel-logo";
+    logoImage.src = _pyxelAssetPath(PYXEL_LOGO_PATH);
+    logoImage.tabindex = -1;
+    await _waitForEvent(logoImage, "load");
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    stage.appendChild(logoImage);
+  }
+
+  controls?.bar?.classList.remove("is-hidden");
   _updateScreenElementsSize();
 
   return sdl2Canvas;
@@ -300,6 +328,214 @@ function _hookPythonError(pyodide) {
       };
     })(),
   });
+}
+
+function _ensurePlaybackUI() {
+  if (_pyxelControls) {
+    return _pyxelControls;
+  }
+
+  let screen = document.querySelector("div#pyxel-screen");
+  if (!screen) {
+    screen = document.createElement("div");
+    screen.id = "pyxel-screen";
+    if (!document.body) {
+      document.body = document.createElement("body");
+    }
+    document.body.appendChild(screen);
+  }
+
+  screen.classList.add("pyxel-screen");
+
+  let stage = screen.querySelector(".pyxel-stage");
+  if (!stage) {
+    stage = document.createElement("div");
+    stage.className = "pyxel-stage";
+    screen.appendChild(stage);
+  }
+
+  let existingBar = stage.querySelector(".pyxel-controls");
+  if (!existingBar) {
+    existingBar = _createPlaybackControls();
+    stage.appendChild(existingBar);
+  }
+
+  _pyxelControls = {
+    screen,
+    stage,
+    controls: {
+      bar: existingBar,
+      start: existingBar.querySelector("#pyxel-start-button"),
+      stop: existingBar.querySelector("#pyxel-stop-button"),
+      reset: existingBar.querySelector("#pyxel-reset-button"),
+    },
+  };
+
+  return _pyxelControls;
+}
+
+function ensurePyxelControls() {
+  let { controls } = _ensurePlaybackUI();
+  return controls;
+}
+
+async function launchPyxelWithControls(pyxelParams) {
+  const controls = ensurePyxelControls();
+
+  let isPaused = false;
+  let hasStarted = false;
+  let isBusy = false;
+
+  const updateControls = () => {
+    controls.start.disabled = isBusy || (hasStarted && !isPaused);
+    controls.stop.disabled = isBusy || !hasStarted;
+    controls.stop.dataset.icon = isPaused ? "play" : "pause";
+    _setControlLabel(controls.stop, isPaused ? "Resume" : "Pause / Stop");
+    controls.reset.disabled = isBusy || !hasStarted;
+  };
+
+  const startViewport = async () => {
+    if (isBusy || (hasStarted && !isPaused)) {
+      return;
+    }
+
+    isBusy = true;
+    updateControls();
+
+    if (!hasStarted) {
+      await launchPyxel(pyxelParams);
+      hasStarted = true;
+    } else if (isPaused) {
+      await resumePyxel();
+    }
+
+    isPaused = false;
+    isBusy = false;
+    updateControls();
+  };
+
+  const togglePause = async () => {
+    if (isBusy || !hasStarted) {
+      return;
+    }
+
+    isBusy = true;
+    updateControls();
+
+    if (isPaused) {
+      await resumePyxel();
+      isPaused = false;
+    } else {
+      await pausePyxel();
+      isPaused = true;
+    }
+
+    isBusy = false;
+    updateControls();
+  };
+
+  const resetViewport = async () => {
+    if (isBusy || !hasStarted) {
+      return;
+    }
+
+    isBusy = true;
+    isPaused = false;
+    updateControls();
+
+    await resetPyxel();
+
+    isBusy = false;
+    updateControls();
+  };
+
+  _bindControlClick(controls.start, startViewport);
+  _bindControlClick(controls.stop, togglePause);
+  _bindControlClick(controls.reset, resetViewport);
+
+  updateControls();
+  await startViewport();
+}
+
+function _createPlaybackControls() {
+  let bar = document.createElement("div");
+  bar.className = "pyxel-controls";
+  bar.role = "group";
+  bar.ariaLabel = "Pyxel playback controls";
+
+  let startButton = _createIconButton(
+    "pyxel-start-button",
+    "Start or resume simulation",
+    "play"
+  );
+  let stopButton = _createIconButton(
+    "pyxel-stop-button",
+    "Pause or stop simulation",
+    "pause"
+  );
+  stopButton.dataset.altIcon = "play";
+  let resetButton = _createIconButton(
+    "pyxel-reset-button",
+    "Reset simulation",
+    "reset"
+  );
+
+  bar.append(startButton, stopButton, resetButton);
+  return bar;
+}
+
+function _createIconButton(id, label, icon) {
+  let button = document.createElement("button");
+  button.type = "button";
+  button.id = id;
+  button.className = "pyxel-icon-button";
+  button.setAttribute("aria-label", label);
+  button.dataset.icon = icon;
+
+  let iconElement = document.createElement("span");
+  iconElement.className = `pyxel-icon pyxel-icon--${icon}`;
+  iconElement.setAttribute("aria-hidden", "true");
+
+  let srText = document.createElement("span");
+  srText.className = "sr-only pyxel-button-label";
+  srText.textContent = label;
+
+  button.append(iconElement);
+
+  if (icon !== "play") {
+    let altIcon = document.createElement("span");
+    altIcon.className = "pyxel-icon pyxel-icon--play pyxel-icon--alt";
+    altIcon.setAttribute("aria-hidden", "true");
+    button.append(altIcon);
+  }
+
+  button.append(srText);
+  return button;
+}
+
+function _bindControlClick(button, handler) {
+  if (!button) {
+    return;
+  }
+
+  if (button._pyxelControlHandler) {
+    button.removeEventListener("click", button._pyxelControlHandler);
+  }
+
+  button._pyxelControlHandler = handler;
+  button.addEventListener("click", handler);
+}
+
+function _setControlLabel(button, label) {
+  if (!button) {
+    return;
+  }
+
+  button.setAttribute("aria-label", label);
+  const srLabel = button.querySelector(".pyxel-button-label");
+  if (srLabel) {
+    srLabel.textContent = label;
+  }
 }
 
 function _displayErrorOverlay(message) {
