@@ -220,10 +220,22 @@ def _resolve_auto_upgrade_interval_minutes(mode: str) -> int:
     return interval_minutes
 
 
+def _normalize_channel_mode(value: str | None) -> str | None:
+    """Return a lowercased, whitespace-trimmed channel value."""
+
+    if value is None:
+        return None
+
+    normalized = value.strip().lower()
+    return normalized or None
+
+
 def _upgrade_command_args(mode: str) -> list[str]:
     """Return the platform-appropriate upgrade command for ``mode``."""
 
-    script = "upgrade.bat" if os.name == "nt" else "./upgrade.sh"
+    script = "./upgrade.sh"
+    if os.name == "nt" or sys.platform == "win32":
+        script = "upgrade.bat"
     return [script, f"--{mode}"]
 
 
@@ -1363,33 +1375,32 @@ def check_github_updates(channel_override: str | None = None) -> None:
     mode_file_physical = mode_file.is_file()
     try:
         try:
-            raw_mode = mode_file.read_text().strip() if mode_file_exists else ""
+            raw_mode = mode_file.read_text() if mode_file_exists else ""
         except (OSError, UnicodeDecodeError):
             logger.warning(
                 "Failed to read auto-upgrade mode lockfile", exc_info=True
             )
         else:
-            cleaned_mode = raw_mode.lower()
+            cleaned_mode = _normalize_channel_mode(raw_mode)
             if cleaned_mode:
                 mode = cleaned_mode
 
-        override_mode = None
         override_log: str | None = None
-        if channel_override:
-            requested = channel_override.strip().lower()
-            if requested in {"latest", "unstable"}:
-                override_mode = "unstable"
-                override_log = "latest"
-            elif requested in {"stable", "normal", "regular"}:
-                override_mode = "stable"
-                if requested == "stable":
-                    override_log = "stable"
+        override_mode = _normalize_channel_mode(channel_override)
         if override_mode:
-            mode = override_mode
+            if override_mode in {"latest", "unstable"}:
+                mode = "unstable"
+                override_log = "latest"
+            elif override_mode in {"stable", "normal", "regular", "version"}:
+                mode = "stable"
+                if override_mode == "stable":
+                    override_log = "stable"
 
         mode = {
             "latest": "unstable",
+            "unstable": "unstable",
             "version": "stable",
+            "stable": "stable",
             "normal": "stable",
             "regular": "stable",
         }.get(mode, mode)
@@ -1588,6 +1599,13 @@ def check_github_updates(channel_override: str | None = None) -> None:
             args = _upgrade_command_args("stable")
             upgrade_was_applied = True
 
+        if os.name != "nt" and args and args[0].lower().endswith(".bat"):
+            args = ["./upgrade.sh", *args[1:]]
+            _append_auto_upgrade_log(
+                base_dir,
+                "Normalized upgrade command for POSIX host",
+            )
+
         if (
             upgrade_was_applied
             and mode == "stable"
@@ -1703,7 +1721,7 @@ def check_github_updates(channel_override: str | None = None) -> None:
             _record_auto_upgrade_failure(base_dir, _classify_auto_upgrade_failure(exc))
         raise
     finally:
-        if reset_network_failures:
+        if reset_network_failures and not failure_recorded:
             _reset_network_failure_count(base_dir)
         if not failure_recorded:
             _reset_auto_upgrade_failure_count(base_dir)

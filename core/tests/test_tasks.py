@@ -370,6 +370,70 @@ def test_check_github_updates_treats_latest_mode_case_insensitively(
     assert _upgrade_command("latest") in run_commands
 
 
+def test_check_github_updates_normalizes_windows_script_on_posix(
+    monkeypatch, tmp_path
+):
+    """Upgrade commands should not invoke Windows scripts on POSIX hosts."""
+
+    from core import tasks
+    import nodes.apps as nodes_apps
+
+    base_dir = tmp_path / "node"
+    locks = base_dir / "locks"
+    logs = base_dir / "logs"
+    locks.mkdir(parents=True)
+    logs.mkdir(parents=True)
+    (base_dir / "VERSION").write_text("0.0.0")
+    (locks / "auto_upgrade.lck").write_text("latest")
+
+    monkeypatch.setattr(tasks, "_project_base_dir", lambda: base_dir)
+    monkeypatch.setattr(tasks, "_auto_upgrade_log_path", lambda _base: logs / "auto-upgrade.log")
+    log_messages: list[str] = []
+    monkeypatch.setattr(tasks, "_append_auto_upgrade_log", lambda _base, message: log_messages.append(message))
+    monkeypatch.setattr(tasks, "_schedule_health_check", lambda *args, **kwargs: None)
+    monkeypatch.setattr(tasks, "_load_skipped_revisions", lambda base: set())
+    monkeypatch.setattr(tasks, "_resolve_release_severity", lambda version: tasks.SEVERITY_NORMAL)
+    monkeypatch.setattr(tasks, "_read_remote_version", lambda base, branch: "0.0.1")
+    monkeypatch.setattr(tasks, "_read_local_version", lambda base: "0.0.0")
+    monkeypatch.setattr(tasks, "_reset_network_failure_count", lambda _base: None)
+    monkeypatch.setattr(tasks, "_broadcast_upgrade_start_message", lambda *args, **kwargs: None)
+    monkeypatch.setattr(tasks, "_record_auto_upgrade_timestamp", lambda _base: None)
+    monkeypatch.setattr(tasks, "_ensure_runtime_services", lambda *args, **kwargs: True)
+
+    monkeypatch.setitem(
+        sys.modules,
+        "core.notifications",
+        SimpleNamespace(notify=lambda *args, **kwargs: None),
+    )
+    monkeypatch.setattr(nodes_apps, "_startup_notification", lambda: None)
+
+    def fake_check_output(command, *args, **kwargs):
+        if command[-1].startswith("origin/"):
+            return "remote-sha"
+        return "local-sha"
+
+    monkeypatch.setattr(tasks.subprocess, "check_output", fake_check_output)
+    monkeypatch.setattr(tasks, "_upgrade_command_args", lambda mode: ["upgrade.bat", f"--{mode}"])
+
+    run_commands: list[list[str]] = []
+
+    def fake_run_upgrade(base: Path, args: list[str]):
+        run_commands.append(args)
+        return None, True
+
+    monkeypatch.setattr(tasks, "_run_upgrade_command", fake_run_upgrade)
+    monkeypatch.setattr(
+        tasks.subprocess,
+        "run",
+        lambda command, **kwargs: subprocess.CompletedProcess(command, 0),
+    )
+
+    tasks.check_github_updates()
+
+    assert run_commands == [["./upgrade.sh", "--latest"]]
+    assert any("Normalized upgrade command for POSIX host" in message for message in log_messages)
+
+
 @pytest.mark.parametrize(
     (
         "channel_override",
@@ -935,6 +999,39 @@ def test_check_github_updates_logs_fetch_failure_details(monkeypatch, tmp_path):
         tasks.check_github_updates()
 
     assert messages == ["Git fetch failed (exit code 128): fatal: forbidden"]
+
+
+def test_check_github_updates_skips_network_reset_on_failure(monkeypatch, tmp_path):
+    """Network failure counters should remain when fetch errors occur."""
+
+    from core import tasks
+
+    base_dir = tmp_path
+    (base_dir / "locks").mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setattr(tasks, "_project_base_dir", lambda: base_dir)
+    monkeypatch.setattr(tasks, "_auto_upgrade_log_path", lambda _base: base_dir / "auto-upgrade.log")
+    monkeypatch.setattr(tasks, "_load_skipped_revisions", lambda _base: set())
+    monkeypatch.setattr(tasks, "_schedule_health_check", lambda *args, **kwargs: None)
+    monkeypatch.setattr(tasks, "_handle_network_failure_if_applicable", lambda _base, _exc: False)
+
+    reset_calls: list[Path] = []
+    monkeypatch.setattr(tasks, "_reset_network_failure_count", lambda base: reset_calls.append(base))
+
+    def fake_append(_base: Path, _message: str) -> None:
+        return None
+
+    monkeypatch.setattr(tasks, "_append_auto_upgrade_log", fake_append)
+
+    def fake_run(command, *args, **kwargs):
+        raise subprocess.CalledProcessError(128, command, "", "fatal: forbidden\n")
+
+    monkeypatch.setattr(tasks.subprocess, "run", fake_run)
+
+    with pytest.raises(subprocess.CalledProcessError):
+        tasks.check_github_updates()
+
+    assert reset_calls == []
 
 
 def test_check_github_updates_skips_when_ci_failing(monkeypatch, tmp_path):
