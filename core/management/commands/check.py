@@ -77,7 +77,7 @@ class Command(SystemCheckCommand):
                 positional_args = []
 
         if target is None:
-            if list_checks:
+            if list_checks or (not positional_args and not options.get("app_labels")):
                 self._print_available_checks(checks)
                 return
             # Fall back to Django's built-in system checks so this command
@@ -92,12 +92,7 @@ class Command(SystemCheckCommand):
             )
 
         command_name = checks[normalized_target]["command_name"]
-        call_command(
-            command_name,
-            *forwarded_args,
-            stdout=self.stdout,
-            stderr=self.stderr,
-        )
+        call_command(command_name, *forwarded_args)
 
     def _resolve_checks(self) -> OrderedDict[str, dict[str, str]]:
         """Pair target aliases with their command names and help text."""
