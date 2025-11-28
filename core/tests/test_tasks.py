@@ -1134,7 +1134,7 @@ def test_record_auto_upgrade_failure_broadcasts_net_message(
     assert (
         tmp_path / "locks" / tasks.AUTO_UPGRADE_FAILURE_LOCK_NAME
     ).read_text(encoding="utf-8") == "1"
-    assert messages == [("alpha 2024-01-02 03:04", "GIT-FETCH-FAILED x1")]
+    assert messages == [("alpha 03:04", "GIT-FETCH-FAILED x1")]
 
 
 def test_check_github_updates_network_failures_trigger_reboot(

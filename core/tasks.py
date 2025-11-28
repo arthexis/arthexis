@@ -1242,9 +1242,7 @@ def _broadcast_upgrade_start_message(
         )
 
 
-def _send_auto_upgrade_failure_message(
-    base_dir: Path, reason: str, failure_count: int, *, include_date: bool = False
-) -> None:
+def _send_auto_upgrade_failure_message(base_dir: Path, reason: str, failure_count: int) -> None:
     from nodes.models import NetMessage, Node
 
     try:
@@ -1258,9 +1256,7 @@ def _send_auto_upgrade_failure_message(
 
     node_name = getattr(node, "hostname", None) or socket.gethostname() or "node"
     timestamp = timezone.localtime(timezone.now())
-    formatted_time = (
-        timestamp.strftime("%Y-%m-%d %H:%M") if include_date else timestamp.strftime("%H:%M")
-    )
+    formatted_time = timestamp.strftime("%H:%M")
     subject = f"{node_name} {formatted_time}"
     body = f"{reason} x{failure_count}"
 
@@ -1280,9 +1276,7 @@ def _record_auto_upgrade_failure(base_dir: Path, reason: str) -> int:
         base_dir,
         f"Auto-upgrade failure {count}: {normalized_reason}",
     )
-    _send_auto_upgrade_failure_message(
-        base_dir, normalized_reason, count, include_date=True
-    )
+    _send_auto_upgrade_failure_message(base_dir, normalized_reason, count)
     return count
 
 
