@@ -337,8 +337,67 @@ class UpgradeReportTests(SimpleTestCase):
                         details = system._suite_uptime_details()
 
         expected_boot = datetime.fromtimestamp(boot_timestamp, tz=datetime_timezone.utc)
+        self.assertFalse(details["available"])
         self.assertEqual(details["boot_time"], expected_boot)
         fake_psutil.boot_time.assert_called_once_with()
+
+    def test_suite_uptime_rejects_lock_older_than_boot(self):
+        fake_now = datetime(2024, 1, 1, 3, tzinfo=datetime_timezone.utc)
+        boot_timestamp = fake_now.timestamp() - 1800
+        lock_payload = {"started_at": "2023-12-31T23:00:00+00:00"}
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            locks_dir = base / "locks"
+            locks_dir.mkdir()
+            lock_path = locks_dir / system.SUITE_UPTIME_LOCK_NAME
+            lock_path.write_text(json.dumps(lock_payload), encoding="utf-8")
+            os.utime(lock_path, (fake_now.timestamp(), fake_now.timestamp()))
+
+            fake_psutil = mock.Mock()
+            fake_psutil.boot_time.return_value = boot_timestamp
+
+            with override_settings(BASE_DIR=str(base)):
+                with mock.patch.dict(sys.modules, {"psutil": fake_psutil}):
+                    with mock.patch("core.system.timezone.now", return_value=fake_now):
+                        details = system._suite_uptime_details()
+
+        expected_boot = datetime.fromtimestamp(boot_timestamp, tz=datetime_timezone.utc)
+        self.assertFalse(details.get("available"))
+        self.assertEqual(details.get("boot_time"), expected_boot)
+
+    @mock.patch("core.system._load_shutdown_periods", return_value=([], None))
+    def test_uptime_report_counts_offline_lock_periods(self, mock_load_shutdowns):
+        fake_now = datetime(2024, 1, 1, 12, tzinfo=datetime_timezone.utc)
+        boot_time = fake_now - timedelta(hours=1)
+        lock_payload = {"started_at": "2023-12-31T23:00:00+00:00"}
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            locks_dir = base / "locks"
+            locks_dir.mkdir()
+            lock_path = locks_dir / system.SUITE_UPTIME_LOCK_NAME
+            lock_path.write_text(json.dumps(lock_payload), encoding="utf-8")
+            os.utime(lock_path, (fake_now.timestamp(), fake_now.timestamp()))
+
+            fake_psutil = mock.Mock()
+            fake_psutil.boot_time.return_value = boot_time.timestamp()
+
+            with override_settings(BASE_DIR=str(base)):
+                with mock.patch.dict(sys.modules, {"psutil": fake_psutil}):
+                    with mock.patch("core.system.timezone.now", return_value=fake_now):
+                        report = system._build_uptime_report()
+
+        first_window = report["windows"][0]
+        self.assertEqual(first_window["downtime_percent"], 4.2)
+        downtime_events = first_window["downtime_events"]
+        self.assertTrue(
+            any(
+                event["start"] == system._format_datetime(boot_time)
+                for event in downtime_events
+            )
+        )
+        self.assertFalse(report["suite"]["available"])
 
     def test_load_auto_upgrade_log_entries_limits_and_orders_entries(self):
         with tempfile.TemporaryDirectory() as tmpdir:
