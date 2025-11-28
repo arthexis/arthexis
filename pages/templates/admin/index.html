@@ -603,42 +603,6 @@
     {% include "admin/dashboard_app_list.html" with app_list=app_list %}
   </div>
 <div class="dashboard-side" id="recent-boxes">
-    {% user_google_calendar as google_calendar %}
-    {% if google_calendar %}
-    <div class="module" id="google-calendar-module">
-        <h2>{{ google_calendar.title }}</h2>
-        {% if google_calendar.events %}
-        <ul class="calendar-event-list">
-            {% for event in google_calendar.events %}
-            <li class="calendar-event">
-                {% if event.html_link %}
-                <a class="calendar-event-title" href="{{ event.html_link }}" target="_blank" rel="noopener noreferrer">
-                    {{ event.summary|default:_('Untitled event') }}
-                </a>
-                {% else %}
-                <span class="calendar-event-title">{{ event.summary|default:_('Untitled event') }}</span>
-                {% endif %}
-                <p class="calendar-event-time">
-                    {% if event.all_day %}
-                        {{ event.start|localtime|date:"DATE_FORMAT" }}
-                    {% else %}
-                        {{ event.start|localtime|date:"SHORT_DATETIME_FORMAT" }}
-                    {% endif %}
-                </p>
-                {% if event.location %}
-                <p class="calendar-event-location">{{ event.location }}</p>
-                {% endif %}
-            </li>
-            {% endfor %}
-        </ul>
-        {% else %}
-        <p class="calendar-empty">{% translate 'No upcoming events' %}</p>
-        {% endif %}
-        {% if google_calendar.calendar_url %}
-        <p class="calendar-link"><a href="{{ google_calendar.calendar_url }}" target="_blank" rel="noopener noreferrer">{% translate 'Open full calendar' %}</a></p>
-        {% endif %}
-    </div>
-    {% endif %}
     <div class="module" id="admin-history-module">
         <h2>{% translate "Recently viewed admin pages" %}</h2>
         {% with history_list=request.user.admin_history.all %}
@@ -717,7 +681,7 @@
 {% block extrahead %}
   {{ block.super }}
   <script>
-    window.addEventListener('DOMContentLoaded', () => {
+    const initializeMiniTrafficChart = () => {
       const canvas = document.getElementById('viewhistory-mini-chart');
       const emptyLabel = document.getElementById('viewhistory-mini-empty');
       if (!canvas) return;
@@ -869,7 +833,22 @@
             emptyLabel.textContent = '{% translate "Unable to load visit data at this time." %}';
           }
         });
-    });
+    };
+
+    const scheduleMiniTrafficChart = () => {
+      const startChart = () => {
+        initializeMiniTrafficChart();
+      };
+
+      if (window.requestIdleCallback) {
+        window.requestIdleCallback(startChart, { timeout: 1000 });
+        return;
+      }
+
+      window.setTimeout(startChart, 0);
+    };
+
+    window.addEventListener('load', scheduleMiniTrafficChart);
   </script>
   <script>
     (function () {
