@@ -1,0 +1,25 @@
+{% extends "pages/base.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Server error" %} · {{ block.super }}{% endblock %}
+
+{% block content %}
+  <div class="container py-5">
+    <div class="row justify-content-center">
+      <div class="col-lg-8 col-xl-6">
+        <div class="card shadow border-0">
+          <div class="card-body text-center py-5">
+            <div class="display-4 fw-bold text-danger">500</div>
+            <h1 class="h3 mt-4">{% trans "Something went wrong on our side" %}</h1>
+            <p class="text-body-secondary mt-3">
+              {% trans "Please try again in a moment or return to the main page." %}
+            </p>
+            <a class="btn btn-primary mt-4" href="{% url 'pages:index' %}">
+              {% trans "Return to the main page" %}
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}

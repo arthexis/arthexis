@@ -4,6 +4,7 @@ from django.contrib.sites.models import Site
 from django.http import Http404
 from django.test import TestCase, override_settings
 from django.urls import path
+from config import urls as config_urls
 
 
 def raise_debug_404(request):
@@ -17,6 +18,7 @@ def raise_debug_500(request):
 urlpatterns = [
     path("debug-404/", raise_debug_404),
     path("debug-500/", raise_debug_500),
+    *config_urls.urlpatterns,
 ]
 
 
@@ -49,8 +51,20 @@ class DebugErrorPageTests(TestCase):
         self.assertContains(response, "ValueError", status_code=500)
         self.assertContains(response, "simulated debug failure", status_code=500)
 
-    @override_settings(DEBUG=False)
+    @override_settings(
+        DEBUG=False,
+        DEBUG_PROPAGATE_EXCEPTIONS=False,
+        ALLOWED_HOSTS=["testserver"],
+    )
     def test_non_debug_uses_standard_responses(self):
+        self.client.raise_request_exception = False
+
         response = self.client.get("/debug-404/")
         self.assertEqual(response.status_code, 404)
+        self.assertContains(response, "Return to the main page", status_code=404)
         self.assertNotContains(response, "Resolver", status_code=404)
+
+        response = self.client.get("/debug-500/")
+        self.assertEqual(response.status_code, 500)
+        self.assertContains(response, "Something went wrong on our side", status_code=500)
+        self.assertNotContains(response, "simulated debug failure", status_code=500)
