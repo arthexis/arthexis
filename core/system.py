@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone as datetime_timezone
 from functools import lru_cache
 from pathlib import Path
 import json
+import os
 import re
 import socket
 import subprocess
@@ -1299,6 +1300,8 @@ def _database_configurations() -> list[dict[str, str]]:
             engine = ""
         if name is None:
             name = ""
+        if isinstance(name, (os.PathLike, Path)):
+            name = Path(name).as_posix()
         databases.append({
             "alias": alias,
             "engine": str(engine),
