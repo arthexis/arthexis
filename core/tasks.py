@@ -1698,7 +1698,7 @@ def check_github_updates(channel_override: str | None = None) -> None:
 def poll_email_collectors() -> None:
     """Poll all configured email collectors for new messages."""
     try:
-        from .models import EmailCollector
+        from teams.models import EmailCollector
     except Exception:  # pragma: no cover - app not ready
         return
 

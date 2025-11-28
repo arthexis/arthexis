@@ -1714,11 +1714,20 @@ class EmailOutboxAdminForm(MaskedPasswordFormMixin, forms.ModelForm):
         required=False,
         help_text="Leave blank to keep the current password.",
     )
+    priority = forms.IntegerField(
+        required=False,
+        initial=0,
+        help_text="Higher values are selected first when multiple outboxes are available.",
+    )
     password_sigil_fields = ("password", "host", "username", "from_email")
 
     class Meta:
         model = EmailOutbox
         fields = "__all__"
+
+    def clean_priority(self):
+        value = self.cleaned_data.get("priority")
+        return 0 if value in (None, "") else value
 
 
 class EmailOutboxInlineForm(ProfileFormMixin, EmailOutboxAdminForm):
