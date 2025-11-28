@@ -34,6 +34,7 @@ LOCK_FILE = LOCK_DIR / "lcd_screen.lck"
 SERVICE_LOCK_FILE = LOCK_DIR / "service.lck"
 SHUTDOWN_SCHEDULE_FILE = Path("/run/systemd/shutdown/scheduled")
 DEFAULT_SCROLL_MS = 1000
+SCROLL_PADDING = 3
 
 
 class LockPayload(NamedTuple):
@@ -307,8 +308,8 @@ def _prepare_display_state(line1: str, line2: str, scroll_ms: int) -> DisplaySta
     scroll_sec = max(scroll_ms, 0) / 1000.0
     text1 = line1[:64]
     text2 = line2[:64]
-    pad1 = text1 + " " * 16 if len(text1) > 16 else text1.ljust(16)
-    pad2 = text2 + " " * 16 if len(text2) > 16 else text2.ljust(16)
+    pad1 = text1 + " " * SCROLL_PADDING if len(text1) > 16 else text1.ljust(16)
+    pad2 = text2 + " " * SCROLL_PADDING if len(text2) > 16 else text2.ljust(16)
     steps1 = max(len(pad1) - 15, 1)
     steps2 = max(len(pad2) - 15, 1)
     cycle = math.lcm(steps1, steps2)

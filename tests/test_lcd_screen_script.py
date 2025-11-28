@@ -235,3 +235,13 @@ def test_display_loops_segments(monkeypatch):
         state = lcd_screen._advance_display(lcd, state)
 
     assert cycles[0] == cycles[-1]
+
+
+def test_scrolling_rows_use_minimal_padding():
+    long_line = "SCROLLING MESSAGE!"  # 18 characters
+
+    state = lcd_screen._prepare_display_state(long_line, "", 200)
+
+    assert state.pad1.endswith(" " * lcd_screen.SCROLL_PADDING)
+    assert state.pad1[-(lcd_screen.SCROLL_PADDING + 1)] == long_line[-1]
+    assert state.steps1 == len(long_line) + lcd_screen.SCROLL_PADDING - 15
