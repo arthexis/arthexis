@@ -2,17 +2,19 @@ import ast
 import inspect
 import logging
 import textwrap
+from functools import lru_cache
 from pathlib import Path
 
 from django import template
 from django.apps import apps
+from django.conf import settings
 from django.contrib import admin
 from django.contrib.contenttypes.models import ContentType
+from django.core.cache import cache
 from django.db import DatabaseError
 from django.db.models import Count, Exists, OuterRef, Q
 from django.db.models import Model
-from django.conf import settings
-from django.core.cache import cache
+from django.db.models.signals import post_delete, post_save
 from django.urls import NoReverseMatch, reverse
 from django.utils.text import capfirst
 from django.utils.translation import gettext_lazy as _
@@ -39,6 +41,50 @@ _DEFAULT_RULE_HANDLERS = {
 }
 
 logger = logging.getLogger(__name__)
+
+
+@lru_cache(maxsize=256)
+def _get_content_type(app_label: str, model_name: str) -> ContentType | None:
+    try:
+        return ContentType.objects.get(app_label=app_label, model=model_name)
+    except ContentType.DoesNotExist:
+        return None
+
+
+def get_cached_content_type(app_label: str, model_name: str) -> ContentType | None:
+    """Return a cached content type lookup for the provided model key."""
+
+    return _get_content_type(app_label, model_name.lower())
+
+
+@lru_cache(maxsize=256)
+def _get_dashboard_rule(app_label: str, model_name: str) -> DashboardRule | None:
+    content_type = get_cached_content_type(app_label, model_name)
+    if content_type is None:
+        return None
+
+    return (
+        DashboardRule.objects.select_related("content_type")
+        .filter(content_type=content_type)
+        .first()
+    )
+
+
+def get_cached_dashboard_rule(app_label: str, model_name: str) -> DashboardRule | None:
+    """Return a cached dashboard rule for the provided model key."""
+
+    return _get_dashboard_rule(app_label, model_name.lower())
+
+
+def _clear_dashboard_rule_caches(**_kwargs):
+    _get_content_type.cache_clear()
+    _get_dashboard_rule.cache_clear()
+
+
+post_save.connect(_clear_dashboard_rule_caches, sender=DashboardRule)
+post_delete.connect(_clear_dashboard_rule_caches, sender=DashboardRule)
+post_save.connect(_clear_dashboard_rule_caches, sender=ContentType)
+post_delete.connect(_clear_dashboard_rule_caches, sender=ContentType)
 
 
 @register.simple_tag
@@ -436,11 +482,8 @@ def badge_counters(context, app_label: str, model_name: str) -> list[dict[str, o
     if cache_key in cache_map:
         return cache_map[cache_key]
 
-    try:
-        content_type = ContentType.objects.get(
-            app_label=app_label, model=model_name.lower()
-        )
-    except ContentType.DoesNotExist:
+    content_type = get_cached_content_type(app_label, model_name)
+    if content_type is None:
         counters: list[dict[str, object]] = []
         cache_map[cache_key] = counters
         return counters
@@ -478,14 +521,7 @@ def model_rule_status(context, app_label: str, model_name: str):
     if normalized_key in cache_map:
         return cache_map[normalized_key]
 
-    rule = (
-        DashboardRule.objects.select_related("content_type")
-        .filter(
-            content_type__app_label=app_label,
-            content_type__model=model_name.lower(),
-        )
-        .first()
-    )
+    rule = get_cached_dashboard_rule(app_label, model_name)
 
     if rule is None:
         handler_name = _DEFAULT_RULE_HANDLERS.get(normalized_key)

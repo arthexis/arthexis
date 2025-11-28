@@ -1366,6 +1366,16 @@ class AdminModelRuleTemplateTagTests(TestCase):
 
         self.assertEqual(cached, status)
 
+    def test_model_rule_status_uses_lookup_cache_between_contexts(self):
+        context = Context({})
+
+        with self.assertNumQueries(2):
+            admin_extras.model_rule_status(context, "nodes", "NodeFeature")
+
+        with self.assertNumQueries(0):
+            fresh_context = Context({})
+            admin_extras.model_rule_status(fresh_context, "nodes", "NodeFeature")
+
     def test_model_rule_status_reports_evcs_heartbeat_success(self):
         Charger.objects.create(
             charger_id="EVCS-PASS", last_heartbeat=timezone.now()
