@@ -2723,7 +2723,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
             summaries.values(), key=lambda item: item["display_name"].lower()
         )
 
-    @admin.action(description=_("Purge all CP data"))
+    @admin.action(description=_("Clear all selected CP data"))
     def purge_data(self, request, queryset):
         purge_summaries = self._build_purge_summaries(queryset)
 
