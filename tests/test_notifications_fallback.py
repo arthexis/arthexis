@@ -5,7 +5,6 @@ from core import notifications
 
 pytestmark = [
     pytest.mark.role("Terminal"),
-    pytest.mark.role("Control"),
     pytest.mark.feature("gui-toast"),
 ]
 
