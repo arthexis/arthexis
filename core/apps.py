@@ -33,7 +33,10 @@ def _setup_celery_beat_integrations():
     from django.core.exceptions import ValidationError
     from django.db.models.signals import pre_save
 
-    from .celery_utils import normalize_periodic_task_name
+    from .celery_utils import (
+        normalize_periodic_task_name,
+        periodic_task_name_variants,
+    )
 
     if not hasattr(CrontabSchedule, "natural_key"):
 
@@ -89,16 +92,28 @@ def _setup_celery_beat_integrations():
 
     def _core_periodic_task_pre_save(sender, instance, **kwargs):
         manager = sender.objects
-        slug = normalize_periodic_task_name(manager, instance.name)
-        instance.name = slug
+        original_name = instance.name
+        slug = normalize_periodic_task_name(manager, original_name)
+
         if instance.pk:
+            existing_pk_row = manager.filter(pk=instance.pk).first()
+            if existing_pk_row and original_name not in periodic_task_name_variants(
+                existing_pk_row.name
+            ):
+                instance.pk = None
+                instance._state.adding = True
             return
-        existing_pk = (
-            manager.filter(name=slug).values_list("pk", flat=True).first()
-        )
-        if existing_pk:
-            instance.pk = existing_pk
-            instance._state.adding = False
+
+        if original_name == slug:
+            existing_pk = (
+                manager.filter(name__in=periodic_task_name_variants(slug))
+                .values_list("pk", flat=True)
+                .first()
+            )
+            if existing_pk:
+                instance.pk = existing_pk
+                instance._state.adding = False
+                instance._core_force_update = True
 
     pre_save.connect(
         _core_periodic_task_pre_save,
@@ -134,6 +149,74 @@ def _setup_celery_beat_integrations():
     PeriodicTask.validate_unique = _core_periodic_task_validate_unique
     PeriodicTask._core_fixture_validate_patch = True
     PeriodicTask._core_fixture_validate_unique = original_validate_unique
+
+    if getattr(PeriodicTask, "_core_fixture_save_patch", False):
+        return
+
+    original_save = PeriodicTask.save
+
+    def _core_periodic_task_save(self, *args, **kwargs):
+        force_insert = kwargs.pop("force_insert", False)
+        force_update = kwargs.pop("force_update", False)
+
+        manager = type(self).objects
+        original_name = self.name
+        slug = normalize_periodic_task_name(manager, original_name)
+
+        if getattr(self, "_core_normalizing", False):
+            return original_save(
+                self,
+                *args,
+                force_insert=force_insert,
+                force_update=force_update,
+                **kwargs,
+            )
+
+        if getattr(self, "_core_force_update", False):
+            force_insert = False
+            force_update = True
+
+        if self.pk:
+            existing_pk_row = manager.filter(pk=self.pk).first()
+            if existing_pk_row and existing_pk_row.name not in periodic_task_name_variants(
+                original_name
+            ):
+                self.pk = None
+                self._state.adding = True
+                force_insert = False
+
+        if original_name == slug:
+            existing_pk = (
+                manager.filter(name__in=periodic_task_name_variants(slug))
+                .exclude(pk=self.pk)
+                .values_list("pk", flat=True)
+                .first()
+            )
+            if existing_pk and not self.pk:
+                self.pk = existing_pk
+                self._state.adding = False
+                force_insert = False
+                force_update = True
+            self.name = slug
+        else:
+            self.name = original_name
+
+        saved = original_save(
+            self,
+            *args,
+            force_insert=force_insert,
+            force_update=force_update,
+            **kwargs,
+        )
+
+        if not getattr(self, "_core_normalizing", False):
+            normalize_periodic_task_name(manager, original_name)
+
+        return saved
+
+    PeriodicTask.save = _core_periodic_task_save
+    PeriodicTask._core_fixture_save_patch = True
+    PeriodicTask._core_fixture_original_save = original_save
 
 
 def _patch_totp_device():
