@@ -5,6 +5,8 @@ from unittest import mock
 from pathlib import Path
 import sys
 
+import pytest
+
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 import django  # noqa: E402
@@ -16,6 +18,9 @@ from django.test import TestCase  # noqa: E402
 
 from core.models import Package, PackageRelease, ReleaseManager, User  # noqa: E402
 from core import release as release_utils  # noqa: E402
+
+
+pytestmark = pytest.mark.role("Control")
 
 
 class PyPICheckReadinessTests(TestCase):

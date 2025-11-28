@@ -4,6 +4,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import shutil
 
+import pytest
+
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 import django
@@ -14,6 +16,9 @@ from django.core.management import call_command, CommandError
 from django.test import TestCase, override_settings
 
 from core.models import Package, PackageRelease
+
+
+pytestmark = pytest.mark.role("Control")
 
 
 class CleanReleaseLogsCommandTests(TestCase):

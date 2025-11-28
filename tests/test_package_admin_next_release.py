@@ -1,11 +1,16 @@
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from django.contrib.admin.sites import AdminSite
 from django.test import RequestFactory, TestCase
 
 from core.admin import PackageAdmin
 from core.models import Package, PackageRelease
+
+
+pytestmark = pytest.mark.role("Control")
 
 
 class PackageAdminPrepareTests(TestCase):

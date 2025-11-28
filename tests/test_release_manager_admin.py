@@ -10,6 +10,9 @@ from core.admin import ReleaseManagerAdmin
 from teams.models import ReleaseManager as TeamsReleaseManager
 
 
+pytestmark = pytest.mark.role("Control")
+
+
 class ReleaseManagerAdminActionTests(TestCase):
     def setUp(self):
         User = get_user_model()

@@ -13,6 +13,9 @@ from core import release
 from core.models import Package, PackageRelease, ReleaseManager
 
 
+pytestmark = pytest.mark.role("Control")
+
+
 @pytest.fixture
 def release_sandbox(tmp_path, monkeypatch):
     """Create a temporary working tree with required files."""

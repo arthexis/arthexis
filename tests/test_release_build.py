@@ -12,6 +12,9 @@ import pytest
 from core import release as release_module
 
 
+pytestmark = pytest.mark.role("Control")
+
+
 def make_proc(returncode: int, stdout: str = "", stderr: str = ""):
     proc = mock.Mock()
     proc.returncode = returncode

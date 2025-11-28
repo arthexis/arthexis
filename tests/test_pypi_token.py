@@ -4,9 +4,14 @@ import sys
 from pathlib import Path
 from unittest import mock
 
+import pytest
+
 from django.test import TestCase
 
 from core import release
+
+
+pytestmark = pytest.mark.role("Control")
 
 
 class PyPITokenTests(TestCase):
