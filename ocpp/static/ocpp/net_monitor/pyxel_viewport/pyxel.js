@@ -126,6 +126,32 @@ async function resetPyxel() {
   }, 0);
 }
 
+async function pausePyxel() {
+  if (!window.pyxelContext.initialized || !window.pyxelContext.pyodide) {
+    return;
+  }
+
+  window.pyxelContext.pyodide._module._emscripten_pause_main_loop();
+
+  let audioContext = window.pyxelContext.pyodide?._module?.SDL2?.audioContext;
+  if (audioContext && audioContext.state === "running") {
+    await audioContext.suspend();
+  }
+}
+
+async function resumePyxel() {
+  if (!window.pyxelContext.initialized || !window.pyxelContext.pyodide) {
+    return;
+  }
+
+  let audioContext = window.pyxelContext.pyodide?._module?.SDL2?.audioContext;
+  if (audioContext && audioContext.state === "suspended") {
+    await audioContext.resume();
+  }
+
+  window.pyxelContext.pyodide._module._emscripten_resume_main_loop();
+}
+
 function _initialize() {
   _setIcon();
   _setStyleSheet();

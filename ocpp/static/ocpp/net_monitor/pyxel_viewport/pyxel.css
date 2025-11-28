@@ -21,3 +21,51 @@ canvas {
 button, input, select {
   font-family: inherit;
 }
+
+#pyxel-screen {
+  min-height: 100vh;
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 16px;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+}
+
+.pyxel-toolbar {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: linear-gradient(135deg, #0f172a 0%, #111827 100%);
+  border: 1px solid #1f2937;
+  border-radius: 12px;
+  padding: 12px 16px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
+}
+
+.pyxel-toolbar button {
+  background: #1f2937;
+  border: 1px solid #334155;
+  border-radius: 10px;
+  color: #f8fafc;
+  padding: 10px 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 120ms ease-in-out;
+}
+
+.pyxel-toolbar button:hover {
+  background: #2563eb;
+  border-color: #1d4ed8;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.35);
+}
+
+.pyxel-toolbar button:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  box-shadow: none;
+}
