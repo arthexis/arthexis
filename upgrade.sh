@@ -71,6 +71,17 @@ ensure_git_safe_directory() {
   git config --global --add safe.directory "$BASE_DIR" >/dev/null 2>&1 || true
 }
 
+is_non_terminal_role() {
+  case "$1" in
+    Control|Constellation|Watchtower)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 pip_requires_break_system_packages() {
   local python_bin="$1"
 
@@ -151,6 +162,8 @@ configure_nginx_site() {
 ensure_git_safe_directory
 
 reset_safe_git_changes() {
+  local role="${1:-Terminal}"
+
   # Discard known auto-generated files that should not block rebases.
   local safe_rebase_files=(
     "VERSION"
@@ -201,6 +214,21 @@ reset_safe_git_changes() {
   fi
 
   if git status --porcelain 2>/dev/null | grep -q '^[ MADRCU?]'; then
+    if is_non_terminal_role "$role"; then
+      echo "Non-terminal role $role detected unstashed changes; discarding local modifications before upgrading..."
+      if ! git reset --hard HEAD >/dev/null 2>&1; then
+        echo "Failed to discard local changes automatically; please commit or stash before upgrading." >&2
+        exit 1
+      fi
+
+      if ! git clean -fd -e data/ >/dev/null 2>&1; then
+        echo "Failed to remove untracked files automatically; please commit or stash before upgrading." >&2
+        exit 1
+      fi
+
+      return 0
+    fi
+
     echo "Uncommitted changes detected; please commit or stash before upgrading." >&2
     exit 1
   fi
@@ -468,13 +496,9 @@ shares_stable_series() {
 cleanup_non_terminal_git_state() {
   local role="$1"
 
-  case "$role" in
-    Control|Constellation|Watchtower)
-      ;;
-    *)
-      return
-      ;;
-  esac
+  if ! is_non_terminal_role "$role"; then
+    return
+  fi
 
   if [ -d .git/rebase-merge ] || [ -d .git/rebase-apply ]; then
     echo "Detected interrupted rebase; aborting before continuing upgrade..."
@@ -532,13 +556,9 @@ auto_realign_branch_for_role() {
   local role="$1"
   local branch="$2"
 
-  case "$role" in
-    Control|Constellation|Watchtower)
-      ;;
-    *)
-      return
-      ;;
-  esac
+  if ! is_non_terminal_role "$role"; then
+    return
+  fi
 
   local behind=0 ahead=0
   if read -r behind ahead < <(git rev-list --left-right --count "origin/$branch...HEAD" 2>/dev/null); then
@@ -1124,7 +1144,7 @@ REMOTE_REVISION="$LOCAL_REVISION"
 if [[ $LOCAL_ONLY -eq 1 ]]; then
   echo "Local refresh requested; skipping remote update check."
 else
-  reset_safe_git_changes
+  reset_safe_git_changes "$NODE_ROLE_NAME"
   echo "Checking repository for updates..."
   fetch_branch_with_ref_repair origin "$BRANCH"
   REMOTE_REVISION="$(git rev-parse "origin/$BRANCH" 2>/dev/null || echo "$REMOTE_REVISION")"
