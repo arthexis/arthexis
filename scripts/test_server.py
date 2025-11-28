@@ -17,6 +17,14 @@ if str(BASE_DIR) not in sys.path:
 
 from scripts import migration_server
 
+try:  # pragma: no cover - optional dependency in tests
+    from core.notifications import notify_async as notify_async  # type: ignore
+except Exception:  # pragma: no cover - notifier may be unavailable
+    def notify_async(subject: str, body: str = "") -> None:
+        """Fallback notification when :mod:`core.notifications` is missing."""
+
+        print(f"Notification: {subject} - {body}")
+
 
 def build_pytest_command(*, use_last_failed: bool) -> list[str]:
     """Return the pytest command honoring ``use_last_failed``."""
@@ -27,6 +35,13 @@ def build_pytest_command(*, use_last_failed: bool) -> list[str]:
     return command
 
 
+def _notify_result(success: bool) -> None:
+    """Send an asynchronous notification reflecting the latest test run."""
+
+    body = "Pytest passed." if success else "Pytest failed. Check VS Code output."
+    notify_async("Test server run completed", body)
+
+
 def run_tests(base_dir: Path, *, use_last_failed: bool) -> bool:
     """Execute pytest in *base_dir* and return ``True`` on success."""
 
@@ -35,11 +50,13 @@ def run_tests(base_dir: Path, *, use_last_failed: bool) -> bool:
     env.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
     print("[Test Server] Running:", " ".join(command))
     result = subprocess.run(command, cwd=base_dir, env=env)
-    if result.returncode == 0:
+    success = result.returncode == 0
+    if success:
         print("[Test Server] Tests passed.")
-        return True
-    print("[Test Server] Tests failed.")
-    return False
+    else:
+        print("[Test Server] Tests failed.")
+    _notify_result(success)
+    return success
 
 
 def run_migrations(base_dir: Path, *, latest: bool = True) -> bool:

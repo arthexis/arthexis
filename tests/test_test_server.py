@@ -33,6 +33,52 @@ def test_run_tests_uses_environment(monkeypatch: pytest.MonkeyPatch, tmp_path: P
     assert calls[0]["env"].get("DJANGO_SETTINGS_MODULE") == "config.settings"
 
 
+def test_run_tests_notifies_success(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    notifications: list[tuple[str, str]] = []
+
+    monkeypatch.setattr(
+        test_server,
+        "notify_async",
+        lambda subject, body="": notifications.append((subject, body)),
+    )
+    monkeypatch.setattr(
+        test_server.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=0),
+    )
+
+    result = test_server.run_tests(tmp_path, use_last_failed=False)
+
+    assert result is True
+    assert notifications == [("Test server run completed", "Pytest passed.")]
+
+
+def test_run_tests_notifies_failure(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    notifications: list[tuple[str, str]] = []
+
+    monkeypatch.setattr(
+        test_server,
+        "notify_async",
+        lambda subject, body="": notifications.append((subject, body)),
+    )
+    monkeypatch.setattr(
+        test_server.subprocess,
+        "run",
+        lambda *args, **kwargs: SimpleNamespace(returncode=1),
+    )
+
+    result = test_server.run_tests(tmp_path, use_last_failed=False)
+
+    assert result is False
+    assert notifications == [
+        ("Test server run completed", "Pytest failed. Check VS Code output."),
+    ]
+
+
 def test_run_migrations_delegates_to_env_refresh(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
