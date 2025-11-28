@@ -116,10 +116,10 @@ Both upgrade scripts prioritise recoverability before applying new code:
 | `--latest` / `--unstable` | Follows origin/main revisions even when the recorded `VERSION` matches, matching the 10-minute unstable cadence.【F:upgrade.sh†L249-L285】【F:upgrade.sh†L520-L550】 |
 | `--stable` / `--regular` / `--normal` | Uses the release-driven stable channel with 24-hour polling and revision matching.【F:upgrade.sh†L249-L285】【F:upgrade.sh†L520-L550】 |
 | `--clean` | Removes untracked files (except `data/`), resets local changes, and keeps git history aligned—useful for appliance roles where local edits should be discarded.【F:upgrade.sh†L60-L94】【F:upgrade.sh†L146-L159】 |
-| `--no-restart` | Skips restarting services after migration so you can review changes manually before bringing the node back online.【F:upgrade.sh†L123-L152】【F:upgrade.sh†L340-L363】 |
+| `--start` / `--no-start` | Forces services to start after upgrade or keeps them offline afterwards; `--no-start` also accepts the legacy `--no-restart` alias.【F:upgrade.sh†L123-L152】【F:upgrade.sh†L340-L363】 |
 | `--no-warn` | Suppresses interactive warnings when an action would remove databases without creating a new backup (used together with `--clean` or manual purges).【F:upgrade.sh†L160-L201】 |
 
-During a normal upgrade the script determines the node role, ensures no interrupted git operations are pending, updates dependencies when `requirements.txt` changes, applies Django migrations, and restarts services unless `--no-restart` was passed.【F:upgrade.sh†L33-L205】【F:upgrade.sh†L332-L419】
+During a normal upgrade the script determines the node role, ensures no interrupted git operations are pending, updates dependencies when `requirements.txt` changes, applies Django migrations, and restarts services unless `--no-start`/`--no-restart` was passed.【F:upgrade.sh†L33-L205】【F:upgrade.sh†L332-L419】
 
 ### 3.3 Windows upgrade workflow
 
