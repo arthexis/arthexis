@@ -24,7 +24,7 @@ from core.models import GoogleCalendarProfile
 from core.entity import Entity
 from nodes.models import NetMessage, Node
 from nodes.models import BadgeCounter
-from pages.dashboard_rules import load_callable, rule_failure
+from pages.dashboard_rules import bind_rule_model, load_callable, rule_failure
 from pages.models import DashboardRule
 
 register = template.Library()
@@ -557,7 +557,8 @@ def model_rule_status(context, app_label: str, model_name: str):
         handler = load_callable(handler_name) if handler_name else None
         if handler:
             try:
-                result = handler()
+                with bind_rule_model(normalized_key):
+                    result = handler()
             except Exception:
                 logger.exception(
                     "Dashboard rule handler failed", extra={"model": normalized_key}
@@ -567,7 +568,8 @@ def model_rule_status(context, app_label: str, model_name: str):
             result = None
     else:
         try:
-            result = rule.evaluate()
+            with bind_rule_model(normalized_key):
+                result = rule.evaluate()
         except Exception:
             logger.exception(
                 "Dashboard rule evaluation failed",

@@ -1,5 +1,7 @@
 """Dashboard rule helpers and evaluators."""
 
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import timedelta
 from importlib import import_module
 import logging
@@ -16,6 +18,9 @@ logger = logging.getLogger(__name__)
 DEFAULT_SUCCESS_MESSAGE = _("All rules met.")
 SUCCESS_ICON = "\u2713"
 ERROR_ICON = "\u2717"
+_RULE_MODEL_CONTEXT: ContextVar[str | None] = ContextVar(
+    "dashboard_rule_model", default=None
+)
 
 # Keep dashboard rule messaging consistent: success responses should use
 # ``DEFAULT_SUCCESS_MESSAGE`` and error text should stay short enough to fit
@@ -29,6 +34,19 @@ def rule_success(message: str = DEFAULT_SUCCESS_MESSAGE) -> dict[str, object]:
 
 def rule_failure(message: str) -> dict[str, object]:
     return {"success": False, "message": message, "icon": ERROR_ICON}
+
+
+@contextmanager
+def bind_rule_model(model_identifier: str | None):
+    token = _RULE_MODEL_CONTEXT.set(model_identifier)
+    try:
+        yield
+    finally:
+        _RULE_MODEL_CONTEXT.reset(token)
+
+
+def current_rule_model() -> str | None:
+    return _RULE_MODEL_CONTEXT.get()
 
 
 def _format_evcs_list(evcs_identifiers: list[str]) -> str:
@@ -159,19 +177,26 @@ def evaluate_email_profile_rules() -> dict[str, object]:
         logger.exception("Unable to query email profiles")
         return rule_failure(_("Email check failed: db error."))
 
-    ready_inboxes = [inbox for inbox in inboxes if inbox.is_ready()]
-    ready_outboxes = [outbox for outbox in outboxes if outbox.is_ready()]
+    model_key = (current_rule_model() or "").lower()
+    evaluate_inbox = model_key.endswith("emailinbox")
+    evaluate_outbox = model_key.endswith("emailoutbox")
+    if not (evaluate_inbox or evaluate_outbox):
+        evaluate_inbox = evaluate_outbox = True
 
     issues: list[str] = []
-    if not inboxes:
-        issues.append(_("Configure an Email Inbox."))
-    elif not ready_inboxes:
-        issues.append(_("Email Inbox validation failed."))
+    if evaluate_inbox:
+        ready_inboxes = [inbox for inbox in inboxes if inbox.is_ready()]
+        if not inboxes:
+            issues.append(_("Configure an Email Inbox."))
+        elif not ready_inboxes:
+            issues.append(_("Email Inbox validation failed."))
 
-    if not outboxes:
-        issues.append(_("Configure an Email Outbox."))
-    elif not ready_outboxes:
-        issues.append(_("Email Outbox validation failed."))
+    if evaluate_outbox:
+        ready_outboxes = [outbox for outbox in outboxes if outbox.is_ready()]
+        if not outboxes:
+            issues.append(_("Configure an Email Outbox."))
+        elif not ready_outboxes:
+            issues.append(_("Email Outbox validation failed."))
 
     if issues:
         return rule_failure(" ".join(str(issue) for issue in issues))
