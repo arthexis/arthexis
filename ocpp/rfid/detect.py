@@ -47,7 +47,7 @@ def _assume_detected(reason: str | None, lock: Path | None) -> Dict[str, Any]:
     if reason:
         response["reason"] = reason
     if lock is not None:
-        response["lockfile"] = str(lock)
+        response["lockfile"] = lock.as_posix()
     return response
 
 

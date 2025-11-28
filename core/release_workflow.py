@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from django.conf import settings
+from django.db import DatabaseError, models
 
 from .views import (
     DirtyRepository,
@@ -20,6 +21,40 @@ from .views import (
 
 logger = logging.getLogger(__name__)
 _LOCK_DIR = Path("locks")
+
+
+def resolve_release_severity(version: str | None) -> str:
+    """Return the severity for a version, preferring active packages."""
+
+    try:
+        from core.models import PackageRelease  # noqa: WPS433 - runtime import
+    except Exception:  # pragma: no cover - app registry not ready
+        return "normal"
+
+    if not version:
+        return PackageRelease.Severity.NORMAL
+
+    try:
+        release = (
+            PackageRelease.objects.filter(version=version)
+            .select_related("package")
+            .order_by(
+                models.Case(
+                    models.When(package__is_active=True, then=models.Value(0)),
+                    default=models.Value(1),
+                    output_field=models.IntegerField(),
+                ),
+                "-pk",
+            )
+            .first()
+        )
+    except DatabaseError:
+        logger.exception("Failed to resolve package release severity")
+        return PackageRelease.Severity.NORMAL
+
+    if release:
+        return release.severity
+    return PackageRelease.Severity.NORMAL
 
 
 class ReleaseWorkflowError(Exception):
