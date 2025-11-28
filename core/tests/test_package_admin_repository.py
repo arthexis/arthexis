@@ -1,5 +1,6 @@
 from unittest import mock
 
+from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.messages import get_messages
 from django.test import TestCase
@@ -11,6 +12,14 @@ from core.models import Package
 class PackageAdminRepositoryTests(TestCase):
     def setUp(self):
         super().setUp()
+        original_init = forms.URLField.__init__
+
+        def _init_with_http_default(self, *args, **kwargs):
+            kwargs.setdefault("assume_scheme", "http")
+            return original_init(self, *args, **kwargs)
+
+        self.addCleanup(setattr, forms.URLField, "__init__", original_init)
+        forms.URLField.__init__ = _init_with_http_default
         User = get_user_model()
         self.user = User.objects.create_superuser(
             username="admin", email="admin@example.com", password="password"
