@@ -31,9 +31,6 @@ def build_footer_context(*, request=None, badge_site=None, badge_node=None, forc
         node=badge_node,
     )
 
-    if not visible_refs and not force_footer:
-        return {"footer_refs": [], "request": request, "show_footer": False}
-
     version = ""
     ver_path = Path(settings.BASE_DIR) / "VERSION"
     if ver_path.exists():
@@ -53,12 +50,23 @@ def build_footer_context(*, request=None, badge_site=None, badge_node=None, forc
     if revision_value and revision_value != release_revision:
         rev_short = revision_value[-6:]
 
+    has_release_info = bool(version or revision_value)
+
     if version:
         release_name = f"{release_name}-{version}"
         if rev_short:
             release_name = f"{release_name}-{rev_short}"
         if release:
             release_url = reverse("admin:core_packagerelease_change", args=[release.pk])
+
+    show_footer = force_footer or bool(visible_refs) or has_release_info
+    if not show_footer:
+        return {
+            "footer_refs": [],
+            "request": request,
+            "show_footer": False,
+            "show_release": False,
+        }
 
     base_dir = Path(settings.BASE_DIR)
     log_file = base_dir / "logs" / "auto-upgrade.log"
@@ -115,6 +123,7 @@ def build_footer_context(*, request=None, badge_site=None, badge_node=None, forc
         "release_url": release_url,
         "request": request,
         "fresh_since": fresh_since,
+        "show_release": has_release_info,
     }
 
 

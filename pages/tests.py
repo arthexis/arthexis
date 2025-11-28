@@ -131,6 +131,7 @@ from django_otp import DEVICE_ID_SESSION_KEY
 from django_otp.oath import TOTP
 from django_otp.plugins.otp_totp.models import TOTPDevice
 from core.backends import TOTP_DEVICE_NAME
+from core.templatetags.ref_tags import build_footer_context
 from pages.views import PASSKEY_LOGIN_SESSION_KEY, PASSKEY_REGISTRATION_SESSION_KEY
 import time
 import asyncio
@@ -5719,6 +5720,14 @@ class FooterFragmentTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Docs")
         self.assertContains(response, "https://example.com")
+
+    def test_footer_fragment_includes_release_metadata(self):
+        response = self.client.get(reverse("pages:footer-fragment"))
+
+        release_name = build_footer_context()["release_name"]
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, release_name)
 
     def test_footer_fragment_respects_force_parameter(self):
         forced_response = self.client.get(
