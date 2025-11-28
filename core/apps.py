@@ -199,7 +199,21 @@ def _setup_celery_beat_integrations():
                 force_update = True
             self.name = slug
         else:
-            self.name = original_name
+            existing_slug_pk = (
+                manager.filter(name=slug)
+                .exclude(pk=self.pk)
+                .values_list("pk", flat=True)
+                .first()
+            )
+            if existing_slug_pk:
+                if not self.pk or self.pk != existing_slug_pk:
+                    self.pk = existing_slug_pk
+                    self._state.adding = False
+                    force_insert = False
+                    force_update = True
+                self.name = slug
+            else:
+                self.name = original_name
 
         saved = original_save(
             self,
