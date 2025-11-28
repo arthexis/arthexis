@@ -296,6 +296,11 @@ class Command(BaseCommand):
         elapsed = max(0.0, time.monotonic() - start_time)
         sample_count = len(system_cpu_samples)
 
+        suite_cpu_average = sum(stats.avg_cpu for stats in stats_map.values() if stats.samples)
+        suite_memory_average = sum(
+            stats.avg_memory for stats in stats_map.values() if stats.samples
+        )
+
         suite_io_read = sum(stats.io_read for stats in stats_map.values())
         suite_io_write = sum(stats.io_write for stats in stats_map.values())
 
@@ -332,11 +337,11 @@ class Command(BaseCommand):
             },
             "suite": {
                 "cpu": {
-                    "average": _average(suite_cpu_samples),
+                    "average": suite_cpu_average,
                     "max": max(suite_cpu_samples) if suite_cpu_samples else 0.0,
                 },
                 "memory": {
-                    "average_bytes": _average(suite_memory_samples),
+                    "average_bytes": suite_memory_average,
                     "max_bytes": max(suite_memory_samples) if suite_memory_samples else 0,
                 },
                 "io": {
