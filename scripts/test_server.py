@@ -10,9 +10,12 @@ import sys
 import time
 from pathlib import Path
 
-from scripts import migration_server
-
 BASE_DIR = Path(__file__).resolve().parents[1]
+
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
+
+from scripts import migration_server
 
 
 def build_pytest_command(*, use_last_failed: bool) -> list[str]:
@@ -37,6 +40,18 @@ def run_tests(base_dir: Path, *, use_last_failed: bool) -> bool:
         return True
     print("[Test Server] Tests failed.")
     return False
+
+
+def run_migrations(base_dir: Path, *, latest: bool = True) -> bool:
+    """Execute migrations via ``env-refresh`` and return ``True`` on success."""
+
+    print("[Test Server] Running migrations...")
+    success = migration_server.run_env_refresh(base_dir, latest=latest)
+    if success:
+        print("[Test Server] Migrations completed successfully.")
+    else:
+        print("[Test Server] Migrations failed.")
+    return success
 
 
 def _summarize_changes(previous: dict[str, int], current: dict[str, int]) -> None:
@@ -77,12 +92,41 @@ def main(argv: list[str] | None = None) -> int:
         action="store_false",
         help="Always run the full test suite.",
     )
+    parser.add_argument(
+        "--migrations",
+        dest="migrations",
+        action="store_true",
+        default=True,
+        help="Run migrations before the test suite (default).",
+    )
+    parser.add_argument(
+        "--no-migrations",
+        dest="migrations",
+        action="store_false",
+        help="Skip migrations before running tests.",
+    )
+    parser.add_argument(
+        "--latest",
+        dest="latest",
+        action="store_true",
+        default=True,
+        help="Pass --latest when running migrations (default).",
+    )
+    parser.add_argument(
+        "--no-latest",
+        dest="latest",
+        action="store_false",
+        help="Do not force --latest when running migrations.",
+    )
     args = parser.parse_args(argv)
 
     print("[Test Server] Starting in", BASE_DIR)
     snapshot = migration_server.collect_source_mtimes(BASE_DIR)
     print("[Test Server] Watching for changes... Press Ctrl+C to stop.")
-    last_run_success = run_tests(BASE_DIR, use_last_failed=False)
+    migrations_ok = not args.migrations or run_migrations(BASE_DIR, latest=args.latest)
+    last_run_success = False
+    if migrations_ok:
+        last_run_success = run_tests(BASE_DIR, use_last_failed=False)
 
     try:
         while True:
@@ -95,6 +139,10 @@ def main(argv: list[str] | None = None) -> int:
                 if updated == snapshot:
                     continue
             _summarize_changes(snapshot, updated)
+            if args.migrations and not run_migrations(BASE_DIR, latest=args.latest):
+                last_run_success = False
+                snapshot = migration_server.collect_source_mtimes(BASE_DIR)
+                continue
             last_run_success = run_tests(
                 BASE_DIR,
                 use_last_failed=args.last_failed and not last_run_success,
