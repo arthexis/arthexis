@@ -56,3 +56,37 @@ class ReadmeEditorTests(TestCase):
         self.assertRedirects(response, "/read/README.md/edit/")
         updated = (self.base_path / "README.md").read_text(encoding="utf-8")
         self.assertEqual(updated, "# Updated\n\nContent")
+
+    def test_readme_progressively_loads_remaining_sections(self):
+        (self.base_path / "README.md").write_text(
+            "\n".join(
+                [
+                    "# Title",
+                    "",
+                    "## Intro",
+                    "First section",
+                    "",
+                    "## Second",
+                    "Second section details",
+                    "",
+                    "## Third",
+                    "Final details",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        response = self.client.get("/read/")
+
+        self.assertContains(response, "Second section details")
+        self.assertNotContains(response, "Final details")
+        self.assertContains(response, 'hx-get="/read/?fragment=remaining"')
+
+        hx_response = self.client.get(
+            "/read/?fragment=remaining", HTTP_HX_REQUEST="true"
+        )
+        self.assertEqual(hx_response.status_code, 200)
+        self.assertContains(hx_response, "Final details")
+
+        full_response = self.client.get("/read/?full=1")
+        self.assertContains(full_response, "Final details")
