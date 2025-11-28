@@ -28,6 +28,7 @@ from nodes.models import Node, NodeRole
 from nodes.utils import capture_screenshot, save_screenshot
 
 from .forms import UserManualAdminForm
+from .favorites_cache import clear_user_favorites_cache
 from .module_defaults import reload_default_modules as restore_default_modules
 from .site_config import ensure_site_fields
 from .utils import landing_leads_supported
@@ -1298,6 +1299,7 @@ def favorite_toggle(request, ct_id):
     if request.method == "POST":
         if fav and request.POST.get("remove"):
             fav.delete()
+            clear_user_favorites_cache(request.user)
             return redirect(next_url or "admin:index")
         label = request.POST.get("custom_label", "").strip()
         user_data = request.POST.get("user_data") == "on"
@@ -1335,6 +1337,7 @@ def favorite_toggle(request, ct_id):
                 user_data=user_data,
                 priority=priority,
             )
+        clear_user_favorites_cache(request.user)
         return redirect(next_url or "admin:index")
     if fav:
         return render(
@@ -1388,6 +1391,7 @@ def favorite_list(request):
 
             if update_fields:
                 fav.save(update_fields=update_fields)
+        clear_user_favorites_cache(request.user)
         return redirect("admin:favorite_list")
     return render(request, "admin/favorite_list.html", {"favorites": favorites})
 
@@ -1395,11 +1399,13 @@ def favorite_list(request):
 def favorite_delete(request, pk):
     fav = get_object_or_404(Favorite, pk=pk, user=request.user)
     fav.delete()
+    clear_user_favorites_cache(request.user)
     return redirect("admin:favorite_list")
 
 
 def favorite_clear(request):
     Favorite.objects.filter(user=request.user).delete()
+    clear_user_favorites_cache(request.user)
     return redirect("admin:favorite_list")
 
 

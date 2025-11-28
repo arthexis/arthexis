@@ -1,7 +1,11 @@
 from django import template
 from django.apps import apps
 from django.contrib.contenttypes.models import ContentType
+from django.core.cache import cache
+from django.template.loader import render_to_string
+from django.utils.safestring import mark_safe
 
+from pages.favorites_cache import user_favorites_cache_key
 from pages.models import Favorite
 
 register = template.Library()
@@ -155,3 +159,45 @@ def favorite_entries(app_list, favorites_map):
     entries.sort(key=lambda entry: (entry["favorite"].priority, entry["favorite"].pk))
 
     return entries
+
+
+@register.simple_tag(takes_context=True)
+def cached_dashboard_favorites(context, app_list, favorites_map=None):
+    request = context.get("request")
+    user = getattr(request, "user", None)
+
+    if favorites_map is None:
+        favorites_map = _get_favorites_map(context)
+
+    if not app_list or not user or not user.is_authenticated:
+        return ""
+
+    show_changelinks = bool(context.get("show_changelinks", True))
+    show_model_badges = bool(context.get("show_model_badges", True))
+
+    cache_key = user_favorites_cache_key(
+        user.pk,
+        show_changelinks=show_changelinks,
+        show_model_badges=show_model_badges,
+    )
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return mark_safe(cached)
+
+    entries = favorite_entries(app_list, favorites_map)
+    if not entries:
+        cache.set(cache_key, "", None)
+        return ""
+
+    rendered = render_to_string(
+        "admin/includes/dashboard_favorites_module.html",
+        {
+            "favorite_entries": entries,
+            "show_changelinks": show_changelinks,
+            "show_model_badges": show_model_badges,
+            "request": request,
+        },
+    )
+
+    cache.set(cache_key, rendered, None)
+    return mark_safe(rendered)
