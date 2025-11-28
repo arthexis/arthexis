@@ -9,7 +9,9 @@
       "host": "10.42.0.1",
       "ws_port": 8888,
       "serial_number": "ROUTERSIM-0420",
-      "connector_id": 2
+      "connector_id": 2,
+      "average_kwh": 60.0,
+      "amperage": 90.0
     }
   }
 ]

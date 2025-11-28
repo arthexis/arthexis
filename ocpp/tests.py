@@ -5549,7 +5549,8 @@ class SimulatorAdminTests(TransactionTestCase):
             name="SIM3",
             cp_path="S3",
             interval=3.5,
-            kw_max=70,
+            average_kwh=70,
+            amperage=95,
             duration=500,
             pre_charge_delay=5,
             vin="WP0ZZZ99999999999",
@@ -5557,7 +5558,8 @@ class SimulatorAdminTests(TransactionTestCase):
         )
         cfg = sim.as_config()
         self.assertEqual(cfg.interval, 3.5)
-        self.assertEqual(cfg.kw_max, 70)
+        self.assertEqual(cfg.average_kwh, 70)
+        self.assertEqual(cfg.amperage, 95)
         self.assertEqual(cfg.duration, 500)
         self.assertEqual(cfg.pre_charge_delay, 5)
         self.assertEqual(cfg.vin, "WP0ZZZ99999999999")
@@ -5578,7 +5580,8 @@ class SimulatorAdminTests(TransactionTestCase):
             "duration": sim.duration,
             "interval": sim.interval,
             "pre_charge_delay": sim.pre_charge_delay,
-            "kw_max": sim.kw_max,
+            "average_kwh": sim.average_kwh,
+            "amperage": sim.amperage,
             "repeat": "on" if sim.repeat else "",
             "username": sim.username,
             "password": sim.password,
@@ -6198,8 +6201,8 @@ class ChargePointSimulatorTests(TransactionTestCase):
                 vin="WP0ZZZ12345678901",
                 duration=0.2,
                 interval=0.05,
-                kw_min=0.1,
-                kw_max=0.2,
+                average_kwh=0.2,
+                amperage=10.0,
                 pre_charge_delay=0.0,
                 serial_number="SN123",
                 connector_id=7,
@@ -6274,8 +6277,8 @@ class ChargePointSimulatorTests(TransactionTestCase):
             cp_path="SIMSTART/",
             duration=0.1,
             interval=0.05,
-            kw_min=0.1,
-            kw_max=0.2,
+            average_kwh=0.2,
+            amperage=10.0,
             pre_charge_delay=0.0,
         )
         store.register_log_name(cfg.cp_path, "SimStart", log_type="simulator")
@@ -6317,8 +6320,8 @@ class ChargePointSimulatorTests(TransactionTestCase):
             cp_path="SIMTERM/",
             duration=0.1,
             interval=0.05,
-            kw_min=0.1,
-            kw_max=0.2,
+            average_kwh=0.2,
+            amperage=10.0,
             pre_charge_delay=0.0,
         )
         sim = ChargePointSimulator(cfg)
@@ -6382,8 +6385,8 @@ class ChargePointSimulatorTests(TransactionTestCase):
                 cp_path="SIMPRE/",
                 duration=0.1,
                 interval=0.05,
-                kw_min=0.1,
-                kw_max=0.2,
+                average_kwh=0.2,
+                amperage=10.0,
                 pre_charge_delay=0.1,
             )
             sim = ChargePointSimulator(cfg)

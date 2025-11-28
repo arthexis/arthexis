@@ -1471,8 +1471,8 @@ def cp_simulator(request):
         "duration": 600,
         "interval": 5.0,
         "pre_charge_delay": 0.0,
-        "kw_min": 30.0,
-        "kw_max": 60.0,
+        "average_kwh": 60.0,
+        "amperage": 90.0,
         "repeat": False,
         "username": "",
         "password": "",
@@ -1496,7 +1496,10 @@ def cp_simulator(request):
                 "pre_charge_delay": default_simulator.pre_charge_delay
                 if default_simulator.pre_charge_delay is not None
                 else default_params["pre_charge_delay"],
-                "kw_max": default_simulator.kw_max or default_params["kw_max"],
+                "average_kwh": default_simulator.average_kwh
+                or default_params["average_kwh"],
+                "amperage": default_simulator.amperage
+                or default_params["amperage"],
                 "repeat": default_simulator.repeat,
                 "username": default_simulator.username or "",
                 "password": default_simulator.password or "",
@@ -1539,11 +1542,13 @@ def cp_simulator(request):
             "interval": _cast_value(
                 request.POST.get("interval"), float, default_params["interval"]
             ),
-            "kw_min": _cast_value(
-                request.POST.get("kw_min"), float, default_params["kw_min"]
+            "average_kwh": _cast_value(
+                request.POST.get("average_kwh"),
+                float,
+                default_params["average_kwh"],
             ),
-            "kw_max": _cast_value(
-                request.POST.get("kw_max"), float, default_params["kw_max"]
+            "amperage": _cast_value(
+                request.POST.get("amperage"), float, default_params["amperage"]
             ),
             "pre_charge_delay": _cast_value(
                 request.POST.get("pre_charge_delay"),

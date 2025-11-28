@@ -2109,7 +2109,8 @@ class Simulator(Entity):
     duration = models.IntegerField(default=600)
     interval = models.FloatField(default=5.0)
     pre_charge_delay = models.FloatField(_("Delay"), default=10.0)
-    kw_max = models.FloatField(default=60.0)
+    average_kwh = models.FloatField(default=60.0)
+    amperage = models.FloatField(default=90.0)
     repeat = models.BooleanField(default=False)
     username = models.CharField(max_length=100, blank=True)
     password = models.CharField(max_length=100, blank=True)
@@ -2206,7 +2207,8 @@ class Simulator(Entity):
             duration=self.duration,
             interval=self.interval,
             pre_charge_delay=self.pre_charge_delay,
-            kw_max=self.kw_max,
+            average_kwh=self.average_kwh,
+            amperage=self.amperage,
             repeat=self.repeat,
             username=self.username or None,
             password=self.password or None,
