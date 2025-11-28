@@ -192,6 +192,26 @@ def test_switch_role_auto_upgrade_supports_stable_channel():
             shutil.rmtree(venv_dir, ignore_errors=True)
 
 
+def test_switch_role_upgrade_channel_enables_auto_upgrade_by_default():
+    repo_root = Path(__file__).resolve().parent.parent
+    script_path = repo_root / "switch-role.sh"
+    venv_dir, created_venv = _ensure_fake_venv_python(repo_root)
+    try:
+        result = subprocess.run(
+            ["bash", str(script_path), "--stable"],
+            capture_output=True,
+            text=True,
+            cwd=repo_root,
+        )
+        assert result.returncode == 0
+        mode_file = repo_root / "locks" / "auto_upgrade.lck"
+        assert mode_file.read_text().strip() == "stable"
+    finally:
+        _cleanup_switch_role_state(repo_root)
+        if created_venv:
+            shutil.rmtree(venv_dir, ignore_errors=True)
+
+
 def test_switch_role_auto_upgrade_supports_regular_channel():
     repo_root = Path(__file__).resolve().parent.parent
     script_path = repo_root / "switch-role.sh"

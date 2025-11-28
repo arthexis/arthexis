@@ -426,6 +426,10 @@ while [[ $# -gt 0 ]]; do
 
 done
 
+if [ -n "$UPGRADE_CHANNEL" ] && [ -z "$AUTO_UPGRADE_MODE" ]; then
+    AUTO_UPGRADE_MODE="enable"
+fi
+
 if [ -n "$FAILOVER_ROLE" ] && [ "$REPAIR" != true ]; then
     echo "--failover can only be used together with --repair" >&2
     usage
