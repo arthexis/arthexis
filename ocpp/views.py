@@ -37,7 +37,7 @@ from asgiref.sync import async_to_sync
 
 from utils.api import api_login_required
 
-from nodes.models import Node
+from nodes.models import NetMessage, Node
 
 from pages.utils import landing
 from core.liveupdate import live_update
@@ -1450,6 +1450,24 @@ def maintenance_request(request):
 @landing("Charge Point Simulator")
 def cp_simulator(request):
     """Public landing page to control the OCPP charge point simulator."""
+
+    def _simulator_target_url(params: dict[str, object]) -> str:
+        cp_path = str(params.get("cp_path") or "")
+        host = str(params.get("host") or "")
+        ws_port = params.get("ws_port")
+        if ws_port:
+            return f"ws://{host}:{ws_port}/{cp_path}"
+        return f"ws://{host}/{cp_path}"
+
+    def _broadcast_simulator_started(
+        name: str, delay: float | int | None, params: dict[str, object]
+    ) -> None:
+        delay_value: float | int | None = 0
+        if isinstance(delay, (int, float)):
+            delay_value = int(delay) if float(delay).is_integer() else delay
+        subject = f"{name} {delay_value}s"
+        NetMessage.broadcast(subject=subject, body=_simulator_target_url(params))
+
     simulator_slot = 1
     host_header = request.get_host()
     default_host, host_port = split_domain_port(host_header)
@@ -1575,6 +1593,11 @@ def cp_simulator(request):
                 prefix = default_simulator.name if default_simulator else "CP Simulator"
                 if started:
                     message = f"{prefix} started: {status}. Logs: {log_file}"
+                    _broadcast_simulator_started(
+                        prefix,
+                        sim_params.get("pre_charge_delay"),
+                        sim_params,
+                    )
                     try:
                         dashboard_link = reverse(
                             "charger-status", args=[sim_params["cp_path"]]
