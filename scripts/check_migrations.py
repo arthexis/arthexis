@@ -6,18 +6,14 @@ import sys
 from pathlib import Path
 from typing import Iterable
 
-import django
-from django.apps import apps
-from django.conf import settings
-
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.append(str(REPO_ROOT))
 
 
-def _local_app_labels() -> list[str]:
-    base_dir = Path(settings.BASE_DIR)
+def _local_app_labels(apps_module, settings_module) -> list[str]:
+    base_dir = Path(settings_module.BASE_DIR)
     labels: list[str] = []
-    for app_config in apps.get_app_configs():
+    for app_config in apps_module.get_app_configs():
         try:
             Path(app_config.path).relative_to(base_dir)
         except ValueError:
@@ -109,6 +105,17 @@ def _check_migrations(labels: Iterable[str]) -> int:
 
 
 def main() -> int:
+    try:
+        import django
+        from django.apps import apps
+        from django.conf import settings
+    except ModuleNotFoundError:
+        print(
+            "Django is required to run migration checks. Install project dependencies",
+            file=sys.stderr,
+        )
+        return 1
+
     os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
     # Prefer the lightweight SQLite backend during migration checks to avoid
     # spending time probing unavailable PostgreSQL instances. The environment
@@ -116,7 +123,7 @@ def main() -> int:
     # specific database engine.
     os.environ.setdefault("ARTHEXIS_FORCE_DB_BACKEND", "sqlite")
     django.setup()
-    labels = _local_app_labels()
+    labels = _local_app_labels(apps, settings)
     return _check_migrations(labels)
 
 

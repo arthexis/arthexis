@@ -1,9 +1,12 @@
 import importlib
+import importlib.util
 import shutil
 import subprocess
 from types import SimpleNamespace
 
 from pathlib import Path
+
+import pytest
 
 import scripts.check_migrations as check_migrations
 
@@ -17,6 +20,9 @@ def clone_repo(tmp_path: Path) -> Path:
 
 
 def test_check_migrations_passes() -> None:
+    if importlib.util.find_spec("django") is None:
+        pytest.skip("Django is not installed")
+
     result = subprocess.run(
         ["python", "scripts/check_migrations.py"],
         cwd=REPO_ROOT,
@@ -27,6 +33,9 @@ def test_check_migrations_passes() -> None:
 
 
 def test_check_migrations_allows_merge(tmp_path: Path) -> None:
+    if importlib.util.find_spec("django") is None:
+        pytest.skip("Django is not installed")
+
     repo = clone_repo(tmp_path)
     merge_file = repo / "core" / "migrations" / "0012_merge_fake.py"
     merge_file.parent.mkdir(parents=True, exist_ok=True)
