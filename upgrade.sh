@@ -39,7 +39,12 @@ trap log_upgrade_exit EXIT
 . "$BASE_DIR/scripts/helpers/service_manager.sh"
 arthexis_resolve_log_dir "$BASE_DIR" LOG_DIR || exit 1
 # Prefer python3 but fall back to python when only the legacy binary is available.
-PYTHON_BIN="$(command -v python3 || command -v python || true)"
+DEFAULT_VENV_PYTHON="$BASE_DIR/.venv/bin/python"
+if [ -x "$DEFAULT_VENV_PYTHON" ]; then
+  PYTHON_BIN="$DEFAULT_VENV_PYTHON"
+else
+  PYTHON_BIN="$(command -v python3 || command -v python || true)"
+fi
 # Capture stdout/stderr to a timestamped log for later review.
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 exec > >(tee "$LOG_FILE")
@@ -70,6 +75,15 @@ pip_requires_break_system_packages() {
   if [ -z "$python_bin" ] || ! command -v "$python_bin" >/dev/null 2>&1; then
     return 1
   fi
+
+  # If we're already running inside a virtual environment, installing packages
+  # won't touch system-managed locations, so we do not need the override.
+  "$python_bin" - <<'PY'
+import sys
+
+if sys.prefix != sys.base_prefix:
+    sys.exit(1)
+PY
 
   "$python_bin" - <<'PY'
 from pathlib import Path
@@ -426,19 +440,23 @@ install_requirements_if_changed() {
   fi
 
   if [ "$new_hash" != "$stored_hash" ]; then
-    local pip_env=()
-    local pip_flags=()
     if [ -n "$PYTHON_BIN" ] && pip_requires_break_system_packages "$PYTHON_BIN"; then
-      pip_env+=("PIP_BREAK_SYSTEM_PACKAGES=1")
-      pip_flags+=("--break-system-packages")
+      cat >&2 <<'MSG'
+System Python is externally managed. To avoid modifying system packages, activate
+the virtual environment and install dependencies manually:
+
+  source .venv/bin/activate
+  python -m pip install -r requirements.txt
+MSG
+      return 1
     fi
 
     if [ -f "$PIP_INSTALL_HELPER" ] && [ -n "$PYTHON_BIN" ]; then
-      "${pip_env[@]}" "$PYTHON_BIN" "$PIP_INSTALL_HELPER" -r "$req_file" "${pip_flags[@]}"
+      "$PYTHON_BIN" "$PIP_INSTALL_HELPER" -r "$req_file"
     elif [ -n "$PYTHON_BIN" ]; then
-      "${pip_env[@]}" "$PYTHON_BIN" -m pip install -r "$req_file" "${pip_flags[@]}"
+      "$PYTHON_BIN" -m pip install -r "$req_file"
     else
-      "${pip_env[@]}" pip install -r "$req_file" "${pip_flags[@]}"
+      pip install -r "$req_file"
     fi
     echo "$new_hash" > "$md5_file"
   else
@@ -1124,6 +1142,7 @@ fi
 if [ $VENV_PRESENT -eq 1 ]; then
   # shellcheck disable=SC1091
   source .venv/bin/activate
+  PYTHON_BIN="$VIRTUAL_ENV/bin/python"
   pip_install_env=()
   pip_install_flags=()
   if pip_requires_break_system_packages python; then
