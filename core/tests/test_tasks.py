@@ -15,6 +15,12 @@ from django.test import override_settings
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 django.setup()
 
+UPGRADE_SCRIPT = "upgrade.bat" if os.name == "nt" else "./upgrade.sh"
+
+
+def _upgrade_command(mode: str) -> list[str]:
+    return [UPGRADE_SCRIPT, f"--{mode}"]
+
 
 def test_read_remote_version_handles_missing_git(monkeypatch, tmp_path):
     """_read_remote_version should return ``None`` when git is unavailable."""
@@ -129,7 +135,7 @@ def test_run_upgrade_command_logs_detached_failure(monkeypatch, tmp_path):
 
     monkeypatch.setattr(tasks.subprocess, "run", fake_run)
 
-    unit, ran_inline = tasks._run_upgrade_command(base_dir, ["upgrade.sh", "--latest"])
+    unit, ran_inline = tasks._run_upgrade_command(base_dir, _upgrade_command("latest"))
 
     assert unit is None
     assert ran_inline is False
@@ -171,7 +177,7 @@ def test_run_upgrade_command_requires_detached_services(monkeypatch, tmp_path):
     monkeypatch.setattr(tasks.subprocess, "run", fake_run)
 
     unit, ran_inline = tasks._run_upgrade_command(
-        tmp_path, ["upgrade.sh", "--stable"], require_detached=True
+        tmp_path, _upgrade_command("stable"), require_detached=True
     )
 
     assert unit is None
@@ -361,7 +367,7 @@ def test_check_github_updates_treats_latest_mode_case_insensitively(
 
     tasks.check_github_updates()
 
-    assert ["./upgrade.sh", "--latest"] in run_commands
+    assert _upgrade_command("latest") in run_commands
 
 
 @pytest.mark.parametrize(
@@ -372,14 +378,14 @@ def test_check_github_updates_treats_latest_mode_case_insensitively(
         "severity_name",
     ),
         [
-            ("latest", ["./upgrade.sh", "--latest"], "latest", "NORMAL"),
+            ("latest", _upgrade_command("latest"), "latest", "NORMAL"),
             (
                 "stable",
-                ["./upgrade.sh", "--stable"],
+                _upgrade_command("stable"),
                 "stable",
                 "CRITICAL",
             ),
-            ("normal", ["./upgrade.sh", "--stable"], None, "NORMAL"),
+            ("normal", _upgrade_command("stable"), None, "NORMAL"),
         ],
 )
 def test_check_github_updates_respects_channel_override(
@@ -618,7 +624,7 @@ def test_check_github_updates_allows_stable_critical_patch(monkeypatch, tmp_path
     tasks.check_github_updates()
 
     assert any(
-        command[-2:] == ["./upgrade.sh", "--stable"] for command in run_commands
+        command[-2:] == _upgrade_command("stable") for command in run_commands
     )
 
 
@@ -734,7 +740,7 @@ def test_check_github_updates_allows_boundary_recency(monkeypatch, tmp_path):
 
     tasks.check_github_updates()
 
-    assert delegated_calls == [(base_dir, ["./upgrade.sh", "--stable"])]
+    assert delegated_calls == [(base_dir, _upgrade_command("stable"))]
     assert not any(
         "last run was less than" in message for message in log_messages
     )
@@ -809,7 +815,7 @@ def test_check_github_updates_restarts_dev_server(monkeypatch, tmp_path):
     with override_settings(BASE_DIR=base_dir):
         tasks.check_github_updates()
 
-    assert any(cmd for cmd in run_commands if cmd and cmd[0] == "./upgrade.sh")
+    assert any(cmd for cmd in run_commands if cmd and cmd[0] == UPGRADE_SCRIPT)
     assert popen_calls == [["./start.sh"]]
     assert any(
         "Restarting development server via start.sh" in message for message in messages
@@ -885,7 +891,7 @@ def test_check_github_updates_skips_latest_low_severity_patch(monkeypatch, tmp_p
 
     tasks.check_github_updates()
 
-    assert not any(cmd for cmd in run_commands if cmd and cmd[0] == "./upgrade.sh")
+    assert not any(cmd for cmd in run_commands if cmd and cmd[0] == UPGRADE_SCRIPT)
     assert any(
         message.startswith("Skipping auto-upgrade for low severity patch")
         for message in messages
@@ -1549,7 +1555,7 @@ def test_check_github_updates_restarts_inactive_service(monkeypatch, tmp_path):
             return CompletedProcess(command, 3)
         if command[:3] == ["systemctl", "restart", "arthexis"]:
             return CompletedProcess(command, 0)
-        if command[0] == "./upgrade.sh":
+        if command[0] == UPGRADE_SCRIPT:
             return CompletedProcess(command, 0)
         return CompletedProcess(command, 0)
 

@@ -220,6 +220,13 @@ def _resolve_auto_upgrade_interval_minutes(mode: str) -> int:
     return interval_minutes
 
 
+def _upgrade_command_args(mode: str) -> list[str]:
+    """Return the platform-appropriate upgrade command for ``mode``."""
+
+    script = "upgrade.bat" if os.name == "nt" else "./upgrade.sh"
+    return [script, f"--{mode}"]
+
+
 def _detect_path_owner(base_dir: Path) -> tuple[str | None, str | None]:
     """Return the owning username and home directory for ``base_dir``."""
 
@@ -1522,7 +1529,7 @@ def check_github_updates(channel_override: str | None = None) -> None:
 
             if notify:
                 notify(upgrade_subject, upgrade_stamp)
-            args = ["./upgrade.sh", "--latest"]
+            args = _upgrade_command_args("latest")
             upgrade_was_applied = True
         else:
             target_version = remote_version or local_version or "0"
@@ -1563,7 +1570,7 @@ def check_github_updates(channel_override: str | None = None) -> None:
 
             if notify:
                 notify(upgrade_subject, upgrade_stamp)
-            args = ["./upgrade.sh", "--stable"]
+            args = _upgrade_command_args("stable")
             upgrade_was_applied = True
 
         if (
