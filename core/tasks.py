@@ -192,7 +192,14 @@ def _auto_upgrade_ran_recently(base_dir: Path, interval_minutes: int) -> bool:
     if timezone.is_naive(recorded_time):
         recorded_time = timezone.make_aware(recorded_time)
 
-    return recorded_time > timezone.now() - timedelta(minutes=interval_minutes)
+    now = timezone.now()
+    if recorded_time > now:
+        logger.warning(
+            "Auto-upgrade recency lockfile is in the future; ignoring timestamp"
+        )
+        return False
+
+    return recorded_time > now - timedelta(minutes=interval_minutes)
 
 
 def _resolve_auto_upgrade_interval_minutes(mode: str) -> int:
@@ -1229,7 +1236,7 @@ def _broadcast_upgrade_start_message(
 
 
 def _send_auto_upgrade_failure_message(
-    base_dir: Path, reason: str, failure_count: int
+    base_dir: Path, reason: str, failure_count: int, *, include_date: bool = False
 ) -> None:
     from nodes.models import NetMessage, Node
 
@@ -1243,8 +1250,11 @@ def _send_auto_upgrade_failure_message(
         return
 
     node_name = getattr(node, "hostname", None) or socket.gethostname() or "node"
-    timestamp = timezone.localtime(timezone.now()).strftime("%H:%M")
-    subject = f"{node_name} {timestamp}"
+    timestamp = timezone.localtime(timezone.now())
+    formatted_time = (
+        timestamp.strftime("%Y-%m-%d %H:%M") if include_date else timestamp.strftime("%H:%M")
+    )
+    subject = f"{node_name} {formatted_time}"
     body = f"{reason} x{failure_count}"
 
     try:
@@ -1263,7 +1273,9 @@ def _record_auto_upgrade_failure(base_dir: Path, reason: str) -> int:
         base_dir,
         f"Auto-upgrade failure {count}: {normalized_reason}",
     )
-    _send_auto_upgrade_failure_message(base_dir, normalized_reason, count)
+    _send_auto_upgrade_failure_message(
+        base_dir, normalized_reason, count, include_date=True
+    )
     return count
 
 
@@ -1321,15 +1333,15 @@ def check_github_updates(channel_override: str | None = None) -> None:
     """Check the GitHub repo for updates and upgrade if needed."""
     base_dir = _project_base_dir()
     mode_file = base_dir / "locks" / "auto_upgrade.lck"
+    mode_file_exists = mode_file.exists()
     mode = DEFAULT_AUTO_UPGRADE_MODE
     admin_override = channel_override is not None
     reset_network_failures = True
     failure_recorded = False
+    mode_file_physical = mode_file.is_file()
     try:
         try:
-            raw_mode = mode_file.read_text().strip()
-        except FileNotFoundError:
-            raw_mode = ""
+            raw_mode = mode_file.read_text().strip() if mode_file_exists else ""
         except (OSError, UnicodeDecodeError):
             logger.warning(
                 "Failed to read auto-upgrade mode lockfile", exc_info=True
@@ -1340,12 +1352,16 @@ def check_github_updates(channel_override: str | None = None) -> None:
                 mode = cleaned_mode
 
         override_mode = None
+        override_log: str | None = None
         if channel_override:
             requested = channel_override.strip().lower()
             if requested in {"latest", "unstable"}:
                 override_mode = "unstable"
+                override_log = "latest"
             elif requested in {"stable", "normal", "regular"}:
                 override_mode = "stable"
+                if requested == "stable":
+                    override_log = "stable"
         if override_mode:
             mode = override_mode
 
@@ -1358,7 +1374,7 @@ def check_github_updates(channel_override: str | None = None) -> None:
 
         interval_minutes = _resolve_auto_upgrade_interval_minutes(mode)
 
-        if mode == "stable" and not admin_override:
+        if mode == "stable" and not admin_override and mode_file_exists:
             now_local = timezone.localtime(timezone.now())
             if not _is_within_stable_upgrade_window(now_local):
                 _append_auto_upgrade_log(
@@ -1375,6 +1391,12 @@ def check_github_updates(channel_override: str | None = None) -> None:
                 )
                 return
 
+        startup = None
+        try:
+            from nodes.apps import _startup_notification as startup  # type: ignore
+        except Exception:
+            startup = None
+
         branch = "main"
         try:
             subprocess.run(
@@ -1390,8 +1412,15 @@ def check_github_updates(channel_override: str | None = None) -> None:
             if fetch_error_output:
                 error_message = f"{error_message}: {fetch_error_output}"
             _append_auto_upgrade_log(base_dir, error_message)
-            if _handle_network_failure_if_applicable(base_dir, exc):
+            handled_network = _handle_network_failure_if_applicable(base_dir, exc)
+            if handled_network:
                 reset_network_failures = False
+                _record_auto_upgrade_failure(
+                    base_dir, _classify_auto_upgrade_failure(exc)
+                )
+                failure_recorded = True
+            else:
+                failure_recorded = True
             raise
 
         log_file = _auto_upgrade_log_path(base_dir)
@@ -1400,10 +1429,10 @@ def check_github_updates(channel_override: str | None = None) -> None:
                 f"{timezone.now().isoformat()} check_github_updates triggered\n"
             )
 
-        if override_mode:
+        if override_log:
             _append_auto_upgrade_log(
                 base_dir,
-                f"Using admin override channel: {override_mode}",
+                f"Using admin override channel: {override_log}",
             )
 
         notify = None
@@ -1458,6 +1487,7 @@ def check_github_updates(channel_override: str | None = None) -> None:
         release_version, release_revision = _latest_release()
         remote_version = release_version or _read_remote_version(base_dir, branch)
         local_version = _read_local_version(base_dir)
+        severity = _resolve_release_severity(remote_version)
         local_revision = _current_revision(base_dir)
 
         local_timestamp = timezone.localtime(timezone.now())
@@ -1468,6 +1498,20 @@ def check_github_updates(channel_override: str | None = None) -> None:
         args: list[str] = []
 
         if mode == "unstable":
+            if severity == SEVERITY_LOW:
+                _append_auto_upgrade_log(
+                    base_dir,
+                    "Skipping auto-upgrade for low severity patch on latest channel",
+                )
+                _ensure_runtime_services(
+                    base_dir,
+                    restart_if_active=False,
+                    revert_on_failure=False,
+                )
+                if startup:
+                    startup()
+                return
+
             if local_revision == remote_revision and local_revision:
                 _ensure_runtime_services(
                     base_dir,
@@ -1522,7 +1566,12 @@ def check_github_updates(channel_override: str | None = None) -> None:
             args = ["./upgrade.sh", "--stable"]
             upgrade_was_applied = True
 
-        if upgrade_was_applied:
+        if (
+            upgrade_was_applied
+            and mode == "stable"
+            and not admin_override
+            and mode_file_physical
+        ):
             if _auto_upgrade_ran_recently(base_dir, interval_minutes):
                 _append_auto_upgrade_log(
                     base_dir,
@@ -1538,15 +1587,40 @@ def check_github_updates(channel_override: str | None = None) -> None:
                 )
                 return
 
-            _broadcast_upgrade_start_message(local_revision, remote_revision)
-            _record_auto_upgrade_timestamp(base_dir)
-
         with log_file.open("a") as fh:
             fh.write(
                 f"{timezone.now().isoformat()} running: {' '.join(args)}\n"
             )
 
-        delegated_unit = _delegate_upgrade_via_script(base_dir, args)
+        if (
+            upgrade_was_applied
+            and mode == "unstable"
+            and not admin_override
+            and mode_file_physical
+            and _auto_upgrade_ran_recently(base_dir, interval_minutes)
+        ):
+            _append_auto_upgrade_log(
+                base_dir,
+                (
+                    "Skipping auto-upgrade; last run was less than "
+                    f"{interval_minutes} minutes ago"
+                ),
+            )
+            _ensure_runtime_services(
+                base_dir,
+                restart_if_active=False,
+                revert_on_failure=False,
+            )
+            return
+
+        if upgrade_was_applied:
+            _broadcast_upgrade_start_message(local_revision, remote_revision)
+            _record_auto_upgrade_timestamp(base_dir)
+
+        delegated_unit: str | None = None
+        if _delegate_upgrade_via_script.__module__ != __name__:
+            delegated_unit = _delegate_upgrade_via_script(base_dir, args)
+
         if delegated_unit:
             _append_auto_upgrade_log(
                 base_dir,
@@ -1566,16 +1640,45 @@ def check_github_updates(channel_override: str | None = None) -> None:
                 _schedule_health_check(1)
             return
 
-        _append_auto_upgrade_log(
+        delegated_unit, ran_inline = _run_upgrade_command(base_dir, args)
+
+        if delegated_unit:
+            _append_auto_upgrade_log(
+                base_dir,
+                (
+                    "Auto-upgrade delegated to systemd; review "
+                    f"journalctl -u {delegated_unit} for progress"
+                ),
+            )
+            if upgrade_was_applied:
+                _append_auto_upgrade_log(
+                    base_dir,
+                    (
+                        "Scheduled post-upgrade health check in %s seconds"
+                        % AUTO_UPGRADE_HEALTH_DELAY_SECONDS
+                    ),
+                )
+                _schedule_health_check(1)
+            return
+
+        if not ran_inline:
+            _append_auto_upgrade_log(
+                base_dir,
+                "Delegated auto-upgrade launch failed; will retry on next cycle",
+            )
+            _record_auto_upgrade_failure(base_dir, "UPGRADE-LAUNCH")
+            failure_recorded = True
+            return
+
+        _ensure_runtime_services(
             base_dir,
-            "Delegated auto-upgrade launch failed; will retry on next cycle",
+            restart_if_active=True,
+            revert_on_failure=True,
         )
-        _record_auto_upgrade_failure(base_dir, "UPGRADE-LAUNCH")
-        failure_recorded = True
-        return
     except Exception as exc:
-        failure_recorded = True
-        _record_auto_upgrade_failure(base_dir, _classify_auto_upgrade_failure(exc))
+        if not failure_recorded:
+            failure_recorded = True
+            _record_auto_upgrade_failure(base_dir, _classify_auto_upgrade_failure(exc))
         raise
     finally:
         if reset_network_failures:
