@@ -486,3 +486,27 @@ class CPForwarder(Entity):
         if not action:
             return False
         return action in self.get_forwarded_messages()
+
+    @property
+    def _forwarding_service(self):
+        """Return the shared forwarding service used to manage sessions."""
+
+        from ocpp.forwarder import forwarder
+
+        return forwarder
+
+    @property
+    def _sessions(self):
+        """Expose active sessions tracked by the forwarding service."""
+
+        return self._forwarding_service._sessions
+
+    def get_session(self, charger_pk: int):
+        """Return the active forwarding session for ``charger_pk`` when present."""
+
+        return self._forwarding_service.get_session(charger_pk)
+
+    def remove_session(self, charger_pk: int) -> None:
+        """Remove the forwarding session for ``charger_pk`` if it exists."""
+
+        self._forwarding_service.remove_session(charger_pk)
