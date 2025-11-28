@@ -14,7 +14,13 @@
     {% endif %}
     {% if show_sigils_input %}
     <label for="sigils_text">{% trans "Sigils" %}</label>
-    <textarea name="sigils_text" id="sigils_text" rows="10" cols="80" style="width:100%;">{{ sigils_text }}</textarea>
+    <textarea
+      name="sigils_text"
+      id="sigils_text"
+      rows="1"
+      cols="80"
+      style="width:100%; resize: vertical;"
+    >{{ sigils_text }}</textarea>
     {% endif %}
     <input type="file" name="sigils_file" id="sigils_file" />
     <button type="submit">{% trans "Validate" %}</button>
@@ -79,9 +85,28 @@
       }
     });
   }
+  function setupAutoGrow(textarea, maxLines) {
+    if (!textarea) return;
+    const computedStyle = window.getComputedStyle(textarea);
+    const lineHeight = parseFloat(computedStyle.lineHeight) || 16;
+    const paddingTop = parseFloat(computedStyle.paddingTop) || 0;
+    const paddingBottom = parseFloat(computedStyle.paddingBottom) || 0;
+    const baseHeight = lineHeight + paddingTop + paddingBottom;
+    const maxHeight = lineHeight * maxLines + paddingTop + paddingBottom;
+    const resize = () => {
+      textarea.style.height = 'auto';
+      const desired = Math.min(textarea.scrollHeight, maxHeight);
+      textarea.style.height = `${Math.max(desired, baseHeight)}px`;
+    };
+    textarea.style.overflowY = 'auto';
+    textarea.style.maxHeight = `${maxHeight}px`;
+    resize();
+    textarea.addEventListener('input', resize);
+  }
   document.addEventListener('DOMContentLoaded', function () {
     setupFilter('sigil-filter', 'sigil-table');
     setupFilter('auto-filter', 'auto-table');
+    setupAutoGrow(document.getElementById('sigils_text'), 20);
   });
 </script>
 {% endblock %}
