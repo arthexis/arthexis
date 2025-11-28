@@ -1619,6 +1619,21 @@ INVITATION_REQUEST_THROTTLE_MESSAGE = _(
 )
 
 
+class _InvitationTemplateResponse(TemplateResponse):
+    """Template response that always exposes its context."""
+
+    @property
+    def context(self):  # pragma: no cover - exercised by integration tests
+        explicit = getattr(self, "_explicit_context", None)
+        if explicit is not None:
+            return explicit
+        return getattr(self, "context_data", None)
+
+    @context.setter
+    def context(self, value):  # pragma: no cover - exercised by integration tests
+        self._explicit_context = value
+
+
 class InvitationRequestForm(forms.Form):
     email = forms.EmailField()
     comment = forms.CharField(
@@ -1726,9 +1741,17 @@ def request_invite(request):
             if lead.sent_on or lead.error:
                 lead.save(update_fields=["sent_on", "error", "sent_via_outbox"])
             sent = True
-    return TemplateResponse(
-        request, "pages/request_invite.html", {"form": form, "sent": sent}
+
+    context = {"form": form, "sent": sent}
+    response = _InvitationTemplateResponse(
+        request, "pages/request_invite.html", context
     )
+    # Expose the rendering context directly for callers that do not use Django's
+    # template test instrumentation and would otherwise see ``None`` when
+    # accessing ``response.context``.
+    response.context_data = context
+    response.context = context
+    return response
 
 
 class InvitationPasswordForm(forms.Form):
