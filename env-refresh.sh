@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
-set -e
 
+# Enable strict error handling with consistent POSIX newlines to avoid
+
+# malformed `set` invocations when the script is copied between filesystems.
+set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PIP_INSTALL_HELPER="$SCRIPT_DIR/scripts/helpers/pip_install.py"
 # shellcheck source=scripts/helpers/logging.sh
