@@ -1130,7 +1130,7 @@ if [ $VENV_PRESENT -eq 1 ]; then
     pip_install_env+=("PIP_BREAK_SYSTEM_PACKAGES=1")
     pip_install_flags+=("--break-system-packages")
   fi
-  "${pip_install_env[@]}" python -m pip install --upgrade pip "${pip_install_flags[@]}"
+  env "${pip_install_env[@]}" python -m pip install --upgrade pip "${pip_install_flags[@]}"
   install_requirements_if_changed
   python manage.py migrate --noinput
   if ls data/*.json >/dev/null 2>&1; then
