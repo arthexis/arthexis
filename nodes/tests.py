@@ -6182,3 +6182,21 @@ class CaptureRpiSnapshotTests(SimpleTestCase):
         self.assertTrue(second.name.endswith("-11111111111111111111111111111111.jpg"))
         self.assertEqual(mock_uuid.call_count, 2)
         self.assertEqual(mock_run.call_count, 2)
+
+    @patch("nodes.utils.subprocess.run")
+    @patch("nodes.utils._CAMERA_LOCK.release")
+    @patch("nodes.utils._CAMERA_LOCK.acquire", return_value=False)
+    @patch("nodes.utils.shutil.which", return_value="/usr/bin/rpicam-still")
+    def test_snapshot_reports_when_camera_is_busy(
+        self,
+        _mock_which,
+        mock_acquire,
+        mock_release,
+        mock_run,
+    ):
+        with self.assertRaisesMessage(RuntimeError, "Camera is busy"):
+            capture_rpi_snapshot()
+
+        mock_acquire.assert_called_once()
+        mock_run.assert_not_called()
+        mock_release.assert_not_called()
