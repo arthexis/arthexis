@@ -361,7 +361,8 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                 "ws_auth_user", "ws_auth_group", "station_model"
             )
             .filter(charger_id=self.charger_id, connector_id=None)
-            .first()
+            .first(),
+            thread_sensitive=False,
         )()
         preferred_version = (
             existing_charger.preferred_ocpp_version_value()
@@ -525,7 +526,9 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         def _clear_for_charger():
             return clear_cached_statuses([self.charger_id])
 
-        cleared = await database_sync_to_async(_clear_for_charger)()
+        cleared = await database_sync_to_async(
+            _clear_for_charger, thread_sensitive=False
+        )()
         if not cleared:
             return
 
