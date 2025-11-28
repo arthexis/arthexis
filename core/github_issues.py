@@ -4,7 +4,7 @@ import contextlib
 import hashlib
 import logging
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Iterable, Mapping
 
@@ -102,8 +102,8 @@ def _has_recent_marker(lock_path: Path) -> bool:
     if not lock_path.exists():
         return False
 
-    marker_age = datetime.utcnow() - datetime.utcfromtimestamp(
-        lock_path.stat().st_mtime
+    marker_age = datetime.now(timezone.utc) - datetime.fromtimestamp(
+        lock_path.stat().st_mtime, timezone.utc
     )
     return marker_age < LOCK_TTL
 
@@ -135,7 +135,9 @@ def build_issue_payload(
             logger.info("Skipping GitHub issue for active fingerprint %s", fingerprint)
             return None
 
-        lock_path.write_text(datetime.utcnow().isoformat(), encoding="utf-8")
+        lock_path.write_text(
+            datetime.now(timezone.utc).isoformat(), encoding="utf-8"
+        )
         digest = _fingerprint_digest(fingerprint)
         payload["body"] = f"{body}\n\n<!-- fingerprint:{digest} -->"
 
