@@ -772,13 +772,6 @@ def _locate_readme_document(role, doc: str | None, lang: str) -> SimpleNamespace
     )
 
 
-def _relative_readme_path(readme_file: Path, root_base: Path) -> str | None:
-    try:
-        return readme_file.relative_to(root_base).as_posix()
-    except ValueError:
-        return None
-
-
 def _split_html_sections(html: str, keep_sections: int) -> tuple[str, str]:
     """Return ``keep_sections`` leading sections and the remaining HTML."""
 
@@ -808,20 +801,6 @@ def _render_readme(request, role, doc: str | None = None, force_footer: bool = F
         response = HttpResponse(remaining_content)
         patch_vary_headers(response, ["Accept-Language", "Cookie"])
         return response
-    relative_path = _relative_readme_path(document.file, document.root_base)
-    user = getattr(request, "user", None)
-    can_edit = bool(
-        relative_path
-        and user
-        and user.is_authenticated
-        and user.is_superuser
-    )
-    edit_url = None
-    if can_edit:
-        try:
-            edit_url = reverse("pages:readme-edit", kwargs={"doc": relative_path})
-        except NoReverseMatch:
-            edit_url = None
     base_query = request.GET.copy()
     base_query.pop("fragment", None)
     base_query.pop("full", None)
@@ -839,7 +818,6 @@ def _render_readme(request, role, doc: str | None = None, force_footer: bool = F
         "fragment_url": fragment_url,
         "full_document_url": full_document_url,
         "page_url": request.build_absolute_uri(),
-        "edit_url": edit_url,
         "force_footer": force_footer,
     }
     response = render(request, "pages/readme.html", context)
@@ -917,20 +895,6 @@ def readme_asset(request, source: str, asset: str):
     return response
 
 
-class MarkdownDocumentForm(forms.Form):
-    content = forms.CharField(
-        widget=forms.Textarea(
-            attrs={
-                "class": "form-control",
-                "rows": 24,
-                "spellcheck": "false",
-            }
-        ),
-        required=False,
-        strip=False,
-    )
-
-
 @landing("Home")
 @never_cache
 def index(request):
@@ -1003,57 +967,6 @@ def readme(request, doc=None):
     node = Node.get_local()
     role = node.role if node else None
     return _render_readme(request, role, doc)
-
-
-def readme_edit(request, doc):
-    user = getattr(request, "user", None)
-    if not (user and user.is_authenticated and user.is_superuser):
-        raise PermissionDenied
-
-    node = Node.get_local()
-    role = node.role if node else None
-    lang = getattr(request, "LANGUAGE_CODE", "")
-    lang = lang.replace("_", "-").lower()
-    document = _locate_readme_document(role, doc, lang)
-    relative_path = _relative_readme_path(document.file, document.root_base)
-    if relative_path:
-        read_url = reverse("pages:readme-document", kwargs={"doc": relative_path})
-    else:
-        read_url = reverse("pages:readme")
-
-    if request.method == "POST":
-        form = MarkdownDocumentForm(request.POST)
-        if form.is_valid():
-            content = form.cleaned_data["content"]
-            try:
-                document.file.write_text(content, encoding="utf-8")
-            except OSError:
-                logger.exception("Failed to update markdown document %s", document.file)
-                messages.error(
-                    request,
-                    _("Unable to save changes. Please try again."),
-                )
-            else:
-                messages.success(request, _("Document saved successfully."))
-                if relative_path:
-                    return redirect("pages:readme-edit", doc=relative_path)
-                return redirect("pages:readme")
-    else:
-        try:
-            initial_text = document.file.read_text(encoding="utf-8")
-        except OSError:
-            logger.exception("Failed to read markdown document %s", document.file)
-            messages.error(request, _("Unable to load the document for editing."))
-            return redirect("pages:readme")
-        form = MarkdownDocumentForm(initial={"content": initial_text})
-
-    context = {
-        "form": form,
-        "title": document.title,
-        "relative_path": relative_path,
-        "read_url": read_url,
-    }
-    return render(request, "pages/readme_edit.html", context)
 
 
 def sitemap(request):
