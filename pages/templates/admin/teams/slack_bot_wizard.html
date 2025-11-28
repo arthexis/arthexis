@@ -153,15 +153,14 @@
         </div>
         <div class="slack-wizard__actions">
           <input type="submit" value="{% trans 'Continue to Slack' %}" class="default" {% if disable_submit %}disabled aria-disabled="true"{% endif %} />
-          {% if callback_host_error %}
-            <p class="help">
-              {% trans "Set a public domain for this node so the redirect URL matches your Slack app configuration." %}
-            </p>
-          {% endif %}
-          <a class="button" href="{{ changelist_url }}">{% trans "Cancel" %}</a>
-        </div>
-      </form>
-    </div>
+        {% if callback_host_error %}
+          <p class="help">
+            {% trans "Set a public domain for this node so the redirect URL matches your Slack app configuration." %}
+          </p>
+        {% endif %}
+      </div>
+    </form>
+  </div>
     <div class="slack-wizard__aside">
       <h3>{% trans "How to find these values" %}</h3>
       <ol class="slack-wizard__list">
