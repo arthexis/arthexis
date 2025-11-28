@@ -14,9 +14,9 @@ import pytest
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
-import django
+from tests.conftest import safe_setup
 
-django.setup()
+safe_setup()
 
 from django.test import SimpleTestCase, TestCase
 from django.urls import reverse
@@ -119,7 +119,10 @@ class ScanNextViewTests(TestCase):
         self.client.force_login(self.user)
 
     @patch("config.middleware.Node.get_local", return_value=None)
-    @patch("config.middleware.get_site")
+    @patch(
+        "config.middleware.get_site",
+        return_value=types.SimpleNamespace(require_https=False, name=""),
+    )
     @patch(
         "ocpp.rfid.views.scan_sources",
         return_value={
@@ -143,7 +146,10 @@ class ScanNextViewTests(TestCase):
         )
 
     @patch("config.middleware.Node.get_local", return_value=None)
-    @patch("config.middleware.get_site")
+    @patch(
+        "config.middleware.get_site",
+        return_value=types.SimpleNamespace(require_https=False, name=""),
+    )
     @patch("ocpp.rfid.views.scan_sources", return_value={"error": "boom"})
     def test_scan_next_error(self, mock_scan, mock_site, mock_node):
         resp = self.client.get(reverse("rfid-scan-next"))
@@ -151,7 +157,10 @@ class ScanNextViewTests(TestCase):
         self.assertEqual(resp.json(), {"error": "boom"})
 
     @patch("config.middleware.Node.get_local", return_value=None)
-    @patch("config.middleware.get_site")
+    @patch(
+        "config.middleware.get_site",
+        return_value=types.SimpleNamespace(require_https=False, name=""),
+    )
     @patch(
         "ocpp.rfid.views.validate_rfid_value",
         return_value={"rfid": "ABCD1234", "label_id": 1, "created": False},
@@ -172,7 +181,10 @@ class ScanNextViewTests(TestCase):
         mock_validate.assert_called_once_with("ABCD1234", kind=None, endianness=None)
 
     @patch("config.middleware.Node.get_local", return_value=None)
-    @patch("config.middleware.get_site")
+    @patch(
+        "config.middleware.get_site",
+        return_value=types.SimpleNamespace(require_https=False, name=""),
+    )
     @patch("ocpp.rfid.views.validate_rfid_value")
     def test_scan_next_post_requires_authentication(
         self, mock_validate, mock_site, mock_node
@@ -188,7 +200,10 @@ class ScanNextViewTests(TestCase):
         mock_validate.assert_not_called()
 
     @patch("config.middleware.Node.get_local", return_value=None)
-    @patch("config.middleware.get_site")
+    @patch(
+        "config.middleware.get_site",
+        return_value=types.SimpleNamespace(require_https=False, name=""),
+    )
     def test_scan_next_post_invalid_json(self, mock_site, mock_node):
         User = get_user_model()
         user = User.objects.create_user("invalid-json", password="pwd")
@@ -1073,7 +1088,10 @@ class ReaderPollingTests(SimpleTestCase):
 
 class DeepReadViewTests(TestCase):
     @patch("config.middleware.Node.get_local", return_value=None)
-    @patch("config.middleware.get_site")
+    @patch(
+        "config.middleware.get_site",
+        return_value=types.SimpleNamespace(require_https=False, name=""),
+    )
     @patch(
         "ocpp.rfid.views.enable_deep_read_mode",
         return_value={"status": "deep read enabled", "enabled": True},
