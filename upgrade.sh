@@ -204,6 +204,42 @@ reset_safe_git_changes() {
   fi
 }
 
+fetch_branch_with_ref_repair() {
+  local remote="$1"
+  local branch="$2"
+  local fetch_output=""
+
+  if fetch_output=$(git fetch "$remote" "$branch" 2>&1); then
+    if [ -n "$fetch_output" ]; then
+      printf '%s\n' "$fetch_output"
+    fi
+    return 0
+  fi
+
+  if [ -n "$fetch_output" ]; then
+    printf '%s\n' "$fetch_output" >&2
+  fi
+
+  if printf '%s\n' "$fetch_output" | grep -q "cannot lock ref 'refs/remotes/${remote}/${branch}'"; then
+    echo "Detected stale remote-tracking ref for ${remote}/${branch}; pruning and retrying git fetch..." >&2
+    git remote prune "$remote" >/dev/null 2>&1 || true
+    git update-ref -d "refs/remotes/${remote}/${branch}" >/dev/null 2>&1 || true
+
+    if fetch_output=$(git fetch "$remote" "$branch" 2>&1); then
+      if [ -n "$fetch_output" ]; then
+        printf '%s\n' "$fetch_output"
+      fi
+      return 0
+    fi
+
+    if [ -n "$fetch_output" ]; then
+      printf '%s\n' "$fetch_output" >&2
+    fi
+  fi
+
+  return 1
+}
+
 queue_startup_net_message() {
   if [ -z "$PYTHON_BIN" ]; then
     echo "Python interpreter not found; cannot queue startup notification." >&2
@@ -1061,7 +1097,7 @@ if [[ $LOCAL_ONLY -eq 1 ]]; then
 else
   reset_safe_git_changes
   echo "Checking repository for updates..."
-  git fetch origin "$BRANCH"
+  fetch_branch_with_ref_repair origin "$BRANCH"
   REMOTE_REVISION="$(git rev-parse "origin/$BRANCH" 2>/dev/null || echo "$REMOTE_REVISION")"
   if git cat-file -e "origin/$BRANCH:VERSION" 2>/dev/null; then
     REMOTE_VERSION=$(git show "origin/$BRANCH:VERSION" | tr -d '\r\n')
