@@ -42,6 +42,32 @@ class EntityUserManager(DjangoUserManager):
     def get_queryset(self):
         return EntityQuerySet(self.model, using=self._db).filter(is_deleted=False)
 
+    def create_superuser(self, username=None, email=None, password=None, **extra_fields):
+        """Create or update a superuser, reusing existing records when present."""
+
+        extra_fields.setdefault("is_staff", True)
+        extra_fields.setdefault("is_superuser", True)
+        extra_fields.setdefault("is_active", True)
+
+        email = self.normalize_email(email)
+        username = self.model.normalize_username(username)
+
+        existing = self.model.all_objects.filter(username=username).first()
+        if existing is not None:
+            for field, value in extra_fields.items():
+                setattr(existing, field, value)
+            if password:
+                existing.set_password(password)
+            else:
+                existing.set_unusable_password()
+            existing.is_deleted = False
+            existing.save(using=self._db)
+            return existing
+
+        return super().create_superuser(
+            username=username, email=email, password=password, **extra_fields
+        )
+
 
 class Entity(models.Model):
     """Base model providing seed data tracking and soft deletion."""
