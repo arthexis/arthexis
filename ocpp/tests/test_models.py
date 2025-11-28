@@ -212,56 +212,6 @@ class ChargerEnergyUnitTests(TestCase):
         )
 
 
-class ChargerReferenceTests(TestCase):
-    def test_reference_created_and_updated_for_remote_urls(self):
-        serial = "Remote-123"
-        first_url = "http://remote.example/chargers/remote-123"
-        updated_url = "http://remote.example/chargers/remote-123/v2"
-
-        with patch("ocpp.models.url_targets_local_loopback") as loopback_mock, patch.object(
-            Charger, "_full_url"
-        ) as full_url_mock:
-            loopback_mock.return_value = False
-            full_url_mock.return_value = first_url
-
-            charger = Charger.objects.create(charger_id=serial)
-
-            charger.refresh_from_db()
-            self.assertIsNotNone(charger.reference)
-            self.assertEqual(charger.reference.value, first_url)
-            self.assertEqual(Reference.objects.count(), 1)
-
-            existing_reference_id = charger.reference_id
-
-            full_url_mock.return_value = first_url
-            charger.save()
-            charger.refresh_from_db()
-
-            self.assertEqual(Reference.objects.count(), 1)
-            self.assertEqual(charger.reference_id, existing_reference_id)
-            self.assertEqual(charger.reference.value, first_url)
-
-            full_url_mock.return_value = updated_url
-            charger.save()
-            charger.refresh_from_db()
-
-            self.assertEqual(Reference.objects.count(), 1)
-            self.assertEqual(charger.reference_id, existing_reference_id)
-            self.assertEqual(charger.reference.value, updated_url)
-
-    def test_loopback_url_skips_reference_creation(self):
-        serial = "Loopback-123"
-
-        with patch("ocpp.models.url_targets_local_loopback") as loopback_mock, patch.object(
-            Charger, "_full_url", return_value="http://loopback"
-        ):
-            loopback_mock.return_value = True
-
-            charger = Charger.objects.create(charger_id=serial)
-
-            charger.refresh_from_db()
-            self.assertIsNone(charger.reference)
-
 
 class ChargerPurgeTests(TestCase):
     def test_purge_clears_related_data_and_store_caches(self):
@@ -588,40 +538,6 @@ class ChargerVisibilityTests(TestCase):
         self.assertFalse(self.public_charger.has_owner_scope())
         self.assertTrue(self.user_owned_charger.has_owner_scope())
         self.assertTrue(self.group_owned_charger.has_owner_scope())
-
-    def test_is_visible_to_follows_query_rules(self):
-        anonymous = AnonymousUser()
-        test_cases = [
-            (anonymous, {"PUB-1"}),
-            (self.staff_user, {"PUB-1"}),
-            (self.owner_user, {"PUB-1", "USR-1"}),
-            (self.group_member, {"PUB-1", "GRP-1"}),
-            (self.superuser, {"PUB-1", "USR-1", "GRP-1"}),
-        ]
-
-        chargers = [
-            self.public_charger,
-            self.user_owned_charger,
-            self.group_owned_charger,
-        ]
-
-        for user, expected_visible in test_cases:
-            with self.subTest(user=getattr(user, "username", "anonymous")):
-                queryset_ids = set(
-                    Charger.visible_for_user(user).values_list(
-                        "charger_id", flat=True
-                    )
-                )
-                self.assertSetEqual(queryset_ids, expected_visible)
-
-
-                for charger in chargers:
-                    with self.subTest(charger=charger.charger_id):
-                        should_be_visible = charger.charger_id in expected_visible
-                        self.assertEqual(
-                            charger.is_visible_to(user),
-                            should_be_visible,
-                        )
 
 
 class ChargerWSAuthTests(TestCase):

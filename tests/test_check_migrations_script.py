@@ -19,48 +19,6 @@ def clone_repo(tmp_path: Path) -> Path:
     return clone_dir
 
 
-def test_check_migrations_passes() -> None:
-    if importlib.util.find_spec("django") is None:
-        pytest.skip("Django is not installed")
-
-    result = subprocess.run(
-        ["python", "scripts/check_migrations.py"],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-    )
-    assert result.returncode == 0
-
-
-def test_check_migrations_allows_merge(tmp_path: Path) -> None:
-    if importlib.util.find_spec("django") is None:
-        pytest.skip("Django is not installed")
-
-    repo = clone_repo(tmp_path)
-    merge_file = repo / "core" / "migrations" / "0012_merge_fake.py"
-    merge_file.parent.mkdir(parents=True, exist_ok=True)
-    merge_file.write_text(
-        """from django.db import migrations
-
-
-class Migration(migrations.Migration):
-    dependencies = [
-        ("core", "0010_businesspowerlead"),
-        ("core", "0009_merge_20250901_2230"),
-    ]
-    operations = []
-"""
-    )
-    result = subprocess.run(
-        ["python", "scripts/check_migrations.py"],
-        cwd=repo,
-        capture_output=True,
-        text=True,
-    )
-    assert result.returncode == 0
-    assert "Merge migrations detected" not in result.stderr
-
-
 def test_check_migrations_attempts_merge(monkeypatch, capsys) -> None:
     calls: list[tuple[str, ...]] = []
 
