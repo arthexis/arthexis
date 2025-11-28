@@ -659,11 +659,14 @@ def node_info(request):
     token = request.GET.get("token", "")
     host_domain = _get_host_domain(request)
     advertised_address = _get_advertised_address(request, node)
-    advertised_port = node.port
+    preferred_port = node.get_preferred_port()
+    advertised_port = node.port or preferred_port
     if host_domain:
         host_port = _get_host_port(request)
-        if host_port:
+        if host_port in {preferred_port, node.port, 80, 443}:
             advertised_port = host_port
+        else:
+            advertised_port = preferred_port
     if host_domain:
         hostname = host_domain
         local_aliases = {

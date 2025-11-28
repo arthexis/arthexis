@@ -68,3 +68,22 @@ class NodeInfoViewTests(TestCase):
         payload = response.json()
         self.assertEqual(payload["hostname"], "gway-002")
         self.assertEqual(payload["address"], "192.168.1.2")
+
+    def test_node_info_ignores_unexpected_host_port(self):
+        mac = Node.get_current_mac()
+        slug = f"test-node-{uuid.uuid4().hex}"
+        defaults = {
+            "hostname": "gway-002",
+            "address": "10.0.0.5",
+            "port": 8123,
+            "public_endpoint": slug,
+        }
+        Node.objects.update_or_create(mac_address=mac, defaults=defaults)
+
+        with patch("nodes.models.Node.get_preferred_port", return_value=8123):
+            response = self.client.get(
+                reverse("node-info"), HTTP_HOST="arthexis.com:8900"
+            )
+
+        payload = response.json()
+        self.assertEqual(payload["port"], 8123)
