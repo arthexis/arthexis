@@ -17,12 +17,10 @@
 
 <h1>{% translate 'Model documentation' %}</h1>
 
-{% regroup models by app_config as grouped_models %}
-
 <div id="content-main">
 {% for group in grouped_models %}
 <div class="module">
-<h2 id="app-{{ group.grouper.label }}">{{ group.grouper.verbose_name }} ({{ group.grouper.name }})</h2>
+<h2 id="app-{{ group.label }}">{{ group.name }} ({{ group.app_name }})</h2>
 
 <table class="xfull">
   <thead>
@@ -32,7 +30,7 @@
     </tr>
   </thead>
   <tbody>
-  {% for model in group.list %}
+  {% for model in group.models %}
   <tr>
     <th scope="row"><a href="{% url 'django-admindocs-models-detail' app_label=model.app_label model_name=model.model_name %}">{{ model.object_name }}</a></th>
     <td>{{ model.docstring|default_if_none:""|linebreaksbr }}</td>
@@ -51,9 +49,8 @@
 <div class="module">
 <h2>{% translate 'Model groups' %}</h2>
 <ul>
-{% regroup models by app_config as grouped_models %}
 {% for group in grouped_models %}
-    <li><a href="#app-{{ group.grouper.label }}">{{ group.grouper.verbose_name }}</a></li>
+    <li><a href="#app-{{ group.label }}">{{ group.name }}</a></li>
 {% endfor %}
 </ul>
 </div>

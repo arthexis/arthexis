@@ -406,11 +406,13 @@ class OdooChatBridge(Entity):
     )
     channel_id = models.PositiveIntegerField(
         help_text=_("Identifier of the Odoo mail.channel that should receive forwarded messages."),
+        verbose_name=_("Channel ID"),
     )
     channel_uuid = models.CharField(
         max_length=64,
         blank=True,
         help_text=_("Optional UUID of the Odoo mail.channel for reference."),
+        verbose_name=_("Channel UUID"),
     )
     is_enabled = models.BooleanField(
         default=True,
@@ -430,8 +432,8 @@ class OdooChatBridge(Entity):
 
     class Meta:
         ordering = ["site__domain", "pk"]
-        verbose_name = _("Odoo chat bridge")
-        verbose_name_plural = _("Odoo chat bridges")
+        verbose_name = _("Odoo Chat Bridge")
+        verbose_name_plural = _("Odoo Chat Bridges")
         constraints = [
             models.UniqueConstraint(
                 fields=["site"],
@@ -615,14 +617,17 @@ class WhatsAppChatBridge(Entity):
     api_base_url = models.URLField(
         default="https://graph.facebook.com/v18.0",
         help_text=_("Base URL for the WhatsApp Cloud API."),
+        verbose_name=_("API Base URL"),
     )
     phone_number_id = models.CharField(
         max_length=100,
         help_text=_("Identifier of the WhatsApp phone number used to send messages."),
+        verbose_name=_("Phone Number ID"),
     )
     access_token = models.CharField(
         max_length=255,
         help_text=_("Bearer token used to authenticate against the WhatsApp API."),
+        verbose_name=_("Access Token"),
     )
     is_enabled = models.BooleanField(
         default=True,
@@ -637,8 +642,8 @@ class WhatsAppChatBridge(Entity):
 
     class Meta:
         ordering = ["site__domain", "pk"]
-        verbose_name = _("WhatsApp chat bridge")
-        verbose_name_plural = _("WhatsApp chat bridges")
+        verbose_name = _("WhatsApp Chat Bridge")
+        verbose_name_plural = _("WhatsApp Chat Bridges")
         constraints = [
             models.UniqueConstraint(
                 fields=["site"],
@@ -755,7 +760,9 @@ class ChatSession(Entity):
         ESCALATED = "escalated", _("Escalated")
         CLOSED = "closed", _("Closed")
 
-    uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    uuid = models.UUIDField(
+        default=uuid.uuid4, unique=True, editable=False, verbose_name=_("UUID")
+    )
     site = models.ForeignKey(
         Site,
         on_delete=models.SET_NULL,
