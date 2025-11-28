@@ -57,11 +57,12 @@ class CeleryUtilsTests(TestCase):
             interval=schedule,
             task="pages.tasks.purge_expired_landing_leads",
         )
-        legacy_task = PeriodicTask.objects.create(
+        legacy_task = PeriodicTask(
             name="pages_purge_landing_leads",
             interval=schedule,
             task="pages.tasks.purge_expired_landing_leads",
         )
+        PeriodicTask._core_fixture_original_save(legacy_task)
 
         normalized = normalize_periodic_task_name(
             PeriodicTask.objects, "pages_purge_landing_leads"
@@ -73,3 +74,34 @@ class CeleryUtilsTests(TestCase):
         assert not PeriodicTask.objects.filter(
             name="pages_purge_landing_leads"
         ).exists()
+
+    def test_periodic_task_save_updates_existing_slug_from_legacy_name(self):
+        from django_celery_beat.models import IntervalSchedule, PeriodicTask
+
+        fast_schedule, _ = IntervalSchedule.objects.get_or_create(
+            every=1, period=IntervalSchedule.MINUTES
+        )
+        slow_schedule, _ = IntervalSchedule.objects.get_or_create(
+            every=30, period=IntervalSchedule.MINUTES
+        )
+        task = PeriodicTask.objects.create(
+            name="pages-purge-landing-leads",
+            interval=fast_schedule,
+            task="pages.tasks.purge_expired_landing_leads",
+        )
+
+        legacy_update = PeriodicTask(
+            name="pages_purge_landing_leads",
+            interval=slow_schedule,
+            task=task.task,
+        )
+        legacy_update.save()
+
+        legacy_update_pk = legacy_update.pk
+
+        task.refresh_from_db()
+
+        assert PeriodicTask.objects.filter(name="pages-purge-landing-leads").count() == 1
+        assert not PeriodicTask.objects.filter(name="pages_purge_landing_leads").exists()
+        assert legacy_update_pk == task.pk
+        assert task.interval_id == slow_schedule.id
