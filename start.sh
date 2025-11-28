@@ -7,6 +7,8 @@ mkdir -p "$LOCK_DIR"
 
 # shellcheck source=scripts/helpers/logging.sh
 . "$BASE_DIR/scripts/helpers/logging.sh"
+# shellcheck source=scripts/helpers/suite-uptime-lock.sh
+. "$BASE_DIR/scripts/helpers/suite-uptime-lock.sh"
 STARTUP_SCRIPT_NAME="$(basename "$0")"
 arthexis_log_startup_event "$BASE_DIR" "$STARTUP_SCRIPT_NAME" "start" "invoked"
 
@@ -15,6 +17,10 @@ log_startup_exit() {
   arthexis_log_startup_event "$BASE_DIR" "$STARTUP_SCRIPT_NAME" "finish" "status=$status"
 }
 trap log_startup_exit EXIT
+
+refresh_suite_uptime_lock_safe() {
+  arthexis_refresh_suite_uptime_lock "$BASE_DIR" || true
+}
 
 SILENT=false
 SERVICE_ARGS=()
@@ -105,10 +111,13 @@ if [ -n "$SERVICE_NAME" ] && [ ${#SYSTEMCTL_CMD[@]} -gt 0 ] \
     exit 0
   fi
   if wait_for_systemd_service "$SERVICE_NAME"; then
+    refresh_suite_uptime_lock_safe
     exit 0
   else
     exit 1
   fi
 fi
 
-"$BASE_DIR/service-start.sh" "${SERVICE_ARGS[@]}"
+if "$BASE_DIR/service-start.sh" "${SERVICE_ARGS[@]}"; then
+  refresh_suite_uptime_lock_safe
+fi

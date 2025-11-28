@@ -734,6 +734,71 @@ def _suite_uptime_lock_path(base_dir: Path | str | None = None) -> Path:
     return root / "locks" / SUITE_UPTIME_LOCK_NAME
 
 
+def _system_boot_time(now: datetime | None = None) -> datetime | None:
+    """Return the host boot time if it can be determined."""
+
+    current_time = now or timezone.now()
+    try:
+        import psutil
+    except Exception:
+        return None
+
+    try:
+        boot_timestamp = float(psutil.boot_time())
+    except Exception:
+        return None
+
+    if not boot_timestamp:
+        return None
+
+    boot_time = datetime.fromtimestamp(boot_timestamp, tz=datetime_timezone.utc)
+    if boot_time > current_time:
+        return None
+
+    return boot_time
+
+
+def _suite_uptime_lock_info(*, now: datetime | None = None) -> dict[str, object]:
+    """Return parsed metadata for the suite uptime lock file."""
+
+    current_time = now or timezone.now()
+    lock_path = _suite_uptime_lock_path()
+    info: dict[str, object] = {
+        "path": lock_path,
+        "exists": False,
+        "started_at": None,
+        "fresh": False,
+    }
+
+    try:
+        stats = lock_path.stat()
+    except OSError:
+        return info
+
+    info["exists"] = True
+    try:
+        raw_payload = lock_path.read_text(encoding="utf-8")
+    except OSError:
+        raw_payload = ""
+
+    try:
+        payload = json.loads(raw_payload)
+    except json.JSONDecodeError:
+        payload = {}
+
+    started_at = _parse_suite_uptime_timestamp(
+        payload.get("started_at") or payload.get("boot_time")
+    )
+    info["started_at"] = started_at
+    info["fresh"] = bool(
+        started_at
+        and started_at <= current_time
+        and _suite_uptime_lock_is_fresh(lock_path, current_time)
+    )
+
+    return info
+
+
 def _parse_suite_uptime_timestamp(value: object) -> datetime | None:
     """Parse an ISO timestamp from the suite uptime lock file."""
 
@@ -780,63 +845,59 @@ def _suite_uptime_details() -> dict[str, object]:
     """Return structured uptime information for the running suite if possible."""
 
     now = timezone.now()
-    lock_path = _suite_uptime_lock_path()
-    try:
-        raw_payload = lock_path.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        raw_payload = ""
-    except OSError:
-        raw_payload = ""
-    else:
-        try:
-            payload = json.loads(raw_payload)
-        except json.JSONDecodeError:
-            payload = {}
-        start_value = payload.get("started_at") or payload.get("boot_time")
-        boot_time = _parse_suite_uptime_timestamp(start_value)
-        if (
-            boot_time
-            and boot_time <= now
-            and _suite_uptime_lock_is_fresh(lock_path, now)
-        ):
-            uptime_label = timesince(boot_time, now)
-            return {
-                "uptime": uptime_label,
-                "boot_time": boot_time,
-                "boot_time_label": _format_datetime(boot_time),
-                "available": True,
-            }
+    lock_info = _suite_uptime_lock_info(now=now)
+    boot_time = _system_boot_time(now)
+    lock_start = lock_info.get("started_at")
 
-    try:
-        import psutil
-    except Exception:
-        return {}
+    if lock_start and boot_time and lock_start < boot_time:
+        return {
+            "available": False,
+            "boot_time": boot_time,
+            "boot_time_label": _format_datetime(boot_time),
+            "lock_started_at": lock_start,
+        }
 
-    try:
-        boot_timestamp = float(psutil.boot_time())
-    except Exception:
-        return {}
+    if lock_info.get("fresh") and isinstance(lock_start, datetime):
+        uptime_label = timesince(lock_start, now)
+        return {
+            "uptime": uptime_label,
+            "boot_time": lock_start,
+            "boot_time_label": _format_datetime(lock_start),
+            "available": True,
+        }
 
-    if not boot_timestamp:
-        return {}
+    if lock_info.get("exists"):
+        return {"available": False}
 
-    boot_time = datetime.fromtimestamp(boot_timestamp, tz=datetime_timezone.utc)
-    if boot_time > now:
-        return {}
+    if boot_time:
+        uptime_label = timesince(boot_time, now)
+        return {
+            "uptime": uptime_label,
+            "boot_time": boot_time,
+            "boot_time_label": _format_datetime(boot_time),
+            "available": True,
+        }
 
-    uptime_label = timesince(boot_time, now)
-    return {
-        "uptime": uptime_label,
-        "boot_time": boot_time,
-        "boot_time_label": _format_datetime(boot_time),
-        "available": True,
-    }
+    return {}
 
 
 def _suite_uptime() -> str:
     """Return a human-readable uptime for the running suite when possible."""
 
     return str(_suite_uptime_details().get("uptime", ""))
+
+
+def _suite_offline_period(now: datetime) -> tuple[datetime, datetime] | None:
+    """Return a downtime window when the lock predates the current boot."""
+
+    lock_info = _suite_uptime_lock_info(now=now)
+    lock_start = lock_info.get("started_at")
+    boot_time = _system_boot_time(now)
+
+    if boot_time and isinstance(lock_start, datetime) and lock_start < boot_time:
+        return boot_time, now
+
+    return None
 
 
 _DAY_NAMES = {"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"}
@@ -1149,6 +1210,10 @@ def _build_uptime_report(*, now: datetime | None = None) -> dict[str, object]:
         if normalized_end < start:
             continue
         shutdown_periods.append((start, normalized_end))
+
+    offline_period = _suite_offline_period(current_time)
+    if offline_period:
+        shutdown_periods.append(offline_period)
 
     windows = [
         (_("Last 24 hours"), current_time - timedelta(hours=24)),

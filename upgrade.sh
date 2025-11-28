@@ -37,6 +37,8 @@ trap log_upgrade_exit EXIT
 . "$BASE_DIR/scripts/helpers/systemd_locks.sh"
 # shellcheck source=scripts/helpers/service_manager.sh
 . "$BASE_DIR/scripts/helpers/service_manager.sh"
+# shellcheck source=scripts/helpers/suite-uptime-lock.sh
+. "$BASE_DIR/scripts/helpers/suite-uptime-lock.sh"
 arthexis_resolve_log_dir "$BASE_DIR" LOG_DIR || exit 1
 # Prefer python3 but fall back to python when only the legacy binary is available.
 DEFAULT_VENV_PYTHON="$BASE_DIR/.venv/bin/python"
@@ -1340,6 +1342,10 @@ if [ -n "$SERVICE_NAME" ] && [[ $NO_RESTART -eq 0 ]] && [[ $LCD_RESTART_REQUIRED
     echo "LCD service lcd-$SERVICE_NAME did not restart cleanly after upgrade." >&2
     exit 1
   fi
+fi
+
+if [ -n "$SERVICE_NAME" ] && [[ $NO_RESTART -eq 0 ]]; then
+  arthexis_refresh_suite_uptime_lock "$BASE_DIR" || true
 fi
 
 if arthexis_lcd_feature_enabled "$LOCK_DIR"; then

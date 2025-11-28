@@ -8,6 +8,8 @@ BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 . "$BASE_DIR/scripts/helpers/ports.sh"
 # shellcheck source=scripts/helpers/service_manager.sh
 . "$BASE_DIR/scripts/helpers/service_manager.sh"
+# shellcheck source=scripts/helpers/suite-uptime-lock.sh
+. "$BASE_DIR/scripts/helpers/suite-uptime-lock.sh"
 arthexis_resolve_log_dir "$BASE_DIR" LOG_DIR || exit 1
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 exec > >(tee "$LOG_FILE") 2>&1
@@ -113,6 +115,8 @@ fi
 # Allow callers (such as upgrades) to keep the LCD running a bit longer to
 # display status by skipping the LCD stop step.
 SKIP_LCD_STOP="${ARTHEXIS_SKIP_LCD_STOP:-0}"
+
+arthexis_clear_suite_uptime_lock "$BASE_DIR" || true
 
 # Stop systemd-managed services when present
 if [ -f "$LOCK_DIR/service.lck" ]; then
