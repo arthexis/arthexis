@@ -409,10 +409,14 @@ def _run_upgrade_command(
             )
             return None, False
 
-    command = args if os.name != "nt" else ["cmd", "/c", *args]
+    command = args
+    run_kwargs: dict[str, object] = {}
+
+    if os.name == "nt":
+        run_kwargs["shell"] = True
 
     try:
-        subprocess.run(command, cwd=base_dir, check=True)
+        subprocess.run(command, cwd=base_dir, check=True, **run_kwargs)
     except OSError as exc:  # pragma: no cover - platform-specific
         logger.warning(
             "Inline auto-upgrade launch failed; will retry on next cycle",
