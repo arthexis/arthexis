@@ -778,7 +778,7 @@ def _relative_readme_path(readme_file: Path, root_base: Path) -> str | None:
         return None
 
 
-def _render_readme(request, role, doc: str | None = None):
+def _render_readme(request, role, doc: str | None = None, force_footer: bool = False):
     lang = getattr(request, "LANGUAGE_CODE", "")
     lang = lang.replace("_", "-").lower()
     document = _locate_readme_document(role, doc, lang)
@@ -803,6 +803,7 @@ def _render_readme(request, role, doc: str | None = None):
         "toc": toc_html,
         "page_url": request.build_absolute_uri(),
         "edit_url": edit_url,
+        "force_footer": force_footer,
     }
     response = render(request, "pages/readme.html", context)
     patch_vary_headers(response, ["Accept-Language", "Cookie"])
@@ -924,7 +925,7 @@ def index(request):
             target_path = landing_obj.path
             if target_path and target_path != request.path:
                 return redirect(target_path)
-    return _render_readme(request, role)
+    return _render_readme(request, role, force_footer=True)
 
 
 @never_cache

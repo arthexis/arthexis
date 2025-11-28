@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from django.db import models
 from django.apps import apps
 from django.db.models import Q
-from django.db.utils import DatabaseError
+from django.db.utils import DatabaseError, IntegrityError
 from django.db.models.signals import post_delete
 from django.dispatch import Signal, receiver
 from core.entity import Entity
@@ -66,6 +66,33 @@ _BADGE_COUNTER_TIMEOUT = getattr(settings, "ADMIN_DASHBOARD_BADGE_TIMEOUT", 300)
 class NodeRoleManager(models.Manager):
     def get_by_natural_key(self, name: str):
         return self.get(name=name)
+
+    def create(self, **kwargs):
+        name = kwargs.get("name")
+        if name:
+            existing = self.filter(name=name).first()
+            if existing:
+                update_fields = []
+                for field, value in kwargs.items():
+                    if field == "name":
+                        continue
+                    if value is not None and getattr(existing, field, None) != value:
+                        setattr(existing, field, value)
+                        update_fields.append(field)
+
+                if update_fields:
+                    existing.save(update_fields=update_fields)
+
+                return existing
+
+        try:
+            return super().create(**kwargs)
+        except IntegrityError:
+            if name:
+                existing = self.filter(name=name).first()
+                if existing:
+                    return existing
+            raise
 
 
 class NodeRole(Entity):
