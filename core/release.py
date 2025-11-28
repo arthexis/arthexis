@@ -200,7 +200,8 @@ def _build_in_sanitized_tree(base_dir: Path) -> None:
     with tempfile.TemporaryDirectory(prefix="arthexis-build-") as temp_dir:
         staging_root = Path(temp_dir)
         _export_tracked_files(base_dir, staging_root)
-        _run([sys.executable, "-m", "build"], cwd=staging_root)
+        with contextlib.chdir(staging_root):
+            _run([sys.executable, "-m", "build"])
         built_dist = staging_root / "dist"
         if not built_dist.exists():
             raise ReleaseError("dist directory not created")
