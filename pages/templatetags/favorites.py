@@ -21,10 +21,6 @@ def favorite_ct_id(app_label, model_name):
     if opts is None:
         return None
 
-    # ContentType uses an internal cache that can retain stale entries if a
-    # row is deleted during tests. Clear the cache before ensuring the
-    # ContentType exists to recreate missing rows reliably.
-    ContentType.objects.clear_cache()
     ct, _ = ContentType.objects.get_or_create(
         app_label=opts.app_label,
         model=opts.model_name,

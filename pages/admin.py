@@ -1297,6 +1297,7 @@ def favorite_toggle(request, ct_id):
     fav = Favorite.objects.filter(user=request.user, content_type=ct).first()
     next_url = _get_safe_next_url(request)
     if request.method == "POST":
+        ContentType.objects.clear_cache()
         if fav and request.POST.get("remove"):
             fav.delete()
             clear_user_favorites_cache(request.user)
@@ -1366,6 +1367,7 @@ def favorite_list(request):
         .order_by("priority", "pk")
     )
     if request.method == "POST":
+        ContentType.objects.clear_cache()
         selected = set(request.POST.getlist("user_data"))
         for fav in favorites:
             update_fields = []
