@@ -3726,7 +3726,6 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
         "print_release_form",
         "copy_rfids",
         "merge_rfids",
-        "toggle_selected_user_data",
         "toggle_selected_released",
         "toggle_selected_allowed",
         "create_account_from_rfid",
@@ -3851,51 +3850,6 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
                 ngettext(
                     "Skipped %(count)d RFID because it is already linked to an account.",
                     "Skipped %(count)d RFIDs because they are already linked to accounts.",
-                    skipped,
-                )
-                % {"count": skipped},
-                level=messages.WARNING,
-            )
-
-    @admin.action(description=_("Toggle selected User Data"))
-    def toggle_selected_user_data(self, request, queryset):
-        toggled = 0
-        skipped = 0
-        for tag in queryset:
-            manager = getattr(type(tag), "all_objects", type(tag).objects)
-            target_user = _resolve_fixture_user(tag, request.user)
-            allow_user_data = _user_allows_user_data(target_user)
-            if tag.is_user_data:
-                manager.filter(pk=tag.pk).update(is_user_data=False)
-                tag.is_user_data = False
-                delete_user_fixture(tag, target_user)
-                toggled += 1
-                continue
-            if not allow_user_data:
-                skipped += 1
-                continue
-            manager.filter(pk=tag.pk).update(is_user_data=True)
-            tag.is_user_data = True
-            dump_user_fixture(tag, target_user)
-            toggled += 1
-
-        if toggled:
-            self.message_user(
-                request,
-                ngettext(
-                    "Toggled user data for %(count)d RFID.",
-                    "Toggled user data for %(count)d RFIDs.",
-                    toggled,
-                )
-                % {"count": toggled},
-                level=messages.SUCCESS,
-            )
-        if skipped:
-            self.message_user(
-                request,
-                ngettext(
-                    "Skipped %(count)d RFID because user data is not available.",
-                    "Skipped %(count)d RFIDs because user data is not available.",
                     skipped,
                 )
                 % {"count": skipped},
