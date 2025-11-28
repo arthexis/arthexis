@@ -48,11 +48,11 @@ from django.test import (
     override_settings,
 )
 from django.conf import settings
-from unittest import skip
 from contextlib import suppress
 from types import SimpleNamespace
 from unittest.mock import patch, Mock, AsyncMock
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import AnonymousUser
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
@@ -68,6 +68,7 @@ from django.contrib.admin.utils import quote
 from protocols.models import MediaBucket
 
 from config.asgi import application
+from pages.context_processors import nav_links
 
 from .models import (
     Transaction,
@@ -4020,22 +4021,39 @@ class SimulatorLandingTests(TestCase):
         Site.objects.update_or_create(
             id=1, defaults={"domain": "testserver", "name": ""}
         )
-        app = Application.objects.create(name="Ocpp")
+        app = Application.objects.create(name="ocpp")
         module = Module.objects.create(node_role=role, application=app, path="/ocpp/")
         module.create_landings()
         User = get_user_model()
         self.user = User.objects.create_user(username="nav", password="pwd")
         self.client = Client()
+        self.request_factory = RequestFactory()
 
-    @skip("Navigation links unavailable in test environment")
+    def _get_nav_modules(self, user=None):
+        request = self.request_factory.get("/", HTTP_HOST="testserver")
+        request.user = user or AnonymousUser()
+        request.session = self.client.session
+        return nav_links(request).get("nav_modules", [])
+
     def test_simulator_app_link_in_nav(self):
-        resp = self.client.get(reverse("pages:index"))
-        self.assertContains(resp, "/ocpp/cpms/dashboard/")
-        self.assertNotContains(resp, "/ocpp/evcs/simulator/")
+        modules = self._get_nav_modules()
+        module = next((mod for mod in modules if mod.path == "/ocpp/"), None)
+        self.assertIsNotNone(module)
+        landings = {landing.path: landing for landing in module.enabled_landings}
+
+        self.assertIn("/ocpp/cpms/dashboard/", landings)
+        simulator = landings.get("/ocpp/evcs/simulator/")
+        self.assertIsNotNone(simulator)
+        self.assertTrue(simulator.nav_is_locked)
+
         self.client.force_login(self.user)
-        resp = self.client.get(reverse("pages:index"))
-        self.assertContains(resp, "/ocpp/cpms/dashboard/")
-        self.assertContains(resp, "/ocpp/evcs/simulator/")
+        modules = self._get_nav_modules(self.user)
+        module = next((mod for mod in modules if mod.path == "/ocpp/"), None)
+        self.assertIsNotNone(module)
+        landings = {landing.path: landing for landing in module.enabled_landings}
+        simulator = landings.get("/ocpp/evcs/simulator/")
+        self.assertIsNotNone(simulator)
+        self.assertFalse(simulator.nav_is_locked)
 
     def test_cp_simulator_redirects_to_login(self):
         response = self.client.get(reverse("cp-simulator"))
