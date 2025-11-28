@@ -43,6 +43,12 @@ def _average(values: Iterable[float]) -> float:
     return statistics.fmean(values_list)
 
 
+def _normalize_path_text(value: str) -> str:
+    """Normalize a path-like string for comparison across platforms."""
+
+    return str(value).replace("\\", "/").lower()
+
+
 @dataclass
 class _ProcessStats:
     pid: int
@@ -123,6 +129,8 @@ def _process_name(proc, info: dict) -> str:
 def _collect_processes(base_dir: Path) -> Dict[int, Tuple[psutil.Process, dict]]:
     results: Dict[int, Tuple[psutil.Process, dict]] = {}
     base_dir_lower = str(base_dir).lower()
+    normalized_base_dir = _normalize_path_text(base_dir_lower)
+    normalized_base_dir_no_drive = normalized_base_dir.split(":", 1)[-1]
     for proc in psutil.process_iter(["pid", "name", "cmdline", "cwd", "exe"]):
         if proc.pid == os.getpid():
             continue
@@ -134,12 +142,21 @@ def _collect_processes(base_dir: Path) -> Dict[int, Tuple[psutil.Process, dict]]
         cwd = info.get("cwd") or ""
         exe = info.get("exe") or ""
         combined = cmdline.lower()
+        normalized_cmdline = _normalize_path_text(cmdline)
+        normalized_cwd = _normalize_path_text(cwd)
+        normalized_exe = _normalize_path_text(exe)
         try:
             if (
                 "arthexis" in combined
                 or base_dir_lower in combined
+                or normalized_base_dir in normalized_cmdline
+                or normalized_base_dir_no_drive in normalized_cmdline
                 or (cwd and base_dir_lower in cwd.lower())
+                or (cwd and normalized_base_dir in normalized_cwd)
+                or (cwd and normalized_base_dir_no_drive in normalized_cwd)
                 or (exe and base_dir_lower in exe.lower())
+                or (exe and normalized_base_dir in normalized_exe)
+                or (exe and normalized_base_dir_no_drive in normalized_exe)
             ):
                 results[proc.pid] = (proc, info)
         except Exception:  # pragma: no cover - defensive fallback
