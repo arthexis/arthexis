@@ -728,7 +728,7 @@ def test_check_github_updates_skips_when_ci_failing(monkeypatch, tmp_path):
     monkeypatch.setattr(tasks, "_resolve_release_severity", lambda version: tasks.SEVERITY_NORMAL)
     monkeypatch.setattr(tasks, "_read_remote_version", lambda base, branch: "0.0.1")
     monkeypatch.setattr(tasks, "_read_local_version", lambda base: "0.0.0")
-    monkeypatch.setattr(tasks, "_ci_status_for_revision", lambda _base, _rev: "failure")
+    monkeypatch.setattr(tasks, "_ci_status_for_revision", lambda _base, _rev, branch="main": "failure")
     monkeypatch.setattr(tasks.shutil, "which", lambda command: None)
 
     def record_services(*args, **kwargs):
@@ -754,6 +754,62 @@ def test_check_github_updates_skips_when_ci_failing(monkeypatch, tmp_path):
     assert any("CI status is failure" in message for message in log_messages)
     assert failure_reasons == ["CI-FAILING"]
     assert service_calls
+
+
+def test_fetch_ci_workflow_status_returns_latest_conclusion(monkeypatch):
+    """Workflow status fetch should return the last completed run conclusion."""
+
+    from core import tasks
+
+    closed: list[str] = []
+
+    class StubResponse:
+        status_code = 200
+
+        @staticmethod
+        def json():
+            return {"workflow_runs": [{"conclusion": "success"}]}
+
+        def close(self):
+            closed.append("closed")
+
+    def fake_get(url, *, headers=None, params=None, timeout=None):
+        assert params == {"branch": "main", "status": "completed", "per_page": 1}
+        return StubResponse()
+
+    monkeypatch.setattr(tasks.requests, "get", fake_get)
+
+    status = tasks._fetch_ci_workflow_status("owner/repo", "main")
+
+    assert status == "success"
+    assert closed == ["closed"]
+
+
+def test_ci_status_for_revision_prefers_branch_badge(monkeypatch, tmp_path):
+    """Branch workflow status should take precedence over revision checks."""
+
+    from core import tasks
+
+    workflow_calls: list[tuple[str, str]] = []
+    revision_calls: list[tuple[str, str]] = []
+
+    monkeypatch.setattr(tasks, "_resolve_github_slug", lambda _base: "owner/repo")
+    monkeypatch.setattr(
+        tasks,
+        "_fetch_ci_workflow_status",
+        lambda slug, branch: workflow_calls.append((slug, branch)) or "success",
+    )
+    monkeypatch.setattr(
+        tasks,
+        "_fetch_ci_status",
+        lambda slug, revision: revision_calls.append((slug, revision)) or "pending",
+    )
+
+    status = tasks._ci_status_for_revision(tmp_path, "abc123", branch="main")
+
+    assert status == "success"
+    assert workflow_calls == [("owner/repo", "main")]
+    assert not revision_calls
 
 
 def test_broadcast_upgrade_start_message_formats_payload(monkeypatch):
