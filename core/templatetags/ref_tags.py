@@ -45,6 +45,7 @@ def render_footer(context):
         "roles", "features", "sites"
     )
     request = context.get("request")
+    force_footer = bool(context.get("force_footer"))
     visible_refs = filter_visible_references(
         refs,
         request=request,
@@ -52,7 +53,7 @@ def render_footer(context):
         node=context.get("badge_node"),
     )
 
-    if not visible_refs:
+    if not visible_refs and not force_footer:
         return {"footer_refs": [], "show_footer": False}
 
     version = ""
