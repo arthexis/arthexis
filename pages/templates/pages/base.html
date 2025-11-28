@@ -374,15 +374,10 @@
         gap: 0.75rem;
         flex-wrap: wrap;
       }
-      .user-story-clipboard {
-        margin: 0;
+      .user-story-rating-hint {
         margin-left: auto;
-        display: inline-flex;
-        align-items: center;
-        gap: 0.35rem;
-      }
-      .user-story-clipboard .form-check-input {
-        margin-top: 0;
+        font-style: italic;
+        color: var(--bs-secondary-color);
       }
       .user-story-rating input {
         position: absolute;
@@ -956,19 +951,8 @@
                   <input type="radio" id="user-story-rating-1" name="rating" value="1">
                   <label for="user-story-rating-1" title="{% trans 'Needs improvement' %}" aria-label="{% trans '1 star' %}">★</label>
                 </div>
+                <span class="user-story-rating-hint" id="user-story-rating-hint">{% trans 'Select a rating' %}</span>
                 <input type="hidden" name="take_screenshot" value="1">
-                {% if request.user.is_authenticated %}
-                  <div class="form-check user-story-clipboard">
-                    <input
-                      class="form-check-input"
-                      type="checkbox"
-                      id="user-story-copy-report"
-                      name="copy_report"
-                      value="1"
-                    >
-                    <label class="form-check-label" for="user-story-copy-report">{% trans 'Copy to clipboard' %}</label>
-                  </div>
-                {% endif %}
               </div>
             </div>
             <div class="mb-3">
@@ -1258,44 +1242,33 @@
           const commentField = document.getElementById('user-story-comments');
           const counter = document.getElementById('user-story-char-count');
           const submitBtn = form.querySelector('button[type="submit"]');
-          const copyCheckbox = document.getElementById('user-story-copy-report');
+          const ratingInputs = overlay.querySelectorAll('.user-story-rating input');
+          const ratingHint = document.getElementById('user-story-rating-hint');
           const defaultSuccessMessage = successAlert ? successAlert.textContent.trim() : '';
-          const copySuccessMessage = '{% trans "Report copied to clipboard." %}';
-          const copyFailureMessage = '{% trans "Feedback sent, but we could not copy the report to your clipboard." %}';
           const anonymousLabel = '{% trans "Anonymous" %}';
-          let previousFocus = null;
-
-          const buildToonReport = formData => {
-            const rating = formData.get('rating') || 'n/a';
-            const comments = (formData.get('comments') || '').toString().trim();
-            const nameField = form.querySelector('#user-story-name');
-            const username = nameField && nameField.value ? nameField.value.trim() : anonymousLabel;
-            const path = formData.get('path') || window.location.pathname || '/';
-            const userAgent = navigator.userAgent || 'unknown';
-            const language = document.documentElement.lang || '';
-            const timestamp = new Date().toISOString();
-
-            return [
-              '[TOON-FEEDBACK-REPORT]',
-              `user=${username || anonymousLabel}`,
-              `path=${path}`,
-              `rating=${rating}/5`,
-              'comments<<<',
-              comments || '(none provided)',
-              '>>>',
-              `ua=${userAgent}`,
-              language ? `lang=${language}` : null,
-              `submitted_at=${timestamp}`,
-              'screenshot=requested',
-            ]
-              .filter(Boolean)
-              .join('\n');
+          const ratingMessages = {
+            0: '{% trans "Select a rating" %}',
+            1: '{% trans "Non-Functional" %}',
+            2: '{% trans "General Problems" %}',
+            3: '{% trans "Mostly Reliable" %}',
+            4: '{% trans "Minor Improvement" %}',
+            5: '{% trans "Excellent" %}',
           };
+          let previousFocus = null;
 
           const setCharCount = () => {
             if (counter && commentField) {
               counter.textContent = commentField.value.length;
             }
+          };
+
+          const setRatingHint = () => {
+            if (!ratingHint) {
+              return;
+            }
+            const selected = Array.from(ratingInputs || []).find(input => input.checked);
+            const ratingValue = selected ? Number(selected.value) : 0;
+            ratingHint.textContent = ratingMessages[ratingValue] || ratingMessages[0];
           };
 
           const resetAlerts = () => {
@@ -1339,6 +1312,7 @@
               resetAlerts();
               form.reset();
               setCharCount();
+              setRatingHint();
               if (previousFocus) {
                 previousFocus.focus();
               }
@@ -1374,6 +1348,13 @@
             setCharCount();
           }
 
+          if (ratingInputs && ratingInputs.length) {
+            ratingInputs.forEach(input => {
+              input.addEventListener('change', setRatingHint);
+            });
+            setRatingHint();
+          }
+
           form.addEventListener('submit', async event => {
             event.preventDefault();
             resetAlerts();
@@ -1383,8 +1364,6 @@
             }
 
             const formData = new FormData(form);
-            const shouldCopy = Boolean(copyCheckbox && copyCheckbox.checked);
-            const toonReport = shouldCopy ? buildToonReport(formData) : '';
             try {
               const response = await fetch(form.action, {
                 method: 'POST',
@@ -1397,25 +1376,11 @@
               if (response.ok) {
                 form.reset();
                 setCharCount();
+                setRatingHint();
                 if (successAlert) {
                   successAlert.textContent = defaultSuccessMessage;
                   successAlert.classList.remove('d-none');
                   successAlert.removeAttribute('hidden');
-                }
-
-                if (shouldCopy && toonReport) {
-                  try {
-                    await navigator.clipboard.writeText(toonReport);
-                    if (successAlert) {
-                      successAlert.textContent = `${defaultSuccessMessage} ${copySuccessMessage}`;
-                    }
-                  } catch (copyError) {
-                    if (errorAlert) {
-                      errorAlert.textContent = copyFailureMessage;
-                      errorAlert.classList.remove('d-none');
-                      errorAlert.removeAttribute('hidden');
-                    }
-                  }
                 }
               } else {
                 const data = await response.json().catch(() => ({}));
