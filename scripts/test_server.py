@@ -49,7 +49,12 @@ def run_tests(base_dir: Path, *, use_last_failed: bool) -> bool:
     env = os.environ.copy()
     env.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
     print("[Test Server] Running:", " ".join(command))
-    result = subprocess.run(command, cwd=base_dir, env=env)
+    try:
+        result = subprocess.run(command, cwd=base_dir, env=env)
+    except KeyboardInterrupt:
+        print("[Test Server] Tests interrupted. Waiting for more changes...")
+        _notify_result(False)
+        return False
     success = result.returncode == 0
     if success:
         print("[Test Server] Tests passed.")
