@@ -1,0 +1,14 @@
+{% load admin_extras %}
+{% badge_counters app_label model_name as model_badges %}
+{% for badge in model_badges %}
+  <span class="{{ badge.css_class }}" aria-label="{{ badge.label }}" title="{{ badge.label }}">
+    {{ badge.primary }}{% if badge.secondary %} {{ badge.separator }} {{ badge.secondary }}{% endif %}
+  </span>
+{% endfor %}
+{% model_rule_status app_label model_name as model_rule %}
+{% if model_rule %}
+  <span class="model-rule-status{% if model_rule.success %} model-rule-status--success{% else %} model-rule-status--error{% endif %}">
+    <span class="model-rule-status__icon" aria-hidden="true">{{ model_rule.icon }}</span>
+    <span class="model-rule-status__message">{{ model_rule.message }}</span>
+  </span>
+{% endif %}

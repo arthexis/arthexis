@@ -1144,6 +1144,15 @@ class AdminDashboardAppListTests(TestCase):
         except FileNotFoundError:
             pass
 
+    def _get_dashboard_status(self, app_label: str, model_name: str):
+        response = self.client.get(
+            reverse("admin:dashboard_model_status"),
+            {"app": app_label, "model": model_name},
+            HTTP_HX_REQUEST="true",
+        )
+        self.assertEqual(response.status_code, 200)
+        return response
+
     def test_horologia_hidden_without_celery_feature(self):
         resp = self.client.get(reverse("admin:index"))
         self.assertNotContains(resp, "5. Horologia</a>")
@@ -1187,6 +1196,12 @@ class AdminDashboardAppListTests(TestCase):
 
         self.assertContains(resp, gettext("No net messages available"))
 
+    def test_dashboard_model_status_loaders_use_htmx(self):
+        resp = self.client.get(reverse("admin:index"))
+
+        self.assertContains(resp, "data-model-status-loader")
+        self.assertIn(reverse("admin:dashboard_model_status"), resp.content.decode())
+
     def test_dashboard_shows_model_rules_success_message(self):
         charger = Charger.objects.create(
             charger_id="EVCS-100", last_heartbeat=timezone.now()
@@ -1194,7 +1209,7 @@ class AdminDashboardAppListTests(TestCase):
         ChargerConfiguration.objects.create(charger_identifier="EVCS-100")
         CPFirmware.objects.create(source_charger=charger, payload_json={})
 
-        resp = self.client.get(reverse("admin:index"))
+        resp = self._get_dashboard_status("ocpp", "Charger")
 
         self.assertContains(resp, "model-rule-status--success")
         self.assertContains(resp, gettext("All rules met."))
@@ -1210,7 +1225,7 @@ class AdminDashboardAppListTests(TestCase):
             last_heartbeat=timezone.now() - timedelta(hours=2),
         )
 
-        resp = self.client.get(reverse("admin:index"))
+        resp = self._get_dashboard_status("ocpp", "Charger")
 
         self.assertContains(resp, "model-rule-status--error")
         self.assertContains(resp, "Missing CP config: EVCS-MISS.")
@@ -1223,7 +1238,7 @@ class AdminDashboardAppListTests(TestCase):
             last_heartbeat=timezone.now() - timedelta(hours=2),
         )
 
-        resp = self.client.get(reverse("admin:index"))
+        resp = self._get_dashboard_status("ocpp", "Charger")
 
         self.assertContains(resp, "model-rule-status--error")
         self.assertContains(resp, "Heartbeat overdue: EVCS-LATE.")
@@ -4256,7 +4271,7 @@ class FavoriteTests(TestCase):
         assigned.status = InviteLead.Status.ASSIGNED
         assigned.save(update_fields=["status"])
 
-        resp = self.client.get(reverse("admin:index"))
+        resp = self._get_dashboard_status("core", "InviteLead")
         content = resp.content.decode()
 
         self.assertIn('badge-counter lead-open-badge', content)
@@ -4267,7 +4282,7 @@ class FavoriteTests(TestCase):
         RFID.objects.create(rfid="RFID0001", released=True, allowed=True)
         RFID.objects.create(rfid="RFID0002", released=True, allowed=False)
 
-        resp = self.client.get(reverse("admin:index"))
+        resp = self._get_dashboard_status("core", "RFID")
 
         expected = "1 / 2"
         badge_label = gettext(
@@ -4288,7 +4303,7 @@ class FavoriteTests(TestCase):
             charger_id="CP-003", connector_id=1, last_status="Unavailable"
         )
 
-        resp = self.client.get(reverse("admin:index"))
+        resp = self._get_dashboard_status("ocpp", "Charger")
 
         expected = "1 / 2"
         badge_label = gettext(
@@ -4309,7 +4324,7 @@ class FavoriteTests(TestCase):
             current_relation=Node.Relation.UPSTREAM,
         )
 
-        resp = self.client.get(reverse("admin:index"))
+        resp = self._get_dashboard_status("nodes", "Node")
 
         content = resp.content.decode()
         self.assertIn('badge-counter node-count-badge', content)
@@ -4352,7 +4367,7 @@ class FavoriteTests(TestCase):
             charger_id="CP-AGG", connector_id=2, last_status="Available"
         )
 
-        resp = self.client.get(reverse("admin:index"))
+        resp = self._get_dashboard_status("ocpp", "Charger")
 
         expected = "2 / 2"
         badge_label = gettext(

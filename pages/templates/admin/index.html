@@ -918,4 +918,52 @@
       });
     })();
   </script>
+  <script>
+    (function () {
+      const renderStatusFallback = (loader, template) => {
+        if (!loader || !template) {
+          return;
+        }
+
+        const content = template.content
+          ? template.content.cloneNode(true)
+          : template.cloneNode(true);
+
+        if (!content) {
+          return;
+        }
+
+        loader.replaceChildren(content);
+      };
+
+      const configureStatusLoaders = () => {
+        const loaders = document.querySelectorAll('[data-model-status-loader]');
+        if (!loaders.length) {
+          return;
+        }
+
+        loaders.forEach((loader) => {
+          const fallbackId = loader.dataset.fallbackTemplate;
+          if (!fallbackId) {
+            return;
+          }
+
+          const fallbackTemplate = document.getElementById(fallbackId);
+
+          const render = () => renderStatusFallback(loader, fallbackTemplate);
+
+          if (!window.htmx) {
+            render();
+            return;
+          }
+
+          htmx.on(loader, 'htmx:responseError', render);
+          htmx.on(loader, 'htmx:sendError', render);
+          htmx.on(loader, 'htmx:timeout', render);
+        });
+      };
+
+      document.addEventListener('DOMContentLoaded', configureStatusLoaders);
+    })();
+  </script>
 {% endblock %}
