@@ -4064,10 +4064,10 @@ class SimulatorAdmin(SaveBeforeChangeAction, LogViewAdminMixin, EntityModelAdmin
     )
     actions = (
         "start_simulator",
-        "start_default_simulator",
         "stop_simulator",
         "send_open_door",
     )
+    changelist_actions = ["start_default_simulator"]
     change_actions = ["start_simulator_action", "stop_simulator_action"]
 
     log_type = "simulator"
@@ -4225,11 +4225,14 @@ class SimulatorAdmin(SaveBeforeChangeAction, LogViewAdminMixin, EntityModelAdmin
                         default_simulator.name,
                         status,
                         log_file,
-                        log_url,
-                    ),
-                )
+                    log_url,
+                ),
+            )
 
         return HttpResponseRedirect(reverse("admin:ocpp_simulator_changelist"))
+
+    start_default_simulator.label = _("Start Default Simulator")
+    start_default_simulator.requires_queryset = False
 
     def stop_simulator(self, request, queryset):
         async def _stop(objs):
