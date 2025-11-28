@@ -124,7 +124,7 @@ def collect_source_mtimes(base_dir: Path) -> Dict[str, int]:
                 continue
             full_path = Path(root, name)
             try:
-                snapshot[str(rel_path)] = full_path.stat().st_mtime_ns
+                snapshot[rel_path.as_posix()] = full_path.stat().st_mtime_ns
             except FileNotFoundError:
                 continue
     return snapshot
