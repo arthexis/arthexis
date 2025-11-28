@@ -426,6 +426,8 @@ cleanup_non_terminal_git_state() {
 install_requirements_if_changed() {
   local req_file="$BASE_DIR/requirements.txt"
   local md5_file="$BASE_DIR/requirements.md5"
+  local venv_python="$BASE_DIR/.venv/bin/python"
+  local python_bin="$PYTHON_BIN"
   local new_hash=""
   local stored_hash=""
 
@@ -434,29 +436,25 @@ install_requirements_if_changed() {
     return
   fi
 
+  if [ -x "$venv_python" ]; then
+    python_bin="$venv_python"
+  fi
+
+  if [ ! -x "$python_bin" ]; then
+    echo "Virtual environment Python not found; run ./install.sh before upgrading dependencies." >&2
+    return 1
+  fi
+
   new_hash=$(md5sum "$req_file" | awk '{print $1}')
   if [ -f "$md5_file" ]; then
     stored_hash=$(cat "$md5_file")
   fi
 
   if [ "$new_hash" != "$stored_hash" ]; then
-    if [ -n "$PYTHON_BIN" ] && pip_requires_break_system_packages "$PYTHON_BIN"; then
-      cat >&2 <<'MSG'
-System Python is externally managed. To avoid modifying system packages, activate
-the virtual environment and install dependencies manually:
-
-  source .venv/bin/activate
-  python -m pip install -r requirements.txt
-MSG
-      return 1
-    fi
-
-    if [ -f "$PIP_INSTALL_HELPER" ] && [ -n "$PYTHON_BIN" ]; then
-      "$PYTHON_BIN" "$PIP_INSTALL_HELPER" -r "$req_file"
-    elif [ -n "$PYTHON_BIN" ]; then
-      "$PYTHON_BIN" -m pip install -r "$req_file"
+    if [ -f "$PIP_INSTALL_HELPER" ]; then
+      "$python_bin" "$PIP_INSTALL_HELPER" -r "$req_file"
     else
-      pip install -r "$req_file"
+      "$python_bin" -m pip install -r "$req_file"
     fi
     echo "$new_hash" > "$md5_file"
   else
