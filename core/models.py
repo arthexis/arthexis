@@ -4413,28 +4413,6 @@ class Product(Entity):
         verbose_name_plural = _("Products")
 
 
-class AdminHistory(Entity):
-    """Record of recently visited admin changelists for a user."""
-
-    user = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="admin_history"
-    )
-    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
-    url = models.TextField()
-    visited_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        ordering = ["-visited_at"]
-        unique_together = ("user", "url")
-        verbose_name = "Admin History"
-        verbose_name_plural = "Admin Histories"
-
-    @property
-    def admin_label(self) -> str:  # pragma: no cover - simple representation
-        model = self.content_type.model_class()
-        return model._meta.verbose_name_plural if model else self.content_type.name
-
-
 class ReleaseManagerManager(EntityManager):
     def get_by_natural_key(self, owner, package=None):
         owner = owner or ""

@@ -453,7 +453,6 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django_otp.middleware.OTPMiddleware",
-    "core.middleware.AdminHistoryMiddleware",
     "core.middleware.SigilContextMiddleware",
     "pages.middleware.ViewHistoryMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",

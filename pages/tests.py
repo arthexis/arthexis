@@ -82,7 +82,6 @@ from pages.odoo import forward_chat_message
 from pages.whatsapp import forward_chat_message as forward_whatsapp_message
 from core.models import (
     AdminCommandResult,
-    AdminHistory,
     ClientReport,
     CustomerAccount,
     InviteLead,
