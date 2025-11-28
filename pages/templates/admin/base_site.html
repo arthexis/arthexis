@@ -1383,51 +1383,7 @@ body.user-story-open {
 </div>
 {% endblock %}
 {% block userlinks %}
-  <span
-    id="user-tools-loader"
-    hx-get="{% url 'admin-user-tools' %}"
-    hx-target="#user-tools"
-    hx-trigger="load"
-    hx-swap="innerHTML"
-  >
-    <span class="user-tools-placeholder" aria-live="polite" aria-busy="true">
-      <span class="user-tools-spinner" aria-hidden="true"></span>
-      <span>{% trans "Loading account tools…" %}</span>
-    </span>
-    <span id="user-tools-inline-fallback" hidden>
-      {% include "admin/includes/user_tools.html" %}
-    </span>
-  </span>
-  <noscript>
-    {% include "admin/includes/user_tools.html" %}
-  </noscript>
-  <script>
-    document.addEventListener("DOMContentLoaded", function () {
-      const loader = document.getElementById("user-tools-loader");
-      const fallback = document.getElementById("user-tools-inline-fallback");
-
-      function renderFallback() {
-        if (!loader || !fallback) {
-          return;
-        }
-        fallback.hidden = false;
-        loader.replaceChildren(fallback);
-      }
-
-      if (!window.htmx) {
-        renderFallback();
-        return;
-      }
-
-      if (!loader) {
-        return;
-      }
-
-      htmx.on(loader, "htmx:responseError", renderFallback);
-      htmx.on(loader, "htmx:sendError", renderFallback);
-      htmx.on(loader, "htmx:timeout", renderFallback);
-    });
-  </script>
+  {% include "admin/includes/user_tools.html" %}
 {% endblock %}
 {% block nav-global %}{% endblock %}
 {% block nav-sidebar %}
