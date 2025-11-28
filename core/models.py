@@ -1247,15 +1247,21 @@ class GoogleCalendarProfile(Profile):
 
     profile_fields = ("calendar_id", "api_key", "display_name", "timezone")
 
-    calendar_id = SigilShortAutoField(max_length=255)
-    api_key = SigilShortAutoField(max_length=255)
-    display_name = models.CharField(max_length=255, blank=True)
+    calendar_id = SigilShortAutoField(
+        max_length=255, verbose_name=_("Calendar ID")
+    )
+    api_key = SigilShortAutoField(max_length=255, verbose_name=_("API Key"))
+    display_name = models.CharField(
+        max_length=255, blank=True, verbose_name=_("Display Name")
+    )
     max_events = models.PositiveIntegerField(
         default=5,
         validators=[MinValueValidator(1), MaxValueValidator(20)],
         help_text=_("Number of upcoming events to display (1-20)."),
     )
-    timezone = SigilShortAutoField(max_length=100, blank=True)
+    timezone = SigilShortAutoField(
+        max_length=100, blank=True, verbose_name=_("Time Zone")
+    )
 
     GOOGLE_EVENTS_URL = (
         "https://www.googleapis.com/calendar/v3/calendars/{calendar}/events"
@@ -1869,13 +1875,13 @@ class Reference(Entity):
         max_length=7,
         choices=FOOTER_VISIBILITY_CHOICES,
         default=FOOTER_PUBLIC,
-        verbose_name="Footer visibility",
+        verbose_name="Footer Visibility",
     )
     transaction_uuid = models.UUIDField(
         default=uuid.uuid4,
         editable=True,
         db_index=True,
-        verbose_name="transaction UUID",
+        verbose_name="Transaction UUID",
     )
     created = models.DateTimeField(auto_now_add=True)
     author = models.ForeignKey(

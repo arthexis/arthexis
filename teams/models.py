@@ -1493,3 +1493,13 @@ class ManualTask(Entity):
             self.schedule_notifications()
 
 
+class Todo(ManualTask):
+    """Proxy exposing manual tasks under the legacy Todo name."""
+
+    class Meta:
+        proxy = True
+        app_label = "core"
+        verbose_name = _("Todo")
+        verbose_name_plural = _("Todos")
+
+

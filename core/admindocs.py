@@ -1,5 +1,6 @@
 import argparse
 import inspect
+import re
 from types import SimpleNamespace
 
 from django.apps import apps
@@ -72,8 +73,46 @@ class OrderedModelIndexView(BaseAdminDocsView):
         "protocols.cpforwarder": "ocpp",
         "core.package": "teams",
         "core.packagerelease": "teams",
+        "core.todo": "teams",
         "pages.usermanual": USER_MANUALS_APP,
     }
+
+    def _group_sort_key(self, app_config):
+        name = str(app_config.verbose_name)
+        match = re.match(r"^(\d+)\.", name)
+        prefix = int(match.group(1)) if match else float("inf")
+        return prefix, name, app_config.label
+
+    def _group_models(self, models: list[SimpleNamespace]) -> list[dict[str, object]]:
+        grouped: dict[str, dict[str, object]] = {}
+
+        for model in models:
+            app_config = model.app_config
+            group_name = str(app_config.verbose_name)
+            sort_key = self._group_sort_key(app_config)
+
+            group = grouped.setdefault(
+                group_name,
+                {
+                    "name": group_name,
+                    "label": app_config.label,
+                    "app_name": app_config.name,
+                    "order": sort_key,
+                    "models": [],
+                },
+            )
+
+            if sort_key < group["order"]:
+                group["label"] = app_config.label
+                group["app_name"] = app_config.name
+                group["order"] = sort_key
+
+            group["models"].append(model)
+
+        ordered_groups = sorted(grouped.values(), key=lambda group: group["order"])
+        for group in ordered_groups:
+            group["models"].sort(key=lambda model: model.object_name)
+        return ordered_groups
 
     def _get_docs_app_config(self, meta):
         override = self.GROUP_OVERRIDES.get(meta.label_lower)
@@ -99,8 +138,11 @@ class OrderedModelIndexView(BaseAdminDocsView):
                         app_config=app_config,
                     )
                 )
-        models.sort(key=lambda m: str(m.app_config.verbose_name))
-        return super().get_context_data(**{**kwargs, "models": models})
+        models.sort(key=lambda m: (self._group_sort_key(m.app_config), m.object_name))
+        grouped_models = self._group_models(models)
+        return super().get_context_data(
+            **{**kwargs, "models": models, "grouped_models": grouped_models}
+        )
 
 
 class ModelGraphIndexView(BaseAdminDocsView):
