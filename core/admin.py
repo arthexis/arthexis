@@ -22,10 +22,10 @@ from django.http import (
 from django.template.response import TemplateResponse
 from django.conf import settings
 from django.views.decorators.csrf import csrf_exempt
-from django.core.exceptions import ValidationError
+from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.validators import EmailValidator
 from django.contrib import messages
-from django.contrib.auth import get_user_model
+from django.contrib.auth import get_user_model, login
 from django.contrib.auth.admin import (
     GroupAdmin as DjangoGroupAdmin,
     UserAdmin as DjangoUserAdmin,
@@ -50,6 +50,7 @@ from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _, ngettext
 from django.forms.models import BaseInlineFormSet
 import json
+import secrets
 import uuid
 import requests
 import datetime
@@ -113,7 +114,7 @@ from .rfid_import_export import (
     parse_accounts,
     serialize_accounts,
 )
-from . import release as release_utils
+from . import release as release_utils, temp_passwords
 
 logger = logging.getLogger(__name__)
 
@@ -188,6 +189,32 @@ admin.ModelAdmin.changelist_view = changelist_view_with_object_links
 _original_admin_get_app_list = admin.AdminSite.get_app_list
 
 TEST_CREDENTIALS_LABEL = _("Test credentials")
+
+GUEST_NAME_ADJECTIVES = (
+    "brisk",
+    "calm",
+    "clever",
+    "daring",
+    "eager",
+    "gentle",
+    "honest",
+    "lively",
+    "merry",
+    "nimble",
+)
+
+GUEST_NAME_NOUNS = (
+    "badger",
+    "heron",
+    "lynx",
+    "otter",
+    "panda",
+    "panther",
+    "sparrow",
+    "terrapin",
+    "whale",
+    "wren",
+)
 
 
 def _build_credentials_actions(action_name, handler_name, description=TEST_CREDENTIALS_LABEL):
@@ -2011,6 +2038,8 @@ class UserPhoneNumberInline(admin.TabularInline):
 class UserAdmin(UserDatumAdminMixin, DjangoUserAdmin):
     form = UserChangeRFIDForm
     add_form = UserCreationWithExpirationForm
+    actions = (DjangoUserAdmin.actions or []) + ["login_as_guest_user"]
+    changelist_actions = ["login_as_guest_user"]
     fieldsets = _include_temporary_expiration(
         _include_require_2fa(_append_operate_as(DjangoUserAdmin.fieldsets))
     )
@@ -2034,6 +2063,84 @@ class UserAdmin(UserDatumAdminMixin, DjangoUserAdmin):
     inlines = USER_PROFILE_INLINES + [UserPhoneNumberInline]
     change_form_template = "admin/user_profile_change_form.html"
     _skip_entity_user_datum = True
+
+    def _generate_guest_username(self) -> str:
+        attempts = 0
+        candidate = None
+        while attempts < 10:
+            candidate = f"{secrets.choice(GUEST_NAME_ADJECTIVES)}-{secrets.choice(GUEST_NAME_NOUNS)}"
+            if not self.model.objects.filter(username=candidate).exists():
+                return candidate
+            attempts += 1
+        suffix = secrets.token_hex(2)
+        return f"{candidate}-{suffix}" if candidate else f"guest-{suffix}"
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path(
+                "login-as-guest/",
+                self.admin_site.admin_view(self.login_as_guest_user),
+                name="core_user_login_as_guest_user",
+            )
+        ]
+        return custom + urls
+
+    def get_changelist_actions(self, request):
+        parent = getattr(super(), "get_changelist_actions", None)
+        actions = []
+        if callable(parent):
+            parent_actions = parent(request)
+            if parent_actions:
+                actions.extend(parent_actions)
+        if "login_as_guest_user" not in actions:
+            actions.append("login_as_guest_user")
+        return actions
+
+    @admin.action(description=_("Login as Guest User"), permissions=["add"])
+    def login_as_guest_user(self, request, queryset=None):
+        if not self.has_add_permission(request):
+            raise PermissionDenied
+
+        expires_at = timezone.now() + temp_passwords.DEFAULT_EXPIRATION
+        username = self._generate_guest_username()
+        guest_user = self.model.objects.create_user(
+            username=username,
+            password=None,
+            is_staff=True,
+            is_superuser=False,
+            require_2fa=False,
+            temporary_expires_at=expires_at,
+        )
+
+        temp_password = temp_passwords.generate_password()
+        entry = temp_passwords.store_temp_password(
+            guest_user.username, temp_password, expires_at=expires_at
+        )
+
+        login(request, guest_user, backend="core.backends.TempPasswordBackend")
+
+        expires_display = timezone.localtime(entry.expires_at)
+        expires_label = expires_display.strftime("%Y-%m-%d %H:%M %Z")
+        self.message_user(
+            request,
+            _(
+                "Logged in as %(username)s with temporary password %(password)s (expires %(expires)s)."
+            )
+            % {
+                "username": guest_user.username,
+                "password": temp_password,
+                "expires": expires_label,
+            },
+            messages.WARNING,
+        )
+
+        redirect_url = request.GET.get("next") or reverse("admin:index")
+        return HttpResponseRedirect(redirect_url)
+
+    login_as_guest_user.label = _("Login as Guest User")
+    login_as_guest_user.short_description = _("Login as Guest User")
+    login_as_guest_user.requires_queryset = False
 
     def get_fieldsets(self, request, obj=None):
         fieldsets = list(super().get_fieldsets(request, obj))
