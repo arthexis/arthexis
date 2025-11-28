@@ -26,6 +26,14 @@ arthexis_resolve_log_dir "$SCRIPT_DIR" LOG_DIR || exit 1
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 exec > >(tee "$LOG_FILE") 2>&1
 
+show_pip_failure() {
+  local status=$1
+  echo "pip failed with exit code ${status}. See the recent installer output below:" >&2
+  if [ -f "$LOG_FILE" ]; then
+    tail -n 40 "$LOG_FILE" >&2 || true
+  fi
+}
+
 VENV_DIR="$SCRIPT_DIR/.venv"
 PYTHON="$VENV_DIR/bin/python"
 USE_SYSTEM_PYTHON=0
@@ -152,8 +160,13 @@ PY
     if [ "$USE_SYSTEM_PYTHON" -eq 1 ]; then
       pip_args+=(--user)
     fi
-    pip_install_with_helper "${pip_args[@]}" -r "$REQ_FILE"
-    echo "$NEW_HASH" > "$MD5_FILE"
+    if pip_install_with_helper "${pip_args[@]}" -r "$REQ_FILE"; then
+      echo "$NEW_HASH" > "$MD5_FILE"
+    else
+      pip_status=$?
+      show_pip_failure "$pip_status"
+      exit "$pip_status"
+    fi
   fi
 elif [ -f "$REQ_FILE" ]; then
   MD5_FILE="$SCRIPT_DIR/requirements.system.md5"
@@ -164,8 +177,10 @@ elif [ -f "$REQ_FILE" ]; then
     if pip_install_with_helper -r "$REQ_FILE"; then
       echo "$NEW_HASH" > "$MD5_FILE"
     else
+      pip_status=$?
+      show_pip_failure "$pip_status"
       echo "Failed to install project requirements with system Python. Run ./install.sh." >&2
-      exit 1
+      exit "$pip_status"
     fi
   fi
 fi
