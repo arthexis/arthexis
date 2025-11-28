@@ -1514,6 +1514,9 @@ class SocialProfile(Profile):
     def clean(self):
         super().clean()
 
+        self.handle = (self.handle or "").strip().lower()
+        self.domain = (self.domain or "").strip().lower()
+
         if self.network == self.Network.DISCORD:
             for field_name in (
                 "application_id",
@@ -1551,10 +1554,12 @@ class SocialProfile(Profile):
             return "discord"
 
         if self.network == self.Network.BLUESKY:
-            if self.handle:
-                return f"Bluesky @{self.handle}"
-            if self.domain:
-                return f"Bluesky @{self.domain}"
+            handle = (self.resolve_sigils("handle") or self.handle or self.domain).strip()
+            network = (self.resolve_sigils("network") or self.network or "").strip()
+            if handle:
+                return f"{handle}@{network or self.Network.BLUESKY}"
+            if network:
+                return network
 
         network = dict(self.Network.choices).get(self.network)
         if network:
