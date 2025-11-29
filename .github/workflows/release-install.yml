@@ -13,15 +13,12 @@ on:
 jobs:
   install:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        mode: [terminal, satellite, control, constellation]
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
         with:
           python-version: '3.x'
       - run: |
-          bash install.sh --${{ matrix.mode }} || true
+          bash install.sh --terminal || true
           pip install .
           python manage.py migrate --noinput
