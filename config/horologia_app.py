@@ -4,7 +4,8 @@ from django_celery_beat.apps import BeatConfig as BaseBeatConfig
 class HorologiaConfig(BaseBeatConfig):
     """Customize Periodic Tasks admin behavior."""
 
-    verbose_name = "5. Horologia"
+    order = 5
+    verbose_name = "Horologia"
 
     def ready(self):  # pragma: no cover - exercised via tests
         super().ready()

@@ -49,12 +49,20 @@ class Command(BaseCommand):
             except LookupError:
                 continue
             description = DEFAULT_APPLICATION_DESCRIPTIONS.get(config.label, "")
+            order = getattr(config, "order", None)
+            defaults = {"description": description}
+            if order is not None:
+                defaults["order"] = order
             app, created = Application.objects.get_or_create(
-                name=config.label, defaults={"description": description}
+                name=config.label, defaults=defaults
             )
-            if not created and description and app.description != description:
-                app.description = description
-                app.save(update_fields=["description"])
+            updates = {}
+            if order is not None and app.order != order:
+                updates["order"] = order
+            if description and app.description != description:
+                updates["description"] = description
+            if updates:
+                app.__class__.objects.filter(pk=app.pk).update(**updates)
             path = f"/{slugify(app.name)}/"
             module, created = Module.objects.update_or_create(
                 node_role=role, path=path, defaults={"application": app}

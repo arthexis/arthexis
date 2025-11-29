@@ -4,6 +4,7 @@
     "fields": {
       "is_seed_data": true,
       "is_deleted": false,
+      "order": 1,
       "name": "awg",
       "description": "Power, Energy and Cost calculations."
     }
