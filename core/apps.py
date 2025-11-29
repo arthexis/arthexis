@@ -480,7 +480,11 @@ def _configure_lock_dependent_tasks(config):
 
     auto_upgrade_dispatch_uid = "core.apps.ensure_auto_upgrade_periodic_task"
 
+    from django.apps import apps
+
     def ensure_auto_upgrade_on_connection(**kwargs):
+        if not apps.ready:
+            return
         connection = kwargs.get("connection")
         if connection is not None and connection.alias != "default":
             return
@@ -502,6 +506,8 @@ def _configure_lock_dependent_tasks(config):
     validation_dispatch_uid = "core.apps.ensure_reference_validation_task"
 
     def ensure_reference_validation_on_connection(**kwargs):
+        if not apps.ready:
+            return
         connection = kwargs.get("connection")
         if connection is not None and connection.alias != "default":
             return
