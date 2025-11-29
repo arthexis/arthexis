@@ -3665,6 +3665,9 @@ class ModuleAdminReloadActionTests(TestCase):
 
 
 class ApplicationModelTests(TestCase):
+    def setUp(self):
+        Application.objects.filter(name__in=["core", "ocpp", "missing"]).delete()
+
     def test_path_defaults_to_slugified_name(self):
         role, _ = NodeRole.objects.get_or_create(name="Terminal")
         Node.objects.update_or_create(
