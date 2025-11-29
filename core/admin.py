@@ -97,7 +97,6 @@ from .models import (
     ReleaseManager,
     SecurityGroup,
     InviteLead,
-    PublicWifiAccess,
 )
 from .user_data import (
     EntityModelAdmin,
@@ -1036,14 +1035,6 @@ class InviteLeadAdmin(EntityModelAdmin):
         return (obj.error[:40] + "…") if len(obj.error) > 40 else obj.error
 
     short_error.short_description = "error"
-
-
-@admin.register(PublicWifiAccess)
-class PublicWifiAccessAdmin(EntityModelAdmin):
-    list_display = ("user", "mac_address", "created_on", "revoked_on")
-    search_fields = ("user__username", "mac_address")
-    readonly_fields = ("user", "mac_address", "created_on", "updated_on", "revoked_on")
-    ordering = ("-created_on",)
 
 
 class CustomerAccountRFIDForm(forms.ModelForm):

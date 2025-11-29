@@ -292,6 +292,29 @@ class NodeFeature(Entity):
         return actions[0] if actions else None
 
 
+class PublicWifiAccess(Entity):
+    """Represent a Wi-Fi lease granted to a client for internet access."""
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="public_wifi_accesses",
+    )
+    mac_address = models.CharField(max_length=17)
+    created_on = models.DateTimeField(auto_now_add=True)
+    updated_on = models.DateTimeField(auto_now=True)
+    revoked_on = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "core_publicwifiaccess"
+        unique_together = ("user", "mac_address")
+        verbose_name = "Wi-Fi Lease"
+        verbose_name_plural = "Wi-Fi Leases"
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return f"{self.user} -> {self.mac_address}"
+
+
 def get_terminal_role():
     """Return the NodeRole representing a Terminal if it exists."""
     return NodeRole.objects.filter(name="Terminal").first()
