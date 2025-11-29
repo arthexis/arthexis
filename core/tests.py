@@ -48,7 +48,6 @@ from .models import (
     Package,
     PackageRelease,
     ReleaseManager,
-    PublicWifiAccess,
 )
 from django.contrib.admin.sites import AdminSite
 from core.admin import (
@@ -60,7 +59,7 @@ from core.admin import (
     USER_PROFILE_INLINES,
 )
 from ocpp.models import Brand, ElectricVehicle, EVModel, Transaction, Charger
-from nodes.models import ContentSample
+from nodes.models import ContentSample, PublicWifiAccess
 
 from django.core.exceptions import ValidationError
 from django.core.management import call_command
