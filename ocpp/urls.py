@@ -4,7 +4,6 @@ from . import views
 
 urlpatterns = [
     path("cpms/dashboard/", views.dashboard, name="ocpp-dashboard"),
-    path("net-monitor/", views.net_monitor_console, name="net-monitor-console"),
     path("maintenance/request/", views.maintenance_request, name="maintenance-request"),
     path("evcs/simulator/", views.cp_simulator, name="cp-simulator"),
     path(

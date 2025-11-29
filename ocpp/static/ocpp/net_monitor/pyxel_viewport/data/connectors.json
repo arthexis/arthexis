@@ -1,8 +1,0 @@
-{
-  "generated_at": "2025-01-01T00:00:00Z",
-  "instance_running": false,
-  "waiting_for_instance": false,
-  "suite_host": "127.0.0.1",
-  "suite_port": 8888,
-  "connectors": []
-}

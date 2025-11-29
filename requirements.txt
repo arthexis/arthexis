@@ -58,7 +58,6 @@ pyasn1==0.6.1
 pyasn1_modules==0.4.2
 pycparser==2.23
 pyOpenSSL==25.1.0
-pyxel==2.1.9
 PySocks==1.7.1
 python-crontab==3.3.0
 python-dateutil==2.9.0.post0

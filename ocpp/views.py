@@ -31,7 +31,6 @@ from django.db.models import (
     Value,
 )
 from django.db.models.functions import Coalesce
-from urllib.parse import urljoin
 
 from asgiref.sync import async_to_sync
 
@@ -1405,22 +1404,6 @@ def dashboard(request):
         )
         return JsonResponse({"html": html})
     return render(request, "ocpp/dashboard.html", context)
-
-
-@login_required(login_url="pages:login")
-@landing("Net Monitor Console")
-def net_monitor_console(request):
-    """Serve the WASM-enabled Net Monitor Console for the Pyxel viewport."""
-
-    return render(
-        request,
-        "ocpp/net_monitor_console.html",
-        {
-            "viewport_src": urljoin(
-                settings.STATIC_URL, "ocpp/net_monitor/index.html"
-            )
-        },
-    )
 
 
 @login_required(login_url="pages:login")
