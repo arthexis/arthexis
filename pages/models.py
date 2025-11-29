@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import contextlib
 import logging
+import re
 import uuid
 from datetime import timedelta
 from pathlib import Path
@@ -61,6 +62,7 @@ class ApplicationManager(models.Manager):
 class Application(Entity):
     name = models.CharField(max_length=100, unique=True)
     description = models.TextField(blank=True)
+    order = models.PositiveIntegerField(blank=True, null=True)
 
     objects = ApplicationManager()
 
@@ -85,6 +87,24 @@ class Application(Entity):
     class Meta:
         verbose_name = _("Application")
         verbose_name_plural = _("Applications")
+
+    @classmethod
+    def order_map(cls) -> dict[str, int]:
+        return {
+            name: order
+            for name, order in cls.objects.filter(order__isnull=False).values_list(
+                "name", "order"
+            )
+        }
+
+    @staticmethod
+    def format_display_name(order: int | None, name: str) -> str:
+        cleaned_name = re.sub(r"^\s*\d+\.\s*", "", name or "").strip()
+        if not cleaned_name:
+            cleaned_name = str(name or "")
+        if order is None:
+            return cleaned_name
+        return f"{order}. {cleaned_name}"
 
 
 class ModuleManager(models.Manager):

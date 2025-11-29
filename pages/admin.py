@@ -87,13 +87,21 @@ def _get_safe_next_url(request):
 
 
 def get_local_app_choices():
+    order_map = Application.order_map()
     choices = []
     for app_label in getattr(settings, "LOCAL_APPS", []):
         try:
             config = django_apps.get_app_config(app_label)
         except LookupError:
             continue
-        choices.append((config.label, config.verbose_name))
+        choices.append(
+            (
+                config.label,
+                Application.format_display_name(
+                    order_map.get(config.label), str(config.verbose_name)
+                ),
+            )
+        )
     return choices
 
 
@@ -457,7 +465,7 @@ class ApplicationModuleInline(admin.TabularInline):
 @admin.register(Application)
 class ApplicationAdmin(EntityModelAdmin):
     form = ApplicationForm
-    list_display = ("name", "app_verbose_name", "description", "installed")
+    list_display = ("name", "order", "app_verbose_name", "description", "installed")
     readonly_fields = ("installed",)
     inlines = [ApplicationModuleInline]
 
