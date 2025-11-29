@@ -5,8 +5,8 @@
       "is_seed_data": true,
       "is_deleted": false,
       "order": 2,
-      "name": "core",
-      "description": "Core platform services and shared configuration."
+      "name": "accounts",
+      "description": "Support for Business processes and monetization."
     }
   }
 ]

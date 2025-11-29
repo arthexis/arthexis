@@ -11,7 +11,7 @@ class CoreConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "core"
     order = 2
-    verbose_name = _("Business")
+    verbose_name = _("Core")
 
     def ready(self):  # pragma: no cover - called by Django
         _setup_celery_beat_integrations()
