@@ -2,7 +2,7 @@
   "coverage": {
     "cp_to_csms": {
       "count": 9,
-      "percent": 34.62,
+      "percent": 37.5,
       "supported": [
         "Authorize",
         "BootNotification",
@@ -10,11 +10,11 @@
         "FirmwareStatusNotification",
         "Heartbeat",
         "LogStatusNotification",
-        "MeterValues",
-        "SecurityEventNotification",
-        "StatusNotification"
+      "MeterValues",
+      "SecurityEventNotification",
+      "StatusNotification"
       ],
-      "total": 26
+      "total": 24
     },
     "csms_to_cp": {
       "count": 5,
@@ -30,7 +30,7 @@
     },
     "overall": {
       "count": 19,
-      "percent": 29.69,
+      "percent": 30.65,
       "supported": [
         "Authorize",
         "BootNotification",
@@ -52,7 +52,7 @@
         "TriggerMessage",
         "UpdateFirmware"
       ],
-      "total": 64
+      "total": 62
     }
   },
   "implemented": {
@@ -99,7 +99,6 @@
       "Authorize",
       "BootNotification",
       "ClearedChargingLimit",
-      "CostUpdated",
       "DataTransfer",
       "FirmwareStatusNotification",
       "Get15118EVCertificate",
@@ -117,7 +116,6 @@
       "NotifyReport",
       "PublishFirmwareStatusNotification",
       "ReportChargingProfiles",
-      "ReservationStatusUpdate",
       "SecurityEventNotification",
       "SignCertificate",
       "StatusNotification",
