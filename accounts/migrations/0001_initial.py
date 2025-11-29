@@ -14,7 +14,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("core", "0122_remove_clientreportschedule_chargers_and_more"),
-        ("django_celery_beat", "0020_googlecalendarprofile_horologiacountdowntimer"),
+        ("django_celery_beat", "0019_alter_periodictasks_options"),
         ("ocpp", "0069_rename_kw_max_simulator_average_kwh_and_more"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
