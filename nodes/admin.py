@@ -32,6 +32,7 @@ from datetime import timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import urlsplit, urlunsplit
+import os
 import base64
 import binascii
 import json
@@ -67,6 +68,7 @@ from .models import (
     NodeRole,
     NodeFeature,
     NodeFeatureAssignment,
+    NodeService,
     ContentSample,
     ContentClassifier,
     ContentClassification,
@@ -145,6 +147,56 @@ class NodeProfileAdmin(EntityModelAdmin):
     list_display = ("name",)
     search_fields = ("name",)
     fields = ("name", "data")
+
+
+@admin.register(NodeService)
+class NodeServiceAdmin(EntityModelAdmin):
+    list_display = ("display", "unit_template", "is_required", "feature")
+    list_filter = ("is_required", "feature")
+    search_fields = ("display", "slug", "unit_template")
+    autocomplete_fields = ("feature",)
+    readonly_fields = ("template_preview",)
+    fields = (
+        "display",
+        "slug",
+        "unit_template",
+        "feature",
+        "is_required",
+        "template_path",
+        "template_content",
+        "template_preview",
+    )
+    actions = ["validate_service_configuration"]
+
+    @admin.display(description=_("Template"))
+    def template_preview(self, obj):
+        content = obj.get_template_body() if obj else ""
+        if not content:
+            return _("No template available.")
+        return format_html('<pre style="white-space: pre-wrap;">{}</pre>', content)
+
+    @admin.action(description=_("Validate Service Configuration"))
+    def validate_service_configuration(self, request, queryset):
+        service_dir = Path(os.environ.get("SYSTEMD_DIR", "/etc/systemd/system"))
+        base_dir = Path(settings.BASE_DIR)
+        for service in queryset:
+            result = service.compare_to_installed(
+                base_dir=base_dir, service_dir=service_dir
+            )
+            unit_name = result.get("unit_name") or service.unit_template
+            status = result.get("status") or ""
+            if result.get("matches"):
+                message = _("%(unit)s matches the stored template.") % {
+                    "unit": unit_name
+                }
+                self.message_user(request, message, level=messages.SUCCESS)
+            else:
+                detail = status or _("Installed configuration differs from the template.")
+                message = _("%(unit)s: %(detail)s") % {
+                    "unit": unit_name,
+                    "detail": detail,
+                }
+                self.message_user(request, message, level=messages.WARNING)
 
 
 @admin.register(PublicWifiAccess)
