@@ -69,6 +69,9 @@ fi
 DEFAULT_PORT="$(arthexis_detect_backend_port "$BASE_DIR")"
 PORT="$DEFAULT_PORT"
 RELOAD=false
+# Whether to wait for the suite to become reachable after launching
+AWAIT_START=false
+STARTUP_TIMEOUT=300
 # Celery workers process Post Office's email queue; prefer embedded mode.
 CELERY_MANAGEMENT_MODE="$SERVICE_MANAGEMENT_MODE"
 CELERY_FLAG_SET=false
@@ -79,6 +82,7 @@ LCD_EMBEDDED=false
 CELERY_WORKER_PID=""
 CELERY_BEAT_PID=""
 LCD_PROCESS_PID=""
+DJANGO_SERVER_PID=""
 cleanup_background_processes() {
   if [ -n "$CELERY_WORKER_PID" ]; then
     kill "$CELERY_WORKER_PID" 2>/dev/null || true
@@ -88,6 +92,9 @@ cleanup_background_processes() {
   fi
   if [ -n "$LCD_PROCESS_PID" ]; then
     kill "$LCD_PROCESS_PID" 2>/dev/null || true
+  fi
+  if [ -n "$DJANGO_SERVER_PID" ]; then
+    kill "$DJANGO_SERVER_PID" 2>/dev/null || true
   fi
 }
 trap cleanup_background_processes EXIT
@@ -127,6 +134,10 @@ while [[ $# -gt 0 ]]; do
       RELOAD=true
       shift
       ;;
+    --await)
+      AWAIT_START=true
+      shift
+      ;;
     --embedded|--celery)
       CELERY_MANAGEMENT_MODE="$ARTHEXIS_SERVICE_MODE_EMBEDDED"
       CELERY_FLAG_SET=true
@@ -151,11 +162,87 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     *)
-      echo "Usage: $0 [--port PORT] [--reload] [--public|--internal] [--embedded|--systemd|--no-celery]" >&2
+      echo "Usage: $0 [--port PORT] [--reload] [--await] [--public|--internal] [--embedded|--systemd|--no-celery]" >&2
       exit 1
       ;;
   esac
 done
+
+arthexis_suite_reachable() {
+  local port="$1"
+  if [ -z "$port" ]; then
+    return 1
+  fi
+
+  local python_bin
+  if command -v python3 >/dev/null 2>&1; then
+    python_bin=python3
+  elif command -v python >/dev/null 2>/dev/null; then
+    python_bin=python
+  else
+    return 1
+  fi
+
+  "$python_bin" - "$port" <<'PY'
+import socket
+import sys
+
+try:
+    port_value = int(sys.argv[1])
+except (IndexError, ValueError):
+    sys.exit(1)
+
+with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+    sock.settimeout(2)
+    try:
+        sock.connect(("127.0.0.1", port_value))
+    except OSError:
+        sys.exit(1)
+
+sys.exit(0)
+PY
+}
+
+wait_for_suite_startup() {
+  local port="$1"
+  local server_pid="$2"
+  local timeout_seconds="$3"
+  local start_time
+  start_time=$(date +%s)
+
+  echo "Waiting for suite to become reachable on port $port (timeout ${timeout_seconds}s)..."
+
+  while true; do
+    if [ -n "$server_pid" ] && ! kill -0 "$server_pid" 2>/dev/null; then
+      echo "Web server process ($server_pid) exited before readiness was confirmed."
+      if [ -s "$ERROR_LOG" ]; then
+        echo "Recent errors from $ERROR_LOG:"
+        tail -n 40 "$ERROR_LOG"
+      elif [ -f "$ERROR_LOG" ]; then
+        echo "No errors captured in $ERROR_LOG."
+      fi
+      return 1
+    fi
+
+    if arthexis_suite_reachable "$port"; then
+      echo "Suite is reachable at http://localhost:$port"
+      return 0
+    fi
+
+    if [ $(( $(date +%s) - start_time )) -ge "$timeout_seconds" ]; then
+      echo "Timed out waiting for the suite to become reachable on port $port."
+      if [ -s "$ERROR_LOG" ]; then
+        echo "Recent errors from $ERROR_LOG:"
+        tail -n 40 "$ERROR_LOG"
+      elif [ -f "$ERROR_LOG" ]; then
+        echo "No errors captured in $ERROR_LOG."
+      fi
+      return 1
+    fi
+
+    sleep 2
+  done
+}
 
 STARTUP_STARTED_AT=$(date +%s)
 {
@@ -210,8 +297,23 @@ if [ "$LCD_EMBEDDED" = true ]; then
 fi
 
 # Start the Django development server
-if [ "$RELOAD" = true ]; then
-  python manage.py runserver 0.0.0.0:"$PORT"
+if [ "$AWAIT_START" = true ]; then
+  if [ "$RELOAD" = true ]; then
+    python manage.py runserver 0.0.0.0:"$PORT" &
+  else
+    python manage.py runserver 0.0.0.0:"$PORT" --noreload &
+  fi
+  DJANGO_SERVER_PID=$!
+
+  if wait_for_suite_startup "$PORT" "$DJANGO_SERVER_PID" "$STARTUP_TIMEOUT"; then
+    wait "$DJANGO_SERVER_PID"
+  else
+    exit 1
+  fi
 else
-  python manage.py runserver 0.0.0.0:"$PORT" --noreload
+  if [ "$RELOAD" = true ]; then
+    python manage.py runserver 0.0.0.0:"$PORT"
+  else
+    python manage.py runserver 0.0.0.0:"$PORT" --noreload
+  fi
 fi
