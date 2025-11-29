@@ -194,10 +194,12 @@ reset_safe_git_changes() {
 
   local placeholder
   for placeholder in "${safe_placeholder_files[@]}"; do
-    if git ls-files --error-unmatch "$placeholder" >/dev/null 2>&1 && [ ! -f "$placeholder" ]; then
-      echo "Restoring missing placeholder $placeholder before upgrading..."
-      mkdir -p "$(dirname "$placeholder")"
-      git checkout -- "$placeholder" 2>/dev/null || git restore "$placeholder" 2>/dev/null || true
+    if git ls-files --error-unmatch "$placeholder" >/dev/null 2>&1; then
+      if [ ! -f "$placeholder" ] || ! git diff --quiet -- "$placeholder" 2>/dev/null; then
+        echo "Restoring placeholder $placeholder before upgrading..."
+        mkdir -p "$(dirname "$placeholder")"
+        git checkout -- "$placeholder" 2>/dev/null || git restore "$placeholder" 2>/dev/null || true
+      fi
     fi
   done
 
