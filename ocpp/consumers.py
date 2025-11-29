@@ -2,7 +2,7 @@ import base64
 import binascii
 import ipaddress
 import re
-from datetime import UTC, datetime
+from datetime import datetime, timezone as dt_timezone
 import asyncio
 from collections import deque
 import inspect
@@ -1748,7 +1748,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         )
 
     async def _handle_boot_notification_action(self, payload, msg_id, raw, text_data):
-        current_time = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+        current_time = datetime.now(dt_timezone.utc).isoformat().replace("+00:00", "Z")
         return {
             "currentTime": current_time,
             "interval": 300,
@@ -1759,7 +1759,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         return await self._handle_data_transfer(msg_id, payload)
 
     async def _handle_heartbeat_action(self, payload, msg_id, raw, text_data):
-        current_time = datetime.now(UTC).isoformat().replace("+00:00", "Z")
+        current_time = datetime.now(dt_timezone.utc).isoformat().replace("+00:00", "Z")
         reply_payload = {"currentTime": current_time}
         now = timezone.now()
         self.charger.last_heartbeat = now
