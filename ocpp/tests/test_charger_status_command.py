@@ -45,8 +45,42 @@ class ChargerStatusCommandTests(TestCase):
         self.assertIn("Status", text)
         self.assertIn("Available", text)
         self.assertIn("Total Energy (kWh)", text)
+        self.assertIn("Last Contact", text)
         self.assertIn("1.50", text)
         self.assertNotIn("Connected", text)
+
+    def test_last_contact_prefers_latest_heartbeat(self):
+        last_heartbeat = timezone.now().replace(microsecond=0)
+        Charger.objects.create(
+            charger_id="CP-HB",
+            last_heartbeat=last_heartbeat,
+        )
+
+        output = StringIO()
+        call_command("charger_status", stdout=output)
+
+        expected_timestamp = timezone.localtime(last_heartbeat).isoformat()
+        self.assertIn(expected_timestamp, output.getvalue())
+
+    def test_last_contact_uses_meter_value_timestamp(self):
+        meter_timestamp = timezone.now().replace(microsecond=0)
+        Charger.objects.create(
+            charger_id="CP-MV",
+            last_meter_values={
+                "meterValue": [
+                    {
+                        "timestamp": meter_timestamp.isoformat(),
+                        "sampledValue": [{"value": "5"}],
+                    }
+                ]
+            },
+        )
+
+        output = StringIO()
+        call_command("charger_status", stdout=output)
+
+        expected_timestamp = timezone.localtime(meter_timestamp).isoformat()
+        self.assertIn(expected_timestamp, output.getvalue())
 
     def test_active_connector_displays_rfid_value(self):
         charger = Charger.objects.create(
@@ -120,10 +154,12 @@ class ChargerStatusCommandTests(TestCase):
             if len(parts) < 3:
                 continue
             connector = parts[2]
-            try:
-                totals[connector] = float(parts[-1])
-            except ValueError:
-                continue
+            for part in reversed(parts):
+                try:
+                    totals[connector] = float(part)
+                except ValueError:
+                    continue
+                break
 
         self.assertIn("all", totals)
         self.assertIn("A", totals)

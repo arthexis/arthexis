@@ -7,6 +7,7 @@ from typing import Iterable
 from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Prefetch, Q, QuerySet
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
 from ocpp import store
 from ocpp.models import Charger, MeterValue, Transaction
@@ -361,6 +362,7 @@ class Command(BaseCommand):
                     active_rfid = str(getattr(tx_obj, "rfid", "") or "").strip()
                     if active_rfid:
                         rfid_value = active_rfid.upper()
+            last_contact = self._last_contact_timestamp(charger)
             rows.append(
                 {
                     "serial": charger.charger_id,
@@ -374,6 +376,7 @@ class Command(BaseCommand):
                     "public": "yes" if charger.public_display else "no",
                     "status": status_label,
                     "energy": self._format_energy(total),
+                    "last_contact": self._format_dt(last_contact) or "-",
                 }
             )
 
@@ -385,6 +388,7 @@ class Command(BaseCommand):
             "public": "Public",
             "status": "Status",
             "energy": "Total Energy (kWh)",
+            "last_contact": "Last Contact",
         }
 
         widths = {
@@ -500,3 +504,33 @@ class Command(BaseCommand):
         if timezone.is_aware(value):
             return timezone.localtime(value).isoformat()
         return value.isoformat()
+
+    def _last_contact_timestamp(self, charger: Charger) -> datetime | None:
+        heartbeat = charger.last_heartbeat
+        meter_ts = self._last_meter_value_timestamp(charger.last_meter_values)
+        if heartbeat and meter_ts:
+            return max(heartbeat, meter_ts)
+        return heartbeat or meter_ts
+
+    def _last_meter_value_timestamp(self, payload: dict | None) -> datetime | None:
+        if not payload:
+            return None
+        entries = payload.get("meterValue")
+        if not isinstance(entries, list):
+            return None
+
+        latest: datetime | None = None
+        for entry in entries:
+            ts_raw = None
+            if isinstance(entry, dict):
+                ts_raw = entry.get("timestamp")
+            if not ts_raw:
+                continue
+            ts = parse_datetime(str(ts_raw))
+            if ts is None:
+                continue
+            if timezone.is_naive(ts):
+                ts = timezone.make_aware(ts, timezone.get_current_timezone())
+            if latest is None or ts > latest:
+                latest = ts
+        return latest
