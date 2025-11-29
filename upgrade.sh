@@ -601,6 +601,7 @@ FORCE_START=0
 NO_WARN=0
 LOCAL_ONLY=0
 DETACHED=0
+REQUESTED_BRANCH=""
 FORWARDED_ARGS=()
 # Parse CLI options controlling the upgrade strategy.
 while [[ $# -gt 0 ]]; do
@@ -646,6 +647,16 @@ while [[ $# -gt 0 ]]; do
     --detached)
       DETACHED=1
       shift
+      ;;
+    --branch)
+      if [[ -z "${2:-}" ]]; then
+        echo "--branch requires an argument" >&2
+        exit 1
+      fi
+
+      REQUESTED_BRANCH="$2"
+      FORWARDED_ARGS+=("$1" "$2")
+      shift 2
       ;;
     --stable|--normal|--regular)
       CHANNEL="stable"
@@ -1102,37 +1113,48 @@ NODE_ROLE_NAME=$(determine_node_role)
 cleanup_non_terminal_git_state "$NODE_ROLE_NAME"
 
 # Determine current and remote versions
-BRANCH=$(git rev-parse --abbrev-ref HEAD)
-if [[ "$BRANCH" == "HEAD" ]]; then
-  echo "Detected detached HEAD; attempting to switch back to the tracked branch..." >&2
-
-  determine_default_branch() {
-    local remote_head
-    remote_head=$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)
-    if [[ -n "$remote_head" ]]; then
-      echo "${remote_head#origin/}"
-      return 0
-    fi
-
-    git branch --remotes --contains HEAD 2>/dev/null \
-      | sed -n 's#^[ *]*origin/##p' \
-      | head -n1
-  }
-
-  TARGET_BRANCH=$(determine_default_branch)
-  if [[ -z "$TARGET_BRANCH" ]]; then
-    echo "Unable to determine branch to switch to while detached." >&2
-    echo "Continuing in detached HEAD state; upgrade steps will run without switching branches." >&2
-    BRANCH="HEAD"
+if [[ -n "$REQUESTED_BRANCH" ]]; then
+  BRANCH="$REQUESTED_BRANCH"
+  if git show-ref --verify --quiet "refs/heads/$BRANCH"; then
+    git switch "$BRANCH" >/dev/null
+  elif git show-ref --verify --quiet "refs/remotes/origin/$BRANCH"; then
+    git switch -c "$BRANCH" "origin/$BRANCH" >/dev/null
   else
-    if git show-ref --verify --quiet "refs/heads/$TARGET_BRANCH"; then
-      git switch "$TARGET_BRANCH" >/dev/null
-    else
-      git switch -c "$TARGET_BRANCH" "origin/$TARGET_BRANCH" >/dev/null
-    fi
+    echo "Requested branch $BRANCH not found locally or on origin; continuing without switching." >&2
+  fi
+else
+  BRANCH=$(git rev-parse --abbrev-ref HEAD)
+  if [[ "$BRANCH" == "HEAD" ]]; then
+    echo "Detected detached HEAD; attempting to switch back to the tracked branch..." >&2
 
-    BRANCH="$TARGET_BRANCH"
-    echo "Switched to branch $BRANCH." >&2
+    determine_default_branch() {
+      local remote_head
+      remote_head=$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)
+      if [[ -n "$remote_head" ]]; then
+        echo "${remote_head#origin/}"
+        return 0
+      fi
+
+      git branch --remotes --contains HEAD 2>/dev/null \
+        | sed -n 's#^[ *]*origin/##p' \
+        | head -n1
+    }
+
+    TARGET_BRANCH=$(determine_default_branch)
+    if [[ -z "$TARGET_BRANCH" ]]; then
+      echo "Unable to determine branch to switch to while detached." >&2
+      echo "Continuing in detached HEAD state; upgrade steps will run without switching branches." >&2
+      BRANCH="HEAD"
+    else
+      if git show-ref --verify --quiet "refs/heads/$TARGET_BRANCH"; then
+        git switch "$TARGET_BRANCH" >/dev/null
+      else
+        git switch -c "$TARGET_BRANCH" "origin/$TARGET_BRANCH" >/dev/null
+      fi
+
+      BRANCH="$TARGET_BRANCH"
+      echo "Switched to branch $BRANCH." >&2
+    fi
   fi
 fi
 LOCAL_VERSION="0"
