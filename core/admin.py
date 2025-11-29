@@ -72,18 +72,20 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from ocpp.models import Charger, ElectricVehicle, Transaction
 from ocpp.rfid.utils import build_mode_toggle
-from teams.models import EmailInbox, EmailCollector, EmailOutbox, SocialProfile
+from teams.models import EmailInbox, EmailCollector, EmailOutbox
+from accounts.models import (
+    ClientReport,
+    ClientReportSchedule,
+    CustomerAccount,
+    EnergyCredit,
+    EnergyTariff,
+    EnergyTransaction,
+    Location,
+)
 from .github_helper import GitHubRepositoryError, create_repository_for_package
 from .models import (
     User,
     UserPhoneNumber,
-    CustomerAccount,
-    EnergyCredit,
-    EnergyTransaction,
-    EnergyTariff,
-    Location,
-    ClientReport,
-    ClientReportSchedule,
     Product,
     RFID,
     SigilRoot,

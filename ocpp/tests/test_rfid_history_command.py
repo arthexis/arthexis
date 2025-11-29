@@ -5,7 +5,7 @@ from django.core.management import call_command, CommandError
 from django.test import TestCase
 from django.utils import timezone
 
-from core.models import CustomerAccount
+from accounts.models import CustomerAccount
 from ocpp.models import Charger, RFIDSessionAttempt
 
 

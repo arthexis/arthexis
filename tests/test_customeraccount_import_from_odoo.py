@@ -4,7 +4,8 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from core.models import CustomerAccount, OdooProfile, SecurityGroup, User
+from accounts.models import CustomerAccount
+from core.models import OdooProfile, SecurityGroup, User
 
 
 class CustomerAccountImportFromOdooTests(TestCase):

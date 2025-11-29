@@ -17,7 +17,8 @@ from django.http import HttpResponse
 from django.test import Client, TestCase
 from django.urls import reverse
 
-from core.models import CustomerAccount, RFID
+from accounts.models import CustomerAccount
+from core.models import RFID
 
 
 pytestmark = [pytest.mark.feature("rfid-scanner")]

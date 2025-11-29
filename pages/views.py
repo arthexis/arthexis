@@ -73,13 +73,8 @@ from django.utils.text import slugify, Truncator
 from django.core.validators import EmailValidator
 from django.db.models import Q
 from webauthn.helpers import base64url_to_bytes, bytes_to_base64url
-from core.models import (
-    InviteLead,
-    ClientReport,
-    ClientReportSchedule,
-    PasskeyCredential,
-    SecurityGroup,
-)
+from accounts.models import ClientReport, ClientReportSchedule
+from core.models import InviteLead, PasskeyCredential, SecurityGroup
 from ocpp.models import Charger
 from .utils import get_original_referer, get_request_language_code
 

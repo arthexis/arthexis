@@ -20,7 +20,8 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext as _
 
-from core.models import RFID, ClientReport, CustomerAccount, ClientReportSchedule
+from accounts.models import ClientReport, ClientReportSchedule, CustomerAccount
+from core.models import RFID
 from ocpp.models import Charger, Transaction
 from pages.views import ClientReportForm
 

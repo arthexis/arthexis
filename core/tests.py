@@ -36,12 +36,10 @@ from django.conf import settings
 from django.contrib.auth.models import Permission
 from django.contrib.messages import get_messages
 from tablib import Dataset
+from accounts.models import CustomerAccount, EnergyCredit, EnergyTariff
 from .models import (
     User,
     UserPhoneNumber,
-    CustomerAccount,
-    EnergyCredit,
-    EnergyTariff,
     Product,
     RFID,
     SecurityGroup,

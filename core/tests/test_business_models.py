@@ -7,7 +7,8 @@ from django.test import TestCase
 from django.utils import timezone
 from django.core.exceptions import ValidationError
 
-from core.models import CountdownTimer, EnergyTariff
+from accounts.models import EnergyTariff
+from core.models import CountdownTimer
 from pages.models import DeveloperArticle
 
 

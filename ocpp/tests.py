@@ -99,15 +99,8 @@ from .admin import (
 from .consumers import CSMSConsumer
 from .views import dispatch_action, _transaction_rfid_details, _usage_timeline
 from .status_display import STATUS_BADGE_MAP
-from core.models import (
-    CustomerAccount,
-    EnergyCredit,
-    EnergyTariff,
-    Location,
-    Reference,
-    RFID,
-    SecurityGroup,
-)
+from accounts.models import CustomerAccount, EnergyCredit, EnergyTariff, Location
+from core.models import Reference, RFID, SecurityGroup
 from . import store
 from decimal import Decimal, ROUND_HALF_UP
 import json

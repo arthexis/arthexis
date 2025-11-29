@@ -6,7 +6,8 @@ import pytest
 from django.contrib.auth import get_user_model
 
 from core.backends import RFIDBackend
-from core.models import CustomerAccount, RFID
+from accounts.models import CustomerAccount
+from core.models import RFID
 
 
 pytestmark = [pytest.mark.django_db, pytest.mark.feature("rfid-scanner")]

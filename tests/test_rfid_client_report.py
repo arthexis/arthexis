@@ -16,7 +16,8 @@ from django.test import Client, TestCase
 from django.urls import reverse
 from django.utils import timezone
 
-from core.models import RFID, CustomerAccount
+from accounts.models import CustomerAccount
+from core.models import RFID
 from ocpp.models import Charger, Transaction
 
 

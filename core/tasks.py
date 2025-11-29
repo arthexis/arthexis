@@ -2013,7 +2013,7 @@ def run_scheduled_release(release_id: int) -> None:
 def run_client_report_schedule(schedule_id: int) -> None:
     """Execute a :class:`core.models.ClientReportSchedule` run."""
 
-    from core.models import ClientReportSchedule
+    from accounts.models import ClientReportSchedule
 
     schedule = ClientReportSchedule.objects.filter(pk=schedule_id).first()
     if not schedule:
@@ -2031,7 +2031,7 @@ def run_client_report_schedule(schedule_id: int) -> None:
 def ensure_recurring_client_reports() -> None:
     """Ensure scheduled consumer reports run for the current period."""
 
-    from core.models import ClientReportSchedule
+    from accounts.models import ClientReportSchedule
 
     reference = timezone.localdate()
     schedules = ClientReportSchedule.objects.filter(

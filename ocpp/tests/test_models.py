@@ -21,7 +21,8 @@ from django.db.models.deletion import ProtectedError
 from django.test import TestCase
 from django.utils import timezone
 
-from core.models import EnergyTariff, Location, Reference, SecurityGroup
+from accounts.models import EnergyTariff, Location
+from core.models import Reference, SecurityGroup
 
 from ocpp import store
 from ocpp.models import (
