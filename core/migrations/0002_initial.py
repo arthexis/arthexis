@@ -13,11 +13,11 @@ class Migration(migrations.Migration):
         ("auth", "0012_alter_user_first_name_max_length"),
         ("contenttypes", "0002_remove_content_type_name"),
         ("core", "0001_initial"),
-        ("django_celery_beat", "0020_googlecalendarprofile_horologiacountdowntimer"),
+        ("django_celery_beat", "0019_alter_periodictasks_options"),
         ("nodes", "0001_initial"),
         ("otp_totp", "0003_add_timestamps"),
         ("pages", "0001_initial"),
-        ("sites", "0003_site_managed_site_require_https_site_template"),
+        ("sites", "0002_alter_domain_unique"),
         ("teams", "0001_initial"),
     ]
 

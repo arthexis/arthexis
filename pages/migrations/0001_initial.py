@@ -18,7 +18,7 @@ class Migration(migrations.Migration):
         ("contenttypes", "0002_remove_content_type_name"),
         ("core", "0001_initial"),
         ("nodes", "0001_initial"),
-        ("sites", "0003_site_managed_site_require_https_site_template"),
+        ("sites", "0002_alter_domain_unique"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
