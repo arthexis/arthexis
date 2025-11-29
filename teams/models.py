@@ -1183,7 +1183,7 @@ class ManualTask(Entity):
         help_text=_("Node where this manual task should be completed."),
     )
     location = models.ForeignKey(
-        "core.Location",
+        "accounts.Location",
         on_delete=models.SET_NULL,
         blank=True,
         null=True,
@@ -1412,7 +1412,8 @@ class ManualTask(Entity):
                 yield user
 
     def resolve_reservation_credentials(self):
-        from core.models import CustomerAccount, RFID
+        from accounts.models import CustomerAccount
+        from core.models import RFID
 
         account: CustomerAccount | None = None
         rfid: RFID | None = None

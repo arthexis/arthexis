@@ -92,7 +92,8 @@ from ocpp.models import Charger
 from protocols.models import CPForwarder
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.primitives import serialization, hashes
-from core.models import Package, PackageRelease, SecurityGroup, RFID, CustomerAccount
+from accounts.models import CustomerAccount
+from core.models import Package, PackageRelease, SecurityGroup, RFID
 from requests.exceptions import SSLError
 from teams.models import EmailOutbox
 

@@ -14,7 +14,8 @@ django.setup()
 from django.test import TestCase
 
 from core.admin import RFIDResource
-from core.models import CustomerAccount, RFID
+from accounts.models import CustomerAccount
+from core.models import RFID
 
 
 pytestmark = [pytest.mark.feature("rfid-scanner")]

@@ -9,7 +9,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from .models import Charger, MeterValue, Transaction
-from core.models import Location
+from accounts.models import Location
 
 
 def _parse_remote_datetime(value) -> datetime | None:

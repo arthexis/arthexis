@@ -19,7 +19,8 @@ from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 
-from core.models import ClientReport, ClientReportSchedule, CustomerAccount, RFID
+from accounts.models import ClientReport, ClientReportSchedule, CustomerAccount
+from core.models import RFID
 from nodes.models import NetMessage, NodeRole
 from ocpp.models import Charger, Transaction
 from core.tasks import ensure_recurring_client_reports

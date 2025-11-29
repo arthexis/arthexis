@@ -9,7 +9,8 @@ from typing import Any, TYPE_CHECKING
 
 from django.utils.dateparse import parse_date, parse_datetime
 
-from core.models import CustomerAccount, RFID
+from accounts.models import CustomerAccount
+from core.models import RFID
 
 if TYPE_CHECKING:  # pragma: no cover - imported only for type checking
     from nodes.models import Node

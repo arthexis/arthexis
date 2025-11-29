@@ -14,7 +14,7 @@ from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
 from django.test import RequestFactory, TestCase
 
-from core.models import ClientReportSchedule
+from accounts.models import ClientReportSchedule
 
 from pages.views import ClientReportForm
 

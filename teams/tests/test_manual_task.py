@@ -186,7 +186,7 @@ class ManualTaskNotificationTests(TestCase):
 
 class ManualTaskAdminActionTests(TestCase):
     def setUp(self):
-        CustomerAccount = apps.get_model("core", "CustomerAccount")
+        CustomerAccount = apps.get_model("accounts", "CustomerAccount")
         RFID = apps.get_model("core", "RFID")
 
         self.user = get_user_model().objects.create_user(

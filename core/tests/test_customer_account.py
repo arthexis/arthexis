@@ -4,7 +4,7 @@ from decimal import Decimal
 
 from django.test import TestCase
 
-from core.models import CustomerAccount, EnergyCredit
+from accounts.models import CustomerAccount, EnergyCredit
 
 
 class CustomerAccountCreditsTests(TestCase):

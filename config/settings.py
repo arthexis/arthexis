@@ -388,6 +388,7 @@ CsrfViewMiddleware._check_referer = _check_referer_with_forwarded
 
 LOCAL_APPS = [
     "nodes",
+    "accounts",
     "core",
     "protocols",
     "ocpp",

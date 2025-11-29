@@ -26,14 +26,8 @@ from asgiref.sync import async_to_sync
 from core.entity import Entity, EntityManager
 from nodes.models import Node
 
-from core.models import (
-    CustomerAccount,
-    EnergyTariff,
-    Location,
-    Reference,
-    RFID as CoreRFID,
-    SecurityGroup,
-)
+from accounts.models import CustomerAccount, EnergyTariff, Location
+from core.models import Reference, RFID as CoreRFID, SecurityGroup
 from . import store
 from .reference_utils import url_targets_local_loopback
 
