@@ -111,6 +111,19 @@ if arthexis_lcd_feature_enabled "$LOCK_DIR"; then
   LCD_FEATURE=true
 fi
 
+ensure_celery_dependencies_ready() {
+  if [ "$CELERY" != true ]; then
+    return
+  fi
+
+  if python manage.py migrate --check >/dev/null 2>&1; then
+    return
+  fi
+
+  echo "Database migrations are pending or unavailable; skipping embedded Celery startup. Run ./db-migrate.sh to apply migrations." >&2
+  CELERY=false
+}
+
 queue_startup_net_message() {
   python - "$BASE_DIR" "$PORT" <<'PY'
 import sys
@@ -265,6 +278,8 @@ case "$CELERY_MANAGEMENT_MODE" in
     fi
     ;;
 esac
+
+ensure_celery_dependencies_ready
 
 if [ "$LCD_FEATURE" = true ]; then
   if [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ] && [ "$LCD_SYSTEMD_UNIT" = true ]; then
