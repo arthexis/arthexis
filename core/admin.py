@@ -311,18 +311,25 @@ def get_app_list_with_protocol_forwarder(self, request, app_label=None):
     order_map = Application.order_map()
 
     ordered_result = []
+    max_defined_order = max(order_map.values(), default=0)
+    next_order = max_defined_order + 1
+
     for entry in result:
-        entry_order = order_map.get(entry.get("app_label"))
+        app_label = entry.get("app_label")
+        entry_order = order_map.get(app_label)
+
         if entry_order is None:
-            continue
+            entry_order = next_order
+            next_order += 1
+
         ordered_entry = entry.copy()
         ordered_entry["order"] = entry_order
         ordered_entry["name"] = Application.format_display_name(
-            entry_order, str(entry.get("name") or entry.get("app_label"))
+            order_map.get(app_label), str(entry.get("name") or app_label)
         )
         ordered_result.append(ordered_entry)
 
-    ordered_result.sort(key=lambda entry: entry.get("order"))
+    ordered_result.sort(key=lambda entry: (entry.get("order"), entry.get("name")))
     return ordered_result
 
 
