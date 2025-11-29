@@ -5,6 +5,7 @@ import os
 from typing import Any
 
 from django import forms
+from django.apps import apps as django_apps
 from django.contrib import admin
 from django.contrib.admin.widgets import RelatedFieldWidgetWrapper
 from django.urls import NoReverseMatch, path, reverse
@@ -93,13 +94,11 @@ from .models import (
     OdooProfile,
     OpenPayProfile,
     GoogleCalendarProfile,
-    SocialProfile,
     Package,
     PackageRelease,
     ReleaseManager,
     SecurityGroup,
     InviteLead,
-    PublicWifiAccess,
 )
 from .user_data import (
     EntityModelAdmin,
@@ -306,8 +305,25 @@ def get_app_list_with_protocol_forwarder(self, request, app_label=None):
                 experience_entry["models"].sort(key=lambda model: model["name"])
 
     if app_label:
-        return [entry for entry in result if entry.get("app_label") == app_label]
-    return result
+        result = [entry for entry in result if entry.get("app_label") == app_label]
+
+    Application = django_apps.get_model("pages", "Application")
+    order_map = Application.order_map()
+
+    ordered_result = []
+    for entry in result:
+        entry_order = order_map.get(entry.get("app_label"))
+        if entry_order is None:
+            continue
+        ordered_entry = entry.copy()
+        ordered_entry["order"] = entry_order
+        ordered_entry["name"] = Application.format_display_name(
+            entry_order, str(entry.get("name") or entry.get("app_label"))
+        )
+        ordered_result.append(ordered_entry)
+
+    ordered_result.sort(key=lambda entry: entry.get("order"))
+    return ordered_result
 
 
 admin.AdminSite.get_app_list = get_app_list_with_protocol_forwarder
@@ -1038,14 +1054,6 @@ class InviteLeadAdmin(EntityModelAdmin):
         return (obj.error[:40] + "…") if len(obj.error) > 40 else obj.error
 
     short_error.short_description = "error"
-
-
-@admin.register(PublicWifiAccess)
-class PublicWifiAccessAdmin(EntityModelAdmin):
-    list_display = ("user", "mac_address", "created_on", "revoked_on")
-    search_fields = ("user__username", "mac_address")
-    readonly_fields = ("user", "mac_address", "created_on", "updated_on", "revoked_on")
-    ordering = ("-created_on",)
 
 
 class CustomerAccountRFIDForm(forms.ModelForm):

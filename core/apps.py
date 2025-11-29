@@ -10,7 +10,8 @@ logger = logging.getLogger(__name__)
 class CoreConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "core"
-    verbose_name = _("2. Business")
+    order = 2
+    verbose_name = _("Business")
 
     def ready(self):  # pragma: no cover - called by Django
         _setup_celery_beat_integrations()

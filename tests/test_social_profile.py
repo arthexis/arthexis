@@ -4,7 +4,7 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 
-from core.models import SocialProfile
+from teams.models import SocialProfile
 
 
 User = get_user_model()

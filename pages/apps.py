@@ -11,7 +11,8 @@ logger = logging.getLogger(__name__)
 class PagesConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "pages"
-    verbose_name = "7. Experience"
+    order = 7
+    verbose_name = "Experience"
     _view_history_purged = False
 
     def ready(self):  # pragma: no cover - import for side effects

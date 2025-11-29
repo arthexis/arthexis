@@ -4,6 +4,7 @@
     "fields": {
       "is_seed_data": true,
       "is_deleted": false,
+      "order": 2,
       "name": "core",
       "description": "Support for Business Processes and monetization."
     }

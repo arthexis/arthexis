@@ -77,6 +77,7 @@ from .models import (
     _format_upgrade_body,
     NodeProfile,
     BadgeCounter,
+    PublicWifiAccess,
 )
 from . import dns as dns_utils
 from core.models import RFID
@@ -144,6 +145,14 @@ class NodeProfileAdmin(EntityModelAdmin):
     list_display = ("name",)
     search_fields = ("name",)
     fields = ("name", "data")
+
+
+@admin.register(PublicWifiAccess)
+class PublicWifiAccessAdmin(EntityModelAdmin):
+    list_display = ("user", "mac_address", "created_on", "revoked_on")
+    search_fields = ("user__username", "mac_address")
+    readonly_fields = ("user", "mac_address", "created_on", "updated_on", "revoked_on")
+    ordering = ("-created_on",)
 
 
 @admin.register(NodeManager)

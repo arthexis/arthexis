@@ -400,6 +400,18 @@ if [ "$REPAIR" = true ]; then
         SERVICE="$(cat "$LOCK_DIR_PATH/service.lck")"
         echo "Repair mode: reusing existing service '$SERVICE'."
     fi
+    if [ -z "$SERVICE" ] && [ -f "$LOCK_DIR_PATH/systemd_services.lck" ]; then
+        while IFS= read -r recorded_unit; do
+            [ -z "$recorded_unit" ] && continue
+            case "$recorded_unit" in
+                *.service)
+                    SERVICE="${recorded_unit%.service}"
+                    echo "Repair mode: discovered service '$SERVICE' from recorded unit."
+                    break
+                    ;;
+            esac
+        done < "$LOCK_DIR_PATH/systemd_services.lck"
+    fi
     if [ -f "$LOCK_DIR_PATH/nginx_mode.lck" ]; then
         NGINX_MODE="$(cat "$LOCK_DIR_PATH/nginx_mode.lck")"
     fi

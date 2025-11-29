@@ -34,7 +34,8 @@ def _startup_notification(
 class NodesConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "nodes"
-    verbose_name = "4. Infrastructure"
+    order = 4
+    verbose_name = "Infrastructure"
 
     def ready(self):  # pragma: no cover - exercised on app start
         # Import signal handlers for content classifiers

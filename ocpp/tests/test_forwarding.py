@@ -133,6 +133,28 @@ class ForwardingTaskTests(TestCase):
         self.assertEqual(limit, "6/h")
         self.assertAlmostEqual(parse_rate(limit), 6 / 3600, places=9)
 
+    @patch(
+        "ocpp.forwarder.create_connection",
+        side_effect=ValueError("scheme https is invalid"),
+    )
+    def test_connect_forwarding_session_handles_invalid_scheme(self, mock_create):
+        charger = Charger.objects.create(
+            charger_id="CP-9009",
+            node_origin=self.local,
+            manager_node=self.local,
+            export_transactions=True,
+        )
+
+        with patch.object(
+            Node,
+            "iter_remote_urls",
+            lambda self, path: iter(["https://remote.example" + path]),
+        ):
+            session = forwarder.connect_forwarding_session(charger, self.remote)
+
+        self.assertIsNone(session)
+        mock_create.assert_called_once()
+
     @patch("protocols.models.send_forwarding_metadata", return_value=(True, None))
     @patch("protocols.models.load_local_node_credentials")
     @patch("ocpp.forwarder.create_connection")

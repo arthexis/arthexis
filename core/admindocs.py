@@ -1,6 +1,5 @@
 import argparse
 import inspect
-import re
 from types import SimpleNamespace
 
 from django.apps import apps
@@ -77,19 +76,30 @@ class OrderedModelIndexView(BaseAdminDocsView):
         "pages.usermanual": USER_MANUALS_APP,
     }
 
-    def _group_sort_key(self, app_config):
-        name = str(app_config.verbose_name)
-        match = re.match(r"^(\d+)\.", name)
-        prefix = int(match.group(1)) if match else float("inf")
-        return prefix, name, app_config.label
+    def _application_order_map(self) -> dict[str, int]:
+        Application = apps.get_model("pages", "Application")
+        return Application.order_map()
 
-    def _group_models(self, models: list[SimpleNamespace]) -> list[dict[str, object]]:
+    def _group_sort_key(self, app_config, order_map: dict[str, int]):
+        Application = apps.get_model("pages", "Application")
+        name = Application.format_display_name(None, str(app_config.verbose_name))
+        prefix = order_map.get(app_config.label)
+        prefix_value = prefix if prefix is not None else float("inf")
+        return prefix_value, name, app_config.label
+
+    def _group_models(
+        self, models: list[SimpleNamespace], order_map: dict[str, int]
+    ) -> list[dict[str, object]]:
+        Application = apps.get_model("pages", "Application")
         grouped: dict[str, dict[str, object]] = {}
 
         for model in models:
             app_config = model.app_config
-            group_name = str(app_config.verbose_name)
-            sort_key = self._group_sort_key(app_config)
+            group_order = order_map.get(app_config.label)
+            group_name = Application.format_display_name(
+                group_order, str(app_config.verbose_name)
+            )
+            sort_key = self._group_sort_key(app_config, order_map)
 
             group = grouped.setdefault(
                 group_name,
@@ -123,6 +133,7 @@ class OrderedModelIndexView(BaseAdminDocsView):
         return meta.app_config
 
     def get_context_data(self, **kwargs):
+        order_map = self._application_order_map()
         models = []
         for m in apps.get_models():
             if user_has_model_view_permission(self.request.user, m._meta):
@@ -138,8 +149,12 @@ class OrderedModelIndexView(BaseAdminDocsView):
                         app_config=app_config,
                     )
                 )
-        models.sort(key=lambda m: (self._group_sort_key(m.app_config), m.object_name))
-        grouped_models = self._group_models(models)
+        models.sort(
+            key=lambda m: (
+                self._group_sort_key(m.app_config, order_map), m.object_name
+            )
+        )
+        grouped_models = self._group_models(models, order_map)
         return super().get_context_data(
             **{**kwargs, "models": models, "grouped_models": grouped_models}
         )
