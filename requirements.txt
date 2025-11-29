@@ -11,7 +11,7 @@ black==25.11.0
 celery==5.5.3
 certifi==2025.11.12
 cffi==2.0.0
-channels==4.1.0
+channels==4.3.2
 charset-normalizer==3.4.4
 click==8.3.1
 click-didyoumean==0.3.1
