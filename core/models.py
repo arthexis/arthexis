@@ -38,7 +38,6 @@ import hashlib
 import hmac
 import os
 import subprocess
-import re
 from io import BytesIO
 from django.core.files.base import ContentFile
 import qrcode
@@ -242,25 +241,6 @@ class Profile(Entity):
         if hasattr(owner, "name"):
             return owner.name
         return str(owner)
-
-
-_SOCIAL_DOMAIN_PATTERN = re.compile(
-    r"^(?=.{1,253}\Z)(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.(?!-)[A-Za-z0-9-]{1,63}(?<!-))*$"
-)
-
-
-social_domain_validator = RegexValidator(
-    regex=_SOCIAL_DOMAIN_PATTERN,
-    message=_("Enter a valid domain name such as example.com."),
-    code="invalid",
-)
-
-
-social_did_validator = RegexValidator(
-    regex=r"^(|did:[a-z0-9]+:[A-Za-z0-9.\-_:]+)$",
-    message=_("Enter a valid DID such as did:plc:1234abcd."),
-    code="invalid",
-)
 
 
 class SigilRootManager(EntityManager):
@@ -646,7 +626,11 @@ class User(Entity, AbstractUser):
 
     @property
     def social_profile(self):
-        return self._direct_profile("SocialProfile")
+        model = apps.get_model("teams", "SocialProfile")
+        try:
+            return self.get_profile(model)
+        except TypeError:
+            return None
 
     @property
     def google_calendar_profile(self):
@@ -1429,169 +1413,6 @@ class GoogleCalendarProfile(Profile):
 
         events.sort(key=lambda event: event.get("start") or timezone.now())
         return events
-
-
-
-
-
-
-class SocialProfile(Profile):
-    """Store configuration required to link social accounts such as Bluesky."""
-
-    class Network(models.TextChoices):
-        BLUESKY = "bluesky", _("Bluesky")
-        DISCORD = "discord", _("Discord")
-
-    profile_fields = (
-        "handle",
-        "domain",
-        "did",
-        "application_id",
-        "public_key",
-        "guild_id",
-        "bot_token",
-        "default_channel_id",
-    )
-
-    network = models.CharField(
-        max_length=32,
-        choices=Network.choices,
-        default=Network.BLUESKY,
-        help_text=_(
-            "Select the social network you want to connect. Bluesky and Discord are supported."
-        ),
-    )
-    handle = models.CharField(
-        max_length=253,
-        blank=True,
-        help_text=_(
-            "Bluesky handle that should resolve to Arthexis. Use the verified domain (for example arthexis.com)."
-        ),
-        validators=[social_domain_validator],
-    )
-    domain = models.CharField(
-        max_length=253,
-        blank=True,
-        help_text=_(
-            "Domain that hosts the Bluesky verification. Publish a _atproto TXT record or a /.well-known/atproto-did file with the DID below."
-        ),
-        validators=[social_domain_validator],
-    )
-    did = models.CharField(
-        max_length=255,
-        blank=True,
-        help_text=_(
-            "Optional DID that Bluesky assigns once the domain is linked (for example did:plc:1234abcd)."
-        ),
-        validators=[social_did_validator],
-    )
-    application_id = models.CharField(
-        max_length=32,
-        blank=True,
-        help_text=_("Discord application ID used to control the bot."),
-    )
-    public_key = models.CharField(
-        max_length=128,
-        blank=True,
-        help_text=_("Discord public key used to verify interaction requests."),
-    )
-    guild_id = models.CharField(
-        max_length=32,
-        blank=True,
-        help_text=_("Discord guild (server) identifier where the bot should operate."),
-    )
-    bot_token = SigilShortAutoField(
-        max_length=255,
-        blank=True,
-        help_text=_("Discord bot token required for authenticated actions."),
-    )
-    default_channel_id = models.CharField(
-        max_length=32,
-        blank=True,
-        help_text=_("Optional Discord channel identifier used for default messaging."),
-    )
-
-    def clean(self):
-        super().clean()
-
-        self.handle = (self.handle or "").strip().lower()
-        self.domain = (self.domain or "").strip().lower()
-
-        if self.network == self.Network.DISCORD:
-            for field_name in (
-                "application_id",
-                "guild_id",
-                "public_key",
-                "bot_token",
-                "default_channel_id",
-            ):
-                value = getattr(self, field_name, "")
-                if isinstance(value, str):
-                    trimmed = value.strip()
-                    if trimmed != value:
-                        setattr(self, field_name, trimmed)
-
-            errors = {}
-            for required in ("application_id", "guild_id", "bot_token"):
-                if not getattr(self, required):
-                    errors[required] = _("This field is required for Discord profiles.")
-            if errors:
-                raise ValidationError(errors)
-
-        if self.network == self.Network.BLUESKY:
-            errors = {}
-            if not self.handle:
-                errors["handle"] = _("Please provide the Bluesky handle to verify.")
-            if not self.domain:
-                errors["domain"] = _("Please provide the Bluesky domain to verify.")
-            if errors:
-                raise ValidationError(errors)
-
-    def __str__(self) -> str:  # pragma: no cover - simple representation
-        if self.network == self.Network.DISCORD:
-            if self.guild_id:
-                return f"{self.guild_id}@discord"
-            return "discord"
-
-        if self.network == self.Network.BLUESKY:
-            handle = (self.resolve_sigils("handle") or self.handle or self.domain).strip()
-            network = (self.resolve_sigils("network") or self.network or "").strip()
-            if handle:
-                return f"{handle}@{network or self.Network.BLUESKY}"
-            if network:
-                return network
-
-        network = dict(self.Network.choices).get(self.network)
-        if network:
-            return network
-
-        owner = self.owner_display()
-        return owner or super().__str__()
-
-    class Meta:
-        verbose_name = _("Social Identity")
-        verbose_name_plural = _("Social Identities")
-        constraints = [
-            models.UniqueConstraint(
-                fields=["network", "handle"],
-                condition=~Q(handle=""),
-                name="socialprofile_network_handle",
-            ),
-            models.UniqueConstraint(
-                fields=["network", "domain"],
-                condition=~Q(domain=""),
-                name="socialprofile_network_domain",
-            ),
-            models.CheckConstraint(
-                condition=(
-                    (Q(user__isnull=False) & Q(group__isnull=True))
-                    | (Q(user__isnull=True) & Q(group__isnull=False))
-                ),
-                name="socialprofile_requires_owner",
-            ),
-        ]
-
-
 class EmailArtifact(Entity):
     """Store messages discovered by :class:`EmailCollector`."""
 

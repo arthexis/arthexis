@@ -71,7 +71,7 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from ocpp.models import Charger, ElectricVehicle, Transaction
 from ocpp.rfid.utils import build_mode_toggle
-from teams.models import EmailInbox, EmailCollector, EmailOutbox
+from teams.models import EmailInbox, EmailCollector, EmailOutbox, SocialProfile
 from .github_helper import GitHubRepositoryError, create_repository_for_package
 from .models import (
     User,
@@ -91,7 +91,6 @@ from .models import (
     OdooProfile,
     OpenPayProfile,
     GoogleCalendarProfile,
-    SocialProfile,
     Package,
     PackageRelease,
     ReleaseManager,
