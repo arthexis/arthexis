@@ -1314,7 +1314,7 @@ def _resolve_upgrade_subject() -> str:
     else:
         node_name = getattr(node, "hostname", None) or fallback_name
 
-    return f"Upgrade @ {node_name}".strip()
+    return f"Upgrade {node_name}".strip()
 
 
 def _broadcast_upgrade_start_message(

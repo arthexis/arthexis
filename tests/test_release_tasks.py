@@ -68,7 +68,7 @@ def test_no_upgrade_triggers_startup(monkeypatch, tmp_path):
         fake_apply_async,
     )
 
-    monkeypatch.setattr(tasks, "_resolve_upgrade_subject", lambda: "Upgrade @ alpha")
+    monkeypatch.setattr(tasks, "_resolve_upgrade_subject", lambda: "Upgrade alpha")
 
     tasks.check_github_updates()
 
@@ -130,7 +130,7 @@ def test_upgrade_shows_message(monkeypatch, tmp_path):
     assert seen_times.get("localtime_arg") is fake_now
     expected_body = fake_now.astimezone(local_zone).strftime("@ %Y%m%d %H:%M")
     assert any(
-        subject == "Upgrade @ alpha" and body == expected_body
+        subject == "Upgrade alpha" and body == expected_body
         for subject, body in notify_calls
     )
     upgrade_call = run_recorder.find(str(base / "delegated-upgrade.sh"))
@@ -411,7 +411,7 @@ def test_stable_mode_triggers_minor_upgrade(monkeypatch, tmp_path):
     assert seen_times.get("localtime_arg") is fake_now
     expected_body = fake_now.astimezone(local_zone).strftime("@ %Y%m%d %H:%M")
     assert any(
-        subject == "Upgrade @ alpha" and body == expected_body
+        subject == "Upgrade alpha" and body == expected_body
         for subject, body in notify_calls
     )
     upgrade_call = run_recorder.find(str(base / "delegated-upgrade.sh"))
