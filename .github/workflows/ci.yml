@@ -20,7 +20,7 @@ jobs:
           pip install -r requirements.txt
       - name: Install suite from repository
         run: |
-          ./install.sh --clean --no-start --no-warn
+          ./install.sh --clean --no-start
       - name: Install released suite and upgrade to branch
         env:
           TARGET_BRANCH: ${{ github.head_ref || github.ref_name }}
