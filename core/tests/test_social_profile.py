@@ -3,7 +3,8 @@ from unittest import mock
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 
-from core.models import SocialProfile, User
+from teams.models import SocialProfile
+from core.models import User
 
 
 class SocialProfileTests(TestCase):
