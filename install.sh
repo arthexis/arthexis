@@ -105,6 +105,9 @@ clean_previous_installation_state() {
         else
             find "$LOG_DIR" -type f -delete
         fi
+
+        mkdir -p "$LOG_DIR/old"
+        touch "$LOG_DIR/.gitkeep" "$LOG_DIR/old/.gitkeep"
     fi
 
     if [ -f "$DB_FILE" ]; then
