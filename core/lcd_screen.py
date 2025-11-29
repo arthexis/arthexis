@@ -32,6 +32,7 @@ BASE_DIR = get_base_dir()
 LOCK_DIR = BASE_DIR / "locks"
 LOCK_FILE = LOCK_DIR / "lcd_screen.lck"
 SERVICE_LOCK_FILE = LOCK_DIR / "service.lck"
+FEATURE_LOCK_NAME = "lcd_screen_enabled.lck"
 SHUTDOWN_SCHEDULE_FILE = Path("/run/systemd/shutdown/scheduled")
 DEFAULT_SCROLL_MS = 1000
 SCROLL_PADDING = 3
@@ -84,6 +85,32 @@ def _clear_lock_file() -> None:
         # The updater should continue running even if the lock file cannot be
         # removed (for example, due to transient filesystem issues).
         logger.debug("Failed to clear LCD lock file", exc_info=True)
+
+
+def _disable_lcd_feature(lock_dir: Path = LOCK_DIR) -> None:
+    """Remove the LCD feature and runtime lock files when the bus is missing."""
+
+    for filename in (FEATURE_LOCK_NAME, LOCK_FILE.name):
+        try:
+            (lock_dir / filename).unlink()
+        except FileNotFoundError:
+            continue
+        except OSError:
+            logger.debug("Failed to remove LCD lock file: %s", filename, exc_info=True)
+
+
+def _handle_lcd_failure(exc: Exception, lock_dir: Path = LOCK_DIR) -> bool:
+    """Handle LCD errors and return True when the feature should be disabled."""
+
+    if isinstance(exc, FileNotFoundError) and "/dev/i2c-1" in str(exc):
+        logger.warning(
+            "LCD update failed: %s; disabling lcd-screen feature", exc
+        )
+        _disable_lcd_feature(lock_dir)
+        return True
+
+    logger.warning("LCD update failed: %s", exc)
+    return False
 
 
 def _lock_file_matches(payload: LockPayload, expected_mtime: float) -> bool:
@@ -382,9 +409,11 @@ def main() -> None:  # pragma: no cover - hardware dependent
                 lcd = None
                 display_state = None
             except Exception as exc:
-                logger.warning("LCD update failed: %s", exc)
+                should_disable = _handle_lcd_failure(exc)
                 lcd = None
                 display_state = None
+                if should_disable:
+                    break
             time.sleep(sleep_duration)
     finally:
         _blank_display(lcd)
