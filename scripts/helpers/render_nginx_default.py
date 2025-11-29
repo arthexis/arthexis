@@ -12,6 +12,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from scripts.helpers.nginx_config import (
+    default_reject_server,
+    http_redirect_server,
     http_proxy_server,
     https_proxy_server,
     write_if_changed,
@@ -57,9 +59,9 @@ def generate_config(
         https_listens.extend(HTTPS_IPV6_LISTENS)
 
     if mode == "public":
-        http_names = http_server_names or "arthexis.com *.arthexis.com _"
+        http_names = http_server_names or "arthexis.com *.arthexis.com"
         https_names = https_server_names or "arthexis.com *.arthexis.com"
-        http_block = http_proxy_server(
+        http_block = http_redirect_server(
             http_names,
             port,
             http_listens,
@@ -71,7 +73,9 @@ def generate_config(
             listens=https_listens,
             trailing_slash=False,
         )
-        return f"{http_block}\n\n{https_block}\n"
+        http_default = default_reject_server(http_listens)
+        https_default = default_reject_server(https_listens, https=True)
+        return f"{http_block}\n\n{http_default}\n\n{https_block}\n\n{https_default}\n"
 
     http_names = http_server_names or "_"
     http_block = http_proxy_server(

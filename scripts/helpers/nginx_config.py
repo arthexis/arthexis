@@ -68,7 +68,7 @@ def proxy_block(port: int, *, trailing_slash: bool = True) -> str:
             proxy_http_version 1.1;
             proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Connection \"upgrade\";
-            proxy_set_header Host $http_host;
+            proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -128,6 +128,36 @@ def http_redirect_server(server_names: str, listens: Iterable[str] | None = None
     lines.append(f"    server_name {server_names};")
     lines.append("    return 301 https://$host$request_uri;")
     lines.append("}")
+    return _format_server_block(lines)
+
+
+def default_reject_server(
+    listens: Iterable[str] | None = None,
+    *,
+    https: bool = False,
+) -> str:
+    """Return a default server block that drops requests for unknown hosts."""
+    if listens is None:
+        listens = ("80",)
+
+    lines: list[str] = ["server {"]
+    for listen in _unique_preserve_order(listens):
+        suffix = " default_server" if "default_server" not in listen else ""
+        lines.append(f"    listen {listen}{suffix};")
+    lines.append("    server_name _;")
+
+    if https:
+        lines.extend(
+            [
+                "",
+                f"    ssl_certificate {CERTIFICATE_PATH};",
+                f"    ssl_certificate_key {CERTIFICATE_KEY_PATH};",
+                f"    include {SSL_OPTIONS_PATH};",
+                f"    ssl_dhparam {SSL_DHPARAM_PATH};",
+            ]
+        )
+
+    lines.extend(["", "    return 444;", "}"])
     return _format_server_block(lines)
 
 
