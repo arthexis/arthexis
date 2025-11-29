@@ -129,7 +129,7 @@ Terminal nodes can start directly with the scripts below without installing; Con
 - Access the [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) at [`http://localhost:8888/admin/`](http://localhost:8888/admin/) to review and manage live data. Use `--port` with the start scripts or installer when you need to expose a different port.
 - Browse the [admindocs](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/) at [`http://localhost:8888/admindocs/`](http://localhost:8888/admindocs/) for API documentation that is generated from your models.
 - Follow the [Install & Administration Guide](docs/cookbooks/install-start-stop-upgrade-uninstall.md) for deployment, lifecycle tasks, and operational runbooks.
-- Upgrade channels: new installs default to `--fixed`, keeping auto-upgrade off. Opt into automated updates on the stable channel with `--stable` (24-hour checks aligned to release revisions) or track mainline revisions with `--unstable`/`--latest` (15-minute checks).
+- Upgrade channels: new installs default to `--fixed`, keeping auto-upgrade off. Opt into automated updates on the stable channel with `--stable` (24-hour checks aligned to release revisions), track mainline revisions quickly with `--unstable` (15-minute checks), or follow the latest channel with hourly checks via `--latest`.
 - Onboard and service chargers with the [EVCS Connectivity & Maintenance Cookbook](docs/cookbooks/evcs-connectivity-maintenance.md).
 - Configure payment gateways with the [Payment Processors Cookbook](docs/cookbooks/payment-processors.md).
 - Reference the [Sigils Cookbook](docs/cookbooks/sigils.md) when configuring tokenized settings across environments.
