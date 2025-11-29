@@ -48,6 +48,14 @@
         </tr>
         <tr>
           <th scope="row">
+            <a href="{% url 'admin:system-nginx-report' %}">
+              {% trans "NGINX Report" %}
+            </a>
+          </th>
+          <td>{% trans "Compare the expected NGINX site definition with the file on disk." %}</td>
+        </tr>
+        <tr>
+          <th scope="row">
             <a href="{% url 'admin:system-changelog-report' %}">
               {% trans "Changelog Report" %}
             </a>

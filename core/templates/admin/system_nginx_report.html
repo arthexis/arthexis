@@ -1,0 +1,64 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:system' %}">{% trans 'System' %}</a>
+  &rsaquo; {% trans "NGINX Report" %}
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <div class="module nginx-report">
+    <h2>{% trans "NGINX Report" %}</h2>
+    <p class="help">
+      {% trans "Review the expected Arthexis-managed NGINX configuration and compare it with the file on disk." %}
+    </p>
+
+    <dl class="nginx-report-summary">
+      <dt>{% trans "Managed file" %}</dt>
+      <dd><code>{{ nginx_report.expected_path }}</code></dd>
+      <dt>{% trans "Difference check" %}</dt>
+      <dd>
+        {% if nginx_report.differs %}
+          <span class="errornote">{% trans "Differences detected" %}</span>
+        {% else %}
+          {% trans "Matches expected configuration" %}
+        {% endif %}
+      </dd>
+      <dt>{% trans "Mode" %}</dt>
+      <dd><code>{{ nginx_report.mode }}</code></dd>
+      <dt>{% trans "Port" %}</dt>
+      <dd><code>{{ nginx_report.port }}</code></dd>
+    </dl>
+
+    <div class="nginx-report-section">
+      <h3>{% trans "Expected contents" %}</h3>
+      {% if nginx_report.expected_error %}
+        <p class="errornote">{{ nginx_report.expected_error }}</p>
+      {% else %}
+        <p class="help">
+          {% blocktrans with mode=nginx_report.mode port=nginx_report.port %}Generated using mode "{{ mode }}" on port {{ port }}.{% endblocktrans %}
+        </p>
+        <pre>{{ nginx_report.expected_content }}</pre>
+      {% endif %}
+    </div>
+
+    <div class="nginx-report-section">
+      <h3>{% trans "Actual contents" %}</h3>
+      <p class="help">
+        {% blocktrans with path=nginx_report.actual_path %}Read from {{ path }}.{% endblocktrans %}
+      </p>
+      {% if nginx_report.actual_error %}
+        <p class="errornote">{{ nginx_report.actual_error }}</p>
+      {% elif nginx_report.actual_content %}
+        <pre>{{ nginx_report.actual_content }}</pre>
+      {% else %}
+        <p class="help">{% trans "The configuration file is empty." %}</p>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

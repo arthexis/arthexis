@@ -47,6 +47,7 @@ from core.release import (
     _remote_with_credentials,
 )
 from core.tasks import check_github_updates, _read_auto_upgrade_failure_count
+from scripts.helpers.render_nginx_default import generate_config
 from utils import revision
 from core import changelog
 
@@ -1501,6 +1502,79 @@ def _configured_backend_port(base_dir: Path) -> int:
     return 8888
 
 
+def _normalize_nginx_content(content: str) -> str:
+    """Return *content* with trailing newlines removed for comparison."""
+
+    return content.rstrip("\n")
+
+
+def _resolve_nginx_mode(base_dir: Path) -> str:
+    """Return the configured nginx mode with a safe fallback."""
+
+    mode_file = base_dir / "locks" / "nginx_mode.lck"
+    try:
+        raw_mode = mode_file.read_text().strip()
+    except OSError:
+        return "internal"
+
+    normalized = raw_mode.lower() or "internal"
+    if normalized not in {"internal", "public"}:
+        return "internal"
+    return normalized
+
+
+def _nginx_site_path() -> Path:
+    configured_path = getattr(settings, "NGINX_SITE_PATH", None) or ""
+    if configured_path:
+        return Path(configured_path)
+    return Path("/etc/nginx/sites-enabled/arthexis.conf")
+
+
+def _build_nginx_report(
+    *, base_dir: Path | None = None, site_path: Path | None = None
+) -> dict[str, object]:
+    """Return comparison data for the managed nginx configuration file."""
+
+    resolved_base = Path(base_dir) if base_dir is not None else Path(settings.BASE_DIR)
+    resolved_site_path = Path(site_path) if site_path is not None else _nginx_site_path()
+
+    mode = _resolve_nginx_mode(resolved_base)
+    port = _configured_backend_port(resolved_base)
+
+    expected_content = ""
+    expected_error = ""
+    try:
+        expected_content = _normalize_nginx_content(generate_config(mode, port))
+    except Exception as exc:  # pragma: no cover - defensive guard
+        logger.exception("Unable to generate expected nginx configuration")
+        expected_error = str(exc)
+
+    actual_content = ""
+    actual_error = ""
+    try:
+        raw_content = resolved_site_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        actual_error = _("NGINX configuration file not found.")
+    except OSError as exc:  # pragma: no cover - unexpected filesystem error
+        actual_error = str(exc)
+    else:
+        actual_content = _normalize_nginx_content(raw_content)
+
+    differs = bool(expected_error or actual_error or expected_content != actual_content)
+
+    return {
+        "expected_path": resolved_site_path,
+        "actual_path": resolved_site_path,
+        "expected_content": expected_content,
+        "expected_error": expected_error,
+        "actual_content": actual_content,
+        "actual_error": actual_error,
+        "differs": differs,
+        "mode": mode,
+        "port": port,
+    }
+
+
 def _detect_runserver_process() -> tuple[bool, int | None]:
     """Return whether the dev server is running and the port if available."""
 
@@ -1901,6 +1975,17 @@ def _system_services_report_view(request):
     return TemplateResponse(request, "admin/system_services_report.html", context)
 
 
+def _system_nginx_report_view(request):
+    context = admin.site.each_context(request)
+    context.update(
+        {
+            "title": _("NGINX Report"),
+            "nginx_report": _build_nginx_report(),
+        }
+    )
+    return TemplateResponse(request, "admin/system_nginx_report.html", context)
+
+
 def _system_upgrade_report_view(request):
     revision_info = None
     session = getattr(request, "session", None)
@@ -2135,6 +2220,11 @@ def patch_admin_system_view() -> None:
                 "system/uptime-report/",
                 admin.site.admin_view(_system_uptime_report_view),
                 name="system-uptime-report",
+            ),
+            path(
+                "system/nginx-report/",
+                admin.site.admin_view(_system_nginx_report_view),
+                name="system-nginx-report",
             ),
             path(
                 "system/services-report/",
