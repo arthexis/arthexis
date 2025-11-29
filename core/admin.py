@@ -72,7 +72,7 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from ocpp.models import Charger, ElectricVehicle, Transaction
 from ocpp.rfid.utils import build_mode_toggle
-from teams.models import EmailInbox, EmailCollector, EmailOutbox
+from teams.models import EmailCollector, EmailInbox, EmailOutbox, SocialProfile
 from accounts.models import (
     ClientReport,
     ClientReportSchedule,
