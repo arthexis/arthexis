@@ -144,3 +144,11 @@ def test_install_script_resets_service_units_on_repair():
     assert "reset_service_units_for_repair" in content
     assert 'if [ "$REPAIR" = true ] && [ -n "$SERVICE" ]; then' in content
     assert 'reset_service_units_for_repair "$SERVICE"' in content
+
+
+def test_install_script_recovers_service_from_systemd_lock_on_repair():
+    script_path = Path(__file__).resolve().parent.parent / "install.sh"
+    content = script_path.read_text()
+
+    assert 'if [ -z "$SERVICE" ] && [ -f "$LOCK_DIR_PATH/systemd_services.lck" ]; then' in content
+    assert "Repair mode: discovered service" in content
