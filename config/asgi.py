@@ -12,14 +12,17 @@ from config.loadenv import loadenv
 from channels.auth import AuthMiddlewareStack
 from channels.routing import ProtocolTypeRouter, URLRouter
 from django.core.asgi import get_asgi_application
-import ocpp.routing
-import nodes.routing
-import pages.routing
 
 loadenv()
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
 django_asgi_app = get_asgi_application()
+
+# Import routing modules after Django has initialized to ensure models are
+# registered before consumers are loaded.
+import ocpp.routing
+import nodes.routing
+import pages.routing
 
 websocket_patterns = [
     *pages.routing.websocket_urlpatterns,
