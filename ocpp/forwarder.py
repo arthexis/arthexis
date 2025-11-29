@@ -129,7 +129,7 @@ class Forwarder:
                     timeout=timeout,
                     subprotocols=["ocpp1.6"],
                 )
-            except (WebSocketException, OSError) as exc:
+            except (WebSocketException, OSError, ValueError) as exc:
                 logger.warning(
                     "Websocket forwarding connection to %s via %s failed: %s",
                     target_node,
