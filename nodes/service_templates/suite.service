@@ -1,0 +1,17 @@
+[Unit]
+Description=Arthexis Constellation Django service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory={base_dir}
+EnvironmentFile=-{base_dir}/redis.env
+EnvironmentFile=-{base_dir}/debug.env
+ExecStart={exec_command}
+Restart=always
+TimeoutStartSec=500
+User={service_user}
+
+[Install]
+WantedBy=multi-user.target

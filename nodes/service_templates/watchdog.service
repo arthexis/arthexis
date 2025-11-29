@@ -1,0 +1,14 @@
+[Unit]
+Description=Arthexis suite watchdog for {service_name}
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart={base_dir}/scripts/helpers/watchdog.sh {service_name}
+Restart=always
+RestartSec=15
+User={service_user}
+
+[Install]
+WantedBy=multi-user.target

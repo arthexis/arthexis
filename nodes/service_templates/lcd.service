@@ -1,0 +1,20 @@
+[Unit]
+Description=LCD screen updater service for Arthexis
+After={service_name}.service network-online.target
+Wants={service_name}.service
+PartOf={service_name}.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory={base_dir}
+ExecStart={base_dir}/.venv/bin/python -m core.lcd_screen
+Restart=always
+TimeoutStartSec=500
+StandardOutput=journal
+StandardError=journal
+User={service_user}
+
+[Install]
+WantedBy=multi-user.target
+WantedBy={service_name}.service

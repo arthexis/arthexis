@@ -1,0 +1,16 @@
+[
+  {
+    "model": "nodes.nodeservice",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "slug": "suite",
+      "display": "Suite Service",
+      "unit_template": "{service_name}.service",
+      "feature": null,
+      "is_required": true,
+      "template_path": "suite.service",
+      "template_content": "[Unit]\nDescription=Arthexis Constellation Django service\nAfter=network-online.target\nWants=network-online.target\n\n[Service]\nType=simple\nWorkingDirectory={base_dir}\nEnvironmentFile=-{base_dir}/redis.env\nEnvironmentFile=-{base_dir}/debug.env\nExecStart={exec_command}\nRestart=always\nTimeoutStartSec=500\nUser={service_user}\n\n[Install]\nWantedBy=multi-user.target\n"
+    }
+  }
+]

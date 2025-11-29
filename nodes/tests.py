@@ -76,6 +76,7 @@ from .models import (
     NodeRole,
     NodeFeature,
     NodeFeatureAssignment,
+    NodeService,
     NetMessage,
     PendingNetMessage,
     NodeManager,
@@ -6214,3 +6215,71 @@ class CaptureRpiSnapshotTests(SimpleTestCase):
         mock_acquire.assert_called_once()
         mock_run.assert_not_called()
         mock_release.assert_not_called()
+
+
+class NodeServiceModelTests(TestCase):
+    def _service(self, **overrides: object) -> NodeService:
+        defaults: dict[str, object] = {
+            "slug": "suite",
+            "display": "Suite Service",
+            "unit_template": "{service_name}.service",
+            "template_path": "suite.service",
+            "template_content": "",
+            "is_required": True,
+        }
+        defaults.update(overrides)
+        return NodeService(**defaults)
+
+    def test_render_template_uses_lock_context(self):
+        service = self._service()
+
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            locks = base_dir / "locks"
+            locks.mkdir()
+            (locks / "service.lck").write_text("demo", encoding="utf-8")
+
+            with override_settings(BASE_DIR=str(base_dir)):
+                rendered = service.render_template()
+
+        self.assertIn(str(base_dir), rendered)
+        self.assertIn("ExecStart", rendered)
+        self.assertNotIn("{service_name}", rendered)
+
+    def test_compare_to_installed_reports_differences(self):
+        service = self._service(
+            slug="celery-worker",
+            display="Celery Worker",
+            unit_template="celery-{service_name}.service",
+            template_path="celery.service",
+        )
+
+        with TemporaryDirectory() as tmpdir, TemporaryDirectory() as systemd_dir:
+            base_dir = Path(tmpdir)
+            locks = base_dir / "locks"
+            locks.mkdir()
+            (locks / "service.lck").write_text("demo", encoding="utf-8")
+
+            with override_settings(BASE_DIR=str(base_dir)):
+                expected = service.render_template()
+
+            service_file = Path(systemd_dir) / "celery-demo.service"
+            service_file.write_text(expected, encoding="utf-8")
+
+            with override_settings(BASE_DIR=str(base_dir)):
+                result = service.compare_to_installed(
+                    base_dir=base_dir, service_dir=Path(systemd_dir)
+                )
+
+            self.assertTrue(result["matches"])
+            self.assertEqual("", result["status"])
+
+            service_file.write_text(expected + "\n#extra", encoding="utf-8")
+
+            with override_settings(BASE_DIR=str(base_dir)):
+                result = service.compare_to_installed(
+                    base_dir=base_dir, service_dir=Path(systemd_dir)
+                )
+
+            self.assertFalse(result["matches"])
+            self.assertTrue(result["status"])

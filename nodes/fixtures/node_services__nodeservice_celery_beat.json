@@ -1,0 +1,18 @@
+[
+  {
+    "model": "nodes.nodeservice",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "slug": "celery-beat",
+      "display": "Celery Beat",
+      "unit_template": "celery-beat-{service_name}.service",
+      "feature": [
+        "celery-queue"
+      ],
+      "is_required": true,
+      "template_path": "celery-beat.service",
+      "template_content": "[Unit]\nDescription=Celery Beat for {service_name}\nAfter={service_name}.service network-online.target redis.service\nRequires={service_name}.service\nPartOf={service_name}.service\nWants=network-online.target\n\n[Service]\nType=simple\nWorkingDirectory={base_dir}\nEnvironmentFile=-{base_dir}/redis.env\nEnvironmentFile=-{base_dir}/debug.env\nExecStart={base_dir}/.venv/bin/celery -A config beat -l info\nRestart=always\nTimeoutStartSec=500\nUser={service_user}\n\n[Install]\nWantedBy=multi-user.target\n"
+    }
+  }
+]
