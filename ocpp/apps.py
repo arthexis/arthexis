@@ -1,11 +1,12 @@
 import logging
 from pathlib import Path
 
-from django.apps import AppConfig
+from django.apps import AppConfig, apps
 from django.conf import settings
 from django.db import connections
 from django.db.backends.signals import connection_created
 from django.db.utils import OperationalError, ProgrammingError
+from django.core.signals import request_started
 
 from .status_resets import clear_cached_statuses
 
@@ -22,6 +23,12 @@ class OcppConfig(AppConfig):
         connection_created.connect(
             self._clear_statuses_on_connection,
             dispatch_uid="ocpp.apps.clear_cached_statuses",
+            weak=False,
+        )
+
+        request_started.connect(
+            self._clear_statuses_on_request,
+            dispatch_uid="ocpp.apps.clear_cached_statuses.request",
             weak=False,
         )
 
@@ -42,6 +49,9 @@ class OcppConfig(AppConfig):
         if self._cleared_cached_statuses:
             return
 
+        if not apps.ready:
+            return
+
         if connection.alias != "default":
             return
 
@@ -52,6 +62,26 @@ class OcppConfig(AppConfig):
             connection_created.disconnect(
                 receiver=self._clear_statuses_on_connection,
                 dispatch_uid="ocpp.apps.clear_cached_statuses",
+            )
+
+    def _clear_statuses_on_request(self, **_kwargs):
+        if self._cleared_cached_statuses:
+            return
+
+        if not apps.ready:
+            return
+
+        self._cleared_cached_statuses = True
+        try:
+            self._clear_cached_statuses()
+        finally:
+            connection_created.disconnect(
+                receiver=self._clear_statuses_on_connection,
+                dispatch_uid="ocpp.apps.clear_cached_statuses",
+            )
+            request_started.disconnect(
+                receiver=self._clear_statuses_on_request,
+                dispatch_uid="ocpp.apps.clear_cached_statuses.request",
             )
 
     def _clear_cached_statuses(self, connection=None) -> None:
