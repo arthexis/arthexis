@@ -63,9 +63,7 @@ def generate_config(
         https_names = https_server_names or "arthexis.com *.arthexis.com"
         http_block = http_redirect_server(
             http_names,
-            port,
-            http_listens,
-            trailing_slash=False,
+            listens=http_listens,
         )
         https_block = https_proxy_server(
             https_names,
