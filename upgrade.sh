@@ -174,6 +174,12 @@ reset_safe_git_changes() {
     "cache"
   )
 
+  # Restore tracked placeholders that may be removed by cleanup scripts.
+  local safe_placeholder_files=(
+    "logs/.gitkeep"
+    "logs/old/.gitkeep"
+  )
+
   if ! command -v git >/dev/null 2>&1; then
     return 0
   fi
@@ -183,6 +189,15 @@ reset_safe_git_changes() {
     if [ -e "$generated_path" ]; then
       echo "Removing generated path $generated_path before upgrading..."
       rm -rf -- "$generated_path"
+    fi
+  done
+
+  local placeholder
+  for placeholder in "${safe_placeholder_files[@]}"; do
+    if git ls-files --error-unmatch "$placeholder" >/dev/null 2>&1 && [ ! -f "$placeholder" ]; then
+      echo "Restoring missing placeholder $placeholder before upgrading..."
+      mkdir -p "$(dirname "$placeholder")"
+      git checkout -- "$placeholder" 2>/dev/null || git restore "$placeholder" 2>/dev/null || true
     fi
   done
 
@@ -229,7 +244,9 @@ reset_safe_git_changes() {
       return 0
     fi
 
-    echo "Uncommitted changes detected; please commit or stash before upgrading." >&2
+    echo "Uncommitted changes detected before upgrading. Dirty paths:" >&2
+    git status --short >&2 || true
+    echo "Please commit or stash before upgrading." >&2
     exit 1
   fi
 }
