@@ -9,6 +9,8 @@ PIP_INSTALL_HELPER="$BASE_DIR/scripts/helpers/pip_install.py"
 UPGRADE_SCRIPT_PATH="$BASE_DIR/upgrade.sh"
 INITIAL_UPGRADE_HASH=""
 UPGRADE_RERUN_EXIT_CODE=3
+UPGRADE_STASH_REF=""
+UPGRADE_STASH_CREATED=0
 if [ -f "$UPGRADE_SCRIPT_PATH" ]; then
   INITIAL_UPGRADE_HASH="$(sha256sum "$UPGRADE_SCRIPT_PATH" | awk '{print $1}')"
 fi
@@ -250,6 +252,44 @@ reset_safe_git_changes() {
     git status --short >&2 || true
     echo "Please commit or stash before upgrading." >&2
     exit 1
+  fi
+}
+
+stash_local_changes_for_upgrade() {
+  if ! command -v git >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if git status --porcelain 2>/dev/null | grep -q '^[ MADRCU?]'; then
+    local stash_label
+    stash_label="upgrade-$(date -u +%Y%m%dT%H%M%SZ)"
+
+    if git stash push --include-untracked -m "$stash_label" >/dev/null 2>&1; then
+      UPGRADE_STASH_REF="$(git stash list | head -n1 | cut -d: -f1)"
+      UPGRADE_STASH_CREATED=1
+      echo "Stashed local changes before upgrade as ${UPGRADE_STASH_REF:-latest stash}."
+    else
+      echo "Failed to stash local changes automatically; please commit or stash before upgrading." >&2
+      exit 1
+    fi
+  fi
+}
+
+restore_stashed_changes_after_upgrade() {
+  if [[ $UPGRADE_STASH_CREATED -ne 1 ]]; then
+    return 0
+  fi
+
+  if [ -z "$UPGRADE_STASH_REF" ]; then
+    return 0
+  fi
+
+  if git stash list | grep -q "^${UPGRADE_STASH_REF}:"; then
+    if git stash pop "$UPGRADE_STASH_REF" >/dev/null 2>&1; then
+      echo "Restored stashed local changes from $UPGRADE_STASH_REF after upgrade."
+    else
+      echo "Stashed changes remain in $UPGRADE_STASH_REF; apply them manually with 'git stash apply'." >&2
+    fi
   fi
 }
 
@@ -1230,11 +1270,10 @@ elif [[ $RERUN_AFTER_SELF_UPDATE -eq 1 ]] && [[ ${RERUN_LCD_WAS_ACTIVE:-0} -eq 1
 fi
 LCD_RESTART_REQUIRED=$LCD_WAS_ACTIVE
 
+DEFER_BROADCAST_MESSAGE=0
 if [[ $SERVICE_WAS_ACTIVE -eq 1 ]] && [[ $UPGRADE_PLANNED -eq 1 ]]; then
   if [[ -n "$LOCAL_REVISION" || -n "$REMOTE_REVISION" ]]; then
-    if ! broadcast_upgrade_start_net_message "$LOCAL_REVISION" "$REMOTE_REVISION"; then
-      echo "Warning: failed to broadcast upgrade Net Message" >&2
-    fi
+    DEFER_BROADCAST_MESSAGE=1
   fi
 fi
 
@@ -1260,6 +1299,7 @@ if [[ $LOCAL_ONLY -eq 1 ]]; then
   echo "Skipping git pull for local refresh."
 else
   echo "Pulling latest changes..."
+  stash_local_changes_for_upgrade
   git pull --rebase
 
   # If the upgrade script itself was updated, stop so the new version is executed on the next run.
@@ -1319,6 +1359,11 @@ if [ $VENV_PRESENT -eq 1 ]; then
   if ls data/*.json >/dev/null 2>&1; then
     python manage.py loaddata data/*.json
   fi
+  if [[ $DEFER_BROADCAST_MESSAGE -eq 1 ]]; then
+    if ! broadcast_upgrade_start_net_message "$LOCAL_REVISION" "$REMOTE_REVISION"; then
+      echo "Warning: failed to broadcast upgrade Net Message" >&2
+    fi
+  fi
   deactivate
 fi
 
@@ -1363,6 +1408,8 @@ if [ -f "$LOCK_DIR/service.lck" ]; then
     arthexis_install_service_stack "$BASE_DIR" "$LOCK_DIR" "$SERVICE_NAME" true "$BASE_DIR/service-start.sh" "$SERVICE_MANAGEMENT_MODE"
   fi
 fi
+
+restore_stashed_changes_after_upgrade
 
 if [ -n "$SERVICE_NAME" ] && lcd_systemd_unit_present "$SERVICE_NAME"; then
   arthexis_install_lcd_service_unit "$BASE_DIR" "$LOCK_DIR" "$SERVICE_NAME"
