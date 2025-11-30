@@ -20,7 +20,7 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.core import mailer
 from apps.core.entity import Entity, EntityAllManager, EntityManager
-from apps.core.fields import SigilShortAutoField
+from apps.sigils.fields import SigilShortAutoField
 from apps.core.models import (
     EmailArtifact,
     GoogleCalendarProfile as CoreGoogleCalendarProfile,

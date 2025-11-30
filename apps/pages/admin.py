@@ -254,7 +254,7 @@ class SiteAdmin(DjangoSiteAdmin):
     def _reload_site_fixtures(self, request):
         fixtures_dir = Path(settings.BASE_DIR) / "apps" / "core" / "fixtures"
         fixture_paths = sorted(fixtures_dir.glob("references__00_site_*.json"))
-        sigil_fixture = fixtures_dir / "sigil_roots__site.json"
+        sigil_fixture = Path("apps/sigils/fixtures/sigil_roots__site.json")
         if sigil_fixture.exists():
             fixture_paths.append(sigil_fixture)
 

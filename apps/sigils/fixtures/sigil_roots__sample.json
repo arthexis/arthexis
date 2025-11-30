@@ -1,0 +1,15 @@
+[
+  {
+    "model": "sigils.sigilroot",
+    "fields": {
+      "is_seed_data": false,
+      "is_deleted": false,
+      "prefix": "SAMPLE",
+      "context_type": "entity",
+      "content_type": [
+        "nodes",
+        "contentsample"
+      ]
+    }
+  }
+]
