@@ -52,7 +52,7 @@ from .utils import (
     save_audio_sample,
     save_screenshot,
 )
-from .reports import (
+from apps.reports.nodes import (
     collect_celery_log_entries,
     collect_scheduled_tasks,
     iter_report_periods,

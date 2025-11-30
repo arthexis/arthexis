@@ -646,7 +646,7 @@ class ClientReportAdmin(EntityModelAdmin):
     list_filter = ("owner", ClientReportRecurrencyFilter)
     readonly_fields = ("created_on", "data")
 
-    change_list_template = "admin/core/clientreport/change_list.html"
+    change_list_template = "admin/energy/clientreport/change_list.html"
 
     def period_range(self, obj):
         return str(obj)
@@ -664,7 +664,7 @@ class ClientReportAdmin(EntityModelAdmin):
     total_kw_period_display.short_description = "Total kW (period)"
 
     def download_link(self, obj):
-        url = reverse("admin:core_clientreport_download", args=[obj.pk])
+        url = reverse("admin:energy_clientreport_download", args=[obj.pk])
         return format_html('<a href="{}">Download</a>', url)
 
     download_link.short_description = "Download"
@@ -747,12 +747,12 @@ class ClientReportAdmin(EntityModelAdmin):
             path(
                 "generate/",
                 self.admin_site.admin_view(self.generate_view),
-                name="core_clientreport_generate",
+                name="energy_clientreport_generate",
             ),
             path(
                 "download/<int:report_id>/",
                 self.admin_site.admin_view(self.download_view),
-                name="core_clientreport_download",
+                name="energy_clientreport_download",
             ),
         ]
         return custom + urls
@@ -823,7 +823,7 @@ class ClientReportAdmin(EntityModelAdmin):
                     "Consumer report generated. The download will begin automatically.",
                     messages.SUCCESS,
                 )
-                redirect_url = f"{reverse('admin:core_clientreport_generate')}?download={report.pk}"
+                redirect_url = f"{reverse('admin:energy_clientreport_generate')}?download={report.pk}"
                 return HttpResponseRedirect(redirect_url)
             report_rows = report.rows_for_display
             report_summary_rows = ClientReport.build_evcs_summary_rows(report_rows)
@@ -840,7 +840,7 @@ class ClientReportAdmin(EntityModelAdmin):
                 pass
             else:
                 download_url = reverse(
-                    "admin:core_clientreport_download", args=[download_report.pk]
+                    "admin:energy_clientreport_download", args=[download_report.pk]
                 )
         if report and report_rows is None:
             report_rows = report.rows_for_display
@@ -868,7 +868,7 @@ class ClientReportAdmin(EntityModelAdmin):
             }
         )
         return TemplateResponse(
-            request, "admin/core/clientreport/generate.html", context
+            request, "admin/energy/clientreport/generate.html", context
         )
 
     def get_changelist_actions(self, request):
@@ -883,7 +883,7 @@ class ClientReportAdmin(EntityModelAdmin):
         return actions
 
     def generate_report(self, request):
-        return HttpResponseRedirect(reverse("admin:core_clientreport_generate"))
+        return HttpResponseRedirect(reverse("admin:energy_clientreport_generate"))
 
     generate_report.label = _("Generate report")
 

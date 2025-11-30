@@ -10,7 +10,7 @@ from django.db import models
 
 from .models import SigilRoot
 from .sigil_context import get_context
-from .system import get_system_sigil_values, resolve_system_namespace_value
+from apps.reports.system import get_system_sigil_values, resolve_system_namespace_value
 
 logger = logging.getLogger(__name__)
 

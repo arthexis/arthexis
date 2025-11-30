@@ -194,7 +194,7 @@ def _gather_commits(range_spec: str) -> Iterable[ChangelogCommit]:
     except ChangelogError:
         return tuple()
 
-    from apps.core.system import _github_commit_url  # Local import to avoid circular dependency
+    from apps.reports.system import _github_commit_url  # Local import to avoid circular dependency
 
     for chunk in output.strip().split("\x1e"):
         if not chunk:

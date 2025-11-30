@@ -1139,7 +1139,7 @@ class ClientReport(Entity):
         }
         with override(language_code):
             html_content = html or render_to_string(
-                "core/reports/client_report_email.html", context
+                "energy/reports/client_report_email.html", context
             )
         html_path = report_dir / f"{identifier}.html"
         html_path.write_text(html_content, encoding="utf-8")
@@ -1700,7 +1700,7 @@ class ClientReport(Entity):
         candidates.append("en")
 
         for code in dict.fromkeys(candidates):
-            template_name = f"core/reports/client_report_pdf/{code}.json"
+            template_name = f"energy/reports/client_report_pdf/{code}.json"
             try:
                 rendered = render_to_string(template_name)
             except TemplateDoesNotExist:
