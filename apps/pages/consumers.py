@@ -10,7 +10,7 @@ from django.conf import settings
 from django.contrib.sites.models import Site
 from django.utils.translation import gettext
 
-from .models import ChatMessage, ChatSession
+from apps.chats.models import ChatMessage, ChatSession
 
 
 logger = logging.getLogger(__name__)
