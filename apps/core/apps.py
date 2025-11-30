@@ -34,10 +34,7 @@ def _setup_celery_beat_integrations():
     from django.core.exceptions import ValidationError
     from django.db.models.signals import pre_save
 
-    from .celery_utils import (
-        normalize_periodic_task_name,
-        periodic_task_name_variants,
-    )
+    from apps.celery.utils import normalize_periodic_task_name, periodic_task_name_variants
 
     if not hasattr(CrontabSchedule, "natural_key"):
 
@@ -427,17 +424,13 @@ def _patch_entity_deserialization():
 
 
 def _configure_lock_dependent_tasks(config):
-    from pathlib import Path
-
-    from django.conf import settings
     from django.db.backends.signals import connection_created
     from django.db.models.signals import post_migrate
 
-    lock = Path(settings.BASE_DIR) / ".locks" / "celery.lck"
-    if not lock.exists():
-        return
+    from apps.celery.utils import is_celery_enabled
 
-    from django.db import connections
+    if not is_celery_enabled():
+        return
 
     from .auto_upgrade import ensure_auto_upgrade_periodic_task
     from .reference_validation import ensure_reference_validation_task
@@ -449,7 +442,7 @@ def _configure_lock_dependent_tasks(config):
         except Exception:  # pragma: no cover - tables or module not ready
             return
 
-        from .celery_utils import normalize_periodic_task_name
+        from apps.celery.utils import normalize_periodic_task_name
 
         try:
             schedule, _ = IntervalSchedule.objects.get_or_create(

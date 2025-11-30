@@ -37,10 +37,7 @@ from pathlib import Path
 from urllib.parse import urlparse, urlunsplit
 from utils import revision
 from apps.core.notifications import notify_async
-from apps.core.celery_utils import (
-    normalize_periodic_task_name,
-    periodic_task_name_variants,
-)
+from apps.celery.utils import normalize_periodic_task_name, periodic_task_name_variants
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_ipv46_address, validate_ipv6_address
 from cryptography.hazmat.primitives.asymmetric import rsa

@@ -36,6 +36,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.core.validators import MaxLengthValidator, MaxValueValidator, MinValueValidator
 from django.core.exceptions import ValidationError
 
+from apps.celery.utils import is_celery_enabled
 from apps.app.models import Application
 from apps.repos import github_issues
 from .tasks import create_user_story_github_issue
@@ -1556,14 +1557,6 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 
 
-def _celery_lock_path() -> Path:
-    return Path(settings.BASE_DIR) / ".locks" / "celery.lck"
-
-
-def _is_celery_enabled() -> bool:
-    return _celery_lock_path().exists()
-
-
 @receiver(post_save, sender=UserStory)
 def _queue_low_rating_user_story_issue(
     sender, instance: UserStory, created: bool, raw: bool, **kwargs
@@ -1576,7 +1569,7 @@ def _queue_low_rating_user_story_issue(
         return
     if not instance.user_id:
         return
-    if not _is_celery_enabled():
+    if not is_celery_enabled():
         return
 
     try:

@@ -34,6 +34,7 @@ from django.utils.translation import gettext_lazy as _, ngettext
 
 from django.db import DatabaseError
 
+from apps.celery.utils import is_celery_enabled
 from apps.core.auto_upgrade import (
     AUTO_UPGRADE_TASK_NAME,
     AUTO_UPGRADE_TASK_PATH,
@@ -1781,7 +1782,7 @@ def _configured_service_units(base_dir: Path) -> list[dict[str, str]]:
 
     _add_unit(service_name, label=str(_("Suite service")))
 
-    if (lock_dir / "celery.lck").exists():
+    if is_celery_enabled(lock_dir / "celery.lck"):
         for prefix, label in [
             ("celery", _("Celery worker")),
             ("celery-beat", _("Celery beat")),

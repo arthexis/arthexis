@@ -20,7 +20,7 @@ from django.utils import formats, timezone
 from django.utils.dateparse import parse_datetime
 from django.utils.translation import gettext, gettext_lazy as _, override
 
-from apps.core.celery_utils import normalize_periodic_task_name
+from apps.celery.utils import normalize_periodic_task_name
 from apps.core.entity import Entity, EntityManager
 from apps.core.language import (
     default_report_language,
