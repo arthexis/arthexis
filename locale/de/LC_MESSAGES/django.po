@@ -4491,8 +4491,8 @@ msgstr ""
 
 #: pages/admin.py:157 pages/admin.py:167
 msgid ""
-"Managed NGINX configuration staged. Run network-setup.sh to apply changes."
-msgstr ""
+"Managed NGINX configuration staged. Apply the changes through your deployment tooling."
+msgstr "Verwaltete NGINX-Konfiguration vorbereitet. Wende die Änderungen über deine Deployment-Tools an."
 
 #: pages/admin.py:180
 msgid "No site fixtures found."

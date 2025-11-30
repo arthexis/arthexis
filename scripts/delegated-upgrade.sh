@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+BASE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 LOCK_DIR="$BASE_DIR/.locks"
 SERVICE_NAME=""
 LOG_DIR="${ARTHEXIS_LOG_DIR:-$BASE_DIR/logs}"

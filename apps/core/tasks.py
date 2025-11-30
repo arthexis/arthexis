@@ -5,7 +5,6 @@ import logging
 import os
 import shutil
 import re
-import shlex
 import socket
 import subprocess
 import sys
@@ -105,23 +104,6 @@ def _resolve_release_severity(version: str | None) -> str:
 def heartbeat() -> None:
     """Log a simple heartbeat message."""
     logger.info("Heartbeat task executed")
-
-
-@shared_task
-def renew_ssl_certificate(force: bool = False) -> None:
-    """Execute the renew-certs helper script to refresh the node SSL cert."""
-
-    base_dir = _project_base_dir()
-    script = base_dir / "renew-certs.sh"
-    if not script.exists():
-        raise FileNotFoundError(f"Certificate renewal script not found at {script}")
-
-    args = [str(script)]
-    if force:
-        args.append("--force")
-
-    logger.info("Running %s", " ".join(shlex.quote(arg) for arg in args))
-    subprocess.run(args, cwd=base_dir, check=True)
 
 
 def _auto_upgrade_log_path(base_dir: Path) -> Path:
@@ -449,7 +431,7 @@ def _run_upgrade_command(
 def _delegate_upgrade_via_script(base_dir: Path, args: list[str]) -> str | None:
     """Launch the delegated upgrade helper script and return the unit name."""
 
-    script = base_dir / "delegated-upgrade.sh"
+    script = base_dir / "scripts" / "delegated-upgrade.sh"
     if not script.exists():
         _append_auto_upgrade_log(
             base_dir,

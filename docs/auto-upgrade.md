@@ -18,8 +18,8 @@ delegated systemd unit is launched, and what to check if something fails.
 
 ## How delegation works
 
-1. Celery calls `delegated-upgrade.sh` when an update is required.
-2. `delegated-upgrade.sh` launches a transient unit with `systemd-run`, setting:
+1. Celery calls `scripts/delegated-upgrade.sh` when an update is required.
+2. `scripts/delegated-upgrade.sh` launches a transient unit with `systemd-run`, setting:
    - `WorkingDirectory` to the project root so relative commands like
      `./upgrade.sh` resolve correctly.
    - `ARTHEXIS_BASE_DIR` and `ARTHEXIS_LOG_DIR` for the watcher.
@@ -39,7 +39,7 @@ Run one of the following from the project root:
 ```bash
 ./upgrade.sh --stable   # direct run, useful for local validation
 ./upgrade.sh --detached # launches the delegated watcher so the upgrade continues if the console disconnects
-./delegated-upgrade.sh  # matches the automated delegated path
+./scripts/delegated-upgrade.sh  # matches the automated delegated path
 ```
 
 You can also request the Celery task:

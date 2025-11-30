@@ -145,7 +145,7 @@ ensure_virtualenv() {
 }
 
 configure_nginx_site() {
-  local setup_script="$BASE_DIR/nginx-setup.sh"
+  local setup_script="$BASE_DIR/scripts/nginx-setup.sh"
 
   if [ ! -x "$setup_script" ]; then
     return 0
@@ -730,7 +730,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 run_detached_upgrade() {
-  local delegated_script="$BASE_DIR/delegated-upgrade.sh"
+  local delegated_script="$BASE_DIR/scripts/delegated-upgrade.sh"
 
   if [ ! -x "$delegated_script" ]; then
     echo "Detached upgrades require $delegated_script" >&2
@@ -1405,7 +1405,7 @@ if [ -f "$LOCK_DIR/service.lck" ]; then
   if [ -f "$SERVICE_FILE" ] && grep -Fq "celery -A" "$SERVICE_FILE"; then
     echo "Migrating service configuration for Celery..."
     touch "$LOCK_DIR/celery.lck"
-    arthexis_install_service_stack "$BASE_DIR" "$LOCK_DIR" "$SERVICE_NAME" true "$BASE_DIR/service-start.sh" "$SERVICE_MANAGEMENT_MODE"
+  arthexis_install_service_stack "$BASE_DIR" "$LOCK_DIR" "$SERVICE_NAME" true "$BASE_DIR/scripts/service-start.sh" "$SERVICE_MANAGEMENT_MODE"
   fi
 fi
 

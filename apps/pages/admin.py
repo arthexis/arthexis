@@ -180,7 +180,7 @@ class SiteAdmin(DjangoSiteAdmin):
             self.message_user(
                 request,
                 _(
-                    "Managed NGINX configuration staged. Run network-setup.sh to apply changes."
+                    "Managed NGINX configuration staged. Apply the changes through your deployment tooling."
                 ),
                 messages.INFO,
             )
@@ -190,7 +190,7 @@ class SiteAdmin(DjangoSiteAdmin):
         self.message_user(
             request,
             _(
-                "Managed NGINX configuration staged. Run network-setup.sh to apply changes."
+                "Managed NGINX configuration staged. Apply the changes through your deployment tooling."
             ),
             messages.INFO,
         )
