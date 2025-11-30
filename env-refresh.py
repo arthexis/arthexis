@@ -240,6 +240,21 @@ def _migration_hash(app_labels: list[str]) -> str:
     return md5.hexdigest()
 
 
+def _fixtures_hash(fixtures: Iterable[str]) -> str:
+    """Return an md5 hash of the provided fixture files."""
+
+    base_dir = Path(settings.BASE_DIR)
+    digest = hashlib.md5(usedforsecurity=False)
+    for fixture in sorted(fixtures):
+        path = base_dir / fixture
+        try:
+            digest.update(str(path.relative_to(base_dir)).encode("utf-8"))
+            digest.update(path.read_bytes())
+        except OSError:
+            continue
+    return digest.hexdigest()
+
+
 def _remove_integrator_from_auth_migration() -> None:
     """Strip lingering integrator imports from Django's auth migration."""
     spec = importlib.util.find_spec("django.contrib.auth.migrations.0013_userproxy")
@@ -264,6 +279,8 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
     using_sqlite = default_db["ENGINE"] == "django.db.backends.sqlite3"
 
     base_dir = Path(settings.BASE_DIR)
+    locks_dir = base_dir / ".locks"
+    locks_dir.mkdir(exist_ok=True)
     local_apps = _local_app_labels()
 
     _remove_integrator_from_auth_migration()
@@ -280,7 +297,7 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
             raise
 
     # Compute migrations hash and compare with stored value
-    hash_file = base_dir / "migrations.md5"
+    hash_file = locks_dir / "migrations.md5"
     new_hash = _migration_hash(local_apps)
     stored_hash = hash_file.read_text().strip() if hash_file.exists() else ""
 
@@ -359,8 +376,15 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
     # fixtures that reference them.
     call_command("register_site_apps")
 
+    fixture_hash_file = locks_dir / "fixtures.md5"
     fixtures = _fixture_files()
-    if fixtures:
+    fixture_hash = _fixtures_hash(fixtures) if fixtures else ""
+    stored_fixture_hash = (
+        fixture_hash_file.read_text().strip() if fixture_hash_file.exists() else ""
+    )
+    should_load_fixtures = fixtures and (clean or fixture_hash != stored_fixture_hash)
+
+    if should_load_fixtures:
         fixtures.sort(key=_fixture_sort_key)
         with tempfile.TemporaryDirectory() as tmpdir:
             patched: dict[int, list[str]] = {}
@@ -528,8 +552,22 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
             finally:
                 post_save.connect(_create_landings, sender=Module)
 
-    # Refresh seed flags for Landing entries created during fixture loading.
-    Landing.objects.update(is_seed_data=True)
+        # Refresh seed flags for Landing entries created during fixture loading.
+        Landing.objects.update(is_seed_data=True)
+
+        # Load shared fixtures once before personal data
+        load_shared_user_fixtures(force=True)
+
+        # Load personal user data fixtures last
+        for user in get_user_model().objects.all():
+            load_user_fixtures(user)
+
+        # Recreate any missing SigilRoots after loading fixtures
+        generate_model_sigils()
+
+        fixture_hash_file.write_text(fixture_hash)
+    elif fixtures:
+        print("Fixtures unchanged; skipping reload.")
 
     # Ensure current node is registered or updated
     node, _ = Node.register_current(notify_peers=False)
@@ -540,16 +578,6 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
             domain=node.public_endpoint,
             defaults={"name": "Control"},
         )
-
-    # Load shared fixtures once before personal data
-    load_shared_user_fixtures(force=True)
-
-    # Load personal user data fixtures last
-    for user in get_user_model().objects.all():
-        load_user_fixtures(user)
-
-    # Recreate any missing SigilRoots after loading fixtures
-    generate_model_sigils()
 
     # Update the migrations hash file after a successful run.
     hash_file.write_text(new_hash)

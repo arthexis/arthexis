@@ -2,6 +2,7 @@
 setlocal
 set "BASE_DIR=%~dp0"
 set "PIP_HELPER=%BASE_DIR%scripts\helpers\pip_install.py"
+set "LOCK_DIR=%BASE_DIR%\.locks"
 cd /d "%BASE_DIR%"
 
 git pull --rebase
@@ -13,7 +14,8 @@ if not exist .venv\Scripts\python.exe (
 
 set VENV=.venv
 set REQ=requirements.txt
-set MD5=requirements.md5
+set MD5=%LOCK_DIR%\requirements.md5
+if not exist "%LOCK_DIR%" mkdir "%LOCK_DIR%" >nul 2>&1
 for /f "skip=1 tokens=1" %%h in ('certutil -hashfile %REQ% MD5') do if not defined NEW_HASH set NEW_HASH=%%h
 if exist %MD5% (
     set /p STORED_HASH=<%MD5%

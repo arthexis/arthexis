@@ -60,6 +60,8 @@ SYSTEMD_UNITS_LOCK="$LOCK_DIR/systemd_services.lck"
 SERVICE_NAME=""
 [ -f "$LOCK_DIR/service.lck" ] && SERVICE_NAME="$(cat "$LOCK_DIR/service.lck")"
 
+mkdir -p "$LOCK_DIR"
+
 ensure_git_safe_directory() {
   if ! command -v git >/dev/null 2>&1; then
     return 0
@@ -577,7 +579,7 @@ cleanup_non_terminal_git_state() {
 
 install_requirements_if_changed() {
   local req_file="$BASE_DIR/requirements.txt"
-  local md5_file="$BASE_DIR/requirements.md5"
+  local md5_file="$LOCK_DIR/requirements.md5"
   local venv_python="$BASE_DIR/.venv/bin/python"
   local new_hash=""
   local stored_hash=""
