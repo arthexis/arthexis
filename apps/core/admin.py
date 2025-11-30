@@ -231,13 +231,18 @@ def _build_credentials_actions(action_name, handler_name, description=TEST_CREDE
 
 
 def get_app_list_with_protocol_forwarder(self, request, app_label=None):
+    try:
+        Application = django_apps.get_model("app", "Application")
+    except LookupError:
+        # Fall back to the original behavior if the Application model is unavailable.
+        return _original_admin_get_app_list(self, request, app_label=app_label)
+
     full_list = list(_original_admin_get_app_list(self, request, app_label=None))
     result = full_list
 
     if app_label:
         result = [entry for entry in result if entry.get("app_label") == app_label]
 
-    Application = django_apps.get_model("pages", "Application")
     order_map = Application.order_map()
 
     ordered_result = []
