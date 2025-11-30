@@ -10,6 +10,7 @@ from collections.abc import MutableMapping
 from typing import Iterable, Literal, Optional, Union
 
 from django.contrib.auth.decorators import login_required
+from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.template.response import TemplateResponse
 from django.test import signals as test_signals
@@ -38,6 +39,19 @@ _ZAP_NUMERIC_FIELDS: tuple[str, ...] = (
     "max_lines",
     "phases",
     "temperature",
+)
+
+_AWG_PARAM_FIELDS: tuple[str, ...] = (
+    "meters",
+    "amps",
+    "volts",
+    "material",
+    "max_awg",
+    "max_lines",
+    "phases",
+    "temperature",
+    "conduit",
+    "ground",
 )
 
 
@@ -113,6 +127,17 @@ def _contains_zap(values: Iterable[Optional[Union[str, int]]]) -> bool:
     """Return ``True`` when any ``values`` contain the zap keyword."""
 
     return any(_normalize_special_value(value) == "zap" for value in values)
+
+
+def _clean_awg_params(data: MutableMapping[str, str]) -> dict[str, str]:
+    """Return calculator parameters stripped of blanks and unsupported fields."""
+
+    allowed_fields = set(_AWG_PARAM_FIELDS) | {"template"}
+    return {
+        key: value
+        for key, value in data.items()
+        if key in allowed_fields and value not in (None, "", "None")
+    }
 
 
 def _load_awg_data(
@@ -560,6 +585,50 @@ def find_awg(
         return worst[1]
 
     return results[0][1]
+
+
+def _template_defaults(template: CalculatorTemplate) -> dict[str, object]:
+    """Return parameters derived from the provided calculator ``template``."""
+
+    return {
+        field: getattr(template, field)
+        for field in _AWG_PARAM_FIELDS
+        if getattr(template, field) not in (None, "")
+    }
+
+
+def awg_calculate(request):
+    """Calculate cable size using query parameters or a stored template."""
+
+    params = _clean_awg_params(request.POST or request.GET)
+    template_value = params.pop("template", None)
+
+    template_params: dict[str, object] = {}
+    if template_value:
+        try:
+            lookup = {"pk": int(template_value)}
+        except (TypeError, ValueError):
+            lookup = {"name__iexact": template_value}
+
+        template = CalculatorTemplate.objects.filter(**lookup).first()
+        if template is None:
+            return JsonResponse(
+                {"error": _("Calculator template not found.")}, status=404
+            )
+        template_params = _template_defaults(template)
+
+    merged_params = {**template_params, **params}
+    if "meters" not in merged_params:
+        return JsonResponse(
+            {"error": _("Meters is required for AWG calculation.")}, status=400
+        )
+
+    try:
+        result = find_awg(**merged_params)
+    except (AssertionError, ValueError) as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
+
+    return JsonResponse(result)
 
 
 @landing(_lazy("AWG Cable Calculator"))
