@@ -392,6 +392,7 @@ LOCAL_APPS = [
     "apps.counts",
     "apps.energy",
     "apps.core",
+    "apps.payments",
     "apps.links",
     "apps.locals",
     "apps.media",
@@ -410,6 +411,7 @@ LOCAL_APPS = [
 APPLICATION_APPS = [
     "apps.awg",
     "apps.core",
+    "apps.payments",
     "apps.energy",
     "apps.nodes",
     "apps.vehicle",
