@@ -19,7 +19,7 @@ from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _, ngettext
 
 from apps.core.models import RFID, SecurityGroup
-from apps.crms.models import OdooProfile
+from apps.odoo.models import OdooProfile
 from apps.locals.user_data import EntityModelAdmin
 from apps.ocpp.models import Charger, ElectricVehicle
 
@@ -150,7 +150,7 @@ class CustomerAccountAdmin(EntityModelAdmin):
             },
         ),
         (
-            "CRM",
+            "Odoo",
             {
                 "fields": ("odoo_customer",),
                 "classes": ("collapse",),
@@ -495,7 +495,7 @@ class CustomerAccountAdmin(EntityModelAdmin):
         profile = getattr(request.user, "odoo_profile", None)
         if not profile or not profile.is_verified:
             context["credential_error"] = _(
-                "Configure your CRM employee credentials before importing customers."
+                "Configure your Odoo profile before importing customers."
             )
             return TemplateResponse(
                 request, "admin/core/customeraccount/import_from_odoo.html", context

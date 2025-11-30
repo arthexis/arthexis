@@ -1,11 +1,11 @@
 {% extends "admin/change_list.html" %}
-{% load i18n %}
+{% load i18n admin_urls %}
 
 {% block object-tools-items %}
   {{ block.super }}
   {% if has_add_permission %}
-    <li><a href="{% url 'admin:core_product_register_from_odoo' %}" class="addlink">{% translate "Register from Odoo" %}</a></li>
+    <li><a href="{% url opts|admin_urlname:'register_from_odoo' %}" class="addlink">{% translate "Register from Odoo" %}</a></li>
   {% else %}
-    <li><a href="{% url 'admin:core_product_register_from_odoo' %}">{% translate "Register from Odoo" %}</a></li>
+    <li><a href="{% url opts|admin_urlname:'register_from_odoo' %}">{% translate "Register from Odoo" %}</a></li>
   {% endif %}
 {% endblock %}

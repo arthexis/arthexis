@@ -35,7 +35,7 @@ from apps.core.models import (
     SecurityGroup as CoreSecurityGroup,
     ReleaseManager as CoreReleaseManager,
 )
-from apps.crms.models import OdooProfile as CoreOdooProfile
+from apps.odoo.models import OdooProfile as CoreOdooProfile
 from apps.locals.user_data import (
     EntityModelAdmin,
     UserDatumAdminMixin,

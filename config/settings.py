@@ -394,7 +394,7 @@ LOCAL_APPS = [
     "apps.core",
     "apps.links",
     "apps.locals",
-    "apps.crms",
+    "apps.odoo",
     "apps.sigils",
     "apps.repos",
     "apps.app",

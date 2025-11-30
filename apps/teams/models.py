@@ -30,7 +30,10 @@ from apps.core.models import (
     SecurityGroup as CoreSecurityGroup,
     User as CoreUser,
 )
-from apps.crms.models import OdooProfile as CoreOdooProfile, Product as CoreProduct
+from apps.odoo.models import (
+    OdooProfile as CoreOdooProfile,
+    OdooProduct as CoreOdooProduct,
+)
 from apps.awg.models import PowerLead as CorePowerLead
 from django_otp.plugins.otp_totp.models import (
     TOTPDevice as CoreTOTPDevice,
@@ -1239,7 +1242,7 @@ class TaskCategory(Entity):
         help_text=_("User responsible for overseeing this category."),
     )
     odoo_products = models.ManyToManyField(
-        CoreProduct,
+        CoreOdooProduct,
         related_name="task_categories",
         verbose_name=_("Odoo products"),
         blank=True,
@@ -1338,7 +1341,7 @@ class ManualTask(Entity):
         help_text=_("User overseeing the task."),
     )
     odoo_products = models.ManyToManyField(
-        CoreProduct,
+        CoreOdooProduct,
         blank=True,
         related_name="manual_tasks",
         verbose_name=_("Odoo products"),
