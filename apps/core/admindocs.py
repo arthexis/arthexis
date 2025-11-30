@@ -83,19 +83,14 @@ class OrderedModelIndexView(BaseAdminDocsView):
             return None
 
     def _application_order_map(self) -> dict[str, int]:
-        Application = self._get_application_model()
-        if not Application:
-            return {}
-        return Application.order_map()
+        return {}
 
     def _group_sort_key(self, app_config, order_map: dict[str, int]):
         Application = self._get_application_model()
-        name = str(app_config.verbose_name)
+        name = str(app_config.label)
         if Application:
-            name = Application.format_display_name(None, name)
-        prefix = order_map.get(app_config.label)
-        prefix_value = prefix if prefix is not None else float("inf")
-        return prefix_value, name, app_config.label
+            name = Application.format_display_name(name)
+        return name, app_config.label
 
     def _group_models(
         self, models: list[SimpleNamespace], order_map: dict[str, int]
@@ -105,12 +100,9 @@ class OrderedModelIndexView(BaseAdminDocsView):
 
         for model in models:
             app_config = model.app_config
-            group_order = order_map.get(app_config.label)
-            group_name = str(app_config.verbose_name)
+            group_name = str(app_config.label)
             if Application:
-                group_name = Application.format_display_name(
-                    group_order, group_name
-                )
+                group_name = Application.format_display_name(group_name)
             sort_key = self._group_sort_key(app_config, order_map)
 
             group = grouped.setdefault(

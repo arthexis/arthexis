@@ -62,9 +62,11 @@ logger = logging.getLogger(__name__)
 
 
 def get_local_app_choices():
-    order_map = Application.order_map()
+    application_apps = getattr(
+        settings, "APPLICATION_APPS", getattr(settings, "LOCAL_APPS", [])
+    )
     choices = []
-    for app_label in getattr(settings, "LOCAL_APPS", []):
+    for app_label in application_apps:
         try:
             config = django_apps.get_app_config(app_label)
         except LookupError:
@@ -72,10 +74,8 @@ def get_local_app_choices():
         choices.append(
             (
                 config.label,
-                Application.format_display_name(
-                    order_map.get(config.label), str(config.verbose_name)
-                ),
-            )
+                Application.format_display_name(str(config.label)),
+            ),
         )
     return choices
 

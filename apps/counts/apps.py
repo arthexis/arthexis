@@ -5,4 +5,3 @@ class CountersConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "apps.counts"
     label = "counters"
-    verbose_name = "Counters"

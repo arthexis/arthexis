@@ -405,6 +405,17 @@ LOCAL_APPS = [
     "apps.teams",
 ]
 
+APPLICATION_APPS = [
+    "apps.awg",
+    "apps.core",
+    "apps.energy",
+    "apps.nodes",
+    "apps.ocpp",
+    "apps.pages",
+    "apps.rfid",
+    "apps.teams",
+]
+
 INSTALLED_APPS = [
     "whitenoise.runserver_nostatic",
     "django.contrib.admin",

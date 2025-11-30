@@ -12,8 +12,6 @@ class PagesConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "apps.pages"
     label = "pages"
-    order = 7
-    verbose_name = "Experience"
     _view_history_purged = False
 
     def ready(self):  # pragma: no cover - import for side effects
