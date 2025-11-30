@@ -70,7 +70,8 @@ from reportlab.graphics.barcode import qr
 from reportlab.graphics.shapes import Drawing
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
-from apps.ocpp.models import Charger, ElectricVehicle, Transaction
+from apps.ocpp.models import Charger, Transaction
+from apps.vehicle.models import ElectricVehicle
 from apps.rfid.utils import build_mode_toggle
 from apps.teams.models import EmailCollector, EmailInbox, EmailOutbox, SocialProfile
 from apps.energy.models import ClientReport, CustomerAccount

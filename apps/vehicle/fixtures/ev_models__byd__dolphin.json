@@ -1,0 +1,10 @@
+[
+  {
+    "model": "vehicle.evmodel",
+    "fields": {
+      "brand": ["BYD"],
+      "name": "Dolphin",
+      "est_battery_kwh": "60.50"
+    }
+  }
+]

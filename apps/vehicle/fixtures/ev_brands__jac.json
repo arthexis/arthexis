@@ -1,0 +1,8 @@
+[
+  {
+    "model": "vehicle.brand",
+    "fields": {
+      "name": "JAC"
+    }
+  }
+]

@@ -1,0 +1,9 @@
+[
+  {
+    "model": "vehicle.evmodel",
+    "fields": {
+      "brand": ["Audi"],
+      "name": "e-tron GT"
+    }
+  }
+]

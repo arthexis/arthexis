@@ -21,7 +21,8 @@ from django.utils.translation import gettext_lazy as _, ngettext
 from apps.core.models import RFID, SecurityGroup
 from apps.odoo.models import OdooProfile
 from apps.locals.user_data import EntityModelAdmin
-from apps.ocpp.models import Charger, ElectricVehicle
+from apps.ocpp.models import Charger
+from apps.vehicle.models import ElectricVehicle
 
 from .models import (
     ClientReport,

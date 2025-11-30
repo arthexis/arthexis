@@ -1,0 +1,10 @@
+[
+  {
+    "model": "vehicle.evmodel",
+    "fields": {
+      "brand": ["MG"],
+      "name": "MG4 Extended Range",
+      "est_battery_kwh": "77.00"
+    }
+  }
+]

@@ -1,9 +1,0 @@
-[
-  {
-    "model": "ocpp.evmodel",
-    "fields": {
-      "brand": ["Porsche"],
-      "name": "Taycan"
-    }
-  }
-]

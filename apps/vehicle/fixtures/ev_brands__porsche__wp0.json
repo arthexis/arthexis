@@ -1,0 +1,9 @@
+[
+  {
+    "model": "vehicle.wmicode",
+    "fields": {
+      "brand": ["Porsche"],
+      "code": "WP0"
+    }
+  }
+]
