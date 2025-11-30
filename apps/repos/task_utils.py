@@ -8,13 +8,11 @@ import os
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
-from celery import shared_task
 import requests
 
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from apps.core.models import Package
-
 
 logger = logging.getLogger(__name__)
 
@@ -25,21 +23,6 @@ REQUEST_TIMEOUT = 10
 
 class GitHubRepositoryError(RuntimeError):
     """Raised when a GitHub repository operation fails."""
-
-
-
-@shared_task
-def report_exception_to_github(payload: dict[str, Any]) -> None:
-    """Send exception context to the GitHub issue helper.
-
-    The task is intentionally light-weight in this repository. Deployments can
-    replace it with an implementation that forwards ``payload`` to the
-    automation responsible for creating GitHub issues.
-    """
-
-    logger.info(
-        "Queued GitHub issue report for %s", payload.get("fingerprint", "<unknown>")
-    )
 
 
 def _resolve_github_token(package: Package | None) -> str:
