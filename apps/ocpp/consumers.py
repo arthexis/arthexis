@@ -13,7 +13,8 @@ from urllib.parse import parse_qs
 from django.conf import settings
 from django.utils import timezone
 from apps.energy.models import CustomerAccount
-from apps.core.models import Reference, RFID as CoreRFID
+from apps.links.models import Reference
+from apps.core.models import RFID as CoreRFID
 from apps.nodes.models import NetMessage
 from django.core.exceptions import ValidationError
 from django.contrib.auth import authenticate

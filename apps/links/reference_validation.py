@@ -1,5 +1,3 @@
-"""Helpers for validating and scheduling reference URL checks."""
-
 from __future__ import annotations
 
 from apps.celery.utils import (
@@ -10,7 +8,7 @@ from apps.celery.utils import (
 
 
 REFERENCE_VALIDATION_TASK_NAME = "reference-url-validation"
-REFERENCE_VALIDATION_TASK_PATH = "apps.core.tasks.validate_reference_links"
+REFERENCE_VALIDATION_TASK_PATH = "apps.links.tasks.validate_reference_links"
 
 
 def ensure_reference_validation_task(sender=None, **kwargs) -> None:
