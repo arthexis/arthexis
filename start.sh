@@ -2,7 +2,7 @@
 set -e
 
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
-LOCK_DIR="$BASE_DIR/locks"
+LOCK_DIR="$BASE_DIR/.locks"
 mkdir -p "$LOCK_DIR"
 
 # shellcheck source=scripts/helpers/logging.sh

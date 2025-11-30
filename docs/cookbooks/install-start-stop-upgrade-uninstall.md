@@ -30,14 +30,14 @@ Run the installer from the project root. Every installer writes a timestamped lo
 
 | Flag | Purpose |
 | --- | --- |
-| `--service NAME` | Registers the deployment under a specific systemd service name. When present, the installer records the value in `locks/service.lck`, enabling later scripts to control that service instead of spawning foreground processes.【F:install.sh†L221-L225】【F:install.sh†L519-L524】 |
+| `--service NAME` | Registers the deployment under a specific systemd service name. When present, the installer records the value in `.locks/service.lck`, enabling later scripts to control that service instead of spawning foreground processes.【F:install.sh†L221-L225】【F:install.sh†L519-L524】 |
 | `--internal` / `--public` | Chooses the nginx topology. `--internal` listens on HTTP ports 80/8000/8080/8900 for LAN-only access, while `--public` provisions TLS-forwarding on 80/443. Both modes proxy to the configured backend port (default 8888).【F:install.sh†L226-L233】【F:install.sh†L305-L373】 |
 | `--port PORT` | Overrides the backend port used by Django when nginx proxies traffic. Defaults to 8888 for every role unless explicitly overridden.【F:install.sh†L234-L237】 |
 | `--upgrade` | Runs the installer in upgrade mode, preserving state while refreshing configuration. Often paired with role flags to recompute dependencies.【F:install.sh†L239-L242】【F:install.sh†L578-L599】 |
-| `--auto-upgrade` | Enables unattended upgrades (disabled by default) and writes `locks/auto_upgrade.lck` so Celery schedules the checks.【F:install.sh†L243-L259】【F:install.sh†L578-L603】 |
+| `--auto-upgrade` | Enables unattended upgrades (disabled by default) and writes `.locks/auto_upgrade.lck` so Celery schedules the checks.【F:install.sh†L243-L259】【F:install.sh†L578-L603】 |
 | `--fixed` | Leaves auto-upgrade off and removes any existing automation lock so upgrades stay manual.【F:install.sh†L247-L259】【F:install.sh†L601-L603】 |
 | `--unstable` / `--latest` / `--stable` / `--regular` / `--normal` | Enables auto-upgrade on the selected channel: unstable follows mainline revisions every 15 minutes; latest polls mainline revisions every hour; stable polls releases every 24 hours.【F:install.sh†L251-L259】【F:core/auto_upgrade.py†L10-L20】 |
-| `--celery` | Forces Celery worker support even when the chosen role would normally skip it. The installer writes `locks/celery.lck` so later scripts manage the worker lifecycle.【F:install.sh†L261-L263】【F:install.sh†L320-L341】 |
+| `--celery` | Forces Celery worker support even when the chosen role would normally skip it. The installer writes `.locks/celery.lck` so later scripts manage the worker lifecycle.【F:install.sh†L261-L263】【F:install.sh†L320-L341】 |
 | `--lcd-screen` / `--no-lcd-screen` | Controls LCD support. `--lcd-screen` installs required I²C packages (if missing) and records the feature lock, while `--no-lcd-screen` removes the lock so the display stays off.【F:install.sh†L275-L333】【F:install.sh†L526-L575】 |
 | `--clean` | Deletes an existing SQLite database after first backing it up with a timestamp that includes the git revision. Use this when reinstalling on a development machine and you do not need existing data.【F:install.sh†L61-L120】 |
 | `--start` / `--no-start` | Runs (or skips) `start.sh` after installation completes so services come up automatically when desired.【F:install.sh†L24-L47】【F:install.sh†L289-L297】【F:install.sh†L611-L613】 |
@@ -135,7 +135,7 @@ Windows nodes reuse Add/Remove Programs, so only the Linux script is provided.
 
 | Flag | Purpose |
 | --- | --- |
-| `--service NAME` | Overrides the service name recorded during installation. When omitted the script falls back to the value stored in `locks/service.lck`, if present.【F:uninstall.sh†L12-L45】 |
+| `--service NAME` | Overrides the service name recorded during installation. When omitted the script falls back to the value stored in `.locks/service.lck`, if present.【F:uninstall.sh†L12-L45】 |
 | `--no-warn` | Skips the confirmation prompt shown before deleting SQLite databases. Use cautiously in automation where no interactive approval is possible.【F:uninstall.sh†L17-L37】 |
 
 The script always asks for confirmation before proceeding because the server will stop and local data may be removed.【F:uninstall.sh†L47-L60】
@@ -147,6 +147,6 @@ During removal the script:
 1. Stops and disables any recorded systemd service, along with linked LCD and Celery units, then clears the associated lock files.【F:uninstall.sh†L61-L109】
 2. Stops historical Wi-Fi watchdog services (`wlan1-refresh`, `wlan1-device-refresh`, `wifi-watchdog`) when they exist so nothing keeps touching network interfaces after the uninstall.【F:uninstall.sh†L110-L121】
 3. Terminates any remaining `manage.py runserver` or Celery processes.【F:uninstall.sh†L122-L127】
-4. Deletes `db.sqlite3`, removes the entire `locks/` directory, and clears the cached requirements hash so future installs start cleanly.【F:uninstall.sh†L129-L142】
+4. Deletes `db.sqlite3`, removes the entire `.locks/` directory, and clears the cached requirements hash so future installs start cleanly.【F:uninstall.sh†L129-L142】
 
 Afterwards the script prints “Uninstall complete.” so you can safely remove the project directory or clone a fresh copy before reinstalling.【F:uninstall.sh†L140-L142】

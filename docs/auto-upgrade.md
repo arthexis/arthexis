@@ -7,11 +7,11 @@ delegated systemd unit is launched, and what to check if something fails.
 
 - `./env-refresh.sh` has been run so `/usr/local/bin/watch-upgrade` exists and is
   executable.
-- `locks/service.lck` contains the managed service name (for example
+- `.locks/service.lck` contains the managed service name (for example
   `arthexis`) so the watcher knows which unit to stop and restart.
 - The service user can run `systemd-run` (with passwordless sudo when required).
 - `upgrade.sh` remains executable in the project root.
-- The Celery beat schedule is kept in sync with `locks/auto_upgrade.lck`; when
+- The Celery beat schedule is kept in sync with `.locks/auto_upgrade.lck`; when
   the lock is removed, the periodic task is removed as well, and any
   environment override set with `ARTHEXIS_UPGRADE_FREQ` is ignored unless it is
   a positive integer.
@@ -62,5 +62,5 @@ check_github_updates.delay()
 - **watch-upgrade missing**: rerun `./env-refresh.sh` to install the helper.
 - **Permission denied on systemd-run**: grant the service user access or provide
   passwordless sudo for `systemd-run`.
-- **Service not restarted**: ensure `locks/service.lck` contains the correct
+- **Service not restarted**: ensure `.locks/service.lck` contains the correct
   unit name and that the unit exists in systemd.

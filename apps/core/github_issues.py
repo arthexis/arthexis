@@ -17,7 +17,7 @@ from .release import DEFAULT_PACKAGE
 logger = logging.getLogger(__name__)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-LOCK_DIR = BASE_DIR / "locks" / "github-issues"
+LOCK_DIR = BASE_DIR / ".locks" / "github-issues"
 LOCK_TTL = timedelta(hours=1)
 REQUEST_TIMEOUT = 10
 

@@ -55,7 +55,7 @@ exec > >(tee "$LOG_FILE")
 exec 2> >(tee "$LOG_FILE" >&2)
 cd "$BASE_DIR"
 
-LOCK_DIR="$BASE_DIR/locks"
+LOCK_DIR="$BASE_DIR/.locks"
 SYSTEMD_UNITS_LOCK="$LOCK_DIR/systemd_services.lck"
 SERVICE_NAME=""
 [ -f "$LOCK_DIR/service.lck" ] && SERVICE_NAME="$(cat "$LOCK_DIR/service.lck")"

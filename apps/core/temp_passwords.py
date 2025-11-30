@@ -30,7 +30,7 @@ def _base_lock_dir() -> Path:
     if configured:
         path = Path(configured)
     else:
-        path = Path(settings.BASE_DIR) / "locks" / "temp-passwords"
+        path = Path(settings.BASE_DIR) / ".locks" / "temp-passwords"
     path.mkdir(parents=True, exist_ok=True)
     return path
 

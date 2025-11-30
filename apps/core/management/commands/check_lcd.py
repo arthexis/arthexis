@@ -35,7 +35,7 @@ class Command(BaseCommand):
         poll_interval: float = options["poll_interval"]
 
         base_dir = Path(settings.BASE_DIR)
-        lock_file = base_dir / "locks" / "lcd_screen.lck"
+        lock_file = base_dir / ".locks" / "lcd_screen.lck"
         lock_file.parent.mkdir(parents=True, exist_ok=True)
 
         self.stdout.write(f"Sending test message to LCD: {message}")

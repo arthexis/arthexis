@@ -590,7 +590,7 @@ def celery_feature_enabled(context) -> bool:
         except Exception:  # pragma: no cover - defensive
             pass
 
-    lock_path = Path(settings.BASE_DIR) / "locks" / "celery.lck"
+    lock_path = Path(settings.BASE_DIR) / ".locks" / "celery.lck"
     return lock_path.exists()
 
 

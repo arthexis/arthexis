@@ -119,7 +119,7 @@ def queue_startup_message(
     )
     payload = render_lcd_payload(subject, body, net_message=True)
 
-    target = lock_file or (Path(base_dir) / "locks" / "lcd_screen.lck")
+    target = lock_file or (Path(base_dir) / ".locks" / "lcd_screen.lck")
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(payload, encoding="utf-8")
     return target

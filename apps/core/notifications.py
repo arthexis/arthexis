@@ -39,7 +39,7 @@ def get_base_dir() -> Path:
         pass
 
     cwd = Path.cwd()
-    if (cwd / "locks").exists():
+    if (cwd / ".locks").exists():
         return cwd
 
     return Path(__file__).resolve().parents[1]
@@ -59,7 +59,7 @@ class NotificationManager:
 
     def __init__(self, lock_file: Path | None = None) -> None:
         base_dir = get_base_dir()
-        self.lock_file = lock_file or base_dir / "locks" / "lcd_screen.lck"
+        self.lock_file = lock_file or base_dir / ".locks" / "lcd_screen.lck"
         self.lock_file.parent.mkdir(parents=True, exist_ok=True)
         # ``plyer`` is only available on Windows and can fail when used in
         # a non-interactive environment (e.g. service or CI).

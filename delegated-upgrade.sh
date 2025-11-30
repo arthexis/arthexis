@@ -2,7 +2,7 @@
 set -euo pipefail
 
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
-LOCK_DIR="$BASE_DIR/locks"
+LOCK_DIR="$BASE_DIR/.locks"
 SERVICE_NAME=""
 LOG_DIR="${ARTHEXIS_LOG_DIR:-$BASE_DIR/logs}"
 

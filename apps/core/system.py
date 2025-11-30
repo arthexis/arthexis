@@ -168,11 +168,11 @@ def _github_commit_url(sha: str) -> str:
 
 
 def _auto_upgrade_mode_file(base_dir: Path) -> Path:
-    return base_dir / "locks" / AUTO_UPGRADE_LOCK_NAME
+    return base_dir / ".locks" / AUTO_UPGRADE_LOCK_NAME
 
 
 def _auto_upgrade_skip_file(base_dir: Path) -> Path:
-    return base_dir / "locks" / AUTO_UPGRADE_SKIP_LOCK_NAME
+    return base_dir / ".locks" / AUTO_UPGRADE_SKIP_LOCK_NAME
 
 
 def _auto_upgrade_log_file(base_dir: Path) -> Path:
@@ -732,7 +732,7 @@ def _suite_uptime_lock_path(base_dir: Path | str | None = None) -> Path:
     """Return the lockfile path used to store suite uptime metadata."""
 
     root = Path(base_dir) if base_dir is not None else Path(settings.BASE_DIR)
-    return root / "locks" / SUITE_UPTIME_LOCK_NAME
+    return root / ".locks" / SUITE_UPTIME_LOCK_NAME
 
 
 def _system_boot_time(now: datetime | None = None) -> datetime | None:
@@ -1488,7 +1488,7 @@ def _parse_runserver_port(command_line: str) -> int | None:
 
 
 def _configured_backend_port(base_dir: Path) -> int:
-    lock_file = base_dir / "locks" / "backend_port.lck"
+    lock_file = base_dir / ".locks" / "backend_port.lck"
     try:
         raw = lock_file.read_text().strip()
     except OSError:
@@ -1511,7 +1511,7 @@ def _normalize_nginx_content(content: str) -> str:
 def _resolve_nginx_mode(base_dir: Path) -> str:
     """Return the configured nginx mode with a safe fallback."""
 
-    mode_file = base_dir / "locks" / "nginx_mode.lck"
+    mode_file = base_dir / ".locks" / "nginx_mode.lck"
     try:
         raw_mode = mode_file.read_text().strip()
     except OSError:
@@ -1634,7 +1634,7 @@ def _port_candidates(default_port: int) -> list[int]:
 def _gather_info() -> dict:
     """Collect basic system information similar to status.sh."""
     base_dir = Path(settings.BASE_DIR)
-    lock_dir = base_dir / "locks"
+    lock_dir = base_dir / ".locks"
     info: dict[str, object] = {}
 
     info["installed"] = (base_dir / ".venv").exists()
@@ -1777,7 +1777,7 @@ def _gather_info() -> dict:
 def _configured_service_units(base_dir: Path) -> list[dict[str, str]]:
     """Return service units configured for this instance."""
 
-    lock_dir = base_dir / "locks"
+    lock_dir = base_dir / ".locks"
     service_file = lock_dir / "service.lck"
     systemd_services_file = lock_dir / "systemd_services.lck"
 

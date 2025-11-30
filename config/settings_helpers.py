@@ -270,7 +270,7 @@ def load_secret_key(
             return value
 
     if secret_file is None:
-        secret_file = base_dir / "locks" / "django-secret.key"
+        secret_file = base_dir / ".locks" / "django-secret.key"
 
     with contextlib.suppress(OSError):
         stored_key = secret_file.read_text(encoding="utf-8").strip()

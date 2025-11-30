@@ -531,7 +531,7 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
     # Ensure current node is registered or updated
     node, _ = Node.register_current(notify_peers=False)
 
-    control_lock = Path(settings.BASE_DIR) / "locks" / "control.lck"
+    control_lock = Path(settings.BASE_DIR) / ".locks" / "control.lck"
     if control_lock.exists():
         Site.objects.update_or_create(
             domain=node.public_endpoint,

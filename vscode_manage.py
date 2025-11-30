@@ -41,7 +41,7 @@ def _resolve_interrupt_main() -> Callable[[], None]:
 def main(argv=None):
     argv = list(argv or [])
     base_dir = Path(__file__).resolve().parent
-    celery_enabled = (base_dir / "locks/celery.lck").exists()
+    celery_enabled = (base_dir / ".locks/celery.lck").exists()
     if "--celery" in argv:
         celery_enabled = True
         argv.remove("--celery")
@@ -176,7 +176,7 @@ class RunserverSession:
         self.base_dir = base_dir
         self.argv = argv
         self.is_debug_session = is_debug_session
-        self.lock_dir = base_dir / "locks"
+        self.lock_dir = base_dir / ".locks"
         self.poll_interval = max(0.05, poll_interval)
         self._interrupt_main = interrupt_main or _resolve_interrupt_main()
         self._restart_event = threading.Event()

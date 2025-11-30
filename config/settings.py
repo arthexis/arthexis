@@ -72,7 +72,7 @@ SECRET_KEY = load_secret_key(BASE_DIR)
 # DEBUG control to the environment.
 NODE_ROLE = os.environ.get("NODE_ROLE")
 if NODE_ROLE is None:
-    role_lock = BASE_DIR / "locks" / "role.lck"
+    role_lock = BASE_DIR / ".locks" / "role.lck"
     NODE_ROLE = role_lock.read_text().strip() if role_lock.exists() else "Terminal"
 
 def _env_bool(name: str, default: bool) -> bool:

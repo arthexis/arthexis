@@ -273,11 +273,11 @@ class NodeFeature(Entity):
         lock = lock_map.get(self.slug)
         if lock:
             base_path = Path(node.base_path or settings.BASE_DIR)
-            lock_path = base_path / "locks" / lock
+            lock_path = base_path / ".locks" / lock
             if lock_path.exists():
                 return True
             if self.slug == "lcd-screen":
-                feature_lock = base_path / "locks" / "lcd_screen_enabled.lck"
+                feature_lock = base_path / ".locks" / "lcd_screen_enabled.lck"
                 if feature_lock.exists():
                     return True
             return False
@@ -348,7 +348,7 @@ class NodeService(Entity):
 
     @staticmethod
     def detect_service_name(base_dir: Path) -> str:
-        service_file = base_dir / "locks" / "service.lck"
+        service_file = base_dir / ".locks" / "service.lck"
         try:
             return service_file.read_text(encoding="utf-8").strip()
         except OSError:
@@ -1169,7 +1169,7 @@ class Node(Entity):
             except ValueError:
                 constellation_ip = ""
         if not constellation_ip:
-            constellation_lock = Path(settings.BASE_DIR) / "locks" / "constellation_ip.lck"
+            constellation_lock = Path(settings.BASE_DIR) / ".locks" / "constellation_ip.lck"
             if constellation_lock.exists():
                 try:
                     lock_value = constellation_lock.read_text().strip()
@@ -1197,7 +1197,7 @@ class Node(Entity):
             "current_relation": cls.Relation.SELF,
         }
         defaults["constellation_ip"] = constellation_ip or ""
-        role_lock = Path(settings.BASE_DIR) / "locks" / "role.lck"
+        role_lock = Path(settings.BASE_DIR) / ".locks" / "role.lck"
         role_name = role_lock.read_text().strip() if role_lock.exists() else "Terminal"
         role_name = ROLE_RENAMES.get(role_name, role_name)
         desired_role = NodeRole.objects.filter(name=role_name).first()
@@ -1670,7 +1670,7 @@ class Node(Entity):
             return
         detected_slugs = set()
         base_path = Path(self.base_path or settings.BASE_DIR)
-        locks_dir = base_path / "locks"
+        locks_dir = base_path / ".locks"
         for slug, filename in self.FEATURE_LOCK_MAP.items():
             if (locks_dir / filename).exists():
                 detected_slugs.add(slug)

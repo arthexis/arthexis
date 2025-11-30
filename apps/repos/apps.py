@@ -59,7 +59,7 @@ def _configure_github_issue_reporting():
             ).hexdigest()
 
             cooldown = getattr(settings, "GITHUB_ISSUE_REPORTING_COOLDOWN", 3600)
-            lock_dir = Path(settings.BASE_DIR) / "locks" / "github-issues"
+            lock_dir = Path(settings.BASE_DIR) / ".locks" / "github-issues"
             fingerprint_path = None
             now = time.time()
 

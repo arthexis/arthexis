@@ -23,7 +23,7 @@ Passing a role flag applies a curated bundle of options. Each preset still honou
 
 | Flag | Purpose |
 | --- | --- |
-| `--service NAME` | Installs or updates systemd services (`NAME`, `celery-NAME`, `celery-beat-NAME`, and optionally `lcd-NAME`) and records the name in `locks/service.lck` for the runtime helpers.【F:install.sh†L221-L225】【F:install.sh†L519-L524】 |
+| `--service NAME` | Installs or updates systemd services (`NAME`, `celery-NAME`, `celery-beat-NAME`, and optionally `lcd-NAME`) and records the name in `.locks/service.lck` for the runtime helpers.【F:install.sh†L221-L225】【F:install.sh†L519-L524】 |
 | `--internal` | Forces the internal Nginx template (HTTP ports 80/8000/8080/8900). This is the default unless a role preset changes it.【F:install.sh†L226-L229】【F:install.sh†L320-L373】 |
 | `--public` | Enables the public HTTPS reverse proxy template while continuing to proxy to the backend on port 8888 unless overridden.【F:install.sh†L230-L233】【F:install.sh†L305-L373】 |
 | `--port PORT` | Overrides the backend Django port used in generated systemd units and the stored lock. If omitted, every mode defaults to `8888`.【F:install.sh†L234-L237】 |
@@ -33,7 +33,7 @@ Passing a role flag applies a curated bundle of options. Each preset still honou
 | `--unstable` / `--latest` | Enables auto-upgrade on the unstable channel that follows origin/main revisions immediately.【F:install.sh†L251-L259】【F:install.sh†L578-L599】 |
 | `--stable` / `--regular` / `--normal` | Enables auto-upgrade on the stable release channel with 24-hour checks.【F:install.sh†L256-L259】【F:install.sh†L578-L599】 |
 | `--celery` | Forces Celery services on even if the preset would leave them disabled. Rarely needed because all presets already enable Celery.【F:install.sh†L261-L263】【F:install.sh†L320-L341】 |
-| `--lcd-screen` / `--no-lcd-screen` | Adds or removes the LCD updater service and lock. Control preset enables it automatically; `--no-lcd-screen` removes an existing unit after reading `locks/service.lck`.【F:install.sh†L275-L333】【F:install.sh†L526-L575】 |
+| `--lcd-screen` / `--no-lcd-screen` | Adds or removes the LCD updater service and lock. Control preset enables it automatically; `--no-lcd-screen` removes an existing unit after reading `.locks/service.lck`.【F:install.sh†L275-L333】【F:install.sh†L526-L575】 |
 | `--clean` | Deletes `db.sqlite3` before installing, after first backing it up into `backups/` with version and Git metadata.【F:install.sh†L61-L120】 |
 | `--start` / `--no-start` | Launches or skips `start.sh` after setup completes, which is useful for unattended provisioning while still allowing explicit opt-outs.【F:install.sh†L24-L47】【F:install.sh†L289-L297】【F:install.sh†L611-L613】 |
 
@@ -80,7 +80,7 @@ The Windows starter mirrors the Linux workflow without service management: it va
 
 ### 3.1 Linux: `upgrade.sh`
 
-`upgrade.sh` keeps nodes current while protecting local changes. It infers the node role from `locks/role.lck` to decide whether local commits should be discarded (Control/Constellation/Watchtower nodes auto-align to the remote branch).【F:upgrade.sh†L123-L205】
+`upgrade.sh` keeps nodes current while protecting local changes. It infers the node role from `.locks/role.lck` to decide whether local commits should be discarded (Control/Constellation/Watchtower nodes auto-align to the remote branch).【F:upgrade.sh†L123-L205】
 
 Supported options:
 
@@ -104,7 +104,7 @@ The Windows upgrade helper focuses on Git safety and dependency refreshes. It pu
 
 ### 4.1 Linux: `uninstall.sh`
 
-`uninstall.sh` removes system services, lock files, and the SQLite database. It warns before deleting persistent data unless you pass `--no-warn` (useful for scripted teardown). Providing `--service NAME` overrides the autodetected service from `locks/service.lck`.【F:uninstall.sh†L1-L77】【F:uninstall.sh†L90-L159】 The script always prompts before stopping the server, disables any LCD and Celery units, cleans up WLAN watchdog services, and refreshes desktop shortcuts on exit.【F:uninstall.sh†L90-L167】
+`uninstall.sh` removes system services, lock files, and the SQLite database. It warns before deleting persistent data unless you pass `--no-warn` (useful for scripted teardown). Providing `--service NAME` overrides the autodetected service from `.locks/service.lck`.【F:uninstall.sh†L1-L77】【F:uninstall.sh†L90-L159】 The script always prompts before stopping the server, disables any LCD and Celery units, cleans up WLAN watchdog services, and refreshes desktop shortcuts on exit.【F:uninstall.sh†L90-L167】
 
 ### 4.2 Windows
 

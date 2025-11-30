@@ -10,8 +10,8 @@ if not exist %VENV%\Scripts\python.exe (
 )
 
 set PORT=8888
-if exist locks\backend_port.lck (
-    for /f %%p in ('findstr /R "^[0-9][0-9]*$" locks\backend_port.lck') do set PORT=%%p
+if exist .locks\backend_port.lck (
+    for /f %%p in ('findstr /R "^[0-9][0-9]*$" .locks\backend_port.lck') do set PORT=%%p
 )
 set RELOAD=
 :parse
