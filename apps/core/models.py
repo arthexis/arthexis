@@ -2138,8 +2138,8 @@ class RFID(Entity):
     def get_account_by_rfid(cls, value):
         """Return the customer account associated with an RFID code if it exists."""
         try:
-            CustomerAccount = apps.get_model("accounts", "CustomerAccount")
-        except LookupError:  # pragma: no cover - customer accounts app optional
+            CustomerAccount = apps.get_model("energy", "CustomerAccount")
+        except LookupError:  # pragma: no cover - energy app optional
             return None
         matches = cls.matching_queryset(value).filter(allowed=True)
         if not matches.exists():
@@ -3212,46 +3212,46 @@ class AdminCommandResult(models.Model):
         return self.command_name or self.command
 
 # Backwards-compatible proxies for energy domain models
-from accounts import models as account_models
+from apps.energy import models as energy_models
 
 
-class EnergyTariff(account_models.EnergyTariff):
-    class Meta(account_models.EnergyTariff.Meta):
+class EnergyTariff(energy_models.EnergyTariff):
+    class Meta(energy_models.EnergyTariff.Meta):
         proxy = True
         app_label = "core"
 
 
-class Location(account_models.Location):
-    class Meta(account_models.Location.Meta):
+class Location(energy_models.Location):
+    class Meta(energy_models.Location.Meta):
         proxy = True
         app_label = "core"
 
 
-class CustomerAccount(account_models.CustomerAccount):
-    class Meta(account_models.CustomerAccount.Meta):
+class CustomerAccount(energy_models.CustomerAccount):
+    class Meta(energy_models.CustomerAccount.Meta):
         proxy = True
         app_label = "core"
 
 
-class EnergyCredit(account_models.EnergyCredit):
-    class Meta(account_models.EnergyCredit.Meta):
+class EnergyCredit(energy_models.EnergyCredit):
+    class Meta(energy_models.EnergyCredit.Meta):
         proxy = True
         app_label = "core"
 
 
-class EnergyTransaction(account_models.EnergyTransaction):
-    class Meta(account_models.EnergyTransaction.Meta):
+class EnergyTransaction(energy_models.EnergyTransaction):
+    class Meta(energy_models.EnergyTransaction.Meta):
         proxy = True
         app_label = "core"
 
 
-class ClientReportSchedule(account_models.ClientReportSchedule):
-    class Meta(account_models.ClientReportSchedule.Meta):
+class ClientReportSchedule(energy_models.ClientReportSchedule):
+    class Meta(energy_models.ClientReportSchedule.Meta):
         proxy = True
         app_label = "core"
 
 
-class ClientReport(account_models.ClientReport):
-    class Meta(account_models.ClientReport.Meta):
+class ClientReport(energy_models.ClientReport):
+    class Meta(energy_models.ClientReport.Meta):
         proxy = True
         app_label = "core"

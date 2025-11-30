@@ -73,7 +73,7 @@ from .status_display import STATUS_BADGE_MAP, ERROR_OK_VALUES
 from .status_resets import clear_stale_cached_statuses
 from .views import _charger_state, _live_sessions
 from apps.core.admin import SaveBeforeChangeAction
-from accounts.models import EnergyTariff
+from apps.energy.models import EnergyTariff
 from apps.core.models import RFID as CoreRFID
 from apps.core.form_fields import SchedulePeriodsField
 from apps.core.user_data import EntityModelAdmin

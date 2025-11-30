@@ -9,8 +9,10 @@ class Migration(migrations.Migration):
 
     initial = True
 
+    replaces = [("accounts", "0002_initial")]
+
     dependencies = [
-        ("accounts", "0001_initial"),
+        ("energy", "0001_initial"),
         ("core", "0001_initial"),
         ("django_celery_beat", "0019_alter_periodictasks_options"),
         ("ocpp", "0001_initial"),
@@ -84,7 +86,7 @@ class Migration(migrations.Migration):
                 null=True,
                 on_delete=django.db.models.deletion.SET_NULL,
                 related_name="reports",
-                to="accounts.clientreportschedule",
+                to="energy.clientreportschedule",
             ),
         ),
         migrations.AddField(
@@ -126,7 +128,7 @@ class Migration(migrations.Migration):
             field=models.ForeignKey(
                 on_delete=django.db.models.deletion.CASCADE,
                 related_name="credits",
-                to="accounts.customeraccount",
+                to="energy.customeraccount",
             ),
         ),
         migrations.AddField(
@@ -172,7 +174,7 @@ class Migration(migrations.Migration):
                 null=True,
                 on_delete=django.db.models.deletion.SET_NULL,
                 related_name="accounts",
-                to="accounts.energytariff",
+                to="energy.energytariff",
             ),
         ),
         migrations.AddField(
@@ -181,7 +183,7 @@ class Migration(migrations.Migration):
             field=models.ForeignKey(
                 on_delete=django.db.models.deletion.CASCADE,
                 related_name="energy_transactions",
-                to="accounts.customeraccount",
+                to="energy.customeraccount",
             ),
         ),
         migrations.AddField(
@@ -193,7 +195,7 @@ class Migration(migrations.Migration):
                 null=True,
                 on_delete=django.db.models.deletion.SET_NULL,
                 related_name="energy_transactions",
-                to="accounts.energytariff",
+                to="energy.energytariff",
             ),
         ),
         migrations.AddField(

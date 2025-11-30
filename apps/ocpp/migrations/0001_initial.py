@@ -11,7 +11,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ("accounts", "0001_initial"),
+        ("energy", "0001_initial"),
         ("core", "0001_initial"),
         ("nodes", "0001_initial"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
@@ -717,7 +717,7 @@ class Migration(migrations.Migration):
                         null=True,
                         on_delete=django.db.models.deletion.SET_NULL,
                         related_name="chargers",
-                        to="accounts.location",
+                        to="energy.location",
                     ),
                 ),
                 (
@@ -1573,7 +1573,7 @@ class Migration(migrations.Migration):
                         null=True,
                         on_delete=django.db.models.deletion.SET_NULL,
                         related_name="cp_reservations",
-                        to="accounts.customeraccount",
+                        to="energy.customeraccount",
                         verbose_name="Energy account",
                     ),
                 ),
@@ -1591,7 +1591,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.PROTECT,
                         related_name="reservations",
-                        to="accounts.location",
+                        to="energy.location",
                         verbose_name="Location",
                     ),
                 ),
@@ -1852,7 +1852,7 @@ class Migration(migrations.Migration):
                     models.ForeignKey(
                         on_delete=django.db.models.deletion.CASCADE,
                         related_name="vehicles",
-                        to="accounts.customeraccount",
+                        to="energy.customeraccount",
                     ),
                 ),
                 (
@@ -2391,7 +2391,7 @@ class Migration(migrations.Migration):
                         null=True,
                         on_delete=django.db.models.deletion.PROTECT,
                         related_name="transactions",
-                        to="accounts.customeraccount",
+                        to="energy.customeraccount",
                     ),
                 ),
                 (
@@ -2443,7 +2443,7 @@ class Migration(migrations.Migration):
                         null=True,
                         on_delete=django.db.models.deletion.SET_NULL,
                         related_name="rfid_attempts",
-                        to="accounts.customeraccount",
+                        to="energy.customeraccount",
                     ),
                 ),
                 (

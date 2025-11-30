@@ -46,7 +46,7 @@ PYPI_REQUEST_TIMEOUT = 10
 from . import temp_passwords
 from .models import OdooProfile, Product, PackageRelease
 from .models import RFID
-from accounts.models import CustomerAccount
+from apps.energy.models import CustomerAccount
 
 
 @staff_member_required

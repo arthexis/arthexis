@@ -11,6 +11,8 @@ class Migration(migrations.Migration):
 
     initial = True
 
+    replaces = [("accounts", "0001_initial")]
+
     dependencies = []
 
     operations = [
