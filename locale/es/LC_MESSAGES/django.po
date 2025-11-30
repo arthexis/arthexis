@@ -4548,8 +4548,8 @@ msgstr ""
 
 #: pages/admin.py:157 pages/admin.py:167
 msgid ""
-"Managed NGINX configuration staged. Run network-setup.sh to apply changes."
-msgstr ""
+"Managed NGINX configuration staged. Apply the changes through your deployment tooling."
+msgstr "Configuración de NGINX gestionada preparada. Aplica los cambios con tus herramientas de despliegue."
 
 #: pages/admin.py:180
 #, fuzzy

@@ -118,6 +118,6 @@ if [ -n "$SERVICE_NAME" ] && [ ${#SYSTEMCTL_CMD[@]} -gt 0 ] \
   fi
 fi
 
-if "$BASE_DIR/service-start.sh" "${SERVICE_ARGS[@]}"; then
+if "$BASE_DIR/scripts/service-start.sh" "${SERVICE_ARGS[@]}"; then
   refresh_suite_uptime_lock_safe
 fi

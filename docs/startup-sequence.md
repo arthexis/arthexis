@@ -9,10 +9,10 @@ manual runs of `env-refresh.sh` or calls made as part of an upgrade.
 - `start.sh` writes a note to `logs/start.log` to record the manual request.
 - If a managed service name exists in `.locks/service.lck` and systemd is
   available, it restarts that unit, watches for it to reach `active`, and exits
-  early if successful. Otherwise, it falls back to running `service-start.sh`
+  early if successful. Otherwise, it falls back to running `scripts/service-start.sh`
   with any additional arguments.
 
-## Main service launcher (`service-start.sh`)
+## Main service launcher (`scripts/service-start.sh`)
 1. Resolve the log directory, tee output into `logs/service-start.log`, mirror
    stderr into `logs/error.log`, and load helper functions. The error log is
    truncated at the start of every boot so it only contains messages from the

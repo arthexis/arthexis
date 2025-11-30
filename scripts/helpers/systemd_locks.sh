@@ -199,7 +199,7 @@ arthexis_install_service_stack() {
   fi
 
   if [ -z "$exec_cmd" ]; then
-    exec_cmd="$base_dir/service-start.sh"
+    exec_cmd="$base_dir/scripts/service-start.sh"
   fi
 
   local manage_celery="$enable_celery"

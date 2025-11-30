@@ -195,7 +195,7 @@ EOF
 }
 
 configure_nginx_site() {
-    local setup_script="$SCRIPT_DIR/nginx-setup.sh"
+    local setup_script="$SCRIPT_DIR/scripts/nginx-setup.sh"
 
     if [ ! -x "$setup_script" ]; then
         echo "nginx setup script missing at $setup_script; skipping nginx configuration." >&2
@@ -591,7 +591,7 @@ if [ -n "$SERVICE" ]; then
     if [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
         arthexis_record_systemd_unit "$LOCK_DIR" "${SERVICE}.service"
     fi
-    EXEC_CMD="$BASE_DIR/service-start.sh"
+    EXEC_CMD="$BASE_DIR/scripts/service-start.sh"
     arthexis_install_service_stack "$BASE_DIR" "$LOCK_DIR" "$SERVICE" "$ENABLE_CELERY" "$EXEC_CMD" "$SERVICE_MANAGEMENT_MODE" "$ENABLE_WATCHDOG"
 fi
 

@@ -384,7 +384,7 @@ class NodeService(Entity):
             "base_dir": str(base_path),
             "service_name": self.detect_service_name(base_path),
             "service_user": self.detect_service_user(base_path),
-            "exec_command": str(base_path / "service-start.sh"),
+            "exec_command": str(base_path / "scripts" / "service-start.sh"),
         }
         if extra_context:
             context.update(extra_context)

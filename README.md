@@ -109,6 +109,8 @@ Terminal nodes can start directly with the scripts below without installing; Con
    - Linux: run [`./start.sh`](start.sh) and stop with [`./stop.sh`](stop.sh).
    - Windows: run [`start.bat`](start.bat) and stop with `Ctrl+C`.
 
+Lifecycle helpers for system services and upgrades now live in [`scripts/`](scripts): `scripts/service-start.sh`, `scripts/switch-role.sh`, `scripts/nginx-setup.sh`, and `scripts/delegated-upgrade.sh`. Legacy maintenance helpers (`db-setup.sh`, `db-migrate.sh`, `renew-certs.sh`, `restore-fs.sh`, `change-hostname.sh`, `email-setup.sh`, `network-setup.sh`, and `ws.sh`) have been removed.
+
 ### 3. Install and upgrade
 - **Linux:**
    - Run [`./install.sh`](install.sh) with a node role flag:

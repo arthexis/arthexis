@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-BASE_DIR="$SCRIPT_DIR"
+BASE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # shellcheck source=scripts/helpers/logging.sh
 . "$BASE_DIR/scripts/helpers/logging.sh"
@@ -14,7 +14,7 @@ BASE_DIR="$SCRIPT_DIR"
 usage() {
     local status=${1:-1}
     cat <<'USAGE'
-Usage: ./nginx-setup.sh [--mode MODE] [--port PORT] [--role ROLE] [--ip6] [--remove] [--no-reload]
+Usage: ./scripts/nginx-setup.sh [--mode MODE] [--port PORT] [--role ROLE] [--ip6] [--remove] [--no-reload]
 
 Configures the nginx site definition for the current Arthexis installation.
 By default the script reads the desired settings from lock files written by

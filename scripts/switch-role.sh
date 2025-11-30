@@ -2,15 +2,16 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+BASE_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 # shellcheck source=scripts/helpers/logging.sh
-. "$SCRIPT_DIR/scripts/helpers/logging.sh"
+. "$BASE_DIR/scripts/helpers/logging.sh"
 # shellcheck source=scripts/helpers/nginx_maintenance.sh
-. "$SCRIPT_DIR/scripts/helpers/nginx_maintenance.sh"
+. "$BASE_DIR/scripts/helpers/nginx_maintenance.sh"
 # shellcheck source=scripts/helpers/ports.sh
-. "$SCRIPT_DIR/scripts/helpers/ports.sh"
+. "$BASE_DIR/scripts/helpers/ports.sh"
 # shellcheck source=scripts/helpers/service_manager.sh
-. "$SCRIPT_DIR/scripts/helpers/service_manager.sh"
-arthexis_resolve_log_dir "$SCRIPT_DIR" LOG_DIR || exit 1
+. "$BASE_DIR/scripts/helpers/service_manager.sh"
+arthexis_resolve_log_dir "$BASE_DIR" LOG_DIR || exit 1
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 exec > >(tee "$LOG_FILE") 2>&1
 
@@ -32,7 +33,6 @@ REPAIR_AUTO_UPGRADE_CHANNEL=""
 FAILOVER_ROLE=""
 INSTALL_WATCHDOG=false
 
-BASE_DIR="$SCRIPT_DIR"
 LOCK_DIR="$BASE_DIR/.locks"
 
 usage() {
@@ -652,7 +652,7 @@ if [ -n "$SERVICE" ]; then
 fi
 
 if [ "$INSTALL_WATCHDOG" = true ]; then
-    EXEC_CMD="$BASE_DIR/service-start.sh"
+    EXEC_CMD="$BASE_DIR/scripts/service-start.sh"
     arthexis_install_service_stack "$BASE_DIR" "$LOCK_DIR" "$SERVICE" "$ENABLE_CELERY" "$EXEC_CMD" "$SERVICE_MANAGEMENT_MODE" true
 fi
 
