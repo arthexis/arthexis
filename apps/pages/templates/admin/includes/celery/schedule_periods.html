@@ -1,22 +1,22 @@
 {% load i18n %}
-<div class="horologia-schedule-periods" data-prefix="{{ widget.name }}">
+<div class="celery-schedule-periods" data-prefix="{{ widget.name }}">
   {{ widget.formset.management_form }}
   {% if widget.formset.non_form_errors %}
     <div class="errors">{{ widget.formset.non_form_errors }}</div>
   {% endif %}
-  <table class="horologia-schedule-periods__table">
+  <table class="celery-schedule-periods__table">
     <thead>
       <tr>
         <th>{% trans "Start period (seconds)" %}</th>
         <th>{% trans "Limit" %}</th>
         <th>{% trans "Number of phases" %}</th>
         <th>{% trans "Phase to use" %}</th>
-        <th class="horologia-schedule-periods__actions">{% trans "Actions" %}</th>
+        <th class="celery-schedule-periods__actions">{% trans "Actions" %}</th>
       </tr>
     </thead>
     <tbody data-period-rows>
       {% for form in widget.formset.forms %}
-        <tr class="horologia-schedule-periods__row" data-row-index="{{ forloop.counter0 }}">
+        <tr class="celery-schedule-periods__row" data-row-index="{{ forloop.counter0 }}">
           {% for field in form.visible_fields %}
             <td>
               {{ field }}
@@ -25,7 +25,7 @@
               {% endif %}
             </td>
           {% endfor %}
-          <td class="horologia-schedule-periods__actions">
+          <td class="celery-schedule-periods__actions">
             <button type="button" class="button delete-button" data-remove-row>{% trans "Remove" %}</button>
           </td>
           {% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
@@ -34,17 +34,17 @@
     </tbody>
   </table>
   <template data-empty-form>
-    <tr class="horologia-schedule-periods__row" data-row-index="__index__">
+    <tr class="celery-schedule-periods__row" data-row-index="__index__">
       {% for field in widget.formset.empty_form.visible_fields %}
         <td>{{ field }}</td>
       {% endfor %}
-      <td class="horologia-schedule-periods__actions">
+      <td class="celery-schedule-periods__actions">
         <button type="button" class="button delete-button" data-remove-row>{% trans "Remove" %}</button>
       </td>
       {% for hidden in widget.formset.empty_form.hidden_fields %}{{ hidden }}{% endfor %}
     </tr>
   </template>
-  <div class="horologia-schedule-periods__controls">
+  <div class="celery-schedule-periods__controls">
     <button type="button" class="button" data-add-row>{% trans "Add period" %}</button>
   </div>
 </div>
@@ -64,7 +64,7 @@
     }
 
     function updateIndexes() {
-      const rows = tableBody.querySelectorAll('.horologia-schedule-periods__row');
+      const rows = tableBody.querySelectorAll('.celery-schedule-periods__row');
       rows.forEach((row, index) => {
         row.dataset.rowIndex = index;
         row.querySelectorAll('input, select, textarea').forEach((element) => {
@@ -77,7 +77,7 @@
 
     addButton?.addEventListener('click', () => {
       const clone = document.importNode(emptyTemplate.content, true);
-      const newRow = clone.querySelector('.horologia-schedule-periods__row');
+      const newRow = clone.querySelector('.celery-schedule-periods__row');
       tableBody.appendChild(clone);
       updateIndexes();
     });
@@ -85,7 +85,7 @@
     tableBody.addEventListener('click', (event) => {
       const target = event.target;
       if (target && target.matches('[data-remove-row]')) {
-        const row = target.closest('.horologia-schedule-periods__row');
+        const row = target.closest('.celery-schedule-periods__row');
         const deleteInput = row?.querySelector('input[name$="-DELETE"]');
         if (deleteInput) {
           if (deleteInput.type === 'checkbox') {
@@ -96,7 +96,7 @@
         }
         if (row) {
           row.style.display = 'none';
-          row.classList.add('horologia-schedule-periods__row--deleted');
+          row.classList.add('celery-schedule-periods__row--deleted');
         }
       }
     });
