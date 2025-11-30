@@ -40,8 +40,8 @@ from django.http import (
     JsonResponse,
 )
 from django.shortcuts import get_object_or_404, redirect, render
-from nodes.models import Node
-from nodes.utils import capture_screenshot, save_screenshot
+from apps.nodes.models import Node
+from apps.nodes.utils import capture_screenshot, save_screenshot
 from django.template import loader
 from django.template.response import TemplateResponse
 from django.test import RequestFactory, signals as test_signals

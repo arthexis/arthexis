@@ -35,8 +35,8 @@ from django.template.loader import get_template
 from django.test import signals
 
 from utils import revision
-from nodes.models import NetMessage, Node
-from nodes.utils import save_screenshot
+from apps.nodes.models import NetMessage, Node
+from apps.nodes.utils import save_screenshot
 from utils.api import api_login_required
 
 logger = logging.getLogger(__name__)

@@ -23,8 +23,8 @@ from pathlib import Path
 from typing import NamedTuple
 
 from apps.core.notifications import get_base_dir
-from nodes.lcd import CharLCD1602, LCDUnavailableError
-from nodes.startup_notifications import STARTUP_NET_MESSAGE_FLAG
+from apps.nodes.lcd import CharLCD1602, LCDUnavailableError
+from apps.nodes.startup_notifications import STARTUP_NET_MESSAGE_FLAG
 
 logger = logging.getLogger(__name__)
 
@@ -297,7 +297,7 @@ def _broadcast_net_message(subject: str, body: str) -> bool:
         return False
 
     try:
-        from nodes.models import NetMessage
+        from apps.nodes.models import NetMessage
     except Exception:
         logger.debug("Net Message model unavailable", exc_info=True)
         return False

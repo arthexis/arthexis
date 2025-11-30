@@ -12,7 +12,7 @@ from django.db.models import Q, Prefetch
 from django.utils import timezone
 
 from apps.core import mailer
-from nodes.models import Node
+from apps.nodes.models import Node
 
 from . import store
 from .forwarder import forwarder

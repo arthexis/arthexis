@@ -92,7 +92,7 @@ def get_original_referer(request) -> str:
 def landing_leads_supported() -> bool:
     """Return ``True`` when the local node supports landing lead tracking."""
 
-    from nodes.models import Node
+    from apps.nodes.models import Node
 
     node = Node.get_local()
     if not node:

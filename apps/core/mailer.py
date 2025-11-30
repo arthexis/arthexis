@@ -79,7 +79,7 @@ def _candidate_outboxes(user=None, node=None, outbox=None):
     target_node = node
     if target_node is None:
         try:  # pragma: no cover - Node may not be installed
-            from nodes.models import Node
+            from apps.nodes.models import Node
 
             target_node = Node.get_local()
         except Exception:

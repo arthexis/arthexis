@@ -11,7 +11,7 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _, ngettext
 
 from apps.ocpp.models import Charger, ChargerConfiguration, CPFirmware
-from nodes.models import Node
+from apps.nodes.models import Node
 
 logger = logging.getLogger(__name__)
 

@@ -1749,7 +1749,7 @@ class Node(Entity):
                 name=task_name,
                 defaults={
                     "interval": schedule,
-                    "task": "nodes.tasks.capture_node_screenshot",
+                    "task": "apps.nodes.tasks.capture_node_screenshot",
                     "kwargs": json.dumps(
                         {
                             "url": f"http://localhost:{self.port}",
@@ -1852,7 +1852,7 @@ class Node(Entity):
                 name=task_name,
                 defaults={
                     "interval": schedule,
-                    "task": "nodes.tasks.poll_unreachable_upstream",
+                    "task": "apps.nodes.tasks.poll_unreachable_upstream",
                     "enabled": True,
                 },
             )
@@ -1880,7 +1880,7 @@ class Node(Entity):
                 name=task_name,
                 defaults={
                     "interval": schedule,
-                    "task": "nodes.tasks.purge_stale_net_messages",
+                    "task": "apps.nodes.tasks.purge_stale_net_messages",
                     "enabled": True,
                 },
             )
@@ -1910,7 +1910,7 @@ class Node(Entity):
                 defaults={
                     "interval": schedule,
                     "crontab": None,
-                    "task": "nodes.tasks.update_all_nodes_information",
+                    "task": "apps.nodes.tasks.update_all_nodes_information",
                     "enabled": True,
                     "one_off": False,
                     "args": "[]",
@@ -1945,7 +1945,7 @@ class Node(Entity):
                 name=task_name,
                 defaults={
                     "interval": schedule,
-                    "task": "nodes.tasks.monitor_network_connectivity",
+                    "task": "apps.nodes.tasks.monitor_network_connectivity",
                     "enabled": True,
                 },
             )

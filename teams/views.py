@@ -10,7 +10,7 @@ from django.utils.translation import gettext_lazy as _
 from django.views import View
 from django.views.decorators.csrf import csrf_exempt
 
-from nodes.models import NetMessage, Node
+from apps.nodes.models import NetMessage, Node
 
 from .admin import SlackBotProfileAdmin
 

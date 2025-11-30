@@ -6,7 +6,7 @@ from django.urls import reverse
 from django.views.decorators.http import require_POST
 from django.contrib.auth.views import redirect_to_login
 from django.contrib.admin.views.decorators import staff_member_required
-from nodes.models import Node, NodeFeature
+from apps.nodes.models import Node, NodeFeature
 from pages.utils import landing
 
 from .scanner import scan_sources, enable_deep_read_mode

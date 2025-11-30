@@ -12,7 +12,7 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.core.entity import Entity, EntityManager
-from nodes.models import Node
+from apps.nodes.models import Node
 from apps.ocpp.forwarder import forwarder
 
 from .forwarding import (

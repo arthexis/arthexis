@@ -7,7 +7,7 @@ from django.http import Http404, HttpResponsePermanentRedirect
 from django.utils.deprecation import MiddlewareMixin
 from django.views.debug import technical_404_response, technical_500_response
 
-from nodes.models import Node
+from apps.nodes.models import Node
 from utils.sites import get_site
 
 from .active_app import set_active_app

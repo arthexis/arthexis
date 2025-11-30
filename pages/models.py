@@ -23,7 +23,7 @@ from pages.dashboard_rules import (
 )
 from apps.core.models import Lead, SecurityGroup, OdooProfile
 from django.contrib.sites.models import Site
-from nodes.models import ContentSample, NodeRole
+from apps.nodes.models import ContentSample, NodeRole
 from django.utils import timezone
 from django.utils.text import slugify
 from django.utils.html import conditional_escape, format_html, linebreaks
@@ -873,7 +873,7 @@ class ChatSession(Entity):
             "uuid": self.uuid
         }
         try:
-            from nodes.models import NetMessage
+            from apps.nodes.models import NetMessage
 
             NetMessage.broadcast(subject=subject, body=body)
         except Exception:  # pragma: no cover - propagation errors handled in logs
@@ -932,7 +932,7 @@ class ChatSession(Entity):
         body = body[:256]
 
         try:
-            from nodes.models import NetMessage
+            from apps.nodes.models import NetMessage
 
             NetMessage.broadcast(subject=subject, body=body)
         except Exception:

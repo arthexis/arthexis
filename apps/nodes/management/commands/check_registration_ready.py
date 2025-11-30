@@ -7,7 +7,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.test import Client
 from django.urls import reverse
 
-from nodes.models import Node
+from apps.nodes.models import Node
 
 
 class Command(BaseCommand):

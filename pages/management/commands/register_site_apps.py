@@ -8,7 +8,7 @@ import socket
 from apps.app.models import Application
 from pages.models import Module
 from pages.defaults import DEFAULT_APPLICATION_DESCRIPTIONS
-from nodes.models import Node, NodeRole
+from apps.nodes.models import Node, NodeRole
 
 
 class Command(BaseCommand):

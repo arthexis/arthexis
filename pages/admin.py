@@ -30,8 +30,8 @@ from django.utils.translation import gettext_lazy as _, ngettext
 from django.core.management import CommandError, call_command
 from django.utils.http import url_has_allowed_host_and_scheme
 
-from nodes.models import Node, NodeRole
-from nodes.utils import capture_screenshot, save_screenshot
+from apps.nodes.models import Node, NodeRole
+from apps.nodes.utils import capture_screenshot, save_screenshot
 
 from .forms import UserManualAdminForm
 from .favorites_cache import clear_user_favorites_cache

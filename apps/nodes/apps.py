@@ -6,7 +6,7 @@ from pathlib import Path
 from django.apps import AppConfig
 from django.conf import settings
 
-from nodes.startup_notifications import lcd_feature_enabled, queue_startup_message
+from apps.nodes.startup_notifications import lcd_feature_enabled, queue_startup_message
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,8 @@ def _startup_notification(
 
 class NodesConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
-    name = "nodes"
+    name = "apps.nodes"
+    label = "nodes"
     order = 4
     verbose_name = "Infrastructure"
 
