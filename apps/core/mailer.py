@@ -22,7 +22,7 @@ def _record_transaction(
     error: str = "",
 ):
     try:
-        from core.models import EmailTransaction
+        from apps.core.models import EmailTransaction
     except Exception:  # pragma: no cover - allow sending before migrations
         return None
 

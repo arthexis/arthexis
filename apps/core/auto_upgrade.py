@@ -9,7 +9,7 @@ from django.conf import settings
 
 
 AUTO_UPGRADE_TASK_NAME = "auto-upgrade-check"
-AUTO_UPGRADE_TASK_PATH = "core.tasks.check_github_updates"
+AUTO_UPGRADE_TASK_PATH = "apps.core.tasks.check_github_updates"
 
 DEFAULT_AUTO_UPGRADE_MODE = "stable"
 AUTO_UPGRADE_INTERVAL_MINUTES = {

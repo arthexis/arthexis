@@ -292,7 +292,7 @@ if [ "$CELERY" = true ]; then
 fi
 
 if [ "$LCD_EMBEDDED" = true ]; then
-  python -m core.lcd_screen &
+  python -m apps.core.lcd_screen &
   LCD_PROCESS_PID=$!
 fi
 

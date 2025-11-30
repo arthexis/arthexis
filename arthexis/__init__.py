@@ -1,7 +1,7 @@
 import importlib
 import sys
 
-for _name in ("config", "core", "nodes", "ocpp", "pages"):
+for _name in ("config", "nodes", "ocpp", "pages"):
     try:
         module = importlib.import_module(f".{_name}", __name__)
     except ModuleNotFoundError:  # pragma: no cover - defensive

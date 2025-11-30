@@ -5,7 +5,7 @@ from typing import Tuple
 from django.http import HttpRequest
 from django.utils.translation import gettext_lazy as _
 
-from core.models import RFID
+from apps.core.models import RFID
 
 
 def normalize_endianness(value) -> str:

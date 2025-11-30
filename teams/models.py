@@ -18,10 +18,10 @@ from django.db.models import F, Q
 from django.utils import formats, timezone
 from django.utils.translation import gettext_lazy as _
 
-from core import mailer
-from core.entity import Entity, EntityAllManager, EntityManager
-from core.fields import SigilShortAutoField
-from core.models import (
+from apps.core import mailer
+from apps.core.entity import Entity, EntityAllManager, EntityManager
+from apps.core.fields import SigilShortAutoField
+from apps.core.models import (
     EmailArtifact,
     GoogleCalendarProfile as CoreGoogleCalendarProfile,
     InviteLead as CoreInviteLead,
@@ -1591,7 +1591,7 @@ class ManualTask(Entity):
 
     def resolve_reservation_credentials(self):
         from accounts.models import CustomerAccount
-        from core.models import RFID
+        from apps.core.models import RFID
 
         account: CustomerAccount | None = None
         rfid: RFID | None = None

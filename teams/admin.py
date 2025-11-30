@@ -21,7 +21,7 @@ from django_otp.plugins.otp_totp.admin import (
 )
 from django_otp.models import VerifyNotAllowed
 from awg.admin import PowerLeadAdmin as CorePowerLeadAdmin
-from core.admin import (
+from apps.core.admin import (
     InviteLeadAdmin,
     SecurityGroupAdmin,
     EmailInboxAdmin,
@@ -30,13 +30,13 @@ from core.admin import (
     OdooProfileAdmin,
     GoogleCalendarProfileAdmin,
 )
-from core.models import (
+from apps.core.models import (
     InviteLead as CoreInviteLead,
     SecurityGroup as CoreSecurityGroup,
     ReleaseManager as CoreReleaseManager,
     OdooProfile as CoreOdooProfile,
 )
-from core.user_data import (
+from apps.core.user_data import (
     EntityModelAdmin,
     UserDatumAdminMixin,
     delete_user_fixture,

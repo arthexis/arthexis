@@ -19,14 +19,14 @@ import urllib.request
 import requests
 
 from celery import shared_task
-from core import github_issues
-from core.auto_upgrade import (
+from apps.core import github_issues
+from apps.core.auto_upgrade import (
     AUTO_UPGRADE_FALLBACK_INTERVAL,
     AUTO_UPGRADE_INTERVAL_MINUTES,
     DEFAULT_AUTO_UPGRADE_MODE,
 )
 from . import release_workflow
-from core.auto_upgrade_failover import clear_failover_lock, write_failover_lock
+from apps.core.auto_upgrade_failover import clear_failover_lock, write_failover_lock
 from django.conf import settings
 from django.db import DatabaseError, models
 from django.utils import timezone
@@ -75,7 +75,7 @@ def _get_package_release_model():
         return _PackageReleaseModel
 
     try:
-        from core.models import PackageRelease  # noqa: WPS433 - runtime import
+        from apps.core.models import PackageRelease  # noqa: WPS433 - runtime import
     except Exception:  # pragma: no cover - app registry not ready
         return None
 
@@ -1530,7 +1530,7 @@ def check_github_updates(channel_override: str | None = None) -> None:
 
         notify = None
         try:  # pragma: no cover - optional dependency
-            from core.notifications import notify  # type: ignore
+            from apps.core.notifications import notify  # type: ignore
         except Exception:
             notify = None
 

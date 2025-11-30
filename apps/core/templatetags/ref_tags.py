@@ -7,9 +7,9 @@ from django.urls import reverse
 from django.utils.html import format_html
 from django.utils import timezone
 
-from core.models import Reference, PackageRelease
-from core.reference_utils import filter_visible_references
-from core.release import DEFAULT_PACKAGE
+from apps.core.models import Reference, PackageRelease
+from apps.core.reference_utils import filter_visible_references
+from apps.core.release import DEFAULT_PACKAGE
 from utils import revision
 
 register = template.Library()

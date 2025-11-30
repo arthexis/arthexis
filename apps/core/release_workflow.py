@@ -27,7 +27,7 @@ def resolve_release_severity(version: str | None) -> str:
     """Return the severity for a version, preferring active packages."""
 
     try:
-        from core.models import PackageRelease  # noqa: WPS433 - runtime import
+        from apps.core.models import PackageRelease  # noqa: WPS433 - runtime import
     except Exception:  # pragma: no cover - app registry not ready
         return "normal"
 

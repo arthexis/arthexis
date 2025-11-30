@@ -14,15 +14,15 @@ import requests
 from django.db import models
 from django.db.models import Q
 from django.core.validators import RegexValidator
-from core.entity import Entity, EntityManager
-from core.fields import ConditionTextField
+from apps.core.entity import Entity, EntityManager
+from apps.core.fields import ConditionTextField
 from pages.dashboard_rules import (
     DEFAULT_SUCCESS_MESSAGE,
     load_callable,
     rule_failure,
     rule_success,
 )
-from core.models import Lead, SecurityGroup, OdooProfile
+from apps.core.models import Lead, SecurityGroup, OdooProfile
 from django.contrib.sites.models import Site
 from nodes.models import ContentSample, NodeRole
 from django.apps import apps as django_apps
@@ -37,7 +37,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.core.validators import MaxLengthValidator, MaxValueValidator, MinValueValidator
 from django.core.exceptions import ValidationError
 
-from core import github_issues
+from apps.core import github_issues
 from .tasks import create_user_story_github_issue
 from .site_config import ensure_site_fields
 

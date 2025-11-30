@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand
-from core.models import RFID
-from core.rfid_import_export import account_column_for_field, serialize_accounts
+from apps.core.models import RFID
+from apps.core.rfid_import_export import account_column_for_field, serialize_accounts
 import csv
 
 

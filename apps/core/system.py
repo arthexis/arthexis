@@ -34,22 +34,22 @@ from django.utils.translation import gettext_lazy as _, ngettext
 
 from django.db import DatabaseError
 
-from core.auto_upgrade import (
+from apps.core.auto_upgrade import (
     AUTO_UPGRADE_TASK_NAME,
     AUTO_UPGRADE_TASK_PATH,
     ensure_auto_upgrade_periodic_task,
 )
-from core.auto_upgrade_failover import clear_failover_lock, read_failover_status
-from core.release import (
+from apps.core.auto_upgrade_failover import clear_failover_lock, read_failover_status
+from apps.core.release import (
     _git_authentication_missing,
     _git_remote_url,
     _manager_git_credentials,
     _remote_with_credentials,
 )
-from core.tasks import check_github_updates, _read_auto_upgrade_failure_count
+from apps.core.tasks import check_github_updates, _read_auto_upgrade_failure_count
 from scripts.helpers.render_nginx_default import generate_config
 from utils import revision
-from core import changelog
+from apps.core import changelog
 
 
 AUTO_UPGRADE_LOCK_NAME = "auto_upgrade.lck"
@@ -2163,7 +2163,7 @@ def _system_upgrade_revision_check_view(request):
     if origin_revision:
         try:
             # CI status is retrieved on demand to avoid unnecessary API calls.
-            from core.tasks import _ci_status_for_revision
+            from apps.core.tasks import _ci_status_for_revision
 
             ci_status = _ci_status_for_revision(base_dir, origin_revision) or ""
         except Exception:  # pragma: no cover - unexpected failure path

@@ -1,6 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.contrib.auth.tokens import default_token_generator
-from core import mailer
+from apps.core import mailer
 from django.core.mail import send_mail
 from django.core.management.base import BaseCommand, CommandError
 from django.urls import reverse
@@ -9,7 +9,7 @@ from django.utils.http import urlsafe_base64_encode
 from django.utils import timezone
 
 from nodes.models import Node
-from core.models import InviteLead
+from apps.core.models import InviteLead
 
 
 class Command(BaseCommand):

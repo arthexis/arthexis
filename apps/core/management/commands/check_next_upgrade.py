@@ -7,8 +7,8 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
-from core import system
-from core.auto_upgrade_failover import read_failover_status
+from apps.core import system
+from apps.core.auto_upgrade_failover import read_failover_status
 
 
 class Command(BaseCommand):

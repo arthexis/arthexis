@@ -1,7 +1,7 @@
 # Release Package Configuration
 
-The release workflow reads package metadata from `core.release.Package` instances.
-Administrators can override the default behavior through the `core.Package`
+The release workflow reads package metadata from `apps.core.release.Package` instances.
+Administrators can override the default behavior through the `apps.core.Package`
 model, which now exposes additional optional fields:
 
 - **Version path** – relative path to the version file that should be updated

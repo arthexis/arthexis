@@ -60,8 +60,8 @@ from .models import (
     UserStory,
 )
 from django.contrib.contenttypes.models import ContentType
-from core.models import ReleaseManager
-from core.user_data import EntityModelAdmin
+from apps.core.models import ReleaseManager
+from apps.core.user_data import EntityModelAdmin
 
 
 logger = logging.getLogger(__name__)
@@ -252,7 +252,7 @@ class SiteAdmin(DjangoSiteAdmin):
         )
 
     def _reload_site_fixtures(self, request):
-        fixtures_dir = Path(settings.BASE_DIR) / "core" / "fixtures"
+        fixtures_dir = Path(settings.BASE_DIR) / "apps" / "core" / "fixtures"
         fixture_paths = sorted(fixtures_dir.glob("references__00_site_*.json"))
         sigil_fixture = fixtures_dir / "sigil_roots__site.json"
         if sigil_fixture.exists():

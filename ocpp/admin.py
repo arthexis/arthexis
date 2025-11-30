@@ -69,11 +69,11 @@ from .transactions_io import (
 from .status_display import STATUS_BADGE_MAP, ERROR_OK_VALUES
 from .status_resets import clear_stale_cached_statuses
 from .views import _charger_state, _live_sessions
-from core.admin import SaveBeforeChangeAction
+from apps.core.admin import SaveBeforeChangeAction
 from accounts.models import EnergyTariff
-from core.models import RFID as CoreRFID
-from core.form_fields import SchedulePeriodsField
-from core.user_data import EntityModelAdmin
+from apps.core.models import RFID as CoreRFID
+from apps.core.form_fields import SchedulePeriodsField
+from apps.core.user_data import EntityModelAdmin
 from nodes.models import Node
 
 

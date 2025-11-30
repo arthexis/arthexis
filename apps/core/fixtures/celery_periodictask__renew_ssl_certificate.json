@@ -3,7 +3,7 @@
     "model": "django_celery_beat.periodictask",
     "fields": {
       "name": "renew-ssl-certificate",
-      "task": "core.tasks.renew_ssl_certificate",
+      "task": "apps.core.tasks.renew_ssl_certificate",
       "crontab": ["0", "3", "*", "1", "*", "UTC"],
       "args": "[]",
       "kwargs": "{}",

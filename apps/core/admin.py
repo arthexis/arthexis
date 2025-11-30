@@ -2135,7 +2135,7 @@ class UserAdmin(UserDatumAdminMixin, DjangoUserAdmin):
             guest_user.username, temp_password, expires_at=expires_at
         )
 
-        login(request, guest_user, backend="core.backends.TempPasswordBackend")
+        login(request, guest_user, backend="apps.core.backends.TempPasswordBackend")
 
         expires_display = timezone.localtime(entry.expires_at)
         expires_label = expires_display.strftime("%Y-%m-%d %H:%M %Z")

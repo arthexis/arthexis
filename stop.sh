@@ -168,7 +168,7 @@ pkill -f "celery -A config" || true
 if [ "$SKIP_LCD_STOP" != "1" ] && [ "$SKIP_LCD_STOP" != "true" ]; then
   if arthexis_lcd_feature_enabled "$LOCK_DIR"; then
     if [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_EMBEDDED" ] || ! command -v systemctl >/dev/null 2>&1; then
-      pkill -f "python -m core\.lcd_screen" || true
+      pkill -f "python -m apps.core\.lcd_screen" || true
     fi
   fi
 fi

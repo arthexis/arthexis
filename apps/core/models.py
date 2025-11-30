@@ -51,8 +51,8 @@ from django.core.management.color import no_style
 from urllib.parse import quote, quote_plus, urlparse
 from zoneinfo import ZoneInfo
 from utils import revision as revision_utils
-from core.celery_utils import normalize_periodic_task_name
-from core.language import default_report_language
+from apps.core.celery_utils import normalize_periodic_task_name
+from apps.core.language import default_report_language
 from typing import Any, Type
 from defusedxml import xmlrpc as defused_xmlrpc
 import requests
@@ -2491,7 +2491,7 @@ class PackageRelease(Entity):
 
     @classmethod
     def dump_fixture(cls) -> None:
-        base = Path("core/fixtures")
+        base = Path("apps/core/fixtures")
         base.mkdir(parents=True, exist_ok=True)
         existing = {path.name: path for path in base.glob("releases__*.json")}
         expected: set[str] = set()
@@ -2629,7 +2629,7 @@ class PackageRelease(Entity):
         name = normalize_periodic_task_name(PeriodicTask.objects, raw_name)
         defaults = {
             "clocked": schedule,
-            "task": "core.tasks.run_scheduled_release",
+            "task": "apps.core.tasks.run_scheduled_release",
             "kwargs": _json.dumps({"release_id": self.pk}),
             "enabled": True,
             "one_off": True,
@@ -2928,7 +2928,7 @@ class PackageRelease(Entity):
         if kwargs.get("git"):
             from glob import glob
 
-            paths = sorted(glob("core/fixtures/releases__*.json"))
+            paths = sorted(glob("apps/core/fixtures/releases__*.json"))
             diff = subprocess.run(
                 ["git", "status", "--porcelain", *paths],
                 capture_output=True,

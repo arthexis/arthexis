@@ -11,7 +11,7 @@ from django.contrib.auth import get_user_model
 from django.db.models import Q, Prefetch
 from django.utils import timezone
 
-from core import mailer
+from apps.core import mailer
 from nodes.models import Node
 
 from . import store
