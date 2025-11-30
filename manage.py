@@ -178,7 +178,11 @@ class RunserverSession:
         self.should_run_env_refresh = not _is_migration_server_running(self.lock_dir)
         self._write_state()
         self._thread = threading.Thread(target=self._watch_for_restart, daemon=True)
-        self._thread.start()
+        try:
+            self._thread.start()
+        except KeyboardInterrupt:
+            self._cleanup_files()
+            raise
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:  # type: ignore[override]
@@ -246,17 +250,20 @@ class RunserverSession:
 
 def _run_runserver(base_dir: Path, argv: list[str], is_debug_session: bool) -> None:
     session = RunserverSession(base_dir, argv, is_debug_session)
-    with session:
-        if session.should_run_env_refresh:
-            _run_env_refresh(base_dir)
-        while True:
-            try:
-                _execute_django(["manage.py", *argv], base_dir)
-                return
-            except KeyboardInterrupt:
-                if session.consume_restart_request():
-                    continue
-                raise
+    try:
+        with session:
+            if session.should_run_env_refresh:
+                _run_env_refresh(base_dir)
+            while True:
+                try:
+                    _execute_django(["manage.py", *argv], base_dir)
+                    return
+                except KeyboardInterrupt:
+                    if session.consume_restart_request():
+                        continue
+                    raise
+    except KeyboardInterrupt:
+        return
 
 
 def main(argv: Sequence[str] | None = None) -> None:
