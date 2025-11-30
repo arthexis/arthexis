@@ -62,7 +62,7 @@ from .reports import (
 )
 from apps.core import temp_passwords
 from apps.core.admin import EmailOutboxAdminForm, SaveBeforeChangeAction
-from protocols.models import CPForwarder
+from apps.ocpp.models import CPForwarder
 from .models import (
     Node,
     NodeRole,
@@ -1933,7 +1933,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
                 level=messages.INFO,
             )
 
-        url = reverse("admin:protocols_cpforwarder_change", args=[forwarder.pk])
+        url = reverse("admin:ocpp_cpforwarder_change", args=[forwarder.pk])
         return HttpResponseRedirect(url)
 
     def changeform_view(self, request, object_id=None, form_url="", extra_context=None):

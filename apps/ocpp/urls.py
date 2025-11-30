@@ -2,6 +2,8 @@ from django.urls import include, path
 
 from . import views
 
+app_name = "ocpp"
+
 urlpatterns = [
     path("cpms/dashboard/", views.dashboard, name="ocpp-dashboard"),
     path("net-monitor/", views.net_monitor_console, name="net-monitor-console"),
@@ -54,4 +56,5 @@ urlpatterns = [
         name="charger-status-connector",
     ),
     path("rfid/validator/", include("apps.rfid.urls")),
+    path("media/<slug:slug>/", views.media_bucket_upload, name="media-bucket-upload"),
 ]

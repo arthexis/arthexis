@@ -178,7 +178,7 @@ class Forwarder:
         """Ensure websocket connections exist for forwarded charge points."""
 
         from apps.nodes.models import Node
-        from protocols.models import CPForwarder
+        from apps.ocpp.models import CPForwarder
         from .models import Charger
 
         local = Node.get_local()

@@ -242,71 +242,8 @@ def _build_credentials_actions(action_name, handler_name, description=TEST_CREDE
 
 
 def get_app_list_with_protocol_forwarder(self, request, app_label=None):
-    if app_label == "protocols":
-        return _original_admin_get_app_list(self, request, app_label=app_label)
-
     full_list = list(_original_admin_get_app_list(self, request, app_label=None))
-    merged_list = []
-    ocpp_entry = None
-    protocols_entry = None
-
-    for entry in full_list:
-        label = entry.get("app_label")
-        if label == "ocpp":
-            ocpp_entry = entry
-            merged_list.append(entry)
-        elif label == "protocols":
-            protocols_entry = entry
-        else:
-            merged_list.append(entry)
-
-    result = merged_list
-    if ocpp_entry and protocols_entry and protocols_entry.get("models"):
-        cp_models = [model.copy() for model in protocols_entry["models"]]
-        existing = {model["object_name"] for model in ocpp_entry["models"]}
-        additional = [model for model in cp_models if model["object_name"] not in existing]
-        if additional:
-            ocpp_entry["models"].extend(additional)
-            ocpp_entry["models"].sort(key=lambda model: model["name"])
-        if protocols_entry.get("has_module_perms"):
-            ocpp_entry["has_module_perms"] = True
-    else:
-        result = full_list
-
-    if result is not full_list:
-        # On protocol-forwarder nodes we collapse the Protocols app into OCPP.
-        # When the Protocols entry has models, Django returns only ``merged_list``
-        # (without the untouched items from ``full_list``). That list may omit the
-        # Experience group, which carries ``SiteTemplate``. Pull the original
-        # Experience entry back in so the dashboard shows those models.
-        experience_app_label = ExperienceReference._meta.app_label
-        experience_entry = next(
-            (
-                entry
-                for entry in result
-                if entry.get("app_label") == experience_app_label
-            ),
-            None,
-        )
-        full_experience_entry = next(
-            (
-                entry
-                for entry in full_list
-                if entry.get("app_label") == experience_app_label
-            ),
-            None,
-        )
-
-        if full_experience_entry:
-            if experience_entry is None:
-                result.append(full_experience_entry)
-            else:
-                existing = {model.get("object_name") for model in experience_entry["models"]}
-                for model in full_experience_entry.get("models", []):
-                    object_name = model.get("object_name")
-                    if object_name not in existing:
-                        experience_entry["models"].append(model)
-                experience_entry["models"].sort(key=lambda model: model["name"])
+    result = full_list
 
     if app_label:
         result = [entry for entry in result if entry.get("app_label") == app_label]
