@@ -1,4 +1,4 @@
-"""Runtime registry and execution helpers for :mod:`nodes` classifiers."""
+"""Runtime registry and execution helpers for :mod:`content` classifiers."""
 
 from __future__ import annotations
 
@@ -12,7 +12,12 @@ from typing import Any, Iterable, Iterator, Mapping
 from django.db import transaction
 from django.utils.text import slugify
 
-from ..models import ContentClassification, ContentClassifier, ContentSample, ContentTag
+from apps.content.models import (
+    ContentClassification,
+    ContentClassifier,
+    ContentSample,
+    ContentTag,
+)
 
 logger = logging.getLogger(__name__)
 

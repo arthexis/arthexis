@@ -14,7 +14,8 @@ from cryptography.hazmat.primitives.asymmetric import padding
 from django.contrib import admin
 from django.utils import timezone as django_timezone
 
-from .models import ContentSample, NetMessage, Node, PendingNetMessage
+from apps.content.models import ContentSample
+from .models import NetMessage, Node, PendingNetMessage
 from .utils import capture_screenshot, save_screenshot
 
 logger = logging.getLogger(__name__)

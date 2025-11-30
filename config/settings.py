@@ -398,6 +398,7 @@ LOCAL_APPS = [
     "apps.payments",
     "apps.links",
     "apps.locals",
+    "apps.content",
     "apps.media",
     "apps.odoo",
     "apps.sigils",
@@ -425,6 +426,7 @@ APPLICATION_APPS = [
     "apps.media",
     "apps.emails",
     "apps.pages",
+    "apps.content",
     "apps.cards",
     "apps.teams",
 ]
