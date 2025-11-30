@@ -387,58 +387,31 @@ CsrfViewMiddleware._check_referer = _check_referer_with_forwarded
 
 # Application definition
 
-_PREFERRED_LOCAL_APP_ORDER = [
-    "celery",
-    "nodes",
-    "screens",
-    "counters",
-    "energy",
-    "core",
-    "emails",
-    "payments",
-    "links",
-    "locals",
-    "media",
-    "odoo",
-    "sigils",
-    "repos",
-    "app",
-    "vehicle",
-    "ocpp",
-    "ocpp.forwarder",
-    "ocpp.simulator",
-    "rfid",
-    "awg",
-    "pages",
-    "teams",
+LOCAL_APPS = [
+    "apps.celery",
+    "apps.nodes",
+    "apps.screens",
+    "apps.counters",
+    "apps.energy",
+    "apps.core",
+    "apps.emails",
+    "apps.payments",
+    "apps.links",
+    "apps.locals",
+    "apps.media",
+    "apps.odoo",
+    "apps.sigils",
+    "apps.repos",
+    "apps.app",
+    "apps.vehicle",
+    "apps.ocpp",
+    "apps.ocpp.forwarder",
+    "apps.ocpp.simulator",
+    "apps.rfid",
+    "apps.awg",
+    "apps.pages",
+    "apps.teams",
 ]
-
-
-def _iter_local_app_labels():
-    for config_path in APPS_DIR.rglob("apps.py"):
-        if config_path.name != "apps.py":
-            continue
-        if not (config_path.parent / "__init__.py").exists():
-            continue
-
-        rel_parts = config_path.relative_to(APPS_DIR).parts[:-1]
-        if not rel_parts:
-            continue
-
-        if any(part.startswith("_") for part in rel_parts):
-            continue
-
-        yield ".".join(rel_parts)
-
-
-_DISCOVERED_LOCAL_APPS = set(_iter_local_app_labels())
-
-_ORDERED_LOCAL_APPS = [
-    app for app in _PREFERRED_LOCAL_APP_ORDER if app in _DISCOVERED_LOCAL_APPS
-]
-_ORDERED_LOCAL_APPS.extend(sorted(_DISCOVERED_LOCAL_APPS - set(_ORDERED_LOCAL_APPS)))
-
-LOCAL_APPS = [f"apps.{app}" for app in _ORDERED_LOCAL_APPS]
 
 APPLICATION_APPS = [
     "apps.awg",
