@@ -41,7 +41,6 @@ from django.http import (
 )
 from django.shortcuts import get_object_or_404, redirect, render
 from apps.nodes.models import Node
-from apps.nodes.utils import capture_screenshot, save_screenshot
 from django.template import loader
 from django.template.response import TemplateResponse
 from django.test import RequestFactory, signals as test_signals
@@ -2251,32 +2250,6 @@ def submit_user_story(request):
         if language_code:
             story.language_code = language_code
         story.save()
-        if story.take_screenshot:
-            screenshot_url = request.META.get("HTTP_REFERER", "")
-            parsed = urlparse(screenshot_url)
-            if not (parsed.scheme and parsed.netloc):
-                target_path = story.path or request.get_full_path() or "/"
-                screenshot_url = request.build_absolute_uri(target_path)
-            try:
-                screenshot_path = capture_screenshot(screenshot_url)
-            except Exception:  # pragma: no cover - best effort capture
-                logger.exception("Failed to capture screenshot for user story %s", story.pk)
-            else:
-                try:
-                    sample = save_screenshot(
-                        screenshot_path,
-                        method="USER_STORY",
-                        user=story.user if story.user_id else None,
-                        link_duplicates=True,
-                    )
-                except Exception:  # pragma: no cover - best effort persistence
-                    logger.exception(
-                        "Failed to persist screenshot for user story %s", story.pk
-                    )
-                else:
-                    if sample is not None:
-                        story.screenshot = sample
-                        story.save(update_fields=["screenshot"])
         return JsonResponse({"success": True})
 
     return JsonResponse({"success": False, "errors": form.errors}, status=400)
