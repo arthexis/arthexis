@@ -8,7 +8,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
 
-from ocpp.transactions_io import export_transactions
+from apps.ocpp.transactions_io import export_transactions
 
 
 class Command(BaseCommand):

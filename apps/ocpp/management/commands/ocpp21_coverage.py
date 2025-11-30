@@ -3,7 +3,7 @@ from pathlib import Path
 
 from django.core.management.base import BaseCommand
 
-from ocpp.management.commands.ocpp16_coverage import (
+from apps.ocpp.management.commands.ocpp16_coverage import (
     _implemented_cp_to_csms,
     _implemented_csms_to_cp,
 )

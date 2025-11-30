@@ -527,7 +527,7 @@ def push_forwarded_charge_points() -> int:
 
 
 # Backwards compatibility alias for legacy schedules
-@shared_task(name="ocpp.tasks.sync_remote_chargers")
+@shared_task(name="apps.ocpp.tasks.sync_remote_chargers")
 def sync_remote_chargers() -> int:
     """Maintain the legacy task name used by older beat schedules."""
 

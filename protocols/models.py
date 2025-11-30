@@ -13,7 +13,7 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.core.entity import Entity, EntityManager
 from nodes.models import Node
-from ocpp.forwarder import forwarder
+from apps.ocpp.forwarder import forwarder
 
 from .forwarding import (
     attempt_forwarding_probe,
@@ -360,7 +360,7 @@ class CPForwarder(Entity):
 
         updated_count = 0
         if chargers_to_update:
-            from ocpp.models import Charger
+            from apps.ocpp.models import Charger
 
             charger_pks = [charger.pk for charger in chargers_to_update if charger.pk]
             if charger_pks:
@@ -455,7 +455,7 @@ class CPForwarder(Entity):
             self._update_fields(is_running=False)
 
     def _eligible_chargers(self, local_node: Node | None):
-        from ocpp.models import Charger
+        from apps.ocpp.models import Charger
 
         qs = Charger.objects.filter(export_transactions=True)
         if local_node and local_node.pk:
@@ -505,7 +505,7 @@ class CPForwarder(Entity):
     def _forwarding_service(self):
         """Return the shared forwarding service used to manage sessions."""
 
-        from ocpp.forwarder import forwarder
+        from apps.ocpp.forwarder import forwarder
 
         return forwarder
 

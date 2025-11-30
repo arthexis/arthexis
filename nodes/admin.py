@@ -84,15 +84,15 @@ from .models import (
 from . import dns as dns_utils
 from apps.core.models import RFID
 from teams.models import EmailOutbox
-from ocpp import store
-from ocpp.models import (
+from apps.ocpp import store
+from apps.ocpp.models import (
     Charger,
     CPFirmware,
     CPFirmwareDeployment,
     CPFirmwareRequest,
     DataTransferMessage,
 )
-from ocpp.network import serialize_charger_for_network
+from apps.ocpp.network import serialize_charger_for_network
 from apps.core.user_data import EntityModelAdmin
 
 

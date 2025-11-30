@@ -1245,7 +1245,7 @@ class ClientReport(Entity):
     @staticmethod
     def _build_dataset(start_date=None, end_date=None, *, chargers=None):
         from datetime import datetime, time, timedelta, timezone as pytimezone
-        from ocpp.models import Transaction, annotate_transaction_energy_bounds
+        from apps.ocpp.models import Transaction, annotate_transaction_energy_bounds
 
         Charger = apps.get_model("ocpp", "Charger")
         RFID = apps.get_model("core", "RFID")

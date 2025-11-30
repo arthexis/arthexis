@@ -3,7 +3,7 @@ import json
 from django.core.management.base import BaseCommand, CommandError
 
 from apps.core.models import RFID
-from ocpp.rfid.reader import validate_rfid_value
+from apps.rfid.reader import validate_rfid_value
 
 
 class Command(BaseCommand):

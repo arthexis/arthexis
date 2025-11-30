@@ -9,9 +9,9 @@ from django.db.models import Prefetch, Q, QuerySet
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
-from ocpp import store
-from ocpp.models import Charger, MeterValue, Transaction
-from ocpp.views import _aggregate_dashboard_state
+from apps.ocpp import store
+from apps.ocpp.models import Charger, MeterValue, Transaction
+from apps.ocpp.views import _aggregate_dashboard_state
 
 
 class Command(BaseCommand):

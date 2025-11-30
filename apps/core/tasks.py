@@ -1198,7 +1198,7 @@ def _charge_point_active(base_dir: Path) -> bool:
     if lock_path.exists():
         return True
     try:
-        from ocpp import store  # type: ignore
+        from apps.ocpp import store  # type: ignore
     except Exception:
         return False
     try:

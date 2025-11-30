@@ -53,5 +53,5 @@ urlpatterns = [
         views.charger_status,
         name="charger-status-connector",
     ),
-    path("rfid/validator/", include("ocpp.rfid.urls")),
+    path("rfid/validator/", include("apps.rfid.urls")),
 ]

@@ -3,7 +3,7 @@ from __future__ import annotations
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
-from ocpp.models import RFIDSessionAttempt
+from apps.ocpp.models import RFIDSessionAttempt
 
 
 class Command(BaseCommand):

@@ -17,7 +17,7 @@ from django.utils.translation import gettext_lazy as _
 from requests import RequestException
 
 from nodes.models import Node
-from ocpp.network import serialize_charger_for_network
+from apps.ocpp.network import serialize_charger_for_network
 
 
 def load_local_node_credentials():
