@@ -6,7 +6,10 @@ from pathlib import Path
 from django.apps import AppConfig
 from django.conf import settings
 
-from apps.nodes.startup_notifications import lcd_feature_enabled, queue_startup_message
+from apps.screens.startup_notifications import (
+    lcd_feature_enabled,
+    queue_startup_message,
+)
 
 logger = logging.getLogger(__name__)
 

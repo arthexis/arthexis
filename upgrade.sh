@@ -339,7 +339,7 @@ queue_startup_net_message() {
 import sys
 from pathlib import Path
 
-from apps.nodes.startup_notifications import queue_startup_message
+from apps.screens.startup_notifications import queue_startup_message
 
 base_dir = Path(sys.argv[1])
 queue_startup_message(base_dir=base_dir)

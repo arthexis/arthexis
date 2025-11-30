@@ -23,8 +23,8 @@ from pathlib import Path
 from typing import NamedTuple
 
 from apps.core.notifications import get_base_dir
-from apps.nodes.lcd import CharLCD1602, LCDUnavailableError
-from apps.nodes.startup_notifications import STARTUP_NET_MESSAGE_FLAG
+from apps.screens.lcd import CharLCD1602, LCDUnavailableError
+from apps.screens.startup_notifications import STARTUP_NET_MESSAGE_FLAG
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +36,8 @@ FEATURE_LOCK_NAME = "lcd_screen_enabled.lck"
 SHUTDOWN_SCHEDULE_FILE = Path("/run/systemd/shutdown/scheduled")
 DEFAULT_SCROLL_MS = 1000
 SCROLL_PADDING = 3
+LCD_COLUMNS = CharLCD1602.columns
+LCD_ROWS = CharLCD1602.rows
 
 
 class LockPayload(NamedTuple):
@@ -276,8 +278,9 @@ def _blank_display(lcd: CharLCD1602 | None) -> None:
 
     try:
         lcd.clear()
-        lcd.write(0, 0, " " * 16)
-        lcd.write(0, 1, " " * 16)
+        blank_row = " " * LCD_COLUMNS
+        for row in range(LCD_ROWS):
+            lcd.write(0, row, blank_row)
     except Exception:
         logger.debug("Failed to blank LCD during shutdown", exc_info=True)
 
@@ -335,10 +338,18 @@ def _prepare_display_state(line1: str, line2: str, scroll_ms: int) -> DisplaySta
     scroll_sec = max(scroll_ms, 0) / 1000.0
     text1 = line1[:64]
     text2 = line2[:64]
-    pad1 = text1 + " " * SCROLL_PADDING if len(text1) > 16 else text1.ljust(16)
-    pad2 = text2 + " " * SCROLL_PADDING if len(text2) > 16 else text2.ljust(16)
-    steps1 = max(len(pad1) - 15, 1)
-    steps2 = max(len(pad2) - 15, 1)
+    pad1 = (
+        text1 + " " * SCROLL_PADDING
+        if len(text1) > LCD_COLUMNS
+        else text1.ljust(LCD_COLUMNS)
+    )
+    pad2 = (
+        text2 + " " * SCROLL_PADDING
+        if len(text2) > LCD_COLUMNS
+        else text2.ljust(LCD_COLUMNS)
+    )
+    steps1 = max(len(pad1) - (LCD_COLUMNS - 1), 1)
+    steps2 = max(len(pad2) - (LCD_COLUMNS - 1), 1)
     cycle = math.lcm(steps1, steps2)
     return DisplayState(pad1, pad2, steps1, steps2, 0, 0, scroll_sec, cycle)
 
@@ -347,10 +358,10 @@ def _advance_display(lcd: CharLCD1602, state: DisplayState) -> DisplayState:
     if _shutdown_requested():
         return state
 
-    segment1 = state.pad1[state.index1 : state.index1 + 16]
-    segment2 = state.pad2[state.index2 : state.index2 + 16]
-    lcd.write(0, 0, segment1.ljust(16))
-    lcd.write(0, 1, segment2.ljust(16))
+    segment1 = state.pad1[state.index1 : state.index1 + LCD_COLUMNS]
+    segment2 = state.pad2[state.index2 : state.index2 + LCD_COLUMNS]
+    lcd.write(0, 0, segment1.ljust(LCD_COLUMNS))
+    lcd.write(0, 1, segment2.ljust(LCD_COLUMNS))
 
     next_index1 = (state.index1 + 1) % state.steps1
     next_index2 = (state.index2 + 1) % state.steps2

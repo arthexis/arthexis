@@ -1,7 +1,7 @@
 """Minimal driver for PCF8574/PCF8574A I2C LCD1602 displays.
 
 The implementation is adapted from the example provided in the
-instructions.  It is intentionally lightweight and only implements the
+instructions. It is intentionally lightweight and only implements the
 operations required for this project: initialisation, clearing the
 screen and writing text to a specific position.
 """
@@ -49,6 +49,9 @@ class _BusWrapper:
 
 class CharLCD1602:
     """Minimal driver for PCF8574/PCF8574A I2C backpack (LCD1602)."""
+
+    columns = 16
+    rows = 2
 
     def __init__(self, bus: _BusWrapper | None = None) -> None:
         if smbus is None:  # pragma: no cover - hardware dependent
@@ -157,8 +160,8 @@ class CharLCD1602:
         self._write_word(self.LCD_ADDR, 0x00)
 
     def write(self, x: int, y: int, s: str) -> None:
-        x = max(0, min(15, int(x)))
-        y = 0 if int(y) <= 0 else 1
+        x = max(0, min(self.columns - 1, int(x)))
+        y = max(0, min(self.rows - 1, int(y)))
         addr = 0x80 + 0x40 * y + x
         self.send_command(addr)
         for ch in str(s):

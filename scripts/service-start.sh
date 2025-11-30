@@ -117,7 +117,7 @@ queue_startup_net_message() {
 import sys
 from pathlib import Path
 
-from apps.nodes.startup_notifications import queue_startup_message
+from apps.screens.startup_notifications import queue_startup_message
 
 base_dir = Path(sys.argv[1])
 port_value = sys.argv[2]
@@ -293,7 +293,7 @@ if [ "$CELERY" = true ]; then
 fi
 
 if [ "$LCD_EMBEDDED" = true ]; then
-  python -m apps.core.lcd_screen &
+  python -m apps.screens.lcd_screen &
   LCD_PROCESS_PID=$!
 fi
 

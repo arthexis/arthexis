@@ -9,7 +9,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 
 from apps.core.notifications import notify
-from apps.nodes.lcd import CharLCD1602, LCDUnavailableError
+from apps.screens.lcd import CharLCD1602, LCDUnavailableError
 
 
 class Command(BaseCommand):
