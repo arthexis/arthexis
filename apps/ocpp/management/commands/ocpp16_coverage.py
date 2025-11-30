@@ -200,7 +200,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--badge-path",
             default=None,
-            help="Optional path to write the SVG badge. Defaults to project root ocpp_coverage.svg.",
+            help="Optional path to write the SVG badge. Defaults to project media/ocpp_coverage.svg.",
         )
         parser.add_argument(
             "--json-path",
@@ -281,7 +281,8 @@ class Command(BaseCommand):
 
         badge_path = options.get("badge_path")
         if badge_path is None:
-            badge_path = project_root / "ocpp_coverage.svg"
+            badge_path = project_root / "media" / "ocpp_coverage.svg"
+            badge_path.parent.mkdir(parents=True, exist_ok=True)
         else:
             badge_path = Path(badge_path)
             if not badge_path.is_absolute():

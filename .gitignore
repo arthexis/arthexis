@@ -98,7 +98,6 @@ db.sqlite3-wal
 # revisioned sqlite databases
 db_*.sqlite3
 test_db_*.sqlite3
-media/
 
 # Flask stuff:
 instance/
@@ -203,8 +202,13 @@ locks/
 .dmypy.json
 dmypy.json
 
-# local media generated during tests
-media/
+# Media uploads and generated assets
+media/*
+!media/.gitkeep
+!media/coverage.svg
+!media/ocpp_coverage.svg
+!media/ocpp201_coverage.svg
+!media/ocpp21_coverage.svg
 # Collected static files
 /static/
 !/static/.gitignore
