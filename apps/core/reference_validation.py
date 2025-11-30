@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
-from django.conf import settings
-
-from .celery_utils import normalize_periodic_task_name, periodic_task_name_variants
+from apps.celery.utils import (
+    is_celery_enabled,
+    normalize_periodic_task_name,
+    periodic_task_name_variants,
+)
 
 
 REFERENCE_VALIDATION_TASK_NAME = "reference-url-validation"
@@ -25,9 +25,8 @@ def ensure_reference_validation_task(sender=None, **kwargs) -> None:
         return
 
     task_names = periodic_task_name_variants(REFERENCE_VALIDATION_TASK_NAME)
-    celery_lock = Path(settings.BASE_DIR) / ".locks" / "celery.lck"
 
-    if not celery_lock.exists():
+    if not is_celery_enabled():
         try:
             PeriodicTask.objects.filter(name__in=task_names).delete()
         except (OperationalError, ProgrammingError):

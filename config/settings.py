@@ -29,6 +29,7 @@ from django.contrib.sites import shortcuts as sites_shortcuts
 from django.contrib.sites.requests import RequestSite
 from urllib.parse import urlsplit
 import django.utils.encoding as encoding
+from apps.celery.utils import resolve_celery_shutdown_timeout
 
 from config.logging import configure_library_loggers
 from config.settings_helpers import (
@@ -36,7 +37,6 @@ from config.settings_helpers import (
     extract_ip_from_host,
     install_validate_host_with_subnets,
     load_secret_key,
-    resolve_celery_shutdown_timeout,
     strip_ipv6_brackets,
 )
 
@@ -387,6 +387,7 @@ CsrfViewMiddleware._check_referer = _check_referer_with_forwarded
 # Application definition
 
 LOCAL_APPS = [
+    "apps.celery",
     "apps.nodes",
     "apps.counters",
     "apps.energy",

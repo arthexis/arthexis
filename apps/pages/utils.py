@@ -7,6 +7,7 @@ from django.core.exceptions import DisallowedHost
 from django.http.request import split_domain_port
 from django.urls import path as django_path
 from django.utils.translation import get_language
+from apps.celery.utils import celery_feature_enabled
 
 try:  # pragma: no cover - compatibility shim for Django versions without constant
     from django.utils.translation import LANGUAGE_SESSION_KEY
@@ -97,7 +98,7 @@ def landing_leads_supported() -> bool:
     node = Node.get_local()
     if not node:
         return False
-    return node.has_feature("celery-queue")
+    return celery_feature_enabled(node)
 
 
 def get_request_language_code(request) -> str:

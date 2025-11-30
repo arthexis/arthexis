@@ -15,6 +15,7 @@ from typing import Iterable, Mapping, MutableMapping
 from django.core.management.utils import get_random_secret_key
 from django.http import request as http_request
 from django.http.request import split_domain_port
+from apps.celery.utils import resolve_celery_shutdown_timeout
 
 
 __all__ = [
@@ -284,30 +285,3 @@ def load_secret_key(
 
     return generated_key
 
-
-def resolve_celery_shutdown_timeout(
-    env: Mapping[str, str] | MutableMapping[str, str] | None = None,
-    default: float = 60.0,
-) -> float:
-    """Return the configured Celery soft shutdown timeout in seconds."""
-
-    if env is None:
-        env = os.environ
-
-    candidates = (
-        "CELERY_WORKER_SOFT_SHUTDOWN_TIMEOUT",
-        "CELERY_WORKER_SHUTDOWN_TIMEOUT",
-    )
-    for variable in candidates:
-        raw_value = (env.get(variable) or "").strip()
-        if not raw_value:
-            continue
-        try:
-            parsed = float(raw_value)
-        except (TypeError, ValueError):
-            continue
-        if parsed < 0:
-            continue
-        return parsed
-
-    return float(default)
