@@ -1,4 +1,4 @@
-{% load admin_extras %}
+{% load counter_extras %}
 {% badge_counters app_label model_name as model_badges %}
 {% for badge in model_badges %}
   <span class="{{ badge.css_class }}" aria-label="{{ badge.label }}" title="{{ badge.label }}">
