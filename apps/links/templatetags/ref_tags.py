@@ -1,15 +1,18 @@
+from __future__ import annotations
+
 from datetime import datetime, timezone as dt_timezone
 from pathlib import Path
 
 from django import template
 from django.conf import settings
 from django.urls import reverse
-from django.utils.html import format_html
 from django.utils import timezone
+from django.utils.html import format_html
 
-from apps.core.models import Reference, PackageRelease
-from apps.core.reference_utils import filter_visible_references
+from apps.core.models import PackageRelease
 from apps.core.release import DEFAULT_PACKAGE
+from apps.links.models import Reference
+from apps.links.reference_utils import filter_visible_references
 from utils import revision
 
 register = template.Library()
@@ -130,6 +133,7 @@ def build_footer_context(*, request=None, badge_site=None, badge_node=None, forc
 @register.simple_tag
 def ref_img(value, size=200, alt=None):
     """Return an <img> tag with the stored reference image for the value."""
+
     ref, created = Reference.objects.get_or_create(
         value=value, defaults={"alt_text": alt or value}
     )

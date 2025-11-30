@@ -55,7 +55,7 @@ from django.utils.http import (
 )
 from django_otp import DEVICE_ID_SESSION_KEY
 from apps.core import changelog, mailer, passkeys, public_wifi
-from apps.core.templatetags.ref_tags import build_footer_context
+from apps.links.templatetags.ref_tags import build_footer_context
 from apps.core.backends import (
     TOTP_DEVICE_NAME,
     get_user_totp_devices,

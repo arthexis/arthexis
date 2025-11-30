@@ -13,7 +13,9 @@ from urllib.parse import parse_qs
 from django.conf import settings
 from django.utils import timezone
 from apps.energy.models import CustomerAccount
-from apps.core.models import Reference, RFID as CoreRFID
+from apps.core.models import RFID as CoreRFID
+from apps.links.models import Reference
+from apps.links.reference_utils import host_is_local_loopback
 from apps.nodes.models import NetMessage
 from django.core.exceptions import ValidationError
 from django.contrib.auth import authenticate
@@ -45,7 +47,6 @@ from .models import (
     ChargerLogRequest,
     PowerProjection,
 )
-from .reference_utils import host_is_local_loopback
 from .evcs_discovery import (
     DEFAULT_CONSOLE_PORT,
     HTTPS_PORTS,

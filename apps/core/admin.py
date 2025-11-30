@@ -87,12 +87,12 @@ from apps.repos.github_helper import (
     GitHubRepositoryError,
     create_repository_for_package,
 )
+from apps.links.models import Reference
 from .models import (
     User,
     UserPhoneNumber,
     Product,
     RFID,
-    Reference,
     OdooProfile,
     OpenPayProfile,
     GoogleCalendarProfile,
@@ -490,7 +490,7 @@ class ReferenceAdmin(EntityModelAdmin):
             path(
                 "bulk/",
                 self.admin_site.admin_view(csrf_exempt(self.bulk_create)),
-                name="core_reference_bulk",
+                name="links_reference_bulk",
             ),
         ]
         return custom + urls

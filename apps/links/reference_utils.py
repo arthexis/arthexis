@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import ipaddress
 from typing import Iterable, TYPE_CHECKING
+from urllib.parse import urlparse
 
 from django.contrib.sites.models import Site
 
@@ -10,6 +12,38 @@ if TYPE_CHECKING:  # pragma: no cover - imported only for type checking
     from django.http import HttpRequest
     from apps.nodes.models import Node
     from .models import Reference
+
+
+def _normalize_host(host: str | None) -> str:
+    """Return a trimmed host string without surrounding brackets."""
+
+    if not host:
+        return ""
+    host = host.strip()
+    if host.startswith("[") and host.endswith("]"):
+        return host[1:-1]
+    return host
+
+
+def host_is_local_loopback(host: str | None) -> bool:
+    """Return ``True`` when the host string points to 127.0.0.1."""
+
+    normalized = _normalize_host(host)
+    if not normalized:
+        return False
+    try:
+        return ipaddress.ip_address(normalized) == ipaddress.ip_address("127.0.0.1")
+    except ValueError:
+        return False
+
+
+def url_targets_local_loopback(url: str | None) -> bool:
+    """Return ``True`` when the parsed URL host equals 127.0.0.1."""
+
+    if not url:
+        return False
+    parsed = urlparse(url)
+    return host_is_local_loopback(parsed.hostname)
 
 
 def filter_visible_references(
@@ -47,9 +81,7 @@ def filter_visible_references(
         if assignments_manager is not None:
             try:
                 assignments = list(
-                    assignments_manager.filter(is_deleted=False).select_related(
-                        "feature"
-                    )
+                    assignments_manager.filter(is_deleted=False).select_related("feature")
                 )
             except Exception:
                 assignments = []
@@ -108,3 +140,9 @@ def filter_visible_references(
 
     return visible_refs
 
+
+__all__ = [
+    "filter_visible_references",
+    "host_is_local_loopback",
+    "url_targets_local_loopback",
+]

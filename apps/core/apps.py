@@ -440,7 +440,6 @@ def _configure_lock_dependent_tasks(config):
     from django.db import connections
 
     from .auto_upgrade import ensure_auto_upgrade_periodic_task
-    from .reference_validation import ensure_reference_validation_task
 
     def ensure_email_collector_task(**kwargs):
         try:  # pragma: no cover - optional dependency
@@ -470,7 +469,6 @@ def _configure_lock_dependent_tasks(config):
 
     post_migrate.connect(ensure_email_collector_task, sender=config)
     post_migrate.connect(ensure_auto_upgrade_periodic_task, sender=config)
-    post_migrate.connect(ensure_reference_validation_task, sender=config)
 
     auto_upgrade_dispatch_uid = "apps.core.apps.ensure_auto_upgrade_periodic_task"
 
@@ -497,28 +495,6 @@ def _configure_lock_dependent_tasks(config):
         weak=False,
     )
 
-    validation_dispatch_uid = "apps.core.apps.ensure_reference_validation_task"
-
-    def ensure_reference_validation_on_connection(**kwargs):
-        if not apps.ready:
-            return
-        connection = kwargs.get("connection")
-        if connection is not None and connection.alias != "default":
-            return
-
-        try:
-            ensure_reference_validation_task()
-        finally:
-            connection_created.disconnect(
-                receiver=ensure_reference_validation_on_connection,
-                dispatch_uid=validation_dispatch_uid,
-            )
-
-    connection_created.connect(
-        ensure_reference_validation_on_connection,
-        dispatch_uid=validation_dispatch_uid,
-        weak=False,
-    )
 
 def _connect_sqlite_wal():
     from django.db import connections

@@ -390,6 +390,7 @@ LOCAL_APPS = [
     "apps.nodes",
     "apps.energy",
     "apps.core",
+    "apps.links",
     "apps.sigils",
     "apps.repos",
     "apps.app",
