@@ -179,7 +179,7 @@ class Forwarder:
 
         from apps.nodes.models import Node
         from apps.ocpp.models import CPForwarder
-        from .models import Charger
+        from ..models import Charger
 
         local = Node.get_local()
         if not local:
