@@ -45,7 +45,7 @@ from requests import RequestException
 from asgiref.sync import async_to_sync
 
 from .classifiers import run_default_classifiers, suppress_default_classifiers
-from .rfid_sync import apply_rfid_payload, serialize_rfid
+from apps.rfid.sync import apply_rfid_payload, serialize_rfid
 from .utils import (
     capture_rpi_snapshot,
     capture_screenshot,
@@ -1642,7 +1642,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         }
         return TemplateResponse(
             request,
-            "admin/nodes/node/rfid_sync_results.html",
+            "admin/rfid/rfid_sync_results.html",
             context,
         )
 
@@ -1650,7 +1650,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         result = self._init_rfid_result(node)
         _, response, attempt_errors = self._request_remote(
             node,
-            "/nodes/rfid/export/",
+            "/rfid/export/",
             lambda url: requests.post(url, data=payload, headers=headers, timeout=5),
         )
         if response is None:
@@ -1702,7 +1702,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         result = self._init_rfid_result(node)
         _, response, attempt_errors = self._request_remote(
             node,
-            "/nodes/rfid/import/",
+            "/rfid/import/",
             lambda url: requests.post(url, data=payload, headers=headers, timeout=5),
         )
         if response is None:

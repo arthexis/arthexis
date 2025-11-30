@@ -38,7 +38,6 @@ from apps.ocpp.network import (
 from apps.ocpp.transactions_io import export_transactions
 from asgiref.sync import async_to_sync
 
-from .rfid_sync import apply_rfid_payload, serialize_rfid
 
 from .models import (
     Node,
@@ -755,108 +754,6 @@ def capture(request):
     screenshot = save_screenshot(path, node=node, method=request.method)
     node_id = screenshot.node.id if screenshot and screenshot.node else None
     return JsonResponse({"screenshot": str(path), "node": node_id})
-
-
-@csrf_exempt
-def export_rfids(request):
-    """Return serialized RFID records for authenticated peers."""
-
-    if request.method != "POST":
-        return JsonResponse({"detail": "POST required"}, status=405)
-
-    try:
-        payload = json.loads(request.body.decode() or "{}")
-    except json.JSONDecodeError:
-        return JsonResponse({"detail": "invalid json"}, status=400)
-
-    requester = payload.get("requester")
-    if not requester:
-        return JsonResponse({"detail": "requester required"}, status=400)
-
-    requester_mac = _clean_requester_hint(payload.get("requester_mac"))
-    requester_public_key = _clean_requester_hint(
-        payload.get("requester_public_key"), strip=False
-    )
-    node, error_response = _load_signed_node(
-        request,
-        requester,
-        mac_address=requester_mac,
-        public_key=requester_public_key,
-    )
-    if error_response is not None:
-        return error_response
-
-    tags = [serialize_rfid(tag) for tag in RFID.objects.all().order_by("label_id")]
-
-    return JsonResponse({"rfids": tags})
-
-
-@csrf_exempt
-def import_rfids(request):
-    """Import RFID payloads from a trusted peer."""
-
-    if request.method != "POST":
-        return JsonResponse({"detail": "POST required"}, status=405)
-
-    try:
-        payload = json.loads(request.body.decode() or "{}")
-    except json.JSONDecodeError:
-        return JsonResponse({"detail": "invalid json"}, status=400)
-
-    requester = payload.get("requester")
-    if not requester:
-        return JsonResponse({"detail": "requester required"}, status=400)
-
-    requester_mac = _clean_requester_hint(payload.get("requester_mac"))
-    requester_public_key = _clean_requester_hint(
-        payload.get("requester_public_key"), strip=False
-    )
-    node, error_response = _load_signed_node(
-        request,
-        requester,
-        mac_address=requester_mac,
-        public_key=requester_public_key,
-    )
-    if error_response is not None:
-        return error_response
-
-    rfids = payload.get("rfids", [])
-    if not isinstance(rfids, list):
-        return JsonResponse({"detail": "rfids must be a list"}, status=400)
-
-    created = 0
-    updated = 0
-    linked_accounts = 0
-    missing_accounts: list[str] = []
-    errors = 0
-
-    for entry in rfids:
-        if not isinstance(entry, Mapping):
-            errors += 1
-            continue
-        outcome = apply_rfid_payload(entry, origin_node=node)
-        if not outcome.ok:
-            errors += 1
-            if outcome.error:
-                missing_accounts.append(outcome.error)
-            continue
-        if outcome.created:
-            created += 1
-        else:
-            updated += 1
-        linked_accounts += outcome.accounts_linked
-        missing_accounts.extend(outcome.missing_accounts)
-
-    return JsonResponse(
-        {
-            "processed": len(rfids),
-            "created": created,
-            "updated": updated,
-            "accounts_linked": linked_accounts,
-            "missing_accounts": missing_accounts,
-            "errors": errors,
-        }
-    )
 
 
 @csrf_exempt

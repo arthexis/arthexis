@@ -9,8 +9,6 @@ urlpatterns = [
     path("screenshot/", views.capture, name="node-screenshot"),
     path("net-message/", views.net_message, name="net-message"),
     path("net-message/pull/", views.net_message_pull, name="net-message-pull"),
-    path("rfid/export/", views.export_rfids, name="node-rfid-export"),
-    path("rfid/import/", views.import_rfids, name="node-rfid-import"),
     path("network/chargers/", views.network_chargers, name="node-network-chargers"),
     path(
         "network/chargers/forward/",
