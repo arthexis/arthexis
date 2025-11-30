@@ -1417,22 +1417,6 @@ def dashboard(request):
 
 
 @login_required(login_url="pages:login")
-@landing("Net Monitor Console")
-def net_monitor_console(request):
-    """Serve the WASM-enabled Net Monitor Console for the Pyxel viewport."""
-
-    return render(
-        request,
-        "ocpp/net_monitor_console.html",
-        {
-            "viewport_src": urljoin(
-                settings.STATIC_URL, "ocpp/net_monitor/index.html"
-            )
-        },
-    )
-
-
-@login_required(login_url="pages:login")
 @landing("Maintenance Request")
 def maintenance_request(request):
     """Allow authenticated users to schedule manual maintenance tasks."""
