@@ -15,7 +15,7 @@ ERROR_LOG="$LOG_DIR/error.log"
 : > "$ERROR_LOG"
 exec > >(tee "$LOG_FILE") 2> >(tee -a "$ERROR_LOG" >&2)
 cd "$BASE_DIR"
-LOCK_DIR="$BASE_DIR/locks"
+LOCK_DIR="$BASE_DIR/.locks"
 STARTUP_LOCK="$LOCK_DIR/startup_started_at.lck"
 SYSTEMD_LOCK_FILE="$LOCK_DIR/systemd_services.lck"
 SERVICE_MANAGEMENT_MODE="$(arthexis_detect_service_mode "$LOCK_DIR")"

@@ -19,8 +19,8 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         base_dir = Path(settings.BASE_DIR)
-        lock_file = base_dir / "locks" / "lcd_screen.lck"
-        service_file = base_dir / "locks" / "service.lck"
+        lock_file = base_dir / ".locks" / "lcd_screen.lck"
+        service_file = base_dir / ".locks" / "service.lck"
 
         self.stdout.write("LCD diagnostic report:")
 

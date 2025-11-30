@@ -208,7 +208,7 @@ fi
 install_watch_upgrade_helper
 
 # Ensure systemd units run as the project owner, matching the install user.
-arthexis_update_systemd_service_user "$SCRIPT_DIR" "$SCRIPT_DIR/locks" || true
+arthexis_update_systemd_service_user "$SCRIPT_DIR" "$SCRIPT_DIR/.locks" || true
 
 ARGS=""
 if [ "$LATEST" -eq 1 ]; then

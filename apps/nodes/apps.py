@@ -15,7 +15,7 @@ def _startup_notification(
     port: str | None = None, lock_file: Path | None = None, *, allow_db_lookup: bool = True
 ) -> None:
     base_dir = Path(getattr(settings, "BASE_DIR", Path(__file__).resolve().parents[1]))
-    lock_dir = (lock_file.parent if lock_file else base_dir / "locks").resolve()
+    lock_dir = (lock_file.parent if lock_file else base_dir / ".locks").resolve()
     if not lcd_feature_enabled(lock_dir):
         return
 

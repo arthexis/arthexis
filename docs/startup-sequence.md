@@ -7,7 +7,7 @@ manual runs of `env-refresh.sh` or calls made as part of an upgrade.
 
 ## Manual entry point (`start.sh`)
 - `start.sh` writes a note to `logs/start.log` to record the manual request.
-- If a managed service name exists in `locks/service.lck` and systemd is
+- If a managed service name exists in `.locks/service.lck` and systemd is
   available, it restarts that unit, watches for it to reach `active`, and exits
   early if successful. Otherwise, it falls back to running `service-start.sh`
   with any additional arguments.
@@ -26,7 +26,7 @@ manual runs of `env-refresh.sh` or calls made as part of an upgrade.
    Celery management preferences), and evaluate whether systemd-managed Celery
    or LCD units are present so embedded workers are enabled only when needed.
    Record the startup timestamp and chosen port in
-   `locks/startup_started_at.lck` for status reporting.
+   `.locks/startup_started_at.lck` for status reporting.
 5. When the LCD feature flag is enabled, queue a startup Net Message via
    `apps.nodes.startup_notifications.queue_startup_message` to record the hostname
    and port for the boot cycle.

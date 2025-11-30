@@ -15,7 +15,7 @@ arthexis_resolve_log_dir "$BASE_DIR" LOG_DIR || exit 1
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 exec > >(tee "$LOG_FILE") 2>&1
 cd "$BASE_DIR"
-LOCK_DIR="$BASE_DIR/locks"
+LOCK_DIR="$BASE_DIR/.locks"
 mkdir -p "$LOCK_DIR"
 
 BACKEND_PORT_DEFAULT=8888

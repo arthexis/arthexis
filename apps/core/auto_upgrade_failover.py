@@ -29,7 +29,7 @@ class FailoverStatus:
 def failover_lock_path(base_dir: Path) -> Path:
     """Return the path to the failover lockfile within ``base_dir``."""
 
-    return base_dir / "locks" / LOCK_FILENAME
+    return base_dir / ".locks" / LOCK_FILENAME
 
 
 def write_failover_lock(

@@ -439,7 +439,7 @@ def _configure_lock_dependent_tasks(config):
     from django.db.backends.signals import connection_created
     from django.db.models.signals import post_migrate
 
-    lock = Path(settings.BASE_DIR) / "locks" / "celery.lck"
+    lock = Path(settings.BASE_DIR) / ".locks" / "celery.lck"
     if not lock.exists():
         return
 

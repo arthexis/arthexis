@@ -39,7 +39,7 @@ def ensure_auto_upgrade_periodic_task(
     else:
         base_dir = Path(base_dir)
 
-    lock_dir = base_dir / "locks"
+    lock_dir = base_dir / ".locks"
     mode_file = lock_dir / "auto_upgrade.lck"
 
     try:  # pragma: no cover - optional dependency failures

@@ -398,7 +398,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [ "$REPAIR" = true ]; then
-    LOCK_DIR_PATH="$SCRIPT_DIR/locks"
+    LOCK_DIR_PATH="$SCRIPT_DIR/.locks"
     if [ -z "$SERVICE" ] && [ -f "$LOCK_DIR_PATH/service.lck" ]; then
         SERVICE="$(cat "$LOCK_DIR_PATH/service.lck")"
         echo "Repair mode: reusing existing service '$SERVICE'."
@@ -444,7 +444,7 @@ fi
 
 BASE_DIR="$SCRIPT_DIR"
 cd "$BASE_DIR"
-LOCK_DIR="$BASE_DIR/locks"
+LOCK_DIR="$BASE_DIR/.locks"
 SYSTEMD_UNITS_LOCK="$LOCK_DIR/systemd_services.lck"
 DB_FILE="$BASE_DIR/db.sqlite3"
 

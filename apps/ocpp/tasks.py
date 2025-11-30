@@ -599,7 +599,7 @@ def send_daily_session_report() -> int:
         logger.info("Skipping OCPP session report: email not configured")
         return 0
 
-    celery_lock = Path(settings.BASE_DIR) / "locks" / "celery.lck"
+    celery_lock = Path(settings.BASE_DIR) / ".locks" / "celery.lck"
     if not celery_lock.exists():
         logger.info("Skipping OCPP session report: celery feature disabled")
         return 0

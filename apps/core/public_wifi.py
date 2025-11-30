@@ -18,7 +18,7 @@ _MAC_RE = re.compile(r"(?P<mac>([0-9a-f]{2}:){5}[0-9a-f]{2})", re.IGNORECASE)
 
 
 def _lock_dir() -> Path:
-    return Path(settings.BASE_DIR) / "locks"
+    return Path(settings.BASE_DIR) / ".locks"
 
 
 def _mode_lock() -> Path:

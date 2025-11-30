@@ -156,7 +156,7 @@ def _append_auto_upgrade_log(base_dir: Path, message: str) -> None:
 
 
 def _recency_lock_path(base_dir: Path) -> Path:
-    return base_dir / "locks" / AUTO_UPGRADE_RECENCY_LOCK_NAME
+    return base_dir / ".locks" / AUTO_UPGRADE_RECENCY_LOCK_NAME
 
 
 def _record_auto_upgrade_timestamp(base_dir: Path) -> None:
@@ -294,7 +294,7 @@ def _run_upgrade_command(
         return [binary]
 
     def _read_service_name() -> str:
-        lock_path = base_dir / "locks" / "service.lck"
+        lock_path = base_dir / ".locks" / "service.lck"
         try:
             value = lock_path.read_text().strip()
         except OSError:
@@ -819,7 +819,7 @@ def _ensure_runtime_services(
     restart_if_active: bool,
     revert_on_failure: bool,
 ) -> bool:
-    service_file = base_dir / "locks" / "service.lck"
+    service_file = base_dir / ".locks" / "service.lck"
     if service_file.exists():
         try:
             service = service_file.read_text().strip()
@@ -1069,7 +1069,7 @@ def _is_within_stable_upgrade_window(current: datetime | None = None) -> bool:
 
 
 def _skip_lock_path(base_dir: Path) -> Path:
-    return base_dir / "locks" / AUTO_UPGRADE_SKIP_LOCK_NAME
+    return base_dir / ".locks" / AUTO_UPGRADE_SKIP_LOCK_NAME
 
 
 def _load_skipped_revisions(base_dir: Path) -> set[str]:
@@ -1109,7 +1109,7 @@ def _add_skipped_revision(base_dir: Path, revision: str) -> None:
 
 
 def _network_failure_lock_path(base_dir: Path) -> Path:
-    return base_dir / "locks" / AUTO_UPGRADE_NETWORK_FAILURE_LOCK_NAME
+    return base_dir / ".locks" / AUTO_UPGRADE_NETWORK_FAILURE_LOCK_NAME
 
 
 def _read_network_failure_count(base_dir: Path) -> int:
@@ -1194,7 +1194,7 @@ def _record_network_failure(base_dir: Path, detail: str) -> int:
 
 
 def _charge_point_active(base_dir: Path) -> bool:
-    lock_path = base_dir / "locks" / "charging.lck"
+    lock_path = base_dir / ".locks" / "charging.lck"
     if lock_path.exists():
         return True
     try:
@@ -1244,7 +1244,7 @@ def _handle_network_failure_if_applicable(
 
 
 def _auto_upgrade_failure_lock_path(base_dir: Path) -> Path:
-    return base_dir / "locks" / AUTO_UPGRADE_FAILURE_LOCK_NAME
+    return base_dir / ".locks" / AUTO_UPGRADE_FAILURE_LOCK_NAME
 
 
 def _read_auto_upgrade_failure_count(base_dir: Path) -> int:
@@ -1393,7 +1393,7 @@ def _classify_auto_upgrade_failure(exc: Exception) -> str:
 def _resolve_service_url(base_dir: Path) -> str:
     """Return the local URL used to probe the Django suite."""
 
-    lock_dir = base_dir / "locks"
+    lock_dir = base_dir / ".locks"
     mode_file = lock_dir / "nginx_mode.lck"
     mode = "internal"
     if mode_file.exists():
@@ -1426,7 +1426,7 @@ def _shares_stable_series(local: str, remote: str) -> bool:
 def check_github_updates(channel_override: str | None = None) -> None:
     """Check the GitHub repo for updates and upgrade if needed."""
     base_dir = _project_base_dir()
-    mode_file = base_dir / "locks" / "auto_upgrade.lck"
+    mode_file = base_dir / ".locks" / "auto_upgrade.lck"
     mode_file_exists = mode_file.exists()
     mode = DEFAULT_AUTO_UPGRADE_MODE
     admin_override = channel_override is not None

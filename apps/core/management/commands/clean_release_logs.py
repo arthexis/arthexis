@@ -39,7 +39,7 @@ class Command(BaseCommand):
             )
 
         log_dir = Path(settings.LOG_DIR)
-        lock_dir = Path(settings.BASE_DIR) / "locks"
+        lock_dir = Path(settings.BASE_DIR) / ".locks"
 
         log_targets: set[Path] = set()
         lock_targets: set[Path] = set()

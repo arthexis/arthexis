@@ -1,6 +1,6 @@
 """Standalone LCD screen updater.
 
-The script polls ``locks/lcd_screen.lck`` for up to two lines of text and
+The script polls ``.locks/lcd_screen.lck`` for up to two lines of text and
 writes them to the attached LCD1602 display. Each row scrolls
 independently when it exceeds 16 characters; shorter rows remain static.
 A third line in the lock file can define the scroll speed in milliseconds
@@ -29,7 +29,7 @@ from apps.nodes.startup_notifications import STARTUP_NET_MESSAGE_FLAG
 logger = logging.getLogger(__name__)
 
 BASE_DIR = get_base_dir()
-LOCK_DIR = BASE_DIR / "locks"
+LOCK_DIR = BASE_DIR / ".locks"
 LOCK_FILE = LOCK_DIR / "lcd_screen.lck"
 SERVICE_LOCK_FILE = LOCK_DIR / "service.lck"
 FEATURE_LOCK_NAME = "lcd_screen_enabled.lck"

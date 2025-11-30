@@ -160,7 +160,7 @@ arthexis_desktop_shortcut_detect_port() {
     local base_dir="$1"
     local default_port="$(arthexis_detect_backend_port "$base_dir")"
 
-    local service_lock="$base_dir/locks/service.lck"
+    local service_lock="$base_dir/.locks/service.lck"
     local service_name=""
     if [ -f "$service_lock" ]; then
         service_name="$(tr -d '\r\n' < "$service_lock" 2>/dev/null)"
@@ -210,7 +210,7 @@ arthexis_desktop_shortcut_launch() {
     local shortcut="$1"
     local base_dir
     base_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-    local locks_dir="$base_dir/locks"
+    local locks_dir="$base_dir/.locks"
     local service_name=""
     local url=""
     local port_suffix="/"

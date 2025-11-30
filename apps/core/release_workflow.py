@@ -20,7 +20,7 @@ from .views import (
 )
 
 logger = logging.getLogger(__name__)
-_LOCK_DIR = Path("locks")
+_LOCK_DIR = Path(".locks")
 
 
 def resolve_release_severity(version: str | None) -> str:

@@ -33,7 +33,7 @@ FAILOVER_ROLE=""
 INSTALL_WATCHDOG=false
 
 BASE_DIR="$SCRIPT_DIR"
-LOCK_DIR="$BASE_DIR/locks"
+LOCK_DIR="$BASE_DIR/.locks"
 
 usage() {
     echo "Usage: $0 [--service NAME] [--latest|--stable|--regular] [--check] [--auto-upgrade|--no-auto-upgrade] [--debug|--no-debug] [--satellite|--terminal|--control|--watchtower] [--watchdog] [--repair [--failover ROLE]]]" >&2

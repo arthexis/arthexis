@@ -29,7 +29,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 base_dir = Path(sys.argv[1])
-lock_path = base_dir / "locks" / "suite_uptime.lck"
+lock_path = base_dir / ".locks" / "suite_uptime.lck"
 lock_path.parent.mkdir(parents=True, exist_ok=True)
 now = datetime.now(timezone.utc)
 payload = {"started_at": now.isoformat()}
@@ -55,7 +55,7 @@ import sys
 from pathlib import Path
 
 base_dir = Path(sys.argv[1])
-lock_path = base_dir / "locks" / "suite_uptime.lck"
+lock_path = base_dir / ".locks" / "suite_uptime.lck"
 lock_path.parent.mkdir(parents=True, exist_ok=True)
 lock_path.write_text(json.dumps({}), encoding="utf-8")
 PY

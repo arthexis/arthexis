@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Dict, Iterable
 
 BASE_DIR = Path(__file__).resolve().parents[1]
-LOCK_DIR = BASE_DIR / "locks"
+LOCK_DIR = BASE_DIR / ".locks"
 REQUIREMENTS_FILE = Path("requirements.txt")
 REQUIREMENTS_HASH_FILE = Path("requirements.md5")
 PIP_INSTALL_HELPER = Path("scripts") / "helpers" / "pip_install.py"

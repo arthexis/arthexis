@@ -25,7 +25,7 @@ def ensure_reference_validation_task(sender=None, **kwargs) -> None:
         return
 
     task_names = periodic_task_name_variants(REFERENCE_VALIDATION_TASK_NAME)
-    celery_lock = Path(settings.BASE_DIR) / "locks" / "celery.lck"
+    celery_lock = Path(settings.BASE_DIR) / ".locks" / "celery.lck"
 
     if not celery_lock.exists():
         try:

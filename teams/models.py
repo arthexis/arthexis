@@ -1425,7 +1425,7 @@ class ManualTask(Entity):
 
     @staticmethod
     def _celery_lock_path() -> Path:
-        return Path(settings.BASE_DIR) / "locks" / "celery.lck"
+        return Path(settings.BASE_DIR) / ".locks" / "celery.lck"
 
     @classmethod
     def _is_celery_enabled(cls) -> bool:

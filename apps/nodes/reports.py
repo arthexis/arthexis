@@ -479,7 +479,7 @@ def _candidate_journal_units() -> Iterable[str]:
 
 
 def _read_service_name() -> str | None:
-    lock_path = Path(settings.BASE_DIR) / "locks" / "service.lck"
+    lock_path = Path(settings.BASE_DIR) / ".locks" / "service.lck"
     try:
         raw = lock_path.read_text(encoding="utf-8").strip()
     except OSError:

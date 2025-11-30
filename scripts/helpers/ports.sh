@@ -9,7 +9,7 @@
 arthexis_detect_backend_port() {
     local base_dir="$1"
     local fallback="${2:-8888}"
-    local lock_file="$base_dir/locks/backend_port.lck"
+    local lock_file="$base_dir/.locks/backend_port.lck"
 
     if [ -f "$lock_file" ]; then
         # shellcheck disable=SC2002

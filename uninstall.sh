@@ -66,7 +66,7 @@ done
 
 BASE_DIR="$SCRIPT_DIR"
 cd "$BASE_DIR"
-LOCK_DIR="$BASE_DIR/locks"
+LOCK_DIR="$BASE_DIR/.locks"
 SYSTEMD_UNITS_LOCK="$LOCK_DIR/systemd_services.lck"
 RECORDED_SYSTEMD_UNITS=()
 if [ -f "$SYSTEMD_UNITS_LOCK" ]; then

@@ -9,7 +9,7 @@ LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 exec > >(tee "$LOG_FILE") 2>&1
 cd "$BASE_DIR"
 
-LOCK_DIR="$BASE_DIR/locks"
+LOCK_DIR="$BASE_DIR/.locks"
 mkdir -p "$LOCK_DIR"
 LOCK_FILE="$LOCK_DIR/$(basename "$0" .sh).lock"
 exec 200>"$LOCK_FILE"
