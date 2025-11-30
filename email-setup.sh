@@ -196,7 +196,7 @@ PYTHON
         read -rp "Username: " UD_USER
         "$PYTHON" manage.py shell <<PYTHON
 from django.contrib.auth import get_user_model
-from apps.core.user_data import dump_user_fixture
+from apps.locals.user_data import dump_user_fixture
 from apps.nodes.models import Node
 from apps.teams.models import EmailOutbox
 

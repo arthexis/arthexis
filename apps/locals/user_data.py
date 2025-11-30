@@ -29,7 +29,7 @@ from django.utils.functional import LazyObject
 from django.utils.translation import gettext as _
 from django.utils.http import url_has_allowed_host_and_scheme
 
-from .entity import Entity
+from apps.core.entity import Entity
 
 
 logger = logging.getLogger(__name__)
