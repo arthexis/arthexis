@@ -83,7 +83,7 @@ from .models import (
 )
 from . import dns as dns_utils
 from apps.core.models import RFID
-from teams.models import EmailOutbox
+from apps.teams.models import EmailOutbox
 from apps.ocpp import store
 from apps.ocpp.models import (
     Charger,

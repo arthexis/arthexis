@@ -165,7 +165,7 @@ def evaluate_node_rules() -> dict[str, object]:
 
 def evaluate_email_profile_rules() -> dict[str, object]:
     try:
-        from teams.models import EmailInbox, EmailOutbox
+        from apps.teams.models import EmailInbox, EmailOutbox
     except Exception:
         logger.exception("Unable to import email profile models")
         return rule_failure(_("Email check failed: import err."))
