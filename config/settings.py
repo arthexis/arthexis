@@ -420,7 +420,7 @@ INSTALLED_APPS = [
     "django_object_actions",
     "django.contrib.sites",
     "channels",
-    "config.horologia_app.HorologiaConfig",
+    "apps.celery.beat_app.CeleryBeatConfig",
 ] + LOCAL_APPS
 
 if DEBUG:

@@ -2727,15 +2727,6 @@ class CountdownTimer(Entity):
         if update_fields:
             release.save(update_fields=update_fields, sync_timer=False)
 
-
-class HorologiaCountdownTimer(CountdownTimer):
-    class Meta:
-        proxy = True
-        app_label = "django_celery_beat"
-        verbose_name = _("Countdown Timer")
-        verbose_name_plural = _("Countdown Timers")
-
-
 class TOTPDeviceSettings(models.Model):
     """Per-device configuration options for authenticator enrollments."""
 

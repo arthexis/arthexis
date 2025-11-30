@@ -121,7 +121,7 @@ class SchedulePeriodForm(forms.Form):
 
 
 class SchedulePeriodsWidget(forms.Widget):
-    template_name = "admin/includes/horologia/schedule_periods.html"
+    template_name = "admin/includes/celery/schedule_periods.html"
 
     def __init__(self, *, formset_class: type[BaseFormSet], attrs=None):
         self.formset_class = formset_class

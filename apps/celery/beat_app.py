@@ -1,11 +1,11 @@
 from django_celery_beat.apps import BeatConfig as BaseBeatConfig
 
 
-class HorologiaConfig(BaseBeatConfig):
+class CeleryBeatConfig(BaseBeatConfig):
     """Customize Periodic Tasks admin behavior."""
 
     order = 5
-    verbose_name = "Horologia"
+    verbose_name = "Celery"
 
     def ready(self):  # pragma: no cover - exercised via tests
         super().ready()
@@ -18,9 +18,9 @@ class HorologiaConfig(BaseBeatConfig):
         from django_celery_beat import admin as celery_admin
         from django_celery_beat.models import IntervalSchedule, PeriodicTask
 
-        from apps.core.models import HorologiaCountdownTimer
+        from apps.celery.models import CeleryCountdownTimer
 
-        class HorologiaPeriodicTaskAdmin(celery_admin.PeriodicTaskAdmin):
+        class CeleryPeriodicTaskAdmin(celery_admin.PeriodicTaskAdmin):
             """Patch the periodic task changelist."""
 
             class IntervalTypeListFilter(admin.SimpleListFilter):
@@ -124,8 +124,8 @@ class HorologiaConfig(BaseBeatConfig):
             admin.site.unregister(PeriodicTask)
         except NotRegistered:  # pragma: no cover - defensive
             pass
-        admin.site.register(PeriodicTask, HorologiaPeriodicTaskAdmin)
+        admin.site.register(PeriodicTask, CeleryPeriodicTaskAdmin)
         try:
-            admin.site.register(HorologiaCountdownTimer, CountdownTimerAdmin)
+            admin.site.register(CeleryCountdownTimer, CountdownTimerAdmin)
         except admin.sites.AlreadyRegistered:  # pragma: no cover - idempotent guard
             pass
