@@ -235,7 +235,7 @@ class InviteLead(Lead):
     error = models.TextField(blank=True)
     mac_address = models.CharField(max_length=17, blank=True)
     sent_via_outbox = models.ForeignKey(
-        "teams.EmailOutbox",
+        "emails.EmailOutbox",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
@@ -734,7 +734,7 @@ class EmailArtifact(Entity):
     """Store messages discovered by :class:`EmailCollector`."""
 
     collector = models.ForeignKey(
-        "teams.EmailCollector", related_name="artifacts", on_delete=models.CASCADE
+        "emails.EmailCollector", related_name="artifacts", on_delete=models.CASCADE
     )
     subject = models.CharField(max_length=255)
     sender = models.CharField(max_length=255)
@@ -791,7 +791,7 @@ class EmailTransaction(Entity):
         help_text="Lifecycle stage for the stored email message.",
     )
     collector = models.ForeignKey(
-        "teams.EmailCollector",
+        "emails.EmailCollector",
         null=True,
         blank=True,
         related_name="transactions",
@@ -799,7 +799,7 @@ class EmailTransaction(Entity):
         help_text="Collector that discovered this message, if applicable.",
     )
     inbox = models.ForeignKey(
-        "teams.EmailInbox",
+        "emails.EmailInbox",
         null=True,
         blank=True,
         related_name="transactions",
@@ -807,7 +807,7 @@ class EmailTransaction(Entity):
         help_text="Inbox account the message was read from or will use for sending.",
     )
     outbox = models.ForeignKey(
-        "teams.EmailOutbox",
+        "emails.EmailOutbox",
         null=True,
         blank=True,
         related_name="transactions",

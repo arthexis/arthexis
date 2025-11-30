@@ -24,8 +24,6 @@ from apps.awg.admin import PowerLeadAdmin as CorePowerLeadAdmin
 from apps.core.admin import (
     InviteLeadAdmin,
     SecurityGroupAdmin,
-    EmailInboxAdmin,
-    EmailCollectorAdmin,
     ReleaseManagerAdmin,
     OdooProfileAdmin,
     GoogleCalendarProfileAdmin,
@@ -45,7 +43,6 @@ from apps.locals.user_data import (
     _resolve_fixture_user,
     _user_allows_user_data,
 )
-from apps.nodes.admin import EmailOutboxAdmin
 from apps.nodes.models import Node
 
 from .forms import (
@@ -58,10 +55,7 @@ from .forms import (
 from .models import (
     InviteLead,
     SecurityGroup,
-    EmailInbox,
-    EmailCollector,
     ReleaseManager,
-    EmailOutbox,
     PowerLead,
     OdooProfile,
     TOTPDevice,
@@ -88,23 +82,8 @@ class SecurityGroupAdminProxy(SecurityGroupAdmin):
     pass
 
 
-@admin.register(EmailInbox)
-class EmailInboxAdminProxy(EmailInboxAdmin):
-    pass
-
-
-@admin.register(EmailCollector)
-class EmailCollectorAdminProxy(EmailCollectorAdmin):
-    pass
-
-
 @admin.register(ReleaseManager)
 class ReleaseManagerAdminProxy(ReleaseManagerAdmin):
-    pass
-
-
-@admin.register(EmailOutbox)
-class EmailOutboxAdminProxy(EmailOutboxAdmin):
     pass
 
 
