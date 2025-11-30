@@ -337,13 +337,13 @@ from .forms import (
     UserStoryForm,
 )
 from .models import (
-    ChatSession,
     DeveloperArticle,
     Module,
     RoleLanding,
     UserManual,
     UserStory,
 )
+from apps.chats.models import ChatSession
 
 
 logger = logging.getLogger(__name__)
