@@ -41,10 +41,6 @@ from .models import (
     SiteTemplate,
     SiteProxy,
     DeveloperArticle,
-    OdooChatBridge,
-    WhatsAppChatBridge,
-    ChatMessage,
-    ChatSession,
     Module,
     Landing,
     LandingLead,
@@ -53,6 +49,9 @@ from .models import (
     UserManual,
     UserStory,
 )
+from apps.chats.models import ChatMessage, ChatSession
+from apps.meta.models import WhatsAppChatBridge
+from apps.odoo.models import OdooChatBridge
 from apps.core.models import ReleaseManager
 from apps.locals.user_data import EntityModelAdmin
 from apps.app.models import Application
@@ -62,9 +61,7 @@ logger = logging.getLogger(__name__)
 
 
 def get_local_app_choices():
-    application_apps = getattr(
-        settings, "APPLICATION_APPS", getattr(settings, "LOCAL_APPS", [])
-    )
+    application_apps = getattr(settings, "LOCAL_APPS", [])
     choices = []
     for app_label in application_apps:
         try:
