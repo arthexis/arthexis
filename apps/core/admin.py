@@ -84,7 +84,6 @@ from .models import (
     User,
     UserPhoneNumber,
     RFID,
-    OpenPayProfile,
     GoogleCalendarProfile,
     Package,
     PackageRelease,
@@ -92,6 +91,7 @@ from .models import (
     SecurityGroup,
     InviteLead,
 )
+from apps.payments.models import OpenPayProcessor, PayPalProcessor, StripeProcessor
 from apps.odoo.models import OdooProduct, OdooProfile
 from apps.locals.user_data import (
     EntityModelAdmin,
@@ -1009,49 +1009,55 @@ class OdooProfileAdminForm(forms.ModelForm):
         )
 
 
-class OpenPayProfileAdminForm(forms.ModelForm):
-    """Admin form for :class:`core.models.OpenPayProfile` with masked secrets."""
+class PaymentProcessorAdminForm(forms.ModelForm):
+    masked_fields: tuple[str, ...] = ()
+    sigil_fields: tuple[str, ...] = ()
 
-    private_key = forms.CharField(
-        widget=forms.PasswordInput(render_value=True),
-        required=False,
-        help_text="Leave blank to keep the current key.",
-    )
-    webhook_secret = forms.CharField(
-        widget=forms.PasswordInput(render_value=True),
-        required=False,
-        help_text="Leave blank to keep the current secret.",
-    )
-    paypal_client_secret = forms.CharField(
-        widget=forms.PasswordInput(render_value=True),
-        required=False,
-        help_text="Leave blank to keep the current secret.",
-    )
-    paypal_webhook_id = forms.CharField(
-        required=False,
-        help_text="Leave blank to keep the current webhook identifier.",
-    )
-    stripe_secret_key = forms.CharField(
-        widget=forms.PasswordInput(render_value=True),
-        required=False,
-        help_text="Leave blank to keep the current key.",
-    )
-    stripe_webhook_secret = forms.CharField(
-        widget=forms.PasswordInput(render_value=True),
-        required=False,
-        help_text="Leave blank to keep the current secret.",
-    )
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance.pk:
+            for field in self.masked_fields:
+                if field in self.fields:
+                    self.fields[field].initial = ""
+                    self.initial[field] = ""
+
+    @staticmethod
+    def _has_value(value) -> bool:
+        if isinstance(value, KeepExistingValue):
+            return True
+        if isinstance(value, bool):
+            return value
+        return value not in (None, "", [], (), {}, set())
+
+    def clean(self):
+        cleaned = super().clean()
+        if cleaned.get("DELETE"):
+            return cleaned
+        if self.instance.pk:
+            for field in self.masked_fields:
+                if cleaned.get(field) == "":
+                    cleaned[field] = keep_existing(field)
+        return cleaned
+
+    def _post_clean(self):
+        super()._post_clean()
+        if self.sigil_fields:
+            _restore_sigil_values(self, list(self.sigil_fields))
+
+
+class OpenPayProcessorAdminForm(PaymentProcessorAdminForm):
+    masked_fields = ("private_key", "webhook_secret")
+    sigil_fields = ("merchant_id", "private_key", "public_key", "webhook_secret")
 
     class Meta:
-        model = OpenPayProfile
+        model = OpenPayProcessor
         fields = "__all__"
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        openpay_help = _(
+        self.fields["merchant_id"].help_text = _(
             "Provide merchant ID, public and private keys, and webhook secret from OpenPay."
         )
-        self.fields["merchant_id"].help_text = openpay_help
         self.fields["public_key"].help_text = _(
             "OpenPay public key used for browser integrations."
         )
@@ -1064,102 +1070,103 @@ class OpenPayProfileAdminForm(forms.ModelForm):
         self.fields["is_production"].help_text = _(
             "Enable to send requests to OpenPay's live environment."
         )
-        default_processor_field = self.fields.get("default_processor")
-        if default_processor_field is not None:
-            default_processor_field.help_text = _(
-                "Select which configured processor to try first when charging."
-            )
-        self.fields["paypal_client_id"].help_text = _(
-            "PayPal REST client ID for your application."
+        self.fields["is_default"].help_text = _(
+            "Use this OpenPay processor first when charging."
         )
-        self.fields["paypal_client_secret"].help_text = _(
+
+    def clean(self):
+        cleaned = super().clean()
+        if cleaned.get("DELETE") or self.errors:
+            return cleaned
+
+        required = ("merchant_id", "private_key", "public_key")
+        provided = [name for name in required if self._has_value(cleaned.get(name))]
+        missing = [name for name in required if not self._has_value(cleaned.get(name))]
+        if provided and missing:
+            raise forms.ValidationError(
+                _("Provide merchant ID, private key, and public key to configure OpenPay.")
+            )
+        if not provided:
+            raise forms.ValidationError(
+                _("Provide merchant ID, private key, and public key to configure OpenPay.")
+            )
+        return cleaned
+
+
+class PayPalProcessorAdminForm(PaymentProcessorAdminForm):
+    masked_fields = ("client_secret",)
+    sigil_fields = ("client_id", "client_secret", "webhook_id")
+
+    class Meta:
+        model = PayPalProcessor
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["client_id"].help_text = _("PayPal REST client ID for your application.")
+        self.fields["client_secret"].help_text = _(
             "PayPal REST client secret. Leave blank to keep the current secret."
         )
-        self.fields["paypal_webhook_id"].help_text = _(
+        self.fields["webhook_id"].help_text = _(
             "PayPal webhook ID used to validate notifications. Leave blank to keep the current webhook identifier."
         )
-        self.fields["paypal_is_production"].help_text = _(
+        self.fields["is_production"].help_text = _(
             "Enable to send requests to PayPal's live environment."
         )
-        self.fields["stripe_secret_key"].help_text = _(
+        self.fields["is_default"].help_text = _(
+            "Use this PayPal processor first when charging."
+        )
+
+    def clean(self):
+        cleaned = super().clean()
+        if cleaned.get("DELETE") or self.errors:
+            return cleaned
+        required = ("client_id", "client_secret")
+        provided = [name for name in required if self._has_value(cleaned.get(name))]
+        if len(provided) != len(required):
+            raise forms.ValidationError(
+                _("Provide PayPal client ID and client secret to configure PayPal.")
+            )
+        return cleaned
+
+
+class StripeProcessorAdminForm(PaymentProcessorAdminForm):
+    masked_fields = ("secret_key", "webhook_secret")
+    sigil_fields = ("secret_key", "publishable_key", "webhook_secret")
+
+    class Meta:
+        model = StripeProcessor
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["secret_key"].help_text = _(
             "Stripe secret key used for authenticated API requests. Leave blank to keep the current key."
         )
-        self.fields["stripe_publishable_key"].help_text = _(
+        self.fields["publishable_key"].help_text = _(
             "Stripe publishable key used by client integrations."
         )
-        self.fields["stripe_webhook_secret"].help_text = _(
+        self.fields["webhook_secret"].help_text = _(
             "Secret used to validate Stripe webhook signatures. Leave blank to keep the current secret."
         )
-        self.fields["stripe_is_production"].help_text = _(
+        self.fields["is_production"].help_text = _(
             "Enable to mark Stripe as live mode; disable for test mode."
         )
-
-        if self.instance.pk:
-            for field in (
-                "private_key",
-                "webhook_secret",
-                "paypal_client_secret",
-                "paypal_webhook_id",
-                "stripe_secret_key",
-                "stripe_webhook_secret",
-            ):
-                if field in self.fields:
-                    self.fields[field].initial = ""
-                    self.initial[field] = ""
-
-    def clean_private_key(self):
-        key = self.cleaned_data.get("private_key")
-        if not key and self.instance.pk:
-            return keep_existing("private_key")
-        return key
-
-    def clean_webhook_secret(self):
-        secret = self.cleaned_data.get("webhook_secret")
-        if secret == "" and self.instance.pk:
-            return keep_existing("webhook_secret")
-        return secret
-
-    def clean_paypal_client_secret(self):
-        secret = self.cleaned_data.get("paypal_client_secret")
-        if not secret and self.instance.pk:
-            return keep_existing("paypal_client_secret")
-        return secret
-
-    def clean_paypal_webhook_id(self):
-        identifier = self.cleaned_data.get("paypal_webhook_id")
-        if identifier == "" and self.instance.pk:
-            return keep_existing("paypal_webhook_id")
-        return identifier
-
-    def clean_stripe_secret_key(self):
-        key = self.cleaned_data.get("stripe_secret_key")
-        if not key and self.instance.pk:
-            return keep_existing("stripe_secret_key")
-        return key
-
-    def clean_stripe_webhook_secret(self):
-        secret = self.cleaned_data.get("stripe_webhook_secret")
-        if secret == "" and self.instance.pk:
-            return keep_existing("stripe_webhook_secret")
-        return secret
-
-    def _post_clean(self):
-        super()._post_clean()
-        _restore_sigil_values(
-            self,
-            [
-                "merchant_id",
-                "private_key",
-                "public_key",
-                "webhook_secret",
-                "paypal_client_id",
-                "paypal_client_secret",
-                "paypal_webhook_id",
-                "stripe_secret_key",
-                "stripe_publishable_key",
-                "stripe_webhook_secret",
-            ],
+        self.fields["is_default"].help_text = _(
+            "Use this Stripe processor first when charging."
         )
+
+    def clean(self):
+        cleaned = super().clean()
+        if cleaned.get("DELETE") or self.errors:
+            return cleaned
+        required = ("secret_key", "publishable_key")
+        provided = [name for name in required if self._has_value(cleaned.get(name))]
+        if len(provided) != len(required):
+            raise forms.ValidationError(
+                _("Provide Stripe secret and publishable keys to configure Stripe.")
+            )
+        return cleaned
 
 
 class GoogleCalendarProfileAdminForm(forms.ModelForm):
@@ -1390,80 +1397,25 @@ class OdooProfileInlineForm(ProfileFormMixin, OdooProfileAdminForm):
         return cleaned
 
 
-class OpenPayProfileInlineForm(ProfileFormMixin, OpenPayProfileAdminForm):
-    profile_fields = OpenPayProfile.profile_fields
+class OpenPayProcessorInlineForm(ProfileFormMixin, OpenPayProcessorAdminForm):
+    profile_fields = OpenPayProcessor.profile_fields
 
-    class Meta(OpenPayProfileAdminForm.Meta):
+    class Meta(OpenPayProcessorAdminForm.Meta):
         exclude = ("user", "group", "verified_on", "verification_reference")
 
-    def clean(self):
-        cleaned = super().clean()
-        if cleaned.get("DELETE") or self.errors:
-            return cleaned
 
-        def _has_value(name: str) -> bool:
-            value = cleaned.get(name)
-            if isinstance(value, KeepExistingValue):
-                return bool(getattr(self.instance, name))
-            return not self._is_empty_value(value)
+class PayPalProcessorInlineForm(ProfileFormMixin, PayPalProcessorAdminForm):
+    profile_fields = PayPalProcessor.profile_fields
 
-        openpay_fields = ("merchant_id", "private_key", "public_key")
-        openpay_provided = [name for name in openpay_fields if _has_value(name)]
-        openpay_missing = [name for name in openpay_fields if not _has_value(name)]
-        if openpay_provided and openpay_missing:
-            raise forms.ValidationError(
-                _(
-                    "Provide merchant ID, private key, and public key to configure OpenPay."
-                )
-            )
+    class Meta(PayPalProcessorAdminForm.Meta):
+        exclude = ("user", "group", "verified_on", "verification_reference")
 
-        paypal_fields = ("paypal_client_id", "paypal_client_secret")
-        paypal_provided = [name for name in paypal_fields if _has_value(name)]
-        paypal_missing = [name for name in paypal_fields if not _has_value(name)]
-        if paypal_provided and paypal_missing:
-            raise forms.ValidationError(
-                _("Provide PayPal client ID and client secret to configure PayPal.")
-            )
 
-        stripe_fields = ("stripe_secret_key", "stripe_publishable_key")
-        stripe_provided = [name for name in stripe_fields if _has_value(name)]
-        stripe_missing = [name for name in stripe_fields if not _has_value(name)]
-        if stripe_provided and stripe_missing:
-            raise forms.ValidationError(
-                _("Provide Stripe secret and publishable keys to configure Stripe.")
-            )
+class StripeProcessorInlineForm(ProfileFormMixin, StripeProcessorAdminForm):
+    profile_fields = StripeProcessor.profile_fields
 
-        has_openpay = len(openpay_provided) == len(openpay_fields)
-        has_paypal = len(paypal_provided) == len(paypal_fields)
-        has_stripe = len(stripe_provided) == len(stripe_fields)
-
-        if not has_openpay and not has_paypal and not has_stripe:
-            raise forms.ValidationError(
-                _(
-                    "Provide OpenPay, PayPal, or Stripe credentials to configure a payment processor."
-                )
-            )
-
-        default_processor = cleaned.get("default_processor") or OpenPayProfile.PROCESSOR_OPENPAY
-        if default_processor == OpenPayProfile.PROCESSOR_OPENPAY and not has_openpay:
-            raise forms.ValidationError(
-                _(
-                    "OpenPay must be fully configured or select PayPal as the default processor."
-                )
-            )
-        if default_processor == OpenPayProfile.PROCESSOR_PAYPAL and not has_paypal:
-            raise forms.ValidationError(
-                _(
-                    "PayPal must be fully configured or select OpenPay as the default processor."
-                )
-            )
-        if default_processor == OpenPayProfile.PROCESSOR_STRIPE and not has_stripe:
-            raise forms.ValidationError(
-                _(
-                    "Stripe must be fully configured or select another processor as the default."
-                )
-            )
-        return cleaned
+    class Meta(StripeProcessorAdminForm.Meta):
+        exclude = ("user", "group", "verified_on", "verification_reference")
 
 
 class GoogleCalendarProfileInlineForm(
@@ -1586,20 +1538,20 @@ PROFILE_INLINE_CONFIG = {
         ),
         "readonly_fields": ("verified_on", "odoo_uid", "name", "email"),
     },
-    OpenPayProfile: {
-        "form": OpenPayProfileInlineForm,
+    OpenPayProcessor: {
+        "form": OpenPayProcessorInlineForm,
         "fieldsets": (
             (
-                _("Default Processor"),
+                _("Preferences"),
                 {
-                    "fields": ("default_processor",),
+                    "fields": ("is_default",),
                     "description": _(
-                        "Choose which configured processor to contact first when processing payments."
+                        "Use this OpenPay processor first when processing payments."
                     ),
                 },
             ),
             (
-                None,
+                _("OpenPay"),
                 {
                     "fields": (
                         "merchant_id",
@@ -1611,25 +1563,63 @@ PROFILE_INLINE_CONFIG = {
                 },
             ),
             (
+                _("Verification"),
+                {"fields": ("verified_on", "verification_reference")},
+            ),
+        ),
+        "readonly_fields": ("verified_on", "verification_reference"),
+    },
+    PayPalProcessor: {
+        "form": PayPalProcessorInlineForm,
+        "fieldsets": (
+            (
+                _("Preferences"),
+                {
+                    "fields": ("is_default",),
+                    "description": _(
+                        "Use this PayPal processor first when processing payments."
+                    ),
+                },
+            ),
+            (
                 _("PayPal"),
                 {
                     "fields": (
-                        "paypal_client_id",
-                        "paypal_client_secret",
-                        "paypal_webhook_id",
-                        "paypal_is_production",
+                        "client_id",
+                        "client_secret",
+                        "webhook_id",
+                        "is_production",
                     ),
                     "description": _("Configure PayPal REST API access."),
+                },
+            ),
+            (
+                _("Verification"),
+                {"fields": ("verified_on", "verification_reference")},
+            ),
+        ),
+        "readonly_fields": ("verified_on", "verification_reference"),
+    },
+    StripeProcessor: {
+        "form": StripeProcessorInlineForm,
+        "fieldsets": (
+            (
+                _("Preferences"),
+                {
+                    "fields": ("is_default",),
+                    "description": _(
+                        "Use this Stripe processor first when processing payments."
+                    ),
                 },
             ),
             (
                 _("Stripe"),
                 {
                     "fields": (
-                        "stripe_secret_key",
-                        "stripe_publishable_key",
-                        "stripe_webhook_secret",
-                        "stripe_is_production",
+                        "secret_key",
+                        "publishable_key",
+                        "webhook_secret",
+                        "is_production",
                     ),
                     "description": _("Configure Stripe API access."),
                 },
@@ -1778,7 +1768,9 @@ def _build_profile_inline(model, owner_field):
 
 PROFILE_MODELS = (
     OdooProfile,
-    OpenPayProfile,
+    OpenPayProcessor,
+    PayPalProcessor,
+    StripeProcessor,
     EmailInbox,
     EmailOutbox,
     SocialProfile,
@@ -2173,93 +2165,19 @@ class OdooProfileAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdm
     ) = _build_credentials_actions("verify_credentials", "_verify_credentials")
 
 
-@admin.register(OpenPayProfile)
-class OpenPayProfileAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdmin):
+class PaymentProcessorAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdmin):
     change_form_template = "django_object_actions/change_form.html"
-    form = OpenPayProfileAdminForm
-    list_display = ("owner", "default_processor_display", "environment", "verified_on")
     readonly_fields = ("verified_on", "verification_reference")
     actions = ["verify_credentials"]
     change_actions = ["verify_credentials_action", "my_profile_action"]
     changelist_actions = ["my_profile"]
-    fieldsets = (
-        (_("Owner"), {"fields": ("user", "group")}),
-        (
-            _("Default Processor"),
-            {
-                "fields": ("default_processor",),
-                "description": _(
-                    "Choose which configured processor to contact first when processing payments."
-                ),
-            },
-        ),
-        (
-            _("OpenPay"),
-            {
-                "fields": (
-                    "merchant_id",
-                    "public_key",
-                    "private_key",
-                    "webhook_secret",
-                    "is_production",
-                ),
-                "description": _("Configure OpenPay merchant access."),
-            },
-        ),
-        (
-            _("PayPal"),
-            {
-                "fields": (
-                    "paypal_client_id",
-                    "paypal_client_secret",
-                    "paypal_webhook_id",
-                    "paypal_is_production",
-                ),
-                "description": _("Configure PayPal REST API access."),
-            },
-        ),
-        (
-            _("Stripe"),
-            {
-                "fields": (
-                    "stripe_secret_key",
-                    "stripe_publishable_key",
-                    "stripe_webhook_secret",
-                    "stripe_is_production",
-                ),
-                "description": _("Configure Stripe API access."),
-            },
-        ),
-        (
-            _("Verification"),
-            {"fields": ("verified_on", "verification_reference")},
-        ),
-    )
 
     @admin.display(description=_("Owner"))
     def owner(self, obj):
         return obj.owner_display()
 
-    @admin.display(description=_("Default Processor"))
-    def default_processor_display(self, obj):
-        return obj.get_default_processor_display()
-
-    @admin.display(description=_("Environment"))
-    def environment(self, obj):
-        if obj.default_processor == obj.PROCESSOR_PAYPAL:
-            return _("PayPal Production") if obj.paypal_is_production else _("PayPal Sandbox")
-        if obj.default_processor == obj.PROCESSOR_STRIPE:
-            return _("Stripe Live") if obj.stripe_is_production else _("Stripe Test")
-        return _("OpenPay Production") if obj.is_production else _("OpenPay Sandbox")
-
     def _verify_credentials(self, request, profile):
-        owner = (
-            profile.owner_display()
-            or profile.merchant_id
-            or profile.paypal_client_id
-            or profile.stripe_publishable_key
-            or _("Payment Processor")
-        )
+        owner = profile.owner_display() or _("Payment Processor")
         try:
             profile.verify()
         except ValidationError as exc:
@@ -2286,6 +2204,116 @@ class OpenPayProfileAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModel
         verify_credentials,
         verify_credentials_action,
     ) = _build_credentials_actions("verify_credentials", "_verify_credentials")
+
+
+@admin.register(OpenPayProcessor)
+class OpenPayProcessorAdmin(PaymentProcessorAdmin):
+    form = OpenPayProcessorAdminForm
+    list_display = ("owner", "is_default", "environment", "verified_on")
+    fieldsets = (
+        (_("Owner"), {"fields": ("user", "group")}),
+        (
+            _("Preferences"),
+            {
+                "fields": ("is_default",),
+                "description": _("Use this OpenPay processor first when charging."),
+            },
+        ),
+        (
+            _("OpenPay"),
+            {
+                "fields": (
+                    "merchant_id",
+                    "public_key",
+                    "private_key",
+                    "webhook_secret",
+                    "is_production",
+                ),
+                "description": _("Configure OpenPay merchant access."),
+            },
+        ),
+        (
+            _("Verification"),
+            {"fields": ("verified_on", "verification_reference")},
+        ),
+    )
+
+    @admin.display(description=_("Environment"))
+    def environment(self, obj):
+        return _("OpenPay Production") if obj.is_production else _("OpenPay Sandbox")
+
+
+@admin.register(PayPalProcessor)
+class PayPalProcessorAdmin(PaymentProcessorAdmin):
+    form = PayPalProcessorAdminForm
+    list_display = ("owner", "is_default", "environment", "verified_on")
+    fieldsets = (
+        (_("Owner"), {"fields": ("user", "group")}),
+        (
+            _("Preferences"),
+            {
+                "fields": ("is_default",),
+                "description": _("Use this PayPal processor first when charging."),
+            },
+        ),
+        (
+            _("PayPal"),
+            {
+                "fields": (
+                    "client_id",
+                    "client_secret",
+                    "webhook_id",
+                    "is_production",
+                ),
+                "description": _("Configure PayPal REST API access."),
+            },
+        ),
+        (
+            _("Verification"),
+            {"fields": ("verified_on", "verification_reference")},
+        ),
+    )
+
+    @admin.display(description=_("Environment"))
+    def environment(self, obj):
+        return _("PayPal Production") if obj.is_production else _("PayPal Sandbox")
+
+
+@admin.register(StripeProcessor)
+class StripeProcessorAdmin(PaymentProcessorAdmin):
+    form = StripeProcessorAdminForm
+    list_display = ("owner", "is_default", "environment", "verified_on")
+    fieldsets = (
+        (_("Owner"), {"fields": ("user", "group")}),
+        (
+            _("Preferences"),
+            {
+                "fields": ("is_default",),
+                "description": _("Use this Stripe processor first when charging."),
+            },
+        ),
+        (
+            _("Stripe"),
+            {
+                "fields": (
+                    "secret_key",
+                    "publishable_key",
+                    "webhook_secret",
+                    "is_production",
+                ),
+                "description": _("Configure Stripe API access."),
+            },
+        ),
+        (
+            _("Verification"),
+            {"fields": ("verified_on", "verification_reference")},
+        ),
+    )
+
+    @admin.display(description=_("Environment"))
+    def environment(self, obj):
+        return _("Stripe Live") if obj.is_production else _("Stripe Test")
+
 
 class GoogleCalendarProfileAdmin(
     ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdmin

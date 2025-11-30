@@ -7,8 +7,8 @@
       "prefix": "OPENPAY",
       "context_type": "entity",
       "content_type": [
-        "core",
-        "openpayprofile"
+        "payments",
+        "openpayprocessor"
       ]
     }
   }
