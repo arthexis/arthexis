@@ -398,6 +398,7 @@ LOCAL_APPS = [
     "apps.payments",
     "apps.links",
     "apps.locals",
+    "apps.content",
     "apps.media",
     "apps.odoo",
     "apps.sigils",
@@ -408,9 +409,10 @@ LOCAL_APPS = [
     "apps.ocpp.forwarder",
     "apps.ocpp.simulator",
     "apps.meta",
-    "apps.cards",
     "apps.awg",
     "apps.pages",
+    "apps.content",
+    "apps.cards",
     "apps.teams",
 ]
 

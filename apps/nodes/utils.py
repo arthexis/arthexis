@@ -16,8 +16,8 @@ try:  # pragma: no cover - optional dependency may be missing
 except Exception:  # pragma: no cover - fallback when installer is unavailable
     install_geckodriver = None
 
-from .classifiers import run_default_classifiers, suppress_default_classifiers
-from .models import ContentSample
+from apps.content.classifiers import run_default_classifiers, suppress_default_classifiers
+from apps.content.models import ContentSample
 
 WORK_DIR = Path(settings.BASE_DIR) / "work"
 SCREENSHOT_DIR = settings.LOG_DIR / "screenshots"

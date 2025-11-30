@@ -40,7 +40,7 @@ class NodesConfig(AppConfig):
     label = "nodes"
 
     def ready(self):  # pragma: no cover - exercised on app start
-        # Import signal handlers for content classifiers
+        # Import node signal handlers
         from . import signals  # noqa: F401
 
         try:
