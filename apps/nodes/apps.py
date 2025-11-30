@@ -35,8 +35,6 @@ class NodesConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "apps.nodes"
     label = "nodes"
-    order = 4
-    verbose_name = "Infrastructure"
 
     def ready(self):  # pragma: no cover - exercised on app start
         # Import signal handlers for content classifiers

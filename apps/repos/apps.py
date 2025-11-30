@@ -8,7 +8,6 @@ from pathlib import Path
 from django.apps import AppConfig
 from django.conf import settings
 from django.core.signals import got_request_exception
-from django.utils.translation import gettext_lazy as _
 
 from apps.repos.github_helper import report_exception_to_github
 
@@ -20,8 +19,6 @@ class ReposConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "apps.repos"
     label = "repos"
-    order = 3
-    verbose_name = _("Repositories")
 
     def ready(self):  # pragma: no cover - called by Django
         _configure_github_issue_reporting()

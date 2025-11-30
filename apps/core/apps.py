@@ -1,7 +1,6 @@
 import logging
 
 from django.apps import AppConfig
-from django.utils.translation import gettext_lazy as _
 
 
 logger = logging.getLogger(__name__)
@@ -11,8 +10,6 @@ class CoreConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "apps.core"
     label = "core"
-    order = 2
-    verbose_name = _("Core")
 
     def ready(self):  # pragma: no cover - called by Django
         _setup_celery_beat_integrations()

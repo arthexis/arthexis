@@ -53,10 +53,6 @@ class Application(Entity):
         }
 
     @staticmethod
-    def format_display_name(order: int | None, name: str) -> str:
+    def format_display_name(name: str) -> str:
         cleaned_name = re.sub(r"^\s*\d+\.\s*", "", name or "").strip()
-        if not cleaned_name:
-            cleaned_name = str(name or "")
-        if order is None:
-            return cleaned_name
-        return f"{order}. {cleaned_name}"
+        return cleaned_name or str(name or "")

@@ -44,7 +44,11 @@ class Command(BaseCommand):
         else:
             Node.objects.create(hostname=hostname, **node_defaults)
 
-        for app_label in getattr(settings, "LOCAL_APPS", []):
+        application_apps = getattr(
+            settings, "APPLICATION_APPS", getattr(settings, "LOCAL_APPS", [])
+        )
+
+        for app_label in application_apps:
             try:
                 config = django_apps.get_app_config(app_label)
             except LookupError:
@@ -55,16 +59,10 @@ class Command(BaseCommand):
                 if config is None:
                     continue
             description = DEFAULT_APPLICATION_DESCRIPTIONS.get(config.label, "")
-            order = getattr(config, "order", None)
-            defaults = {"description": description}
-            if order is not None:
-                defaults["order"] = order
             app, created = Application.objects.get_or_create(
-                name=config.label, defaults=defaults
+                name=config.label, defaults={"description": description}
             )
             updates = {}
-            if order is not None and app.order != order:
-                updates["order"] = order
             if description and app.description != description:
                 updates["description"] = description
             if updates:

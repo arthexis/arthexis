@@ -4,7 +4,6 @@
     "fields": {
       "is_seed_data": true,
       "is_deleted": false,
-      "order": 6,
       "name": "teams",
       "description": "Identity, Entitlements and Access Controls."
     }

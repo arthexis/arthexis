@@ -8,7 +8,6 @@ class RfidConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "apps.rfid"
     label = "rfid"
-    verbose_name = "RFID"
 
     def ready(self):  # pragma: no cover - startup side effects
         control_lock = Path(settings.BASE_DIR) / ".locks" / "control.lck"

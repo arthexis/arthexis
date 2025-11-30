@@ -12,8 +12,6 @@ class OcppConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "apps.ocpp"
     label = "ocpp"
-    order = 3
-    verbose_name = "Protocol"
 
     logger = logging.getLogger(__name__)
     _cleared_cached_statuses = False

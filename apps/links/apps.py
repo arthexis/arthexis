@@ -13,8 +13,6 @@ class LinksConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "apps.links"
     label = "links"
-    order = 5
-    verbose_name = "Links"
 
     def ready(self):  # pragma: no cover - import for side effects
         if not is_celery_enabled():

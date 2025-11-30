@@ -4,8 +4,8 @@
     "fields": {
       "is_seed_data": true,
       "is_deleted": false,
-      "name": "django_celery_beat",
-      "description": "Task scheduling and execution controls."
+      "name": "ocpp",
+      "description": "Compatibility with Standards and Good Practices."
     }
   }
 ]
