@@ -535,12 +535,6 @@ class Node(Entity):
         blank=True,
         validators=[validate_ipv6_address],
     )
-    constellation_ip = models.CharField(
-        max_length=45,
-        blank=True,
-        validators=[validate_ipv46_address],
-    )
-    constellation_device = models.CharField(max_length=16, blank=True)
     address = models.CharField(
         max_length=45,
         blank=True,
@@ -613,11 +607,6 @@ class Node(Entity):
 
     class Meta:
         constraints = [
-            models.UniqueConstraint(
-                fields=["constellation_device"],
-                condition=~Q(constellation_device=""),
-                name="nodes_node_constellation_device_unique",
-            ),
             models.UniqueConstraint(
                 fields=["mac_address"],
                 condition=~Q(mac_address=""),
@@ -828,7 +817,6 @@ class Node(Entity):
 
         values: list[str] = []
         for attr in (
-            "constellation_ip",
             "network_hostname",
             "hostname",
             "ipv6_address",
@@ -877,10 +865,7 @@ class Node(Entity):
         """Return the preferred IP address for this node if known."""
 
         candidates: list[str] = []
-        for value in (
-            getattr(self, "constellation_ip", "") or "",
-            getattr(self, "address", "") or "",
-        ):
+        for value in (getattr(self, "address", "") or "",):
             value = value.strip()
             if not value:
                 continue
@@ -1161,26 +1146,6 @@ class Node(Entity):
         node = cls.objects.filter(mac_address=mac).first()
         if not node:
             node = cls.objects.filter(public_endpoint=slug).first()
-        constellation_override = os.environ.get("NODE_CONSTELLATION_IP", "").strip()
-        constellation_ip = ""
-        if constellation_override:
-            try:
-                constellation_ip = str(ipaddress.ip_address(constellation_override))
-            except ValueError:
-                constellation_ip = ""
-        if not constellation_ip:
-            constellation_lock = Path(settings.BASE_DIR) / ".locks" / "constellation_ip.lck"
-            if constellation_lock.exists():
-                try:
-                    lock_value = constellation_lock.read_text().strip()
-                except OSError:
-                    lock_value = ""
-                if lock_value:
-                    try:
-                        constellation_ip = str(ipaddress.ip_address(lock_value))
-                    except ValueError:
-                        constellation_ip = ""
-
         defaults = {
             "hostname": hostname,
             "network_hostname": network_hostname,
@@ -1196,7 +1161,6 @@ class Node(Entity):
             "mac_address": mac,
             "current_relation": cls.Relation.SELF,
         }
-        defaults["constellation_ip"] = constellation_ip or ""
         role_lock = Path(settings.BASE_DIR) / ".locks" / "role.lck"
         role_name = role_lock.read_text().strip() if role_lock.exists() else "Terminal"
         role_name = ROLE_RENAMES.get(role_name, role_name)
@@ -1276,7 +1240,6 @@ class Node(Entity):
             "hostname": self.hostname,
             "network_hostname": self.network_hostname,
             "address": self.address,
-            "constellation_ip": self.constellation_ip,
             "ipv4_address": self.ipv4_address,
             "ipv6_address": self.ipv6_address,
             "port": self.port,

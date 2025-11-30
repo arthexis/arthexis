@@ -210,7 +210,7 @@ media/
 !/static/.gitignore
 /staticfiles/
 # Security keys generated for nodes
-security/
+work/nodes/security/
 # Pyre type checker
 .pyre/
 
