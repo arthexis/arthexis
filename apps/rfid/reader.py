@@ -14,7 +14,7 @@ from .constants import (
     SPI_BUS,
     SPI_DEVICE,
 )
-from .camera import queue_camera_snapshot
+from apps.camera.rfid import queue_camera_snapshot
 from .utils import convert_endianness_value, normalize_endianness
 
 

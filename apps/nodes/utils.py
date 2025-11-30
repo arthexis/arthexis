@@ -5,7 +5,6 @@ import logging
 import shutil
 import subprocess
 import uuid
-import threading
 
 from django.conf import settings
 from selenium import webdriver
@@ -22,12 +21,10 @@ from .models import ContentSample
 
 WORK_DIR = Path(settings.BASE_DIR) / "work"
 SCREENSHOT_DIR = settings.LOG_DIR / "screenshots"
-CAMERA_DIR = WORK_DIR / "camera"
 AUDIO_DIR = settings.LOG_DIR / "audio"
 logger = logging.getLogger(__name__)
 
 _FIREFOX_BINARY_CANDIDATES = ("firefox", "firefox-esr", "firefox-bin")
-_CAMERA_LOCK = threading.Lock()
 
 
 def _find_firefox_binary() -> str | None:
@@ -94,47 +91,6 @@ def capture_screenshot(url: str, cookies=None) -> Path:
                 "Firefox WebDriver is unavailable. Install geckodriver or configure the GECKODRIVER environment variable so Selenium can locate it."
             )
         raise RuntimeError(f"Screenshot capture failed: {message}") from exc
-
-
-def capture_rpi_snapshot(timeout: int = 10) -> Path:
-    """Capture a snapshot using the Raspberry Pi camera stack.
-
-    Snapshots are written under the node's work directory instead of the log
-    directory so binary images do not end up in rotated log files.
-    """
-
-    tool_path = shutil.which("rpicam-still")
-    if not tool_path:
-        raise RuntimeError("rpicam-still is not available")
-    CAMERA_DIR.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.utcnow()
-    unique_suffix = uuid.uuid4().hex
-    filename = CAMERA_DIR / f"{timestamp:%Y%m%d%H%M%S}-{unique_suffix}.jpg"
-    acquired = _CAMERA_LOCK.acquire(timeout=timeout)
-    if not acquired:
-        raise RuntimeError("Camera is busy. Wait for the current capture to finish.")
-
-    try:
-        result = subprocess.run(
-            [tool_path, "-o", str(filename), "-t", "1"],
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=timeout,
-        )
-    except Exception as exc:  # pragma: no cover - depends on camera stack
-        logger.error("Failed to invoke %s: %s", tool_path, exc)
-        raise RuntimeError(f"Snapshot capture failed: {exc}") from exc
-    finally:
-        _CAMERA_LOCK.release()
-    if result.returncode != 0:
-        error = (result.stderr or result.stdout or "Snapshot capture failed").strip()
-        logger.error("rpicam-still exited with %s: %s", result.returncode, error)
-        raise RuntimeError(error)
-    if not filename.exists():
-        logger.error("Snapshot file %s was not created", filename)
-        raise RuntimeError("Snapshot capture failed")
-    return filename
 
 
 def record_microphone_sample(
