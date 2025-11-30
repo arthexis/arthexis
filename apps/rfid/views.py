@@ -7,7 +7,7 @@ from django.views.decorators.http import require_POST
 from django.contrib.auth.views import redirect_to_login
 from django.contrib.admin.views.decorators import staff_member_required
 from apps.nodes.models import Node, NodeFeature
-from pages.utils import landing
+from apps.pages.utils import landing
 
 from .scanner import scan_sources, enable_deep_read_mode
 from .reader import validate_rfid_value

@@ -143,7 +143,7 @@ def main(argv: list[str] | None = None) -> int:
     if not setup_django():
         return 1
 
-    from pages.screenshot_specs import (
+    from apps.pages.screenshot_specs import (
         ScreenshotSpec,
         ScreenshotSpecRunner,
         ScreenshotUnavailable,

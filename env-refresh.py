@@ -41,7 +41,7 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 django.setup()
 
 from django.db.models.signals import post_save
-from pages.models import Module, Landing, _create_landings
+from apps.pages.models import Module, Landing, _create_landings
 from apps.nodes.models import Node
 from django.contrib.sites.models import Site
 from django.contrib.auth import get_user_model

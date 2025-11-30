@@ -1787,7 +1787,7 @@ class Node(Entity):
                 defaults={
                     "crontab": schedule,
                     "interval": None,
-                    "task": "pages.tasks.purge_expired_landing_leads",
+                    "task": "apps.pages.tasks.purge_expired_landing_leads",
                     "enabled": True,
                 },
             )

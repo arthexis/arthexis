@@ -15,7 +15,7 @@ from django.db.models import Q
 from django.core.validators import RegexValidator
 from apps.core.entity import Entity, EntityManager
 from apps.core.fields import ConditionTextField
-from pages.dashboard_rules import (
+from .dashboard_rules import (
     DEFAULT_SUCCESS_MESSAGE,
     load_callable,
     rule_failure,

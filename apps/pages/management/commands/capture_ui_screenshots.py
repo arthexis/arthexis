@@ -6,7 +6,7 @@ from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
 
-from pages.screenshot_specs import (
+from apps.pages.screenshot_specs import (
     ScreenshotSpecRunner,
     ScreenshotUnavailable,
     autodiscover,

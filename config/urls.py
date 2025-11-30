@@ -26,7 +26,7 @@ from apps.core.admindocs import (
     ModelGraphIndexView,
     OrderedModelIndexView,
 )
-from pages import views as pages_views
+from apps.pages import views as pages_views
 
 admin.site.site_header = _("Constellation")
 admin.site.site_title = _("Constellation")
@@ -146,7 +146,7 @@ urlpatterns = [
     ),
     path("admin/", admin.site.urls),
     path("i18n/setlang/", csrf_exempt(set_language), name="set_language"),
-    path("", include("pages.urls")),
+    path("", include("apps.pages.urls")),
 ]
 
 urlpatterns += autodiscovered_urlpatterns()
