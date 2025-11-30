@@ -392,7 +392,6 @@ LOCAL_APPS = [
     "apps.core",
     "apps.repos",
     "apps.app",
-    "protocols",
     "apps.ocpp",
     "apps.rfid",
     "apps.awg",

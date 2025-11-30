@@ -1798,7 +1798,7 @@ def _prepare_diagnostics_upload_payload(
 
     expires_at = timezone.now() + timedelta(days=30)
     bucket = charger.ensure_diagnostics_bucket(expires_at=expires_at)
-    upload_path = reverse("protocols:media-bucket-upload", kwargs={"slug": bucket.slug})
+    upload_path = reverse("ocpp:media-bucket-upload", kwargs={"slug": bucket.slug})
     location = request.build_absolute_uri(upload_path)
     prepared["location"] = location
     if bucket.expires_at:

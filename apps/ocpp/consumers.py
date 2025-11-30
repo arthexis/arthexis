@@ -740,7 +740,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
             return None
 
         def _resolve():
-            from protocols.models import CPForwarder
+            from apps.ocpp.models import CPForwarder
 
             target_id = getattr(charger, "forwarded_to_id", None)
             if not target_id:
@@ -779,7 +779,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
                     forwarding_watermark=timestamp
                 )
             if forwarder_pk:
-                from protocols.models import CPForwarder
+                from apps.ocpp.models import CPForwarder
 
                 CPForwarder.objects.filter(pk=forwarder_pk).update(
                     last_forwarded_at=timestamp,
