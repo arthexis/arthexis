@@ -11,7 +11,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("core", "0003_initial"),
-        ("django_celery_beat", "0020_googlecalendarprofile_horologiacountdowntimer"),
+        ("django_celery_beat", "0019_alter_periodictasks_options"),
         ("links", "0001_initial"),
         ("nodes", "0001_initial"),
         ("otp_totp", "0003_add_timestamps"),

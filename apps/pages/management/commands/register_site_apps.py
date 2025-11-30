@@ -48,7 +48,12 @@ class Command(BaseCommand):
             try:
                 config = django_apps.get_app_config(app_label)
             except LookupError:
-                continue
+                config = next(
+                    (c for c in django_apps.get_app_configs() if c.name == app_label),
+                    None,
+                )
+                if config is None:
+                    continue
             description = DEFAULT_APPLICATION_DESCRIPTIONS.get(config.label, "")
             order = getattr(config, "order", None)
             defaults = {"description": description}
