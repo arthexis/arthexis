@@ -1,6 +1,6 @@
 [
   {
-    "model": "core.reference",
+    "model": "links.reference",
     "fields": {
       "value": "https://ko-fi.com/arthexis/gallery",
       "alt_text": "Mysteric Gallery",
