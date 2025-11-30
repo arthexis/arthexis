@@ -1,13 +1,13 @@
 import json
 import uuid
 
-from django import admin
+from django.contrib import admin
 from django.http import JsonResponse
 from django.urls import path
 from django.utils.html import format_html
 from django.views.decorators.csrf import csrf_exempt
 
-from apps.core.user_data import EntityModelAdmin
+from apps.locals.user_data import EntityModelAdmin
 from .models import ExperienceReference, Reference
 
 

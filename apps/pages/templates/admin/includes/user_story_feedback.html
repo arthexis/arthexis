@@ -88,7 +88,6 @@
               <input type="radio" id="user-story-rating-1" name="rating" value="1">
               <label for="user-story-rating-1" title="{% trans 'Needs improvement' %}" aria-label="{% trans '1 star' %}">★</label>
             </div>
-            <input type="hidden" name="take_screenshot" value="1">
             {% if request.user.is_authenticated %}
               <div class="form-check user-story-clipboard">
                 <input
@@ -173,7 +172,6 @@
         `ua=${userAgent}`,
         language ? `lang=${language}` : null,
         `submitted_at=${timestamp}`,
-        'screenshot=requested',
       ]
         .filter(Boolean)
         .join('\n');

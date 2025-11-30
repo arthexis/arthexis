@@ -29,8 +29,7 @@ from django.conf import settings
 from django.utils.translation import gettext_lazy as _, ngettext
 from django.core.management import CommandError, call_command
 
-from apps.nodes.models import Node, NodeRole
-from apps.nodes.utils import capture_screenshot, save_screenshot
+from apps.nodes.models import NodeRole
 
 from .forms import UserManualAdminForm
 from .module_defaults import reload_default_modules as restore_default_modules
@@ -50,7 +49,6 @@ from .models import (
     Landing,
     LandingLead,
     RoleLanding,
-    DashboardRule,
     ViewHistory,
     UserManual,
     UserStory,
@@ -138,37 +136,6 @@ class SiteAdmin(DjangoSiteAdmin):
     fields = ("domain", "name", "template", "managed", "require_https")
     list_display = ("domain", "name", "template", "managed", "require_https")
     list_filter = (ManagedSiteListFilter, RequireHttpsListFilter)
-    actions = ["capture_screenshot"]
-
-    @admin.action(description="Capture screenshot")
-    def capture_screenshot(self, request, queryset):
-        node = Node.get_local()
-        for site in queryset:
-            url = f"http://{site.domain}/"
-            try:
-                path = capture_screenshot(url)
-                screenshot = save_screenshot(path, node=node, method="ADMIN")
-            except Exception as exc:  # pragma: no cover - browser issues
-                self.message_user(request, f"{site.domain}: {exc}", messages.ERROR)
-                continue
-            if screenshot:
-                link = reverse("admin:nodes_contentsample_change", args=[screenshot.pk])
-                self.message_user(
-                    request,
-                    format_html(
-                        'Screenshot for {} saved. <a href="{}">View</a>',
-                        site.domain,
-                        link,
-                    ),
-                    messages.SUCCESS,
-                )
-            else:
-                self.message_user(
-                    request,
-                    f"{site.domain}: duplicate screenshot; not saved",
-                    messages.INFO,
-                )
-
     def _has_siteproxy_permission(self, request, action: str) -> bool:
         """Return True when the user has the requested proxy or sites perm."""
 
@@ -1071,12 +1038,10 @@ class UserStoryAdmin(EntityModelAdmin):
         "status",
         "submitted_at",
         "github_issue_display",
-        "screenshot_display",
-        "take_screenshot",
         "owner",
         "assign_to",
     )
-    list_filter = ("rating", "status", "submitted_at", "take_screenshot")
+    list_filter = ("rating", "status", "submitted_at")
     search_fields = (
         "name",
         "comments",
@@ -1090,7 +1055,6 @@ class UserStoryAdmin(EntityModelAdmin):
         "name",
         "rating",
         "comments",
-        "take_screenshot",
         "path",
         "user",
         "owner",
@@ -1102,15 +1066,12 @@ class UserStoryAdmin(EntityModelAdmin):
         "submitted_at",
         "github_issue_number",
         "github_issue_url",
-        "screenshot_display",
     )
     ordering = ("-submitted_at",)
     fields = (
         "name",
         "rating",
         "comments",
-        "take_screenshot",
-        "screenshot_display",
         "path",
         "language_code",
         "user",
@@ -1142,21 +1103,6 @@ class UserStoryAdmin(EntityModelAdmin):
         if obj.github_issue_number is not None:
             return f"#{obj.github_issue_number}"
         return ""
-
-    @admin.display(description=_("Screenshot"), ordering="screenshot")
-    def screenshot_display(self, obj):
-        if not obj.screenshot_id:
-            return ""
-        try:
-            url = reverse("admin:nodes_contentsample_change", args=[obj.screenshot_id])
-        except NoReverseMatch:
-            return obj.screenshot.path
-        return format_html(
-            '<a href="{}" target="_blank" rel="noopener noreferrer">{}</a>',
-            url,
-            _("View screenshot"),
-        )
-        return _("Not created")
 
     @admin.action(description=_("Create GitHub issues"))
     def create_github_issues(self, request, queryset):

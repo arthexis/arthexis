@@ -5,7 +5,6 @@ import contextlib
 import logging
 import uuid
 from datetime import timedelta
-from pathlib import Path
 
 import json
 import requests
@@ -17,7 +16,7 @@ from apps.core.entity import Entity, EntityManager
 from apps.core.models import Lead, SecurityGroup
 from apps.crms.models import OdooProfile
 from django.contrib.sites.models import Site
-from apps.nodes.models import ContentSample, NodeRole
+from apps.nodes.models import NodeRole
 from django.utils import timezone
 from django.utils.text import slugify
 from django.utils.html import conditional_escape, format_html, linebreaks
@@ -25,7 +24,6 @@ from django.utils.translation import gettext, gettext_lazy as _, get_language_in
 from importlib import import_module
 from django.urls import URLPattern, reverse
 from django.conf import settings
-from django.contrib.contenttypes.models import ContentType
 from django.core.validators import MaxLengthValidator, MaxValueValidator, MinValueValidator
 from django.core.exceptions import ValidationError
 
@@ -1274,82 +1272,6 @@ class ViewHistory(Entity):
         return deleted
 
 
-class DashboardRule(Entity):
-    """Rule configuration for admin dashboard model rows."""
-
-    class Implementation(models.TextChoices):
-        CONDITION = "condition", _("SQL + Sigil comparison")
-        PYTHON = "python", _("Python callable")
-
-    name = models.CharField(max_length=200, unique=True)
-    content_type = models.OneToOneField(
-        ContentType, on_delete=models.CASCADE, related_name="dashboard_rule"
-    )
-    implementation = models.CharField(
-        max_length=20, choices=Implementation.choices, default=Implementation.PYTHON
-    )
-    condition = ConditionTextField(blank=True, default="")
-    function_name = models.CharField(max_length=255, blank=True)
-    success_message = models.CharField(
-        max_length=200, default=DEFAULT_SUCCESS_MESSAGE
-    )
-    failure_message = models.CharField(max_length=500, blank=True)
-
-    objects = DashboardRuleManager()
-
-    class Meta:
-        ordering = ["name"]
-        verbose_name = _("Dashboard Rule")
-        verbose_name_plural = _("Dashboard Rules")
-
-    def __str__(self) -> str:  # pragma: no cover - simple representation
-        return self.name
-
-    def natural_key(self):  # pragma: no cover - simple representation
-        return (self.name,)
-
-    def clean(self):
-        super().clean()
-        errors = {}
-
-        if self.implementation == self.Implementation.PYTHON:
-            if not self.function_name:
-                errors["function_name"] = _(
-                    "Provide a handler name for Python-based rules."
-                )
-        else:
-            if not (self.condition or "").strip():
-                errors["condition"] = _(
-                    "Provide a condition for SQL-based rules."
-                )
-
-        if errors:
-            raise ValidationError(errors)
-
-    def evaluate(self) -> dict[str, object]:
-        if self.implementation == self.Implementation.PYTHON:
-            handler = load_callable(self.function_name)
-            if handler is None:
-                return rule_failure(_("Rule handler is not configured."))
-
-            try:
-                return handler()
-            except Exception:
-                logger.exception("Dashboard rule handler failed: %s", self.function_name)
-                return rule_failure(_("Unable to evaluate dashboard rule."))
-
-        condition_field = self._meta.get_field("condition")
-        result = condition_field.evaluate(self)
-        if result.passed:
-            message = self.success_message or str(DEFAULT_SUCCESS_MESSAGE)
-            return rule_success(message)
-
-        message = self.failure_message or _("Rule condition not met.")
-        if result.error:
-            message = f"{message} ({result.error})"
-        return rule_failure(message)
-
-
 class UserStory(Lead):
     path = models.CharField(max_length=500)
     name = models.CharField(max_length=40, blank=True)
@@ -1360,10 +1282,6 @@ class UserStory(Lead):
     comments = models.TextField(
         validators=[MaxLengthValidator(400)],
         help_text=_("Share more about your experience."),
-    )
-    take_screenshot = models.BooleanField(
-        default=True,
-        help_text=_("Request a screenshot capture for this feedback."),
     )
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -1389,14 +1307,6 @@ class UserStory(Lead):
     github_issue_url = models.URLField(
         blank=True,
         help_text=_("Link to the GitHub issue created for this feedback."),
-    )
-    screenshot = models.ForeignKey(
-        ContentSample,
-        on_delete=models.SET_NULL,
-        blank=True,
-        null=True,
-        related_name="user_stories",
-        help_text=_("Screenshot captured for this feedback."),
     )
     language_code = models.CharField(
         max_length=15,
@@ -1439,13 +1349,10 @@ class UserStory(Lead):
 
         name = self.name or gettext("Anonymous")
         path = self.path or "/"
-        screenshot_requested = gettext("Yes") if self.take_screenshot else gettext("No")
-
         lines = [
             f"**Path:** {path}",
             f"**Rating:** {self.rating}/5",
             f"**Name:** {name}",
-            f"**Screenshot requested:** {screenshot_requested}",
         ]
 
         language_code = (self.language_code or "").strip()

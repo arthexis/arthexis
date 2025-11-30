@@ -241,11 +241,10 @@ class UserManualAdminForm(forms.ModelForm):
 class UserStoryForm(forms.ModelForm):
     class Meta:
         model = UserStory
-        fields = ("name", "rating", "comments", "take_screenshot", "path")
+        fields = ("name", "rating", "comments", "path")
         widgets = {
             "path": forms.HiddenInput(),
             "comments": forms.Textarea(attrs={"rows": 4, "maxlength": 400}),
-            "take_screenshot": forms.HiddenInput(),
         }
 
     def __init__(self, *args, user=None, **kwargs):
@@ -277,14 +276,9 @@ class UserStoryForm(forms.ModelForm):
                     }
                 ),
             )
-        self.fields["take_screenshot"].initial = True
         self.fields["rating"].widget = forms.RadioSelect(
             choices=[(i, str(i)) for i in range(1, 6)]
         )
-
-    def clean_take_screenshot(self):
-        # Screenshots are always requested when possible, regardless of user input.
-        return True
 
     def clean_comments(self):
         comments = (self.cleaned_data.get("comments") or "").strip()
