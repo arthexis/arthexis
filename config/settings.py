@@ -394,7 +394,7 @@ LOCAL_APPS = [
     "protocols",
     "apps.ocpp",
     "apps.rfid",
-    "awg",
+    "apps.awg",
     "pages",
     "teams",
 ]
