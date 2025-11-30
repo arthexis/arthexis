@@ -396,7 +396,7 @@ LOCAL_APPS = [
     "apps.rfid",
     "apps.awg",
     "apps.pages",
-    "teams",
+    "apps.teams",
 ]
 
 INSTALLED_APPS = [

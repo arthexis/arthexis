@@ -918,7 +918,7 @@ class ClientReportSchedule(Entity):
         return ClientReport.resolve_reply_to_for_owner(self.owner)
 
     def get_outbox(self):
-        """Return the preferred :class:`teams.models.EmailOutbox` instance."""
+        """Return the preferred :class:`apps.teams.models.EmailOutbox` instance."""
 
         return ClientReport.resolve_outbox_for_owner(self.owner)
 

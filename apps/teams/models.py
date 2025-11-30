@@ -1535,7 +1535,7 @@ class ManualTask(Entity):
     def _schedule_notification_task(
         self, trigger: str, eta: timezone.datetime | None = None
     ) -> None:
-        from teams.tasks import send_manual_task_notification
+        from apps.teams.tasks import send_manual_task_notification
 
         kwargs = {"manual_task_id": self.pk, "trigger": trigger}
         if eta is None:

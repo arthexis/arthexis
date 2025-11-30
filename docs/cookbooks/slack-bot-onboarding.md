@@ -77,7 +77,7 @@ Arthexis stores the default broadcast list as JSON channel IDs. Gather them befo
 
 1. With the profile selected, use the admin action **Save and continue editing**. In a separate shell, run:
    ```bash
-   python manage.py shell -c "from teams.models import SlackBotProfile; SlackBotProfile.objects.get(team_id='TXXXXX').connect()"
+   python manage.py shell -c "from apps.teams.models import SlackBotProfile; SlackBotProfile.objects.get(team_id='TXXXXX').connect()"
    ```
    Replace `TXXXXX` with your team ID. The command calls Slack’s `auth.test` endpoint and stores any returned team or bot identifiers.
 2. Create a Net Message from **Nodes → Net Messages** in the Django admin or trigger an in-app event. Arthexis posts the formatted subject/body to every configured Slack channel using `chat.postMessage`.

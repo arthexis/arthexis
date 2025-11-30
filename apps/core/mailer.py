@@ -62,7 +62,7 @@ def _candidate_outboxes(user=None, node=None, outbox=None):
         _add(outbox)
 
     try:
-        from teams.models import EmailOutbox
+        from apps.teams.models import EmailOutbox
     except Exception:  # pragma: no cover - app not ready
         return candidates
 
@@ -266,7 +266,9 @@ def can_send_email() -> bool:
     """Return ``True`` when at least one outbound email path is configured."""
 
     try:
-        from teams.models import EmailOutbox  # imported lazily to avoid circular deps
+        from apps.teams.models import (
+            EmailOutbox,
+        )  # imported lazily to avoid circular deps
     except Exception:  # pragma: no cover - app not ready
         return False
 
