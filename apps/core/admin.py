@@ -73,7 +73,8 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 from apps.ocpp.models import Charger, Transaction
 from apps.vehicle.models import ElectricVehicle
 from apps.rfid.utils import build_mode_toggle
-from apps.teams.models import EmailCollector, EmailInbox, EmailOutbox, SocialProfile
+from apps.emails.models import EmailCollector, EmailInbox, EmailOutbox
+from apps.teams.models import SocialProfile
 from apps.energy.models import ClientReport, CustomerAccount
 from apps.repos.forms import PackageRepositoryForm
 from apps.repos.task_utils import GitHubRepositoryError, create_repository_for_package
@@ -1237,7 +1238,7 @@ class MaskedPasswordFormMixin:
 
 
 class EmailInboxAdminForm(MaskedPasswordFormMixin, forms.ModelForm):
-    """Admin form for :class:`apps.teams.models.EmailInbox` with hidden password."""
+    """Admin form for :class:`apps.emails.models.EmailInbox` with hidden password."""
 
     password = forms.CharField(
         widget=forms.PasswordInput(attrs={"autocomplete": "new-password"}),
@@ -1450,7 +1451,7 @@ class SocialProfileInlineForm(ProfileFormMixin, forms.ModelForm):
 
 
 class EmailOutboxAdminForm(MaskedPasswordFormMixin, forms.ModelForm):
-    """Admin form for :class:`apps.teams.models.EmailOutbox` with hidden password."""
+    """Admin form for :class:`apps.emails.models.EmailOutbox` with hidden password."""
 
     password = forms.CharField(
         widget=forms.PasswordInput(attrs={"autocomplete": "new-password"}),
@@ -2380,7 +2381,7 @@ class EmailInboxAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdmi
             path(
                 "<path:object_id>/test/",
                 self.admin_site.admin_view(self.test_inbox),
-                name="teams_emailinbox_test",
+                name="emails_emailinbox_test",
             )
         ]
         return custom + urls
@@ -2401,7 +2402,7 @@ class EmailInboxAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdmi
         extra_context = extra_context or {}
         if object_id:
             extra_context["test_url"] = reverse(
-                "admin:teams_emailinbox_test", args=[object_id]
+                "admin:emails_emailinbox_test", args=[object_id]
             )
         return super().changeform_view(request, object_id, form_url, extra_context)
 

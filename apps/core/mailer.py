@@ -61,10 +61,7 @@ def _candidate_outboxes(user=None, node=None, outbox=None):
     if outbox is not None:
         _add(outbox)
 
-    try:
-        from apps.teams.models import EmailOutbox
-    except Exception:  # pragma: no cover - app not ready
-        return candidates
+    from apps.emails.models import EmailOutbox
 
     queryset = EmailOutbox.objects.filter(is_enabled=True)
 

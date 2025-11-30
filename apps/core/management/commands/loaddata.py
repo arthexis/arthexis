@@ -11,7 +11,7 @@ class Command(DjangoLoadDataCommand):
     def handle(self, *fixture_labels, **options):
         result = super().handle(*fixture_labels, **options)
         try:
-            from apps.teams.models import ensure_admin_email_mailboxes
+            from apps.emails.models import ensure_admin_email_mailboxes
 
             ensure_admin_email_mailboxes()
         except Exception:  # pragma: no cover - defensive logging

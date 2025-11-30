@@ -918,7 +918,7 @@ class ClientReportSchedule(Entity):
         return ClientReport.resolve_reply_to_for_owner(self.owner)
 
     def get_outbox(self):
-        """Return the preferred :class:`apps.teams.models.EmailOutbox` instance."""
+        """Return the preferred :class:`apps.emails.models.EmailOutbox` instance."""
 
         return ClientReport.resolve_outbox_for_owner(self.owner)
 
@@ -1724,7 +1724,7 @@ class ClientReport(Entity):
         if not owner:
             return []
         try:
-            inbox_model = apps.get_model("teams", "EmailInbox")
+            inbox_model = apps.get_model("emails", "EmailInbox")
         except LookupError:
             inbox_model = None
         try:
@@ -1742,7 +1742,7 @@ class ClientReport(Entity):
         from apps.nodes.models import Node
 
         try:
-            outbox_model = apps.get_model("teams", "EmailOutbox")
+            outbox_model = apps.get_model("emails", "EmailOutbox")
         except LookupError:
             outbox_model = None
 
