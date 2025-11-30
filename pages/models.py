@@ -3,7 +3,6 @@ from __future__ import annotations
 import base64
 import contextlib
 import logging
-import re
 import uuid
 from datetime import timedelta
 from pathlib import Path
@@ -25,7 +24,6 @@ from pages.dashboard_rules import (
 from apps.core.models import Lead, SecurityGroup, OdooProfile
 from django.contrib.sites.models import Site
 from nodes.models import ContentSample, NodeRole
-from django.apps import apps as django_apps
 from django.utils import timezone
 from django.utils.text import slugify
 from django.utils.html import conditional_escape, format_html, linebreaks
@@ -37,6 +35,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.core.validators import MaxLengthValidator, MaxValueValidator, MinValueValidator
 from django.core.exceptions import ValidationError
 
+from apps.app.models import Application
 from apps.core import github_issues
 from .tasks import create_user_story_github_issue
 from .site_config import ensure_site_fields
@@ -52,59 +51,6 @@ _HEX_COLOR_VALIDATOR = RegexValidator(
     regex=r"^#(?:[0-9a-fA-F]{3}){1,2}$",
     message="Enter a valid hex color code (e.g. #0d6efd).",
 )
-
-
-class ApplicationManager(models.Manager):
-    def get_by_natural_key(self, name: str):
-        return self.get(name=name)
-
-
-class Application(Entity):
-    name = models.CharField(max_length=100, unique=True)
-    description = models.TextField(blank=True)
-    order = models.PositiveIntegerField(blank=True, null=True)
-
-    objects = ApplicationManager()
-
-    def natural_key(self):  # pragma: no cover - simple representation
-        return (self.name,)
-
-    def __str__(self) -> str:  # pragma: no cover - simple representation
-        return self.name
-
-    @property
-    def installed(self) -> bool:
-        return django_apps.is_installed(self.name)
-
-    @property
-    def verbose_name(self) -> str:
-        try:
-            return django_apps.get_app_config(self.name).verbose_name
-        except LookupError:
-            return self.name
-
-
-    class Meta:
-        verbose_name = _("Application")
-        verbose_name_plural = _("Applications")
-
-    @classmethod
-    def order_map(cls) -> dict[str, int]:
-        return {
-            name: order
-            for name, order in cls.objects.filter(order__isnull=False).values_list(
-                "name", "order"
-            )
-        }
-
-    @staticmethod
-    def format_display_name(order: int | None, name: str) -> str:
-        cleaned_name = re.sub(r"^\s*\d+\.\s*", "", name or "").strip()
-        if not cleaned_name:
-            cleaned_name = str(name or "")
-        if order is None:
-            return cleaned_name
-        return f"{order}. {cleaned_name}"
 
 
 class ModuleManager(models.Manager):

@@ -5,7 +5,8 @@ from django.core.management.base import BaseCommand
 from django.utils.text import slugify
 import socket
 
-from pages.models import Application, Module
+from apps.app.models import Application
+from pages.models import Module
 from pages.defaults import DEFAULT_APPLICATION_DESCRIPTIONS
 from nodes.models import Node, NodeRole
 
