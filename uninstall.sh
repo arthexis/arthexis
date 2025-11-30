@@ -194,6 +194,6 @@ fi
 
 # Clear lock directory and other cached configuration
 rm -rf "$LOCK_DIR"
-rm -f "$BASE_DIR/requirements.md5"
+rm -f "$LOCK_DIR/requirements.md5" "$LOCK_DIR/migrations.md5" "$LOCK_DIR/fixtures.md5"
 
 echo "Uninstall complete."
