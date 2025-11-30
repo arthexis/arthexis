@@ -144,11 +144,6 @@ Constelación Arthexis sigue en desarrollo muy activo y se agregan nuevas funcio
 
 Si decides usar nuestra suite para tus proyectos de energía, puedes contactarnos en [tecnologia@gelectriic.com](mailto:tecnologia@gelectriic.com) o visitar nuestro [sitio web](https://www.gelectriic.com/) para [servicios profesionales](https://es.wikipedia.org/wiki/Servicios_profesionales) y [soporte comercial](https://es.wikipedia.org/wiki/Soporte_t%C3%A9cnico).
 
-## Directrices del proyecto
-
-- [AGENTS](AGENTS.md) – manual operativo para los flujos de trabajo del repositorio, las pruebas y la gestión de versiones.
-- [DESIGN](DESIGN.md) – guía de diseño visual, experiencia de usuario y branding que deben seguir todas las interfaces.
-
 ## Sobre mí
 
 > "¿Qué? ¿También quieres saber sobre mí? Bueno, disfruto el [desarrollo de software](https://es.wikipedia.org/wiki/Desarrollo_de_software), los [juegos de rol](https://es.wikipedia.org/wiki/Juego_de_rol), largas caminatas por la [playa](https://es.wikipedia.org/wiki/Playa) y una cuarta cosa secreta."

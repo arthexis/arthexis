@@ -144,11 +144,6 @@ Die Arthexis-Konstellation befindet sich weiterhin in sehr aktiver Entwicklung u
 
 Wenn du unsere Suite für deine Energieprojekte einsetzen möchtest, erreichst du uns unter [tecnologia@gelectriic.com](mailto:tecnologia@gelectriic.com) oder über unsere [Webseite](https://www.gelectriic.com/) für [professionelle Dienstleistungen](https://de.wikipedia.org/wiki/Dienstleistung) und [kommerziellen Support](https://de.wikipedia.org/wiki/Technischer_Support).
 
-## Projektleitlinien
-
-- [AGENTS](AGENTS.md) – Betriebsleitfaden für Repository-Workflows, Tests und Release-Management.
-- [DESIGN](DESIGN.md) – Gestaltungs-, UX- und Branding-Richtlinien, die für alle Oberflächen gelten.
-
 ## Über mich
 
 > "Wie bitte, du willst auch etwas über mich wissen? Nun, ich mag es, [Software zu entwickeln](https://de.wikipedia.org/wiki/Softwareentwicklung), [Pen-&-Paper-Rollenspiele](https://de.wikipedia.org/wiki/Rollenspiel), lange Spaziergänge am [Strand](https://de.wikipedia.org/wiki/Strand) und eine vierte geheime Sache."
