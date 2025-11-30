@@ -73,7 +73,6 @@ def default_package_modules() -> list[str]:
 
     return list(DEFAULT_PACKAGE.packages)
 from . import temp_passwords
-from . import user_data  # noqa: F401 - ensure signal registration
 from apps.sigils.fields import (
     SigilShortAutoField,
     ConditionTextField,

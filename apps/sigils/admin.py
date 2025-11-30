@@ -1,7 +1,7 @@
 from django import forms
 from django.contrib import admin
 
-from apps.core.user_data import EntityModelAdmin
+from apps.locals.user_data import EntityModelAdmin
 
 from .models import CustomSigil, SigilRoot
 

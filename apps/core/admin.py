@@ -92,7 +92,7 @@ from .models import (
     InviteLead,
 )
 from apps.crms.models import OdooProfile, Product
-from .user_data import (
+from apps.locals.user_data import (
     EntityModelAdmin,
     UserDatumAdminMixin,
     delete_user_fixture,

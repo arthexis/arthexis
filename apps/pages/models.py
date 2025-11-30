@@ -1281,22 +1281,80 @@ class ViewHistory(Entity):
         return deleted
 
 
-class Favorite(Entity):
-    user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name="favorites",
+class DashboardRule(Entity):
+    """Rule configuration for admin dashboard model rows."""
+
+    class Implementation(models.TextChoices):
+        CONDITION = "condition", _("SQL + Sigil comparison")
+        PYTHON = "python", _("Python callable")
+
+    name = models.CharField(max_length=200, unique=True)
+    content_type = models.OneToOneField(
+        ContentType, on_delete=models.CASCADE, related_name="dashboard_rule"
     )
-    content_type = models.ForeignKey(ContentType, on_delete=models.CASCADE)
-    custom_label = models.CharField(max_length=100, blank=True)
-    user_data = models.BooleanField(default=False)
-    priority = models.IntegerField(default=0)
+    implementation = models.CharField(
+        max_length=20, choices=Implementation.choices, default=Implementation.PYTHON
+    )
+    condition = ConditionTextField(blank=True, default="")
+    function_name = models.CharField(max_length=255, blank=True)
+    success_message = models.CharField(
+        max_length=200, default=DEFAULT_SUCCESS_MESSAGE
+    )
+    failure_message = models.CharField(max_length=500, blank=True)
+
+    objects = DashboardRuleManager()
 
     class Meta:
-        unique_together = ("user", "content_type")
-        ordering = ["priority", "pk"]
-        verbose_name = _("Favorite")
-        verbose_name_plural = _("Favorites")
+        ordering = ["name"]
+        verbose_name = _("Dashboard Rule")
+        verbose_name_plural = _("Dashboard Rules")
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return self.name
+
+    def natural_key(self):  # pragma: no cover - simple representation
+        return (self.name,)
+
+    def clean(self):
+        super().clean()
+        errors = {}
+
+        if self.implementation == self.Implementation.PYTHON:
+            if not self.function_name:
+                errors["function_name"] = _(
+                    "Provide a handler name for Python-based rules."
+                )
+        else:
+            if not (self.condition or "").strip():
+                errors["condition"] = _(
+                    "Provide a condition for SQL-based rules."
+                )
+
+        if errors:
+            raise ValidationError(errors)
+
+    def evaluate(self) -> dict[str, object]:
+        if self.implementation == self.Implementation.PYTHON:
+            handler = load_callable(self.function_name)
+            if handler is None:
+                return rule_failure(_("Rule handler is not configured."))
+
+            try:
+                return handler()
+            except Exception:
+                logger.exception("Dashboard rule handler failed: %s", self.function_name)
+                return rule_failure(_("Unable to evaluate dashboard rule."))
+
+        condition_field = self._meta.get_field("condition")
+        result = condition_field.evaluate(self)
+        if result.passed:
+            message = self.success_message or str(DEFAULT_SUCCESS_MESSAGE)
+            return rule_success(message)
+
+        message = self.failure_message or _("Rule condition not met.")
+        if result.error:
+            message = f"{message} ({result.error})"
+        return rule_failure(message)
 
 
 class UserStory(Lead):

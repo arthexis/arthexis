@@ -393,6 +393,7 @@ LOCAL_APPS = [
     "apps.energy",
     "apps.core",
     "apps.links",
+    "apps.locals",
     "apps.crms",
     "apps.sigils",
     "apps.repos",
