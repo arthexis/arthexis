@@ -1,0 +1,10 @@
+[
+  {
+    "model": "vehicle.evmodel",
+    "fields": {
+      "brand": ["Tesla"],
+      "name": "Model 3 RWD",
+      "est_battery_kwh": "57.50"
+    }
+  }
+]

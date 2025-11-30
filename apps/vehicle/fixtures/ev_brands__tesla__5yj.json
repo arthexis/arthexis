@@ -1,0 +1,9 @@
+[
+  {
+    "model": "vehicle.wmicode",
+    "fields": {
+      "brand": ["Tesla"],
+      "code": "5YJ"
+    }
+  }
+]

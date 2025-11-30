@@ -1,0 +1,10 @@
+[
+  {
+    "model": "vehicle.evmodel",
+    "fields": {
+      "brand": ["Volvo"],
+      "name": "EX30",
+      "est_battery_kwh": "69.00"
+    }
+  }
+]

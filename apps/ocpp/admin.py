@@ -36,7 +36,6 @@ from django.utils.translation import gettext_lazy as _, ngettext
 from requests import RequestException
 
 from .models import (
-    Brand,
     Charger,
     ChargingProfile,
     ChargingProfileDispatch,
@@ -44,11 +43,9 @@ from .models import (
     PowerProjection,
     ChargerConfiguration,
     ConfigurationKey,
-    ElectricVehicle,
     Simulator,
     MeterValue,
     StationModel,
-    EVModel,
     Transaction,
     DataTransferMessage,
     CPReservation,
@@ -58,7 +55,6 @@ from .models import (
     CPNetworkProfileDeployment,
     SecurityEvent,
     ChargerLogRequest,
-    WMICode,
     MediaBucket,
     MediaFile,
     CPForwarder,
@@ -1778,19 +1774,6 @@ class CPReservationAdmin(EntityModelAdmin):
             )
 
 
-@admin.register(ElectricVehicle)
-class ElectricVehicleAdmin(EntityModelAdmin):
-    list_display = ("vin", "license_plate", "brand", "model", "account")
-    search_fields = (
-        "vin",
-        "license_plate",
-        "brand__name",
-        "model__name",
-        "account__name",
-    )
-    fields = ("account", "vin", "license_plate", "brand", "model")
-
-
 @admin.register(PowerProjection)
 class PowerProjectionAdmin(EntityModelAdmin):
     list_display = (
@@ -1831,65 +1814,6 @@ class PowerProjectionAdmin(EntityModelAdmin):
             },
         ),
     )
-
-
-class WMICodeInline(admin.TabularInline):
-    model = WMICode
-    extra = 0
-
-
-@admin.register(StationModel)
-class StationModelAdmin(EntityModelAdmin):
-    fields = (
-        "vendor",
-        "model_family",
-        "model",
-        "max_power_kw",
-        "max_voltage_v",
-        "preferred_ocpp_version",
-        "connector_type",
-        "notes",
-    )
-    list_display = (
-        "model",
-        "model_family",
-        "vendor",
-        "max_power_kw",
-        "max_voltage_v",
-        "preferred_ocpp_version",
-        "connector_type",
-    )
-    search_fields = ("vendor", "model_family", "model", "connector_type")
-
-
-@admin.register(Brand)
-class BrandAdmin(EntityModelAdmin):
-    fields = ("name",)
-    list_display = ("name", "wmi_codes_display")
-    inlines = [WMICodeInline]
-
-    def wmi_codes_display(self, obj):
-        return ", ".join(obj.wmi_codes.values_list("code", flat=True))
-
-    wmi_codes_display.short_description = "WMI codes"
-
-
-@admin.register(EVModel)
-class EVModelAdmin(EntityModelAdmin):
-    fields = ("brand", "name")
-    list_display = ("name", "brand", "brand_wmi_codes")
-
-    def get_queryset(self, request):
-        queryset = super().get_queryset(request)
-        return queryset.select_related("brand").prefetch_related("brand__wmi_codes")
-
-    def brand_wmi_codes(self, obj):
-        if not obj.brand:
-            return ""
-        codes = [wmi.code for wmi in obj.brand.wmi_codes.all()]
-        return ", ".join(codes)
-
-    brand_wmi_codes.short_description = "WMI codes"
 
 
 @admin.register(Charger)

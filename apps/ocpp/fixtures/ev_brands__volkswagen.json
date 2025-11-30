@@ -1,8 +1,0 @@
-[
-  {
-    "model": "ocpp.brand",
-    "fields": {
-      "name": "Volkswagen"
-    }
-  }
-]

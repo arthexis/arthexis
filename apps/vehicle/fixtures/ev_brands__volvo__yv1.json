@@ -1,0 +1,9 @@
+[
+  {
+    "model": "vehicle.wmicode",
+    "fields": {
+      "brand": ["Volvo"],
+      "code": "YV1"
+    }
+  }
+]

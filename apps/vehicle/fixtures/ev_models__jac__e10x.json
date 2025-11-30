@@ -1,0 +1,10 @@
+[
+  {
+    "model": "vehicle.evmodel",
+    "fields": {
+      "brand": ["JAC"],
+      "name": "E10X",
+      "est_battery_kwh": "31.40"
+    }
+  }
+]

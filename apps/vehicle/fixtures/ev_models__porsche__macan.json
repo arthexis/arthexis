@@ -1,0 +1,9 @@
+[
+  {
+    "model": "vehicle.evmodel",
+    "fields": {
+      "brand": ["Porsche"],
+      "name": "Macan"
+    }
+  }
+]

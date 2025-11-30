@@ -1,9 +1,0 @@
-[
-  {
-    "model": "ocpp.wmicode",
-    "fields": {
-      "brand": ["Porsche"],
-      "code": "WP0"
-    }
-  }
-]
