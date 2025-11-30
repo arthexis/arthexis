@@ -1,11 +1,3 @@
-from dataclasses import dataclass
-from typing import Any
+from apps.counters.badge_utils import BadgeCounterResult
 
-
-@dataclass
-class BadgeCounterResult:
-    """Resolved values for a dashboard badge counter."""
-
-    primary: Any
-    secondary: Any | None = None
-    label: str | None = None
+__all__ = ["BadgeCounterResult"]

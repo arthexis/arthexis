@@ -14,13 +14,6 @@ from django.db import models
 from django.db.models import Q
 from django.core.validators import RegexValidator
 from apps.core.entity import Entity, EntityManager
-from apps.sigils.fields import ConditionTextField
-from .dashboard_rules import (
-    DEFAULT_SUCCESS_MESSAGE,
-    load_callable,
-    rule_failure,
-    rule_success,
-)
 from apps.core.models import Lead, SecurityGroup
 from apps.crms.models import OdooProfile
 from django.contrib.sites.models import Site
@@ -57,11 +50,6 @@ _HEX_COLOR_VALIDATOR = RegexValidator(
 class ModuleManager(models.Manager):
     def get_by_natural_key(self, role: str, path: str):
         return self.get(node_role__name=role, path=path)
-
-
-class DashboardRuleManager(models.Manager):
-    def get_by_natural_key(self, name: str):
-        return self.get(name=name)
 
 
 class Module(Entity):
@@ -1308,82 +1296,6 @@ class Favorite(Entity):
         ordering = ["priority", "pk"]
         verbose_name = _("Favorite")
         verbose_name_plural = _("Favorites")
-
-
-class DashboardRule(Entity):
-    """Rule configuration for admin dashboard model rows."""
-
-    class Implementation(models.TextChoices):
-        CONDITION = "condition", _("SQL + Sigil comparison")
-        PYTHON = "python", _("Python callable")
-
-    name = models.CharField(max_length=200, unique=True)
-    content_type = models.OneToOneField(
-        ContentType, on_delete=models.CASCADE, related_name="dashboard_rule"
-    )
-    implementation = models.CharField(
-        max_length=20, choices=Implementation.choices, default=Implementation.PYTHON
-    )
-    condition = ConditionTextField(blank=True, default="")
-    function_name = models.CharField(max_length=255, blank=True)
-    success_message = models.CharField(
-        max_length=200, default=DEFAULT_SUCCESS_MESSAGE
-    )
-    failure_message = models.CharField(max_length=500, blank=True)
-
-    objects = DashboardRuleManager()
-
-    class Meta:
-        ordering = ["name"]
-        verbose_name = _("Dashboard Rule")
-        verbose_name_plural = _("Dashboard Rules")
-
-    def __str__(self) -> str:  # pragma: no cover - simple representation
-        return self.name
-
-    def natural_key(self):  # pragma: no cover - simple representation
-        return (self.name,)
-
-    def clean(self):
-        super().clean()
-        errors = {}
-
-        if self.implementation == self.Implementation.PYTHON:
-            if not self.function_name:
-                errors["function_name"] = _(
-                    "Provide a handler name for Python-based rules."
-                )
-        else:
-            if not (self.condition or "").strip():
-                errors["condition"] = _(
-                    "Provide a condition for SQL-based rules."
-                )
-
-        if errors:
-            raise ValidationError(errors)
-
-    def evaluate(self) -> dict[str, object]:
-        if self.implementation == self.Implementation.PYTHON:
-            handler = load_callable(self.function_name)
-            if handler is None:
-                return rule_failure(_("Rule handler is not configured."))
-
-            try:
-                return handler()
-            except Exception:
-                logger.exception("Dashboard rule handler failed: %s", self.function_name)
-                return rule_failure(_("Unable to evaluate dashboard rule."))
-
-        condition_field = self._meta.get_field("condition")
-        result = condition_field.evaluate(self)
-        if result.passed:
-            message = self.success_message or str(DEFAULT_SUCCESS_MESSAGE)
-            return rule_success(message)
-
-        message = self.failure_message or _("Rule condition not met.")
-        if result.error:
-            message = f"{message} ({result.error})"
-        return rule_failure(message)
 
 
 class UserStory(Lead):

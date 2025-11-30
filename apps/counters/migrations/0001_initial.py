@@ -1,0 +1,148 @@
+from django.db import migrations, models
+import django.db.models.deletion
+import apps.core.fields
+
+
+class Migration(migrations.Migration):
+
+    initial = True
+
+    dependencies = [
+        ("contenttypes", "0002_remove_content_type_name"),
+        ("sigils", "0001_initial"),
+    ]
+
+    operations = [
+        migrations.CreateModel(
+            name="BadgeCounter",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("name", models.CharField(max_length=150)),
+                (
+                    "label_template",
+                    models.CharField(
+                        blank=True,
+                        help_text="Optional label template that can reference {name}, {primary}, {secondary}, and {separator}. Badge counters are intended for values that do not change often; remember to invalidate the cache after updates.",
+                        max_length=255,
+                    ),
+                ),
+                (
+                    "priority",
+                    models.PositiveIntegerField(
+                        default=0, help_text="Lower values appear first from left to right."
+                    ),
+                ),
+                (
+                    "separator",
+                    models.CharField(
+                        default="/",
+                        help_text="Symbol shown between counters when two values are present.",
+                        max_length=8,
+                    ),
+                ),
+                (
+                    "primary_source_type",
+                    models.CharField(
+                        choices=[("sigil", "Sigil string"), ("callable", "Python callable")],
+                        default="sigil",
+                        max_length=20,
+                    ),
+                ),
+                (
+                    "primary_source",
+                    models.CharField(
+                        help_text="Value source expressed as [sigils] or a dotted callable path. Badge counters are intended for values that do not change often and may require manual cache invalidation.",
+                        max_length=255,
+                    ),
+                ),
+                (
+                    "secondary_source_type",
+                    models.CharField(
+                        blank=True,
+                        choices=[("sigil", "Sigil string"), ("callable", "Python callable")],
+                        max_length=20,
+                        null=True,
+                    ),
+                ),
+                ("secondary_source", models.CharField(blank=True, max_length=255)),
+                (
+                    "css_class",
+                    models.CharField(
+                        default="badge-counter",
+                        help_text="Additional CSS classes applied to the badge span.",
+                        max_length=100,
+                    ),
+                ),
+                ("is_enabled", models.BooleanField(default=True)),
+                (
+                    "content_type",
+                    models.ForeignKey(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="badge_counters",
+                        to="contenttypes.contenttype",
+                        verbose_name="model",
+                    ),
+                ),
+            ],
+            options={
+                "ordering": ("priority", "pk"),
+                "unique_together": {("content_type", "name")},
+                "verbose_name": "Badge Counter",
+                "verbose_name_plural": "Badge Counters",
+            },
+        ),
+        migrations.CreateModel(
+            name="DashboardRule",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("is_seed_data", models.BooleanField(default=False, editable=False)),
+                ("is_user_data", models.BooleanField(default=False, editable=False)),
+                ("is_deleted", models.BooleanField(default=False, editable=False)),
+                ("name", models.CharField(max_length=200, unique=True)),
+                (
+                    "implementation",
+                    models.CharField(
+                        choices=[("condition", "SQL + Sigil comparison"), ("python", "Python callable")],
+                        default="python",
+                        max_length=20,
+                    ),
+                ),
+                ("condition", apps.core.fields.ConditionTextField(blank=True, default="")),
+                ("function_name", models.CharField(blank=True, max_length=255)),
+                (
+                    "success_message",
+                    models.CharField(default="All rules met.", max_length=200),
+                ),
+                ("failure_message", models.CharField(blank=True, max_length=500)),
+                (
+                    "content_type",
+                    models.OneToOneField(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="dashboard_rule",
+                        to="contenttypes.contenttype",
+                    ),
+                ),
+            ],
+            options={
+                "ordering": ["name"],
+                "verbose_name": "Dashboard Rule",
+                "verbose_name_plural": "Dashboard Rules",
+            },
+        ),
+    ]
