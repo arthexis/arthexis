@@ -20,14 +20,14 @@ django_asgi_app = get_asgi_application()
 
 # Import routing modules after Django has initialized to ensure models are
 # registered before consumers are loaded.
-import ocpp.routing
+import apps.ocpp.routing
 import nodes.routing
 import pages.routing
 
 websocket_patterns = [
     *pages.routing.websocket_urlpatterns,
     *nodes.routing.websocket_urlpatterns,
-    *ocpp.routing.websocket_urlpatterns,
+    *apps.ocpp.routing.websocket_urlpatterns,
 ]
 
 application = ProtocolTypeRouter(

@@ -70,8 +70,8 @@ from reportlab.graphics.barcode import qr
 from reportlab.graphics.shapes import Drawing
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
-from ocpp.models import Charger, ElectricVehicle, Transaction
-from ocpp.rfid.utils import build_mode_toggle
+from apps.ocpp.models import Charger, ElectricVehicle, Transaction
+from apps.rfid.utils import build_mode_toggle
 from teams.models import EmailCollector, EmailInbox, EmailOutbox, SocialProfile
 from accounts.models import (
     ClientReport,
@@ -4528,8 +4528,8 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
         return render(request, "admin/core/rfid/scan.html", context)
 
     def scan_next(self, request):
-        from ocpp.rfid.scanner import scan_sources
-        from ocpp.rfid.reader import validate_rfid_value
+        from apps.rfid.scanner import scan_sources
+        from apps.rfid.reader import validate_rfid_value
 
         if request.method == "POST":
             try:

@@ -391,7 +391,8 @@ LOCAL_APPS = [
     "accounts",
     "apps.core",
     "protocols",
-    "ocpp",
+    "apps.ocpp",
+    "apps.rfid",
     "awg",
     "pages",
     "teams",
@@ -750,19 +751,19 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": crontab(minute="*/5"),
     },
     "ocpp_configuration_check": {
-        "task": "ocpp.tasks.schedule_daily_charge_point_configuration_checks",
+        "task": "apps.ocpp.tasks.schedule_daily_charge_point_configuration_checks",
         "schedule": crontab(minute=0, hour=0),
     },
     "ocpp_power_projection": {
-        "task": "ocpp.tasks.schedule_power_projection_requests",
+        "task": "apps.ocpp.tasks.schedule_power_projection_requests",
         "schedule": crontab(minute=0),
     },
     "ocpp_firmware_snapshot": {
-        "task": "ocpp.tasks.schedule_daily_firmware_snapshot_requests",
+        "task": "apps.ocpp.tasks.schedule_daily_firmware_snapshot_requests",
         "schedule": crontab(minute=30, hour=0),
     },
     "ocpp_forwarding_push": {
-        "task": "ocpp.tasks.push_forwarded_charge_points",
+        "task": "apps.ocpp.tasks.push_forwarded_charge_points",
         "schedule": timedelta(minutes=10),
     },
 }

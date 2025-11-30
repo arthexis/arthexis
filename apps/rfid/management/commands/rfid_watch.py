@@ -12,7 +12,7 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        from ocpp.rfid.always_on import is_running, start, stop
+        from apps.rfid.always_on import is_running, start, stop
 
         if options["stop"]:
             stop()

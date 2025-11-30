@@ -29,14 +29,14 @@ from django.db import IntegrityError, transaction
 from django.db.models import Q
 
 from apps.core.models import RFID
-from ocpp import store
-from ocpp.models import Charger
-from ocpp.network import (
+from apps.ocpp import store
+from apps.ocpp.models import Charger
+from apps.ocpp.network import (
     apply_remote_charger_payload,
     serialize_charger_for_network,
     sync_transactions_payload,
 )
-from ocpp.transactions_io import export_transactions
+from apps.ocpp.transactions_io import export_transactions
 from asgiref.sync import async_to_sync
 
 from .rfid_sync import apply_rfid_payload, serialize_rfid

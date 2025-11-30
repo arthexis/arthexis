@@ -1,8 +1,6 @@
 import logging
-from pathlib import Path
 
 from django.apps import AppConfig, apps
-from django.conf import settings
 from django.db import connections
 from django.db.backends.signals import connection_created
 from django.db.utils import OperationalError, ProgrammingError
@@ -12,7 +10,8 @@ from .status_resets import clear_cached_statuses
 
 class OcppConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
-    name = "ocpp"
+    name = "apps.ocpp"
+    label = "ocpp"
     order = 3
     verbose_name = "Protocol"
 
@@ -22,28 +21,15 @@ class OcppConfig(AppConfig):
     def ready(self):  # pragma: no cover - startup side effects
         connection_created.connect(
             self._clear_statuses_on_connection,
-            dispatch_uid="ocpp.apps.clear_cached_statuses",
+            dispatch_uid="apps.ocpp.apps.clear_cached_statuses",
             weak=False,
         )
 
         request_started.connect(
             self._clear_statuses_on_request,
-            dispatch_uid="ocpp.apps.clear_cached_statuses.request",
+            dispatch_uid="apps.ocpp.apps.clear_cached_statuses.request",
             weak=False,
         )
-
-        control_lock = Path(settings.BASE_DIR) / "locks" / "control.lck"
-        rfid_lock = Path(settings.BASE_DIR) / "locks" / "rfid.lck"
-        if not (control_lock.exists() and rfid_lock.exists()):
-            return
-        from .rfid.signals import tag_scanned
-        from apps.core.notifications import notify
-
-        def _notify(_sender, rfid=None, **_kwargs):
-            if rfid:
-                notify("RFID", str(rfid))
-
-        tag_scanned.connect(_notify, weak=False)
 
     def _clear_statuses_on_connection(self, sender, connection, **kwargs):
         if self._cleared_cached_statuses:
@@ -61,7 +47,7 @@ class OcppConfig(AppConfig):
         finally:
             connection_created.disconnect(
                 receiver=self._clear_statuses_on_connection,
-                dispatch_uid="ocpp.apps.clear_cached_statuses",
+                dispatch_uid="apps.ocpp.apps.clear_cached_statuses",
             )
 
     def _clear_statuses_on_request(self, **_kwargs):
@@ -77,11 +63,11 @@ class OcppConfig(AppConfig):
         finally:
             connection_created.disconnect(
                 receiver=self._clear_statuses_on_connection,
-                dispatch_uid="ocpp.apps.clear_cached_statuses",
+                dispatch_uid="apps.ocpp.apps.clear_cached_statuses",
             )
             request_started.disconnect(
                 receiver=self._clear_statuses_on_request,
-                dispatch_uid="ocpp.apps.clear_cached_statuses.request",
+                dispatch_uid="apps.ocpp.apps.clear_cached_statuses.request",
             )
 
     def _clear_cached_statuses(self, connection=None) -> None:

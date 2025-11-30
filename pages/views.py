@@ -75,7 +75,7 @@ from django.db.models import Q
 from webauthn.helpers import base64url_to_bytes, bytes_to_base64url
 from accounts.models import ClientReport, ClientReportSchedule
 from apps.core.models import InviteLead, PasskeyCredential, SecurityGroup
-from ocpp.models import Charger
+from apps.ocpp.models import Charger
 from .utils import get_original_referer, get_request_language_code
 
 

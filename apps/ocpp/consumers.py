@@ -711,7 +711,7 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         """Persist a stable OCPP transaction identifier for lookups.
 
         The identifier is used to link OCPP 2.0.1 TransactionEvent messages to
-        the stored :class:`~ocpp.models.Transaction` even when the websocket
+        the stored :class:`~apps.ocpp.models.Transaction` even when the websocket
         session is rebuilt.
         """
 

@@ -1611,7 +1611,7 @@ class ManualTask(Entity):
         return account, rfid, rfid.rfid
 
     def create_cp_reservation(self):
-        from ocpp.models import CPReservation
+        from apps.ocpp.models import CPReservation
 
         if not self.location_id or not self.location:
             raise ValidationError(

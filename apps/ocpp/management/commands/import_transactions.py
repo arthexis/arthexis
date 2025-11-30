@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from django.core.management.base import BaseCommand
 
-from ocpp.transactions_io import import_transactions
+from apps.ocpp.transactions_io import import_transactions
 
 
 class Command(BaseCommand):

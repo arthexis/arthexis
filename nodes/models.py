@@ -1827,7 +1827,7 @@ class Node(Entity):
                 defaults={
                     "crontab": schedule,
                     "interval": None,
-                    "task": "ocpp.tasks.send_daily_session_report",
+                    "task": "apps.ocpp.tasks.send_daily_session_report",
                     "enabled": True,
                 },
             )
