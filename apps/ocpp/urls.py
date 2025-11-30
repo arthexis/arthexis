@@ -1,6 +1,7 @@
 from django.urls import include, path
 
 from . import views
+from apps.media import views as media_views
 
 app_name = "ocpp"
 
@@ -55,5 +56,5 @@ urlpatterns = [
         name="charger-status-connector",
     ),
     path("rfid/validator/", include("apps.rfid.urls")),
-    path("media/<slug:slug>/", views.media_bucket_upload, name="media-bucket-upload"),
+    path("media/<slug:slug>/", media_views.media_bucket_upload, name="media-bucket-upload"),
 ]
