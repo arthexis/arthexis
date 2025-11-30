@@ -2,19 +2,20 @@ from functools import lru_cache
 import logging
 
 from django import template
-from django.conf import settings
 from django.contrib.contenttypes.models import ContentType
-from django.core.cache import cache
 from django.db.models.signals import post_delete, post_save
 from django.utils.translation import gettext_lazy as _
 
-from apps.counts.dashboard_rules import bind_rule_model, load_callable, rule_failure
-from apps.counts.models import BadgeCounter, DashboardRule
+from apps.counters.dashboard_rules import (
+    bind_rule_model,
+    load_callable,
+    rule_failure,
+    rule_success,
+)
+from apps.counters.models import BadgeCounter, DashboardRule
 
 register = template.Library()
 
-_BADGE_CACHE_TIMEOUT = getattr(settings, "ADMIN_DASHBOARD_BADGE_TIMEOUT", 300)
-_CACHE_MISS = object()
 _MODEL_RULES_CACHE_KEY = "_model_rule_status_cache"
 _DEFAULT_RULE_HANDLERS = {
     "ocpp.charger": "evaluate_evcs_heartbeat_rules",
@@ -64,6 +65,9 @@ def get_cached_dashboard_rule(app_label: str, model_name: str) -> DashboardRule 
 def _clear_dashboard_rule_caches(**_kwargs):
     _get_content_type.cache_clear()
     _get_dashboard_rule.cache_clear()
+    instance = _kwargs.get("instance")
+    if isinstance(instance, (DashboardRule, ContentType)):
+        DashboardRule.invalidate_model_cache(instance)
 
 
 post_save.connect(_clear_dashboard_rule_caches, sender=DashboardRule)
@@ -84,23 +88,17 @@ def badge_counters(context, app_label: str, model_name: str) -> list[dict[str, o
     content_type = get_cached_content_type(app_label, model_name)
     if content_type is None:
         counters: list[dict[str, object]] = []
-        cache_map[cache_key] = counters
-        return counters
-
-    global_cache_key = BadgeCounter.cache_key_for_content_type(content_type.pk)
-    cached_counters = cache.get(global_cache_key, _CACHE_MISS)
-    if cached_counters is _CACHE_MISS:
-        counters: list[dict[str, object]] = []
-        queryset = BadgeCounter.objects.filter(
-            content_type=content_type, is_enabled=True
-        ).order_by("priority", "pk")
-        for counter in queryset:
-            display = counter.build_display()
-            if display:
-                counters.append(display)
-        cache.set(global_cache_key, counters, _BADGE_CACHE_TIMEOUT)
     else:
-        counters = cached_counters
+        counters = BadgeCounter.get_cached_value(
+            content_type,
+            lambda: [
+                display
+                for counter in BadgeCounter.objects.filter(
+                    content_type=content_type, is_enabled=True
+                ).order_by("priority", "pk")
+                if (display := counter.build_display())
+            ],
+        )
 
     cache_map[cache_key] = counters
     return counters
@@ -120,32 +118,40 @@ def model_rule_status(context, app_label: str, model_name: str):
     if normalized_key in cache_map:
         return cache_map[normalized_key]
 
-    rule = get_cached_dashboard_rule(app_label, model_name)
+    content_type = get_cached_content_type(app_label, model_name)
 
-    if rule is None:
-        handler_name = _DEFAULT_RULE_HANDLERS.get(normalized_key)
-        handler = load_callable(handler_name) if handler_name else None
-        if handler:
-            try:
-                with bind_rule_model(normalized_key):
-                    result = handler()
-            except Exception:
-                logger.exception(
-                    "Dashboard rule handler failed", extra={"model": normalized_key}
-                )
-                result = rule_failure(_("Unable to evaluate dashboard rule."))
-        else:
-            result = None
-    else:
+    def _evaluate_rule():
+        rule = get_cached_dashboard_rule(app_label, model_name)
+
+        if rule is None:
+            handler_name = _DEFAULT_RULE_HANDLERS.get(normalized_key)
+            handler = load_callable(handler_name) if handler_name else None
+            if handler:
+                try:
+                    with bind_rule_model(normalized_key):
+                        return handler()
+                except Exception:
+                    logger.exception(
+                        "Dashboard rule handler failed", extra={"model": normalized_key}
+                    )
+                    return rule_failure(_("Unable to evaluate dashboard rule."))
+
+            return rule_success()
+
         try:
             with bind_rule_model(normalized_key):
-                result = rule.evaluate()
+                return rule.evaluate()
         except Exception:
             logger.exception(
                 "Dashboard rule evaluation failed",
                 extra={"model": normalized_key, "rule_id": rule.pk},
             )
-            result = rule_failure(_("Unable to evaluate dashboard rule."))
+            return rule_failure(_("Unable to evaluate dashboard rule."))
+
+    if content_type is None:
+        result = _evaluate_rule()
+    else:
+        result = DashboardRule.get_cached_value(content_type, _evaluate_rule)
 
     cache_map[normalized_key] = result
     return result
