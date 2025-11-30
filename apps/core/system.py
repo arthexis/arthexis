@@ -14,7 +14,7 @@ import socket
 import subprocess
 import shutil
 import logging
-from typing import Callable, Iterable, Optional
+from typing import Iterable
 from urllib.parse import urlparse
 
 from django import forms
@@ -1339,29 +1339,6 @@ def _resolve_auto_upgrade_namespace(key: str) -> str | None:
     return None
 
 
-_SYSTEM_SIGIL_NAMESPACES: dict[str, Callable[[str], Optional[str]]] = {
-    "AUTO_UPGRADE": _resolve_auto_upgrade_namespace,
-}
-
-
-def resolve_system_namespace_value(key: str) -> str | None:
-    """Resolve dot-notation sigils mapped to dynamic ``SYS`` namespaces."""
-
-    if not key:
-        return None
-    normalized_key = key.replace("-", "_").upper()
-    if normalized_key == "NEXT_VER_CHECK":
-        return _auto_upgrade_next_check()
-    namespace, _, remainder = key.partition(".")
-    if not remainder:
-        return None
-    normalized = namespace.replace("-", "_").upper()
-    handler = _SYSTEM_SIGIL_NAMESPACES.get(normalized)
-    if not handler:
-        return None
-    return handler(remainder)
-
-
 def _database_configurations() -> list[dict[str, str]]:
     """Return a normalized list of configured database connections."""
 
@@ -1441,38 +1418,6 @@ def _build_system_fields(info: dict[str, object]) -> list[SystemField]:
     )
 
     return fields
-
-
-def _export_field_value(field: SystemField) -> str:
-    """Serialize a ``SystemField`` value for sigil resolution."""
-
-    if field.field_type in {"features", "databases"}:
-        return json.dumps(field.value)
-    if field.field_type == "boolean":
-        return "True" if field.value else "False"
-    if field.value is None:
-        return ""
-    return str(field.value)
-
-
-def get_system_sigil_values() -> dict[str, str]:
-    """Expose system information in a format suitable for sigil lookups."""
-
-    info = _gather_info()
-    values: dict[str, str] = {}
-    for field in _build_system_fields(info):
-        exported = _export_field_value(field)
-        raw_key = (field.sigil_key or "").strip()
-        if not raw_key:
-            continue
-        variants = {
-            raw_key.upper(),
-            raw_key.replace("-", "_").upper(),
-        }
-        for variant in variants:
-            values[variant] = exported
-    return values
-
 
 def _parse_runserver_port(command_line: str) -> int | None:
     """Extract the HTTP port from a runserver command line."""

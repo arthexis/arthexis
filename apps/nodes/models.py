@@ -14,7 +14,7 @@ from django.db.models.signals import post_delete
 from django.dispatch import Signal, receiver
 from apps.core.entity import Entity
 from apps.core.models import PackageRelease, Profile
-from apps.core.fields import SigilLongAutoField, SigilShortAutoField
+from apps.sigils.fields import SigilLongAutoField, SigilShortAutoField
 from django.contrib.contenttypes.models import ContentType
 from django.core.cache import cache
 from django.utils.module_loading import import_string
@@ -646,7 +646,7 @@ class Node(Entity):
         return dict(profile.normalized_data())
 
     def resolve_profile_field_value(self, key: str) -> tuple[bool, object | None]:
-        """Resolve profile-backed sigils for :mod:`core.sigil_resolver`."""
+        """Resolve profile-backed sigils for :mod:`apps.sigils.sigil_resolver`."""
 
         raw_key = (key or "").strip()
         if not raw_key:
@@ -3135,7 +3135,7 @@ class BadgeCounter(models.Model):
                 )
                 return None
 
-        from apps.core.sigil_resolver import resolve_sigils
+        from apps.sigils.sigil_resolver import resolve_sigils
 
         return resolve_sigils(source)
 

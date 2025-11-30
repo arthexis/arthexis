@@ -92,8 +92,6 @@ from .models import (
     UserPhoneNumber,
     Product,
     RFID,
-    SigilRoot,
-    CustomSigil,
     Reference,
     OdooProfile,
     OpenPayProfile,
@@ -283,26 +281,6 @@ class ExperienceReference(Reference):
         app_label = "pages"
         verbose_name = Reference._meta.verbose_name
         verbose_name_plural = Reference._meta.verbose_name_plural
-
-
-class CustomSigilAdminForm(forms.ModelForm):
-    class Meta:
-        model = CustomSigil
-        fields = ["prefix", "content_type"]
-
-
-@admin.register(CustomSigil)
-class CustomSigilAdmin(EntityModelAdmin):
-    form = CustomSigilAdminForm
-    list_display = ("prefix", "content_type")
-
-    def get_queryset(self, request):
-        qs = super().get_queryset(request)
-        return qs.filter(context_type=SigilRoot.Context.ENTITY)
-
-    def save_model(self, request, obj, form, change):
-        obj.context_type = SigilRoot.Context.ENTITY
-        super().save_model(request, obj, form, change)
 
 
 class SaveBeforeChangeAction(DjangoObjectActions):

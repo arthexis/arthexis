@@ -68,7 +68,7 @@ def main() -> int:
 
     django.setup()
 
-    from apps.core.sigil_resolver import resolve_sigils
+    from apps.sigils.sigil_resolver import resolve_sigils
 
     text = _load_text(args)
     resolved = resolve_sigils(text)

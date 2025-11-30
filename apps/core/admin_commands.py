@@ -22,7 +22,7 @@ from django.urls import path, reverse
 from django.utils.translation import gettext_lazy as _
 
 from .models import AdminCommandResult
-from .sigil_resolver import resolve_sigils
+from apps.sigils.sigil_resolver import resolve_sigils
 
 
 class RunCommandForm(forms.Form):

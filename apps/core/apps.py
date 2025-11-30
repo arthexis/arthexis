@@ -352,10 +352,6 @@ def _register_admin_and_post_migrate_handlers(config):
     from .admin_history import patch_admin_history
     from .admin_commands import patch_admin_command_runner
     from .environment import patch_admin_environment_view
-    from .sigil_builder import (
-        generate_model_sigils,
-        patch_admin_sigil_builder_view,
-    )
     from .system import patch_admin_system_view
     from .user_data import (
         patch_admin_user_datum,
@@ -373,13 +369,11 @@ def _register_admin_and_post_migrate_handlers(config):
             )
 
     post_migrate.connect(create_default_arthexis, sender=config)
-    post_migrate.connect(generate_model_sigils, sender=config)
 
     patch_admin_user_datum()
     patch_admin_user_data_views()
     patch_admin_system_view()
     patch_admin_environment_view()
-    patch_admin_sigil_builder_view()
     patch_admin_history()
     patch_admin_command_runner()
 

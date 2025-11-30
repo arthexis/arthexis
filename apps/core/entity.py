@@ -163,7 +163,7 @@ class Entity(models.Model):
         value = self.__dict__.get(fobj.attname, "")
         if value is None:
             return ""
-        from .sigil_resolver import resolve_sigils as _resolve
+        from apps.sigils.sigil_resolver import resolve_sigils as _resolve
 
         return _resolve(str(value), current=self)
 

@@ -33,7 +33,6 @@ import logging
 import json
 import base64
 from decimal import Decimal
-from django.contrib.contenttypes.models import ContentType
 import hashlib
 import hmac
 import os
@@ -79,7 +78,7 @@ def default_package_modules() -> list[str]:
     return list(DEFAULT_PACKAGE.packages)
 from . import temp_passwords
 from . import user_data  # noqa: F401 - ensure signal registration
-from .fields import (
+from apps.sigils.fields import (
     SigilShortAutoField,
     ConditionTextField,
     ConditionCheckResult,
@@ -198,43 +197,6 @@ class Profile(Entity):
         if hasattr(owner, "name"):
             return owner.name
         return str(owner)
-
-
-class SigilRootManager(EntityManager):
-    def get_by_natural_key(self, prefix: str):
-        return self.get(prefix=prefix)
-
-
-class SigilRoot(Entity):
-    class Context(models.TextChoices):
-        CONFIG = "config", "Configuration"
-        ENTITY = "entity", "Entity"
-
-    prefix = models.CharField(max_length=50, unique=True)
-    context_type = models.CharField(max_length=20, choices=Context.choices)
-    content_type = models.ForeignKey(
-        ContentType, null=True, blank=True, on_delete=models.CASCADE
-    )
-
-    objects = SigilRootManager()
-
-    def __str__(self) -> str:  # pragma: no cover - simple representation
-        return self.prefix
-
-    def natural_key(self):  # pragma: no cover - simple representation
-        return (self.prefix,)
-
-    class Meta:
-        verbose_name = "Sigil Root"
-        verbose_name_plural = "Sigil Roots"
-
-
-class CustomSigil(SigilRoot):
-    class Meta:
-        proxy = True
-        app_label = "pages"
-        verbose_name = _("Custom Sigil")
-        verbose_name_plural = _("Custom Sigils")
 
 
 class Lead(Entity):

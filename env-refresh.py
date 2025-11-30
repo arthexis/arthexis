@@ -47,7 +47,7 @@ from django.contrib.sites.models import Site
 from django.contrib.auth import get_user_model
 
 from apps.core.models import PackageRelease
-from apps.core.sigil_builder import generate_model_sigils
+from apps.sigils.sigil_builder import generate_model_sigils
 from apps.core.user_data import load_shared_user_fixtures, load_user_fixtures
 from utils.env_refresh import unlink_sqlite_db as _unlink_sqlite_db
 from django.utils import timezone
@@ -415,7 +415,7 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                         if mapped_user != original_user:
                             fields["user"] = mapped_user
                             modified = True
-                    if model_label == "core.sigilroot":
+                    if model_label == "sigils.sigilroot":
                         content_type = fields.get("content_type")
                         app_label: str | None = None
                         if isinstance(content_type, (list, tuple)) and content_type:
