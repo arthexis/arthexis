@@ -390,7 +390,7 @@ LOCAL_APPS = [
     "apps.celery",
     "apps.nodes",
     "apps.screens",
-    "apps.counts",
+    "apps.counters",
     "apps.energy",
     "apps.core",
     "apps.payments",

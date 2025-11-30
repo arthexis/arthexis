@@ -1,9 +1,13 @@
 import inspect
 import logging
+from typing import Callable
+
 from django.contrib.contenttypes.models import ContentType
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models.signals import post_delete, post_save
+from django.dispatch import receiver
 from django.utils.module_loading import import_string
 from django.utils.translation import gettext, gettext_lazy as _
 
@@ -21,7 +25,69 @@ from .dashboard_rules import (
 
 logger = logging.getLogger(__name__)
 
+_CACHE_MISS = object()
 _BADGE_COUNTER_CACHE_PREFIX = "admin.dashboard.badge_counters"
+_DASHBOARD_RULE_CACHE_PREFIX = "admin.dashboard.rules"
+
+
+class StoredCounter(models.Model):
+    """Base model for cached dashboard counters.
+
+    Instances cache their computed values indefinitely and rely on explicit
+    invalidation through :meth:`invalidate_model_cache` when source data
+    changes.
+    """
+
+    cache_prefix: str = ""
+    cache_timeout: int | float | None = None
+
+    class Meta:
+        abstract = True
+
+    @classmethod
+    def cache_key_for_content_type(cls, content_type_id: int) -> str:
+        prefix = cls.cache_prefix or cls.__name__.lower()
+        return f"{prefix}:{content_type_id}"
+
+    @classmethod
+    def _content_type_for(cls, model_or_content_type):
+        if isinstance(model_or_content_type, ContentType):
+            return model_or_content_type
+        if model_or_content_type is None:
+            return None
+        model_class = getattr(model_or_content_type, "__class__", None)
+        if isinstance(model_or_content_type, type):
+            model_class = model_or_content_type
+        try:
+            return ContentType.objects.get_for_model(
+                model_class, for_concrete_model=False
+            )
+        except Exception:
+            return None
+
+    @classmethod
+    def get_cached_value(
+        cls, model_or_content_type, builder: Callable[[], object]
+    ) -> object:
+        content_type = cls._content_type_for(model_or_content_type)
+        if content_type is None:
+            return builder()
+
+        cache_key = cls.cache_key_for_content_type(content_type.pk)
+        cached_value = cache.get(cache_key, _CACHE_MISS)
+        if cached_value is not _CACHE_MISS:
+            return cached_value
+
+        value = builder()
+        cache.set(cache_key, value, timeout=cls.cache_timeout)
+        return value
+
+    @classmethod
+    def invalidate_model_cache(cls, model_or_content_type):
+        content_type = cls._content_type_for(model_or_content_type)
+        if content_type is None:
+            return
+        cache.delete(cls.cache_key_for_content_type(content_type.pk))
 
 
 class DashboardRuleManager(models.Manager):
@@ -29,8 +95,11 @@ class DashboardRuleManager(models.Manager):
         return self.get(name=name)
 
 
-class BadgeCounter(models.Model):
+class BadgeCounter(StoredCounter):
     """Configurable badge counters for the admin dashboard."""
+
+    cache_prefix = _BADGE_COUNTER_CACHE_PREFIX
+    cache_timeout = None
 
     class ValueSource(models.TextChoices):
         SIGIL_TEXT = "sigil", _("Sigil string")
@@ -96,35 +165,6 @@ class BadgeCounter(models.Model):
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return f"{self.name} ({self.content_type})"
-
-    @classmethod
-    def cache_key_for_content_type(cls, content_type_id: int) -> str:
-        return f"{_BADGE_COUNTER_CACHE_PREFIX}:{content_type_id}"
-
-    @classmethod
-    def invalidate_model_cache(cls, model_or_content_type):
-        """Invalidate cached badge counters for the given model or content type."""
-
-        content_type = cls._content_type_for(model_or_content_type)
-        if content_type is None:
-            return
-        cache.delete(cls.cache_key_for_content_type(content_type.pk))
-
-    @staticmethod
-    def _content_type_for(model_or_content_type):
-        if isinstance(model_or_content_type, ContentType):
-            return model_or_content_type
-        if model_or_content_type is None:
-            return None
-        model_class = getattr(model_or_content_type, "__class__", None)
-        if isinstance(model_or_content_type, type):
-            model_class = model_or_content_type
-        try:
-            return ContentType.objects.get_for_model(
-                model_class, for_concrete_model=False
-            )
-        except Exception:
-            return None
 
     def _invoke_callable(self, func):
         try:
@@ -268,8 +308,11 @@ class BadgeCounter(models.Model):
         }
 
 
-class DashboardRule(Entity):
+class DashboardRule(StoredCounter, Entity):
     """Rule configuration for admin dashboard model rows."""
+
+    cache_prefix = _DASHBOARD_RULE_CACHE_PREFIX
+    cache_timeout = None
 
     class Implementation(models.TextChoices):
         CONDITION = "condition", _("SQL + Sigil comparison")
@@ -343,3 +386,15 @@ class DashboardRule(Entity):
         if result.error:
             message = f"{message} ({result.error})"
         return rule_failure(message)
+
+
+@receiver(post_save, sender=BadgeCounter)
+@receiver(post_delete, sender=BadgeCounter)
+def clear_badge_counter_cache(sender, instance: BadgeCounter, **_kwargs):
+    BadgeCounter.invalidate_model_cache(instance.content_type)
+
+
+@receiver(post_save, sender=DashboardRule)
+@receiver(post_delete, sender=DashboardRule)
+def clear_dashboard_rule_cache(sender, instance: DashboardRule, **_kwargs):
+    DashboardRule.invalidate_model_cache(instance.content_type)
