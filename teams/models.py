@@ -32,7 +32,7 @@ from apps.core.models import (
     SecurityGroup as CoreSecurityGroup,
     User as CoreUser,
 )
-from awg.models import PowerLead as CorePowerLead
+from apps.awg.models import PowerLead as CorePowerLead
 from django_otp.plugins.otp_totp.models import (
     TOTPDevice as CoreTOTPDevice,
 )

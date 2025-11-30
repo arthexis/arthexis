@@ -20,7 +20,7 @@ from django_otp.plugins.otp_totp.admin import (
     TOTPDeviceAdmin as CoreTOTPDeviceAdmin,
 )
 from django_otp.models import VerifyNotAllowed
-from awg.admin import PowerLeadAdmin as CorePowerLeadAdmin
+from apps.awg.admin import PowerLeadAdmin as CorePowerLeadAdmin
 from apps.core.admin import (
     InviteLeadAdmin,
     SecurityGroupAdmin,
