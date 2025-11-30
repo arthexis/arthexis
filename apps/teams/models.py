@@ -25,13 +25,12 @@ from apps.core.models import (
     EmailArtifact,
     GoogleCalendarProfile as CoreGoogleCalendarProfile,
     InviteLead as CoreInviteLead,
-    OdooProfile as CoreOdooProfile,
-    Product as CoreProduct,
     Profile as CoreProfile,
     ReleaseManager as CoreReleaseManager,
     SecurityGroup as CoreSecurityGroup,
     User as CoreUser,
 )
+from apps.crms.models import OdooProfile as CoreOdooProfile, Product as CoreProduct
 from apps.awg.models import PowerLead as CorePowerLead
 from django_otp.plugins.otp_totp.models import (
     TOTPDevice as CoreTOTPDevice,

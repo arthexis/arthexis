@@ -90,10 +90,8 @@ from apps.repos.github_helper import (
 from .models import (
     User,
     UserPhoneNumber,
-    Product,
     RFID,
     Reference,
-    OdooProfile,
     OpenPayProfile,
     GoogleCalendarProfile,
     Package,
@@ -102,6 +100,7 @@ from .models import (
     SecurityGroup,
     InviteLead,
 )
+from apps.crms.models import OdooProfile, Product
 from .user_data import (
     EntityModelAdmin,
     UserDatumAdminMixin,

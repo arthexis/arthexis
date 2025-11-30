@@ -385,7 +385,7 @@ class CustomerAccount(Entity):
         help_text="Expiration year for the backup credit card.",
     )
     live_subscription_product = models.ForeignKey(
-        "core.Product",
+        "crms.Product",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,

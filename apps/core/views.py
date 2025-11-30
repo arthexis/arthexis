@@ -44,8 +44,9 @@ logger = logging.getLogger(__name__)
 PYPI_REQUEST_TIMEOUT = 10
 
 from . import temp_passwords
-from .models import OdooProfile, Product, PackageRelease
+from .models import PackageRelease
 from .models import RFID
+from apps.crms.models import OdooProfile, Product
 from apps.energy.models import CustomerAccount
 
 
