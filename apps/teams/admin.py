@@ -34,8 +34,8 @@ from apps.core.models import (
     InviteLead as CoreInviteLead,
     SecurityGroup as CoreSecurityGroup,
     ReleaseManager as CoreReleaseManager,
-    OdooProfile as CoreOdooProfile,
 )
+from apps.crms.models import OdooProfile as CoreOdooProfile
 from apps.core.user_data import (
     EntityModelAdmin,
     UserDatumAdminMixin,

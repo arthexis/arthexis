@@ -21,7 +21,8 @@ from .dashboard_rules import (
     rule_failure,
     rule_success,
 )
-from apps.core.models import Lead, SecurityGroup, OdooProfile
+from apps.core.models import Lead, SecurityGroup
+from apps.crms.models import OdooProfile
 from django.contrib.sites.models import Site
 from apps.nodes.models import ContentSample, NodeRole
 from django.utils import timezone
