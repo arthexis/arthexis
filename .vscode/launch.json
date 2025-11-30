@@ -9,7 +9,7 @@
             "windows": {
                 "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe"
             },
-            "program": "${workspaceFolder}/vscode_manage.py",
+            "program": "${workspaceFolder}/manage.py",
             "args": [
                 "runserver",
                 "--noreload"
@@ -26,7 +26,7 @@
             "windows": {
                 "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe"
             },
-            "program": "${workspaceFolder}/vscode_manage.py",
+            "program": "${workspaceFolder}/manage.py",
             "args": [
                 "runserver"
             ],
