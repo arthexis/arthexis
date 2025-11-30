@@ -4,6 +4,7 @@ from typing import Callable
 
 from django.contrib.contenttypes.models import ContentType
 from django.core.cache import cache
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models.signals import post_delete, post_save
@@ -189,13 +190,8 @@ class BadgeCounter(StoredCounter):
             return None
 
         if source_type == self.ValueSource.CALLABLE:
-            try:
-                func = import_string(source)
-            except Exception:
-                logger.exception(
-                    "Unable to import badge counter callable",
-                    extra={"badge_id": self.pk, "callable": source},
-                )
+            func = self._import_callable(source)
+            if func is None:
                 return None
 
             try:
@@ -205,11 +201,52 @@ class BadgeCounter(StoredCounter):
                     "Badge counter callable failed",
                     extra={"badge_id": self.pk, "callable": source},
                 )
-                return None
+            return None
 
         from apps.sigils.sigil_resolver import resolve_sigils
 
         return resolve_sigils(source)
+
+    def _import_callable(self, source: str):
+        last_error: Exception | None = None
+        attempts = [source]
+
+        legacy_source = self._legacy_callable_source(source)
+        if legacy_source:
+            attempts.append(legacy_source)
+
+        for path in attempts:
+            try:
+                return import_string(path)
+            except Exception as exc:  # pragma: no cover - runtime import errors
+                last_error = exc
+                continue
+
+        logger.exception(
+            "Unable to import badge counter callable",
+            extra={"badge_id": self.pk, "callable": attempts[-1]},
+            exc_info=last_error,
+        )
+        return None
+
+    @staticmethod
+    def _legacy_callable_source(source: str) -> str | None:
+        if source.startswith("apps.") or "." not in source:
+            return None
+
+        app_prefix, _, remainder = source.partition(".")
+        if not remainder:
+            return None
+
+        local_apps = getattr(settings, "LOCAL_APPS", [])
+        known_modules = {
+            app.split(".", 1)[1] for app in local_apps if app.startswith("apps.")
+        }
+
+        if app_prefix in known_modules:
+            return f"apps.{source}"
+
+        return None
 
     def _format_label(self, primary, secondary):
         template = (self.label_template or "").strip()
