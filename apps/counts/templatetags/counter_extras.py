@@ -8,8 +8,8 @@ from django.core.cache import cache
 from django.db.models.signals import post_delete, post_save
 from django.utils.translation import gettext_lazy as _
 
-from apps.counters.dashboard_rules import bind_rule_model, load_callable, rule_failure
-from apps.counters.models import BadgeCounter, DashboardRule
+from apps.counts.dashboard_rules import bind_rule_model, load_callable, rule_failure
+from apps.counts.models import BadgeCounter, DashboardRule
 
 register = template.Library()
 
