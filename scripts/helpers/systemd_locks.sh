@@ -69,7 +69,7 @@ Wants=network-online.target
 [Service]
 Type=simple
 WorkingDirectory=$base_dir
-ExecStart=$base_dir/.venv/bin/python -m core.lcd_screen
+ExecStart=$base_dir/.venv/bin/python -m apps.core.lcd_screen
 Restart=always
 TimeoutStartSec=500
 StandardOutput=journal

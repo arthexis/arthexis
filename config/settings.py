@@ -16,7 +16,7 @@ import os
 import sys
 import ipaddress
 import socket
-from core.log_paths import select_log_dir
+from apps.core.log_paths import select_log_dir
 from django.utils.translation import gettext_lazy as _
 from datetime import timedelta
 
@@ -389,7 +389,7 @@ CsrfViewMiddleware._check_referer = _check_referer_with_forwarded
 LOCAL_APPS = [
     "nodes",
     "accounts",
-    "core",
+    "apps.core",
     "protocols",
     "ocpp",
     "awg",
@@ -454,7 +454,7 @@ MIDDLEWARE = [
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django_otp.middleware.OTPMiddleware",
-    "core.middleware.SigilContextMiddleware",
+    "apps.core.middleware.SigilContextMiddleware",
     "pages.middleware.ViewHistoryMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
@@ -517,11 +517,11 @@ AUTH_USER_MODEL = "core.User"
 
 # Enable RFID authentication backend and restrict default admin login to localhost
 AUTHENTICATION_BACKENDS = [
-    "core.backends.TempPasswordBackend",
-    "core.backends.LocalhostAdminBackend",
-    "core.backends.PasskeyBackend",
-    "core.backends.TOTPBackend",
-    "core.backends.RFIDBackend",
+    "apps.core.backends.TempPasswordBackend",
+    "apps.core.backends.LocalhostAdminBackend",
+    "apps.core.backends.PasskeyBackend",
+    "apps.core.backends.TOTPBackend",
+    "apps.core.backends.RFIDBackend",
 ]
 
 # Use the custom login view for all authentication redirects.
@@ -746,7 +746,7 @@ CELERY_WORKER_SHUTDOWN_TIMEOUT = CELERY_WORKER_SOFT_SHUTDOWN_TIMEOUT
 
 CELERY_BEAT_SCHEDULE = {
     "heartbeat": {
-        "task": "core.tasks.heartbeat",
+        "task": "apps.core.tasks.heartbeat",
         "schedule": crontab(minute="*/5"),
     },
     "ocpp_configuration_check": {

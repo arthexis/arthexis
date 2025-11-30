@@ -12,7 +12,7 @@
       ],
       "is_required": true,
       "template_path": "lcd.service",
-      "template_content": "[Unit]\nDescription=LCD screen updater service for Arthexis\nAfter={service_name}.service network-online.target\nWants={service_name}.service\nPartOf={service_name}.service\nWants=network-online.target\n\n[Service]\nType=simple\nWorkingDirectory={base_dir}\nExecStart={base_dir}/.venv/bin/python -m core.lcd_screen\nRestart=always\nTimeoutStartSec=500\nStandardOutput=journal\nStandardError=journal\nUser={service_user}\n\n[Install]\nWantedBy=multi-user.target\nWantedBy={service_name}.service\n"
+      "template_content": "[Unit]\nDescription=LCD screen updater service for Arthexis\nAfter={service_name}.service network-online.target\nWants={service_name}.service\nPartOf={service_name}.service\nWants=network-online.target\n\n[Service]\nType=simple\nWorkingDirectory={base_dir}\nExecStart={base_dir}/.venv/bin/python -m apps.core.lcd_screen\nRestart=always\nTimeoutStartSec=500\nStandardOutput=journal\nStandardError=journal\nUser={service_user}\n\n[Install]\nWantedBy=multi-user.target\nWantedBy={service_name}.service\n"
     }
   }
 ]

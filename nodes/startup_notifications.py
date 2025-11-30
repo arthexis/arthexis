@@ -48,7 +48,7 @@ def _should_mark_nonrelease(version: str, current_revision: str) -> bool:
         return False
 
     try:
-        from core.models import PackageRelease
+        from apps.core.models import PackageRelease
     except Exception:
         return False
 

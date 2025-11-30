@@ -40,7 +40,7 @@ from utils.api import api_login_required
 from nodes.models import NetMessage, Node
 
 from pages.utils import landing
-from core.liveupdate import live_update
+from apps.core.liveupdate import live_update
 
 from django.utils.dateparse import parse_datetime
 

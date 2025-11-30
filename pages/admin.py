@@ -60,8 +60,8 @@ from .models import (
     UserStory,
 )
 from django.contrib.contenttypes.models import ContentType
-from core.models import ReleaseManager
-from core.user_data import EntityModelAdmin
+from apps.core.models import ReleaseManager
+from apps.core.user_data import EntityModelAdmin
 
 
 logger = logging.getLogger(__name__)

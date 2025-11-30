@@ -23,11 +23,21 @@ Repository = "https://github.com/arthexis/arthexis"
 Homepage = "https://arthexis.com"
 
 [tool.setuptools]
-packages = [ "core", "config", "nodes", "ocpp", "pages",]
+packages = [
+    "apps",
+    "apps.core",
+    "apps.app",
+    "core",
+    "app",
+    "config",
+    "nodes",
+    "ocpp",
+    "pages",
+]
 include-package-data = true
 
 [tool.setuptools.package-data]
-core = [ "**/*",]
+apps.core = [ "**/*",]
 config = [ "**/*",]
 nodes = [ "**/*",]
 ocpp = [ "**/*",]

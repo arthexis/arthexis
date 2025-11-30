@@ -11,7 +11,7 @@ from pages.utils import landing
 
 from .scanner import scan_sources, enable_deep_read_mode
 from .reader import validate_rfid_value
-from core.models import RFID
+from apps.core.models import RFID
 from .utils import build_mode_toggle
 from .camera import scan_camera_qr
 

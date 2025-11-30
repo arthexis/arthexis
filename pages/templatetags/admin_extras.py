@@ -18,9 +18,9 @@ from django.db.models.signals import post_delete, post_save
 from django.urls import NoReverseMatch, reverse
 from django.utils.text import capfirst
 from django.utils.translation import gettext_lazy as _
-from core import mailer
-from core.models import GoogleCalendarProfile
-from core.entity import Entity
+from apps.core import mailer
+from apps.core.models import GoogleCalendarProfile
+from apps.core.entity import Entity
 from nodes.models import NetMessage, Node
 from nodes.models import BadgeCounter
 from pages.dashboard_rules import bind_rule_model, load_callable, rule_failure

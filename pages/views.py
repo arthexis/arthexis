@@ -54,9 +54,9 @@ from django.utils.http import (
     urlsafe_base64_encode,
 )
 from django_otp import DEVICE_ID_SESSION_KEY
-from core import changelog, mailer, passkeys, public_wifi
-from core.templatetags.ref_tags import build_footer_context
-from core.backends import (
+from apps.core import changelog, mailer, passkeys, public_wifi
+from apps.core.templatetags.ref_tags import build_footer_context
+from apps.core.backends import (
     TOTP_DEVICE_NAME,
     get_user_totp_devices,
     totp_devices_allow_passwordless,
@@ -74,7 +74,7 @@ from django.core.validators import EmailValidator
 from django.db.models import Q
 from webauthn.helpers import base64url_to_bytes, bytes_to_base64url
 from accounts.models import ClientReport, ClientReportSchedule
-from core.models import InviteLead, PasskeyCredential, SecurityGroup
+from apps.core.models import InviteLead, PasskeyCredential, SecurityGroup
 from ocpp.models import Charger
 from .utils import get_original_referer, get_request_language_code
 
@@ -329,7 +329,7 @@ def _resolve_work_asset(user, path: str) -> Path:
         raise Http404("Asset not found")
     return asset_resolved
 from pages.utils import landing
-from core.liveupdate import live_update
+from apps.core.liveupdate import live_update
 from django_otp import login as otp_login
 from django_otp.plugins.otp_totp.models import TOTPDevice
 import qrcode
@@ -1299,7 +1299,7 @@ def passkey_login_verify(request):
     passkey.save(update_fields=["sign_count", "last_used_at", "updated_at"])
 
     user = passkey.user
-    login(request, user, backend="core.backends.PasskeyBackend")
+    login(request, user, backend="apps.core.backends.PasskeyBackend")
 
     redirect_target = payload.get(CustomLoginView.redirect_field_name)
     return JsonResponse({"redirect": _get_login_redirect(request, user, redirect_target)})
@@ -1763,7 +1763,7 @@ def invitation_login(request, uidb64, token):
                 )
             if mac_address:
                 public_wifi.grant_public_access(user, mac_address)
-        login(request, user, backend="core.backends.LocalhostAdminBackend")
+        login(request, user, backend="apps.core.backends.LocalhostAdminBackend")
         return redirect(reverse("admin:index") if user.is_staff else "/")
     return render(request, "pages/invitation_login.html", {"form": form})
 

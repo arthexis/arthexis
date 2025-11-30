@@ -632,7 +632,7 @@ if [ "$AUTO_UPGRADE" = true ]; then
     fi
     source .venv/bin/activate
     python manage.py shell <<'PYCODE'
-from core.auto_upgrade import ensure_auto_upgrade_periodic_task
+from apps.core.auto_upgrade import ensure_auto_upgrade_periodic_task
 
 ensure_auto_upgrade_periodic_task()
 PYCODE

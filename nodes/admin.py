@@ -60,8 +60,8 @@ from .reports import (
     iter_report_periods,
     resolve_period,
 )
-from core import temp_passwords
-from core.admin import EmailOutboxAdminForm, SaveBeforeChangeAction
+from apps.core import temp_passwords
+from apps.core.admin import EmailOutboxAdminForm, SaveBeforeChangeAction
 from protocols.models import CPForwarder
 from .models import (
     Node,
@@ -82,7 +82,7 @@ from .models import (
     PublicWifiAccess,
 )
 from . import dns as dns_utils
-from core.models import RFID
+from apps.core.models import RFID
 from teams.models import EmailOutbox
 from ocpp import store
 from ocpp.models import (
@@ -93,7 +93,7 @@ from ocpp.models import (
     DataTransferMessage,
 )
 from ocpp.network import serialize_charger_for_network
-from core.user_data import EntityModelAdmin
+from apps.core.user_data import EntityModelAdmin
 
 
 class NodeAdminForm(forms.ModelForm):

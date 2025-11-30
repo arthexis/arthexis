@@ -6,7 +6,7 @@ from django.urls import reverse
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
-from core.admin import EntityModelAdmin
+from apps.core.admin import EntityModelAdmin
 
 from .models import CPForwarder, MediaBucket, MediaFile
 

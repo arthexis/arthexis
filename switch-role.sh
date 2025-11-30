@@ -291,13 +291,13 @@ run_auto_upgrade_management() {
 
     if [ "$action" = "enable" ]; then
         "$python_bin" "$BASE_DIR/manage.py" shell <<'PYCODE' || true
-from core.auto_upgrade import ensure_auto_upgrade_periodic_task
+from apps.core.auto_upgrade import ensure_auto_upgrade_periodic_task
 
 ensure_auto_upgrade_periodic_task()
 PYCODE
     else
         "$python_bin" "$BASE_DIR/manage.py" shell <<'PYCODE' || true
-from core.auto_upgrade import AUTO_UPGRADE_TASK_NAME
+from apps.core.auto_upgrade import AUTO_UPGRADE_TASK_NAME
 try:
     from django_celery_beat.models import PeriodicTask
 except Exception:

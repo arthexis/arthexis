@@ -373,7 +373,7 @@ except Exception:
     sys.exit(0)
 
 try:
-    from core.tasks import _broadcast_upgrade_start_message
+    from apps.core.tasks import _broadcast_upgrade_start_message
 except Exception:
     sys.exit(0)
 

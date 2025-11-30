@@ -12,9 +12,9 @@ from django.db.models import Q
 from django.db.utils import DatabaseError, IntegrityError
 from django.db.models.signals import post_delete
 from django.dispatch import Signal, receiver
-from core.entity import Entity
-from core.models import PackageRelease, Profile
-from core.fields import SigilLongAutoField, SigilShortAutoField
+from apps.core.entity import Entity
+from apps.core.models import PackageRelease, Profile
+from apps.core.fields import SigilLongAutoField, SigilShortAutoField
 from django.contrib.contenttypes.models import ContentType
 from django.core.cache import cache
 from django.utils.module_loading import import_string
@@ -36,8 +36,8 @@ import shutil
 from pathlib import Path
 from urllib.parse import urlparse, urlunsplit
 from utils import revision
-from core.notifications import notify_async
-from core.celery_utils import (
+from apps.core.notifications import notify_async
+from apps.core.celery_utils import (
     normalize_periodic_task_name,
     periodic_task_name_variants,
 )
@@ -50,7 +50,7 @@ from django.contrib.auth import get_user_model
 from django.core import serializers
 from django.core.mail import get_connection
 from django.core.serializers.base import DeserializationError
-from core import mailer
+from apps.core import mailer
 import logging
 from .badge_utils import BadgeCounterResult
 
@@ -259,7 +259,7 @@ class NodeFeature(Entity):
         if node.features.filter(pk=self.pk).exists():
             return True
         if self.slug == "gui-toast":
-            from core.notifications import supports_gui_toast
+            from apps.core.notifications import supports_gui_toast
 
             return supports_gui_toast()
         if self.slug == "rpi-camera":
@@ -657,7 +657,7 @@ class Node(Entity):
         return dict(profile.normalized_data())
 
     def resolve_profile_field_value(self, key: str) -> tuple[bool, object | None]:
-        """Resolve profile-backed sigils for :mod:`core.sigil_resolver`."""
+        """Resolve profile-backed sigils for :mod:`apps.core.sigil_resolver`."""
 
         raw_key = (key or "").strip()
         if not raw_key:
@@ -1679,7 +1679,7 @@ class Node(Entity):
         if self._hosts_gelectriic_ap():
             detected_slugs.add("ap-router")
         try:
-            from core.notifications import supports_gui_toast
+            from apps.core.notifications import supports_gui_toast
         except Exception:
             pass
         else:
@@ -2702,7 +2702,7 @@ class NetMessage(Entity):
         return msg
 
     def propagate(self, seen: list[str] | None = None):
-        from core.notifications import notify
+        from apps.core.notifications import notify
         import random
         import requests
 
@@ -3172,7 +3172,7 @@ class BadgeCounter(models.Model):
                 )
                 return None
 
-        from core.sigil_resolver import resolve_sigils
+        from apps.core.sigil_resolver import resolve_sigils
 
         return resolve_sigils(source)
 
