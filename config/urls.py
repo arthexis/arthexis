@@ -15,7 +15,7 @@ from django.conf.urls.static import static
 from django.contrib.staticfiles.urls import staticfiles_urlpatterns
 from django.contrib import admin
 from django.urls import include, path
-import teams.admin  # noqa: F401
+from apps.teams import admin as teams_admin  # noqa: F401
 from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import RedirectView
 from django.views.i18n import set_language

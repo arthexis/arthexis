@@ -8,7 +8,7 @@ from django.core.mail import get_connection
 from django.conf import settings
 from django.db.models import Q
 
-from teams.models import EmailOutbox
+from apps.teams.models import EmailOutbox
 
 
 class OutboxEmailBackend(BaseEmailBackend):

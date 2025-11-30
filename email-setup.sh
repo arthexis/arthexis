@@ -49,7 +49,7 @@ fi
 if [ "$SHOW_STATUS" = true ]; then
   "$PYTHON" manage.py shell <<'PYTHON'
 from django.conf import settings
-from teams.models import EmailInbox, EmailOutbox
+from apps.teams.models import EmailInbox, EmailOutbox
 
 
 def heading(title):
@@ -145,7 +145,7 @@ if [[ "${SET_OUTBOX,,}" == "y" ]]; then
     read -rp "From email (leave blank to use default): " FROM_EMAIL
 
     "$PYTHON" manage.py shell <<PYTHON
-from teams.models import EmailOutbox
+from apps.teams.models import EmailOutbox
 from apps.nodes.models import Node
 
 
@@ -198,7 +198,7 @@ PYTHON
 from django.contrib.auth import get_user_model
 from apps.core.user_data import dump_user_fixture
 from apps.nodes.models import Node
-from teams.models import EmailOutbox
+from apps.teams.models import EmailOutbox
 
 
 def _select_outbox(node):
@@ -247,7 +247,7 @@ if [[ "${SET_INBOX,,}" == "y" ]]; then
 
     "$PYTHON" manage.py shell <<PYTHON
 from django.contrib.auth import get_user_model
-from teams.models import EmailInbox
+from apps.teams.models import EmailInbox
 User = get_user_model()
 user = User.objects.get(username="$INBOX_USER")
 inbox, _ = EmailInbox.objects.update_or_create(

@@ -72,7 +72,7 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from apps.ocpp.models import Charger, ElectricVehicle, Transaction
 from apps.rfid.utils import build_mode_toggle
-from teams.models import EmailCollector, EmailInbox, EmailOutbox, SocialProfile
+from apps.teams.models import EmailCollector, EmailInbox, EmailOutbox, SocialProfile
 from apps.energy.models import (
     ClientReport,
     ClientReportSchedule,
@@ -1389,7 +1389,7 @@ class MaskedPasswordFormMixin:
 
 
 class EmailInboxAdminForm(MaskedPasswordFormMixin, forms.ModelForm):
-    """Admin form for :class:`teams.models.EmailInbox` with hidden password."""
+    """Admin form for :class:`apps.teams.models.EmailInbox` with hidden password."""
 
     password = forms.CharField(
         widget=forms.PasswordInput(attrs={"autocomplete": "new-password"}),
@@ -1657,7 +1657,7 @@ class SocialProfileInlineForm(ProfileFormMixin, forms.ModelForm):
 
 
 class EmailOutboxAdminForm(MaskedPasswordFormMixin, forms.ModelForm):
-    """Admin form for :class:`teams.models.EmailOutbox` with hidden password."""
+    """Admin form for :class:`apps.teams.models.EmailOutbox` with hidden password."""
 
     password = forms.CharField(
         widget=forms.PasswordInput(attrs={"autocomplete": "new-password"}),
