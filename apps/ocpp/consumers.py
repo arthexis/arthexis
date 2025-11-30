@@ -46,7 +46,7 @@ from .models import (
     ChargerLogRequest,
     PowerProjection,
 )
-from .reference_utils import host_is_local_loopback
+from apps.links.reference_utils import host_is_local_loopback
 from .evcs_discovery import (
     DEFAULT_CONSOLE_PORT,
     HTTPS_PORTS,
