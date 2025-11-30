@@ -390,6 +390,7 @@ LOCAL_APPS = [
     "nodes",
     "accounts",
     "apps.core",
+    "apps.app",
     "protocols",
     "apps.ocpp",
     "apps.rfid",

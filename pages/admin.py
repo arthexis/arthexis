@@ -42,7 +42,6 @@ from .utils import landing_leads_supported
 from .models import (
     SiteBadge,
     SiteTemplate,
-    Application,
     SiteProxy,
     DeveloperArticle,
     OdooChatBridge,
@@ -62,6 +61,7 @@ from .models import (
 from django.contrib.contenttypes.models import ContentType
 from apps.core.models import ReleaseManager
 from apps.core.user_data import EntityModelAdmin
+from apps.app.models import Application
 
 
 logger = logging.getLogger(__name__)
