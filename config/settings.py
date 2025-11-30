@@ -392,6 +392,7 @@ LOCAL_APPS = [
     "apps.counters",
     "apps.energy",
     "apps.core",
+    "apps.links",
     "apps.locals",
     "apps.crms",
     "apps.sigils",
