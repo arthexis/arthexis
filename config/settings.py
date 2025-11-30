@@ -410,8 +410,8 @@ LOCAL_APPS = [
     "apps.ocpp.simulator",
     "apps.meta",
     "apps.awg",
+    "apps.chats",
     "apps.pages",
-    "apps.content",
     "apps.cards",
     "apps.teams",
 ]
