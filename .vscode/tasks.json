@@ -63,7 +63,7 @@
         {
             "label": "Dev: manage",
             "type": "shell",
-            "command": "${workspaceFolder}/manage.sh",
+            "command": "${workspaceFolder}/.venv/bin/python ${workspaceFolder}/manage.py",
             "windows": {
                 "command": "${workspaceFolder}\\.venv\\Scripts\\python.exe ${workspaceFolder}\\manage.py"
             },
