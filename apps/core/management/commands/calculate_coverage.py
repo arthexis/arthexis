@@ -23,7 +23,7 @@ class Command(BaseCommand):
         )
         parser.add_argument(
             "--badge-path",
-            default="coverage.svg",
+            default="media/coverage.svg",
             help="Destination for the SVG badge.",
         )
         parser.add_argument(
@@ -50,7 +50,7 @@ class Command(BaseCommand):
         output = json.dumps(summary.to_dict(), indent=2, sort_keys=True)
         self.stdout.write(output)
 
-        badge_path = Path(options.get("badge_path") or "coverage.svg")
+        badge_path = Path(options.get("badge_path") or "media/coverage.svg")
         if not badge_path.is_absolute():
             badge_path = project_root / badge_path
         badge_path.parent.mkdir(parents=True, exist_ok=True)
