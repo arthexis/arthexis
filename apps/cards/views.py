@@ -10,7 +10,7 @@ from django.contrib.auth.views import redirect_to_login
 from django.contrib.admin.views.decorators import staff_member_required
 from apps.nodes.models import Node, NodeFeature
 from apps.pages.utils import landing
-from apps.rfid.sync import apply_rfid_payload, serialize_rfid
+from apps.cards.sync import apply_rfid_payload, serialize_rfid
 from apps.nodes.views import _clean_requester_hint, _load_signed_node
 
 from .scanner import scan_sources, enable_deep_read_mode
@@ -225,7 +225,7 @@ def reader(request):
         )
         context["deep_read_url"] = reverse("rfid-scan-deep")
         context["admin_view_url"] = reverse("admin:core_rfid_scan")
-    return render(request, "rfid/reader.html", context)
+    return render(request, "cards/reader.html", context)
 
 
 reader.required_features_any = frozenset({"rfid-scanner", "rpi-camera"})

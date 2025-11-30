@@ -32,7 +32,7 @@ admin.site.site_header = _("Constellation")
 admin.site.site_title = _("Constellation")
 
 # Apps that require a custom prefix for their URLs
-URL_PREFIX_OVERRIDES = {"core": "api/rfid"}
+URL_PREFIX_OVERRIDES = {"core": "api/rfid", "cards": "rfid"}
 
 
 def autodiscovered_urlpatterns():

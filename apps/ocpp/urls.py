@@ -55,6 +55,6 @@ urlpatterns = [
         views.charger_status,
         name="charger-status-connector",
     ),
-    path("rfid/validator/", include("apps.rfid.urls")),
+    path("rfid/validator/", include("apps.cards.urls")),
     path("media/<slug:slug>/", media_views.media_bucket_upload, name="media-bucket-upload"),
 ]

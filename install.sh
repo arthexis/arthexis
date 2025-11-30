@@ -562,7 +562,7 @@ fi
 
 if [ "$ENABLE_CONTROL" = true ]; then
     echo "Checking for RFID scanner hardware..."
-    if python -m apps.rfid.detect; then
+if python -m apps.cards.detect; then
         touch "$RFID_LOCK"
         echo "Enabled node feature 'rfid-scanner' based on detected hardware."
     else
