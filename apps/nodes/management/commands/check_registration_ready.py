@@ -1,8 +1,6 @@
 import json
-from pathlib import Path
 from secrets import token_hex
 
-from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.test import Client
 from django.urls import reverse
@@ -26,7 +24,7 @@ class Command(BaseCommand):
                 f"Current node record refreshed ({node.hostname}:{node.port})."
             )
 
-        security_dir = Path(node.base_path or settings.BASE_DIR) / "security"
+        security_dir = node.get_base_path() / "security"
         priv_path = security_dir / f"{node.public_endpoint}"
         pub_path = security_dir / f"{node.public_endpoint}.pub"
 
