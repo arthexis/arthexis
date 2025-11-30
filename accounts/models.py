@@ -923,7 +923,7 @@ class ClientReportSchedule(Entity):
         return ClientReport.resolve_outbox_for_owner(self.owner)
 
     def notify_failure(self, message: str):
-        from nodes.models import NetMessage
+        from apps.nodes.models import NetMessage
 
         NetMessage.broadcast("Client report delivery issue", message)
 
@@ -1739,7 +1739,7 @@ class ClientReport(Entity):
 
     @staticmethod
     def resolve_outbox_for_owner(owner):
-        from nodes.models import Node
+        from apps.nodes.models import Node
 
         try:
             outbox_model = apps.get_model("teams", "EmailOutbox")

@@ -3,8 +3,8 @@ import sys
 from django.contrib import messages
 from django.core.management.base import BaseCommand
 
-from nodes.feature_checks import feature_checks
-from nodes.models import Node, NodeFeature, NodeFeatureAssignment, NodeRole
+from apps.nodes.feature_checks import feature_checks
+from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment, NodeRole
 
 
 class Command(BaseCommand):

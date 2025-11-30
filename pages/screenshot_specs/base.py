@@ -17,8 +17,8 @@ from django.core.management import call_command
 from django.test import Client
 from django.utils import timezone
 
-from nodes.models import ContentSample
-from nodes.utils import capture_screenshot, save_screenshot
+from apps.nodes.models import ContentSample
+from apps.nodes.utils import capture_screenshot, save_screenshot
 
 logger = logging.getLogger(__name__)
 

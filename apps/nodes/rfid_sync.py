@@ -13,7 +13,7 @@ from accounts.models import CustomerAccount
 from apps.core.models import RFID
 
 if TYPE_CHECKING:  # pragma: no cover - imported only for type checking
-    from nodes.models import Node
+    from apps.nodes.models import Node
 
 
 @dataclass(slots=True)

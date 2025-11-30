@@ -37,7 +37,7 @@ from asgiref.sync import async_to_sync
 
 from utils.api import api_login_required
 
-from nodes.models import NetMessage, Node
+from apps.nodes.models import NetMessage, Node
 
 from pages.utils import landing
 from apps.core.liveupdate import live_update

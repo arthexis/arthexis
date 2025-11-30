@@ -1300,7 +1300,7 @@ def _short_revision(revision: str | None) -> str:
 
 
 def _resolve_upgrade_subject() -> str:
-    from nodes.models import Node
+    from apps.nodes.models import Node
 
     fallback_name = socket.gethostname() or "node"
 
@@ -1320,7 +1320,7 @@ def _resolve_upgrade_subject() -> str:
 def _broadcast_upgrade_start_message(
     local_revision: str | None, remote_revision: str | None
 ) -> None:
-    from nodes.models import NetMessage
+    from apps.nodes.models import NetMessage
 
     subject = _resolve_upgrade_subject()
     previous_revision = _short_revision(local_revision)
@@ -1336,7 +1336,7 @@ def _broadcast_upgrade_start_message(
 
 
 def _send_auto_upgrade_failure_message(base_dir: Path, reason: str, failure_count: int) -> None:
-    from nodes.models import NetMessage, Node
+    from apps.nodes.models import NetMessage, Node
 
     try:
         node = Node.get_local()
@@ -1486,7 +1486,7 @@ def check_github_updates(channel_override: str | None = None) -> None:
 
         startup = None
         try:
-            from nodes.apps import _startup_notification as startup  # type: ignore
+            from apps.nodes.apps import _startup_notification as startup  # type: ignore
         except Exception:
             startup = None
 

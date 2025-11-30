@@ -146,7 +146,7 @@ if [[ "${SET_OUTBOX,,}" == "y" ]]; then
 
     "$PYTHON" manage.py shell <<PYTHON
 from teams.models import EmailOutbox
-from nodes.models import Node
+from apps.nodes.models import Node
 
 
 defaults = {
@@ -197,7 +197,7 @@ PYTHON
         "$PYTHON" manage.py shell <<PYTHON
 from django.contrib.auth import get_user_model
 from apps.core.user_data import dump_user_fixture
-from nodes.models import Node
+from apps.nodes.models import Node
 from teams.models import EmailOutbox
 
 

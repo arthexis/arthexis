@@ -21,8 +21,8 @@ from django.utils.translation import gettext_lazy as _
 from apps.core import mailer
 from apps.core.models import GoogleCalendarProfile
 from apps.core.entity import Entity
-from nodes.models import NetMessage, Node
-from nodes.models import BadgeCounter
+from apps.nodes.models import NetMessage, Node
+from apps.nodes.models import BadgeCounter
 from pages.dashboard_rules import bind_rule_model, load_callable, rule_failure
 from pages.models import DashboardRule
 

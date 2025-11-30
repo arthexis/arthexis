@@ -1666,7 +1666,7 @@ def _gather_info() -> dict:
 
     features: list[dict[str, object]] = []
     try:
-        from nodes.models import Node, NodeFeature
+        from apps.nodes.models import Node, NodeFeature
     except Exception:
         info["features"] = features
     else:

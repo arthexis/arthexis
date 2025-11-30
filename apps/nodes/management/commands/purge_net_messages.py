@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from django.core.management.base import BaseCommand
 
-from nodes.models import NetMessage, PendingNetMessage
+from apps.nodes.models import NetMessage, PendingNetMessage
 
 
 class Command(BaseCommand):

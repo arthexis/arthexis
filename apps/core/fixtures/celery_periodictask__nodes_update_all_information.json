@@ -3,7 +3,7 @@
     "model": "django_celery_beat.periodictask",
     "fields": {
       "name": "nodes-update-all-information",
-      "task": "nodes.tasks.update_all_nodes_information",
+      "task": "apps.nodes.tasks.update_all_nodes_information",
       "crontab": ["0", "5", "*", "*", "*", "UTC"],
       "args": "[]",
       "kwargs": "{}",

@@ -27,7 +27,7 @@ def site_and_node(request: HttpRequest):
 
     node = None
     try:
-        from nodes.models import Node
+        from apps.nodes.models import Node
 
         node = Node.get_local()
         if not node:

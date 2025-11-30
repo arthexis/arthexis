@@ -116,7 +116,7 @@ queue_startup_net_message() {
 import sys
 from pathlib import Path
 
-from nodes.startup_notifications import queue_startup_message
+from apps.nodes.startup_notifications import queue_startup_message
 
 base_dir = Path(sys.argv[1])
 port_value = sys.argv[2]

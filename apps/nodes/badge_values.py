@@ -3,7 +3,7 @@ from django.utils.translation import gettext, ngettext
 
 from apps.core.models import Lead, RFID
 from apps.ocpp.models import Charger
-from nodes.models import Node
+from apps.nodes.models import Node
 from .badge_utils import BadgeCounterResult
 
 

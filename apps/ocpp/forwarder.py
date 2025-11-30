@@ -177,7 +177,7 @@ class Forwarder:
     def sync_forwarded_charge_points(self, *, refresh_forwarders: bool = True) -> int:
         """Ensure websocket connections exist for forwarded charge points."""
 
-        from nodes.models import Node
+        from apps.nodes.models import Node
         from protocols.models import CPForwarder
         from .models import Charger
 

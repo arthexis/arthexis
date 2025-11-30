@@ -1831,7 +1831,7 @@ class RFID(Entity):
         update_fields = kwargs.get("update_fields")
         if not self.origin_node_id:
             try:
-                from nodes.models import Node  # imported lazily to avoid circular import
+                from apps.nodes.models import Node  # imported lazily to avoid circular import
             except Exception:  # pragma: no cover - nodes app may be unavailable
                 node = None
             else:

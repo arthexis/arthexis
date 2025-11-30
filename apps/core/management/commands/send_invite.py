@@ -8,7 +8,7 @@ from django.utils.encoding import force_bytes
 from django.utils.http import urlsafe_base64_encode
 from django.utils import timezone
 
-from nodes.models import Node
+from apps.nodes.models import Node
 from apps.core.models import InviteLead
 
 

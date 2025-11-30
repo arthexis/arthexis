@@ -16,7 +16,7 @@ from django.conf import settings
 from django.utils.translation import gettext_lazy as _
 from requests import RequestException
 
-from nodes.models import Node
+from apps.nodes.models import Node
 from apps.ocpp.network import serialize_charger_for_network
 
 

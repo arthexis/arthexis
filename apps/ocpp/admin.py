@@ -74,7 +74,7 @@ from accounts.models import EnergyTariff
 from apps.core.models import RFID as CoreRFID
 from apps.core.form_fields import SchedulePeriodsField
 from apps.core.user_data import EntityModelAdmin
-from nodes.models import Node
+from apps.nodes.models import Node
 
 
 class TransactionExportForm(forms.Form):

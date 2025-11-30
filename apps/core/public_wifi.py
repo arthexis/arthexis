@@ -236,7 +236,7 @@ def public_mode_lock_exists() -> bool:
 
 
 def grant_public_access(user, mac: str):
-    from nodes.models import PublicWifiAccess
+    from apps.nodes.models import PublicWifiAccess
 
     mac = _normalize_mac(mac)
     if not mac:
@@ -261,7 +261,7 @@ def revoke_public_access(access) -> None:
 
 
 def revoke_public_access_for_user(user) -> None:
-    from nodes.models import PublicWifiAccess
+    from apps.nodes.models import PublicWifiAccess
 
     for access in PublicWifiAccess.objects.filter(user=user, revoked_on__isnull=True):
         revoke_public_access(access)

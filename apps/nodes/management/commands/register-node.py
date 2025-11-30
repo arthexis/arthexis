@@ -7,7 +7,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.test import RequestFactory
 from requests import RequestException
 
-from nodes.views import node_info, register_node
+from apps.nodes.views import node_info, register_node
 
 
 class Command(BaseCommand):

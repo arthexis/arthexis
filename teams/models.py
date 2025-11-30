@@ -36,7 +36,7 @@ from apps.awg.models import PowerLead as CorePowerLead
 from django_otp.plugins.otp_totp.models import (
     TOTPDevice as CoreTOTPDevice,
 )
-from nodes.models import Node
+from apps.nodes.models import Node
 
 
 logger = logging.getLogger(__name__)
@@ -822,7 +822,7 @@ def ensure_admin_email_mailboxes():
         owner = None
 
     try:  # pragma: no cover - optional dependency during setup
-        from nodes.models import Node
+        from apps.nodes.models import Node
 
         local_node = Node.get_local()
     except Exception:

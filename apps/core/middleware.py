@@ -2,7 +2,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.sites.models import Site
 from django.urls import resolve
 
-from nodes.models import Node, NodeRole
+from apps.nodes.models import Node, NodeRole
 
 from .sigil_context import set_context, clear_context
 

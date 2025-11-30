@@ -8,7 +8,7 @@ from django.contrib.sites.models import Site
 
 if TYPE_CHECKING:  # pragma: no cover - imported only for type checking
     from django.http import HttpRequest
-    from nodes.models import Node
+    from apps.nodes.models import Node
     from .models import Reference
 
 
@@ -34,7 +34,7 @@ def filter_visible_references(
 
     if node is None:
         try:
-            from nodes.models import Node  # imported lazily to avoid circular import
+            from apps.nodes.models import Node  # imported lazily to avoid circular import
 
             node = Node.get_local()
         except Exception:

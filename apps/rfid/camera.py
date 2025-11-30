@@ -11,8 +11,8 @@ from typing import Any
 from django.db import close_old_connections
 from django.utils import timezone
 
-from nodes.models import NodeFeature
-from nodes.utils import capture_rpi_snapshot, save_screenshot
+from apps.nodes.models import NodeFeature
+from apps.nodes.utils import capture_rpi_snapshot, save_screenshot
 
 logger = logging.getLogger(__name__)
 

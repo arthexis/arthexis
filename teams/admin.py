@@ -45,8 +45,8 @@ from apps.core.user_data import (
     _resolve_fixture_user,
     _user_allows_user_data,
 )
-from nodes.admin import EmailOutboxAdmin
-from nodes.models import Node
+from apps.nodes.admin import EmailOutboxAdmin
+from apps.nodes.models import Node
 
 from .forms import (
     SlackBotProfileAdminForm,

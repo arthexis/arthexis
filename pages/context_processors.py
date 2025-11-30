@@ -3,7 +3,7 @@ from django.urls import Resolver404, resolve
 from django.shortcuts import resolve_url
 from django.conf import settings
 from pathlib import Path
-from nodes.models import Node, NodeFeature
+from apps.nodes.models import Node, NodeFeature
 from apps.core.models import Reference
 from apps.core.reference_utils import filter_visible_references
 from .models import Module, SiteTemplate

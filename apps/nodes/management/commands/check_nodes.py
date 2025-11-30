@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from django.core.management.base import BaseCommand, CommandError
 
-from nodes.tasks import update_all_nodes_information
+from apps.nodes.tasks import update_all_nodes_information
 
 
 class Command(BaseCommand):
