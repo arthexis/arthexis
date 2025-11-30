@@ -82,7 +82,11 @@ from accounts.models import (
     EnergyTransaction,
     Location,
 )
-from .github_helper import GitHubRepositoryError, create_repository_for_package
+from apps.repos.forms import PackageRepositoryForm
+from apps.repos.github_helper import (
+    GitHubRepositoryError,
+    create_repository_for_package,
+)
 from .models import (
     User,
     UserPhoneNumber,
@@ -769,41 +773,6 @@ class ReleaseManagerAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModel
     ) = _build_credentials_actions("test_credentials", "_test_credentials")
 
 
-class PackageRepositoryForm(forms.Form):
-    owner_repo = forms.CharField(
-        label=_("Owner/Repository"),
-        help_text=_("Enter the repository slug in the form owner/repository."),
-        widget=forms.TextInput(attrs={"placeholder": "owner/repository"}),
-    )
-    description = forms.CharField(
-        label=_("Description"),
-        required=False,
-        widget=forms.Textarea(attrs={"rows": 3}),
-    )
-    private = forms.BooleanField(
-        label=_("Private repository"),
-        required=False,
-        help_text=_("Mark the repository as private when checked."),
-    )
-
-    def clean_owner_repo(self):
-        value = self.cleaned_data.get("owner_repo", "").strip()
-        if "/" not in value:
-            raise forms.ValidationError(_("Enter the owner/repository slug."))
-        owner, repo = value.split("/", 1)
-        owner = owner.strip()
-        repo = repo.strip()
-        if not owner or not repo:
-            raise forms.ValidationError(_("Enter the owner/repository slug."))
-        if " " in owner or " " in repo:
-            raise forms.ValidationError(
-                _("Owner and repository cannot contain spaces."),
-            )
-        self.cleaned_data["owner"] = owner
-        self.cleaned_data["repo"] = repo
-        return value
-
-
 @admin.register(Package)
 class PackageAdmin(SaveBeforeChangeAction, EntityModelAdmin):
     actions = ["create_repository_bulk_action"]
@@ -993,7 +962,7 @@ class PackageAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             }
         )
         return TemplateResponse(
-            request, "admin/core/package/create_repository.html", context
+            request, "admin/repos/package/create_repository.html", context
         )
 
 

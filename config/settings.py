@@ -390,6 +390,7 @@ LOCAL_APPS = [
     "apps.nodes",
     "accounts",
     "apps.core",
+    "apps.repos",
     "apps.app",
     "protocols",
     "apps.ocpp",
