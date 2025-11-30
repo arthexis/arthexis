@@ -10,16 +10,17 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
-from pathlib import Path
 import contextlib
 import os
 import sys
 import ipaddress
 import socket
+from pathlib import Path
 from apps.core.log_paths import select_log_dir
 from django.utils.translation import gettext_lazy as _
 from datetime import timedelta
 
+from django.apps import AppConfig as DjangoAppConfig
 from celery.schedules import crontab
 from django.http import request as http_request
 from django.http.request import split_domain_port
@@ -90,6 +91,22 @@ def _env_bool(name: str, default: bool) -> bool:
 
 
 DEBUG = _env_bool("DEBUG", False)
+
+
+def _dedupe_app_labels(app_paths: list[str]) -> list[str]:
+    """Return a list of app paths with duplicate labels removed."""
+
+    deduped: list[str] = []
+    seen_labels: set[str] = set()
+    for entry in app_paths:
+        label = DjangoAppConfig.create(entry).label
+        if label in seen_labels:
+            continue
+
+        seen_labels.add(label)
+        deduped.append(entry)
+
+    return deduped
 
 # Disable NetMessage propagation when running maintenance commands that should
 # avoid contacting remote peers.
@@ -434,6 +451,8 @@ INSTALLED_APPS = [
     "channels",
     "apps.celery.beat_app.CeleryBeatConfig",
 ] + LOCAL_APPS
+
+INSTALLED_APPS = _dedupe_app_labels(INSTALLED_APPS)
 
 if DEBUG:
     try:
