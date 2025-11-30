@@ -388,6 +388,7 @@ CsrfViewMiddleware._check_referer = _check_referer_with_forwarded
 # Application definition
 
 LOCAL_APPS = [
+    "apps.base",
     "apps.celery",
     "apps.nodes",
     "apps.screens",
