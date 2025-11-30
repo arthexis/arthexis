@@ -14,7 +14,7 @@ from django.db.models import Q
 from django.core.validators import RegexValidator
 from apps.core.entity import Entity, EntityManager
 from apps.core.models import Lead, SecurityGroup
-from apps.crms.models import OdooProfile
+from apps.odoo.models import OdooProfile
 from django.contrib.sites.models import Site
 from apps.nodes.models import NodeRole
 from django.utils import timezone

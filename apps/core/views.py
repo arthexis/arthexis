@@ -46,7 +46,7 @@ PYPI_REQUEST_TIMEOUT = 10
 from . import temp_passwords
 from .models import PackageRelease
 from .models import RFID
-from apps.crms.models import OdooProfile, Product
+from apps.odoo.models import OdooProduct, OdooProfile
 from apps.energy.models import CustomerAccount
 
 
@@ -102,7 +102,7 @@ def odoo_quote_report(request):
 
     if not profile or not profile.is_verified:
         context["error"] = _(
-            "Configure and verify your CRM employee credentials before generating the report."
+            "Configure and verify your Odoo profile before generating the report."
         )
         return TemplateResponse(
             request, "admin/core/odoo_quote_report.html", context
@@ -1772,7 +1772,7 @@ def product_list(request):
     """Return a JSON list of products."""
 
     products = list(
-        Product.objects.values("id", "name", "description", "renewal_period")
+        OdooProduct.objects.values("id", "name", "description", "renewal_period")
     )
     return JsonResponse({"products": products})
 
@@ -1799,8 +1799,8 @@ def add_live_subscription(request):
         )
 
     try:
-        product = Product.objects.get(id=product_id)
-    except Product.DoesNotExist:
+        product = OdooProduct.objects.get(id=product_id)
+    except OdooProduct.DoesNotExist:
         return JsonResponse({"detail": "invalid product"}, status=404)
 
     try:

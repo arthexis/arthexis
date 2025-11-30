@@ -91,7 +91,7 @@ from .models import (
     SecurityGroup,
     InviteLead,
 )
-from apps.crms.models import OdooProfile, Product
+from apps.odoo.models import OdooProduct, OdooProfile
 from apps.locals.user_data import (
     EntityModelAdmin,
     UserDatumAdminMixin,
@@ -1389,7 +1389,7 @@ class OdooProfileInlineForm(ProfileFormMixin, OdooProfileAdminForm):
         ]
         if provided and missing:
             raise forms.ValidationError(
-                "Provide host, database, username, and password to create a CRM employee.",
+                "Provide host, database, username, and password to create an Odoo profile.",
             )
 
         return cleaned
@@ -1575,7 +1575,6 @@ PROFILE_INLINE_CONFIG = {
                 None,
                 {
                     "fields": (
-                        "crm",
                         "host",
                         "database",
                         "username",
@@ -1584,7 +1583,7 @@ PROFILE_INLINE_CONFIG = {
                 },
             ),
             (
-                "CRM Employee",
+                "Odoo Profile",
                 {
                     "fields": ("verified_on", "odoo_uid", "name", "email"),
                 },
@@ -2134,17 +2133,17 @@ class OdooProfileAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdm
     change_form_template = "django_object_actions/change_form.html"
     form = OdooProfileAdminForm
     list_display = ("owner", "host", "database", "credentials_ok", "verified_on")
-    list_filter = ("crm",)
+    list_filter = ()
     readonly_fields = ("verified_on", "odoo_uid", "name", "email", "partner_id")
     actions = ["verify_credentials"]
     change_actions = ["verify_credentials_action", "my_profile_action"]
     changelist_actions = ["my_profile", "generate_quote_report"]
     fieldsets = (
         ("Owner", {"fields": ("user", "group")}),
-        ("Configuration", {"fields": ("crm", "host", "database")}),
+        ("Configuration", {"fields": ("host", "database")}),
         ("Credentials", {"fields": ("username", "password")}),
         (
-            "CRM Employee",
+            "Odoo Profile",
             {"fields": ("verified_on", "odoo_uid", "name", "email", "partner_id")},
         ),
     )
@@ -2490,16 +2489,16 @@ class OdooCustomerSearchForm(forms.Form):
     )
 
 
-class ProductAdminForm(forms.ModelForm):
+class OdooProductAdminForm(forms.ModelForm):
     class Meta:
-        model = Product
+        model = OdooProduct
         fields = "__all__"
         widgets = {"odoo_product": OdooProductWidget}
 
 
-@admin.register(Product)
-class ProductAdmin(EntityModelAdmin):
-    form = ProductAdminForm
+@admin.register(OdooProduct)
+class OdooProductAdmin(EntityModelAdmin):
+    form = OdooProductAdminForm
     actions = ["register_from_odoo"]
     change_list_template = "admin/core/product/change_list.html"
 
@@ -2546,7 +2545,7 @@ class ProductAdmin(EntityModelAdmin):
         profile = getattr(request.user, "odoo_profile", None)
         if not profile or not profile.is_verified:
             context["credential_error"] = _(
-                "Configure your CRM employee credentials before registering products."
+                "Configure your Odoo profile before registering products."
             )
             return context, None
 

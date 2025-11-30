@@ -16,7 +16,7 @@ class Migration(migrations.Migration):
     dependencies = [
         ("app", "0001_initial"),
         ("core", "0002_initial"),
-        ("crms", "0001_initial"),
+        ("odoo", "0001_initial"),
         ("links", "0001_initial"),
         ("nodes", "0001_initial"),
         ("sites", "0002_alter_domain_unique"),
@@ -792,7 +792,7 @@ class Migration(migrations.Migration):
                         help_text="Verified Odoo employee credentials used to post chat messages.",
                         on_delete=django.db.models.deletion.CASCADE,
                         related_name="chat_bridges",
-                        to="crms.odooprofile",
+                        to="odoo.odooprofile",
                     ),
                 ),
                 (

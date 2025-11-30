@@ -20,8 +20,8 @@ xmlrpc_client = defused_xmlrpc.xmlrpc_client
 logger = logging.getLogger(__name__)
 
 
-class Product(Entity):
-    """A product that users can subscribe to."""
+class OdooProduct(Entity):
+    """A product defined in Odoo that users can subscribe to."""
 
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
@@ -36,27 +36,19 @@ class Product(Entity):
         return self.name
 
     class Meta:
-        verbose_name = gettext_lazy("Product")
-        verbose_name_plural = gettext_lazy("Products")
-        db_table = "core_product"
+        verbose_name = gettext_lazy("Odoo Product")
+        verbose_name_plural = gettext_lazy("Odoo Products")
+        db_table = "core_odoo_product"
 
 
 class OdooProfile(Profile):
     """Store Odoo API credentials for a user."""
-
-    class CRM(models.TextChoices):
-        ODOO = "odoo", gettext_lazy("Odoo")
 
     profile_fields = ("host", "database", "username", "password")
     host = SigilShortAutoField(max_length=255)
     database = SigilShortAutoField(max_length=255)
     username = SigilShortAutoField(max_length=255)
     password = SigilShortAutoField(max_length=255)
-    crm = models.CharField(
-        max_length=32,
-        choices=CRM.choices,
-        default=CRM.ODOO,
-    )
     verified_on = models.DateTimeField(null=True, blank=True)
     odoo_uid = models.PositiveIntegerField(null=True, blank=True, editable=False)
     name = models.CharField(max_length=255, blank=True, editable=False)
@@ -214,8 +206,8 @@ class OdooProfile(Profile):
         return f"{owner} @ {self.host}" if owner else self.host
 
     class Meta:
-        verbose_name = gettext_lazy("CRM Employee")
-        verbose_name_plural = gettext_lazy("CRM Employees")
+        verbose_name = gettext_lazy("Odoo Profile")
+        verbose_name_plural = gettext_lazy("Odoo Profiles")
         db_table = "core_odooprofile"
         constraints = [
             models.CheckConstraint(

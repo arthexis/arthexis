@@ -498,7 +498,7 @@ class User(Entity, AbstractUser):
 
     @property
     def odoo_profile(self):
-        return self._direct_profile("OdooProfile", app_label="crms")
+        return self._direct_profile("OdooProfile", app_label="odoo")
 
     @property
     def social_profile(self):

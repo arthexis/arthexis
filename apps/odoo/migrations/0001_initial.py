@@ -17,7 +17,7 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.CreateModel(
-            name="Product",
+            name="OdooProduct",
             fields=[
                 (
                     "id",
@@ -47,9 +47,9 @@ class Migration(migrations.Migration):
                 ),
             ],
             options={
-                "verbose_name": "Product",
-                "verbose_name_plural": "Products",
-                "db_table": "core_product",
+                "verbose_name": "Odoo Product",
+                "verbose_name_plural": "Odoo Products",
+                "db_table": "core_odoo_product",
             },
         ),
         migrations.CreateModel(
@@ -71,12 +71,6 @@ class Migration(migrations.Migration):
                 ("database", apps.sigils.fields.SigilShortAutoField(max_length=255)),
                 ("username", apps.sigils.fields.SigilShortAutoField(max_length=255)),
                 ("password", apps.sigils.fields.SigilShortAutoField(max_length=255)),
-                (
-                    "crm",
-                    models.CharField(
-                        choices=[("odoo", "Odoo")], default="odoo", max_length=32
-                    ),
-                ),
                 ("verified_on", models.DateTimeField(blank=True, null=True)),
                 (
                     "odoo_uid",
@@ -113,8 +107,8 @@ class Migration(migrations.Migration):
                 ),
             ],
             options={
-                "verbose_name": "CRM Employee",
-                "verbose_name_plural": "CRM Employees",
+                "verbose_name": "Odoo Profile",
+                "verbose_name_plural": "Odoo Profiles",
                 "db_table": "core_odooprofile",
                 "constraints": [
                     models.CheckConstraint(

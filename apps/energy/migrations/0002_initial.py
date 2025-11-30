@@ -11,7 +11,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("core", "0002_initial"),
-        ("crms", "0001_initial"),
+        ("odoo", "0001_initial"),
         ("django_celery_beat", "0020_googlecalendarprofile_horologiacountdowntimer"),
         ("energy", "0001_initial"),
         ("ocpp", "0001_initial"),
@@ -96,7 +96,7 @@ class Migration(migrations.Migration):
                 null=True,
                 on_delete=django.db.models.deletion.SET_NULL,
                 related_name="live_subscription_accounts",
-                to="crms.product",
+                to="odoo.odooproduct",
             ),
         ),
         migrations.AddField(
