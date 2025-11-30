@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 import os
+import multiprocessing
 import subprocess
 import sys
 import time
@@ -188,6 +189,98 @@ def run_env_refresh_with_report(base_dir: Path, *, latest: bool) -> bool:
     return success
 
 
+def _backend_port(base_dir: Path, default: int = 8888) -> int:
+    """Return the configured backend port with a safe fallback."""
+
+    lock_file = base_dir / ".locks" / "backend_port.lck"
+    try:
+        raw_value = lock_file.read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        return default
+    except OSError:
+        return default
+
+    try:
+        value = int(raw_value)
+    except (TypeError, ValueError):
+        return default
+
+    if 1 <= value <= 65535:
+        return value
+    return default
+
+
+def build_runserver_command(base_dir: Path, *, reload: bool = False) -> list[str]:
+    """Return the command used to run the Django development server."""
+
+    manage_py = base_dir / "manage.py"
+    if not manage_py.exists():
+        raise FileNotFoundError("manage.py not found")
+
+    port = _backend_port(base_dir)
+    command = [
+        sys.executable,
+        str(manage_py),
+        "runserver",
+        f"0.0.0.0:{port}",
+    ]
+    if not reload:
+        command.append("--noreload")
+    return command
+
+
+def _run_django_server(command: list[str], *, cwd: Path, env: dict[str, str]) -> None:
+    """Target function that runs the Django server in a daemon process."""
+
+    try:
+        subprocess.run(command, cwd=cwd, env=env, check=False)
+    except Exception:
+        return
+
+
+def start_django_server(base_dir: Path, *, reload: bool = False) -> multiprocessing.Process | None:
+    """Launch the Django server as a daemon process and return it."""
+
+    try:
+        command = build_runserver_command(base_dir, reload=reload)
+    except FileNotFoundError as exc:
+        print(f"[Migration Server] Unable to start Django server: {exc}")
+        return None
+
+    env = os.environ.copy()
+    env.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+    print("[Migration Server] Starting Django server:", " ".join(command))
+
+    process = multiprocessing.Process(
+        target=_run_django_server,
+        args=(command,),
+        kwargs={"cwd": base_dir, "env": env},
+        daemon=True,
+    )
+    try:
+        process.start()
+    except OSError as exc:
+        print(f"[Migration Server] Failed to start Django server: {exc}")
+        return None
+    return process
+
+
+def stop_django_server(process: multiprocessing.Process | None) -> None:
+    """Terminate the Django server daemon if it is running."""
+
+    if process is None:
+        return
+    if not process.is_alive():
+        return
+
+    print("[Migration Server] Stopping Django server...")
+    process.terminate()
+    process.join(timeout=5)
+    if process.is_alive():
+        process.kill()
+        process.join(timeout=2)
+
+
 def _hash_file(path: Path) -> str:
     """Return the md5 hash of *path*."""
 
@@ -367,8 +460,10 @@ def main(argv: list[str] | None = None) -> int:
     print("[Migration Server] Starting in", BASE_DIR)
     snapshot = collect_source_mtimes(BASE_DIR)
     print("[Migration Server] Watching for changes... Press Ctrl+C to stop.")
+    server_process: multiprocessing.Process | None = None
     with migration_server_state(LOCK_DIR):
-        run_env_refresh_with_report(BASE_DIR, latest=args.latest)
+        if run_env_refresh_with_report(BASE_DIR, latest=args.latest):
+            server_process = start_django_server(BASE_DIR)
         snapshot = collect_source_mtimes(BASE_DIR)
 
         try:
@@ -380,6 +475,7 @@ def main(argv: list[str] | None = None) -> int:
                     if updated == snapshot:
                         continue
                 if update_requirements(BASE_DIR):
+                    stop_django_server(server_process)
                     notify_async(
                         "New Python requirements installed",
                         "The migration server stopped after installing new dependencies.",
@@ -395,9 +491,13 @@ def main(argv: list[str] | None = None) -> int:
                     if len(change_summary) > 5:
                         display += "; ..."
                     print(f"[Migration Server] Changes detected: {display}")
-                run_env_refresh_with_report(BASE_DIR, latest=args.latest)
+                stop_django_server(server_process)
+                server_process = None
+                if run_env_refresh_with_report(BASE_DIR, latest=args.latest):
+                    server_process = start_django_server(BASE_DIR)
                 snapshot = collect_source_mtimes(BASE_DIR)
         except KeyboardInterrupt:
+            stop_django_server(server_process)
             print("[Migration Server] Stopped.")
             return 0
 
