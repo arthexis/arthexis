@@ -28,11 +28,11 @@ manual runs of `env-refresh.sh` or calls made as part of an upgrade.
    Record the startup timestamp and chosen port in
    `.locks/startup_started_at.lck` for status reporting.
 5. When the LCD feature flag is enabled, queue a startup Net Message via
-   `apps.nodes.startup_notifications.queue_startup_message` to record the hostname
+   `apps.screens.startup_notifications.queue_startup_message` to record the hostname
    and port for the boot cycle.
 6. Start embedded Celery worker and beat processes unless Celery management is
    disabled or delegated to systemd, capturing their PIDs for cleanup.
-7. If the LCD is configured for embedded mode, start the `apps.core.lcd_screen`
+7. If the LCD is configured for embedded mode, start the `apps.screens.lcd_screen`
    process alongside the web server.
 8. Launch the Django server on `0.0.0.0:<port>`, using `--noreload` by default
    unless `--reload` was requested.
