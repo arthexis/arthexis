@@ -413,22 +413,6 @@ LOCAL_APPS = [
     "apps.teams",
 ]
 
-APPLICATION_APPS = [
-    "apps.awg",
-    "apps.core",
-    "apps.payments",
-    "apps.energy",
-    "apps.nodes",
-    "apps.screens",
-    "apps.vehicle",
-    "apps.ocpp",
-    "apps.media",
-    "apps.emails",
-    "apps.pages",
-    "apps.cards",
-    "apps.teams",
-]
-
 INSTALLED_APPS = [
     "whitenoise.runserver_nostatic",
     "django.contrib.admin",

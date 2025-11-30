@@ -44,9 +44,7 @@ class Command(BaseCommand):
         else:
             Node.objects.create(hostname=hostname, **node_defaults)
 
-        application_apps = getattr(
-            settings, "APPLICATION_APPS", getattr(settings, "LOCAL_APPS", [])
-        )
+        application_apps = getattr(settings, "LOCAL_APPS", [])
 
         for app_label in application_apps:
             try:
