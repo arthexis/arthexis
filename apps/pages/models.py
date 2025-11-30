@@ -36,7 +36,7 @@ from django.core.validators import MaxLengthValidator, MaxValueValidator, MinVal
 from django.core.exceptions import ValidationError
 
 from apps.app.models import Application
-from apps.core import github_issues
+from apps.repos import github_issues
 from .tasks import create_user_story_github_issue
 from .site_config import ensure_site_fields
 
