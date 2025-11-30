@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import OrderedDict
 from collections.abc import Iterable, Mapping
 
-from accounts.models import CustomerAccount
+from apps.energy.models import CustomerAccount
 from apps.core.models import RFID
 
 ACCOUNT_ID_COLUMN = "customer_accounts"

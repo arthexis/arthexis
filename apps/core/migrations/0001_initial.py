@@ -19,7 +19,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ("accounts", "0001_initial"),
+        ("energy", "0001_initial"),
         ("auth", "0012_alter_user_first_name_max_length"),
     ]
 
@@ -1330,7 +1330,7 @@ class Migration(migrations.Migration):
                 "indexes": [],
                 "constraints": [],
             },
-            bases=("accounts.clientreport",),
+            bases=("energy.clientreport",),
         ),
         migrations.CreateModel(
             name="ClientReportSchedule",
@@ -1341,7 +1341,7 @@ class Migration(migrations.Migration):
                 "indexes": [],
                 "constraints": [],
             },
-            bases=("accounts.clientreportschedule",),
+            bases=("energy.clientreportschedule",),
         ),
         migrations.CreateModel(
             name="CustomerAccount",
@@ -1352,7 +1352,7 @@ class Migration(migrations.Migration):
                 "indexes": [],
                 "constraints": [],
             },
-            bases=("accounts.customeraccount",),
+            bases=("energy.customeraccount",),
         ),
         migrations.CreateModel(
             name="EnergyCredit",
@@ -1363,7 +1363,7 @@ class Migration(migrations.Migration):
                 "indexes": [],
                 "constraints": [],
             },
-            bases=("accounts.energycredit",),
+            bases=("energy.energycredit",),
         ),
         migrations.CreateModel(
             name="EnergyTariff",
@@ -1374,7 +1374,7 @@ class Migration(migrations.Migration):
                 "indexes": [],
                 "constraints": [],
             },
-            bases=("accounts.energytariff",),
+            bases=("energy.energytariff",),
         ),
         migrations.CreateModel(
             name="EnergyTransaction",
@@ -1385,7 +1385,7 @@ class Migration(migrations.Migration):
                 "indexes": [],
                 "constraints": [],
             },
-            bases=("accounts.energytransaction",),
+            bases=("energy.energytransaction",),
         ),
         migrations.CreateModel(
             name="Location",
@@ -1396,6 +1396,6 @@ class Migration(migrations.Migration):
                 "indexes": [],
                 "constraints": [],
             },
-            bases=("accounts.location",),
+            bases=("energy.location",),
         ),
     ]

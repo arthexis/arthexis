@@ -73,7 +73,7 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 from apps.ocpp.models import Charger, ElectricVehicle, Transaction
 from apps.rfid.utils import build_mode_toggle
 from teams.models import EmailCollector, EmailInbox, EmailOutbox, SocialProfile
-from accounts.models import (
+from apps.energy.models import (
     ClientReport,
     ClientReportSchedule,
     CustomerAccount,

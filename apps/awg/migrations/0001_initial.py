@@ -9,7 +9,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ("accounts", "0001_initial"),
+        ("energy", "0001_initial"),
     ]
 
     operations = [
@@ -193,6 +193,6 @@ class Migration(migrations.Migration):
                 "indexes": [],
                 "constraints": [],
             },
-            bases=("accounts.energytariff",),
+            bases=("energy.energytariff",),
         ),
     ]

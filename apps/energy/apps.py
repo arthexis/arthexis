@@ -2,8 +2,9 @@ from django.apps import AppConfig
 from django.utils.translation import gettext_lazy as _
 
 
-class AccountsConfig(AppConfig):
+class EnergyConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
-    name = "accounts"
+    name = "apps.energy"
+    label = "energy"
     order = 2
-    verbose_name = _("Business")
+    verbose_name = _("Energy")

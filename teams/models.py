@@ -1361,7 +1361,7 @@ class ManualTask(Entity):
         help_text=_("Node where this manual task should be completed."),
     )
     location = models.ForeignKey(
-        "accounts.Location",
+        "energy.Location",
         on_delete=models.SET_NULL,
         blank=True,
         null=True,
@@ -1590,7 +1590,7 @@ class ManualTask(Entity):
                 yield user
 
     def resolve_reservation_credentials(self):
-        from accounts.models import CustomerAccount
+        from apps.energy.models import CustomerAccount
         from apps.core.models import RFID
 
         account: CustomerAccount | None = None

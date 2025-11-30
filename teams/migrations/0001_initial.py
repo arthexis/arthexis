@@ -16,7 +16,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ("accounts", "0002_initial"),
+        ("energy", "0002_initial"),
         ("awg", "0002_initial"),
         ("core", "0001_initial"),
         ("nodes", "0001_initial"),
@@ -848,7 +848,7 @@ class Migration(migrations.Migration):
                         null=True,
                         on_delete=django.db.models.deletion.SET_NULL,
                         related_name="manual_tasks",
-                        to="accounts.location",
+                        to="energy.location",
                         verbose_name="Location",
                     ),
                 ),

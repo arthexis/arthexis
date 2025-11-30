@@ -12,7 +12,7 @@ import uuid
 from urllib.parse import parse_qs
 from django.conf import settings
 from django.utils import timezone
-from accounts.models import CustomerAccount
+from apps.energy.models import CustomerAccount
 from apps.core.models import Reference, RFID as CoreRFID
 from apps.nodes.models import NetMessage
 from django.core.exceptions import ValidationError
