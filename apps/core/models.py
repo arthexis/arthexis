@@ -50,7 +50,7 @@ from django.core.management.color import no_style
 from urllib.parse import quote, quote_plus, urlparse
 from zoneinfo import ZoneInfo
 from utils import revision as revision_utils
-from apps.core.celery_utils import normalize_periodic_task_name
+from apps.celery.utils import normalize_periodic_task_name
 from apps.core.language import default_report_language
 from typing import Any, Type
 import requests

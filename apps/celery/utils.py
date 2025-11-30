@@ -1,26 +1,76 @@
-"""Utilities for working with Celery periodic task names."""
-
 from __future__ import annotations
 
+import os
 import re
-from typing import Set
+from pathlib import Path
+from typing import Mapping, MutableMapping, Set
 
+from django.conf import settings
 from django.db import transaction
 from django.db.utils import IntegrityError
 
 
-def slugify_task_name(name: str) -> str:
-    """Return a slugified task name using dashes.
+def celery_lock_path(base_dir: Path | str | None = None) -> Path:
+    """Return the path of the Celery feature lock file."""
 
-    Celery stores periodic task names in the database and historically these
-    values included underscores or dotted module paths. The scheduler UI reads
-    these values directly, so we collapse consecutive underscores or dots into a
-    single dash to keep them human readable while remaining unique.
-    """
+    resolved_base_dir = Path(
+        base_dir or getattr(settings, "BASE_DIR", Path(__file__).resolve().parents[2])
+    )
+    return resolved_base_dir / ".locks" / "celery.lck"
+
+
+def is_celery_enabled(lock_path: Path | str | None = None) -> bool:
+    """Return ``True`` when the Celery feature lock file exists."""
+
+    path = Path(lock_path) if lock_path is not None else celery_lock_path()
+    return path.exists()
+
+
+def celery_feature_enabled(node=None, lock_path: Path | str | None = None) -> bool:
+    """Return ``True`` when Celery support is enabled for the given node."""
+
+    if node is not None and hasattr(node, "has_feature"):
+        try:
+            if node.has_feature("celery-queue"):
+                return True
+        except Exception:  # pragma: no cover - defensive guard
+            pass
+
+    return is_celery_enabled(lock_path)
+
+
+def resolve_celery_shutdown_timeout(
+    env: Mapping[str, str] | MutableMapping[str, str] | None = None,
+    default: float = 60.0,
+) -> float:
+    """Return the configured Celery soft shutdown timeout in seconds."""
+
+    if env is None:
+        env = os.environ
+
+    candidates = (
+        "CELERY_WORKER_SOFT_SHUTDOWN_TIMEOUT",
+        "CELERY_WORKER_SHUTDOWN_TIMEOUT",
+    )
+    for variable in candidates:
+        raw_value = (env.get(variable) or "").strip()
+        if not raw_value:
+            continue
+        try:
+            parsed = float(raw_value)
+        except (TypeError, ValueError):
+            continue
+        if parsed < 0:
+            continue
+        return parsed
+
+    return float(default)
+
+
+def slugify_task_name(name: str) -> str:
+    """Return a slugified task name using dashes."""
 
     slug = re.sub(r"[._]+", "-", name)
-    # Collapse any accidental duplicate separators that may result from the
-    # replacement so ``foo__bar`` and ``foo..bar`` both become ``foo-bar``.
     slug = re.sub(r"-{2,}", "-", slug)
     return slug
 
@@ -44,18 +94,11 @@ def _reassign_client_report_schedule(source, target) -> None:
 
 
 def normalize_periodic_task_name(manager, name: str) -> str:
-    """Ensure the stored periodic task name matches the slugified form.
-
-    The helper renames any rows that still use the legacy value so that follow-up
-    ``update_or_create`` calls keep working without leaving duplicate tasks in
-    the scheduler. When conflicting slug or legacy rows exist, they are
-    deduplicated while preserving foreign key relationships where possible.
-    """
+    """Ensure the stored periodic task name matches the slugified form."""
 
     slug = slugify_task_name(name)
     variants = periodic_task_name_variants(name)
 
-    # Nothing to normalize when the slug is unchanged and no variants exist.
     if variants == {slug}:
         return slug
 
@@ -65,7 +108,6 @@ def normalize_periodic_task_name(manager, name: str) -> str:
 
     canonical = next((task for task in tasks if task.name == slug), tasks[0])
 
-    # Drop duplicate rows while preserving relationships.
     for task in tasks:
         if task.pk == canonical.pk:
             continue
@@ -81,8 +123,6 @@ def normalize_periodic_task_name(manager, name: str) -> str:
             canonical._core_normalizing = True
             canonical.save(update_fields=["name"])
     except IntegrityError:
-        # Another process may have created the slug in between the select and
-        # the update. If so, prefer the existing slug and drop the legacy row.
         canonical.refresh_from_db()
         if canonical.name != slug:
             conflict = manager.filter(name=slug).exclude(pk=canonical.pk).first()

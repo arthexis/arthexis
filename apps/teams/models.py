@@ -3,7 +3,6 @@ import logging
 from datetime import timedelta
 from decimal import Decimal
 from math import ceil
-from pathlib import Path
 from typing import Iterable, Iterator, Sequence
 
 import contextlib
@@ -18,6 +17,7 @@ from django.db.models import F, Q
 from django.utils import formats, timezone
 from django.utils.translation import gettext_lazy as _
 
+from apps.celery.utils import is_celery_enabled
 from apps.core import mailer
 from apps.core.entity import Entity, EntityAllManager, EntityManager
 from apps.sigils.fields import SigilShortAutoField
@@ -1422,14 +1422,6 @@ class ManualTask(Entity):
 
     # Notification helpers -------------------------------------------
 
-    @staticmethod
-    def _celery_lock_path() -> Path:
-        return Path(settings.BASE_DIR) / ".locks" / "celery.lck"
-
-    @classmethod
-    def _is_celery_enabled(cls) -> bool:
-        return cls._celery_lock_path().exists()
-
     def _iter_group_emails(self, group: CoreSecurityGroup | None) -> Iterator[str]:
         if not group or not group.pk:
             return
@@ -1545,7 +1537,7 @@ class ManualTask(Entity):
     def schedule_notifications(self) -> None:
         if not self.enable_notifications:
             return
-        if not self._is_celery_enabled():
+        if not is_celery_enabled():
             return
         if not mailer.can_send_email():
             return

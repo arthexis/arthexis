@@ -890,53 +890,6 @@ class ViewHistoryAdmin(EntityModelAdmin):
         return {"labels": labels, "datasets": datasets, "meta": meta}
 
 
-@admin.register(DashboardRule)
-class DashboardRuleAdmin(EntityModelAdmin):
-    list_display = (
-        "name",
-        "content_type",
-        "implementation",
-        "function_name",
-    )
-    list_filter = ("implementation",)
-    search_fields = (
-        "name",
-        "content_type__app_label",
-        "content_type__model",
-    )
-    list_select_related = ("content_type",)
-    raw_id_fields = ("content_type",)
-    fieldsets = (
-        (
-            None,
-            {
-                "fields": (
-                    "name",
-                    "content_type",
-                    "implementation",
-                )
-            },
-        ),
-        (
-            "Condition",
-            {
-                "fields": (
-                    "condition",
-                    "success_message",
-                    "failure_message",
-                ),
-                "classes": ("wide",),
-            },
-        ),
-        (
-            "Python handler",
-            {
-                "fields": ("function_name",),
-            },
-        ),
-    )
-
-
 @admin.register(OdooChatBridge)
 class OdooChatBridgeAdmin(EntityModelAdmin):
     list_display = ("bridge_label", "site", "channel_id", "is_enabled", "is_default")

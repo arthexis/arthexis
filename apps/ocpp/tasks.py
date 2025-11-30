@@ -2,7 +2,6 @@ import json
 import logging
 import uuid
 from datetime import date, datetime, time, timedelta
-from pathlib import Path
 
 from asgiref.sync import async_to_sync
 from celery import shared_task
@@ -11,6 +10,7 @@ from django.contrib.auth import get_user_model
 from django.db.models import Q, Prefetch
 from django.utils import timezone
 
+from apps.celery.utils import is_celery_enabled
 from apps.core import mailer
 from apps.nodes.models import Node
 
@@ -599,8 +599,7 @@ def send_daily_session_report() -> int:
         logger.info("Skipping OCPP session report: email not configured")
         return 0
 
-    celery_lock = Path(settings.BASE_DIR) / ".locks" / "celery.lck"
-    if not celery_lock.exists():
+    if not is_celery_enabled():
         logger.info("Skipping OCPP session report: celery feature disabled")
         return 0
 
