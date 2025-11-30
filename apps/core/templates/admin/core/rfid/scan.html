@@ -12,5 +12,5 @@
 
 {% block content %}
 <h1>{% trans "RFID Scanner" %}</h1>
-{% include "rfid/scanner.html" with scan_url=scan_url prefix="admin" show_release_info=show_release_info default_endianness=default_endianness %}
+{% include "cards/scanner.html" with scan_url=scan_url prefix="admin" show_release_info=show_release_info default_endianness=default_endianness %}
 {% endblock %}

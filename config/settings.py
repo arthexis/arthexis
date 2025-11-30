@@ -406,7 +406,7 @@ _PREFERRED_LOCAL_APP_ORDER = [
     "app",
     "vehicle",
     "ocpp",
-    "rfid",
+    "cards",
     "awg",
     "pages",
     "teams",
@@ -437,7 +437,7 @@ APPLICATION_APPS = [
     "apps.media",
     "apps.emails",
     "apps.pages",
-    "apps.rfid",
+    "apps.cards",
     "apps.teams",
 ]
 

@@ -4,7 +4,7 @@ from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Q
 
 from apps.core.models import RFID
-from apps.rfid.reader import read_rfid, validate_rfid_value
+from apps.cards.reader import read_rfid, validate_rfid_value
 
 
 class Command(BaseCommand):

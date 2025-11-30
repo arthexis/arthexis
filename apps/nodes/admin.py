@@ -45,7 +45,7 @@ from requests import RequestException
 from asgiref.sync import async_to_sync
 
 from .classifiers import run_default_classifiers, suppress_default_classifiers
-from apps.rfid.sync import apply_rfid_payload, serialize_rfid
+from apps.cards.sync import apply_rfid_payload, serialize_rfid
 from .utils import (
     capture_screenshot,
     record_microphone_sample,
@@ -1642,7 +1642,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         }
         return TemplateResponse(
             request,
-            "admin/rfid/rfid_sync_results.html",
+            "admin/cards/rfid_sync_results.html",
             context,
         )
 
