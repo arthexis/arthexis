@@ -20,8 +20,8 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import RedirectView
 from django.views.i18n import set_language
 from django.utils.translation import gettext_lazy as _
-from core import views as core_views
-from core.admindocs import (
+from apps.core import views as core_views
+from apps.core.admindocs import (
     CommandsView,
     ModelGraphIndexView,
     OrderedModelIndexView,
