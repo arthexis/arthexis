@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 from pathlib import Path
 import contextlib
 import os
+import pkgutil
 import sys
 import ipaddress
 import socket
@@ -48,6 +49,7 @@ install_validate_host_with_subnets()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+APPS_DIR = BASE_DIR / "apps"
 
 ACRONYMS: list[str] = []
 with contextlib.suppress(FileNotFoundError):
@@ -386,28 +388,41 @@ CsrfViewMiddleware._check_referer = _check_referer_with_forwarded
 
 # Application definition
 
-LOCAL_APPS = [
-    "apps.celery",
-    "apps.nodes",
-    "apps.screens",
-    "apps.counters",
-    "apps.energy",
-    "apps.core",
-    "apps.payments",
-    "apps.links",
-    "apps.locals",
-    "apps.media",
-    "apps.odoo",
-    "apps.sigils",
-    "apps.repos",
-    "apps.app",
-    "apps.vehicle",
-    "apps.ocpp",
-    "apps.rfid",
-    "apps.awg",
-    "apps.pages",
-    "apps.teams",
+_PREFERRED_LOCAL_APP_ORDER = [
+    "celery",
+    "nodes",
+    "screens",
+    "counters",
+    "energy",
+    "core",
+    "payments",
+    "links",
+    "locals",
+    "media",
+    "odoo",
+    "sigils",
+    "repos",
+    "app",
+    "vehicle",
+    "ocpp",
+    "rfid",
+    "awg",
+    "pages",
+    "teams",
 ]
+
+_DISCOVERED_LOCAL_APPS = {
+    module.name
+    for module in pkgutil.iter_modules([str(APPS_DIR)])
+    if module.ispkg and not module.name.startswith("_")
+}
+
+_ORDERED_LOCAL_APPS = [
+    app for app in _PREFERRED_LOCAL_APP_ORDER if app in _DISCOVERED_LOCAL_APPS
+]
+_ORDERED_LOCAL_APPS.extend(sorted(_DISCOVERED_LOCAL_APPS - set(_ORDERED_LOCAL_APPS)))
+
+LOCAL_APPS = [f"apps.{app}" for app in _ORDERED_LOCAL_APPS]
 
 APPLICATION_APPS = [
     "apps.awg",
