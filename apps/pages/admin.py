@@ -61,9 +61,7 @@ logger = logging.getLogger(__name__)
 
 
 def get_local_app_choices():
-    application_apps = getattr(
-        settings, "APPLICATION_APPS", getattr(settings, "LOCAL_APPS", [])
-    )
+    application_apps = getattr(settings, "LOCAL_APPS", [])
     choices = []
     for app_label in application_apps:
         try:

@@ -13,7 +13,6 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 from pathlib import Path
 import contextlib
 import os
-import pkgutil
 import sys
 import ipaddress
 import socket
@@ -388,60 +387,30 @@ CsrfViewMiddleware._check_referer = _check_referer_with_forwarded
 
 # Application definition
 
-_PREFERRED_LOCAL_APP_ORDER = [
-    "celery",
-    "nodes",
-    "screens",
-    "counters",
-    "energy",
-    "core",
-    "emails",
-    "payments",
-    "links",
-    "locals",
-    "media",
-    "odoo",
-    "sigils",
-    "repos",
-    "chats",
-    "app",
-    "meta",
-    "vehicle",
-    "ocpp",
-    "cards",
-    "awg",
-    "pages",
-    "teams",
-]
-
-_DISCOVERED_LOCAL_APPS = {
-    module.name
-    for module in pkgutil.iter_modules([str(APPS_DIR)])
-    if module.ispkg and not module.name.startswith("_")
-}
-
-_ORDERED_LOCAL_APPS = [
-    app for app in _PREFERRED_LOCAL_APP_ORDER if app in _DISCOVERED_LOCAL_APPS
-]
-_ORDERED_LOCAL_APPS.extend(sorted(_DISCOVERED_LOCAL_APPS - set(_ORDERED_LOCAL_APPS)))
-
-LOCAL_APPS = [f"apps.{app}" for app in _ORDERED_LOCAL_APPS]
-
-APPLICATION_APPS = [
-    "apps.awg",
-    "apps.core",
-    "apps.payments",
-    "apps.energy",
+LOCAL_APPS = [
+    "apps.celery",
     "apps.nodes",
     "apps.screens",
+    "apps.counters",
+    "apps.energy",
+    "apps.core",
+    "apps.emails",
+    "apps.payments",
+    "apps.links",
+    "apps.locals",
+    "apps.media",
+    "apps.odoo",
+    "apps.sigils",
+    "apps.repos",
+    "apps.app",
     "apps.vehicle",
     "apps.ocpp",
-    "apps.media",
-    "apps.chats",
+    "apps.ocpp.forwarder",
+    "apps.ocpp.simulator",
     "apps.meta",
-    "apps.emails",
-    "apps.pages",
     "apps.cards",
+    "apps.awg",
+    "apps.pages",
     "apps.teams",
 ]
 
