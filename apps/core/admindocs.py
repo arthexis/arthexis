@@ -75,13 +75,24 @@ class OrderedModelIndexView(BaseAdminDocsView):
         "pages.usermanual": USER_MANUALS_APP,
     }
 
+    @staticmethod
+    def _get_application_model():
+        try:
+            return apps.get_model("app", "Application")
+        except LookupError:
+            return None
+
     def _application_order_map(self) -> dict[str, int]:
-        Application = apps.get_model("pages", "Application")
+        Application = self._get_application_model()
+        if not Application:
+            return {}
         return Application.order_map()
 
     def _group_sort_key(self, app_config, order_map: dict[str, int]):
-        Application = apps.get_model("pages", "Application")
-        name = Application.format_display_name(None, str(app_config.verbose_name))
+        Application = self._get_application_model()
+        name = str(app_config.verbose_name)
+        if Application:
+            name = Application.format_display_name(None, name)
         prefix = order_map.get(app_config.label)
         prefix_value = prefix if prefix is not None else float("inf")
         return prefix_value, name, app_config.label
@@ -89,15 +100,17 @@ class OrderedModelIndexView(BaseAdminDocsView):
     def _group_models(
         self, models: list[SimpleNamespace], order_map: dict[str, int]
     ) -> list[dict[str, object]]:
-        Application = apps.get_model("pages", "Application")
+        Application = self._get_application_model()
         grouped: dict[str, dict[str, object]] = {}
 
         for model in models:
             app_config = model.app_config
             group_order = order_map.get(app_config.label)
-            group_name = Application.format_display_name(
-                group_order, str(app_config.verbose_name)
-            )
+            group_name = str(app_config.verbose_name)
+            if Application:
+                group_name = Application.format_display_name(
+                    group_order, group_name
+                )
             sort_key = self._group_sort_key(app_config, order_map)
 
             group = grouped.setdefault(
