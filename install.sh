@@ -122,7 +122,11 @@ clean_previous_installation_state() {
 
     rm -f "$LOCK_DIR"/*.lck "$LOCK_DIR"/*.lock "$LOCK_DIR"/*.tmp "$LOCK_DIR"/service.lck
     rm -f "$SYSTEMD_UNITS_LOCK"
-    rm -f "$LOCK_DIR/requirements.md5" "$BASE_DIR/redis.env" "$BASE_DIR/debug.env"
+    rm -f "$LOCK_DIR/requirements.md5" \
+          "$LOCK_DIR/migrations.md5" \
+          "$LOCK_DIR/fixtures.md5" \
+          "$BASE_DIR/redis.env" \
+          "$BASE_DIR/debug.env"
 }
 
 reset_service_units_for_repair() {
