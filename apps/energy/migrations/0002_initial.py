@@ -12,7 +12,7 @@ class Migration(migrations.Migration):
     dependencies = [
         ("core", "0002_initial"),
         ("odoo", "0001_initial"),
-        ("django_celery_beat", "0020_googlecalendarprofile_horologiacountdowntimer"),
+        ("django_celery_beat", "0019_alter_periodictasks_options"),
         ("energy", "0001_initial"),
         ("ocpp", "0001_initial"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),

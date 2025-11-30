@@ -348,12 +348,16 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                     raise exc
 
     # Remove auto-generated SigilRoot entries so fixtures define prefixes
-    SigilRoot = apps.get_model("core", "SigilRoot")
+    SigilRoot = apps.get_model("sigils", "SigilRoot")
     SigilRoot.objects.all().delete()
 
     # Track Site entries provided via fixtures so we can update them without
     # disturbing operator-managed records.
     Site = apps.get_model("sites", "Site")
+
+    # Ensure Application and Module entries exist for local apps before loading
+    # fixtures that reference them.
+    call_command("register_site_apps")
 
     fixtures = _fixture_files()
     if fixtures:
@@ -524,8 +528,7 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
             finally:
                 post_save.connect(_create_landings, sender=Module)
 
-    # Ensure Application and Module entries exist for local apps
-    call_command("register_site_apps")
+    # Refresh seed flags for Landing entries created during fixture loading.
     Landing.objects.update(is_seed_data=True)
 
     # Ensure current node is registered or updated
