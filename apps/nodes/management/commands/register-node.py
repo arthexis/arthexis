@@ -78,7 +78,6 @@ class Command(BaseCommand):
             "network_hostname",
             "ipv4_address",
             "ipv6_address",
-            "constellation_ip",
             "installed_version",
             "installed_revision",
         ):
