@@ -38,6 +38,7 @@ from apps.celery.utils import normalize_periodic_task_name, periodic_task_name_v
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_ipv46_address, validate_ipv6_address
 from cryptography.hazmat.primitives.asymmetric import rsa
+from apps.camera import has_rpi_camera_stack
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 from django.contrib.auth import get_user_model
@@ -584,8 +585,6 @@ class Node(Entity):
         "nginx-server": "nginx_mode.lck",
     }
     CONNECTIVITY_MONITOR_ROLES = {"Control", "Satellite"}
-    RPI_CAMERA_DEVICE = Path("/dev/video0")
-    RPI_CAMERA_BINARIES = ("rpicam-hello", "rpicam-still", "rpicam-vid")
     AP_ROUTER_SSID = "gelectriic-ap"
     AUDIO_CAPTURE_PCM_PATH = Path("/proc/asound/pcm")
     NMCLI_TIMEOUT = 5
@@ -1504,35 +1503,7 @@ class Node(Entity):
     def _has_rpi_camera(cls) -> bool:
         """Return ``True`` when the Raspberry Pi camera stack is available."""
 
-        device = cls.RPI_CAMERA_DEVICE
-        if not device.exists():
-            return False
-        device_path = str(device)
-        try:
-            mode = os.stat(device_path).st_mode
-        except OSError:
-            return False
-        if not stat.S_ISCHR(mode):
-            return False
-        if not os.access(device_path, os.R_OK | os.W_OK):
-            return False
-        for binary in cls.RPI_CAMERA_BINARIES:
-            tool_path = shutil.which(binary)
-            if not tool_path:
-                return False
-            try:
-                result = subprocess.run(
-                    [tool_path, "--help"],
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                    timeout=5,
-                )
-            except Exception:
-                return False
-            if result.returncode != 0:
-                return False
-        return True
+        return has_rpi_camera_stack()
 
     @classmethod
     def _has_audio_capture_device(cls) -> bool:

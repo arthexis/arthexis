@@ -12,18 +12,21 @@ from django.db import close_old_connections
 from django.utils import timezone
 
 from apps.nodes.models import NodeFeature
-from apps.nodes.utils import capture_rpi_snapshot, save_screenshot
+from .rpi import capture_rpi_snapshot
+from apps.nodes.utils import save_screenshot
 
 logger = logging.getLogger(__name__)
 
 
-def _camera_feature_enabled() -> bool:
+def is_rpi_camera_feature_active() -> bool:
     """Return ``True`` if the Raspberry Pi camera feature is active."""
 
     try:
         feature = NodeFeature.objects.filter(slug="rpi-camera").first()
     except Exception:  # pragma: no cover - database may be unavailable early
-        logger.debug("RFID snapshot skipped: unable to query node features", exc_info=True)
+        logger.debug(
+            "RFID snapshot skipped: unable to query node features", exc_info=True
+        )
         return False
     if not feature:
         return False
@@ -87,9 +90,7 @@ def _decode_qr_payload(image: Path, *, timeout: int = 8) -> str | None:
     if result.returncode != 0:
         message = (result.stderr or result.stdout or "").strip()
         if message:
-            logger.debug(
-                "QR decode returned %s: %s", result.returncode, message
-            )
+            logger.debug("QR decode returned %s: %s", result.returncode, message)
         return None
 
     output = (result.stdout or result.stderr or "").strip()
@@ -107,7 +108,7 @@ def _decode_qr_payload(image: Path, *, timeout: int = 8) -> str | None:
 def scan_camera_qr(*, endianness: str | None = None) -> dict[str, Any]:
     """Capture a QR code using the Raspberry Pi camera when enabled."""
 
-    if not _camera_feature_enabled():
+    if not is_rpi_camera_feature_active():
         return {"rfid": None, "label_id": None}
 
     snapshot: Path | None = None
@@ -130,7 +131,7 @@ def scan_camera_qr(*, endianness: str | None = None) -> dict[str, Any]:
         return {"rfid": None, "label_id": None}
 
     try:
-        from .reader import validate_rfid_value
+        from apps.rfid.reader import validate_rfid_value
     except Exception as exc:  # pragma: no cover - defensive guard
         logger.exception("Unable to validate QR payload")
         return {"error": str(exc)}
@@ -145,7 +146,7 @@ def queue_camera_snapshot(rfid: str, payload: dict[str, Any] | None = None) -> N
 
     if not rfid:
         return
-    if not _camera_feature_enabled():
+    if not is_rpi_camera_feature_active():
         return
 
     metadata: dict[str, Any] = dict(payload or {})
@@ -160,3 +161,10 @@ def queue_camera_snapshot(rfid: str, payload: dict[str, Any] | None = None) -> N
         daemon=True,
     )
     thread.start()
+
+
+__all__ = [
+    "is_rpi_camera_feature_active",
+    "queue_camera_snapshot",
+    "scan_camera_qr",
+]

@@ -47,7 +47,6 @@ from asgiref.sync import async_to_sync
 from .classifiers import run_default_classifiers, suppress_default_classifiers
 from .rfid_sync import apply_rfid_payload, serialize_rfid
 from .utils import (
-    capture_rpi_snapshot,
     capture_screenshot,
     record_microphone_sample,
     save_audio_sample,
@@ -59,6 +58,7 @@ from .reports import (
     iter_report_periods,
     resolve_period,
 )
+from apps.camera import capture_rpi_snapshot
 from apps.core import temp_passwords
 from apps.core.admin import EmailOutboxAdminForm, SaveBeforeChangeAction
 from apps.ocpp.models import CPForwarder
