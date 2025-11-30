@@ -24,7 +24,7 @@ from django.utils import timezone
 
 from asgiref.sync import async_to_sync
 
-from apps.core.entity import Entity, EntityManager
+from apps.base.models import Entity, EntityManager
 from apps.nodes.models import Node
 
 from apps.energy.models import CustomerAccount, EnergyTariff, Location
@@ -958,12 +958,12 @@ class ConfigurationKey(Entity):
         return data
 
 
-class ChargerConfigurationManager(models.Manager):
+class ChargerConfigurationManager(EntityManager):
     def get_queryset(self):
         return super().get_queryset().prefetch_related("configuration_entries")
 
 
-class ChargerConfiguration(models.Model):
+class ChargerConfiguration(Entity):
     """Persisted configuration package returned by a charge point."""
 
     charger_identifier = models.CharField(_("Serial Number"), max_length=100)
@@ -1380,7 +1380,7 @@ class ChargingProfile(Entity):
         return True
 
 
-class ChargingSchedule(models.Model):
+class ChargingSchedule(Entity):
     """Charging schedule linked to a :class:`ChargingProfile`."""
 
     profile = models.OneToOneField(
@@ -1600,7 +1600,7 @@ class ChargingSchedule(models.Model):
         return schedule
 
 
-class ChargingProfileDispatch(models.Model):
+class ChargingProfileDispatch(Entity):
     """Track where a charging profile has been dispatched."""
 
     profile = models.ForeignKey(
@@ -2239,7 +2239,7 @@ class Simulator(Entity):
         return f"ws://{self.host}/{path}"
 
 
-class DataTransferMessage(models.Model):
+class DataTransferMessage(Entity):
     """Persisted record of OCPP DataTransfer exchanges."""
 
     DIRECTION_CP_TO_CSMS = "cp_to_csms"

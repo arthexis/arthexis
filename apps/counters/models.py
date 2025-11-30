@@ -12,7 +12,7 @@ from django.dispatch import receiver
 from django.utils.module_loading import import_string
 from django.utils.translation import gettext, gettext_lazy as _
 
-from apps.core.entity import Entity
+from apps.base.models import Entity
 from apps.sigils.fields import ConditionTextField
 
 from .badge_utils import BadgeCounterResult
@@ -31,7 +31,7 @@ _BADGE_COUNTER_CACHE_PREFIX = "admin.dashboard.badge_counters"
 _DASHBOARD_RULE_CACHE_PREFIX = "admin.dashboard.rules"
 
 
-class StoredCounter(models.Model):
+class StoredCounter(Entity):
     """Base model for cached dashboard counters.
 
     Instances cache their computed values indefinitely and rely on explicit
@@ -345,7 +345,7 @@ class BadgeCounter(StoredCounter):
         }
 
 
-class DashboardRule(StoredCounter, Entity):
+class DashboardRule(StoredCounter):
     """Rule configuration for admin dashboard model rows."""
 
     cache_prefix = _DASHBOARD_RULE_CACHE_PREFIX

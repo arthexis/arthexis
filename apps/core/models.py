@@ -57,7 +57,7 @@ import requests
 logger = logging.getLogger(__name__)
 
 
-from .entity import Entity, EntityUserManager, EntityManager
+from apps.base.models import Entity, EntityManager, EntityUserManager
 from .release import (
     Package as ReleasePackage,
     Credentials,
@@ -2349,7 +2349,7 @@ class CountdownTimer(Entity):
         if update_fields:
             release.save(update_fields=update_fields, sync_timer=False)
 
-class TOTPDeviceSettings(models.Model):
+class TOTPDeviceSettings(Entity):
     """Per-device configuration options for authenticator enrollments."""
 
     device = models.OneToOneField(
@@ -2377,15 +2377,12 @@ class TOTPDeviceSettings(models.Model):
             "Share this authenticator with every user in the selected security group."
         ),
     )
-    is_seed_data = models.BooleanField(default=False)
-    is_user_data = models.BooleanField(default=False)
-
     class Meta:
         verbose_name = _("Authenticator Device Setting")
         verbose_name_plural = _("Authenticator Device Settings")
 
 
-class PasskeyCredential(models.Model):
+class PasskeyCredential(Entity):
     """Stored WebAuthn credentials that allow passwordless logins."""
 
     user = models.ForeignKey(
@@ -2425,7 +2422,7 @@ class PasskeyCredential(models.Model):
         return f"{self.name} ({self.user})"
 
 
-class AdminCommandResult(models.Model):
+class AdminCommandResult(Entity):
     """Persisted output for ad-hoc Django management command runs."""
 
     command = models.TextField()

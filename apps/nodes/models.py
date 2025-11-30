@@ -12,7 +12,7 @@ from django.db.models import Q
 from django.db.utils import DatabaseError, IntegrityError
 from django.db.models.signals import post_delete
 from django.dispatch import Signal, receiver
-from apps.core.entity import Entity
+from apps.base.models import Entity
 from apps.core.models import PackageRelease, Profile
 from apps.sigils.fields import SigilLongAutoField, SigilShortAutoField
 from django.utils.translation import gettext_lazy as _
@@ -2826,7 +2826,7 @@ class NetMessage(Entity):
             self.save(update_fields=save_fields)
 
 
-class PendingNetMessage(models.Model):
+class PendingNetMessage(Entity):
     """Queued :class:`NetMessage` awaiting delivery to a downstream node."""
 
     node = models.ForeignKey(
