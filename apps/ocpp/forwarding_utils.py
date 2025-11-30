@@ -31,7 +31,7 @@ def load_local_node_credentials():
     if not endpoint:
         return local_node, None, _("Local node public endpoint is not configured.")
 
-    security_dir = Path(local_node.base_path or settings.BASE_DIR) / "security"
+    security_dir = local_node.get_base_path() / "security"
     priv_path = security_dir / endpoint
     if not priv_path.exists():
         return local_node, None, _("Local node private key not found.")

@@ -1192,7 +1192,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             except Exception as exc:  # pragma: no cover - unexpected errors
                 return {"ok": False, "message": str(exc)}
 
-        security_dir = Path(local_node.base_path or settings.BASE_DIR) / "security"
+        security_dir = local_node.get_base_path() / "security"
         priv_path = security_dir / f"{local_node.public_endpoint}"
         if not priv_path.exists():
             return {
@@ -1361,7 +1361,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         if not node:
             self.message_user(request, "Unknown node", messages.ERROR)
             return redirect("..")
-        security_dir = Path(settings.BASE_DIR) / "security"
+        security_dir = local_node.get_base_path() / "security"
         pub_path = security_dir / f"{node.public_endpoint}.pub"
         if pub_path.exists():
             response = HttpResponse(pub_path.read_bytes(), content_type="text/plain")
@@ -1470,7 +1470,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
                 "Local node public endpoint is not configured."
             )
 
-        security_dir = Path(local_node.base_path or settings.BASE_DIR) / "security"
+        security_dir = local_node.get_base_path() / "security"
         priv_path = security_dir / endpoint
         if not priv_path.exists():
             return local_node, None, _("Local node private key not found.")

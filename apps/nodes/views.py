@@ -18,7 +18,6 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.utils.cache import patch_vary_headers
 from django.views.decorators.csrf import csrf_exempt
-from pathlib import Path
 
 from utils.api import api_login_required
 
@@ -377,11 +376,7 @@ def node_info(request):
 
     if token:
         try:
-            priv_path = (
-                Path(node.base_path or settings.BASE_DIR)
-                / "security"
-                / f"{node.public_endpoint}"
-            )
+            priv_path = node.get_base_path() / "security" / f"{node.public_endpoint}"
             private_key = serialization.load_pem_private_key(
                 priv_path.read_bytes(), password=None
             )

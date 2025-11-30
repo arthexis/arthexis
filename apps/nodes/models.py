@@ -263,7 +263,7 @@ class NodeFeature(Entity):
         }
         lock = lock_map.get(self.slug)
         if lock:
-            base_path = Path(node.base_path or settings.BASE_DIR)
+            base_path = node.get_base_path()
             lock_path = base_path / ".locks" / lock
             if lock_path.exists():
                 return True
@@ -607,6 +607,18 @@ class Node(Entity):
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return f"{self.hostname}:{self.port}"
+
+    @classmethod
+    def default_base_path(cls) -> Path:
+        """Return the default filesystem base path for node assets."""
+
+        return Path(settings.BASE_DIR) / "work" / "nodes"
+
+    def get_base_path(self) -> Path:
+        """Return the configured base path or the default nodes directory."""
+
+        base_path = (self.base_path or "").strip()
+        return Path(base_path) if base_path else self.default_base_path()
 
     def _get_profile_instance(self) -> "NodeProfile | None":
         if hasattr(self, "_cached_node_profile"):
@@ -1123,7 +1135,7 @@ class Node(Entity):
 
         preferred_contact = ipv4_address or ipv6_address or direct_address or "127.0.0.1"
         port = cls.get_preferred_port()
-        base_path = str(settings.BASE_DIR)
+        base_path = str(cls.default_base_path())
         ver_path = Path(settings.BASE_DIR) / "VERSION"
         installed_version = ver_path.read_text().strip() if ver_path.exists() else ""
         rev_value = revision.get_revision()
@@ -1201,7 +1213,7 @@ class Node(Entity):
         except Exception:  # pragma: no cover - requests should be available
             return
 
-        security_dir = Path(self.base_path or settings.BASE_DIR) / "security"
+        security_dir = self.get_base_path() / "security"
         priv_path = security_dir / f"{self.public_endpoint}"
         if not priv_path.exists():
             logger.debug("Private key for %s not found; skipping peer update", self)
@@ -1302,7 +1314,7 @@ class Node(Entity):
                 logger.warning("Unable to notify node %s of startup", peer)
 
     def ensure_keys(self):
-        security_dir = Path(settings.BASE_DIR) / "security"
+        security_dir = self.get_base_path() / "security"
         security_dir.mkdir(parents=True, exist_ok=True)
         priv_path = security_dir / f"{self.public_endpoint}"
         pub_path = security_dir / f"{self.public_endpoint}.pub"
@@ -1353,11 +1365,7 @@ class Node(Entity):
             self.ensure_keys()
         except Exception:
             return None
-        priv_path = (
-            Path(self.base_path or settings.BASE_DIR)
-            / "security"
-            / f"{self.public_endpoint}"
-        )
+        priv_path = self.get_base_path() / "security" / f"{self.public_endpoint}"
         try:
             return serialization.load_pem_private_key(
                 priv_path.read_bytes(), password=None
@@ -1623,7 +1631,7 @@ class Node(Entity):
             self.sync_feature_tasks()
             return
         detected_slugs = set()
-        base_path = Path(self.base_path or settings.BASE_DIR)
+        base_path = self.get_base_path()
         locks_dir = base_path / ".locks"
         for slug, filename in self.FEATURE_LOCK_MAP.items():
             if (locks_dir / filename).exists():
