@@ -233,7 +233,8 @@ def _run_django_server(command: list[str], *, cwd: Path, env: dict[str, str]) ->
     """Target function that runs the Django server in a daemon process."""
 
     try:
-        subprocess.run(command, cwd=cwd, env=env, check=False)
+        os.chdir(cwd)
+        os.execve(command[0], command, env)
     except Exception:
         return
 
