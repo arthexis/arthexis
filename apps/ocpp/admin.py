@@ -76,7 +76,7 @@ from apps.core.admin import SaveBeforeChangeAction
 from apps.energy.models import EnergyTariff
 from apps.core.models import RFID as CoreRFID
 from apps.core.form_fields import SchedulePeriodsField
-from apps.core.user_data import EntityModelAdmin
+from apps.locals.user_data import EntityModelAdmin
 from apps.nodes.models import Node
 
 

@@ -36,7 +36,7 @@ from apps.core.models import (
     ReleaseManager as CoreReleaseManager,
 )
 from apps.crms.models import OdooProfile as CoreOdooProfile
-from apps.core.user_data import (
+from apps.locals.user_data import (
     EntityModelAdmin,
     UserDatumAdminMixin,
     delete_user_fixture,

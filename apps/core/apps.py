@@ -353,10 +353,6 @@ def _register_admin_and_post_migrate_handlers(config):
     from .admin_commands import patch_admin_command_runner
     from .environment import patch_admin_environment_view
     from .system import patch_admin_system_view
-    from .user_data import (
-        patch_admin_user_datum,
-        patch_admin_user_data_views,
-    )
 
     def create_default_arthexis(**kwargs):
         User = get_user_model()
@@ -370,8 +366,6 @@ def _register_admin_and_post_migrate_handlers(config):
 
     post_migrate.connect(create_default_arthexis, sender=config)
 
-    patch_admin_user_datum()
-    patch_admin_user_data_views()
     patch_admin_system_view()
     patch_admin_environment_view()
     patch_admin_history()

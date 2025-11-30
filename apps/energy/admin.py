@@ -18,8 +18,9 @@ from django.utils.html import format_html
 from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _, ngettext
 
-from apps.core.models import OdooProfile, RFID, SecurityGroup
-from apps.core.user_data import EntityModelAdmin
+from apps.core.models import RFID, SecurityGroup
+from apps.crms.models import OdooProfile
+from apps.locals.user_data import EntityModelAdmin
 from apps.ocpp.models import Charger, ElectricVehicle
 
 from .models import (

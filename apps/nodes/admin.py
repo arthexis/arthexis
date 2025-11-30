@@ -93,7 +93,7 @@ from apps.ocpp.models import (
     DataTransferMessage,
 )
 from apps.ocpp.network import serialize_charger_for_network
-from apps.core.user_data import EntityModelAdmin
+from apps.locals.user_data import EntityModelAdmin
 
 
 class NodeAdminForm(forms.ModelForm):
