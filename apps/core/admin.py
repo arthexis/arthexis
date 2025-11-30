@@ -76,10 +76,7 @@ from apps.rfid.utils import build_mode_toggle
 from apps.teams.models import EmailCollector, EmailInbox, EmailOutbox, SocialProfile
 from apps.energy.models import ClientReport, CustomerAccount
 from apps.repos.forms import PackageRepositoryForm
-from apps.repos.github_helper import (
-    GitHubRepositoryError,
-    create_repository_for_package,
-)
+from apps.repos.task_utils import GitHubRepositoryError, create_repository_for_package
 from .models import (
     User,
     UserPhoneNumber,

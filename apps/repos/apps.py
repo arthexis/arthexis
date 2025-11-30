@@ -9,7 +9,7 @@ from django.apps import AppConfig
 from django.conf import settings
 from django.core.signals import got_request_exception
 
-from apps.repos.github_helper import report_exception_to_github
+from apps.repos.tasks import report_exception_to_github
 
 
 logger = logging.getLogger(__name__)
