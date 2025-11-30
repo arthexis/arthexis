@@ -704,10 +704,6 @@ class WhatsAppChatBridge(Entity):
                         close()
 
 
-from . import odoo as odoo_bridge
-from . import whatsapp as whatsapp_bridge
-
-
 class ChatSession(Entity):
     """Persistent conversation between a visitor and staff."""
 
@@ -821,9 +817,6 @@ class ChatSession(Entity):
         )
         message.is_user_data = True
         message.save()
-        if (source or "").lower() != "whatsapp":
-            whatsapp_bridge.forward_chat_message(self, message)
-        odoo_bridge.forward_chat_message(self, message)
         self.touch_activity(visitor=not from_staff, staff=from_staff)
         if not from_staff:
             self.notify_staff_of_message(message)
