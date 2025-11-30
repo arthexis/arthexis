@@ -11,8 +11,8 @@ import threading
 import websockets
 from config.offline import requires_network
 
-from . import store
-from .websocket_headers import connect_headers_kwargs
+from .. import store
+from ..websocket_headers import connect_headers_kwargs
 
 
 class UnsupportedMessageError(RuntimeError):

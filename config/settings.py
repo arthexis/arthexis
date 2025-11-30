@@ -13,7 +13,6 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 from pathlib import Path
 import contextlib
 import os
-import pkgutil
 import sys
 import ipaddress
 import socket
@@ -406,17 +405,33 @@ _PREFERRED_LOCAL_APP_ORDER = [
     "app",
     "vehicle",
     "ocpp",
+    "ocpp.forwarder",
+    "ocpp.simulator",
     "rfid",
     "awg",
     "pages",
     "teams",
 ]
 
-_DISCOVERED_LOCAL_APPS = {
-    module.name
-    for module in pkgutil.iter_modules([str(APPS_DIR)])
-    if module.ispkg and not module.name.startswith("_")
-}
+
+def _iter_local_app_labels():
+    for config_path in APPS_DIR.rglob("apps.py"):
+        if config_path.name != "apps.py":
+            continue
+        if not (config_path.parent / "__init__.py").exists():
+            continue
+
+        rel_parts = config_path.relative_to(APPS_DIR).parts[:-1]
+        if not rel_parts:
+            continue
+
+        if any(part.startswith("_") for part in rel_parts):
+            continue
+
+        yield ".".join(rel_parts)
+
+
+_DISCOVERED_LOCAL_APPS = set(_iter_local_app_labels())
 
 _ORDERED_LOCAL_APPS = [
     app for app in _PREFERRED_LOCAL_APP_ORDER if app in _DISCOVERED_LOCAL_APPS
