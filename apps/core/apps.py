@@ -469,7 +469,7 @@ def _configure_lock_dependent_tasks(config):
                 name=task_name,
                 defaults={
                     "interval": schedule,
-                    "task": "core.tasks.poll_email_collectors",
+                    "task": "apps.core.tasks.poll_email_collectors",
                 },
             )
         except (OperationalError, ProgrammingError):
@@ -479,7 +479,7 @@ def _configure_lock_dependent_tasks(config):
     post_migrate.connect(ensure_auto_upgrade_periodic_task, sender=config)
     post_migrate.connect(ensure_reference_validation_task, sender=config)
 
-    auto_upgrade_dispatch_uid = "core.apps.ensure_auto_upgrade_periodic_task"
+    auto_upgrade_dispatch_uid = "apps.core.apps.ensure_auto_upgrade_periodic_task"
 
     from django.apps import apps
 
@@ -504,7 +504,7 @@ def _configure_lock_dependent_tasks(config):
         weak=False,
     )
 
-    validation_dispatch_uid = "core.apps.ensure_reference_validation_task"
+    validation_dispatch_uid = "apps.core.apps.ensure_reference_validation_task"
 
     def ensure_reference_validation_on_connection(**kwargs):
         if not apps.ready:
@@ -541,7 +541,7 @@ def _connect_sqlite_wal():
 
     connection_created.connect(
         enable_sqlite_wal,
-        dispatch_uid="core.enable_sqlite_wal",
+        dispatch_uid="apps.core.enable_sqlite_wal",
         weak=False,
     )
 
@@ -556,7 +556,7 @@ def _configure_github_issue_reporting():
     from django.conf import settings
     from django.core.signals import got_request_exception
 
-    from core.github_helper import report_exception_to_github
+    from apps.core.github_helper import report_exception_to_github
 
     def queue_github_issue(sender, request=None, **kwargs):
         if not getattr(settings, "GITHUB_ISSUE_REPORTING_ENABLED", True):
@@ -632,7 +632,7 @@ def _configure_github_issue_reporting():
 
     got_request_exception.connect(
         queue_github_issue,
-        dispatch_uid="core.github_issue_reporter",
+        dispatch_uid="apps.core.github_issue_reporter",
         weak=False,
     )
 

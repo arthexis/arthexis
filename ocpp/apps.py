@@ -37,7 +37,7 @@ class OcppConfig(AppConfig):
         if not (control_lock.exists() and rfid_lock.exists()):
             return
         from .rfid.signals import tag_scanned
-        from core.notifications import notify
+        from apps.core.notifications import notify
 
         def _notify(_sender, rfid=None, **_kwargs):
             if rfid:

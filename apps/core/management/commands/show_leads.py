@@ -1,6 +1,6 @@
 from django.core.management.base import BaseCommand
 from django.utils import timezone
-from core.models import InviteLead
+from apps.core.models import InviteLead
 from awg.models import PowerLead
 import json
 

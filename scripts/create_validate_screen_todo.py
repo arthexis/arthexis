@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-FIXTURE_DIR = REPO_ROOT / "core" / "fixtures"
+FIXTURE_DIR = REPO_ROOT / "apps" / "core" / "fixtures"
 
 
 def guess_title(slug: str) -> str:

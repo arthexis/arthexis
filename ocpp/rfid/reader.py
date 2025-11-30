@@ -5,8 +5,8 @@ import time
 from django.utils import timezone
 from django.core.exceptions import ValidationError
 
-from core.models import RFID
-from core.notifications import notify_async
+from apps.core.models import RFID
+from apps.core.notifications import notify_async
 
 from .constants import (
     DEFAULT_RST_PIN,

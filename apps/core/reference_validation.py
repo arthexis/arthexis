@@ -10,7 +10,7 @@ from .celery_utils import normalize_periodic_task_name, periodic_task_name_varia
 
 
 REFERENCE_VALIDATION_TASK_NAME = "reference-url-validation"
-REFERENCE_VALIDATION_TASK_PATH = "core.tasks.validate_reference_links"
+REFERENCE_VALIDATION_TASK_PATH = "apps.core.tasks.validate_reference_links"
 
 
 def ensure_reference_validation_task(sender=None, **kwargs) -> None:

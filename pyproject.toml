@@ -27,7 +27,6 @@ packages = [
     "apps",
     "apps.core",
     "apps.app",
-    "core",
     "app",
     "config",
     "nodes",

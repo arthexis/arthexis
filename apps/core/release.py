@@ -348,7 +348,7 @@ def _git_has_staged_changes() -> bool:
 def _manager_credentials() -> Optional[Credentials]:
     """Return credentials from the Package's release manager if available."""
     try:  # pragma: no cover - optional dependency
-        from core.models import Package as PackageModel
+        from apps.core.models import Package as PackageModel
 
         package_obj = PackageModel.objects.select_related("release_manager").first()
         if package_obj and package_obj.release_manager:
@@ -362,7 +362,7 @@ def _manager_git_credentials(package: Optional[Package] = None) -> Optional[GitC
     """Return Git credentials from the Package's release manager if available."""
 
     try:  # pragma: no cover - optional dependency
-        from core.models import Package as PackageModel
+        from apps.core.models import Package as PackageModel
 
         queryset = PackageModel.objects.select_related("release_manager")
         if package is not None:

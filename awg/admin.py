@@ -4,7 +4,7 @@ from django.utils.translation import gettext_lazy as _
 
 from .constants import CONDUIT_CHOICES
 from .models import CableSize, ConduitFill, CalculatorTemplate, EnergyTariff, PowerLead
-from core.user_data import EntityModelAdmin
+from apps.core.user_data import EntityModelAdmin
 
 
 @admin.register(CableSize)

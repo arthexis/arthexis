@@ -1393,7 +1393,9 @@ def _step_pre_release_actions(release, ctx, log_path: Path, *, user=None) -> Non
     _sync_with_origin_main(log_path)
     PackageRelease.dump_fixture()
     staged_release_fixtures: list[Path] = []
-    release_fixture_paths = sorted(Path("core/fixtures").glob("releases__*.json"))
+    release_fixture_paths = sorted(
+        Path("apps/core/fixtures").glob("releases__*.json")
+    )
     if release_fixture_paths:
         subprocess.run(
             ["git", "add", *[str(path) for path in release_fixture_paths]],
@@ -1458,7 +1460,7 @@ def _step_promote_build(release, ctx, log_path: Path, *, user=None) -> None:
         )
         from glob import glob
 
-        paths = ["VERSION", *glob("core/fixtures/releases__*.json")]
+        paths = ["VERSION", *glob("apps/core/fixtures/releases__*.json")]
         diff = subprocess.run(
             ["git", "status", "--porcelain", *paths],
             capture_output=True,
@@ -1684,7 +1686,7 @@ def _step_publish(release, ctx, log_path: Path, *, user=None) -> None:
     if release.github_url:
         _append_log(log_path, f"Recorded GitHub URL: {release.github_url}")
     fixture_paths = [
-        str(path) for path in Path("core/fixtures").glob("releases__*.json")
+        str(path) for path in Path("apps/core/fixtures").glob("releases__*.json")
     ]
     if fixture_paths:
         status = subprocess.run(

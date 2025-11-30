@@ -18,7 +18,7 @@ from django.utils.translation import gettext as _, gettext_lazy as _lazy
 
 from pages.utils import get_original_referer, landing
 
-from core.models import CountdownTimer
+from apps.core.models import CountdownTimer
 
 from .models import (
     CableSize,

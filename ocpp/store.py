@@ -16,7 +16,7 @@ import heapq
 import itertools
 from typing import Iterable, Iterator
 
-from core.log_paths import select_log_dir
+from apps.core.log_paths import select_log_dir
 
 IDENTITY_SEPARATOR = "#"
 AGGREGATE_SLUG = "all"

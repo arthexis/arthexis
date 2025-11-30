@@ -9,13 +9,13 @@ from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
 from django.views.decorators.debug import sensitive_variables
 
-from core.backends import (
+from apps.core.backends import (
     get_user_totp_devices,
     totp_devices_allow_passwordless,
     totp_devices_require_password,
     verify_user_totp_token,
 )
-from core.form_fields import Base64FileField
+from apps.core.form_fields import Base64FileField
 
 from .models import UserManual, UserStory
 
@@ -122,7 +122,7 @@ class AuthenticatorLoginForm(AuthenticationForm):
                     device.user = user
                     device.user_id = user.pk
                 user.otp_device = device
-                backend_path = "core.backends.TOTPBackend"
+                backend_path = "apps.core.backends.TOTPBackend"
                 user.backend = backend_path
                 self.user_cache = user
                 self.cleaned_data["otp_token"] = token

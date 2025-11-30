@@ -1,8 +1,8 @@
 from django.db import models
-from core.entity import Entity, EntityManager
+from apps.core.entity import Entity, EntityManager
 from django.utils.translation import gettext_lazy as _
 from accounts.models import EnergyTariff as CoreEnergyTariff
-from core.models import Lead
+from apps.core.models import Lead
 
 
 class CableSizeManager(EntityManager):

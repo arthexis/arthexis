@@ -8,7 +8,7 @@ from pathlib import Path
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
-from core.notifications import notify
+from apps.core.notifications import notify
 from nodes.lcd import CharLCD1602, LCDUnavailableError
 
 

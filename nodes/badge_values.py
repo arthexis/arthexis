@@ -1,7 +1,7 @@
 from django.db.models import Count, Exists, OuterRef, Q
 from django.utils.translation import gettext, ngettext
 
-from core.models import Lead, RFID
+from apps.core.models import Lead, RFID
 from ocpp.models import Charger
 from nodes.models import Node
 from .badge_utils import BadgeCounterResult

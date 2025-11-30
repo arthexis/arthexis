@@ -66,7 +66,7 @@ class _ReleaseMarker:
 
 
 _CACHE_TIMEOUT_SECONDS = 120
-_CACHE_KEY_PREFIX = "core.changelog.sections"
+_CACHE_KEY_PREFIX = "apps.core.changelog.sections"
 _INITIAL_SECTION_COUNT = 2
 
 
@@ -194,7 +194,7 @@ def _gather_commits(range_spec: str) -> Iterable[ChangelogCommit]:
     except ChangelogError:
         return tuple()
 
-    from core.system import _github_commit_url  # Local import to avoid circular dependency
+    from apps.core.system import _github_commit_url  # Local import to avoid circular dependency
 
     for chunk in output.strip().split("\x1e"):
         if not chunk:

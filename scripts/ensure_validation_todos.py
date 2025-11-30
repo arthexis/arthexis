@@ -87,7 +87,7 @@ def ensure_todo(entries: list, description: str) -> None:
 
 def main() -> int:
     base = Path(__file__).resolve().parents[1]
-    todos_dir = base / "core/fixtures"
+    todos_dir = base / "apps" / "core" / "fixtures"
     entries = []
     for p in sorted(todos_dir.glob("todos__*.json")):
         entries.extend(json.loads(p.read_text()))

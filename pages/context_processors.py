@@ -4,8 +4,8 @@ from django.shortcuts import resolve_url
 from django.conf import settings
 from pathlib import Path
 from nodes.models import Node, NodeFeature
-from core.models import Reference
-from core.reference_utils import filter_visible_references
+from apps.core.models import Reference
+from apps.core.reference_utils import filter_visible_references
 from .models import Module, SiteTemplate
 
 _FAVICON_DIR = Path(settings.BASE_DIR) / "pages" / "fixtures" / "data"

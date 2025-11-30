@@ -1,5 +1,5 @@
 from django.core.management.base import BaseCommand
-from core.notifications import notify
+from apps.core.notifications import notify
 
 
 class Command(BaseCommand):

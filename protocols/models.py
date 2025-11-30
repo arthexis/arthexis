@@ -11,7 +11,7 @@ from django.db.models import Q
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
-from core.entity import Entity, EntityManager
+from apps.core.entity import Entity, EntityManager
 from nodes.models import Node
 from ocpp.forwarder import forwarder
 

@@ -5,7 +5,7 @@ from datetime import datetime
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
-from core import changelog
+from apps.core import changelog
 
 
 class Command(BaseCommand):

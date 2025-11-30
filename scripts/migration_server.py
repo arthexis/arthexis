@@ -24,7 +24,7 @@ if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
 try:  # pragma: no cover - optional dependency in tests
-    from core.notifications import notify_async as notify_async  # type: ignore
+    from apps.core.notifications import notify_async as notify_async  # type: ignore
 except Exception:  # pragma: no cover - the notifier is optional
     def notify_async(subject: str, body: str = "") -> None:
         """Fallback notification when :mod:`core.notifications` is unavailable."""

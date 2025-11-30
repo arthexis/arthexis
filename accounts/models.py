@@ -20,9 +20,9 @@ from django.utils import formats, timezone
 from django.utils.dateparse import parse_datetime
 from django.utils.translation import gettext, gettext_lazy as _, override
 
-from core.celery_utils import normalize_periodic_task_name
-from core.entity import Entity, EntityManager
-from core.language import (
+from apps.core.celery_utils import normalize_periodic_task_name
+from apps.core.entity import Entity, EntityManager
+from apps.core.language import (
     default_report_language,
     normalize_report_language,
     normalize_report_title,
@@ -727,7 +727,7 @@ class ClientReportSchedule(Entity):
         name = normalize_periodic_task_name(PeriodicTask.objects, raw_name)
         defaults = {
             "crontab": schedule,
-            "task": "core.tasks.run_client_report_schedule",
+            "task": "apps.core.tasks.run_client_report_schedule",
             "kwargs": _json.dumps({"schedule_id": self.pk}),
             "enabled": True,
         }
@@ -961,7 +961,7 @@ class ClientReportSchedule(Entity):
                 raise RuntimeError("No recipients available for client report")
             else:
                 try:
-                    from core.models import ClientReport as ProxyClientReport
+                    from apps.core.models import ClientReport as ProxyClientReport
 
                     delivered = ProxyClientReport.send_delivery(
                         report,
@@ -1172,7 +1172,7 @@ class ClientReport(Entity):
         outbox=None,
         reply_to: list[str] | None = None,
     ) -> list[str]:
-        from core import mailer
+        from apps.core import mailer
 
         recipients = list(to or [])
         if not recipients:
