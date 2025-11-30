@@ -222,7 +222,7 @@ def build_runserver_command(base_dir: Path, *, reload: bool = False) -> list[str
         sys.executable,
         str(manage_py),
         "runserver",
-        f"0.0.0.0:{port}",
+        f"127.0.0.1:{port}",
     ]
     if not reload:
         command.append("--noreload")

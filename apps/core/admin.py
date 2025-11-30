@@ -72,7 +72,7 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from apps.ocpp.models import Charger, Transaction
 from apps.vehicle.models import ElectricVehicle
-from apps.rfid.utils import build_mode_toggle
+from apps.cards.utils import build_mode_toggle
 from apps.emails.models import EmailCollector, EmailInbox, EmailOutbox
 from apps.teams.models import SocialProfile
 from apps.energy.models import ClientReport, CustomerAccount
@@ -3721,8 +3721,8 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
         return render(request, "admin/core/rfid/scan.html", context)
 
     def scan_next(self, request):
-        from apps.rfid.scanner import scan_sources
-        from apps.rfid.reader import validate_rfid_value
+        from apps.cards.scanner import scan_sources
+        from apps.cards.reader import validate_rfid_value
 
         if request.method == "POST":
             try:

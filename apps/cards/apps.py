@@ -4,10 +4,10 @@ from django.apps import AppConfig
 from django.conf import settings
 
 
-class RfidConfig(AppConfig):
+class CardsConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
-    name = "apps.rfid"
-    label = "rfid"
+    name = "apps.cards"
+    label = "cards"
 
     def ready(self):  # pragma: no cover - startup side effects
         control_lock = Path(settings.BASE_DIR) / ".locks" / "control.lck"

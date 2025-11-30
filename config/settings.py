@@ -425,7 +425,7 @@ APPLICATION_APPS = [
     "apps.media",
     "apps.emails",
     "apps.pages",
-    "apps.rfid",
+    "apps.cards",
     "apps.teams",
 ]
 
