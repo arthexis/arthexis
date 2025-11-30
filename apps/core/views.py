@@ -1969,8 +1969,9 @@ def release_progress(request, pk: int, action: str):
     if error_response:
         return error_response
     session_key = f"release_publish_{pk}"
-    lock_path = Path(".locks") / f"release_publish_{pk}.json"
-    restart_path = Path(".locks") / f"release_publish_{pk}.restarts"
+    lock_dir = Path(settings.BASE_DIR) / ".locks"
+    lock_path = lock_dir / f"release_publish_{pk}.json"
+    restart_path = lock_dir / f"release_publish_{pk}.restarts"
     log_dir, log_dir_warning = _resolve_release_log_dir(Path(settings.LOG_DIR))
     log_dir_warning_message = log_dir_warning
 
