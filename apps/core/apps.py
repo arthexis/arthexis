@@ -9,7 +9,8 @@ logger = logging.getLogger(__name__)
 
 class CoreConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
-    name = "core"
+    name = "apps.core"
+    label = "core"
     order = 2
     verbose_name = _("Core")
 

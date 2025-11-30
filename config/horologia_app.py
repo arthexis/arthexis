@@ -18,7 +18,7 @@ class HorologiaConfig(BaseBeatConfig):
         from django_celery_beat import admin as celery_admin
         from django_celery_beat.models import IntervalSchedule, PeriodicTask
 
-        from core.models import HorologiaCountdownTimer
+        from apps.core.models import HorologiaCountdownTimer
 
         class HorologiaPeriodicTaskAdmin(celery_admin.PeriodicTaskAdmin):
             """Patch the periodic task changelist."""

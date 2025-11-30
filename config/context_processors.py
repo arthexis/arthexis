@@ -5,7 +5,7 @@ from django.contrib.sites.models import Site
 from django.http import HttpRequest
 from django.conf import settings
 
-from core.auto_upgrade_failover import read_failover_status
+from apps.core.auto_upgrade_failover import read_failover_status
 
 
 DEFAULT_BADGE_COLOR = "#28a745"
