@@ -18,7 +18,7 @@ from typing import Dict, Iterable
 BASE_DIR = Path(__file__).resolve().parents[1]
 LOCK_DIR = BASE_DIR / ".locks"
 REQUIREMENTS_FILE = Path("requirements.txt")
-REQUIREMENTS_HASH_FILE = Path("requirements.md5")
+REQUIREMENTS_HASH_FILE = LOCK_DIR / "requirements.md5"
 PIP_INSTALL_HELPER = Path("scripts") / "helpers" / "pip_install.py"
 
 if str(BASE_DIR) not in sys.path:
@@ -298,6 +298,8 @@ def update_requirements(base_dir: Path) -> bool:
     req_file = base_dir / REQUIREMENTS_FILE
     hash_file = base_dir / REQUIREMENTS_HASH_FILE
     helper_script = base_dir / PIP_INSTALL_HELPER
+
+    hash_file.parent.mkdir(parents=True, exist_ok=True)
 
     if not req_file.exists():
         return False

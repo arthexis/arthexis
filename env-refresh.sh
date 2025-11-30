@@ -58,6 +58,7 @@ VENV_DIR="$SCRIPT_DIR/.venv"
 PYTHON="$VENV_DIR/bin/python"
 USE_SYSTEM_PYTHON=0
 FORCE_REQUIREMENTS_INSTALL=0
+LOCK_DIR="$SCRIPT_DIR/.locks"
 
 LATEST=0
 CLEAN=0
@@ -148,13 +149,15 @@ install_watch_upgrade_helper() {
 }
 
 
+mkdir -p "$LOCK_DIR"
+
 if [ "$CLEAN" -eq 1 ]; then
   find "$SCRIPT_DIR" -maxdepth 1 -name 'db*.sqlite3' -delete
 fi
 
 REQ_FILE="$SCRIPT_DIR/requirements.txt"
 if [ -f "$REQ_FILE" ]; then
-  MD5_FILE="$SCRIPT_DIR/requirements.md5"
+  MD5_FILE="$LOCK_DIR/requirements.md5"
   NEW_HASH=$(md5sum "$REQ_FILE" | awk '{print $1}')
   STORED_HASH=""
   [ -f "$MD5_FILE" ] && STORED_HASH=$(cat "$MD5_FILE")
@@ -189,7 +192,7 @@ PY
     fi
   fi
 elif [ -f "$REQ_FILE" ]; then
-  MD5_FILE="$SCRIPT_DIR/requirements.system.md5"
+  MD5_FILE="$LOCK_DIR/requirements.system.md5"
   NEW_HASH=$(md5sum "$REQ_FILE" | awk '{print $1}')
   STORED_HASH=""
   [ -f "$MD5_FILE" ] && STORED_HASH=$(cat "$MD5_FILE")

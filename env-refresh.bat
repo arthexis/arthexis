@@ -3,6 +3,7 @@ setlocal EnableDelayedExpansion
 set "SCRIPT_DIR=%~dp0"
 set "PIP_HELPER=%SCRIPT_DIR%scripts\helpers\pip_install.py"
 set "BACKUP_DIR=%SCRIPT_DIR%backups"
+set "LOCK_DIR=%SCRIPT_DIR%\.locks"
 if /I "%SCRIPT_DIR%"=="%SYSTEMDRIVE%\\" (
     echo Refusing to run from drive root.
     exit /b 1
@@ -50,6 +51,8 @@ if not exist "%VENV%\Scripts\python.exe" (
     exit /b 1
 )
 
+if not exist "%LOCK_DIR%" mkdir "%LOCK_DIR%" >nul 2>&1
+
 if %CLEAN%==1 (
     del "%SCRIPT_DIR%db*.sqlite3" >nul 2>&1
 )
@@ -57,8 +60,8 @@ if exist "%SCRIPT_DIR%\requirements.txt" (
     for /f "skip=1 tokens=1" %%h in ('certutil -hashfile "%SCRIPT_DIR%\requirements.txt" MD5') do (
         if not defined REQ_HASH set REQ_HASH=%%h
     )
-    if exist "%SCRIPT_DIR%\requirements.md5" (
-        set /p STORED_HASH=<"%SCRIPT_DIR%\requirements.md5"
+    if exist "%LOCK_DIR%\requirements.md5" (
+        set /p STORED_HASH=<"%LOCK_DIR%\requirements.md5"
     )
     if /I not "%REQ_HASH%"=="%STORED_HASH%" (
         if exist "%PIP_HELPER%" (
@@ -66,7 +69,7 @@ if exist "%SCRIPT_DIR%\requirements.txt" (
         ) else (
             "%VENV%\Scripts\python.exe" -m pip install -r "%SCRIPT_DIR%\requirements.txt"
         )
-        echo %REQ_HASH%>"%SCRIPT_DIR%\requirements.md5"
+        echo %REQ_HASH%>"%LOCK_DIR%\requirements.md5"
     )
 )
 set "ARGS="

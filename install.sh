@@ -122,7 +122,7 @@ clean_previous_installation_state() {
 
     rm -f "$LOCK_DIR"/*.lck "$LOCK_DIR"/*.lock "$LOCK_DIR"/*.tmp "$LOCK_DIR"/service.lck
     rm -f "$SYSTEMD_UNITS_LOCK"
-    rm -f "$BASE_DIR/requirements.md5" "$BASE_DIR/redis.env" "$BASE_DIR/debug.env"
+    rm -f "$LOCK_DIR/requirements.md5" "$BASE_DIR/redis.env" "$BASE_DIR/debug.env"
 }
 
 reset_service_units_for_repair() {
@@ -540,7 +540,7 @@ source .venv/bin/activate
 pip install --upgrade pip
 
 REQ_FILE="requirements.txt"
-MD5_FILE="requirements.md5"
+MD5_FILE="$LOCK_DIR/requirements.md5"
 NEW_HASH=$(md5sum "$REQ_FILE" | awk '{print $1}')
 STORED_HASH=""
 [ -f "$MD5_FILE" ] && STORED_HASH=$(cat "$MD5_FILE")
