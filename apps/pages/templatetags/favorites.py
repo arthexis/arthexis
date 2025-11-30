@@ -5,8 +5,8 @@ from django.core.cache import cache
 from django.template.loader import render_to_string
 from django.utils.safestring import mark_safe
 
-from pages.favorites_cache import user_favorites_cache_key
-from pages.models import Favorite
+from ..favorites_cache import user_favorites_cache_key
+from ..models import Favorite
 
 register = template.Library()
 

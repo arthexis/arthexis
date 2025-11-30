@@ -22,10 +22,10 @@ django_asgi_app = get_asgi_application()
 # registered before consumers are loaded.
 import apps.ocpp.routing
 import apps.nodes.routing
-import pages.routing
+import apps.pages.routing
 
 websocket_patterns = [
-    *pages.routing.websocket_urlpatterns,
+    *apps.pages.routing.websocket_urlpatterns,
     *apps.nodes.routing.websocket_urlpatterns,
     *apps.ocpp.routing.websocket_urlpatterns,
 ]

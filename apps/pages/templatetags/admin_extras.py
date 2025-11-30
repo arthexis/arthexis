@@ -23,8 +23,8 @@ from apps.core.models import GoogleCalendarProfile
 from apps.core.entity import Entity
 from apps.nodes.models import NetMessage, Node
 from apps.nodes.models import BadgeCounter
-from pages.dashboard_rules import bind_rule_model, load_callable, rule_failure
-from pages.models import DashboardRule
+from ..dashboard_rules import bind_rule_model, load_callable, rule_failure
+from ..models import DashboardRule
 
 register = template.Library()
 

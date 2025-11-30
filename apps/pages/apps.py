@@ -10,7 +10,8 @@ logger = logging.getLogger(__name__)
 
 class PagesConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
-    name = "pages"
+    name = "apps.pages"
+    label = "pages"
     order = 7
     verbose_name = "Experience"
     _view_history_purged = False
@@ -33,7 +34,7 @@ class PagesConfig(AppConfig):
         self._purge_view_history()
 
     def _purge_view_history(self, days: int = 15) -> None:
-        """Remove stale :class:`pages.models.ViewHistory` entries."""
+        """Remove stale :class:`apps.pages.models.ViewHistory` entries."""
 
         from .models import ViewHistory
 

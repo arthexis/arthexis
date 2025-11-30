@@ -76,7 +76,7 @@ from webauthn.helpers import base64url_to_bytes, bytes_to_base64url
 from accounts.models import ClientReport, ClientReportSchedule
 from apps.core.models import InviteLead, PasskeyCredential, SecurityGroup
 from apps.ocpp.models import Charger
-from .utils import get_original_referer, get_request_language_code
+from .utils import get_original_referer, get_request_language_code, landing
 
 
 class _GraphvizDeprecationFilter(logging.Filter):
@@ -328,7 +328,6 @@ def _resolve_work_asset(user, path: str) -> Path:
     if asset_resolved.is_dir():
         raise Http404("Asset not found")
     return asset_resolved
-from pages.utils import landing
 from apps.core.liveupdate import live_update
 from django_otp import login as otp_login
 from django_otp.plugins.otp_totp.models import TOTPDevice

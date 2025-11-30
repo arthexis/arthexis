@@ -28,7 +28,7 @@ _DISCOVERED = False
 
 
 def autodiscover() -> None:
-    """Import all concrete spec modules under :mod:`pages.screenshot_specs`."""
+    """Import all concrete spec modules under :mod:`apps.pages.screenshot_specs`."""
 
     global _DISCOVERED
     if _DISCOVERED:

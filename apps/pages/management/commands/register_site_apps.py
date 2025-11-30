@@ -6,8 +6,8 @@ from django.utils.text import slugify
 import socket
 
 from apps.app.models import Application
-from pages.models import Module
-from pages.defaults import DEFAULT_APPLICATION_DESCRIPTIONS
+from apps.pages.models import Module
+from apps.pages.defaults import DEFAULT_APPLICATION_DESCRIPTIONS
 from apps.nodes.models import Node, NodeRole
 
 
