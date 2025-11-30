@@ -1,13 +1,17 @@
 import json
+from collections.abc import Mapping
 
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
+from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.views import redirect_to_login
 from django.contrib.admin.views.decorators import staff_member_required
 from apps.nodes.models import Node, NodeFeature
 from apps.pages.utils import landing
+from apps.rfid.sync import apply_rfid_payload, serialize_rfid
+from apps.nodes.views import _clean_requester_hint, _load_signed_node
 
 from .scanner import scan_sources, enable_deep_read_mode
 from .reader import validate_rfid_value
@@ -74,6 +78,108 @@ def scan_next(request):
             result = scan_sources(request, endianness=endianness)
     status = 500 if result.get("error") else 200
     return JsonResponse(result, status=status)
+
+
+@csrf_exempt
+def export_rfids(request):
+    """Return serialized RFID records for authenticated peers."""
+
+    if request.method != "POST":
+        return JsonResponse({"detail": "POST required"}, status=405)
+
+    try:
+        payload = json.loads(request.body.decode() or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"detail": "invalid json"}, status=400)
+
+    requester = payload.get("requester")
+    if not requester:
+        return JsonResponse({"detail": "requester required"}, status=400)
+
+    requester_mac = _clean_requester_hint(payload.get("requester_mac"))
+    requester_public_key = _clean_requester_hint(
+        payload.get("requester_public_key"), strip=False
+    )
+    node, error_response = _load_signed_node(
+        request,
+        requester,
+        mac_address=requester_mac,
+        public_key=requester_public_key,
+    )
+    if error_response is not None:
+        return error_response
+
+    tags = [serialize_rfid(tag) for tag in RFID.objects.all().order_by("label_id")]
+
+    return JsonResponse({"rfids": tags})
+
+
+@csrf_exempt
+def import_rfids(request):
+    """Import RFID payloads from a trusted peer."""
+
+    if request.method != "POST":
+        return JsonResponse({"detail": "POST required"}, status=405)
+
+    try:
+        payload = json.loads(request.body.decode() or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"detail": "invalid json"}, status=400)
+
+    requester = payload.get("requester")
+    if not requester:
+        return JsonResponse({"detail": "requester required"}, status=400)
+
+    requester_mac = _clean_requester_hint(payload.get("requester_mac"))
+    requester_public_key = _clean_requester_hint(
+        payload.get("requester_public_key"), strip=False
+    )
+    node, error_response = _load_signed_node(
+        request,
+        requester,
+        mac_address=requester_mac,
+        public_key=requester_public_key,
+    )
+    if error_response is not None:
+        return error_response
+
+    rfids = payload.get("rfids", [])
+    if not isinstance(rfids, list):
+        return JsonResponse({"detail": "rfids must be a list"}, status=400)
+
+    created = 0
+    updated = 0
+    linked_accounts = 0
+    missing_accounts: list[str] = []
+    errors = 0
+
+    for entry in rfids:
+        if not isinstance(entry, Mapping):
+            errors += 1
+            continue
+        outcome = apply_rfid_payload(entry, origin_node=node)
+        if not outcome.ok:
+            errors += 1
+            if outcome.error:
+                missing_accounts.append(outcome.error)
+            continue
+        if outcome.created:
+            created += 1
+        else:
+            updated += 1
+        linked_accounts += outcome.accounts_linked
+        missing_accounts.extend(outcome.missing_accounts)
+
+    return JsonResponse(
+        {
+            "processed": len(rfids),
+            "created": created,
+            "updated": updated,
+            "accounts_linked": linked_accounts,
+            "missing_accounts": missing_accounts,
+            "errors": errors,
+        }
+    )
 
 
 @require_POST

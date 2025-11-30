@@ -137,7 +137,12 @@ def _resolve_accounts(
 
     has_account_data = any(
         key in entry
-        for key in ("customer_accounts", "energy_accounts", "customer_account_names", "energy_account_names")
+        for key in (
+            "customer_accounts",
+            "energy_accounts",
+            "customer_account_names",
+            "energy_account_names",
+        )
     )
     if not has_account_data:
         return [], [], False
