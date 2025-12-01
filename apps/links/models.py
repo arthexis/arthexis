@@ -144,7 +144,6 @@ class Reference(Entity):
 class ExperienceReference(Reference):
     class Meta:
         proxy = True
-        app_label = "pages"
         verbose_name = _("Reference")
         verbose_name_plural = _("References")
 
