@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import socket
+from collections.abc import Iterable
 from pathlib import Path
 
 from utils import revision
@@ -23,6 +24,33 @@ def lcd_feature_enabled(lock_dir: Path) -> bool:
     feature_lock = lock_dir / LCD_FEATURE_LOCK
     runtime_lock = lock_dir / LCD_RUNTIME_LOCK
     return feature_lock.exists() or runtime_lock.exists()
+
+
+def lcd_feature_enabled_in_dirs(lock_dirs: Iterable[Path] | None) -> bool:
+    """Return True when any provided lock directory enables the LCD feature."""
+
+    if not lock_dirs:
+        return False
+
+    for lock_dir in lock_dirs:
+        if lcd_feature_enabled(lock_dir):
+            return True
+    return False
+
+
+def lcd_feature_enabled_for_paths(base_dir: Path, node_base_path: Path) -> bool:
+    """Return True when LCD locks exist in the node or project lock directories."""
+
+    lock_dirs: list[Path] = []
+    for candidate in (node_base_path / ".locks", Path(base_dir) / ".locks"):
+        try:
+            resolved = candidate.resolve()
+        except Exception:
+            resolved = candidate
+        if resolved not in lock_dirs:
+            lock_dirs.append(resolved)
+
+    return lcd_feature_enabled_in_dirs(lock_dirs)
 
 
 def _maybe_setup_django() -> bool:

@@ -6,8 +6,8 @@ from copy import deepcopy
 from dataclasses import dataclass
 import getpass
 from typing import Optional
-from django.db import models
 from django.apps import apps
+from django.db import models
 from django.db.models import Q
 from django.db.utils import DatabaseError, IntegrityError
 from django.db.models.signals import post_delete
@@ -250,6 +250,13 @@ class NodeFeature(Entity):
             return False
         if node.features.filter(pk=self.pk).exists():
             return True
+        base_path = node.get_base_path()
+        base_dir = Path(settings.BASE_DIR)
+
+        if self.slug == "lcd-screen":
+            from apps.screens.startup_notifications import lcd_feature_enabled_for_paths
+
+            return lcd_feature_enabled_for_paths(base_dir, base_path)
         if self.slug == "gui-toast":
             from apps.core.notifications import supports_gui_toast
 
@@ -257,20 +264,19 @@ class NodeFeature(Entity):
         if self.slug == "rpi-camera":
             return Node._has_rpi_camera()
         lock_map = {
-            "lcd-screen": "lcd_screen.lck",
             "rfid-scanner": "rfid.lck",
             "celery-queue": "celery.lck",
             "nginx-server": "nginx_mode.lck",
         }
         lock = lock_map.get(self.slug)
         if lock:
-            base_path = node.get_base_path()
-            lock_path = base_path / ".locks" / lock
-            if lock_path.exists():
-                return True
-            if self.slug == "lcd-screen":
-                feature_lock = base_path / ".locks" / "lcd_screen_enabled.lck"
-                if feature_lock.exists():
+            project_lock_dir = base_dir / ".locks"
+            lock_dirs = [base_path / ".locks"]
+            if project_lock_dir not in lock_dirs:
+                lock_dirs.append(project_lock_dir)
+
+            for lock_dir in lock_dirs:
+                if (lock_dir / lock).exists():
                     return True
             return False
         return False
@@ -579,7 +585,6 @@ class Node(Entity):
     preferred_port: int = int(os.environ.get("PORT", 8888))
 
     FEATURE_LOCK_MAP = {
-        "lcd-screen": "lcd_screen.lck",
         "rfid-scanner": "rfid.lck",
         "celery-queue": "celery.lck",
         "nginx-server": "nginx_mode.lck",
@@ -589,6 +594,7 @@ class Node(Entity):
     AUDIO_CAPTURE_PCM_PATH = Path("/proc/asound/pcm")
     NMCLI_TIMEOUT = 5
     AUTO_MANAGED_FEATURES = set(FEATURE_LOCK_MAP.keys()) | {
+        "lcd-screen",
         "gui-toast",
         "rpi-camera",
         "ap-router",
@@ -1603,10 +1609,25 @@ class Node(Entity):
             return
         detected_slugs = set()
         base_path = self.get_base_path()
+        base_dir = Path(settings.BASE_DIR)
         locks_dir = base_path / ".locks"
+        project_lock_dir = base_dir / ".locks"
+        lock_dirs = [locks_dir]
+        if project_lock_dir not in lock_dirs:
+            lock_dirs.append(project_lock_dir)
         for slug, filename in self.FEATURE_LOCK_MAP.items():
-            if (locks_dir / filename).exists():
+            if any((lock_dir / filename).exists() for lock_dir in lock_dirs):
                 detected_slugs.add(slug)
+        try:
+            from apps.screens.startup_notifications import lcd_feature_enabled_for_paths
+        except Exception:
+            pass
+        else:
+            try:
+                if lcd_feature_enabled_for_paths(base_dir, base_path):
+                    detected_slugs.add("lcd-screen")
+            except Exception:
+                pass
         if self._has_rpi_camera():
             detected_slugs.add("rpi-camera")
         if self._hosts_gelectriic_ap():
