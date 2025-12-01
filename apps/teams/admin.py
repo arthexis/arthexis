@@ -25,7 +25,7 @@ from apps.core.admin import (
     InviteLeadAdmin,
     SecurityGroupAdmin,
     ReleaseManagerAdmin,
-    OdooProfileAdmin,
+    OdooEmployeeAdmin,
     GoogleCalendarProfileAdmin,
 )
 from apps.core.models import (
@@ -33,7 +33,7 @@ from apps.core.models import (
     SecurityGroup as CoreSecurityGroup,
     ReleaseManager as CoreReleaseManager,
 )
-from apps.odoo.models import OdooProfile as CoreOdooProfile
+from apps.odoo.models import OdooEmployee as CoreOdooEmployee
 from apps.locals.user_data import (
     EntityModelAdmin,
     UserDatumAdminMixin,
@@ -57,7 +57,7 @@ from .models import (
     SecurityGroup,
     ReleaseManager,
     PowerLead,
-    OdooProfile,
+    OdooEmployee,
     TOTPDevice,
     GoogleCalendarProfile,
     ManualTask,
@@ -92,8 +92,8 @@ class PowerLeadAdminProxy(CorePowerLeadAdmin):
     pass
 
 
-@admin.register(OdooProfile)
-class OdooProfileAdminProxy(OdooProfileAdmin):
+@admin.register(OdooEmployee)
+class OdooEmployeeAdminProxy(OdooEmployeeAdmin):
     pass
 
 

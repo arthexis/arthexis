@@ -46,7 +46,7 @@ PYPI_REQUEST_TIMEOUT = 10
 from . import temp_passwords
 from .models import PackageRelease
 from .models import RFID
-from apps.odoo.models import OdooProduct, OdooProfile
+from apps.odoo.models import OdooEmployee, OdooProduct
 from apps.energy.models import CustomerAccount
 
 
@@ -54,7 +54,7 @@ from apps.energy.models import CustomerAccount
 def odoo_products(request):
     """Return available products from the user's Odoo instance."""
 
-    profile = getattr(request.user, "odoo_profile", None)
+    profile = getattr(request.user, "odoo_employee", None)
     if not profile or not profile.is_verified:
         raise Http404
     try:
@@ -81,7 +81,7 @@ def odoo_products(request):
 def odoo_quote_report(request):
     """Display a consolidated quote report from the user's Odoo instance."""
 
-    profile = getattr(request.user, "odoo_profile", None)
+    profile = getattr(request.user, "odoo_employee", None)
     context = {
         "title": _("Quote Report"),
         "profile": profile,
@@ -93,7 +93,7 @@ def odoo_quote_report(request):
         "profile_url": "",
     }
 
-    profile_admin = admin_site._registry.get(OdooProfile)
+    profile_admin = admin_site._registry.get(OdooEmployee)
     if profile_admin is not None:
         try:
             context["profile_url"] = profile_admin.get_my_profile_url(request)
@@ -102,7 +102,7 @@ def odoo_quote_report(request):
 
     if not profile or not profile.is_verified:
         context["error"] = _(
-            "Configure and verify your Odoo profile before generating the report."
+            "Configure and verify your Odoo employee before generating the report."
         )
         return TemplateResponse(
             request, "admin/core/odoo_quote_report.html", context
