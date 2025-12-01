@@ -40,7 +40,6 @@ from apps.core.auto_upgrade import (
     AUTO_UPGRADE_TASK_PATH,
     ensure_auto_upgrade_periodic_task,
 )
-from apps.core.auto_upgrade_failover import clear_failover_lock, read_failover_status
 from apps.release.release import (
     _git_authentication_missing,
     _git_remote_url,
@@ -1944,7 +1943,6 @@ def _system_upgrade_report_view(request):
             "auto_upgrade_report": _build_auto_upgrade_report(
                 **({"revision_info": revision_info} if revision_info is not None else {})
             ),
-            "failover_status": read_failover_status(Path(settings.BASE_DIR)),
         }
     )
     return TemplateResponse(request, "admin/system_upgrade_report.html", context)
@@ -2125,20 +2123,6 @@ def _system_upgrade_revision_check_view(request):
 
     return _upgrade_redirect(request, reverse("admin:system-upgrade-report"))
 
-
-def _system_clear_failover_lock_view(request):
-    if request.method != "POST":
-        return HttpResponseRedirect(reverse("admin:index"))
-
-    base_dir = Path(settings.BASE_DIR)
-    clear_failover_lock(base_dir)
-    messages.success(
-        request,
-        _("Failover alert dismissed. Auto-upgrade retries remain available."),
-    )
-    return _upgrade_redirect(request, reverse("admin:system-upgrade-report"))
-
-
 def patch_admin_system_view() -> None:
     """Add custom admin view for system information."""
     original_get_urls = admin.site.get_urls
@@ -2191,11 +2175,6 @@ def patch_admin_system_view() -> None:
                 "system/upgrade-report/run-check/",
                 admin.site.admin_view(_system_trigger_upgrade_check_view),
                 name="system-upgrade-run-check",
-            ),
-            path(
-                "system/upgrade-report/dismiss-failover/",
-                admin.site.admin_view(_system_clear_failover_lock_view),
-                name="system-upgrade-dismiss-failover",
             ),
         ]
         return custom + urls

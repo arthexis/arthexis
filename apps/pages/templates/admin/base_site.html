@@ -250,13 +250,6 @@ document.addEventListener('DOMContentLoaded', function () {
     --user-story-alert-danger-border: rgba(248, 113, 113, 0.35);
     --user-story-alert-danger-fg: #b91c1c;
     --user-story-close-hover-bg: rgba(15, 23, 42, 0.08);
-    --auto-upgrade-failover-bg: rgba(248, 113, 113, 0.12);
-    --auto-upgrade-failover-border: rgba(185, 28, 28, 0.35);
-    --auto-upgrade-failover-title: #b91c1c;
-    --auto-upgrade-failover-link: #b91c1c;
-    --auto-upgrade-failover-button-bg: #dc2626;
-    --auto-upgrade-failover-button-hover: #b91c1c;
-    --auto-upgrade-failover-button-secondary-border: rgba(185, 28, 28, 0.4);
 }
 
 .chat-widget {
@@ -585,13 +578,6 @@ body.chat-open {
     --user-story-alert-danger-border: rgba(248, 113, 113, 0.45);
     --user-story-alert-danger-fg: #fca5a5;
     --user-story-close-hover-bg: rgba(148, 163, 184, 0.25);
-    --auto-upgrade-failover-bg: rgba(248, 113, 113, 0.18);
-    --auto-upgrade-failover-border: rgba(248, 113, 113, 0.45);
-    --auto-upgrade-failover-title: #fca5a5;
-    --auto-upgrade-failover-link: #fca5a5;
-    --auto-upgrade-failover-button-bg: #f87171;
-    --auto-upgrade-failover-button-hover: #fca5a5;
-    --auto-upgrade-failover-button-secondary-border: rgba(248, 113, 113, 0.45);
 }
 
 body.login #header {
@@ -626,113 +612,6 @@ body.login #site-badges .badge a {
     text-decoration: none;
 }
 body.login .badge-unknown {background-color:#6c757d;}
-
-.auto-upgrade-failover-banner {
-    align-items: flex-start;
-    background-color: var(--auto-upgrade-failover-bg);
-    border: 1px solid var(--auto-upgrade-failover-border);
-    border-radius: 14px;
-    box-shadow: 0 14px 40px rgba(15, 23, 42, 0.12);
-    color: inherit;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1.25rem;
-    margin: 1.5rem 0;
-    padding: 1.25rem 1.5rem;
-}
-
-.auto-upgrade-failover-body {
-    flex: 1 1 300px;
-    min-width: 0;
-}
-
-.auto-upgrade-failover-title {
-    color: var(--auto-upgrade-failover-title);
-    display: block;
-    font-size: 1.1rem;
-    font-weight: 700;
-    margin-bottom: 0.25rem;
-}
-
-.auto-upgrade-failover-detail {
-    line-height: 1.6;
-    margin: 0;
-}
-
-.auto-upgrade-failover-detail a {
-    color: var(--auto-upgrade-failover-link);
-    font-weight: 600;
-    text-decoration: underline;
-}
-
-.auto-upgrade-failover-meta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.75rem;
-    list-style: none;
-    margin: 0.75rem 0 0;
-    padding: 0;
-    font-size: 0.85rem;
-    opacity: 0.85;
-}
-
-.auto-upgrade-failover-actions {
-    align-items: center;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-}
-
-.auto-upgrade-failover-actions form {
-    display: inline;
-}
-
-.auto-upgrade-failover-actions .button {
-    background-color: var(--auto-upgrade-failover-button-bg);
-    border: none;
-    border-radius: 999px;
-    color: #fff;
-    font-weight: 600;
-    padding: 0.45rem 1.4rem;
-    transition: background-color 0.2s ease, transform 0.2s ease;
-}
-
-.auto-upgrade-failover-actions .button:hover,
-.auto-upgrade-failover-actions .button:focus-visible {
-    background-color: var(--auto-upgrade-failover-button-hover);
-    color: #fff;
-    transform: translateY(-1px);
-}
-
-.auto-upgrade-failover-actions .auto-upgrade-failover-button-secondary {
-    background: transparent;
-    border: 1px solid var(--auto-upgrade-failover-button-secondary-border);
-    color: inherit;
-    padding: 0.45rem 1.4rem;
-}
-
-[data-theme="dark"] .auto-upgrade-failover-actions .auto-upgrade-failover-button-secondary {
-    color: var(--body-fg, #f8fafc);
-}
-
-.auto-upgrade-failover-actions .auto-upgrade-failover-button-secondary:hover,
-.auto-upgrade-failover-actions .auto-upgrade-failover-button-secondary:focus-visible {
-    background-color: rgba(15, 23, 42, 0.08);
-    color: inherit;
-    transform: none;
-}
-
-@media (max-width: 960px) {
-    .auto-upgrade-failover-banner {
-        padding: 1.25rem;
-    }
-
-    .auto-upgrade-failover-actions {
-        width: 100%;
-        justify-content: flex-start;
-    }
-}
-
 #server-clock {
     font-family: monospace;
     font-size: 0.9rem;
@@ -1396,40 +1275,6 @@ body.user-story-open {
   </nav>
 {% endblock %}
 {% block messages %}
-  {% if request.user.is_authenticated and request.user.is_staff and auto_upgrade_failover %}
-    <section class="auto-upgrade-failover-banner" role="alert" aria-live="polite">
-      <div class="auto-upgrade-failover-body">
-        <span class="auto-upgrade-failover-title">{% trans "Auto-upgrade reverted to failover mode" %}</span>
-        <p class="auto-upgrade-failover-detail">
-          {{ auto_upgrade_failover.detail }}
-          <a href="{% url 'admin:system-upgrade-report' %}">{% trans "Review auto-upgrade log" %}</a>.
-        </p>
-        {% if auto_upgrade_failover.created or auto_upgrade_failover.revision %}
-          <ul class="auto-upgrade-failover-meta">
-            {% if auto_upgrade_failover.created %}
-              <li>{% blocktrans with timestamp=auto_upgrade_failover.created|date:'SHORT_DATETIME_FORMAT' %}Recorded {{ timestamp }}{% endblocktrans %}</li>
-            {% endif %}
-            {% if auto_upgrade_failover.revision %}
-              <li>{% blocktrans with revision=auto_upgrade_failover.revision|slice:':7' %}Revision {{ revision }}{% endblocktrans %}</li>
-            {% endif %}
-          </ul>
-        {% endif %}
-      </div>
-      <div class="auto-upgrade-failover-actions">
-        <form action="{% url 'admin:system-upgrade-dismiss-failover' %}" method="post">
-          {% csrf_token %}
-          <input type="hidden" name="next" value="{{ request.get_full_path }}">
-          <button type="submit" class="button auto-upgrade-failover-button-secondary">{% trans "Dismiss" %}</button>
-        </form>
-        <form action="{% url 'admin:system-upgrade-run-check' %}" method="post">
-          {% csrf_token %}
-          <input type="hidden" name="channel" value="normal">
-          <input type="hidden" name="next" value="{{ request.get_full_path }}">
-          <button type="submit" class="button">{% trans "Retry upgrade" %}</button>
-        </form>
-      </div>
-    </section>
-  {% endif %}
   {% include "admin/includes/messages.html" %}
 {% endblock %}
 {% block footer %}

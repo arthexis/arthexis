@@ -25,7 +25,6 @@ from apps.core.auto_upgrade import (
     DEFAULT_AUTO_UPGRADE_MODE,
 )
 from apps.release import release_workflow
-from apps.core.auto_upgrade_failover import clear_failover_lock, write_failover_lock
 from django.conf import settings
 from django.db import DatabaseError, models
 from django.utils import timezone
@@ -557,7 +556,7 @@ def _restart_service_via_start_script(base_dir: Path, service: str) -> bool:
 
 
 def _record_restart_failure(base_dir: Path, service: str) -> None:
-    """Record restart failures and surface a failover alert."""
+    """Record restart failures in the auto-upgrade log."""
 
     _append_auto_upgrade_log(
         base_dir,
@@ -566,17 +565,6 @@ def _record_restart_failure(base_dir: Path, service: str) -> None:
             "manual intervention required"
         ),
     )
-
-    revision = _current_revision(base_dir)
-    write_failover_lock(
-        base_dir,
-        reason=f"Service {service or 'unknown'} failed to restart after upgrade",
-        detail=(
-            "Restart verification did not succeed; manual intervention required"
-        ),
-        revision=revision or None,
-    )
-
 
 def _ensure_managed_service(
     base_dir: Path,
@@ -1859,12 +1847,6 @@ def _handle_failed_health_check(base_dir: Path, detail: str) -> None:
     _append_auto_upgrade_log(
         base_dir, "Health check failed; manual intervention required"
     )
-    write_failover_lock(
-        base_dir,
-        reason="Auto-upgrade health check failed",
-        detail=detail,
-        revision=revision or None,
-    )
     _record_auto_upgrade_failure(base_dir, detail or "Health check failed")
 
 
@@ -1911,7 +1893,6 @@ def verify_auto_upgrade_health(attempt: int = 1) -> bool | None:
 
     if status == 200:
         _record_health_check_result(base_dir, attempt, status, "succeeded")
-        clear_failover_lock(base_dir)
         logger.info(
             "Auto-upgrade health check succeeded on attempt %s with HTTP %s",
             attempt,

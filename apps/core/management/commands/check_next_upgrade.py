@@ -8,7 +8,6 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from apps.core import system
-from apps.core.auto_upgrade_failover import read_failover_status
 
 
 class Command(BaseCommand):
@@ -46,15 +45,12 @@ class Command(BaseCommand):
         mode_enabled = bool(mode_info.get("enabled", False))
 
         skip_revisions = system._load_auto_upgrade_skip_revisions(base_dir)
-        failover_status = read_failover_status(base_dir)
-
         blockers = self._collect_blockers(
             base_dir,
             available,
             error,
             task,
             mode_info,
-            failover_status,
             schedule,
         )
 
@@ -150,7 +146,6 @@ class Command(BaseCommand):
         error: str,
         task,
         mode_info: dict,
-        failover_status,
         schedule,
     ) -> list[str]:
         blockers: list[str] = []
@@ -175,16 +170,6 @@ class Command(BaseCommand):
                 blockers.append(
                     f"Auto-upgrade mode file {mode_file} exists but could not be read."
                 )
-
-        if failover_status:
-            detail = failover_status.detail or failover_status.reason or "Active"
-            if failover_status.revision:
-                detail = f"{detail} (revision {failover_status.revision})"
-            if failover_status.created:
-                created_display = system._format_timestamp(failover_status.created)
-                if created_display:
-                    detail = f"{detail} since {created_display}"
-            blockers.append(f"Auto-upgrade failover is active: {detail}")
 
         return blockers
 
