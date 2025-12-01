@@ -466,6 +466,8 @@ if DEBUG:
 
 SITE_ID = 1
 
+MIGRATION_MODULES = {"sites": "apps.core.sites_migrations"}
+
 _original_get_current_site = sites_shortcuts.get_current_site
 
 
