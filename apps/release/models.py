@@ -394,7 +394,6 @@ class PackageRelease(Entity):
 
     def save(self, *args, **kwargs):
         sync_schedule = kwargs.pop("sync_schedule", True)
-        sync_timer = kwargs.pop("sync_timer", True)
         update_fields = kwargs.get("update_fields")
         normalized_version = type(self).normalize_version(self.version)
         if normalized_version != self.version:
@@ -406,8 +405,6 @@ class PackageRelease(Entity):
         super().save(*args, **kwargs)
         if sync_schedule and self.pk:
             self.sync_scheduled_task()
-        if sync_timer:
-            self.sync_countdown_timer()
 
     def clear_schedule(self, *, save: bool = True) -> None:
         """Remove any scheduled release metadata."""
@@ -418,7 +415,6 @@ class PackageRelease(Entity):
             self.save(
                 update_fields=["scheduled_date", "scheduled_time"],
                 sync_schedule=True,
-                sync_timer=True,
             )
 
     @property
@@ -617,48 +613,6 @@ class PackageRelease(Entity):
 
         return targets
 
-    def sync_countdown_timer(self) -> None:
-        """Keep the countdown timer aligned with the release schedule."""
-
-        if not self.pk:
-            return
-
-        schedule_at = self.scheduled_datetime
-        try:
-            timer = self.countdown_timer
-        except CountdownTimer.DoesNotExist:
-            timer = None
-
-        if schedule_at is None:
-            if timer:
-                timer.delete()
-            return
-
-        default_title = f"{self.package.name} {self.version} release"
-
-        if timer is None:
-            CountdownTimer.objects.create(
-                title=default_title,
-                scheduled_for=schedule_at,
-                package_release=self,
-                is_published=False,
-            )
-            return
-
-        update_fields: list[str] = []
-        if timer.scheduled_for != schedule_at:
-            timer.scheduled_for = schedule_at
-            update_fields.append("scheduled_for")
-        if timer.package_release_id != self.pk:
-            timer.package_release = self
-            update_fields.append("package_release")
-        if not timer.title:
-            timer.title = default_title
-            update_fields.append("title")
-
-        if update_fields:
-            timer.save(update_fields=update_fields)
-
     def github_package_url(self) -> str | None:
         """Return the GitHub Packages URL for this release if determinable."""
 
@@ -805,142 +759,4 @@ def validate_relative_url(value: str) -> None:
     parsed = urlparse(value)
     if parsed.scheme or parsed.netloc or not value.startswith("/"):
         raise ValidationError("URL must be relative")
-
-
-class CountdownTimerManager(EntityManager):
-    """Manager with helpers for countdown timers."""
-
-    def published(self):
-        """Return timers marked as published."""
-
-        return super().get_queryset().filter(is_published=True)
-
-    def visible(self):
-        """Return published timers sorted by most recent schedule."""
-
-        return self.published().order_by("-scheduled_for", "pk")
-
-    def upcoming(self):
-        """Return timers scheduled for the future ordered by start time."""
-
-        now = timezone.now()
-        return (
-            self.published()
-            .filter(scheduled_for__gte=now)
-            .order_by("scheduled_for", "pk")
-        )
-
-
-class CountdownTimer(Entity):
-    """Represents a dated event used by the countdown calculator."""
-
-    title = models.CharField(max_length=200)
-    body = models.TextField(blank=True, default="")
-    scheduled_for = models.DateTimeField()
-    article = models.ForeignKey(
-        "pages.DeveloperArticle",
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="countdown_timers",
-    )
-    package_release = models.OneToOneField(
-        "release.PackageRelease",
-        null=True,
-        blank=True,
-        on_delete=models.CASCADE,
-        related_name="countdown_timer",
-    )
-    is_published = models.BooleanField(default=False)
-    created_on = models.DateTimeField(auto_now_add=True)
-    updated_on = models.DateTimeField(auto_now=True)
-
-    objects = CountdownTimerManager()
-
-    class Meta:
-        ordering = ("scheduled_for", "title", "pk")
-        verbose_name = _("Countdown Timer")
-        verbose_name_plural = _("Countdown Timers")
-
-    def clean(self):
-        super().clean()
-        if self.scheduled_for is None:
-            return
-        original_scheduled_for = None
-        if self.pk:
-            try:
-                original_scheduled_for = (
-                    type(self)
-                    .all_objects.only("scheduled_for")
-                    .get(pk=self.pk)
-                    .scheduled_for
-                )
-            except type(self).DoesNotExist:
-                original_scheduled_for = None
-
-        if self.scheduled_for <= timezone.now():
-            if original_scheduled_for is None or (
-                original_scheduled_for is not None
-                and self.scheduled_for != original_scheduled_for
-            ):
-                raise ValidationError(
-                    {
-                        "scheduled_for": _(
-                            "Countdown timers must target a future date and time."
-                        )
-                    }
-                )
-        if self.article and not self.article.is_published:
-            raise ValidationError(
-                {
-                    "article": _(
-                        "Only published developer articles can be linked to a countdown timer."
-                    )
-                }
-            )
-
-    @property
-    def is_upcoming(self) -> bool:
-        """Return ``True`` when the timer targets a future moment."""
-
-        return self.scheduled_for >= timezone.now()
-
-    def save(self, *args, **kwargs):
-        update_fields = kwargs.get("update_fields")
-        should_validate = update_fields is None or bool(
-            set(update_fields or []) - {"is_deleted"}
-        )
-        if should_validate:
-            self.full_clean()
-        super().save(*args, **kwargs)
-        self._sync_package_release()
-
-    def natural_key(self):  # pragma: no cover - simple representation
-        return (self.title, self.scheduled_for.isoformat())
-
-    def __str__(self):  # pragma: no cover - human readable
-        return self.title
-
-    def _sync_package_release(self) -> None:
-        if not self.package_release_id:
-            return
-
-        release = self.package_release
-        if release is None:
-            return
-
-        scheduled_for = timezone.localtime(self.scheduled_for)
-        scheduled_date = scheduled_for.date()
-        scheduled_time = scheduled_for.timetz().replace(tzinfo=None)
-
-        update_fields: list[str] = []
-        if release.scheduled_date != scheduled_date:
-            release.scheduled_date = scheduled_date
-            update_fields.append("scheduled_date")
-        if release.scheduled_time != scheduled_time:
-            release.scheduled_time = scheduled_time
-            update_fields.append("scheduled_time")
-
-        if update_fields:
-            release.save(update_fields=update_fields, sync_timer=False)
 

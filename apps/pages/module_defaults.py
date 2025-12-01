@@ -31,7 +31,6 @@ ROLE_MODULE_DEFAULTS: Mapping[str, tuple[ModuleDefinition, ...]] = {
             "landings": (
                 ("/awg/", "AWG Cable Calculator"),
                 ("/awg/energy-tariff/", "Energy Tariff Calculator"),
-                ("/awg/future-event/", "Future Event Calculator"),
             ),
         },
     ),
