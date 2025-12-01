@@ -15,6 +15,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Dict, Iterable
 
+import psutil
+
 BASE_DIR = Path(__file__).resolve().parents[1]
 LOCK_DIR = BASE_DIR / ".locks"
 REQUIREMENTS_FILE = Path("requirements.txt")
@@ -248,6 +250,37 @@ def _run_django_server(
         print(f"[Migration Server] Failed to run Django server: {exc}")
 
 
+def _terminate_process_tree(pid: int, *, timeout: float = 5.0) -> None:
+    """Terminate a process and its children using :mod:`psutil`."""
+
+    try:
+        parent = psutil.Process(pid)
+    except psutil.Error:
+        return
+
+    children = parent.children(recursive=True)
+
+    for child in children:
+        try:
+            child.terminate()
+        except psutil.Error:
+            continue
+
+    try:
+        parent.terminate()
+    except psutil.Error:
+        parent = None
+
+    _, alive = psutil.wait_procs(children + ([parent] if parent else []), timeout=timeout)
+    for proc in alive:
+        try:
+            proc.kill()
+        except psutil.Error:
+            continue
+    if alive:
+        psutil.wait_procs(alive, timeout=timeout / 2)
+
+
 def start_django_server(base_dir: Path, *, reload: bool = False) -> subprocess.Popen | None:
     """Launch the Django server in a child process and return it."""
 
@@ -279,23 +312,15 @@ def stop_django_server(process: subprocess.Popen | multiprocessing.Process | Non
             return
 
         print("[Migration Server] Stopping Django server...")
-        try:
-            process.terminate()
-            process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            process.wait(timeout=2)
+        _terminate_process_tree(process.pid)
         return
 
     if not process.is_alive():
         return
 
     print("[Migration Server] Stopping Django server...")
-    process.terminate()
-    process.join(timeout=5)
-    if process.is_alive():
-        process.kill()
-        process.join(timeout=2)
+    _terminate_process_tree(process.pid)
+    process.join(timeout=0.1)
 
 
 def _hash_file(path: Path) -> str:
