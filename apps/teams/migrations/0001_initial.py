@@ -12,7 +12,7 @@ from apps.migration_utils import import_callable
 
 
 SigilShortAutoField = import_callable(
-    "SigilShortAutoField", default=models.CharField
+    "apps.sigils.fields.SigilShortAutoField", default=models.CharField
 )
 
 

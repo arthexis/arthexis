@@ -7,7 +7,7 @@ from apps.migration_utils import import_callable
 
 
 ConditionTextField = import_callable(
-    "ConditionTextField", default=models.TextField
+    "apps.sigils.fields.ConditionTextField", default=models.TextField
 )
 
 
