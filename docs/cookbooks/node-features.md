@@ -59,6 +59,16 @@ Select one or more features on the changelist and choose **Check features for el
 
 Eligibility runs also report whether a feature can be enabled manually. The helper `_manual_enablement_message` in `NodeFeatureAdmin` communicates whether the feature belongs to `Node.MANUAL_FEATURE_SLUGS` or requires automation.
 
+## Declaring feature setup hooks
+
+Auto-managed features discover their enablement and lifecycle through app-level hooks:
+
+- Add a `node_features.py` module to an app.
+- Export `check_node_feature(slug, *, node)` to return `True` when a feature could be meaningfully enabled on the provided node. Return `None` when the slug is unknown to the module.
+- Export `setup_node_feature(slug, *, node)` for any setup or side-effects the feature needs during auto-detection (returning `True`/`False` mirrors `check_node_feature`).
+
+The nodes app loads these hooks from every installed app so features can own their own detection logic instead of being hard-coded in `apps.nodes.models.Node`.
+
 ## Enabling features manually
 
 To toggle features outside of automatic provisioning, select them in the changelist and execute **Enable selected features**. When a local node is registered, the action creates `NodeFeatureAssignment` rows for that node (see `NodeFeatureAssignment.objects.update_or_create` calls in [`nodes/models.py`](../../nodes/models.py) lines 1009-1191).
