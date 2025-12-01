@@ -739,7 +739,7 @@ class ManualTask(Entity):
         help_text=_("Node where this manual task should be completed."),
     )
     location = models.ForeignKey(
-        "energy.Location",
+        "maps.Location",
         on_delete=models.SET_NULL,
         blank=True,
         null=True,

@@ -415,6 +415,7 @@ LOCAL_APPS = [
     "apps.emails",
     "apps.payments",
     "apps.links",
+    "apps.maps",
     "apps.locals",
     "apps.content",
     "apps.media",

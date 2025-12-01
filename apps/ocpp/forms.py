@@ -4,7 +4,7 @@ from django import forms
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
-from apps.energy.models import Location
+from apps.maps.models import Location
 from apps.teams.models import ManualTask
 
 
