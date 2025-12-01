@@ -6,8 +6,8 @@ from copy import deepcopy
 from dataclasses import dataclass
 import getpass
 from typing import Optional
-from django.db import models
 from django.apps import apps
+from django.db import models
 from django.db.models import Q
 from django.db.utils import DatabaseError, IntegrityError
 from django.db.models.signals import post_delete
@@ -250,30 +250,19 @@ class NodeFeature(Entity):
             return False
         if node.features.filter(pk=self.pk).exists():
             return True
-        if self.slug == "gui-toast":
-            from apps.core.notifications import supports_gui_toast
-
-            return supports_gui_toast()
-        if self.slug == "rpi-camera":
-            return Node._has_rpi_camera()
-        lock_map = {
-            "lcd-screen": "lcd_screen.lck",
-            "rfid-scanner": "rfid.lck",
-            "celery-queue": "celery.lck",
-            "nginx-server": "nginx_mode.lck",
-        }
-        lock = lock_map.get(self.slug)
-        if lock:
-            base_path = node.get_base_path()
-            lock_path = base_path / ".locks" / lock
-            if lock_path.exists():
-                return True
-            if self.slug == "lcd-screen":
-                feature_lock = base_path / ".locks" / "lcd_screen_enabled.lck"
-                if feature_lock.exists():
-                    return True
-            return False
-        return False
+        try:
+            from apps.nodes.node_feature_hooks import run_feature_checks
+        except Exception:
+            run_feature_checks = None
+        if run_feature_checks:
+            hook_result = run_feature_checks(self.slug, node=node)
+            if hook_result is not None:
+                return bool(hook_result)
+        base_path = node.get_base_path()
+        base_dir = Path(settings.BASE_DIR)
+        return node._detect_auto_feature(
+            self.slug, base_dir=base_dir, base_path=base_path
+        )
 
     def get_default_actions(self) -> tuple[NodeFeatureDefaultAction, ...]:
         """Return the configured default actions for this feature."""
@@ -579,7 +568,6 @@ class Node(Entity):
     preferred_port: int = int(os.environ.get("PORT", 8888))
 
     FEATURE_LOCK_MAP = {
-        "lcd-screen": "lcd_screen.lck",
         "rfid-scanner": "rfid.lck",
         "celery-queue": "celery.lck",
         "nginx-server": "nginx_mode.lck",
@@ -589,6 +577,7 @@ class Node(Entity):
     AUDIO_CAPTURE_PCM_PATH = Path("/proc/asound/pcm")
     NMCLI_TIMEOUT = 5
     AUTO_MANAGED_FEATURES = set(FEATURE_LOCK_MAP.keys()) | {
+        "lcd-screen",
         "gui-toast",
         "rpi-camera",
         "ap-router",
@@ -1595,6 +1584,54 @@ class Node(Entity):
                 return True
         return False
 
+    def _detect_auto_feature(
+        self, slug: str, *, base_dir: Path, base_path: Path
+    ) -> bool:
+        detected: bool | None = None
+        try:
+            from apps.nodes.node_feature_hooks import (
+                run_feature_checks,
+                run_feature_setups,
+            )
+        except Exception:
+            run_feature_checks = None
+            run_feature_setups = None
+        if run_feature_setups:
+            try:
+                detected = run_feature_setups(slug, node=self)
+            except Exception:
+                logger.exception("Auto-setup failed for feature %s", slug)
+        if detected is None and run_feature_checks:
+            try:
+                detected = run_feature_checks(slug, node=self)
+            except Exception:
+                logger.exception("Auto-check failed for feature %s", slug)
+        if detected is not None:
+            return bool(detected)
+
+        lock = self.FEATURE_LOCK_MAP.get(slug)
+        if lock:
+            project_lock_dir = base_dir / ".locks"
+            lock_dirs = [base_path / ".locks"]
+            if project_lock_dir not in lock_dirs:
+                lock_dirs.append(project_lock_dir)
+            return any((lock_dir / lock).exists() for lock_dir in lock_dirs)
+        if slug == "gui-toast":
+            try:
+                from apps.core.notifications import supports_gui_toast
+            except Exception:
+                return False
+            try:
+                return supports_gui_toast()
+            except Exception:
+                logger.exception("GUI toast detection failed")
+                return False
+        if slug == "rpi-camera":
+            return self._has_rpi_camera()
+        if slug == "ap-router":
+            return self._hosts_gelectriic_ap()
+        return False
+
     def refresh_features(self):
         if not self.pk:
             return
@@ -1603,24 +1640,13 @@ class Node(Entity):
             return
         detected_slugs = set()
         base_path = self.get_base_path()
-        locks_dir = base_path / ".locks"
-        for slug, filename in self.FEATURE_LOCK_MAP.items():
-            if (locks_dir / filename).exists():
-                detected_slugs.add(slug)
-        if self._has_rpi_camera():
-            detected_slugs.add("rpi-camera")
-        if self._hosts_gelectriic_ap():
-            detected_slugs.add("ap-router")
-        try:
-            from apps.core.notifications import supports_gui_toast
-        except Exception:
-            pass
-        else:
+        base_dir = Path(settings.BASE_DIR)
+        for slug in self.AUTO_MANAGED_FEATURES:
             try:
-                if supports_gui_toast():
-                    detected_slugs.add("gui-toast")
+                if self._detect_auto_feature(slug, base_dir=base_dir, base_path=base_path):
+                    detected_slugs.add(slug)
             except Exception:
-                pass
+                logger.exception("Automatic detection failed for feature %s", slug)
         current_slugs = set(
             self.features.filter(slug__in=self.AUTO_MANAGED_FEATURES).values_list(
                 "slug", flat=True
