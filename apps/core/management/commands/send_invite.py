@@ -1,6 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.contrib.auth.tokens import default_token_generator
-from apps.core import mailer
+from apps.emails import mailer
 from django.core.mail import send_mail
 from django.core.management.base import BaseCommand, CommandError
 from django.urls import reverse

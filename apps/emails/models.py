@@ -6,7 +6,7 @@ from django.core.mail import get_connection
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
-from apps.core import mailer
+from apps.emails import mailer
 from apps.core.entity import Entity
 from apps.core.models import EmailArtifact, Profile as CoreProfile
 from apps.nodes.models import Node

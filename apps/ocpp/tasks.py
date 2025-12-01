@@ -11,7 +11,7 @@ from django.db.models import Q, Prefetch
 from django.utils import timezone
 
 from apps.celery.utils import is_celery_enabled
-from apps.core import mailer
+from apps.emails import mailer
 from apps.nodes.models import Node
 
 from . import store
