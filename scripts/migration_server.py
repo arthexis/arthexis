@@ -504,10 +504,8 @@ def main(argv: list[str] | None = None) -> int:
     print("[Migration Server] Starting in", BASE_DIR)
     snapshot = collect_source_mtimes(BASE_DIR)
     print("[Migration Server] Watching for changes... Press Ctrl+C to stop.")
-    server_process: subprocess.Popen | None = None
     with migration_server_state(LOCK_DIR):
-        if run_env_refresh_with_report(BASE_DIR, latest=args.latest):
-            server_process = start_django_server(BASE_DIR)
+        run_env_refresh_with_report(BASE_DIR, latest=args.latest)
         snapshot = collect_source_mtimes(BASE_DIR)
 
         try:
@@ -519,7 +517,6 @@ def main(argv: list[str] | None = None) -> int:
                     if updated == snapshot:
                         continue
                 if update_requirements(BASE_DIR):
-                    stop_django_server(server_process)
                     notify_async(
                         "New Python requirements installed",
                         "The migration server stopped after installing new dependencies.",
@@ -535,13 +532,9 @@ def main(argv: list[str] | None = None) -> int:
                     if len(change_summary) > 5:
                         display += "; ..."
                     print(f"[Migration Server] Changes detected: {display}")
-                stop_django_server(server_process)
-                server_process = None
-                if run_env_refresh_with_report(BASE_DIR, latest=args.latest):
-                    server_process = start_django_server(BASE_DIR)
+                run_env_refresh_with_report(BASE_DIR, latest=args.latest)
                 snapshot = collect_source_mtimes(BASE_DIR)
         except KeyboardInterrupt:
-            stop_django_server(server_process)
             print("[Migration Server] Stopped.")
             return 0
 
