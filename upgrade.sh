@@ -1359,7 +1359,7 @@ if [ $VENV_PRESENT -eq 1 ]; then
   install_requirements_if_changed
   python manage.py migrate --noinput
   if ls data/*.json >/dev/null 2>&1; then
-    python manage.py loaddata data/*.json
+    python manage.py load_user_data data/*.json
   fi
   if [[ $DEFER_BROADCAST_MESSAGE -eq 1 ]]; then
     if ! broadcast_upgrade_start_net_message "$LOCAL_REVISION" "$REMOTE_REVISION"; then

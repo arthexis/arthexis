@@ -406,7 +406,7 @@ def _load_fixture(
 
     try:
         call_command(
-            "loaddata",
+            "load_user_data",
             str(path),
             ignorenonexistent=True,
             verbosity=verbosity_level,

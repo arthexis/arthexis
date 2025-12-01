@@ -110,7 +110,7 @@ def _load_fixture_with_retry(
 
     for attempt in range(1, attempts + 1):
         try:
-            call_command("loaddata", fixture, verbosity=0)
+            call_command("load_user_data", fixture, verbosity=0)
             return
         except OperationalError as exc:
             if ("database is locked" not in str(exc).lower()) or not using_sqlite:
