@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import multiprocessing
 import os
 import subprocess
 import sys
@@ -13,6 +14,8 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Dict, Iterable
+
+import psutil
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 LOCK_DIR = BASE_DIR / ".locks"
@@ -228,20 +231,54 @@ def build_runserver_command(base_dir: Path, *, reload: bool = False) -> list[str
     return command
 
 
-def _run_django_server(command: list[str], *, cwd: Path | None = None, env: Dict[str, str] | None = None) -> None:
-    """Spawn a Django server process and block until it exits."""
+def _run_django_server(
+    command: list[str], *, cwd: Path | str | None = None, env: dict[str, str] | None = None
+) -> None:
+    """Execute the Django server command in a child process.
 
-    server = subprocess.Popen(command, cwd=cwd, env=env)
+    Designed for use with :class:`multiprocessing.Process` to allow the caller to
+    terminate the spawned server via :func:`stop_django_server`.
+    """
+
+    resolved_env = os.environ.copy() if env is None else env
+    resolved_env.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+
     try:
-        server.wait()
-    finally:
-        if server.poll() is None:
-            server.terminate()
-            try:
-                server.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                server.kill()
-                server.wait(timeout=2)
+        process = subprocess.Popen(command, cwd=cwd, env=resolved_env)
+        process.wait()
+    except OSError as exc:
+        print(f"[Migration Server] Failed to run Django server: {exc}")
+
+
+def _terminate_process_tree(pid: int, *, timeout: float = 5.0) -> None:
+    """Terminate a process and its children using :mod:`psutil`."""
+
+    try:
+        parent = psutil.Process(pid)
+    except psutil.Error:
+        return
+
+    children = parent.children(recursive=True)
+
+    for child in children:
+        try:
+            child.terminate()
+        except psutil.Error:
+            continue
+
+    try:
+        parent.terminate()
+    except psutil.Error:
+        parent = None
+
+    _, alive = psutil.wait_procs(children + ([parent] if parent else []), timeout=timeout)
+    for proc in alive:
+        try:
+            proc.kill()
+        except psutil.Error:
+            continue
+    if alive:
+        psutil.wait_procs(alive, timeout=timeout / 2)
 
 
 def start_django_server(base_dir: Path, *, reload: bool = False) -> subprocess.Popen | None:
@@ -264,37 +301,26 @@ def start_django_server(base_dir: Path, *, reload: bool = False) -> subprocess.P
         return None
 
 
-def stop_django_server(process) -> None:
+def stop_django_server(process: subprocess.Popen | multiprocessing.Process | None) -> None:
     """Terminate the Django server process if it is running."""
 
     if process is None:
         return
 
-    if hasattr(process, "poll"):
+    if isinstance(process, subprocess.Popen):
         if process.poll() is not None:
             return
-        terminator = process.terminate
-        waiter = process.wait
-        killer = process.kill
-    elif hasattr(process, "is_alive"):
-        if not process.is_alive():
-            return
-        terminator = process.terminate
-        waiter = process.join
-        killer = process.kill
-    else:  # pragma: no cover - defensive guard for unexpected process types
+
+        print("[Migration Server] Stopping Django server...")
+        _terminate_process_tree(process.pid)
+        return
+
+    if not process.is_alive():
         return
 
     print("[Migration Server] Stopping Django server...")
-    try:
-        terminator()
-        waiter(timeout=5)
-    except (TypeError, subprocess.TimeoutExpired):
-        try:
-            killer()
-            waiter(timeout=2)
-        except Exception:
-            pass
+    _terminate_process_tree(process.pid)
+    process.join(timeout=0.1)
 
 
 def _hash_file(path: Path) -> str:

@@ -40,7 +40,7 @@ h11==0.16.0
 httpcore==1.0.9
 httpx==0.28.1
 pytest==8.3.4
-pytest-django==4.10.0
+pytest-django==4.11.1
 hyperlink==21.0.0
 idna==3.11
 incremental==24.7.2
