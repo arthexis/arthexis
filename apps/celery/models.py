@@ -1,6 +1,6 @@
 from django.utils.translation import gettext_lazy as _
 
-from apps.core.models import CountdownTimer
+from apps.release.models import CountdownTimer
 
 
 class CeleryCountdownTimer(CountdownTimer):

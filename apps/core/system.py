@@ -41,7 +41,7 @@ from apps.core.auto_upgrade import (
     ensure_auto_upgrade_periodic_task,
 )
 from apps.core.auto_upgrade_failover import clear_failover_lock, read_failover_status
-from apps.core.release import (
+from apps.release.release import (
     _git_authentication_missing,
     _git_remote_url,
     _manager_git_credentials,

@@ -10,7 +10,7 @@ from typing import Any
 from django.conf import settings
 from django.db import DatabaseError, models
 
-from .views import (
+from apps.core.views import (
     DirtyRepository,
     PUBLISH_STEPS,
     ApprovalRequired,
@@ -27,7 +27,7 @@ def resolve_release_severity(version: str | None) -> str:
     """Return the severity for a version, preferring active packages."""
 
     try:
-        from apps.core.models import PackageRelease  # noqa: WPS433 - runtime import
+        from apps.release.models import PackageRelease  # noqa: WPS433 - runtime import
     except Exception:  # pragma: no cover - app registry not ready
         return "normal"
 

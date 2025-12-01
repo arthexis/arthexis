@@ -24,15 +24,15 @@ from apps.awg.admin import PowerLeadAdmin as CorePowerLeadAdmin
 from apps.core.admin import (
     InviteLeadAdmin,
     SecurityGroupAdmin,
-    ReleaseManagerAdmin,
     OdooEmployeeAdmin,
     GoogleCalendarProfileAdmin,
 )
+from apps.release.admin import ReleaseManagerAdmin
 from apps.core.models import (
     InviteLead as CoreInviteLead,
     SecurityGroup as CoreSecurityGroup,
-    ReleaseManager as CoreReleaseManager,
 )
+from apps.release.models import ReleaseManager as CoreReleaseManager
 from apps.odoo.models import OdooEmployee as CoreOdooEmployee
 from apps.locals.user_data import (
     EntityModelAdmin,

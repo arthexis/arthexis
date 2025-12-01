@@ -24,10 +24,10 @@ from apps.core.models import (
     GoogleCalendarProfile as CoreGoogleCalendarProfile,
     InviteLead as CoreInviteLead,
     Profile as CoreProfile,
-    ReleaseManager as CoreReleaseManager,
     SecurityGroup as CoreSecurityGroup,
     User as CoreUser,
 )
+from apps.release.models import ReleaseManager as CoreReleaseManager
 from apps.odoo.models import (
     OdooEmployee as CoreOdooEmployee,
     OdooProduct as CoreOdooProduct,
