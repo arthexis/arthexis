@@ -83,7 +83,13 @@
       <th>{% trans "Status" %}</th>
     </tr>
   </thead>
-  <tbody data-dashboard-table-body>
+  <tbody
+    data-dashboard-table-body
+    hx-get="{% url 'ocpp:dashboard' %}?partial=table"
+    hx-trigger="load, every 5s"
+    hx-target="this"
+    hx-swap="innerHTML"
+  >
     {% include "ocpp/includes/dashboard_table_rows.html" %}
   </tbody>
 </table>
@@ -94,56 +100,3 @@
 {% endif %}
 {% endblock %}
 
-{% block live_update_script %}
-      (function () {
-        const intervalSeconds = Number({{ request.live_update_interval|default_if_none:5 }});
-        if (!intervalSeconds || intervalSeconds < 0) {
-          return;
-        }
-        const tableBody = document.querySelector('[data-dashboard-table-body]');
-        if (!tableBody) {
-          setInterval(() => location.reload(), intervalSeconds * 1000);
-          return;
-        }
-        const requestUrl = new URL(window.location.href, window.location.origin);
-        requestUrl.searchParams.set('partial', 'table');
-        const fetchUrl = requestUrl.toString();
-
-        async function refreshTable() {
-          try {
-            const response = await fetch(fetchUrl, {
-              headers: {
-                'X-Requested-With': 'XMLHttpRequest',
-                'Accept': 'application/json',
-              },
-              credentials: 'same-origin',
-            });
-            if (!response.ok) {
-              return;
-            }
-            const data = await response.json();
-            if (!data || typeof data.html !== 'string') {
-              return;
-            }
-            tableBody.innerHTML = data.html;
-          } catch (error) {
-            console.error('Failed to refresh dashboard table', error);
-          }
-        }
-
-        refreshTable();
-
-        setInterval(() => {
-          if (document.visibilityState === 'hidden') {
-            return;
-          }
-          refreshTable();
-        }, intervalSeconds * 1000);
-
-        document.addEventListener('visibilitychange', () => {
-          if (document.visibilityState === 'visible') {
-            refreshTable();
-          }
-        });
-      })();
-{% endblock %}

@@ -40,7 +40,6 @@ from utils.api import api_login_required
 from apps.nodes.models import NetMessage, Node
 
 from apps.pages.utils import landing
-from apps.core.liveupdate import live_update
 
 from django.utils.dateparse import parse_datetime
 
@@ -1206,9 +1205,9 @@ def charger_detail(request, cid, connector=None):
 
 
 @landing("CPMS Online Dashboard")
-@live_update()
 def dashboard(request):
     """Landing page listing all known chargers and their status."""
+    is_htmx = request.headers.get("HX-Request") == "true"
     _clear_stale_statuses_for_view()
     node = Node.get_local()
     role = node.role if node else None
@@ -1218,8 +1217,6 @@ def dashboard(request):
         return redirect_to_login(
             request.get_full_path(), login_url=reverse("pages:login")
         )
-    if not getattr(request, "live_update_interval", None):
-        setattr(request, "live_update_interval", 5)
     is_watchtower = role_name in {"Watchtower", "Constellation"}
     latest_tx_subquery = (
         Transaction.objects.filter(charger=OuterRef("pk"))
@@ -1399,10 +1396,14 @@ def dashboard(request):
         "demo_ws_url": ws_url,
         "ws_rate_limit": store.MAX_CONNECTIONS_PER_IP,
     }
-    if request.headers.get("x-requested-with") == "XMLHttpRequest" or request.GET.get("partial") == "table":
+    wants_table_partial = request.GET.get("partial") == "table"
+    accepts_json = "application/json" in request.headers.get("Accept", "").lower()
+    if is_htmx or wants_table_partial or request.headers.get("x-requested-with") == "XMLHttpRequest":
         html = render_to_string(
             "ocpp/includes/dashboard_table_rows.html", context, request=request
         )
+        if is_htmx or (wants_table_partial and not accepts_json):
+            return HttpResponse(html)
         return JsonResponse({"html": html})
     return render(request, "ocpp/dashboard.html", context)
 
