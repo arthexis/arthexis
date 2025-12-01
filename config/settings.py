@@ -545,7 +545,6 @@ CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}
 
 PAGES_CHAT_ENABLED = _env_bool("PAGES_CHAT_ENABLED", True)
 PAGES_CHAT_NOTIFY_STAFF = _env_bool("PAGES_CHAT_NOTIFY_STAFF", False)
-PASSKEY_LOGIN_ENABLED = _env_bool("PASSKEY_LOGIN_ENABLED", False)
 try:
     PAGES_CHAT_IDLE_ESCALATE_SECONDS = int(
         os.environ.get("PAGES_CHAT_IDLE_ESCALATE_SECONDS", "300")
@@ -562,7 +561,6 @@ AUTH_USER_MODEL = "core.User"
 AUTHENTICATION_BACKENDS = [
     "apps.core.backends.TempPasswordBackend",
     "apps.core.backends.LocalhostAdminBackend",
-    "apps.core.backends.PasskeyBackend",
     "apps.core.backends.TOTPBackend",
     "apps.core.backends.RFIDBackend",
 ]

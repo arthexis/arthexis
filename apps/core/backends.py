@@ -16,7 +16,7 @@ from django.db.models import Q
 from django_otp.plugins.otp_totp.models import TOTPDevice
 
 from apps.energy.models import CustomerAccount
-from .models import PasskeyCredential, RFID, TOTPDeviceSettings
+from .models import RFID, TOTPDeviceSettings
 from . import temp_passwords
 
 
@@ -181,37 +181,6 @@ def verify_user_totp_token(
             return device, {"requires_password": device_requires_password}
 
     return None, {"error": "invalid_token", "requires_password": requires_password}
-
-
-class PasskeyBackend(ModelBackend):
-    """Authenticate using a WebAuthn passkey credential."""
-
-    def authenticate(self, request, credential_id=None, **kwargs):
-        if not credential_id:
-            return None
-
-        credential_value = str(credential_id).strip()
-        if not credential_value:
-            return None
-
-        try:
-            passkey = PasskeyCredential.objects.select_related("user").get(
-                credential_id=credential_value
-            )
-        except PasskeyCredential.DoesNotExist:
-            return None
-
-        user = passkey.user
-        if not user.is_active:
-            return None
-        return user
-
-    def get_user(self, user_id):
-        UserModel = get_user_model()
-        try:
-            return UserModel._default_manager.get(pk=user_id)
-        except UserModel.DoesNotExist:
-            return None
 
 
 class TOTPBackend(ModelBackend):
