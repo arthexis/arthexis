@@ -16,7 +16,7 @@ from django.urls import NoReverseMatch, reverse
 from django.utils.text import capfirst
 from django.utils.translation import gettext_lazy as _
 from apps.celery.utils import celery_feature_enabled as celery_feature_enabled_helper
-from apps.core import mailer
+from apps.emails import mailer
 from apps.core.models import GoogleCalendarProfile
 from apps.core.entity import Entity
 from apps.nodes.models import NetMessage, Node

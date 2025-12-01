@@ -17,7 +17,7 @@ from django.utils import formats, timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.celery.utils import is_celery_enabled
-from apps.core import mailer
+from apps.emails import mailer
 from apps.core.entity import Entity, EntityAllManager, EntityManager
 from apps.sigils.fields import SigilShortAutoField
 from apps.core.models import (

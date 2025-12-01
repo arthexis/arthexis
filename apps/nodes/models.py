@@ -46,7 +46,7 @@ from django.contrib.auth import get_user_model
 from django.core import serializers
 from django.core.mail import get_connection
 from django.core.serializers.base import DeserializationError
-from apps.core import mailer
+from apps.emails import mailer
 import logging
 
 

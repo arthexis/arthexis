@@ -1090,7 +1090,7 @@ class ClientReport(Entity):
         outbox=None,
         reply_to: list[str] | None = None,
     ) -> list[str]:
-        from apps.core import mailer
+        from apps.emails import mailer
 
         recipients = list(to or [])
         if not recipients:
