@@ -53,7 +53,8 @@ from django.utils.http import (
     urlsafe_base64_encode,
 )
 from django_otp import DEVICE_ID_SESSION_KEY
-from apps.core import changelog, mailer
+from apps.core import changelog
+from apps.emails import mailer
 from apps.links.templatetags.ref_tags import build_footer_context
 from apps.core.backends import (
     TOTP_DEVICE_NAME,
