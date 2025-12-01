@@ -53,7 +53,7 @@ from django.utils.http import (
     urlsafe_base64_encode,
 )
 from django_otp import DEVICE_ID_SESSION_KEY
-from apps.core import changelog, mailer, passkeys
+from apps.core import changelog, mailer
 from apps.links.templatetags.ref_tags import build_footer_context
 from apps.core.backends import (
     TOTP_DEVICE_NAME,
@@ -71,9 +71,8 @@ from django.core.exceptions import PermissionDenied, SuspiciousFileOperation
 from django.utils.text import slugify, Truncator
 from django.core.validators import EmailValidator
 from django.db.models import Q
-from webauthn.helpers import base64url_to_bytes, bytes_to_base64url
 from apps.energy.models import ClientReport, ClientReportSchedule
-from apps.core.models import InviteLead, PasskeyCredential, SecurityGroup
+from apps.core.models import InviteLead, SecurityGroup
 from apps.ocpp.models import Charger
 from .utils import get_original_referer, get_request_language_code, landing
 
@@ -130,11 +129,6 @@ ALLOWED_IMAGE_EXTENSIONS = {
     ".svg",
     ".webp",
 }
-
-PASSKEY_LOGIN_SESSION_KEY = "pages.passkeys.login"
-PASSKEY_REGISTRATION_SESSION_KEY = "pages.passkeys.registration"
-PASSKEY_NAME_MAX_LENGTH = PasskeyCredential._meta.get_field("name").max_length
-
 
 def _render_markdown_with_toc(text: str) -> tuple[str, str]:
     """Render ``text`` to HTML and return the HTML and stripped TOC."""
@@ -1121,11 +1115,6 @@ class CustomLoginView(LoginView):
             }
         )
         context["authenticator_check_url"] = reverse("pages:authenticator-login-check")
-        passkey_login_enabled = getattr(settings, "PASSKEY_LOGIN_ENABLED", False)
-        context["passkey_login_enabled"] = passkey_login_enabled
-        if passkey_login_enabled:
-            context["passkey_login_options_url"] = reverse("pages:passkey-login-options")
-            context["passkey_login_verify_url"] = reverse("pages:passkey-login-verify")
         node = Node.get_local()
         has_rfid_scanner = False
         had_rfid_feature = False
@@ -1214,93 +1203,6 @@ def authenticator_login_check(request):
             "username": user.get_username(),
         }
     )
-
-
-def _get_login_redirect(request, user, candidate: str | None = None) -> str:
-    """Return the appropriate redirect after a passkey login."""
-
-    redirect_field_name = CustomLoginView.redirect_field_name
-    redirect_target = candidate or ""
-    if redirect_target and not url_has_allowed_host_and_scheme(
-        redirect_target,
-        allowed_hosts={request.get_host()},
-        require_https=request.is_secure(),
-    ):
-        redirect_target = ""
-    if redirect_target:
-        return redirect_target
-    if user.is_staff:
-        return reverse("admin:index")
-    return "/"
-
-
-@require_POST
-@ensure_csrf_cookie
-def passkey_login_options(request):
-    """Return assertion options for a passkey login attempt."""
-
-    options = passkeys.build_authentication_options(request)
-    request.session[PASSKEY_LOGIN_SESSION_KEY] = options.challenge
-    request.session.modified = True
-    return JsonResponse({"publicKey": options.data})
-
-
-@require_POST
-def passkey_login_verify(request):
-    """Verify a passkey assertion and log the user in."""
-
-    challenge = request.session.pop(PASSKEY_LOGIN_SESSION_KEY, None)
-    if not challenge:
-        return JsonResponse({"error": "missing-challenge"}, status=400)
-
-    try:
-        payload = json.loads(request.body.decode() or "{}")
-    except json.JSONDecodeError:
-        return JsonResponse({"error": "invalid-json"}, status=400)
-
-    credential_data = payload.get("credential") or payload
-    if not isinstance(credential_data, dict):
-        return JsonResponse({"error": "invalid-credential"}, status=400)
-
-    credential_id = credential_data.get("id")
-    if not credential_id:
-        return JsonResponse({"error": "missing-id"}, status=400)
-
-    try:
-        passkey = PasskeyCredential.objects.select_related("user").get(
-            credential_id=credential_id
-        )
-    except PasskeyCredential.DoesNotExist:
-        return JsonResponse({"error": "unknown-credential"}, status=400)
-
-    response_data = credential_data.get("response")
-    if isinstance(response_data, dict):
-        response_handle = response_data.get("userHandle")
-        if response_handle and response_handle != passkey.user_handle:
-            return JsonResponse({"error": "mismatched-user"}, status=400)
-
-    try:
-        verification = passkeys.verify_authentication_response(
-            request,
-            credential=credential_data,
-            expected_challenge=challenge,
-            credential_public_key=passkey.public_key,
-            credential_current_sign_count=passkey.sign_count,
-        )
-    except Exception:  # pragma: no cover - detailed errors are not exposed to clients
-        logger.exception("Passkey authentication verification failed")
-        return JsonResponse({"error": "verification-failed"}, status=400)
-
-    passkey.sign_count = verification.new_sign_count
-    passkey.last_used_at = timezone.now()
-    passkey.save(update_fields=["sign_count", "last_used_at", "updated_at"])
-
-    user = passkey.user
-    login(request, user, backend="apps.core.backends.PasskeyBackend")
-
-    redirect_target = payload.get(CustomLoginView.redirect_field_name)
-    return JsonResponse({"redirect": _get_login_redirect(request, user, redirect_target)})
-
 
 @ensure_csrf_cookie
 def rfid_login_page(request):
@@ -1417,146 +1319,9 @@ def authenticator_setup(request):
         "manual_key": manual_key,
         "enrollment_form": enrollment_form,
     }
-    passkey_qs = PasskeyCredential.objects.filter(user=user).order_by("name", "created_at")
-    context.update(
-        {
-            "passkeys": passkey_qs,
-            "passkey_register_options_url": reverse("pages:passkey-register-options"),
-            "passkey_register_verify_url": reverse("pages:passkey-register-verify"),
-            "passkey_name_max_length": PASSKEY_NAME_MAX_LENGTH,
-        }
-    )
     return TemplateResponse(request, "pages/authenticator_setup.html", context)
 
 
-@staff_member_required
-@require_POST
-def passkey_register_options(request):
-    """Start a new passkey registration flow for the current user."""
-
-    try:
-        payload = json.loads(request.body.decode() or "{}")
-    except json.JSONDecodeError:
-        return JsonResponse({"error": "invalid-json"}, status=400)
-
-    name = (payload.get("name") or "").strip()
-    if not name:
-        return JsonResponse({"error": "name-required"}, status=400)
-    if len(name) > PASSKEY_NAME_MAX_LENGTH:
-        return JsonResponse({"error": "name-too-long", "max_length": PASSKEY_NAME_MAX_LENGTH}, status=400)
-
-    user = request.user
-    if PasskeyCredential.objects.filter(user=user, name=name).exists():
-        return JsonResponse({"error": "duplicate-name"}, status=400)
-
-    site = get_site(request)
-    rp_name = getattr(site, "name", "") or "Arthexis"
-    user_name = user.get_username() or user.email or str(user.pk)
-    display_name = (user.get_full_name() or user_name).strip() or user_name
-    user_id = bytes_to_base64url(str(user.pk).encode("utf-8"))
-
-    exclude = [
-        base64url_to_bytes(entry.credential_id)
-        for entry in PasskeyCredential.objects.filter(user=user)
-    ]
-
-    options = passkeys.build_registration_options(
-        request,
-        user_id=user_id,
-        user_name=user_name,
-        user_display_name=display_name,
-        rp_name=rp_name,
-        exclude_credentials=exclude,
-    )
-
-    request.session[PASSKEY_REGISTRATION_SESSION_KEY] = {
-        "challenge": options.challenge,
-        "user_handle": options.user_handle,
-        "name": name,
-        "user_id": user_id,
-    }
-    request.session.modified = True
-
-    return JsonResponse({"publicKey": options.data})
-
-
-@staff_member_required
-@require_POST
-def passkey_register_verify(request):
-    """Complete a pending passkey registration."""
-
-    session_data = request.session.get(PASSKEY_REGISTRATION_SESSION_KEY)
-    if not session_data:
-        return JsonResponse({"error": "missing-challenge"}, status=400)
-
-    try:
-        payload = json.loads(request.body.decode() or "{}")
-    except json.JSONDecodeError:
-        return JsonResponse({"error": "invalid-json"}, status=400)
-
-    credential_data = payload.get("credential") or payload
-    if not isinstance(credential_data, dict):
-        return JsonResponse({"error": "invalid-credential"}, status=400)
-
-    try:
-        verification = passkeys.verify_registration_response(
-            request,
-            credential=credential_data,
-            expected_challenge=session_data.get("challenge", ""),
-        )
-    except Exception:  # pragma: no cover - sensitive failure details remain server-side
-        logger.exception("Passkey registration verification failed")
-        request.session.pop(PASSKEY_REGISTRATION_SESSION_KEY, None)
-        return JsonResponse({"error": "verification-failed"}, status=400)
-
-    request.session.pop(PASSKEY_REGISTRATION_SESSION_KEY, None)
-
-    credential_id = bytes_to_base64url(verification.credential_id)
-    if PasskeyCredential.objects.filter(credential_id=credential_id).exists():
-        return JsonResponse({"error": "duplicate-credential"}, status=400)
-
-    response_data = credential_data.get("response")
-    if isinstance(response_data, dict):
-        response_handle = response_data.get("userHandle")
-        expected_handle = session_data.get("user_handle")
-        if response_handle and expected_handle and response_handle != expected_handle:
-            return JsonResponse({"error": "mismatched-user"}, status=400)
-
-    transports = payload.get("transports")
-    if transports is None and isinstance(credential_data, dict):
-        transports = credential_data.get("transports")
-    if not isinstance(transports, (list, tuple)):
-        transports = []
-    transports = [str(value) for value in transports if isinstance(value, str)]
-
-    passkey = PasskeyCredential.objects.create(
-        user=request.user,
-        name=session_data.get("name", ""),
-        credential_id=credential_id,
-        public_key=verification.credential_public_key,
-        sign_count=verification.sign_count,
-        user_handle=session_data.get("user_handle", session_data.get("user_id", "")),
-        transports=transports,
-    )
-
-    return JsonResponse(
-        {
-            "id": passkey.pk,
-            "name": passkey.name,
-            "created_at": timezone.localtime(passkey.created_at).isoformat(),
-            "delete_url": reverse("pages:passkey-delete", args=[passkey.pk]),
-        }
-    )
-
-
-@staff_member_required
-@require_POST
-def passkey_delete(request, pk: int):
-    """Remove a stored passkey for the current user."""
-
-    passkey = get_object_or_404(PasskeyCredential, pk=pk, user=request.user)
-    passkey.delete()
-    return JsonResponse({"deleted": True})
 
 
 INVITATION_REQUEST_MIN_SUBMISSION_INTERVAL = datetime.timedelta(seconds=3)
