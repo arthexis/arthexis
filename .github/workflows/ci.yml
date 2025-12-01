@@ -19,4 +19,5 @@ jobs:
           ./install.sh --clean --no-start
       - name: Run tests
         run: |
+          source .venv/bin/activate
           pytest --maxfail=1 --disable-warnings -q
