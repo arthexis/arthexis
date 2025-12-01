@@ -447,6 +447,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django_mermaid.apps.MermaidConfig",
     "import_export",
     "django_object_actions",
     "django.contrib.sites",
@@ -700,6 +701,8 @@ STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 # traffic chart fail to load their JavaScript dependencies.
 WHITENOISE_USE_FINDERS = True
 WHITENOISE_AUTOREFRESH = DEBUG
+
+MERMAID_USE_CDN = True
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
