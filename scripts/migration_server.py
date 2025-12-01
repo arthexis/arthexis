@@ -228,6 +228,22 @@ def build_runserver_command(base_dir: Path, *, reload: bool = False) -> list[str
     return command
 
 
+def _run_django_server(command: list[str], *, cwd: Path | None = None, env: Dict[str, str] | None = None) -> None:
+    """Spawn a Django server process and block until it exits."""
+
+    server = subprocess.Popen(command, cwd=cwd, env=env)
+    try:
+        server.wait()
+    finally:
+        if server.poll() is None:
+            server.terminate()
+            try:
+                server.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                server.kill()
+                server.wait(timeout=2)
+
+
 def start_django_server(base_dir: Path, *, reload: bool = False) -> subprocess.Popen | None:
     """Launch the Django server in a child process and return it."""
 
@@ -248,21 +264,37 @@ def start_django_server(base_dir: Path, *, reload: bool = False) -> subprocess.P
         return None
 
 
-def stop_django_server(process: subprocess.Popen | None) -> None:
+def stop_django_server(process) -> None:
     """Terminate the Django server process if it is running."""
 
     if process is None:
         return
-    if process.poll() is not None:
+
+    if hasattr(process, "poll"):
+        if process.poll() is not None:
+            return
+        terminator = process.terminate
+        waiter = process.wait
+        killer = process.kill
+    elif hasattr(process, "is_alive"):
+        if not process.is_alive():
+            return
+        terminator = process.terminate
+        waiter = process.join
+        killer = process.kill
+    else:  # pragma: no cover - defensive guard for unexpected process types
         return
 
     print("[Migration Server] Stopping Django server...")
     try:
-        process.terminate()
-        process.wait(timeout=5)
-    except subprocess.TimeoutExpired:
-        process.kill()
-        process.wait(timeout=2)
+        terminator()
+        waiter(timeout=5)
+    except (TypeError, subprocess.TimeoutExpired):
+        try:
+            killer()
+            waiter(timeout=2)
+        except Exception:
+            pass
 
 
 def _hash_file(path: Path) -> str:
