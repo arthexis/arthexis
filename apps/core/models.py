@@ -2454,6 +2454,7 @@ class AdminCommandResult(Entity):
 
 # Backwards-compatible proxies for energy domain models
 from apps.energy import models as energy_models
+from apps.maps import models as map_models
 
 
 class EnergyTariff(energy_models.EnergyTariff):
@@ -2462,8 +2463,8 @@ class EnergyTariff(energy_models.EnergyTariff):
         app_label = "core"
 
 
-class Location(energy_models.Location):
-    class Meta(energy_models.Location.Meta):
+class Location(map_models.Location):
+    class Meta(map_models.Location.Meta):
         proxy = True
         app_label = "core"
 

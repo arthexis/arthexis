@@ -27,7 +27,8 @@ from asgiref.sync import async_to_sync
 from apps.base.models import Entity, EntityManager
 from apps.nodes.models import Node
 
-from apps.energy.models import CustomerAccount, EnergyTariff, Location
+from apps.energy.models import CustomerAccount, EnergyTariff
+from apps.maps.models import Location
 from apps.links.models import Reference
 from apps.core.models import RFID as CoreRFID, SecurityGroup
 from apps.media.models import MediaBucket, MediaFile, media_bucket_slug, media_file_path
