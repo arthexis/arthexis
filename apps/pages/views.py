@@ -53,7 +53,7 @@ from django.utils.http import (
     urlsafe_base64_encode,
 )
 from django_otp import DEVICE_ID_SESSION_KEY
-from apps.core import changelog, mailer, passkeys, public_wifi
+from apps.core import changelog, mailer, passkeys
 from apps.links.templatetags.ref_tags import build_footer_context
 from apps.core.backends import (
     TOTP_DEVICE_NAME,
@@ -1650,7 +1650,6 @@ def request_invite(request):
         if recent_requests.count() >= INVITATION_REQUEST_THROTTLE_LIMIT:
             form.add_error(None, INVITATION_REQUEST_THROTTLE_MESSAGE)
         else:
-            mac_address = public_wifi.resolve_mac_address(ip_address)
             lead = InviteLead.objects.create(
                 email=email,
                 comment=comment,
@@ -1659,7 +1658,7 @@ def request_invite(request):
                 referer=get_original_referer(request),
                 user_agent=request.META.get("HTTP_USER_AGENT", ""),
                 ip_address=ip_address,
-                mac_address=mac_address or "",
+                mac_address="",
             )
             logger.info("Invitation requested for %s", email)
             User = get_user_model()
@@ -1745,21 +1744,6 @@ def invitation_login(request, uidb64, token):
             user.set_password(password)
         user.is_active = True
         user.save()
-        node = Node.get_local()
-        if node and node.has_feature("ap-router"):
-            mac_address = public_wifi.resolve_mac_address(
-                request.META.get("REMOTE_ADDR")
-            )
-            if not mac_address:
-                mac_address = (
-                    InviteLead.objects.filter(email__iexact=user.email)
-                    .exclude(mac_address="")
-                    .order_by("-created_on")
-                    .values_list("mac_address", flat=True)
-                    .first()
-                )
-            if mac_address:
-                public_wifi.grant_public_access(user, mac_address)
         login(request, user, backend="apps.core.backends.LocalhostAdminBackend")
         return redirect(reverse("admin:index") if user.is_staff else "/")
     return render(request, "pages/invitation_login.html", {"form": form})
