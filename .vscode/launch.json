@@ -42,7 +42,9 @@
                 "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe"
             },
             "program": "${workspaceFolder}/scripts/migration_server.py",
-            "noDebug": true
+            "noDebug": true,
+            "console": "integratedTerminal",
+            "subProcess": true
         },
         {
             "name": "Test Server",
