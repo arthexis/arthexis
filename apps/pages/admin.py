@@ -206,7 +206,7 @@ class SiteAdmin(DjangoSiteAdmin):
         loaded = 0
         for path in fixture_paths:
             try:
-                call_command("loaddata", str(path), verbosity=0)
+                call_command("load_user_data", str(path), verbosity=0)
             except CommandError as exc:
                 self.message_user(
                     request,

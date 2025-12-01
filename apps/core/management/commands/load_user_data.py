@@ -6,7 +6,7 @@ logger = logging.getLogger(__name__)
 
 
 class Command(DjangoLoadDataCommand):
-    """Load fixtures then ensure admin mailboxes exist."""
+    """Load user fixtures then ensure admin mailboxes exist."""
 
     def handle(self, *fixture_labels, **options):
         result = super().handle(*fixture_labels, **options)
@@ -15,5 +15,5 @@ class Command(DjangoLoadDataCommand):
 
             ensure_admin_email_mailboxes()
         except Exception:  # pragma: no cover - defensive logging
-            logger.exception("Unable to ensure admin email mailboxes after loaddata")
+            logger.exception("Unable to ensure admin email mailboxes after load_user_data")
         return result

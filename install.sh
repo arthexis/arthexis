@@ -576,7 +576,7 @@ python manage.py migrate --noinput
 
 # Load personal user data fixtures if present
 if ls data/*.json >/dev/null 2>&1; then
-    python manage.py loaddata data/*.json
+    python manage.py load_user_data data/*.json
 fi
 
 # Refresh environment data and register this node
