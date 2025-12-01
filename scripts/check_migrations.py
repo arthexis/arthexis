@@ -121,7 +121,7 @@ def main() -> int:
     # spending time probing unavailable PostgreSQL instances. The environment
     # variable can still be overridden by callers that want to target a
     # specific database engine.
-    os.environ.setdefault("ARTHEXIS_FORCE_DB_BACKEND", "sqlite")
+    os.environ.setdefault("ARTHEXIS_DB_BACKEND", "sqlite")
     django.setup()
     labels = _local_app_labels(apps, settings)
     return _check_migrations(labels)
