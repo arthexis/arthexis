@@ -14,12 +14,10 @@ from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.template.response import TemplateResponse
 from django.test import signals as test_signals
-from django.utils import timezone
 from django.utils.translation import gettext as _, gettext_lazy as _lazy
 
 from apps.pages.utils import get_original_referer, landing
 
-from apps.release.models import CountdownTimer
 
 from .models import (
     CableSize,
@@ -951,30 +949,3 @@ def energy_tariff_calculator(request):
     return response
 
 
-@landing(_("Future Event Calculator"))
-def future_event_calculator(request):
-    """Render a live countdown for the next scheduled event."""
-
-    events: list[dict[str, object]] = []
-    for timer in CountdownTimer.objects.visible()[:3]:
-        scheduled = timer.scheduled_for
-        if timezone.is_naive(scheduled):
-            scheduled = timezone.make_aware(
-                scheduled, timezone.get_current_timezone()
-            )
-        local_scheduled = timezone.localtime(scheduled)
-        events.append(
-            {
-                "timer": timer,
-                "scheduled": local_scheduled,
-                "target_iso": local_scheduled.isoformat(),
-                "article_url": timer.article.get_absolute_url()
-                if timer.article
-                else "",
-            }
-        )
-
-    context = {
-        "events": events,
-    }
-    return render(request, "awg/future_event_calculator.html", context)
