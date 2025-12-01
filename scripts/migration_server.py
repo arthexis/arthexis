@@ -10,7 +10,7 @@ import os
 import subprocess
 import sys
 import time
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from pathlib import Path
 from typing import Dict, Iterable
 
@@ -228,6 +228,20 @@ def build_runserver_command(base_dir: Path, *, reload: bool = False) -> list[str
     return command
 
 
+def _run_django_server(
+    command: list[str], *, cwd: Path | None = None, env: dict[str, str] | None = None
+) -> None:
+    """Execute a Django server command and wait for it to exit."""
+
+    process = subprocess.Popen(command, cwd=cwd, env=env)
+    try:
+        process.wait()
+    finally:
+        with suppress(subprocess.SubprocessError, OSError):
+            if process.poll() is None:
+                process.terminate()
+
+
 def start_django_server(base_dir: Path, *, reload: bool = False) -> subprocess.Popen | None:
     """Launch the Django server in a child process and return it."""
 
@@ -248,21 +262,32 @@ def start_django_server(base_dir: Path, *, reload: bool = False) -> subprocess.P
         return None
 
 
-def stop_django_server(process: subprocess.Popen | None) -> None:
+def stop_django_server(process: subprocess.Popen | multiprocessing.Process | None) -> None:
     """Terminate the Django server process if it is running."""
 
     if process is None:
         return
-    if process.poll() is not None:
+
+    if hasattr(process, "poll"):
+        if process.poll() is not None:
+            return
+        print("[Migration Server] Stopping Django server...")
+        try:
+            process.terminate()
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait(timeout=2)
+        return
+
+    if not process.is_alive():
         return
 
     print("[Migration Server] Stopping Django server...")
-    try:
-        process.terminate()
-        process.wait(timeout=5)
-    except subprocess.TimeoutExpired:
+    process.terminate()
+    process.join(timeout=5)
+    if process.is_alive() and hasattr(process, "kill"):
         process.kill()
-        process.wait(timeout=2)
 
 
 def _hash_file(path: Path) -> str:

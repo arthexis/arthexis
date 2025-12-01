@@ -636,7 +636,10 @@ else:
             "ENGINE": "django.db.backends.sqlite3",
             "NAME": SQLITE_DB_PATH,
             "OPTIONS": {"timeout": 60},
-            "TEST": {"NAME": BASE_DIR / "test_db.sqlite3"},
+            "TEST": {
+                "NAME": ":memory:",
+                "SERIALIZE": False,
+            },
         }
     }
 
