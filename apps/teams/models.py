@@ -29,7 +29,7 @@ from apps.core.models import (
     User as CoreUser,
 )
 from apps.odoo.models import (
-    OdooProfile as CoreOdooProfile,
+    OdooEmployee as CoreOdooEmployee,
     OdooProduct as CoreOdooProduct,
 )
 from apps.awg.models import PowerLead as CorePowerLead
@@ -255,12 +255,12 @@ class ReleaseManager(CoreReleaseManager):
         verbose_name_plural = CoreReleaseManager._meta.verbose_name_plural
 
 
-class OdooProfile(CoreOdooProfile):
+class OdooEmployee(CoreOdooEmployee):
     class Meta:
         proxy = True
         app_label = "teams"
-        verbose_name = CoreOdooProfile._meta.verbose_name
-        verbose_name_plural = CoreOdooProfile._meta.verbose_name_plural
+        verbose_name = CoreOdooEmployee._meta.verbose_name
+        verbose_name_plural = CoreOdooEmployee._meta.verbose_name_plural
 
 
 class TOTPDevice(CoreTOTPDevice):

@@ -46,7 +46,7 @@ class OdooProduct(Entity):
         db_table = "core_odoo_product"
 
 
-class OdooProfile(Profile):
+class OdooEmployee(Profile):
     """Store Odoo API credentials for a user."""
 
     profile_fields = ("host", "database", "username", "password")
@@ -211,16 +211,16 @@ class OdooProfile(Profile):
         return f"{owner} @ {self.host}" if owner else self.host
 
     class Meta:
-        verbose_name = _("Odoo Profile")
-        verbose_name_plural = _("Odoo Profiles")
-        db_table = "core_odooprofile"
+        verbose_name = _("Odoo Employee")
+        verbose_name_plural = _("Odoo Employees")
+        db_table = "core_odooemployee"
         constraints = [
             models.CheckConstraint(
                 condition=(
                     (Q(user__isnull=False) & Q(group__isnull=True))
                     | (Q(user__isnull=True) & Q(group__isnull=False))
                 ),
-                name="odooprofile_requires_owner",
+                name="odooemployee_requires_owner",
             )
         ]
 
@@ -239,7 +239,7 @@ class OdooChatBridge(ChatBridge):
         ),
     )
     profile = models.ForeignKey(
-        "odoo.OdooProfile",
+        "odoo.OdooEmployee",
         on_delete=models.CASCADE,
         related_name="chat_bridges",
         help_text=_("Verified Odoo employee credentials used to post chat messages."),

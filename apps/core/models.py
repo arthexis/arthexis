@@ -496,8 +496,12 @@ class User(Entity, AbstractUser):
         return self._direct_profile("ReleaseManager")
 
     @property
+    def odoo_employee(self):
+        return self._direct_profile("OdooEmployee", app_label="odoo")
+
+    @property
     def odoo_profile(self):
-        return self._direct_profile("OdooProfile", app_label="odoo")
+        return self.odoo_employee
 
     @property
     def social_profile(self):

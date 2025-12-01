@@ -19,7 +19,7 @@ from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _, ngettext
 
 from apps.core.models import RFID, SecurityGroup
-from apps.odoo.models import OdooProfile
+from apps.odoo.models import OdooEmployee
 from apps.locals.user_data import EntityModelAdmin
 from apps.ocpp.models import Charger
 from apps.vehicle.models import ElectricVehicle
@@ -250,8 +250,8 @@ class CustomerAccountAdmin(EntityModelAdmin):
         context.update({"form": form})
         return render(request, "core/onboard_details.html", context)
 
-    def _odoo_profile_admin(self):
-        return self.admin_site._registry.get(OdooProfile)
+    def _odoo_employee_admin(self):
+        return self.admin_site._registry.get(OdooEmployee)
 
     @staticmethod
     def _simplify_customer(customer: dict[str, Any]) -> dict[str, Any]:
@@ -308,7 +308,7 @@ class CustomerAccountAdmin(EntityModelAdmin):
         request,
         context: dict[str, Any],
         exc: Exception,
-        profile: OdooProfile,
+        profile: OdooEmployee,
     ) -> None:
         logger.exception(
             "Failed to fetch Odoo customers for user %s (profile_id=%s, host=%s, database=%s)",
@@ -335,7 +335,7 @@ class CustomerAccountAdmin(EntityModelAdmin):
             context["debug_error"] = "\n".join(details)
 
     def _fetch_odoo_customers(
-        self, profile: OdooProfile, cleaned_data: dict[str, Any]
+        self, profile: OdooEmployee, cleaned_data: dict[str, Any]
     ) -> list[dict[str, Any]]:
         limit = cleaned_data.get("limit") or 50
         customers = profile.execute(
@@ -348,7 +348,7 @@ class CustomerAccountAdmin(EntityModelAdmin):
         return [self._simplify_customer(customer) for customer in customers]
 
     def _fetch_customers_by_id(
-        self, profile: OdooProfile, identifiers: list[int]
+        self, profile: OdooEmployee, identifiers: list[int]
     ) -> list[dict[str, Any]]:
         if not identifiers:
             return []
@@ -380,7 +380,7 @@ class CustomerAccountAdmin(EntityModelAdmin):
     def _import_selected_customers(
         self,
         request,
-        profile: OdooProfile,
+        profile: OdooEmployee,
         customers: list[dict[str, Any]],
         action: str,
         context: dict[str, Any],
@@ -489,14 +489,14 @@ class CustomerAccountAdmin(EntityModelAdmin):
             }
         )
 
-        profile_admin = self._odoo_profile_admin()
+        profile_admin = self._odoo_employee_admin()
         if profile_admin is not None:
             context["profile_url"] = profile_admin.get_my_profile_url(request)
 
-        profile = getattr(request.user, "odoo_profile", None)
+        profile = getattr(request.user, "odoo_employee", None)
         if not profile or not profile.is_verified:
             context["credential_error"] = _(
-                "Configure your Odoo profile before importing customers."
+                "Configure your Odoo employee before importing customers."
             )
             return TemplateResponse(
                 request, "admin/core/customeraccount/import_from_odoo.html", context

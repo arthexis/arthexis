@@ -90,7 +90,7 @@ from .models import (
     InviteLead,
 )
 from apps.payments.models import OpenPayProcessor, PayPalProcessor, StripeProcessor
-from apps.odoo.models import OdooProduct, OdooProfile
+from apps.odoo.models import OdooEmployee, OdooProduct
 from apps.locals.user_data import (
     EntityModelAdmin,
     UserDatumAdminMixin,
@@ -972,8 +972,8 @@ def _restore_sigil_values(form, field_names):
         setattr(form.instance, name, raw)
 
 
-class OdooProfileAdminForm(forms.ModelForm):
-    """Admin form for :class:`core.models.OdooProfile` with hidden password."""
+class OdooEmployeeAdminForm(forms.ModelForm):
+    """Admin form for :class:`core.models.OdooEmployee` with hidden password."""
 
     password = forms.CharField(
         widget=forms.PasswordInput(render_value=True),
@@ -982,7 +982,7 @@ class OdooProfileAdminForm(forms.ModelForm):
     )
 
     class Meta:
-        model = OdooProfile
+        model = OdooEmployee
         fields = "__all__"
 
     def __init__(self, *args, **kwargs):
@@ -1366,10 +1366,10 @@ class ProfileFormMixin(forms.ModelForm):
         return cleaned
 
 
-class OdooProfileInlineForm(ProfileFormMixin, OdooProfileAdminForm):
-    profile_fields = OdooProfile.profile_fields
+class OdooEmployeeInlineForm(ProfileFormMixin, OdooEmployeeAdminForm):
+    profile_fields = OdooEmployee.profile_fields
 
-    class Meta(OdooProfileAdminForm.Meta):
+    class Meta(OdooEmployeeAdminForm.Meta):
         exclude = ("user", "group", "verified_on", "odoo_uid", "name", "email")
 
     def clean(self):
@@ -1389,7 +1389,7 @@ class OdooProfileInlineForm(ProfileFormMixin, OdooProfileAdminForm):
         ]
         if provided and missing:
             raise forms.ValidationError(
-                "Provide host, database, username, and password to create an Odoo profile.",
+                "Provide host, database, username, and password to create an Odoo employee.",
             )
 
         return cleaned
@@ -1513,8 +1513,8 @@ class ReleaseManagerInlineForm(ProfileFormMixin, forms.ModelForm):
 
 
 PROFILE_INLINE_CONFIG = {
-    OdooProfile: {
-        "form": OdooProfileInlineForm,
+    OdooEmployee: {
+        "form": OdooEmployeeInlineForm,
         "fieldsets": (
             (
                 None,
@@ -1528,7 +1528,7 @@ PROFILE_INLINE_CONFIG = {
                 },
             ),
             (
-                "Odoo Profile",
+                "Odoo Employee",
                 {
                     "fields": ("verified_on", "odoo_uid", "name", "email"),
                 },
@@ -1765,7 +1765,7 @@ def _build_profile_inline(model, owner_field):
 
 
 PROFILE_MODELS = (
-    OdooProfile,
+    OdooEmployee,
     OpenPayProcessor,
     PayPalProcessor,
     StripeProcessor,
@@ -2113,10 +2113,10 @@ class SocialProfileAdmin(
         return obj.owner_display()
 
 
-@admin.register(OdooProfile)
-class OdooProfileAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdmin):
+@admin.register(OdooEmployee)
+class OdooEmployeeAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdmin):
     change_form_template = "django_object_actions/change_form.html"
-    form = OdooProfileAdminForm
+    form = OdooEmployeeAdminForm
     list_display = ("owner", "host", "database", "credentials_ok", "verified_on")
     list_filter = ()
     readonly_fields = ("verified_on", "odoo_uid", "name", "email", "partner_id")
@@ -2128,7 +2128,7 @@ class OdooProfileAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdm
         ("Configuration", {"fields": ("host", "database")}),
         ("Credentials", {"fields": ("username", "password")}),
         (
-            "Odoo Profile",
+            "Odoo Employee",
             {"fields": ("verified_on", "odoo_uid", "name", "email", "partner_id")},
         ),
     )
@@ -2523,8 +2523,8 @@ class OdooProductAdmin(EntityModelAdmin):
     actions = ["register_from_odoo"]
     change_list_template = "admin/core/product/change_list.html"
 
-    def _odoo_profile_admin(self):
-        return self.admin_site._registry.get(OdooProfile)
+    def _odoo_employee_admin(self):
+        return self.admin_site._registry.get(OdooEmployee)
 
     def get_urls(self):
         urls = super().get_urls()
@@ -2559,14 +2559,14 @@ class OdooProductAdmin(EntityModelAdmin):
             }
         )
 
-        profile_admin = self._odoo_profile_admin()
+        profile_admin = self._odoo_employee_admin()
         if profile_admin is not None:
             context["profile_url"] = profile_admin.get_my_profile_url(request)
 
-        profile = getattr(request.user, "odoo_profile", None)
+        profile = getattr(request.user, "odoo_employee", None)
         if not profile or not profile.is_verified:
             context["credential_error"] = _(
-                "Configure your Odoo profile before registering products."
+                "Configure your Odoo employee before registering products."
             )
             return context, None
 
