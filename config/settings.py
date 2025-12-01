@@ -571,10 +571,10 @@ OTP_TOTP_ISSUER = os.environ.get("OTP_TOTP_ISSUER", "Arthexis")
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-FORCED_DB_BACKEND = os.environ.get("ARTHEXIS_FORCE_DB_BACKEND", "").strip().lower()
+FORCED_DB_BACKEND = os.environ.get("ARTHEXIS_DB_BACKEND", "").strip().lower()
 if FORCED_DB_BACKEND and FORCED_DB_BACKEND not in {"sqlite", "postgres"}:
     raise ImproperlyConfigured(
-        "ARTHEXIS_FORCE_DB_BACKEND must be 'sqlite' or 'postgres' when defined."
+        "ARTHEXIS_DB_BACKEND must be 'sqlite' or 'postgres' when defined."
     )
 
 
