@@ -12,7 +12,7 @@ import requests
 
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
-    from apps.core.models import Package
+    from apps.release.models import Package
 
 logger = logging.getLogger(__name__)
 

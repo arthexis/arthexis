@@ -10,8 +10,8 @@ from typing import Iterable, Mapping
 
 import requests
 
-from apps.core.models import Package, PackageRelease
-from apps.core.release import DEFAULT_PACKAGE
+from apps.release.models import Package, PackageRelease
+from apps.release.release import DEFAULT_PACKAGE
 
 
 logger = logging.getLogger(__name__)

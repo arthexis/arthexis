@@ -24,7 +24,7 @@ from apps.core.auto_upgrade import (
     AUTO_UPGRADE_INTERVAL_MINUTES,
     DEFAULT_AUTO_UPGRADE_MODE,
 )
-from . import release_workflow
+from apps.release import release_workflow
 from apps.core.auto_upgrade_failover import clear_failover_lock, write_failover_lock
 from django.conf import settings
 from django.db import DatabaseError, models
@@ -66,7 +66,7 @@ _PackageReleaseModel = None
 
 
 def _get_package_release_model():
-    """Return the :class:`core.models.PackageRelease` model when available."""
+    """Return the :class:`release.models.PackageRelease` model when available."""
 
     global _PackageReleaseModel
 
@@ -74,7 +74,7 @@ def _get_package_release_model():
         return _PackageReleaseModel
 
     try:
-        from apps.core.models import PackageRelease  # noqa: WPS433 - runtime import
+        from apps.release.models import PackageRelease  # noqa: WPS433 - runtime import
     except Exception:  # pragma: no cover - app registry not ready
         return None
 
