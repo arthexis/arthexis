@@ -7,9 +7,4 @@ class Migration(migrations.Migration):
         ("teams", "0002_move_email_models"),
     ]
 
-    operations = [
-        migrations.RenameModel(
-            old_name="OdooProfile",
-            new_name="OdooEmployee",
-        ),
-    ]
+    operations = []

@@ -17,7 +17,7 @@ class Migration(migrations.Migration):
     dependencies = [
         ("awg", "0002_initial"),
         ("core", "0003_initial"),
-        ("odoo", "0001_initial"),
+        ("odoo", "0004_rename_odoo_profile_to_employee"),
         ("energy", "0002_initial"),
         ("nodes", "0001_initial"),
         ("otp_totp", "0003_add_timestamps"),
@@ -38,16 +38,16 @@ class Migration(migrations.Migration):
             bases=("core.invitelead",),
         ),
         migrations.CreateModel(
-            name="OdooProfile",
+            name="OdooEmployee",
             fields=[],
             options={
-                "verbose_name": "Odoo Profile",
-                "verbose_name_plural": "Odoo Profiles",
+                "verbose_name": "Odoo Employee",
+                "verbose_name_plural": "Odoo Employees",
                 "proxy": True,
                 "indexes": [],
                 "constraints": [],
             },
-            bases=("odoo.odooprofile",),
+            bases=("odoo.odooemployee",),
         ),
         migrations.CreateModel(
             name="PowerLead",
