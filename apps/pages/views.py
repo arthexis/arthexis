@@ -327,7 +327,6 @@ def _resolve_work_asset(user, path: str) -> Path:
     if asset_resolved.is_dir():
         raise Http404("Asset not found")
     return asset_resolved
-from apps.core.liveupdate import live_update
 from django_otp import login as otp_login
 from django_otp.plugins.otp_totp.models import TOTPDevice
 import qrcode
@@ -1932,7 +1931,6 @@ class ClientReportForm(forms.Form):
         return ClientReport.normalize_title(title)
 
 
-@live_update()
 def client_report(request):
     form = ClientReportForm(request.POST or None, request=request)
     report = None
@@ -1958,8 +1956,6 @@ def client_report(request):
             download_url = reverse(
                 "pages:client-report-download", args=[download_id]
             )
-        if download_url:
-            setattr(request, "live_update_interval", None)
 
     try:
         login_url = reverse("pages:login")
