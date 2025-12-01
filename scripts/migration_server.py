@@ -7,7 +7,6 @@ import argparse
 import hashlib
 import json
 import os
-import multiprocessing
 import subprocess
 import sys
 import time
@@ -229,18 +228,8 @@ def build_runserver_command(base_dir: Path, *, reload: bool = False) -> list[str
     return command
 
 
-def _run_django_server(command: list[str], *, cwd: Path, env: dict[str, str]) -> None:
-    """Target function that runs the Django server in a daemon process."""
-
-    try:
-        os.chdir(cwd)
-        os.execve(command[0], command, env)
-    except Exception:
-        return
-
-
-def start_django_server(base_dir: Path, *, reload: bool = False) -> multiprocessing.Process | None:
-    """Launch the Django server as a daemon process and return it."""
+def start_django_server(base_dir: Path, *, reload: bool = False) -> subprocess.Popen | None:
+    """Launch the Django server in a child process and return it."""
 
     try:
         command = build_runserver_command(base_dir, reload=reload)
@@ -252,34 +241,28 @@ def start_django_server(base_dir: Path, *, reload: bool = False) -> multiprocess
     env.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
     print("[Migration Server] Starting Django server:", " ".join(command))
 
-    process = multiprocessing.Process(
-        target=_run_django_server,
-        args=(command,),
-        kwargs={"cwd": base_dir, "env": env},
-        daemon=True,
-    )
     try:
-        process.start()
+        return subprocess.Popen(command, cwd=base_dir, env=env)
     except OSError as exc:
         print(f"[Migration Server] Failed to start Django server: {exc}")
         return None
-    return process
 
 
-def stop_django_server(process: multiprocessing.Process | None) -> None:
-    """Terminate the Django server daemon if it is running."""
+def stop_django_server(process: subprocess.Popen | None) -> None:
+    """Terminate the Django server process if it is running."""
 
     if process is None:
         return
-    if not process.is_alive():
+    if process.poll() is not None:
         return
 
     print("[Migration Server] Stopping Django server...")
-    process.terminate()
-    process.join(timeout=5)
-    if process.is_alive():
+    try:
+        process.terminate()
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
         process.kill()
-        process.join(timeout=2)
+        process.wait(timeout=2)
 
 
 def _hash_file(path: Path) -> str:
@@ -463,7 +446,7 @@ def main(argv: list[str] | None = None) -> int:
     print("[Migration Server] Starting in", BASE_DIR)
     snapshot = collect_source_mtimes(BASE_DIR)
     print("[Migration Server] Watching for changes... Press Ctrl+C to stop.")
-    server_process: multiprocessing.Process | None = None
+    server_process: subprocess.Popen | None = None
     with migration_server_state(LOCK_DIR):
         if run_env_refresh_with_report(BASE_DIR, latest=args.latest):
             server_process = start_django_server(BASE_DIR)
