@@ -1,28 +1,12 @@
 from __future__ import annotations
 
-import contextlib
 import logging
-from typing import Mapping
 
-import requests
-
-from apps.repos.github_issues import REQUEST_TIMEOUT, get_github_token
+from apps.repos.github_issues import get_github_token
+from apps.repos.models import GitHubRepository
 
 
 logger = logging.getLogger(__name__)
-
-
-def _build_repository_payload(
-    repo: str,
-    visibility: str,
-    description: str | None,
-) -> Mapping[str, object]:
-    payload: dict[str, object] = {"name": repo, "visibility": visibility}
-
-    if description is not None:
-        payload["description"] = description
-
-    return payload
 
 
 def create_repository(
@@ -31,51 +15,26 @@ def create_repository(
     *,
     visibility: str = "private",
     description: str | None = None,
-) -> requests.Response:
+):
     """Create a GitHub repository for the authenticated user or organisation."""
 
     token = get_github_token()
+    repository = GitHubRepository(
+        owner=owner or "", name=repo, description=description or "", is_private=visibility == "private"
+    )
 
-    headers = {
-        "Accept": "application/vnd.github+json",
-        "Authorization": f"token {token}",
-        "User-Agent": "arthexis-runtime-reporter",
-    }
+    headers = GitHubRepository._build_headers(token)
+    payload = repository._build_payload(private=repository.is_private, description=description)
 
     if owner:
-        url = f"https://api.github.com/orgs/{owner}/repos"
+        endpoint = f"{GitHubRepository.API_ROOT}/orgs/{owner}/repos"
     else:
-        url = "https://api.github.com/user/repos"
+        endpoint = f"{GitHubRepository.API_ROOT}/user/repos"
 
-    payload = _build_repository_payload(repo, visibility, description)
-
-    response = None
-    try:
-        response = requests.post(
-            url,
-            json=payload,
-            headers=headers,
-            timeout=REQUEST_TIMEOUT,
-        )
-
-        if not (200 <= response.status_code < 300):
-            logger.error(
-                "GitHub repository creation failed with status %s: %s",
-                response.status_code,
-                response.text,
-            )
-            response.raise_for_status()
-
-        logger.info(
-            "GitHub repository created for %s with status %s",
-            owner or "authenticated user",
-            response.status_code,
-        )
-
-        return response
-    finally:
-        if response is not None:
-            close = getattr(response, "close", None)
-            if callable(close):
-                with contextlib.suppress(Exception):
-                    close()
+    response = repository._make_request(endpoint, payload, headers)
+    logger.info(
+        "GitHub repository created for %s with status %s",
+        owner or "authenticated user",
+        response.status_code,
+    )
+    return response

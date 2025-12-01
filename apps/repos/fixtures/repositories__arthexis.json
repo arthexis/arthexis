@@ -1,6 +1,6 @@
 [
   {
-    "model": "repos.repository",
+    "model": "repos.githubrepository",
     "fields": {
       "is_seed_data": true,
       "owner": "arthexis",
