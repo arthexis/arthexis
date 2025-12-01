@@ -98,7 +98,7 @@ from apps.locals.user_data import (
     _user_allows_user_data,
 )
 from .widgets import OdooProductWidget, RFIDDataWidget
-from .rfid_import_export import (
+from apps.cards.rfid_import_export import (
     account_column_for_field,
     parse_accounts,
     serialize_accounts,
