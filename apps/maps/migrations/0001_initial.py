@@ -154,162 +154,84 @@ class Migration(migrations.Migration):
                         "db_table": "core_location",
                     },
                 ),
-                migrations.CreateModel(
-                    name="GoogleMapsLocation",
-                    fields=[
-                        (
-                            "id",
-                            models.BigAutoField(
-                                auto_created=True,
-                                primary_key=True,
-                                serialize=False,
-                                verbose_name="ID",
-                            ),
-                        ),
-                        ("is_seed_data", models.BooleanField(default=False, editable=False)),
-                        ("is_user_data", models.BooleanField(default=False, editable=False)),
-                        ("is_deleted", models.BooleanField(default=False, editable=False)),
-                        (
-                            "place_id",
-                            models.CharField(
-                                help_text="Google Maps place identifier for the location.",
-                                max_length=255,
-                                unique=True,
-                                verbose_name="Place ID",
-                            ),
-                        ),
-                        (
-                            "map_url",
-                            models.URLField(
-                                blank=True,
-                                default="",
-                                help_text="Public map URL returned by Google Maps.",
-                                verbose_name="Map URL",
-                            ),
-                        ),
-                        (
-                            "embed_url",
-                            models.URLField(
-                                blank=True,
-                                default="",
-                                help_text="Embeddable map URL for dashboards and reports.",
-                                verbose_name="Embed URL",
-                            ),
-                        ),
-                        (
-                            "formatted_address",
-                            models.CharField(
-                                blank=True,
-                                default="",
-                                help_text="Normalized address provided by Google Maps.",
-                                max_length=255,
-                                verbose_name="Formatted address",
-                            ),
-                        ),
-                        (
-                            "coordinates",
-                            models.JSONField(
-                                blank=True,
-                                help_text="Latitude/longitude and viewport details from Google Maps.",
-                                null=True,
-                                verbose_name="Coordinates",
-                            ),
-                        ),
-                        (
-                            "location",
-                            models.OneToOneField(
-                                on_delete=django.db.models.deletion.CASCADE,
-                                related_name="google_maps_details",
-                                to="maps.location",
-                                verbose_name="Location",
-                            ),
-                        ),
-                    ],
-                    options={
-                        "verbose_name": "Google Maps location",
-                        "verbose_name_plural": "Google Maps locations",
-                        "db_table": "maps_google_maps_location",
-                    },
+            ],
+            database_operations=[],
+        ),
+        migrations.CreateModel(
+            name="GoogleMapsLocation",
+            fields=[
+                (
+                    "id",
+                    models.BigAutoField(
+                        auto_created=True,
+                        primary_key=True,
+                        serialize=False,
+                        verbose_name="ID",
+                    ),
+                ),
+                ("is_seed_data", models.BooleanField(default=False, editable=False)),
+                ("is_user_data", models.BooleanField(default=False, editable=False)),
+                ("is_deleted", models.BooleanField(default=False, editable=False)),
+                (
+                    "place_id",
+                    models.CharField(
+                        help_text="Google Maps place identifier for the location.",
+                        max_length=255,
+                        unique=True,
+                        verbose_name="Place ID",
+                    ),
+                ),
+                (
+                    "map_url",
+                    models.URLField(
+                        blank=True,
+                        default="",
+                        help_text="Public map URL returned by Google Maps.",
+                        verbose_name="Map URL",
+                    ),
+                ),
+                (
+                    "embed_url",
+                    models.URLField(
+                        blank=True,
+                        default="",
+                        help_text="Embeddable map URL for dashboards and reports.",
+                        verbose_name="Embed URL",
+                    ),
+                ),
+                (
+                    "formatted_address",
+                    models.CharField(
+                        blank=True,
+                        default="",
+                        help_text="Normalized address provided by Google Maps.",
+                        max_length=255,
+                        verbose_name="Formatted address",
+                    ),
+                ),
+                (
+                    "coordinates",
+                    models.JSONField(
+                        blank=True,
+                        help_text="Latitude/longitude and viewport details from Google Maps.",
+                        null=True,
+                        verbose_name="Coordinates",
+                    ),
+                ),
+                (
+                    "location",
+                    models.OneToOneField(
+                        on_delete=django.db.models.deletion.CASCADE,
+                        related_name="google_maps_details",
+                        to="maps.location",
+                        verbose_name="Location",
+                    ),
                 ),
             ],
-            database_operations=[
-                migrations.CreateModel(
-                    name="GoogleMapsLocation",
-                    fields=[
-                        (
-                            "id",
-                            models.BigAutoField(
-                                auto_created=True,
-                                primary_key=True,
-                                serialize=False,
-                                verbose_name="ID",
-                            ),
-                        ),
-                        ("is_seed_data", models.BooleanField(default=False, editable=False)),
-                        ("is_user_data", models.BooleanField(default=False, editable=False)),
-                        ("is_deleted", models.BooleanField(default=False, editable=False)),
-                        (
-                            "place_id",
-                            models.CharField(
-                                help_text="Google Maps place identifier for the location.",
-                                max_length=255,
-                                unique=True,
-                                verbose_name="Place ID",
-                            ),
-                        ),
-                        (
-                            "map_url",
-                            models.URLField(
-                                blank=True,
-                                default="",
-                                help_text="Public map URL returned by Google Maps.",
-                                verbose_name="Map URL",
-                            ),
-                        ),
-                        (
-                            "embed_url",
-                            models.URLField(
-                                blank=True,
-                                default="",
-                                help_text="Embeddable map URL for dashboards and reports.",
-                                verbose_name="Embed URL",
-                            ),
-                        ),
-                        (
-                            "formatted_address",
-                            models.CharField(
-                                blank=True,
-                                default="",
-                                help_text="Normalized address provided by Google Maps.",
-                                max_length=255,
-                                verbose_name="Formatted address",
-                            ),
-                        ),
-                        (
-                            "coordinates",
-                            models.JSONField(
-                                blank=True,
-                                help_text="Latitude/longitude and viewport details from Google Maps.",
-                                null=True,
-                                verbose_name="Coordinates",
-                            ),
-                        ),
-                        (
-                            "location",
-                            models.OneToOneField(
-                                on_delete=django.db.models.deletion.CASCADE,
-                                related_name="google_maps_details",
-                                to="maps.location",
-                                verbose_name="Location",
-                            ),
-                        ),
-                    ],
-                    options={
-                        "verbose_name": "Google Maps location",
-                        "verbose_name_plural": "Google Maps locations",
-                        "db_table": "maps_google_maps_location",
-                    },
-                )
-            ],
-        )
+            options={
+                "verbose_name": "Google Maps location",
+                "verbose_name_plural": "Google Maps locations",
+                "db_table": "maps_google_maps_location",
+            },
+        ),
     ]
