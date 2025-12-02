@@ -12,6 +12,8 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
+import pytest
+
 from scripts import migration_server as migration
 
 BASE_DIR = migration.BASE_DIR
@@ -25,7 +27,14 @@ wait_for_changes = migration.wait_for_changes
 PREFIX = "[Test Server]"
 
 
-def test_server_state(lock_dir: Path):
+@pytest.fixture
+def lock_dir(tmp_path: Path) -> Path:
+    """Provide an isolated lock directory for tests."""
+
+    return tmp_path / "locks"
+
+
+def server_state(lock_dir: Path):
     """Context manager that records the test server PID."""
 
     lock_dir.mkdir(parents=True, exist_ok=True)
@@ -49,6 +58,18 @@ def test_server_state(lock_dir: Path):
                 pass
 
     return _manager()
+
+
+def test_server_state_records_pid(lock_dir: Path) -> None:
+    """Record and clean up server state snapshots."""
+
+    with server_state(lock_dir) as state_path:
+        assert state_path.exists()
+        data = json.loads(state_path.read_text(encoding="utf-8"))
+        assert data["pid"] == os.getpid()
+        assert "timestamp" in data
+
+    assert not state_path.exists()
 
 
 def update_requirements(base_dir: Path) -> bool:
@@ -197,7 +218,7 @@ def main(argv: list[str] | None = None) -> int:
     print(PREFIX, "Starting in", BASE_DIR)
     snapshot = collect_source_mtimes(BASE_DIR)
     print(PREFIX, "Watching for changes... Press Ctrl+C to stop.")
-    with test_server_state(LOCK_DIR):
+    with server_state(LOCK_DIR):
         run_env_refresh_with_tests(BASE_DIR, latest=args.latest)
         snapshot = collect_source_mtimes(BASE_DIR)
 
