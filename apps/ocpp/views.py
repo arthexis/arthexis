@@ -286,12 +286,12 @@ def _normalize_connector_slug(slug: str | None) -> tuple[int | None, str]:
 def _reverse_connector_url(name: str, serial: str, connector_slug: str) -> str:
     """Return URL name for connector-aware routes."""
 
-    target = f"{name}-connector"
+    target = f"ocpp:{name}-connector"
     if connector_slug == Charger.AGGREGATE_CONNECTOR_SLUG:
         try:
             return reverse(target, args=[serial, connector_slug])
         except NoReverseMatch:
-            return reverse(name, args=[serial])
+            return reverse(f"ocpp:{name}", args=[serial])
     return reverse(target, args=[serial, connector_slug])
 
 
@@ -1426,7 +1426,7 @@ def maintenance_request(request):
             _("Maintenance request scheduled for %(location)s.")
             % {"location": task.location or _("the selected location")},
         )
-        return redirect("maintenance-request")
+        return redirect("ocpp:maintenance-request")
 
     return render(request, "ocpp/maintenance_request.html", {"form": form})
 
@@ -1585,7 +1585,7 @@ def cp_simulator(request):
                     )
                     try:
                         dashboard_link = reverse(
-                            "charger-status", args=[sim_params["cp_path"]]
+                            "ocpp:charger-status", args=[sim_params["cp_path"]]
                         )
                     except NoReverseMatch:  # pragma: no cover - defensive
                         dashboard_link = None
@@ -3011,7 +3011,7 @@ def _handle_update_firmware(context: ActionContext, data: dict) -> JsonResponse 
         is_user_data=True,
     )
     token = deployment.issue_download_token(lifetime=timedelta(hours=4))
-    download_path = reverse("cp-firmware-download", args=[deployment.pk, token])
+    download_path = reverse("ocpp:cp-firmware-download", args=[deployment.pk, token])
     request_obj = getattr(context, "request", None)
     if request_obj is not None:
         download_url = request_obj.build_absolute_uri(download_path)

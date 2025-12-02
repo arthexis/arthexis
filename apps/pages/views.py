@@ -1044,7 +1044,7 @@ class CustomLoginView(LoginView):
             parsed_target = urlparse(redirect_target)
             target_path = parsed_target.path or redirect_target
             try:
-                simulator_path = reverse("cp-simulator")
+                simulator_path = reverse("ocpp:cp-simulator")
             except NoReverseMatch:  # pragma: no cover - simulator may be uninstalled
                 simulator_path = None
             if simulator_path and target_path.startswith(simulator_path):

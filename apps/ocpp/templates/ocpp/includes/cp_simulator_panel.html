@@ -1,5 +1,5 @@
 <div id="cp-simulator-panel"
-     hx-get="{% url 'cp-simulator' %}"
+     hx-get="{% url 'ocpp:cp-simulator' %}"
      hx-trigger="load, every 5s"
      hx-swap="outerHTML">
   {% if message %}
