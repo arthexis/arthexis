@@ -11,7 +11,8 @@ from django.db import models
 from django.db.models import Q
 from django.core.validators import RegexValidator
 from apps.core.entity import Entity, EntityManager
-from apps.core.models import Lead, SecurityGroup
+from apps.core.models import SecurityGroup
+from apps.leads.models import Lead
 from apps.chats.models import ChatMessage, ChatSession
 from apps.meta.models import WhatsAppChatBridge
 from apps.odoo.models import OdooChatBridge

@@ -412,6 +412,7 @@ LOCAL_APPS = [
     "apps.counters",
     "apps.energy",
     "apps.core",
+    "apps.leads",
     "apps.release",
     "apps.emails",
     "apps.payments",
