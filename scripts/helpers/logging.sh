@@ -39,9 +39,9 @@ arthexis_resolve_log_dir() {
     fi
 
     if [ "$euid" -eq 0 ]; then
-        if [ -z "${SUDO_USER:-}" ] || [ "${SUDO_USER}" = "root" ]; then
-            candidates+=("$default")
-        fi
+        # When running with elevated privileges, avoid writing logs inside the
+        # repository tree so subsequent non-root processes (like CI cleanups)
+        # do not encounter permission issues.
         candidates+=("/var/log/arthexis" "/tmp/arthexis/logs")
     else
         local state_home
