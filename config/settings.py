@@ -90,7 +90,8 @@ def _env_bool(name: str, default: bool) -> bool:
     return default
 
 
-DEBUG = _env_bool("DEBUG", False)
+_debugpy_attached = "DEBUGPY_LAUNCHER_PORT" in os.environ
+DEBUG = _env_bool("DEBUG", _debugpy_attached)
 
 
 def _dedupe_app_labels(app_paths: list[str]) -> list[str]:
