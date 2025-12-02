@@ -40,7 +40,6 @@ from .models import (
     SiteBadge,
     SiteTemplate,
     SiteProxy,
-    DeveloperArticle,
     Module,
     Landing,
     LandingLead,
@@ -341,7 +340,7 @@ class SiteTemplateAdmin(EntityModelAdmin):
             color,
         )
 
-    @admin.display(description=_("Preview"))
+@admin.display(description=_("Preview"))
     def palette(self, obj):  # pragma: no cover - admin rendering
         return format_html(
             "{}{}{}{}{}{}",
@@ -352,37 +351,6 @@ class SiteTemplateAdmin(EntityModelAdmin):
             self._render_swatch(obj.support_color),
             self._render_swatch(obj.support_color_emphasis),
         )
-
-
-@admin.register(DeveloperArticle)
-class DeveloperArticleAdmin(EntityModelAdmin):
-    list_display = ("title", "is_published", "updated_on")
-    list_filter = ("is_published", "created_on")
-    search_fields = ("title", "summary", "content")
-    prepopulated_fields = {"slug": ("title",)}
-    readonly_fields = (
-        "created_on",
-        "updated_on",
-        "is_seed_data",
-        "is_user_data",
-        "is_deleted",
-    )
-    fieldsets = (
-        (None, {"fields": ("title", "slug", "summary", "content", "is_published")}),
-        (
-            _("Record details"),
-            {
-                "fields": (
-                    "created_on",
-                    "updated_on",
-                    "is_seed_data",
-                    "is_user_data",
-                    "is_deleted",
-                ),
-                "classes": ("collapse",),
-            },
-        ),
-    )
 
 
 class ApplicationForm(forms.ModelForm):

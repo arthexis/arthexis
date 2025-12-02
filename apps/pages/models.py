@@ -22,7 +22,7 @@ from django.utils import timezone
 from django.utils.text import slugify
 from django.utils.translation import gettext, gettext_lazy as _, get_language_info
 from importlib import import_module
-from django.urls import URLPattern, reverse
+from django.urls import URLPattern
 from django.conf import settings
 from django.core.validators import MaxLengthValidator, MaxValueValidator, MinValueValidator
 from django.core.exceptions import ValidationError
@@ -264,57 +264,6 @@ class SiteProxy(Site):
             ("delete_siteproxy", "Can delete site"),
             ("view_siteproxy", "Can view site"),
         ]
-
-
-class DeveloperArticleManager(EntityManager):
-    """Manager providing helpers for developer-authored articles."""
-
-    def get_by_natural_key(self, slug: str):
-        return self.get(slug=slug)
-
-    def published(self):
-        """Return only the articles that are published."""
-
-        return super().get_queryset().filter(is_published=True)
-
-
-class DeveloperArticle(Entity):
-    """Editorial content authored by developers for public consumption."""
-
-    title = models.CharField(max_length=200)
-    slug = models.SlugField(max_length=200, unique=True)
-    summary = models.TextField(blank=True, default="")
-    content = models.TextField()
-    is_published = models.BooleanField(default=False)
-    created_on = models.DateTimeField(auto_now_add=True)
-    updated_on = models.DateTimeField(auto_now=True)
-
-    objects = DeveloperArticleManager()
-
-    class Meta:
-        ordering = ("-created_on", "title")
-        verbose_name = _("Developer Article")
-        verbose_name_plural = _("Developer Articles")
-
-    def __str__(self) -> str:  # pragma: no cover - human readable
-        return self.title
-
-    def natural_key(self):  # pragma: no cover - natural reference
-        return (self.slug,)
-
-    def get_absolute_url(self) -> str:
-        return reverse("pages:developer-article", kwargs={"slug": self.slug})
-
-    def clean(self):
-        super().clean()
-        if not self.slug:
-            raise ValidationError({"slug": _("Slug is required for developer articles.")})
-
-    def save(self, *args, **kwargs):
-        if not self.slug:
-            self.slug = slugify(self.title)
-        self.full_clean()
-        super().save(*args, **kwargs)
 
 
 
