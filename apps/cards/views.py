@@ -15,7 +15,7 @@ from apps.nodes.views import _clean_requester_hint, _load_signed_node
 
 from .scanner import scan_sources, enable_deep_read_mode
 from .reader import validate_rfid_value
-from apps.core.models import RFID
+from apps.cards.models import RFID
 from .utils import build_mode_toggle
 from apps.camera.rfid import scan_camera_qr
 
@@ -221,10 +221,10 @@ def reader(request):
     }
     if request.user.is_staff:
         context["admin_change_url_template"] = reverse(
-            "admin:core_rfid_change", args=[0]
+            "admin:cards_rfid_change", args=[0]
         )
         context["deep_read_url"] = reverse("rfid-scan-deep")
-        context["admin_view_url"] = reverse("admin:core_rfid_scan")
+        context["admin_view_url"] = reverse("admin:cards_rfid_scan")
     return render(request, "cards/reader.html", context)
 
 

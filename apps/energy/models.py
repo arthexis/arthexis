@@ -249,7 +249,7 @@ class CustomerAccount(Entity):
         help_text="Selected customer from Odoo (id, name, and contact details)",
     )
     rfids = models.ManyToManyField(
-        "core.RFID",
+        "cards.RFID",
         blank=True,
         related_name="energy_accounts",
         db_table="core_account_rfids",
@@ -1166,7 +1166,7 @@ class ClientReport(Entity):
         from apps.ocpp.models import Transaction, annotate_transaction_energy_bounds
 
         Charger = apps.get_model("ocpp", "Charger")
-        RFID = apps.get_model("core", "RFID")
+        RFID = apps.get_model("cards", "RFID")
 
         qs = Transaction.objects.all()
 

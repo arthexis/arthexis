@@ -81,11 +81,11 @@ from apps.repos.task_utils import GitHubRepositoryError, create_repository_for_p
 from .models import (
     User,
     UserPhoneNumber,
-    RFID,
     GoogleCalendarProfile,
     SecurityGroup,
     InviteLead,
 )
+from apps.cards.models import RFID
 from apps.payments.models import OpenPayProcessor, PayPalProcessor, StripeProcessor
 from apps.odoo.models import OdooEmployee, OdooProduct
 from apps.locals.user_data import (
@@ -2509,9 +2509,8 @@ class CopyRFIDForm(forms.Form):
         return normalized
 
 
-@admin.register(RFID)
 class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
-    change_list_template = "admin/core/rfid/change_list.html"
+    change_list_template = "admin/cards/rfid/change_list.html"
     resource_class = RFIDResource
     import_form_class = RFIDImportForm
     confirm_form_class = RFIDConfirmImportForm
@@ -2590,7 +2589,7 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
         return labels.get(obj.endianness, obj.get_endianness_display())
 
     def scan_rfids(self, request, queryset):
-        return redirect("admin:core_rfid_scan")
+        return redirect("admin:cards_rfid_scan")
 
     scan_rfids.short_description = "Scan RFIDs"
 
@@ -2781,7 +2780,7 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
                         level=messages.SUCCESS,
                     )
                     return HttpResponseRedirect(
-                        reverse("admin:core_rfid_change", args=[new_tag.pk])
+                        reverse("admin:cards_rfid_change", args=[new_tag.pk])
                     )
         else:
             form = CopyRFIDForm()
@@ -2797,7 +2796,7 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
             }
         )
         context["media"] = self.media + form.media
-        return TemplateResponse(request, "admin/core/rfid/copy.html", context)
+        return TemplateResponse(request, "admin/cards/rfid/copy.html", context)
 
     @admin.action(description=_("Merge RFID cards"))
     def merge_rfids(self, request, queryset):
@@ -3253,7 +3252,7 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
 
     def print_valid_card_labels(self, request):
         queryset = self.get_queryset(request).filter(allowed=True, released=True)
-        changelist_url = reverse("admin:core_rfid_changelist")
+        changelist_url = reverse("admin:cards_rfid_changelist")
         return self._render_card_labels(
             request,
             queryset,
@@ -3267,22 +3266,22 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
             path(
                 "report/",
                 self.admin_site.admin_view(self.report_view),
-                name="core_rfid_report",
+                name="cards_rfid_report",
             ),
             path(
                 "print-valid-labels/",
                 self.admin_site.admin_view(self.print_valid_card_labels),
-                name="core_rfid_print_valid_card_labels",
+                name="cards_rfid_print_valid_card_labels",
             ),
             path(
                 "scan/",
                 self.admin_site.admin_view(csrf_exempt(self.scan_view)),
-                name="core_rfid_scan",
+                name="cards_rfid_scan",
             ),
             path(
                 "scan/next/",
                 self.admin_site.admin_view(csrf_exempt(self.scan_next)),
-                name="core_rfid_scan_next",
+                name="cards_rfid_scan_next",
             ),
         ]
         return custom + urls
@@ -3290,7 +3289,7 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
     def report_view(self, request):
         context = self.admin_site.each_context(request)
         context["report"] = ClientReport.build_rows(for_display=True)
-        return TemplateResponse(request, "admin/core/rfid/report.html", context)
+        return TemplateResponse(request, "admin/cards/rfid/report.html", context)
 
     def scan_view(self, request):
         context = self.admin_site.each_context(request)
@@ -3300,9 +3299,9 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
             public_view_url = f"{public_view_url}?mode=table"
         context.update(
             {
-                "scan_url": reverse("admin:core_rfid_scan_next"),
+                "scan_url": reverse("admin:cards_rfid_scan_next"),
                 "admin_change_url_template": reverse(
-                    "admin:core_rfid_change", args=[0]
+                    "admin:cards_rfid_change", args=[0]
                 ),
                 "title": _("Scan RFIDs"),
                 "opts": self.model._meta,
@@ -3317,7 +3316,7 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
         context["opts"] = self.model._meta
         context["show_release_info"] = True
         context["default_endianness"] = RFID.BIG_ENDIAN
-        return render(request, "admin/core/rfid/scan.html", context)
+        return render(request, "admin/cards/rfid/scan.html", context)
 
     def scan_next(self, request):
         from apps.cards.scanner import scan_sources

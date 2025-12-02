@@ -1,5 +1,5 @@
 from django.core.management.base import BaseCommand, CommandError
-from apps.core.models import RFID
+from apps.cards.models import RFID
 from apps.cards.rfid_import_export import account_column_for_field, parse_accounts
 import csv
 

@@ -68,7 +68,7 @@ from .status_resets import clear_stale_cached_statuses
 from .views import _charger_state, _live_sessions
 from apps.core.admin import SaveBeforeChangeAction
 from apps.energy.models import EnergyTariff
-from apps.core.models import RFID as CoreRFID
+from apps.cards.models import RFID as CoreRFID
 from apps.core.form_fields import SchedulePeriodsField
 from apps.locals.user_data import EntityModelAdmin
 from apps.nodes.models import Node

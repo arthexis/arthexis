@@ -391,7 +391,7 @@ def _transaction_rfid_details(
         canonical_value = normalized
         if tag:
             try:
-                rfid_url = reverse("admin:core_rfid_change", args=[tag.pk])
+                rfid_url = reverse("admin:cards_rfid_change", args=[tag.pk])
             except NoReverseMatch:  # pragma: no cover - admin may be disabled
                 rfid_url = None
             custom_label = (tag.custom_label or "").strip()

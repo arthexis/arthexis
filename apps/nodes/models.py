@@ -197,7 +197,7 @@ class NodeFeature(Entity):
     DEFAULT_ACTIONS: dict[str, tuple[NodeFeatureDefaultAction, ...]] = {
         "rfid-scanner": (
             NodeFeatureDefaultAction(
-                label="Scan RFIDs", url_name="admin:core_rfid_scan"
+                label="Scan RFIDs", url_name="admin:cards_rfid_scan"
             ),
         ),
         "celery-queue": (
