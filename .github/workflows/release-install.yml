@@ -20,4 +20,20 @@ jobs:
           python-version: '3.x'
       - run: |
           bash install.sh --terminal || true
-          ./upgrade.sh --local --no-restart
+  upgrade:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v6
+        with:
+          ref: main
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+      - name: Install from main
+        run: |
+          bash install.sh --terminal || true
+      - name: Checkout PR changes
+        uses: actions/checkout@v6
+      - name: Upgrade from PR
+        run: ./upgrade.sh --local --no-restart
