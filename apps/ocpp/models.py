@@ -18,7 +18,7 @@ from django.contrib.sites.models import Site
 from django.db import models
 from django.db.models import DecimalField, OuterRef, Prefetch, Q, Subquery
 from django.core.exceptions import ValidationError
-from django.urls import reverse
+from django.urls import NoReverseMatch, reverse
 from django.utils.translation import gettext_lazy as _
 from django.utils import timezone
 
@@ -676,9 +676,14 @@ class Charger(Entity):
     def get_absolute_url(self):
         serial, connector = self.identity_tuple()
         connector_slug = type(self).connector_slug_from_value(connector)
-        if connector_slug == self.AGGREGATE_CONNECTOR_SLUG:
-            return reverse("ocpp:charger-page", args=[serial])
-        return reverse("ocpp:charger-page-connector", args=[serial, connector_slug])
+        try:
+            if connector_slug == self.AGGREGATE_CONNECTOR_SLUG:
+                return reverse("ocpp:charger-page", args=[serial])
+            return reverse("ocpp:charger-page-connector", args=[serial, connector_slug])
+        except NoReverseMatch:
+            if connector_slug == self.AGGREGATE_CONNECTOR_SLUG:
+                return reverse("charger-page", args=[serial])
+            return reverse("charger-page-connector", args=[serial, connector_slug])
 
     def _fallback_domain(self) -> str:
         """Return a best-effort hostname when the Sites framework is unset."""
