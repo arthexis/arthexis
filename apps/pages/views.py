@@ -73,7 +73,7 @@ from django.utils.text import slugify, Truncator
 from django.core.validators import EmailValidator
 from django.db.models import Q
 from apps.energy.models import ClientReport, ClientReportSchedule
-from apps.core.models import InviteLead, SecurityGroup
+from apps.core.models import InviteLead
 from apps.ocpp.models import Charger
 from .utils import get_original_referer, get_request_language_code, landing
 
@@ -332,7 +332,6 @@ from .forms import (
 )
 from .models import (
     Module,
-    RoleLanding,
     UserManual,
     UserStory,
 )
@@ -886,46 +885,16 @@ def readme_asset(request, source: str, asset: str):
 def index(request):
     site = get_site(request)
     if site:
-        try:
-            landing = site.badge.landing_override
-        except Exception:
-            landing = None
-        if landing:
-            return redirect(landing.path)
-    node = Node.get_local()
-    role = node.role if node else None
-    landing_filters = Q()
-    if role:
-        landing_filters |= Q(node_role=role)
-    user = getattr(request, "user", None)
-    if user and user.is_authenticated:
-        landing_filters |= Q(user=user)
-        user_group_ids = list(user.groups.values_list("pk", flat=True))
-        if user_group_ids:
-            security_group_ids = list(
-                SecurityGroup.objects.filter(pk__in=user_group_ids).values_list(
-                    "pk", flat=True
-                )
-            )
-            if security_group_ids:
-                landing_filters |= Q(security_group_id__in=security_group_ids)
-    if landing_filters:
-        role_landing = (
-            RoleLanding.objects.filter(
-                landing_filters,
-                is_deleted=False,
-                landing__enabled=True,
-                landing__is_deleted=False,
-            )
-            .select_related("landing")
-            .order_by("-priority", "-pk")
-            .first()
-        )
-        if role_landing and role_landing.landing_id:
-            landing_obj = role_landing.landing
-            target_path = landing_obj.path
+        badge = getattr(site, "badge", None)
+        landing = getattr(badge, "landing_override", None)
+        if landing is None:
+            landing = getattr(site, "default_landing", None)
+        if landing and not getattr(landing, "is_deleted", False) and landing.enabled:
+            target_path = landing.path
             if target_path and target_path != request.path:
                 return redirect(target_path)
+    node = Node.get_local()
+    role = node.role if node else None
     return _render_readme(request, role, force_footer=True)
 
 

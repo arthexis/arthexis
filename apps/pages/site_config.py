@@ -54,6 +54,19 @@ _FIELD_DEFINITIONS: tuple[tuple[str, Callable[[], models.Field]], ...] = (
             verbose_name=_("Template"),
         ),
     ),
+    (
+        "default_landing",
+        lambda: models.ForeignKey(
+            "pages.Landing",
+            on_delete=models.SET_NULL,
+            related_name="default_for_sites",
+            null=True,
+            blank=True,
+            verbose_name=_("Default landing"),
+            help_text=_("Landing visitors should be redirected to by default."),
+            limit_choices_to={"is_deleted": False, "enabled": True},
+        ),
+    ),
 )
 
 
