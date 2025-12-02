@@ -48,7 +48,6 @@ from typing import Dict, Optional
 
 import websockets
 from . import store
-from .websocket_headers import connect_headers_kwargs
 
 # ---------------------------------------------------------------------------
 # Helper utilities
@@ -209,7 +208,9 @@ async def simulate_cp(
         b64 = base64.b64encode(userpass.encode("utf-8")).decode("ascii")
         headers["Authorization"] = f"Basic {b64}"
 
-    connect_kwargs = connect_headers_kwargs(headers)
+    connect_kwargs: dict[str, object] = {}
+    if headers:
+        connect_kwargs["additional_headers"] = headers
 
     state = sim_state or _simulators.get(cp_idx + 1, _simulators[1])
 

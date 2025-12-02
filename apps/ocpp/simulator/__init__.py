@@ -12,7 +12,6 @@ import websockets
 from config.offline import requires_network
 
 from .. import store
-from ..websocket_headers import connect_headers_kwargs
 
 
 class UnsupportedMessageError(RuntimeError):
@@ -418,7 +417,9 @@ class ChargePointSimulator:
             b64 = base64.b64encode(userpass.encode()).decode()
             headers["Authorization"] = f"Basic {b64}"
 
-        connect_kwargs = connect_headers_kwargs(headers)
+        connect_kwargs: dict[str, object] = {}
+        if headers:
+            connect_kwargs["additional_headers"] = headers
 
         ws = None
         try:
