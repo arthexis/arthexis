@@ -16,16 +16,11 @@ from django.template.response import TemplateResponse
 from django.test import signals as test_signals
 from django.utils.translation import gettext as _, gettext_lazy as _lazy
 
+from apps.energy.models import EnergyTariff
 from apps.pages.utils import get_original_referer, landing
 
 
-from .models import (
-    CableSize,
-    ConduitFill,
-    CalculatorTemplate,
-    EnergyTariff,
-    PowerLead,
-)
+from .models import CableSize, ConduitFill, CalculatorTemplate, PowerLead
 
 from .constants import CONDUIT_LABELS
 

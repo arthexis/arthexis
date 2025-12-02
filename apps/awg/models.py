@@ -1,7 +1,6 @@
 from django.db import models
 from apps.core.entity import Entity, EntityManager
 from django.utils.translation import gettext_lazy as _
-from apps.energy.models import EnergyTariff as CoreEnergyTariff
 from apps.leads.models import Lead
 
 
@@ -171,9 +170,3 @@ class PowerLead(Lead):
         return f"{self.user or 'anonymous'} @ {self.created_on}"
 
 
-class EnergyTariff(CoreEnergyTariff):
-    class Meta:
-        proxy = True
-        app_label = "awg"
-        verbose_name = CoreEnergyTariff._meta.verbose_name
-        verbose_name_plural = CoreEnergyTariff._meta.verbose_name_plural
