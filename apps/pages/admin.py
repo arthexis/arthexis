@@ -340,18 +340,6 @@ class SiteTemplateAdmin(EntityModelAdmin):
             color,
         )
 
-@admin.display(description=_("Preview"))
-    def palette(self, obj):  # pragma: no cover - admin rendering
-        return format_html(
-            "{}{}{}{}{}{}",
-            self._render_swatch(obj.primary_color),
-            self._render_swatch(obj.primary_color_emphasis),
-            self._render_swatch(obj.accent_color),
-            self._render_swatch(obj.accent_color_emphasis),
-            self._render_swatch(obj.support_color),
-            self._render_swatch(obj.support_color_emphasis),
-        )
-
 
 class ApplicationForm(forms.ModelForm):
     name = forms.ChoiceField(choices=[])
