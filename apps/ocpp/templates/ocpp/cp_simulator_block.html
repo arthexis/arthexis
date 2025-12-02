@@ -1,7 +1,7 @@
 <div class="card simulator-card mb-3">
   <div class="card-body">
     <form method="post" class="simulator-form"
-          hx-post="{% url 'cp-simulator' %}"
+          hx-post="{% url 'ocpp:cp-simulator' %}"
           hx-target="#cp-simulator-panel"
           hx-swap="outerHTML">
       {% csrf_token %}
