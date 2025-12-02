@@ -103,9 +103,8 @@ Available options:
 
 Both upgrade scripts prioritise recoverability before applying new code:
 
-- They create `failover-YYYYMMDD-N` branches that capture the current working tree (including uncommitted changes) so you can revert later.【F:upgrade.sh†L28-L96】【F:upgrade.sh†L200-L216】
-- SQLite databases are copied into `backups/` alongside the failover branch name.【F:upgrade.sh†L97-L121】
-- When reverting, the script restores both the git state and the database snapshot if available.【F:upgrade.sh†L217-L292】
+- They capture upgrade output in timestamped logs and record lifecycle events for visibility in admin reports.【F:upgrade.sh†L4-L36】【F:upgrade.sh†L18-L24】
+- When local changes exist, the Linux upgrade script stashes them (including untracked files) before applying updates and restores them afterwards so developer edits are preserved.【F:upgrade.sh†L260-L294】【F:upgrade.sh†L1304-L1414】
 
 ### 3.2 Linux upgrade flags
 
