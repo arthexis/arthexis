@@ -10,7 +10,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ("django_celery_beat", "0020_googlecalendarprofile"),
+        ("django_celery_beat", "0019_alter_periodictasks_options"),
         ("energy", "0001_initial"),
         ("ocpp", "0001_initial"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
