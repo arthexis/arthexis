@@ -27,10 +27,7 @@ from apps.core.models import (
     User as CoreUser,
 )
 from apps.release.models import ReleaseManager as CoreReleaseManager
-from apps.odoo.models import (
-    OdooEmployee as CoreOdooEmployee,
-    OdooProduct as CoreOdooProduct,
-)
+from apps.odoo.models import OdooProduct as CoreOdooProduct
 from apps.awg.models import PowerLead as CorePowerLead
 from django_otp.plugins.otp_totp.models import (
     TOTPDevice as CoreTOTPDevice,
@@ -252,14 +249,6 @@ class ReleaseManager(CoreReleaseManager):
         app_label = "teams"
         verbose_name = CoreReleaseManager._meta.verbose_name
         verbose_name_plural = CoreReleaseManager._meta.verbose_name_plural
-
-
-class OdooEmployee(CoreOdooEmployee):
-    class Meta:
-        proxy = True
-        app_label = "teams"
-        verbose_name = CoreOdooEmployee._meta.verbose_name
-        verbose_name_plural = CoreOdooEmployee._meta.verbose_name_plural
 
 
 class TOTPDevice(CoreTOTPDevice):
