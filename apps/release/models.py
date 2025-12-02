@@ -10,14 +10,13 @@ from django.apps import apps
 from django.conf import settings
 from django.core import serializers
 from django.core.exceptions import ValidationError
-from django.db import models, transaction
+from django.db import models
 from django.db.models import F, Q
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from urllib.parse import urlparse
 
 from apps.base.models import Entity, EntityManager
-from apps.celery.utils import normalize_periodic_task_name
 from apps.core.models import Profile
 from apps.sigils.fields import ConditionCheckResult, ConditionTextField, SigilShortAutoField
 from utils import revision as revision_utils
@@ -317,15 +316,6 @@ class PackageRelease(Entity):
     release_on = models.DateTimeField(blank=True, null=True, editable=False)
     scheduled_date = models.DateField(blank=True, null=True)
     scheduled_time = models.TimeField(blank=True, null=True)
-    scheduled_task = models.OneToOneField(
-        "django_celery_beat.PeriodicTask",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        editable=False,
-        serialize=False,
-        related_name="package_release_schedule",
-    )
 
     class Meta:
         verbose_name = "Package Release"
@@ -365,7 +355,6 @@ class PackageRelease(Entity):
                 old_path.unlink()
 
     def delete(self, using=None, keep_parents=False):
-        self._clear_periodic_task()
         user_data.delete_user_fixture(self)
         super().delete(using=using, keep_parents=keep_parents)
 
@@ -393,7 +382,6 @@ class PackageRelease(Entity):
             )
 
     def save(self, *args, **kwargs):
-        sync_schedule = kwargs.pop("sync_schedule", True)
         update_fields = kwargs.get("update_fields")
         normalized_version = type(self).normalize_version(self.version)
         if normalized_version != self.version:
@@ -403,8 +391,6 @@ class PackageRelease(Entity):
                 updated_fields.add("version")
                 kwargs["update_fields"] = list(updated_fields)
         super().save(*args, **kwargs)
-        if sync_schedule and self.pk:
-            self.sync_scheduled_task()
 
     def clear_schedule(self, *, save: bool = True) -> None:
         """Remove any scheduled release metadata."""
@@ -412,10 +398,7 @@ class PackageRelease(Entity):
         self.scheduled_date = None
         self.scheduled_time = None
         if save:
-            self.save(
-                update_fields=["scheduled_date", "scheduled_time"],
-                sync_schedule=True,
-            )
+            self.save(update_fields=["scheduled_date", "scheduled_time"])
 
     @property
     def scheduled_datetime(self) -> datetime_datetime | None:
@@ -429,70 +412,6 @@ class PackageRelease(Entity):
         return timezone.make_aware(
             combined, timezone.get_current_timezone()
         )
-
-    def _clear_periodic_task(self) -> None:
-        if not self.scheduled_task_id:
-            return
-        from django_celery_beat.models import ClockedSchedule, PeriodicTask
-
-        task = PeriodicTask.objects.filter(pk=self.scheduled_task_id).first()
-        clock_id = getattr(task, "clocked_id", None)
-        if task:
-            task.delete()
-        if self.pk:
-            type(self).objects.filter(pk=self.pk).update(scheduled_task=None)
-        self.scheduled_task = None
-        if clock_id and not PeriodicTask.objects.filter(clocked_id=clock_id).exists():
-            ClockedSchedule.objects.filter(pk=clock_id).delete()
-
-    def sync_scheduled_task(self) -> None:
-        """Ensure django-celery-beat is aware of the configured schedule."""
-
-        if not self.pk:
-            return
-
-        schedule_at = self.scheduled_datetime
-        if schedule_at is None:
-            self._clear_periodic_task()
-            return
-
-        from django_celery_beat.models import ClockedSchedule, PeriodicTask
-        import json as _json
-
-        previous_clock_id = None
-        if self.scheduled_task_id:
-            previous_clock_id = (
-                PeriodicTask.objects.filter(pk=self.scheduled_task_id)
-                .values_list("clocked_id", flat=True)
-                .first()
-            )
-        schedule, _ = ClockedSchedule.objects.get_or_create(
-            clocked_time=schedule_at
-        )
-        raw_name = f"package_release_schedule_{self.pk}"
-        name = normalize_periodic_task_name(PeriodicTask.objects, raw_name)
-        defaults = {
-            "clocked": schedule,
-            "task": "apps.core.tasks.run_scheduled_release",
-            "kwargs": _json.dumps({"release_id": self.pk}),
-            "enabled": True,
-            "one_off": True,
-        }
-        with transaction.atomic():
-            periodic_task, _ = PeriodicTask.objects.update_or_create(
-                name=name, defaults=defaults
-            )
-            if self.scheduled_task_id != periodic_task.pk:
-                type(self).objects.filter(pk=self.pk).update(
-                    scheduled_task=periodic_task
-                )
-            self.scheduled_task = periodic_task
-        if (
-            previous_clock_id
-            and previous_clock_id != schedule.pk
-            and not PeriodicTask.objects.filter(clocked_id=previous_clock_id).exists()
-        ):
-            ClockedSchedule.objects.filter(pk=previous_clock_id).delete()
 
     def to_credentials(
         self, user: models.Model | None = None
