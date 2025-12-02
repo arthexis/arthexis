@@ -1139,7 +1139,7 @@ class CPFirmwareAdmin(EntityModelAdmin):
         )
         token = deployment.issue_download_token(lifetime=timedelta(hours=4))
         download_url = request.build_absolute_uri(
-            reverse("cp-firmware-download", args=[deployment.pk, token])
+            reverse("ocpp:cp-firmware-download", args=[deployment.pk, token])
         )
         payload = {
             "location": download_url,
@@ -2002,7 +2002,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
 
     @admin.action(description=_("View in Site"))
     def view_charge_point_dashboard(self, request, queryset=None):
-        return HttpResponseRedirect(reverse("ocpp-dashboard"))
+        return HttpResponseRedirect(reverse("ocpp:ocpp-dashboard"))
 
     def get_urls(self):
         urls = super().get_urls()
