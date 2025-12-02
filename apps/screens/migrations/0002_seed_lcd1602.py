@@ -1,11 +1,18 @@
 from django.db import migrations
 
+from apps.migration_utils import get_model
+
 
 LCD_SLUG = "lcd-1602"
 
 
 def seed_lcd_screen(apps, schema_editor):
-    DeviceScreen = apps.get_model("screens", "DeviceScreen")
+    DeviceScreen = get_model(apps, "screens", "DeviceScreen", allow_missing=True)
+
+    if DeviceScreen is None:
+        return
+
+    manager = getattr(DeviceScreen, "all_objects", DeviceScreen.objects)
 
     defaults = {
         "name": "I2C LCD1602",
@@ -18,7 +25,7 @@ def seed_lcd_screen(apps, schema_editor):
         "is_deleted": False,
     }
 
-    screen, created = DeviceScreen.all_objects.get_or_create(
+    screen, created = manager.get_or_create(
         slug=LCD_SLUG,
         defaults=defaults,
     )
@@ -30,8 +37,14 @@ def seed_lcd_screen(apps, schema_editor):
 
 
 def remove_lcd_screen(apps, schema_editor):
-    DeviceScreen = apps.get_model("screens", "DeviceScreen")
-    DeviceScreen.all_objects.filter(slug=LCD_SLUG).delete()
+    DeviceScreen = get_model(apps, "screens", "DeviceScreen", allow_missing=True)
+
+    if DeviceScreen is None:
+        return
+
+    manager = getattr(DeviceScreen, "all_objects", DeviceScreen.objects)
+
+    manager.filter(slug=LCD_SLUG).delete()
 
 
 class Migration(migrations.Migration):
