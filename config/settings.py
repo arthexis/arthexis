@@ -438,6 +438,7 @@ LOCAL_APPS = [
     "apps.cards",
     "apps.tasks",
     "apps.teams",
+    "apps.nmcli",
 ]
 
 INSTALLED_APPS = [

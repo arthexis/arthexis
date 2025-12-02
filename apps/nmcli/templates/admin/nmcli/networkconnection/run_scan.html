@@ -1,0 +1,41 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+  &rsaquo; <a href="{{ changelist_url }}">{{ opts.verbose_name_plural|capfirst }}</a>
+  &rsaquo; {% trans "Run NMCLI Scan" %}
+</div>
+{% endblock %}
+
+{% block content %}
+<h1>{% trans "Run NMCLI Scan" %}</h1>
+<p>{% trans "Trigger a fresh nmcli scan to populate or refresh the stored network connections." %}</p>
+<form method="post" action="{{ scan_url }}">
+  {% csrf_token %}
+  <p>
+    <button type="submit" class="default">{% trans "Run NMCLI Scan" %}</button>
+    <a href="{{ changelist_url }}" class="button">{% trans "Back to list" %}</a>
+  </p>
+</form>
+
+{% if result %}
+  <h2>{% trans "Scan results" %}</h2>
+  <ul>
+    <li>{% blocktrans with count=result.count %}Connections found: {{ count }}{% endblocktrans %}</li>
+    <li>{% blocktrans with created=result.created updated=result.updated %}Created {{ created }}, updated {{ updated }}.{% endblocktrans %}</li>
+    {% if result.errors %}
+      <li>
+        {% trans "Warnings" %}
+        <ul>
+        {% for error in result.errors %}
+          <li>{{ error }}</li>
+        {% endfor %}
+        </ul>
+      </li>
+    {% endif %}
+  </ul>
+{% endif %}
+{% endblock %}
