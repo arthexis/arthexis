@@ -12,7 +12,7 @@ from apps.migration_utils import import_callable
 
 
 EntityUserManager = import_callable(
-    "apps.base.models.EntityUserManager",
+    "apps.base.migration_utils.EntityUserManager",
     default=django.contrib.auth.models.UserManager,
     aliases={
         "apps.base.models.EntityUserManager": "apps.base.migration_utils.EntityUserManager",
