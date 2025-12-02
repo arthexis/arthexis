@@ -7,7 +7,7 @@
       "prefix": "APP",
       "context_type": "entity",
       "content_type": [
-        "pages",
+        "app",
         "application"
       ]
     }

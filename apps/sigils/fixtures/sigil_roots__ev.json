@@ -7,7 +7,7 @@
       "prefix": "EV",
       "context_type": "entity",
       "content_type": [
-        "ocpp",
+        "vehicle",
         "electricvehicle"
       ]
     }

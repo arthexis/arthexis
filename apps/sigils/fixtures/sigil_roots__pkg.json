@@ -7,7 +7,7 @@
       "prefix": "PKG",
       "context_type": "entity",
       "content_type": [
-        "core",
+        "release",
         "package"
       ]
     }

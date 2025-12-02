@@ -7,7 +7,7 @@
       "prefix": "REF",
       "context_type": "entity",
       "content_type": [
-        "core",
+        "links",
         "reference"
       ]
     }

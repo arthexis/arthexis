@@ -25,7 +25,6 @@ from apps.core.admin import (
     InviteLeadAdmin,
     SecurityGroupAdmin,
     OdooEmployeeAdmin,
-    GoogleCalendarProfileAdmin,
 )
 from apps.release.admin import ReleaseManagerAdmin
 from apps.core.models import (
@@ -59,7 +58,6 @@ from .models import (
     PowerLead,
     OdooEmployee,
     TOTPDevice,
-    GoogleCalendarProfile,
     ManualTask,
     SlackBotProfile,
     TaskCategory,
@@ -94,11 +92,6 @@ class PowerLeadAdminProxy(CorePowerLeadAdmin):
 
 @admin.register(OdooEmployee)
 class OdooEmployeeAdminProxy(OdooEmployeeAdmin):
-    pass
-
-
-@admin.register(GoogleCalendarProfile)
-class GoogleCalendarProfileAdminProxy(GoogleCalendarProfileAdmin):
     pass
 
 

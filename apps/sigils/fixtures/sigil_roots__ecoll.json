@@ -7,7 +7,7 @@
       "prefix": "ECOLL",
       "context_type": "entity",
       "content_type": [
-        "teams",
+        "emails",
         "emailcollector"
       ]
     }

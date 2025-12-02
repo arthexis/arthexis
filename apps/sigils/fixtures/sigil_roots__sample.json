@@ -7,7 +7,7 @@
       "prefix": "SAMPLE",
       "context_type": "entity",
       "content_type": [
-        "nodes",
+        "content",
         "contentsample"
       ]
     }

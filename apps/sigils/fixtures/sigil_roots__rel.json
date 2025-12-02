@@ -7,7 +7,7 @@
       "prefix": "REL",
       "context_type": "entity",
       "content_type": [
-        "core",
+        "release",
         "packagerelease"
       ]
     }
