@@ -2,7 +2,6 @@
 setlocal EnableDelayedExpansion
 set "SCRIPT_DIR=%~dp0"
 set "PIP_HELPER=%SCRIPT_DIR%scripts\helpers\pip_install.py"
-set "BACKUP_DIR=%SCRIPT_DIR%backups"
 set "LOCK_DIR=%SCRIPT_DIR%\.locks"
 if /I "%SCRIPT_DIR%"=="%SYSTEMDRIVE%\\" (
     echo Refusing to run from drive root.
@@ -12,26 +11,6 @@ pushd "%SCRIPT_DIR%" >nul
 set VENV=%SCRIPT_DIR%\.venv
 set LATEST=0
 set CLEAN=0
-if not defined FAILOVER_CREATED (
-    for /f %%b in ('powershell -NoProfile -Command "$d=(Get-Date).ToString(\"yyyyMMdd\"); $i=1; while (Test-Path (\".git/refs/heads/failover-$d-$i\")) { $i++ }; Write-Output \"failover-$d-$i\""') do set BRANCH=%%b
-    for /f %%s in ('git stash create') do set STASH=%%s
-    if defined STASH (
-        git branch !BRANCH! %%STASH%% >nul 2>&1
-        git reset --mixed >nul 2>&1
-    ) else (
-        git branch !BRANCH! >nul 2>&1
-    )
-    echo Created failover branch !BRANCH!
-    if exist db.sqlite3 (
-        if not exist "%BACKUP_DIR%" mkdir "%BACKUP_DIR%" >nul 2>&1
-        copy /Y db.sqlite3 "%BACKUP_DIR%\!BRANCH!.sqlite3" >nul 2>&1
-        if errorlevel 1 (
-            echo Failed to create database backup for !BRANCH!.>&2
-        ) else (
-            echo Saved database backup to backups\!BRANCH!.sqlite3
-        )
-    )
-)
 :parse
 if "%1"=="" goto after_parse
 if "%1"=="--latest" (
