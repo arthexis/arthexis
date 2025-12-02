@@ -729,39 +729,4 @@ class Migration(migrations.Migration):
                 "unique_together": {("node", "message")},
             },
         ),
-        migrations.CreateModel(
-            name="PublicWifiAccess",
-            fields=[
-                (
-                    "id",
-                    models.BigAutoField(
-                        auto_created=True,
-                        primary_key=True,
-                        serialize=False,
-                        verbose_name="ID",
-                    ),
-                ),
-                ("is_seed_data", models.BooleanField(default=False, editable=False)),
-                ("is_user_data", models.BooleanField(default=False, editable=False)),
-                ("is_deleted", models.BooleanField(default=False, editable=False)),
-                ("mac_address", models.CharField(max_length=17)),
-                ("created_on", models.DateTimeField(auto_now_add=True)),
-                ("updated_on", models.DateTimeField(auto_now=True)),
-                ("revoked_on", models.DateTimeField(blank=True, null=True)),
-                (
-                    "user",
-                    models.ForeignKey(
-                        on_delete=django.db.models.deletion.CASCADE,
-                        related_name="public_wifi_accesses",
-                        to=settings.AUTH_USER_MODEL,
-                    ),
-                ),
-            ],
-            options={
-                "verbose_name": "Wi-Fi Lease",
-                "verbose_name_plural": "Wi-Fi Leases",
-                "db_table": "core_publicwifiaccess",
-                "unique_together": {("user", "mac_address")},
-            },
-        ),
     ]

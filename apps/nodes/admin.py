@@ -72,7 +72,6 @@ from .models import (
     DNSRecord,
     _format_upgrade_body,
     NodeProfile,
-    PublicWifiAccess,
 )
 from . import dns as dns_utils
 from apps.cards.models import RFID
@@ -190,14 +189,6 @@ class NodeServiceAdmin(EntityModelAdmin):
                     "detail": detail,
                 }
                 self.message_user(request, message, level=messages.WARNING)
-
-
-@admin.register(PublicWifiAccess)
-class PublicWifiAccessAdmin(EntityModelAdmin):
-    list_display = ("user", "mac_address", "created_on", "revoked_on")
-    search_fields = ("user__username", "mac_address")
-    readonly_fields = ("user", "mac_address", "created_on", "updated_on", "revoked_on")
-    ordering = ("-created_on",)
 
 
 @admin.register(NodeManager)
