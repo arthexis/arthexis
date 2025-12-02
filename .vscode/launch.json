@@ -30,6 +30,9 @@
             "args": [
                 "runserver"
             ],
+            "env": {
+                "DEBUG": "1"
+            },
             "subProcess": true,
             "preLaunchTask": "Dev: collectstatic"
         },
