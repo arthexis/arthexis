@@ -7,16 +7,18 @@ from apps.migration_utils import import_callable
 
 
 media_bucket_slug = import_callable(
-    "media_bucket_slug",
+    "apps.media.migration_utils.media_bucket_slug",
     aliases={
         "media_bucket_slug": "apps.media.migration_utils.media_bucket_slug",
+        "apps.media.models.media_bucket_slug": "apps.media.migration_utils.media_bucket_slug",
     },
 )
 
 media_file_path = import_callable(
-    "media_file_path",
+    "apps.media.migration_utils.media_file_path",
     aliases={
         "media_file_path": "apps.media.migration_utils.media_file_path",
+        "apps.media.models.media_file_path": "apps.media.migration_utils.media_file_path",
     },
 )
 
