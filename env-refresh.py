@@ -393,7 +393,10 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
     stored_fixture_hash = (
         fixture_hash_file.read_text().strip() if fixture_hash_file.exists() else ""
     )
-    should_load_fixtures = fixtures and (clean or fixture_hash != stored_fixture_hash)
+    migrations_changed = stored_hash != new_hash
+    should_load_fixtures = fixtures and (
+        clean or migrations_changed or fixture_hash != stored_fixture_hash
+    )
 
     if should_load_fixtures:
         fixtures.sort(key=_fixture_sort_key)
