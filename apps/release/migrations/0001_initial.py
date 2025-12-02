@@ -20,7 +20,6 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("core", "0003_initial"),
-        ("django_celery_beat", "0019_alter_periodictasks_options"),
         ("pages", "0001_initial"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
@@ -154,18 +153,6 @@ class Migration(migrations.Migration):
                         on_delete=django.db.models.deletion.CASCADE,
                         related_name="releases",
                         to="release.package",
-                    ),
-                ),
-                (
-                    "scheduled_task",
-                    models.OneToOneField(
-                        blank=True,
-                        editable=False,
-                        null=True,
-                        on_delete=django.db.models.deletion.SET_NULL,
-                        related_name="package_release_schedule",
-                        serialize=False,
-                        to="django_celery_beat.periodictask",
                     ),
                 ),
             ],
