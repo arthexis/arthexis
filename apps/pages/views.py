@@ -927,10 +927,6 @@ def sitemap(request):
 
 @landing("Package Releases")
 @security_group_required("Release Managers")
-def release_admin_redirect(request):
-    return redirect("admin:core_packagerelease_changelist")
-
-
 def release_checklist(request):
     file_path = Path(settings.BASE_DIR) / "releases" / "release-checklist.md"
     if not file_path.exists():

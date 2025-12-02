@@ -19,7 +19,6 @@ urlpatterns = [
     path("sitemap.xml", views.sitemap, name="pages-sitemap"),
     path("changelog/", views.changelog_report, name="changelog"),
     path("changelog/data/", views.changelog_report_data, name="changelog-data"),
-    path("release/", views.release_admin_redirect, name="release-admin"),
     path("client-report/", views.client_report, name="client-report"),
     path(
         "client-report/download/<int:report_id>/",
