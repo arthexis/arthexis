@@ -197,8 +197,8 @@ class SiteTemplate(Entity):
     objects = SiteTemplateManager()
 
     class Meta:
-        verbose_name = _("Site Template")
-        verbose_name_plural = _("Site Templates")
+        verbose_name = _("Site Branding")
+        verbose_name_plural = _("Site Brandings")
         ordering = ("name",)
 
     def natural_key(self):  # pragma: no cover - simple representation
