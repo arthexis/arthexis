@@ -113,11 +113,7 @@ Lifecycle helpers for system services and upgrades now live in [`scripts/`](scri
 
 ### 3. Install and upgrade
 - **Linux:**
-   - Run [`./install.sh`](install.sh) with a node role flag:
-     - `--terminal` – default when unspecified and recommended if you're unsure. Terminal nodes can also use the start/stop scripts above without installing.
-     - `--control` – prepares the single-device testing appliance.
-     - `--satellite` – configures the edge data acquisition node.
-     - `--watchtower` – enables the multi-user orchestration stack.
+   - Run [`./install.sh`](install.sh) with a node role flag; see the Role Architecture table above for the role-specific options and defaults.
    - Use `./install.sh --help` to list every available flag if you need to customize the node beyond the role defaults.
    - Upgrade with [`./upgrade.sh`](upgrade.sh).
    - Consult the [Install & Lifecycle Scripts Manual](docs/development/install-lifecycle-scripts-manual.md) for complete flag descriptions and operational notes.

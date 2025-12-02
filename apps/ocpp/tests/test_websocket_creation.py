@@ -3,6 +3,7 @@ import pytest
 from asgiref.sync import async_to_sync
 from channels.db import database_sync_to_async
 from channels.testing import WebsocketCommunicator
+from django.urls import reverse
 from django.test.utils import override_settings
 
 from apps.ocpp import store
@@ -62,3 +63,10 @@ def test_charge_point_created_for_new_websocket_path():
         await communicator.disconnect()
 
     async_to_sync(run_scenario)()
+
+
+@override_settings(ROOT_URLCONF="apps.ocpp.urls")
+def test_charger_page_reverse_resolves_expected_path():
+    cid = "CP-TEST-REVERSE"
+
+    assert reverse("charger-page", args=[cid]) == f"/c/{cid}/"

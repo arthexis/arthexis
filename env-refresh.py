@@ -51,6 +51,7 @@ from apps.release.models import PackageRelease
 from apps.sigils.sigil_builder import generate_model_sigils
 from apps.locals.user_data import load_shared_user_fixtures, load_user_fixtures
 from utils.env_refresh import unlink_sqlite_db as _unlink_sqlite_db
+from scripts.fixtures_changed import fixtures_changed
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
@@ -394,8 +395,12 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
         fixture_hash_file.read_text().strip() if fixture_hash_file.exists() else ""
     )
     migrations_changed = stored_hash != new_hash
-    should_load_fixtures = fixtures and (
-        clean or migrations_changed or fixture_hash != stored_fixture_hash
+    should_load_fixtures = fixtures_changed(
+        fixtures_present=bool(fixtures),
+        current_hash=fixture_hash,
+        stored_hash=stored_fixture_hash,
+        migrations_changed=migrations_changed,
+        clean=clean,
     )
 
     if should_load_fixtures:

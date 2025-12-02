@@ -113,11 +113,7 @@ Lebenszyklus-Helferskripte für Dienste und Upgrades befinden sich jetzt im Ordn
 
 ### 3. Installieren und Aktualisieren
 - **Linux:**
-   - [`./install.sh`](install.sh) mit einem Flag für die Node-Rolle ausführen:
-     - `--terminal` – Standard, wenn nicht angegeben, und empfohlen, wenn du unsicher bist. Terminal-Knoten können auch ohne Installation über die obigen Skripte gestartet/gestoppt werden.
-     - `--control` – Bereitet das Einzelgerätetest-System vor.
-     - `--satellite` – Konfiguriert den Edge-Knoten zur Datenerfassung.
-     - `--watchtower` – Aktiviert den Multiuser-Orchestrierungsstack.
+   - [`./install.sh`](install.sh) mit einem Flag für die Node-Rolle ausführen; siehe die obige Tabelle zur Rollenarchitektur für die rollenspezifischen Optionen und Standardwerte.
    - `./install.sh --help` zeigt alle verfügbaren Optionen, falls du die Konfiguration über die Rollenvorgaben hinaus anpassen möchtest.
    - Aktualisieren mit [`./upgrade.sh`](upgrade.sh).
    - Lies das [Manual zu Installations- & Lifecycle-Skripten](docs/development/install-lifecycle-scripts-manual.md) für vollständige Flag-Beschreibungen und Betriebsdetails.
