@@ -1,11 +1,18 @@
 """Utilities for caching per-user admin favorites blocks."""
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 
-from django.core.cache import cache
+from django.utils import timezone
+
+from .caches import CacheStore
 
 
-def _user_cache_keys(user_id: int, *, show_changelinks: bool | None = None, show_model_badges: bool | None = None) -> list[str]:
+def _user_cache_keys(
+    user_id: int,
+    *,
+    show_changelinks: bool | None = None,
+    show_model_badges: bool | None = None,
+) -> list[str]:
     """Return cache keys for a user's favorites block.
 
     If ``show_changelinks`` or ``show_model_badges`` are ``None``, keys for both
@@ -43,15 +50,46 @@ def user_favorites_cache_key(
     )[0]
 
 
-def clear_user_favorites_cache(user, *, show_changelinks: bool | None = None, show_model_badges: bool | None = None) -> None:
+def _favorites_store(
+    user_id: int, *, show_changelinks: bool, show_model_badges: bool
+) -> CacheStore:
+    return CacheStore.objects.get_or_create(
+        key=user_favorites_cache_key(
+            user_id,
+            show_changelinks=show_changelinks,
+            show_model_badges=show_model_badges,
+        )
+    )[0]
+
+
+def get_cached_user_favorites(
+    user_id: int,
+    *,
+    show_changelinks: bool,
+    show_model_badges: bool,
+    builder: Callable[[], object],
+):
+    store = _favorites_store(
+        user_id,
+        show_changelinks=show_changelinks,
+        show_model_badges=show_model_badges,
+    )
+    return store.get_value(builder)
+
+
+def clear_user_favorites_cache(
+    user, *, show_changelinks: bool | None = None, show_model_badges: bool | None = None
+) -> None:
     """Remove cached dashboard favorites blocks for the given user."""
 
     if not user or not getattr(user, "is_authenticated", False):
         return
-    cache.delete_many(
-        _user_cache_keys(
-            user.pk,
-            show_changelinks=show_changelinks,
-            show_model_badges=show_model_badges,
-        )
+
+    keys = _user_cache_keys(
+        user.pk,
+        show_changelinks=show_changelinks,
+        show_model_badges=show_model_badges,
+    )
+    CacheStore.objects.filter(key__in=keys).update(
+        payload=None, refreshed_at=timezone.now()
     )

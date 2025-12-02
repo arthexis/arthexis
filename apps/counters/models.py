@@ -2,9 +2,8 @@ import inspect
 import logging
 from typing import Callable
 
-from django.contrib.contenttypes.models import ContentType
-from django.core.cache import cache
 from django.conf import settings
+from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models.signals import post_delete, post_save
@@ -13,6 +12,7 @@ from django.utils.module_loading import import_string
 from django.utils.translation import gettext, gettext_lazy as _
 
 from apps.base.models import Entity
+from apps.locals.caches import CacheStoreMixin
 from apps.sigils.fields import ConditionTextField
 
 from .badge_utils import BadgeCounterResult
@@ -26,12 +26,11 @@ from .dashboard_rules import (
 
 logger = logging.getLogger(__name__)
 
-_CACHE_MISS = object()
 _BADGE_COUNTER_CACHE_PREFIX = "admin.dashboard.badge_counters"
 _DASHBOARD_RULE_CACHE_PREFIX = "admin.dashboard.rules"
 
 
-class StoredCounter(Entity):
+class StoredCounter(CacheStoreMixin, Entity):
     """Base model for cached dashboard counters.
 
     Instances cache their computed values indefinitely and rely on explicit
@@ -41,14 +40,14 @@ class StoredCounter(Entity):
 
     cache_prefix: str = ""
     cache_timeout: int | float | None = None
+    cache_refresh_interval = None
 
     class Meta:
         abstract = True
 
     @classmethod
     def cache_key_for_content_type(cls, content_type_id: int) -> str:
-        prefix = cls.cache_prefix or cls.__name__.lower()
-        return f"{prefix}:{content_type_id}"
+        return cls.cache_key_for_identifier(content_type_id)
 
     @classmethod
     def _content_type_for(cls, model_or_content_type):
@@ -68,27 +67,22 @@ class StoredCounter(Entity):
 
     @classmethod
     def get_cached_value(
-        cls, model_or_content_type, builder: Callable[[], object]
+        cls, model_or_content_type, builder: Callable[[], object], *, force_refresh=False
     ) -> object:
         content_type = cls._content_type_for(model_or_content_type)
         if content_type is None:
             return builder()
 
-        cache_key = cls.cache_key_for_content_type(content_type.pk)
-        cached_value = cache.get(cache_key, _CACHE_MISS)
-        if cached_value is not _CACHE_MISS:
-            return cached_value
-
-        value = builder()
-        cache.set(cache_key, value, timeout=cls.cache_timeout)
-        return value
+        return super().get_cached_value(
+            content_type.pk, builder, force_refresh=force_refresh
+        )
 
     @classmethod
     def invalidate_model_cache(cls, model_or_content_type):
         content_type = cls._content_type_for(model_or_content_type)
         if content_type is None:
             return
-        cache.delete(cls.cache_key_for_content_type(content_type.pk))
+        cls.invalidate_cached_value(content_type.pk)
 
 
 class DashboardRuleManager(models.Manager):
