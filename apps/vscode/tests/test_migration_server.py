@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
+import multiprocessing
 import os
 import sys
 import time
-import multiprocessing
 
 import psutil
 import pytest
 
-from scripts import migration_server
+from apps.vscode import migration_server
 
 
 def test_stop_django_server_terminates_runserver_process(tmp_path) -> None:

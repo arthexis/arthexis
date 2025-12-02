@@ -44,7 +44,8 @@
             "windows": {
                 "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe"
             },
-            "program": "${workspaceFolder}/scripts/migration_server.py",
+            "module": "apps.vscode.migration_server",
+            "cwd": "${workspaceFolder}",
             "noDebug": true,
             "console": "integratedTerminal",
             "subProcess": true
@@ -57,7 +58,8 @@
             "windows": {
                 "python": "${workspaceFolder}\\.venv\\Scripts\\python.exe"
             },
-            "program": "${workspaceFolder}/scripts/test_server.py",
+            "module": "apps.vscode.test_server",
+            "cwd": "${workspaceFolder}",
             "noDebug": true
         },
         {
