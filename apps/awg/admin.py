@@ -1,9 +1,8 @@
 from django.contrib import admin
 from django import forms
-from django.utils.translation import gettext_lazy as _
 
 from .constants import CONDUIT_CHOICES
-from .models import CableSize, ConduitFill, CalculatorTemplate, EnergyTariff, PowerLead
+from .models import CableSize, ConduitFill, CalculatorTemplate, PowerLead
 from apps.locals.user_data import EntityModelAdmin
 
 
@@ -146,69 +145,3 @@ class PowerLeadAdmin(EntityModelAdmin):
         "malformed",
     )
 
-
-@admin.register(EnergyTariff)
-class EnergyTariffAdmin(EntityModelAdmin):
-    list_display = (
-        "year",
-        "season_label",
-        "zone",
-        "contract_type_label",
-        "period_label",
-        "unit",
-        "start_time",
-        "end_time",
-        "price_mxn",
-        "cost_mxn",
-    )
-    list_filter = (
-        "year",
-        "season",
-        "zone",
-        "contract_type",
-        "period",
-        "unit",
-    )
-    search_fields = ("zone", "contract_type")
-    ordering = (
-        "-year",
-        "season",
-        "zone",
-        "contract_type",
-        "period",
-        "start_time",
-    )
-    fieldsets = (
-        (
-            None,
-            {
-                "fields": (
-                    "year",
-                    "season",
-                    "zone",
-                    "contract_type",
-                    "period",
-                    "unit",
-                    ("start_time", "end_time"),
-                    ("price_mxn", "cost_mxn"),
-                    "notes",
-                )
-            },
-        ),
-    )
-
-    @admin.display(description=_("Season"), ordering="season")
-    def season_label(self, obj):
-        return obj.get_season_display()
-
-    @admin.display(description=_("Contract"), ordering="contract_type")
-    def contract_type_label(self, obj):
-        display_value = obj.get_contract_type_display()
-        if "(" in display_value and display_value.endswith(")"):
-            return display_value.split("(", 1)[1][:-1]
-
-        return display_value
-
-    @admin.display(description=_("Period"), ordering="period")
-    def period_label(self, obj):
-        return obj.get_period_display()
