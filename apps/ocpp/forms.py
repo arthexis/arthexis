@@ -5,7 +5,7 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.maps.models import Location
-from apps.teams.models import ManualTask
+from apps.tasks.models import ManualTask
 
 
 class MaintenanceRequestForm(forms.ModelForm):

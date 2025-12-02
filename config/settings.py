@@ -436,6 +436,7 @@ LOCAL_APPS = [
     "apps.chats",
     "apps.pages",
     "apps.cards",
+    "apps.tasks",
     "apps.teams",
 ]
 
