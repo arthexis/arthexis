@@ -1,6 +1,6 @@
 [
   {
-    "model": "pages.dashboardrule",
+    "model": "counters.dashboardrule",
     "fields": {
       "is_seed_data": true,
       "is_user_data": false,
