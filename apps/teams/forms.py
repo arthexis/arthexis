@@ -7,7 +7,7 @@ from django.utils.translation import gettext_lazy as _
 from apps.core.models import SecurityGroup, TOTPDeviceSettings
 from django_otp.plugins.otp_totp.models import TOTPDevice
 
-from .models import SlackBotProfile, TaskCategory
+from .models import SlackBotProfile
 
 
 class TOTPDeviceAdminForm(forms.ModelForm):
@@ -235,10 +235,4 @@ class SlackBotWizardSetupForm(forms.Form):
             if isinstance(value, str):
                 cleaned_data[key] = value.strip()
         return cleaned_data
-
-
-class TaskCategoryAdminForm(forms.ModelForm):
-    class Meta:
-        model = TaskCategory
-        fields = "__all__"
 

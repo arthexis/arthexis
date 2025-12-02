@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 def send_manual_task_notification(manual_task_id: int, trigger: str) -> None:
     """Send reminder emails for the given manual task."""
 
-    from apps.teams.models import ManualTask
+    from apps.tasks.models import ManualTask
 
     task = ManualTask.objects.filter(pk=manual_task_id).first()
     if task is None:
