@@ -43,7 +43,6 @@ from .models import (
     Module,
     Landing,
     LandingLead,
-    RoleLanding,
     ViewHistory,
     UserManual,
     UserStory,
@@ -129,8 +128,23 @@ class SiteAdmin(DjangoSiteAdmin):
     form = SiteForm
     inlines = [SiteBadgeInline]
     change_list_template = "admin/sites/site/change_list.html"
-    fields = ("domain", "name", "template", "managed", "require_https")
-    list_display = ("domain", "name", "template", "managed", "require_https")
+    fields = (
+        "domain",
+        "name",
+        "template",
+        "default_landing",
+        "managed",
+        "require_https",
+    )
+    list_display = (
+        "domain",
+        "name",
+        "template",
+        "default_landing",
+        "managed",
+        "require_https",
+    )
+    list_select_related = ("default_landing",)
     list_filter = (ManagedSiteListFilter, RequireHttpsListFilter)
     def _has_siteproxy_permission(self, request, action: str) -> bool:
         """Return True when the user has the requested proxy or sites perm."""
@@ -604,51 +618,6 @@ class LandingLeadAdmin(EntityModelAdmin):
     @admin.display(description=_("Referrer"))
     def referer_display(self, obj):
         return obj.referer or ""
-
-
-@admin.register(RoleLanding)
-class RoleLandingAdmin(EntityModelAdmin):
-    list_display = (
-        "target_display",
-        "landing_path",
-        "landing_label",
-        "priority",
-        "is_seed_data",
-    )
-    list_filter = ("node_role", "security_group")
-    search_fields = (
-        "node_role__name",
-        "security_group__name",
-        "user__username",
-        "landing__path",
-        "landing__label",
-    )
-    fields = ("node_role", "security_group", "user", "priority", "landing")
-    list_select_related = (
-        "node_role",
-        "security_group",
-        "user",
-        "landing",
-        "landing__module",
-    )
-
-    @admin.display(description="Landing Path")
-    def landing_path(self, obj):
-        return obj.landing.path if obj.landing_id else ""
-
-    @admin.display(description="Landing Label")
-    def landing_label(self, obj):
-        return obj.landing.label if obj.landing_id else ""
-
-    @admin.display(description="Target", ordering="priority")
-    def target_display(self, obj):
-        if obj.node_role_id:
-            return obj.node_role.name
-        if obj.security_group_id:
-            return obj.security_group.name
-        if obj.user_id:
-            return obj.user.get_username()
-        return ""
 
 
 @admin.register(UserManual)

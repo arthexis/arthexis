@@ -11,7 +11,6 @@ from django.db import models
 from django.db.models import Q
 from django.core.validators import RegexValidator
 from apps.core.entity import Entity, EntityManager
-from apps.core.models import SecurityGroup
 from apps.leads.models import Lead
 from apps.chats.models import ChatMessage, ChatSession
 from apps.meta.models import WhatsAppChatBridge
@@ -320,160 +319,19 @@ class LandingLead(Lead):
         return f"{self.landing.label} ({self.path})"
 
 
-class RoleLandingManager(models.Manager):
-    def get_by_natural_key(
-        self,
-        role: str | None,
-        group: str | None,
-        username: str | None,
-        module_path: str,
-        path: str,
-    ):
-        filters = {
-            "landing__module__path": module_path,
-            "landing__path": path,
-        }
-        if role:
-            filters["node_role__name"] = role
-        else:
-            filters["node_role__isnull"] = True
-        if group:
-            filters["security_group__name"] = group
-        else:
-            filters["security_group__isnull"] = True
-        if username:
-            filters["user__username"] = username
-        else:
-            filters["user__isnull"] = True
-        return self.get(**filters)
-
-
-class RoleLanding(Entity):
-    node_role = models.OneToOneField(
-        NodeRole,
-        on_delete=models.CASCADE,
-        related_name="default_landing",
-        null=True,
-        blank=True,
-    )
-    security_group = models.OneToOneField(
-        SecurityGroup,
-        on_delete=models.CASCADE,
-        related_name="default_landing",
-        null=True,
-        blank=True,
-    )
-    user = models.OneToOneField(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        related_name="default_landing",
-        null=True,
-        blank=True,
-    )
+class LandingLead(Lead):
     landing = models.ForeignKey(
-        Landing,
-        on_delete=models.CASCADE,
-        related_name="role_defaults",
+        "pages.Landing", on_delete=models.CASCADE, related_name="leads"
     )
-    priority = models.IntegerField(default=0)
-
-    objects = RoleLandingManager()
 
     class Meta:
-        verbose_name = _("Default Landing")
-        verbose_name_plural = _("Default Landings")
-        ordering = ("-priority", "pk")
-        constraints = [
-            models.CheckConstraint(
-                name="pages_rolelanding_single_target",
-                condition=(
-                    Q(
-                        node_role__isnull=False,
-                        security_group__isnull=True,
-                        user__isnull=True,
-                    )
-                    | Q(
-                        node_role__isnull=True,
-                        security_group__isnull=False,
-                        user__isnull=True,
-                    )
-                    | Q(
-                        node_role__isnull=True,
-                        security_group__isnull=True,
-                        user__isnull=False,
-                    )
-                ),
-            )
-        ]
+        verbose_name = _("Landing Lead")
+        verbose_name_plural = _("Landing Leads")
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
-        if self.node_role_id:
-            role_name = self.node_role.name
-        elif self.security_group_id:
-            role_name = self.security_group.name
-        elif self.user_id:
-            role_name = self.user.get_username()
-        else:  # pragma: no cover - guarded by constraint
-            role_name = "?"
-        landing_path = self.landing.path if self.landing_id else "?"
-        return f"{role_name} → {landing_path}"
+        return f"{self.landing.label} ({self.path})"
 
-    def natural_key(self):  # pragma: no cover - simple representation
-        role_name = None
-        group_name = None
-        username = None
-        if getattr(self, "node_role_id", None):
-            role_name = self.node_role.name
-        if getattr(self, "security_group_id", None):
-            group_name = self.security_group.name
-        if getattr(self, "user_id", None):
-            username = self.user.get_username()
-        landing_key = (None, None)
-        if getattr(self, "landing_id", None):
-            landing_key = (
-                self.landing.module.path if self.landing.module_id else None,
-                self.landing.path,
-            )
-        return (role_name, group_name, username) + landing_key
 
-    natural_key.dependencies = [
-        "nodes.NodeRole",
-        "core.SecurityGroup",
-        settings.AUTH_USER_MODEL,
-        "pages.Landing",
-    ]
-
-    def clean(self):
-        super().clean()
-        targets = [
-            bool(self.node_role_id),
-            bool(self.security_group_id),
-            bool(self.user_id),
-        ]
-        if sum(targets) == 0:
-            raise ValidationError(
-                {
-                    "node_role": _("Select a node role, security group, or user."),
-                    "security_group": _(
-                        "Select a node role, security group, or user."
-                    ),
-                    "user": _("Select a node role, security group, or user."),
-                }
-            )
-        if sum(targets) > 1:
-            raise ValidationError(
-                {
-                    "node_role": _(
-                        "Only one of node role, security group, or user may be set."
-                    ),
-                    "security_group": _(
-                        "Only one of node role, security group, or user may be set."
-                    ),
-                    "user": _(
-                        "Only one of node role, security group, or user may be set."
-                    ),
-                }
-            )
 
 class UserManual(Entity):
     class PdfOrientation(models.TextChoices):
