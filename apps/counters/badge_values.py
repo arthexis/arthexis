@@ -1,7 +1,8 @@
 from django.db.models import Count, Exists, OuterRef, Q
 from django.utils.translation import gettext, ngettext
 
-from apps.core.models import Lead, RFID
+from apps.core.models import RFID
+from apps.leads.models import Lead
 from apps.ocpp.models import Charger
 from apps.nodes.models import Node
 
