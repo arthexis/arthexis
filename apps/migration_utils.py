@@ -29,6 +29,14 @@ def import_callable(
     """
 
     target_path: str = _resolve_alias(dotted_path, aliases)
+
+    if "." not in target_path:
+        if default is not None:
+            return default
+        raise ImportError(
+            "Callable paths for migrations must include a module name (e.g. 'package.callable')"
+        )
+
     module_path, attribute = target_path.rsplit(".", 1)
 
     if importlib.util.find_spec(module_path) is None:
