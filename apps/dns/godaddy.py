@@ -11,14 +11,15 @@ from dns import resolver as dns_resolver
 from requests import Response
 
 if TYPE_CHECKING:  # pragma: no cover - imported for type checking only
-    from .models import DNSRecord, NodeManager
+    from apps.nodes.models import NodeManager
+    from .models import GoDaddyDNSRecord
 
 
 @dataclass
 class DeploymentResult:
-    deployed: list["DNSRecord"]
-    failures: MutableMapping["DNSRecord", str]
-    skipped: MutableMapping["DNSRecord", str]
+    deployed: list["GoDaddyDNSRecord"]
+    failures: MutableMapping["GoDaddyDNSRecord", str]
+    skipped: MutableMapping["GoDaddyDNSRecord", str]
 
 
 def _error_from_response(response: Response) -> str:
@@ -42,13 +43,10 @@ def _error_from_response(response: Response) -> str:
     return f"{response.status_code} {reason}".strip()
 
 
-def deploy_records(manager: "NodeManager", records: Iterable["DNSRecord"]) -> DeploymentResult:
-    filtered: list["DNSRecord"] = []
-    skipped: MutableMapping["DNSRecord", str] = {}
+def deploy_records(manager: "NodeManager", records: Iterable["GoDaddyDNSRecord"]) -> DeploymentResult:
+    filtered: list["GoDaddyDNSRecord"] = []
+    skipped: MutableMapping["GoDaddyDNSRecord", str] = {}
     for record in records:
-        if record.provider != record.Provider.GODADDY:
-            skipped[record] = "Unsupported DNS provider"
-            continue
         domain = record.get_domain(manager)
         if not domain:
             skipped[record] = "Domain is required for deployment"
@@ -70,7 +68,7 @@ def deploy_records(manager: "NodeManager", records: Iterable["DNSRecord"]) -> De
     if customer_id:
         session.headers["X-Shopper-Id"] = customer_id
 
-    grouped: MutableMapping[tuple[str, str, str], list["DNSRecord"]] = defaultdict(list)
+    grouped: MutableMapping[tuple[str, str, str], list["GoDaddyDNSRecord"]] = defaultdict(list)
     for record in filtered:
         key = (
             record.get_domain(manager),
@@ -79,8 +77,8 @@ def deploy_records(manager: "NodeManager", records: Iterable["DNSRecord"]) -> De
         )
         grouped[key].append(record)
 
-    deployed: list["DNSRecord"] = []
-    failures: MutableMapping["DNSRecord", str] = {}
+    deployed: list["GoDaddyDNSRecord"] = []
+    failures: MutableMapping["GoDaddyDNSRecord", str] = {}
     now = timezone.now()
 
     base_url = manager.get_base_url()
@@ -131,7 +129,7 @@ def _extract_txt(rdata) -> str:
     return str(rdata).strip('"')
 
 
-def _matches_record(record: "DNSRecord", rdata) -> bool:
+def _matches_record(record: "GoDaddyDNSRecord", rdata) -> bool:
     expected = (record.resolve_sigils("data") or "").strip()
     rtype = record.record_type
 
@@ -174,7 +172,7 @@ def _matches_record(record: "DNSRecord", rdata) -> bool:
 
 
 def validate_record(
-    record: "DNSRecord", resolver: dns_resolver.Resolver | None = None
+    record: "GoDaddyDNSRecord", resolver: dns_resolver.Resolver | None = None
 ) -> tuple[bool, str]:
     resolver = resolver or create_resolver()
     fqdn = record.fqdn()
@@ -200,4 +198,3 @@ def validate_record(
     message = "DNS record does not match expected value"
     record.mark_error(message)
     return False, message
-

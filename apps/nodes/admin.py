@@ -69,12 +69,10 @@ from .models import (
     NodeService,
     NetMessage,
     NodeManager,
-    DNSRecord,
     _format_upgrade_body,
     NodeProfile,
     PublicWifiAccess,
 )
-from . import dns as dns_utils
 from apps.cards.models import RFID
 from apps.emails.models import EmailOutbox
 from apps.ocpp import store
@@ -121,18 +119,6 @@ class NodeFeatureAssignmentInline(admin.TabularInline):
     autocomplete_fields = ("feature",)
 
 
-class DeployDNSRecordsForm(forms.Form):
-    manager = forms.ModelChoiceField(
-        label="Node Profile",
-        queryset=NodeManager.objects.none(),
-        help_text="Credentials used to authenticate with the DNS provider.",
-    )
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.fields["manager"].queryset = NodeManager.objects.filter(
-            provider=NodeManager.Provider.GODADDY, is_enabled=True
-        )
 
 
 @admin.register(NodeProfile)
@@ -227,104 +213,6 @@ class NodeManagerAdmin(EntityModelAdmin):
             },
         ),
     )
-
-
-@admin.register(DNSRecord)
-class DNSRecordAdmin(EntityModelAdmin):
-    list_display = (
-        "record_type",
-        "fqdn",
-        "data",
-        "ttl",
-        "node_manager",
-        "last_synced_at",
-        "last_verified_at",
-    )
-    list_filter = ("record_type", "provider", "node_manager")
-    search_fields = ("domain", "name", "data")
-    autocomplete_fields = ("node_manager",)
-    actions = ["deploy_selected_records", "validate_selected_records"]
-
-    def _default_manager_for_queryset(self, queryset):
-        manager_ids = list(
-            queryset.exclude(node_manager__isnull=True)
-            .values_list("node_manager_id", flat=True)
-            .distinct()
-        )
-        if len(manager_ids) == 1:
-            return manager_ids[0]
-        available = list(
-            NodeManager.objects.filter(
-                provider=NodeManager.Provider.GODADDY, is_enabled=True
-            ).values_list("pk", flat=True)
-        )
-        if len(available) == 1:
-            return available[0]
-        return None
-
-    @admin.action(description="Deploy Selected records")
-    def deploy_selected_records(self, request, queryset):
-        unsupported = queryset.exclude(provider=DNSRecord.Provider.GODADDY)
-        for record in unsupported:
-            self.message_user(
-                request,
-                f"{record} uses unsupported provider {record.get_provider_display()}",
-                messages.WARNING,
-            )
-        queryset = queryset.filter(provider=DNSRecord.Provider.GODADDY)
-        if not queryset:
-            self.message_user(request, "No GoDaddy records selected.", messages.WARNING)
-            return None
-
-        if "apply" in request.POST:
-            form = DeployDNSRecordsForm(request.POST)
-            if form.is_valid():
-                manager = form.cleaned_data["manager"]
-                result = manager.publish_dns_records(list(queryset))
-                for record, reason in result.skipped.items():
-                    self.message_user(request, f"{record}: {reason}", messages.WARNING)
-                for record, reason in result.failures.items():
-                    self.message_user(request, f"{record}: {reason}", messages.ERROR)
-                if result.deployed:
-                    self.message_user(
-                        request,
-                        f"Deployed {len(result.deployed)} DNS record(s) via {manager}.",
-                        messages.SUCCESS,
-                    )
-                return None
-        else:
-            initial_manager = self._default_manager_for_queryset(queryset)
-            form = DeployDNSRecordsForm(initial={"manager": initial_manager})
-
-        context = {
-            **self.admin_site.each_context(request),
-            "opts": self.model._meta,
-            "form": form,
-            "queryset": queryset,
-            "title": "Deploy DNS records",
-        }
-        return render(
-            request,
-            "admin/nodes/dnsrecord/deploy_records.html",
-            context,
-        )
-
-    @admin.action(description="Validate Selected records")
-    def validate_selected_records(self, request, queryset):
-        resolver = dns_utils.create_resolver()
-        successes = 0
-        for record in queryset:
-            ok, message = dns_utils.validate_record(record, resolver=resolver)
-            if ok:
-                successes += 1
-            else:
-                self.message_user(request, f"{record}: {message}", messages.WARNING)
-        if successes:
-            self.message_user(
-                request,
-                f"Validated {successes} DNS record(s).",
-                messages.SUCCESS,
-            )
 
 
 @admin.register(Node)
