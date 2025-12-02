@@ -113,11 +113,7 @@ Gli helper di ciclo di vita per servizi e aggiornamenti ora si trovano in [`scri
 
 ### 3. Installare e aggiornare
 - **Linux:**
-   - Esegui [`./install.sh`](install.sh) con un flag per il ruolo del nodo:
-     - `--terminal` – impostazione predefinita se non specificato e consigliato se non sei sicuro. I nodi Terminal possono anche utilizzare gli script sopra per avviare/arrestare senza installazione.
-     - `--control` – prepara l'appliance di test per singolo dispositivo.
-     - `--satellite` – configura il nodo perimetrale di acquisizione dati.
-     - `--watchtower` – abilita lo stack di orchestrazione multiutente.
+   - Esegui [`./install.sh`](install.sh) con un flag per il ruolo del nodo; consulta la tabella sull'architettura dei ruoli qui sopra per le opzioni e i valori predefiniti di ciascun ruolo.
    - Usa `./install.sh --help` per elencare tutte le opzioni disponibili se hai bisogno di personalizzare il nodo oltre le impostazioni del ruolo.
    - Aggiorna con [`./upgrade.sh`](upgrade.sh).
    - Consulta il [Manuale degli script di installazione e ciclo di vita](docs/development/install-lifecycle-scripts-manual.md) per l'elenco completo dei flag e le note operative.

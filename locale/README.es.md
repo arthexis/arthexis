@@ -113,11 +113,7 @@ Los scripts de ciclo de vida para servicios y actualizaciones ahora viven en [`s
 
 ### 3. Instalar y actualizar
 - **Linux:**
-   - Ejecuta [`./install.sh`](install.sh) con un flag de rol de nodo:
-     - `--terminal`: rol predeterminado si no se especifica y recomendado si no sabes cuál elegir. Los nodos Terminal también pueden usar los scripts anteriores para iniciar/detener sin instalar.
-     - `--control`: prepara el equipo de control para pruebas de un solo dispositivo.
-     - `--satellite`: configura el nodo perimetral de adquisición de datos.
-     - `--watchtower`: habilita la pila de orquestación multiusuario.
+   - Ejecuta [`./install.sh`](install.sh) con un flag de rol de nodo; consulta la tabla de Arquitectura de roles anterior para ver las opciones y predeterminados de cada rol.
    - Usa `./install.sh --help` para ver la lista completa de flags si necesitas personalizar el nodo más allá del rol.
    - Actualiza con [`./upgrade.sh`](upgrade.sh).
    - Consulta el [Manual de scripts de instalación y ciclo de vida](docs/development/install-lifecycle-scripts-manual.md) para ver la descripción completa de los flags y las notas operativas.
