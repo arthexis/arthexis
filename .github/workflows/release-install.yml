@@ -20,5 +20,4 @@ jobs:
           python-version: '3.x'
       - run: |
           bash install.sh --terminal || true
-          pip install .
-          python manage.py migrate --noinput
+          ./upgrade.sh --local --no-restart
