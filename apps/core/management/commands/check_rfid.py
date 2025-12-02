@@ -2,7 +2,7 @@ import json
 
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.core.models import RFID
+from apps.cards.models import RFID
 from apps.cards.reader import validate_rfid_value
 
 

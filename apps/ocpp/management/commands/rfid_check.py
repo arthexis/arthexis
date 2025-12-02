@@ -3,7 +3,7 @@ import json
 from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Q
 
-from apps.core.models import RFID
+from apps.cards.models import RFID
 from apps.cards.reader import read_rfid, validate_rfid_value
 
 

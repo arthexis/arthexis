@@ -6,7 +6,7 @@ from collections import OrderedDict
 from collections.abc import Iterable, Mapping
 
 from apps.energy.models import CustomerAccount
-from apps.core.models import RFID
+from apps.cards.models import RFID
 
 ACCOUNT_ID_COLUMN = "customer_accounts"
 ACCOUNT_NAME_COLUMN = "customer_account_names"

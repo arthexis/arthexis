@@ -27,7 +27,7 @@ from cryptography.hazmat.primitives.asymmetric import padding
 from django.db import IntegrityError, transaction
 from django.db.models import Q
 
-from apps.core.models import RFID
+from apps.cards.models import RFID
 from apps.ocpp import store
 from apps.ocpp.models import Charger
 from apps.ocpp.network import (

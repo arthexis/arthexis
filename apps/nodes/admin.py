@@ -75,7 +75,7 @@ from .models import (
     PublicWifiAccess,
 )
 from . import dns as dns_utils
-from apps.core.models import RFID
+from apps.cards.models import RFID
 from apps.emails.models import EmailOutbox
 from apps.ocpp import store
 from apps.ocpp.models import (
