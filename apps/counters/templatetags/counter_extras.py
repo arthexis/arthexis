@@ -6,26 +6,12 @@ from django.contrib.contenttypes.models import ContentType
 from django.db.models.signals import post_delete, post_save
 from django.utils.translation import gettext_lazy as _
 
-from apps.counters.dashboard_rules import (
-    bind_rule_model,
-    load_callable,
-    rule_failure,
-    rule_success,
-)
+from apps.counters.dashboard_rules import bind_rule_model, rule_failure, rule_success
 from apps.counters.models import BadgeCounter, DashboardRule
 
 register = template.Library()
 
 _MODEL_RULES_CACHE_KEY = "_model_rule_status_cache"
-_DEFAULT_RULE_HANDLERS = {
-    "ocpp.charger": "evaluate_evcs_heartbeat_rules",
-    "ocpp.chargerconfiguration": "evaluate_cp_configuration_rules",
-    "ocpp.cpfirmware": "evaluate_cp_firmware_rules",
-    "nodes.node": "evaluate_node_rules",
-    "teams.emailinbox": "evaluate_email_profile_rules",
-    "teams.emailoutbox": "evaluate_email_profile_rules",
-}
-
 logger = logging.getLogger(__name__)
 
 
@@ -124,18 +110,6 @@ def model_rule_status(context, app_label: str, model_name: str):
         rule = get_cached_dashboard_rule(app_label, model_name)
 
         if rule is None:
-            handler_name = _DEFAULT_RULE_HANDLERS.get(normalized_key)
-            handler = load_callable(handler_name) if handler_name else None
-            if handler:
-                try:
-                    with bind_rule_model(normalized_key):
-                        return handler()
-                except Exception:
-                    logger.exception(
-                        "Dashboard rule handler failed", extra={"model": normalized_key}
-                    )
-                    return rule_failure(_("Unable to evaluate dashboard rule."))
-
             return rule_success()
 
         try:
