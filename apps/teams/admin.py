@@ -21,18 +21,13 @@ from django_otp.plugins.otp_totp.admin import (
 )
 from django_otp.models import VerifyNotAllowed
 from apps.awg.admin import PowerLeadAdmin as CorePowerLeadAdmin
-from apps.core.admin import (
-    InviteLeadAdmin,
-    SecurityGroupAdmin,
-    OdooEmployeeAdmin,
-)
+from apps.core.admin import (InviteLeadAdmin, SecurityGroupAdmin)
 from apps.release.admin import ReleaseManagerAdmin
 from apps.core.models import (
     InviteLead as CoreInviteLead,
     SecurityGroup as CoreSecurityGroup,
 )
 from apps.release.models import ReleaseManager as CoreReleaseManager
-from apps.odoo.models import OdooEmployee as CoreOdooEmployee
 from apps.locals.user_data import (
     EntityModelAdmin,
     UserDatumAdminMixin,
@@ -56,7 +51,6 @@ from .models import (
     SecurityGroup,
     ReleaseManager,
     PowerLead,
-    OdooEmployee,
     TOTPDevice,
     ManualTask,
     SlackBotProfile,
@@ -87,11 +81,6 @@ class ReleaseManagerAdminProxy(ReleaseManagerAdmin):
 
 @admin.register(PowerLead)
 class PowerLeadAdminProxy(CorePowerLeadAdmin):
-    pass
-
-
-@admin.register(OdooEmployee)
-class OdooEmployeeAdminProxy(OdooEmployeeAdmin):
     pass
 
 
