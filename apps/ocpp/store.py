@@ -44,7 +44,7 @@ triggered_followups: dict[str, list[dict[str, object]]] = {}
 # mapping of charger id / cp_path to friendly names used for log files
 log_names: dict[str, dict[str, str]] = {"charger": {}, "simulator": {}}
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parents[2]
 LOG_DIR = select_log_dir(BASE_DIR)
 SESSION_DIR = LOG_DIR / "sessions"
 SESSION_DIR.mkdir(exist_ok=True)
