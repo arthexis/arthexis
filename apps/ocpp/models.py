@@ -2288,8 +2288,8 @@ class DataTransferMessage(Entity):
 
     class Meta:
         ordering = ["-created_at"]
-        verbose_name = _("Data Message")
-        verbose_name_plural = _("Data Messages")
+        verbose_name = _("CP Data Message")
+        verbose_name_plural = _("CP Data Messages")
         indexes = [
             models.Index(
                 fields=["ocpp_message_id"],
