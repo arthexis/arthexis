@@ -331,7 +331,6 @@ from .forms import (
     UserStoryForm,
 )
 from .models import (
-    DeveloperArticle,
     Module,
     RoleLanding,
     UserManual,
@@ -928,25 +927,6 @@ def index(request):
             if target_path and target_path != request.path:
                 return redirect(target_path)
     return _render_readme(request, role, force_footer=True)
-
-
-@never_cache
-def developer_article_detail(request, slug):
-    """Render a published developer article with markdown formatting."""
-
-    article = get_object_or_404(DeveloperArticle.objects.published(), slug=slug)
-    html, toc_html = _render_markdown_with_toc(article.content)
-    context = {
-        "article": article,
-        "title": article.title,
-        "summary": article.summary,
-        "content": html,
-        "toc": toc_html,
-        "page_url": request.build_absolute_uri(),
-    }
-    response = render(request, "pages/developer_article.html", context)
-    patch_vary_headers(response, ["Accept-Language", "Cookie"])
-    return response
 
 
 @never_cache
