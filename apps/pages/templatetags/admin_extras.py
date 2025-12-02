@@ -16,7 +16,6 @@ from django.urls import NoReverseMatch, reverse
 from django.utils.text import capfirst
 from django.utils.translation import gettext_lazy as _
 from apps.celery.utils import celery_feature_enabled as celery_feature_enabled_helper
-from apps.emails import mailer
 from apps.core.models import GoogleCalendarProfile
 from apps.core.entity import Entity
 from apps.nodes.models import NetMessage, Node
@@ -34,13 +33,6 @@ def safe_admin_url(view_name: str, *args, **kwargs) -> str:
         return reverse(view_name, args=args, kwargs=kwargs)
     except NoReverseMatch:
         return ""
-
-
-@register.simple_tag
-def admin_can_send_email() -> bool:
-    """Return ``True`` when outbound email is configured for this node."""
-
-    return mailer.can_send_email()
 
 
 def _admin_model_instance(model_admin, request, user):

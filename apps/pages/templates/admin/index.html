@@ -1,5 +1,5 @@
 {% extends "admin/base_site.html" %}
-{% load i18n static admin_extras tz %}
+{% load i18n static admin_extras counter_extras tz %}
 
 {% block extrastyle %}
   {{ block.super }}
@@ -532,17 +532,20 @@
 {% block bodyclass %}{{ block.super }} dashboard{% endblock %}
 
 {% block content_title %}
-{% admin_can_send_email as admin_email_configured %}
-{% if user.is_superuser and not admin_email_configured %}
-  {% url 'admin:teams_emailoutbox_add' as email_outbox_add_url %}
-  <div class="admin-dashboard-warning" role="alert" aria-live="polite">
-    <p class="admin-dashboard-warning__title">{% translate "Email delivery is not configured." %}</p>
-    <p class="admin-dashboard-warning__body">
-      {% blocktrans trimmed with link_start='<a href="'|add:email_outbox_add_url|add:'">'|safe link_end='</a>'|safe %}
-        Configure Django email settings or {{ link_start }}add an Email Outbox{{ link_end }} to restore outbound email for this node.
-      {% endblocktrans %}
-    </p>
-  </div>
+{% if user.is_superuser %}
+  {% model_rule_status 'teams' 'EmailOutbox' as email_outbox_rule %}
+  {% if email_outbox_rule and not email_outbox_rule.success %}
+    {% url 'admin:teams_emailoutbox_add' as email_outbox_add_url %}
+    <div class="admin-dashboard-warning" role="alert" aria-live="polite">
+      <p class="admin-dashboard-warning__title">{% translate "Email delivery is not configured." %}</p>
+      <p class="admin-dashboard-warning__body">
+        {{ email_outbox_rule.message }}
+        {% blocktrans trimmed with link_start='<a href="'|add:email_outbox_add_url|add:'">'|safe link_end='</a>'|safe %}
+          {{ link_start }}Add an Email Outbox{{ link_end }} to restore outbound email for this node.
+        {% endblocktrans %}
+      </p>
+    </div>
+  {% endif %}
 {% endif %}
 {% last_net_message as admin_last_net_message %}
 <div id="admin-home-header">
