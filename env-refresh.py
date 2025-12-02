@@ -34,6 +34,7 @@ from django.db.utils import OperationalError
 from django.db.migrations.recorder import MigrationRecorder
 from django.db.migrations.loader import MigrationLoader
 from django.core.serializers.base import DeserializationError
+from utils.migration_branches import MissingBranchSplinterError
 
 
 os.environ.setdefault("NET_MESSAGE_DISABLE_PROPAGATION", "1")
@@ -332,6 +333,16 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
     if not connection.in_atomic_block:
         try:
             call_command("migrate", interactive=False)
+        except MissingBranchSplinterError as exc:
+            print(
+                "Detected a retroactively edited migration branch that this database "
+                "skipped.\n"
+                f"{exc}\n"
+                "Manually recreate the database or roll it back to the splinter "
+                "migration before retrying the installation.",
+                flush=True,
+            )
+            raise
         except InconsistentMigrationHistory:
             call_command("reset_ocpp_migrations")
             call_command("migrate", interactive=False)
