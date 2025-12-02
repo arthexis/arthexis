@@ -1,0 +1,1 @@
+# DNS app initialization
