@@ -7,7 +7,7 @@
       "prefix": "INBOX",
       "context_type": "entity",
       "content_type": [
-        "teams",
+        "emails",
         "emailinbox"
       ]
     }

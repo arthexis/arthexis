@@ -7,7 +7,7 @@
       "prefix": "ODOO",
       "context_type": "entity",
       "content_type": [
-        "core",
+        "odoo",
         "odooemployee"
       ]
     }

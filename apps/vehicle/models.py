@@ -11,6 +11,9 @@ class BrandManager(EntityManager):
     def get_queryset(self):
         return super().get_queryset().prefetch_related("wmi_codes")
 
+    def get_by_natural_key(self, name: str):  # pragma: no cover - used by fixtures
+        return self.get(name=name)
+
 
 class Brand(Entity):
     name = models.CharField(max_length=100, unique=True)

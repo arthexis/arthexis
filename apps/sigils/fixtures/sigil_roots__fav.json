@@ -7,7 +7,7 @@
       "prefix": "FAV",
       "context_type": "entity",
       "content_type": [
-        "pages",
+        "locals",
         "favorite"
       ]
     }

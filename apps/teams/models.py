@@ -21,7 +21,6 @@ from apps.emails import mailer
 from apps.core.entity import Entity, EntityAllManager, EntityManager
 from apps.sigils.fields import SigilShortAutoField
 from apps.core.models import (
-    GoogleCalendarProfile as CoreGoogleCalendarProfile,
     InviteLead as CoreInviteLead,
     Profile as CoreProfile,
     SecurityGroup as CoreSecurityGroup,
@@ -272,14 +271,6 @@ class TOTPDevice(CoreTOTPDevice):
         app_label = "teams"
         verbose_name = _("TOTP Device")
         verbose_name_plural = _("TOTP Devices")
-
-
-class GoogleCalendarProfile(CoreGoogleCalendarProfile):
-    class Meta:
-        proxy = True
-        app_label = "django_celery_beat"
-        verbose_name = CoreGoogleCalendarProfile._meta.verbose_name
-        verbose_name_plural = CoreGoogleCalendarProfile._meta.verbose_name_plural
 
 
 class SlackBotProfile(CoreProfile):

@@ -7,7 +7,7 @@
       "prefix": "OUTBOX",
       "context_type": "entity",
       "content_type": [
-        "teams",
+        "emails",
         "emailoutbox"
       ]
     }
