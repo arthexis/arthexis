@@ -7,18 +7,13 @@ from apps.ocpp.management.commands.ocpp16_coverage import (
     _implemented_cp_to_csms,
     _implemented_csms_to_cp,
 )
+from apps.protocols.services import load_protocol_spec_from_file, spec_path
 from utils.coverage import coverage_color, render_badge
 
 
 def _load_spec() -> dict[str, list[str]]:
-    app_dir = Path(__file__).resolve().parents[2]
-    spec_path = app_dir / "spec" / "ocpp21_calls.json"
-    with spec_path.open("r", encoding="utf-8") as handle:
-        data = json.load(handle)
-    return {
-        "cp_to_csms": list(dict.fromkeys(data.get("cp_to_csms", []))),
-        "csms_to_cp": list(dict.fromkeys(data.get("csms_to_cp", []))),
-    }
+    data = load_protocol_spec_from_file(spec_path("ocpp21"))
+    return data["calls"]
 
 
 class Command(BaseCommand):

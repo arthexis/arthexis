@@ -13,6 +13,8 @@ from django.utils import timezone
 from apps.celery.utils import is_celery_enabled
 from apps.emails import mailer
 from apps.nodes.models import Node
+from apps.protocols.decorators import protocol_call
+from apps.protocols.models import ProtocolCall as ProtocolCallModel
 
 from . import store
 from .forwarder import forwarder
@@ -367,6 +369,7 @@ def schedule_daily_charge_point_configuration_checks() -> int:
     return scheduled
 
 
+@protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "GetCompositeSchedule")
 @shared_task
 def request_power_projection(
     charger_pk: int,
