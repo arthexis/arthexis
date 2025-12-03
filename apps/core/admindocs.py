@@ -60,19 +60,12 @@ class CommandsView(BaseAdminDocsView):
 class OrderedModelIndexView(BaseAdminDocsView):
     template_name = "admin_doc/model_index.html"
 
-    USER_MANUALS_APP = SimpleNamespace(
-        label="manuals",
-        name="manuals",
-        verbose_name=_("User Manuals"),
-    )
-
     GROUP_OVERRIDES = {
         "ocpp.location": "core",
         "core.rfid": "ocpp",
         "ocpp.cpforwarder": "ocpp",
         "core.package": "teams",
         "core.packagerelease": "teams",
-        "pages.usermanual": USER_MANUALS_APP,
     }
 
     @staticmethod

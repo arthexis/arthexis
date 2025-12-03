@@ -15,9 +15,8 @@ from apps.core.backends import (
     totp_devices_require_password,
     verify_user_totp_token,
 )
-from apps.core.form_fields import Base64FileField
 
-from .models import UserManual, UserStory
+from .models import UserStory
 
 
 class AuthenticatorLoginForm(AuthenticationForm):
@@ -209,33 +208,6 @@ class AuthenticatorEnrollmentForm(forms.Form):
 
     def get_verified_device(self):
         return self.device
-
-
-_manual_pdf_field = UserManual._meta.get_field("content_pdf")
-
-
-class UserManualAdminForm(forms.ModelForm):
-    content_pdf = Base64FileField(
-        label=_manual_pdf_field.verbose_name,
-        help_text=_manual_pdf_field.help_text,
-        required=not _manual_pdf_field.blank,
-        content_type="application/pdf",
-        download_name="manual.pdf",
-    )
-
-    class Meta:
-        model = UserManual
-        fields = "__all__"
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        instance = getattr(self, "instance", None)
-        slug = getattr(instance, "slug", "")
-        if slug:
-            self.fields["content_pdf"].widget.download_name = f"{slug}.pdf"
-        self.fields["content_pdf"].widget.attrs.setdefault(
-            "accept", "application/pdf"
-        )
 
 
 class UserStoryForm(forms.ModelForm):
