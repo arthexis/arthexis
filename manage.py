@@ -281,8 +281,6 @@ def main(argv: Sequence[str] | None = None) -> None:
     if is_runserver:
         if is_debug_session:
             os.environ["DEBUG"] = "1"
-        else:
-            os.environ.pop("DEBUG", None)
         if "--noreload" not in args:
             args.insert(1, "--noreload")
     try:
