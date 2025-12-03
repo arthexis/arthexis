@@ -95,13 +95,13 @@
             <div class="col-sm-6 col-md-4">
               <div class="mb-2">
                 <label class="form-label" for="username{{ idx }}">User</label>
-                <input id="username{{ idx }}" name="username" value="{{ form_params.username|default:'' }}" class="form-control form-control-sm">
+                <input id="username{{ idx }}" name="username" value="{{ form_params.username|default:'' }}" class="form-control form-control-sm" hx-preserve>
               </div>
             </div>
             <div class="col-sm-6 col-md-4">
               <div class="mb-2">
                 <label class="form-label" for="password{{ idx }}">Pass</label>
-                <input id="password{{ idx }}" name="password" type="password" value="" class="form-control form-control-sm">
+                <input id="password{{ idx }}" name="password" type="password" value="" class="form-control form-control-sm" hx-preserve>
               </div>
             </div>
           </div>
