@@ -8,7 +8,9 @@ class SigilsConfig(AppConfig):
     label = "sigils"
 
     def ready(self):  # pragma: no cover - Django hook
+        from .loader import load_fixture_sigil_roots
         from .sigil_builder import generate_model_sigils, patch_admin_sigil_builder_view
 
         post_migrate.connect(generate_model_sigils, sender=self)
+        post_migrate.connect(load_fixture_sigil_roots, sender=self)
         patch_admin_sigil_builder_view()
