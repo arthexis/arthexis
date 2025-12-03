@@ -12,6 +12,8 @@ import time
 from contextlib import contextmanager
 from pathlib import Path
 
+import pytest
+
 from . import migration_server as migration
 
 BASE_DIR = migration.BASE_DIR
@@ -23,6 +25,13 @@ diff_snapshots = migration.diff_snapshots
 wait_for_changes = migration.wait_for_changes
 
 PREFIX = "[Test Server]"
+
+
+@pytest.fixture
+def lock_dir(tmp_path: Path) -> Path:
+    """Provide an isolated lock directory for tests."""
+
+    return tmp_path / "locks"
 
 
 def test_server_state(lock_dir: Path):
