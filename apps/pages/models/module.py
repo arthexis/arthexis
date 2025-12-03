@@ -9,8 +9,8 @@ from django.urls import URLPattern
 from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _
 
-from apps.app.models import Application
 from apps.core.entity import Entity
+from apps.groups.models import SecurityGroup
 from apps.nodes.models import NodeRole
 
 if TYPE_CHECKING:  # pragma: no cover - type checking only
@@ -31,9 +31,11 @@ class Module(Entity):
         related_name="modules",
     )
     application = models.ForeignKey(
-        Application,
-        on_delete=models.CASCADE,
+        "app.Application",
+        on_delete=models.SET_NULL,
         related_name="modules",
+        null=True,
+        blank=True,
     )
     path = models.CharField(
         max_length=100,
@@ -51,6 +53,25 @@ class Module(Entity):
     )
     is_default = models.BooleanField(default=False)
     favicon = models.ImageField(upload_to="modules/favicons/", blank=True)
+    security_group = models.ForeignKey(
+        SecurityGroup,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="modules",
+    )
+    SECURITY_EXCLUSIVE = "exclusive"
+    SECURITY_INCLUSIVE = "inclusive"
+    SECURITY_CHOICES = (
+        (SECURITY_EXCLUSIVE, "Exclusive"),
+        (SECURITY_INCLUSIVE, "Inclusive"),
+    )
+    security_mode = models.CharField(
+        max_length=10,
+        choices=SECURITY_CHOICES,
+        default=SECURITY_INCLUSIVE,
+        help_text="Exclusive requires site and group match; inclusive allows either.",
+    )
 
     objects = ModuleManager()
 
@@ -68,15 +89,21 @@ class Module(Entity):
     natural_key.dependencies = ["nodes.NodeRole"]
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
-        return f"{self.application.name} ({self.path})"
+        label = self.menu_label or "Module"
+        return f"{label} ({self.path})"
 
     @property
     def menu_label(self) -> str:
-        return self.menu or self.application.name
+        if self.menu:
+            return self.menu
+        if self.application:
+            return self.application.name
+        return (self.path or "").strip("/") or "Module"
 
     def save(self, *args, **kwargs):
         if not self.path:
-            self.path = f"/{slugify(self.application.name)}/"
+            base = self.menu or getattr(self.application, "name", "module")
+            self.path = f"/{slugify(base)}/"
         super().save(*args, **kwargs)
 
     def _iter_landing_patterns(self, patterns, prefix=""):
@@ -89,18 +116,29 @@ class Module(Entity):
                 )
 
     def create_landings(self):
+        app_name = getattr(self.application, "name", None)
+        if not app_name:
+            from .landing import Landing
+
+            Landing.objects.get_or_create(
+                module=self,
+                path=self.path,
+                defaults={"label": self.menu_label},
+            )
+            return
+
         try:
-            urlconf = import_module(f"{self.application.name}.urls")
+            urlconf = import_module(f"{app_name}.urls")
         except Exception:
             try:
-                urlconf = import_module(f"{self.application.name.lower()}.urls")
+                urlconf = import_module(f"{app_name.lower()}.urls")
             except Exception:
                 from .landing import Landing
 
                 Landing.objects.get_or_create(
                     module=self,
                     path=self.path,
-                    defaults={"label": self.application.name},
+                    defaults={"label": self.menu_label},
                 )
                 return
 
@@ -138,7 +176,7 @@ class Module(Entity):
 
         if not created:
             Landing.objects.get_or_create(
-                module=self, path=self.path, defaults={"label": self.application.name}
+                module=self, path=self.path, defaults={"label": self.menu_label}
             )
 
     def should_create_landings(self, *, created: bool, raw: bool) -> bool:
