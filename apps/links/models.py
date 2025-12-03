@@ -133,7 +133,7 @@ class Reference(Entity):
 
         if self.validation_status is None:
             return True
-        return self.validation_status == 200
+        return 200 <= self.validation_status < 400
 
     class Meta:
         db_table = "core_reference"
