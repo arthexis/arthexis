@@ -1246,6 +1246,10 @@ if [[ "$LOCAL_VERSION" == "$REMOTE_VERSION" ]]; then
     echo "Unstable channel requested; continuing upgrade despite matching version $REMOTE_VERSION."
   elif [[ $FORCE_UPGRADE -eq 1 ]]; then
     echo "Forcing upgrade despite matching version $LOCAL_VERSION."
+  elif [[ -n "$REMOTE_REVISION" && -n "$LOCAL_REVISION" && "$LOCAL_REVISION" != "$REMOTE_REVISION" ]]; then
+    echo "Updates detected for version $LOCAL_VERSION, but --latest is required to apply them."
+    echo "Re-run upgrade.sh with --latest to migrate to the newest changes."
+    exit 0
   else
     echo "Already on version $LOCAL_VERSION; skipping upgrade."
     exit 0
