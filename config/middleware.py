@@ -18,7 +18,8 @@ class ActiveAppMiddleware:
         site = get_site(request)
         node = Node.get_local()
         role_name = node.role.name if node and node.role else "Terminal"
-        active = site.name or role_name
+        site_name = site.name if site else ""
+        active = site_name or role_name
         set_active_app(active)
         request.site = site
         request.active_app = active
