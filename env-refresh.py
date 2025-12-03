@@ -187,6 +187,36 @@ def _fixture_sort_key(name: str) -> tuple[int, str]:
     return (priority, filename)
 
 
+def _sigilroot_skip_reason(fields: dict) -> str | None:
+    """Return a human readable reason to skip a SigilRoot entry."""
+
+    content_type = fields.get("content_type")
+    app_label: str | None = None
+    model_name: str | None = None
+
+    if isinstance(content_type, (list, tuple)):
+        if content_type:
+            app_label = content_type[0]
+        if len(content_type) >= 2 and isinstance(content_type[1], str):
+            model_name = content_type[1]
+    elif isinstance(content_type, dict):
+        app_label = content_type.get("app_label")
+        model_name = content_type.get("model") or content_type.get("model_name")
+
+    if app_label:
+        try:
+            apps.get_app_config(app_label)
+        except LookupError:
+            return f"missing app '{app_label}'"
+        if model_name:
+            try:
+                apps.get_model(app_label, model_name)
+            except LookupError:
+                return f"missing model '{app_label}.{model_name}'"
+
+    return None
+
+
 def _preferred_site_domain(domains: Iterable[str]) -> str | None:
     """Return the preferred ``Site`` domain from *domains*.
 
@@ -463,22 +493,12 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                             fields["user"] = mapped_user
                             modified = True
                     if model_label == "sigils.sigilroot":
-                        content_type = fields.get("content_type")
-                        app_label: str | None = None
-                        if isinstance(content_type, (list, tuple)) and content_type:
-                            app_label = content_type[0]
-                        elif isinstance(content_type, dict):
-                            app_label = content_type.get("app_label")
-                        if app_label:
-                            try:
-                                apps.get_app_config(app_label)
-                            except LookupError:
-                                prefix = fields.get("prefix", "?")
-                                print(
-                                    f"Skipping SigilRoot '{prefix}' (missing app '{app_label}')"
-                                )
-                                modified = True
-                                continue
+                        skip_reason = _sigilroot_skip_reason(fields)
+                        if skip_reason:
+                            prefix = fields.get("prefix", "?")
+                            print(f"Skipping SigilRoot '{prefix}' ({skip_reason})")
+                            modified = True
+                            continue
                     if model is Site:
                         domain = fields.get("domain")
                         if domain:
