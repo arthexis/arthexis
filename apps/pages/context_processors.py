@@ -2,6 +2,7 @@ from utils.sites import get_site
 from django.urls import Resolver404, resolve
 from django.shortcuts import resolve_url
 from django.conf import settings
+from django.db.utils import OperationalError, ProgrammingError
 from pathlib import Path
 from apps.nodes.models import Node, NodeFeature
 from apps.links.models import Reference
@@ -37,14 +38,22 @@ _ROLE_FAVICONS = {
 def nav_links(request):
     """Provide navigation links for the current site."""
     site = get_site(request)
-    node = Node.get_local()
-    role = node.role if node else None
+    try:
+        node = Node.get_local()
+        role = node.role if node else None
+    except (OperationalError, ProgrammingError):
+        node = None
+        role = None
+
     if role:
-        modules = (
-            Module.objects.filter(node_role=role, is_deleted=False)
-            .select_related("application")
-            .prefetch_related("landings")
-        )
+        try:
+            modules = (
+                Module.objects.filter(node_role=role, is_deleted=False)
+                .select_related("application")
+                .prefetch_related("landings")
+            )
+        except (OperationalError, ProgrammingError):
+            modules = []
     else:
         modules = []
 
@@ -62,7 +71,10 @@ def nav_links(request):
     def feature_is_enabled(slug: str) -> bool:
         if slug in feature_cache:
             return feature_cache[slug]
-        feature = NodeFeature.objects.filter(slug=slug).first()
+        try:
+            feature = NodeFeature.objects.filter(slug=slug).first()
+        except (OperationalError, ProgrammingError):
+            feature = None
         try:
             enabled = bool(feature and feature.is_enabled)
         except Exception:
@@ -157,19 +169,25 @@ def nav_links(request):
             role_name = getattr(getattr(node, "role", None), "name", "")
             favicon_url = _ROLE_FAVICONS.get(role_name, _DEFAULT_FAVICON) or _DEFAULT_FAVICON
 
-    header_refs_qs = (
-        Reference.objects.filter(show_in_header=True)
-        .exclude(value="")
-        .prefetch_related("roles", "features", "sites")
-    )
-    header_references = filter_visible_references(
-        header_refs_qs,
-        request=request,
-        site=site,
-        node=node,
-    )
+    try:
+        header_refs_qs = (
+            Reference.objects.filter(show_in_header=True)
+            .exclude(value="")
+            .prefetch_related("roles", "features", "sites")
+        )
+        header_references = filter_visible_references(
+            header_refs_qs,
+            request=request,
+            site=site,
+            node=node,
+        )
+    except (OperationalError, ProgrammingError):
+        header_references = []
 
-    chat_feature = NodeFeature.objects.filter(slug="chat-bridge").first()
+    try:
+        chat_feature = NodeFeature.objects.filter(slug="chat-bridge").first()
+    except (OperationalError, ProgrammingError):
+        chat_feature = None
     chat_enabled = bool(
         getattr(settings, "PAGES_CHAT_ENABLED", False)
         and chat_feature
@@ -181,7 +199,10 @@ def nav_links(request):
     if site:
         site_template = getattr(site, "template", None)
     if site_template is None:
-        site_template = SiteTemplate.objects.order_by("name").first()
+        try:
+            site_template = SiteTemplate.objects.order_by("name").first()
+        except (OperationalError, ProgrammingError):
+            site_template = None
 
     return {
         "nav_modules": valid_modules,
