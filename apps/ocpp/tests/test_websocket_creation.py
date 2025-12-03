@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import json
 from urllib.parse import urlparse
 
@@ -12,6 +13,7 @@ from django.test.utils import override_settings
 from django.contrib.contenttypes.models import ContentType
 from django.core.cache import cache
 from django.core.management import call_command
+from django.contrib.auth import get_user_model
 
 from apps.ocpp import store
 from apps.ocpp.models import Charger, Simulator
@@ -24,9 +26,13 @@ pytestmark = pytest.mark.django_db(transaction=True)
 
 @pytest.fixture(autouse=True)
 def clear_store_state():
+    cache.clear()
+    RateLimit.objects.all().delete()
     store.connections.clear()
     store.ip_connections.clear()
     yield
+    cache.clear()
+    RateLimit.objects.all().delete()
     store.connections.clear()
     store.ip_connections.clear()
 
@@ -106,6 +112,117 @@ def test_ocpp_websocket_rate_limit_enforced():
     )
 
     cache.clear()
+
+    async_to_sync(run_scenario)()
+
+
+@override_settings(ROOT_URLCONF="apps.ocpp.urls")
+def test_rejects_placeholder_serial_in_path():
+    async def run_scenario():
+        path = "/<charger_id>"
+        communicator = WebsocketCommunicator(application, path)
+
+        connected, close_code = await communicator.connect()
+
+        assert connected is False
+        assert close_code == 4003
+        exists = await database_sync_to_async(
+            Charger.objects.filter(charger_id="<charger_id>", connector_id=None).exists
+        )()
+        assert exists is False
+
+    async_to_sync(run_scenario)()
+
+
+@override_settings(ROOT_URLCONF="apps.ocpp.urls")
+def test_basic_auth_required_and_validates_credentials():
+    User = get_user_model()
+    user = User.objects.create_user(username="ws-user", password="secret")
+    charger = Charger.objects.create(charger_id="CP-AUTH", ws_auth_user=user)
+
+    async def run_scenario():
+        path = f"/{charger.charger_id}"
+
+        unauthenticated = WebsocketCommunicator(application, path)
+        connected, close_code = await unauthenticated.connect()
+        assert connected is False
+        assert close_code == 4003
+
+        invalid_header = [(b"authorization", b"Basic !!invalid!!")]
+        invalid = WebsocketCommunicator(application, path, headers=invalid_header)
+        connected, close_code = await invalid.connect()
+        assert connected is False
+        assert close_code == 4003
+
+        token = base64.b64encode(b"ws-user:secret").decode("ascii")
+        valid_header = [(b"authorization", f"Basic {token}".encode("ascii"))]
+        authenticated = WebsocketCommunicator(
+            application, path, headers=valid_header, subprotocols=["ocpp1.6"]
+        )
+        connected, accepted_subprotocol = await authenticated.connect()
+        assert connected is True
+        assert accepted_subprotocol == "ocpp1.6"
+
+        await authenticated.disconnect()
+
+    async_to_sync(run_scenario)()
+
+
+@override_settings(ROOT_URLCONF="apps.ocpp.urls")
+def test_negotiates_latest_supported_subprotocol():
+    async def run_scenario():
+        communicator = WebsocketCommunicator(
+            application,
+            "/CP-PROTO-NEW",
+            subprotocols=["ocpp1.6", "ocpp2.0.1"],
+        )
+
+        connected, accepted_subprotocol = await communicator.connect()
+
+        assert connected is True
+        assert accepted_subprotocol == "ocpp2.0.1"
+
+        await communicator.disconnect()
+
+    async_to_sync(run_scenario)()
+
+
+@override_settings(ROOT_URLCONF="apps.ocpp.urls")
+def test_preferred_subprotocol_falls_back_when_missing():
+    Charger.objects.create(charger_id="CP-PROTO-PREF", preferred_ocpp_version="ocpp2.0")
+
+    async def run_scenario():
+        communicator = WebsocketCommunicator(
+            application, "/CP-PROTO-PREF", subprotocols=["ocpp1.6"]
+        )
+
+        connected, accepted_subprotocol = await communicator.connect()
+
+        assert connected is True
+        assert accepted_subprotocol == "ocpp1.6"
+
+        await communicator.disconnect()
+
+    async_to_sync(run_scenario)()
+
+
+@override_settings(ROOT_URLCONF="apps.ocpp.urls")
+def test_uses_preferred_version_when_no_subprotocol_offered():
+    Charger.objects.create(charger_id="CP-PROTO-PREFERRED", preferred_ocpp_version="ocpp2.0")
+
+    async def run_scenario():
+        communicator = WebsocketCommunicator(application, "/CP-PROTO-PREFERRED")
+
+        connected, accepted_subprotocol = await communicator.connect()
+
+        assert connected is True
+        assert accepted_subprotocol is None
+        store_key = store.pending_key("CP-PROTO-PREFERRED")
+        consumer = store.connections.get(store_key)
+        assert consumer is not None
+        assert getattr(consumer, "ocpp_version", "") == "ocpp2.0"
+
+        await communicator.disconnect()
 
     async_to_sync(run_scenario)()
 
