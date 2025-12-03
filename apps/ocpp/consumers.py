@@ -217,6 +217,17 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
     rate_limit_fallback = store.MAX_CONNECTIONS_PER_IP
     rate_limit_window = 60
 
+    def _client_ip_is_local(self) -> bool:
+        parsed = _parse_ip(getattr(self, "client_ip", None))
+        if not parsed:
+            return False
+        return parsed.is_private or parsed.is_loopback or parsed.is_link_local
+
+    def get_rate_limit_identifier(self) -> str | None:
+        if self._client_ip_is_local():
+            return None
+        return super().get_rate_limit_identifier()
+
     def _extract_serial_identifier(self) -> str:
         """Return the charge point serial from the query string or path."""
 

@@ -1,0 +1,16 @@
+[
+  {
+    "model": "nodes.node",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "hostname": "arthexis.com",
+      "port": 443,
+      "trusted": false,
+      "current_relation": "UPSTREAM",
+      "last_seen": "2024-01-01T00:00:00Z",
+      "public_endpoint": "watchtower-arthexis-com",
+      "role": ["Watchtower"]
+    }
+  }
+]

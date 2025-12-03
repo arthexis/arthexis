@@ -24,6 +24,18 @@ class Landing(Entity):
     enabled = models.BooleanField(default=True)
     track_leads = models.BooleanField(default=False)
     description = models.TextField(blank=True)
+    validation_status = models.IntegerField(
+        null=True,
+        blank=True,
+        verbose_name="Validation Status",
+        help_text="HTTP status code from the last landing validation attempt.",
+    )
+    validated_url_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="Validated URL",
+        help_text="Timestamp of the last landing validation check.",
+    )
 
     objects = LandingManager()
 
@@ -34,6 +46,13 @@ class Landing(Entity):
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return f"{self.label} ({self.path})"
+
+    def is_link_valid(self) -> bool:
+        """Return ``True`` when the landing link is considered valid."""
+
+        if self.validation_status is None:
+            return True
+        return 200 <= self.validation_status < 400
 
     def save(self, *args, **kwargs):
         existing = None

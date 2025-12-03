@@ -2,6 +2,7 @@ from utils.sites import get_site
 from django.urls import Resolver404, resolve
 from django.shortcuts import resolve_url
 from django.conf import settings
+from django.db.models import Q
 from django.db.utils import OperationalError, ProgrammingError
 from pathlib import Path
 from apps.nodes.models import Node, NodeFeature
@@ -56,8 +57,9 @@ def nav_links(request):
     if role:
         try:
             modules = (
-                Module.objects.filter(node_role=role, is_deleted=False)
-                .select_related("application")
+                Module.objects.filter(is_deleted=False)
+                .filter(Q(node_role=role) | Q(security_mode=Module.SECURITY_INCLUSIVE))
+                .select_related("application", "security_group", "node_role")
                 .prefetch_related("landings")
             )
         except (OperationalError, ProgrammingError):
@@ -72,8 +74,10 @@ def nav_links(request):
     user_is_superuser = getattr(user, "is_superuser", False)
     if user_is_authenticated:
         user_group_names = set(user.groups.values_list("name", flat=True))
+        user_group_ids = set(user.groups.values_list("id", flat=True))
     else:
         user_group_names = set()
+        user_group_ids = set()
     feature_cache: dict[str, bool] = {}
 
     def feature_is_enabled(slug: str) -> bool:
@@ -91,6 +95,21 @@ def nav_links(request):
         return enabled
 
     for module in modules:
+        site_matches = bool(role and module.node_role_id == getattr(role, "id", None))
+        group_matches = bool(
+            module.security_group_id
+            and user_is_authenticated
+            and module.security_group_id in user_group_ids
+        )
+        if module.security_group_id:
+            if module.security_mode == Module.SECURITY_EXCLUSIVE:
+                if not (site_matches and group_matches):
+                    continue
+            else:
+                if not (site_matches or group_matches):
+                    continue
+        elif role and not site_matches:
+            continue
         landings = []
         seen_paths: set[str] = set()
         for landing in module.landings.filter(enabled=True):
@@ -98,9 +117,14 @@ def nav_links(request):
             if normalized_path in seen_paths:
                 continue
             seen_paths.add(normalized_path)
+            landing.nav_is_invalid = not landing.is_link_valid()
+            landing.nav_is_locked = False
+            landing.nav_lock_reason = None
             try:
                 match = resolve(landing.path)
             except Resolver404:
+                landing.nav_is_invalid = True
+                landings.append(landing)
                 continue
             view_func = match.func
             required_features_any = getattr(
@@ -108,6 +132,8 @@ def nav_links(request):
             )
             if required_features_any:
                 if not any(feature_is_enabled(slug) for slug in required_features_any):
+                    landing.nav_is_invalid = True
+                    landings.append(landing)
                     continue
             requires_login = bool(getattr(view_func, "login_required", False))
             if not requires_login and hasattr(view_func, "login_url"):
@@ -134,6 +160,9 @@ def nav_links(request):
 
             landing.nav_is_locked = bool(blocked_reason)
             landing.nav_lock_reason = blocked_reason
+            landing.nav_is_invalid = landing.nav_is_invalid or (
+                not landing.is_link_valid()
+            )
             landings.append(landing)
         if landings:
             normalized_module_path = module.path.rstrip("/") or "/"
