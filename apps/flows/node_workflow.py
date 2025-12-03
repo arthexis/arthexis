@@ -134,6 +134,23 @@ class NodeWorkflow:
         lock_path.parent.mkdir(parents=True, exist_ok=True)
         lock_path.write_text(json.dumps(dict(ctx)), encoding="utf-8")
 
+    def _record_transition(
+        self, identifier: str, from_state: Any, to_state: Any, step_name: str
+    ) -> None:
+        try:
+            from apps.flows.models import Transition
+        except Exception:  # pragma: no cover - registry or import issues
+            logger.exception("Unable to record transition for workflow %s", self.name)
+            return
+
+        Transition.objects.create(
+            workflow=self.name,
+            identifier=identifier,
+            from_state="" if from_state is None else str(from_state),
+            to_state="" if to_state is None else str(to_state),
+            step_name=step_name or "",
+        )
+
     def run(
         self,
         identifier: str,
@@ -163,6 +180,7 @@ class NodeWorkflow:
         self._persist_state(lock_path, ctx)
 
         for index, step in enumerate(self.steps[ctx[self.state_key] :], start=ctx[self.state_key]):
+            from_state = ctx[self.state_key]
             try:
                 result = run_step(step, ctx)
             except Exception:
@@ -175,6 +193,12 @@ class NodeWorkflow:
                 ctx.update(state_update)
 
             ctx[self.state_key] = index + 1
+            self._record_transition(
+                identifier,
+                from_state,
+                ctx[self.state_key],
+                step.name,
+            )
             self._persist_state(lock_path, ctx)
 
         self._persist_state(lock_path, ctx, final=True)
