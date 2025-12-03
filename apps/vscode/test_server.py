@@ -165,16 +165,18 @@ def run_tests(base_dir: Path) -> bool:
     env = os.environ.copy()
     env.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
     print(f"{PREFIX} Running tests:", " ".join(command))
+    started_at = time.monotonic()
     result = subprocess.run(command, cwd=base_dir, env=env)
+    elapsed = migration._format_elapsed(time.monotonic() - started_at)
     if result.returncode != 0:
         NOTIFY(
             "Test suite failure",
             "Check test server output for pytest details.",
         )
-        print(f"{PREFIX} Test suite failed.")
+        print(f"{PREFIX} Test suite failed after {elapsed}.")
         return False
 
-    print(f"{PREFIX} Test suite completed successfully.")
+    print(f"{PREFIX} Test suite completed successfully in {elapsed}.")
     return True
 
 
