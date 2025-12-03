@@ -129,8 +129,8 @@ class DNSRecord(Entity):
 
 class GoDaddyDNSRecord(DNSRecord):
     class Meta:
-        verbose_name = "GoDaddy DNS Record"
-        verbose_name_plural = "GoDaddy DNS Records"
+        verbose_name = "GoDaddy Record"
+        verbose_name_plural = "GoDaddy Records"
         db_table = "nodes_dnsrecord"
 
     def to_godaddy_payload(self) -> dict[str, object]:
