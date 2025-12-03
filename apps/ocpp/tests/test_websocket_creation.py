@@ -1,5 +1,6 @@
 import asyncio
 import json
+import base64
 from urllib.parse import urlparse
 
 import pytest
@@ -12,6 +13,7 @@ from django.test.utils import override_settings
 from django.contrib.contenttypes.models import ContentType
 from django.core.cache import cache
 from django.core.management import call_command
+from django.contrib.auth import get_user_model
 
 from apps.ocpp import store
 from apps.ocpp.models import Charger, Simulator
@@ -26,9 +28,24 @@ pytestmark = pytest.mark.django_db(transaction=True)
 def clear_store_state():
     store.connections.clear()
     store.ip_connections.clear()
+    store.logs["charger"].clear()
+    store.log_names["charger"].clear()
+    RateLimit.objects.all().delete()
+    cache.clear()
     yield
     store.connections.clear()
     store.ip_connections.clear()
+    store.logs["charger"].clear()
+    store.log_names["charger"].clear()
+    RateLimit.objects.all().delete()
+    cache.clear()
+
+
+@pytest.fixture(autouse=True)
+def isolate_log_dir(tmp_path, monkeypatch):
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(store, "LOG_DIR", log_dir)
 
 
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
@@ -206,3 +223,154 @@ def test_cp_simulator_connects_with_default_fixture(monkeypatch):
     charger = Charger.objects.filter(charger_id=config.cp_path, connector_id=None).first()
     assert charger is not None
     assert charger.last_path == f"/{config.cp_path}"
+
+
+def _latest_log_message(key: str) -> str:
+    entry = store.logs["charger"][key][-1]
+    parts = entry.split(" ", 2)
+    return parts[-1] if len(parts) == 3 else entry
+
+
+@override_settings(ROOT_URLCONF="apps.ocpp.urls")
+def test_rejects_invalid_serial_from_path_logs_reason():
+    async def run_scenario():
+        communicator = WebsocketCommunicator(application, "/<charger_id>")
+        connected, close_code = await communicator.connect()
+        assert connected is False
+        assert close_code == 4003
+
+    async_to_sync(run_scenario)()
+
+    store_key = store.pending_key("<charger_id>")
+    message = _latest_log_message(store_key)
+    assert "Serial Number placeholder values such as <charger_id> are not allowed." in message
+
+
+@override_settings(ROOT_URLCONF="apps.ocpp.urls")
+def test_rejects_invalid_query_serial_and_logs_details():
+    async def run_scenario():
+        communicator = WebsocketCommunicator(application, "/?cid=")
+        connected, close_code = await communicator.connect()
+        assert connected is False
+        assert close_code == 4003
+
+    async_to_sync(run_scenario)()
+
+    store_key = store.pending_key("")
+    message = _latest_log_message(store_key)
+    assert "Serial Number cannot be blank." in message
+    assert "query_string='cid='" in message
+
+
+def _auth_header(username: str, password: str) -> list[tuple[bytes, bytes]]:
+    token = base64.b64encode(f"{username}:{password}".encode("utf-8"))
+    return [(b"authorization", b"Basic " + token)]
+
+
+@override_settings(ROOT_URLCONF="apps.ocpp.urls")
+def test_basic_auth_rejects_when_missing_header():
+    user = get_user_model().objects.create_user(username="auth-missing", password="secret")
+    charger = Charger.objects.create(charger_id="AUTH-MISSING", connector_id=None, ws_auth_user=user)
+
+    async def run_scenario():
+        communicator = WebsocketCommunicator(application, f"/{charger.charger_id}")
+        connected, close_code = await communicator.connect()
+        assert connected is False
+        assert close_code == 4003
+
+    async_to_sync(run_scenario)()
+
+    store_key = store.pending_key(charger.charger_id)
+    message = _latest_log_message(store_key)
+    assert "HTTP Basic authentication required (credentials missing)" in message
+
+
+@override_settings(ROOT_URLCONF="apps.ocpp.urls")
+def test_basic_auth_rejects_invalid_header_format():
+    user = get_user_model().objects.create_user(username="auth-invalid", password="secret")
+    charger = Charger.objects.create(charger_id="AUTH-INVALID", connector_id=None, ws_auth_user=user)
+
+    async def run_scenario():
+        communicator = WebsocketCommunicator(
+            application,
+            f"/{charger.charger_id}",
+            headers=[(b"authorization", b"Bearer token")],
+        )
+        connected, close_code = await communicator.connect()
+        assert connected is False
+        assert close_code == 4003
+
+    async_to_sync(run_scenario)()
+
+    store_key = store.pending_key(charger.charger_id)
+    message = _latest_log_message(store_key)
+    assert "HTTP Basic authentication header is invalid" in message
+
+
+@override_settings(ROOT_URLCONF="apps.ocpp.urls")
+def test_basic_auth_rejects_invalid_credentials():
+    user = get_user_model().objects.create_user(username="auth-fail", password="secret")
+    charger = Charger.objects.create(charger_id="AUTH-FAIL", connector_id=None, ws_auth_user=user)
+
+    async def run_scenario():
+        communicator = WebsocketCommunicator(
+            application,
+            f"/{charger.charger_id}",
+            headers=_auth_header("auth-fail", "wrong"),
+        )
+        connected, close_code = await communicator.connect()
+        assert connected is False
+        assert close_code == 4003
+
+    async_to_sync(run_scenario)()
+
+    store_key = store.pending_key(charger.charger_id)
+    message = _latest_log_message(store_key)
+    assert "HTTP Basic authentication failed" in message
+
+
+@override_settings(ROOT_URLCONF="apps.ocpp.urls")
+def test_basic_auth_rejects_unauthorized_user():
+    authorized = get_user_model().objects.create_user(username="authorized", password="secret")
+    unauthorized = get_user_model().objects.create_user(username="unauthorized", password="secret")
+    charger = Charger.objects.create(
+        charger_id="AUTH-UNAUTH", connector_id=None, ws_auth_user=authorized
+    )
+
+    async def run_scenario():
+        communicator = WebsocketCommunicator(
+            application,
+            f"/{charger.charger_id}",
+            headers=_auth_header("unauthorized", "secret"),
+        )
+        connected, close_code = await communicator.connect()
+        assert connected is False
+        assert close_code == 4003
+
+    async_to_sync(run_scenario)()
+
+    store_key = store.pending_key(charger.charger_id)
+    message = _latest_log_message(store_key)
+    assert "HTTP Basic authentication rejected for unauthorized user 'unauthorized'" in message
+
+
+@override_settings(ROOT_URLCONF="apps.ocpp.urls")
+def test_basic_auth_accepts_authorized_user():
+    user = get_user_model().objects.create_user(username="auth-ok", password="secret")
+    charger = Charger.objects.create(charger_id="AUTH-OK", connector_id=None, ws_auth_user=user)
+
+    async def run_scenario():
+        communicator = WebsocketCommunicator(
+            application,
+            f"/{charger.charger_id}",
+            headers=_auth_header("auth-ok", "secret"),
+        )
+        connected, _ = await communicator.connect()
+        assert connected is True
+        await communicator.disconnect()
+
+    async_to_sync(run_scenario)()
+
+    store_key = store.pending_key(charger.charger_id)
+    entries = list(store.logs["charger"][store_key])
+    assert any("Connected" in entry for entry in entries)
