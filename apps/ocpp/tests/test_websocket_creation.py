@@ -7,11 +7,12 @@ import websockets
 from asgiref.sync import async_to_sync
 from channels.db import database_sync_to_async
 from channels.testing import WebsocketCommunicator
-from django.urls import reverse
-from django.test.utils import override_settings
 from django.contrib.contenttypes.models import ContentType
 from django.core.cache import cache
 from django.core.management import call_command
+from django.test.utils import override_settings
+from django.urls import reverse
+from django.utils import timezone
 
 from apps.ocpp import store
 from apps.ocpp.models import Charger, Simulator
@@ -24,9 +25,11 @@ pytestmark = pytest.mark.django_db(transaction=True)
 
 @pytest.fixture(autouse=True)
 def clear_store_state():
+    cache.clear()
     store.connections.clear()
     store.ip_connections.clear()
     yield
+    cache.clear()
     store.connections.clear()
     store.ip_connections.clear()
 
@@ -108,6 +111,73 @@ def test_ocpp_websocket_rate_limit_enforced():
     cache.clear()
 
     async_to_sync(run_scenario)()
+
+
+@override_settings(ROOT_URLCONF="apps.ocpp.urls")
+def test_pending_connection_replaced_on_reconnect():
+    async def run_scenario():
+        serial = "CP-REPLACE"
+        path = f"/{serial}"
+
+        first = WebsocketCommunicator(application, path)
+        connected, _ = await first.connect()
+        assert connected is True
+
+        existing_consumer = store.connections[store.pending_key(serial)]
+
+        second = WebsocketCommunicator(application, path)
+        connected, _ = await second.connect()
+        assert connected is True
+
+        close_event = await first.receive_output(1)
+        assert close_event["type"] == "websocket.close"
+
+        assert (
+            store.connections[store.pending_key(serial)] is not existing_consumer
+        )
+
+        await second.disconnect()
+        await first.wait()
+
+    async_to_sync(run_scenario)()
+
+
+@override_settings(ROOT_URLCONF="apps.ocpp.urls")
+def test_existing_charger_clears_status_and_refreshes_forwarding(monkeypatch):
+    charger = Charger.objects.create(
+        charger_id="CP-CLEAR-CACHE",
+        connector_id=None,
+        last_status="Charging",
+        last_error_code="Fault",
+        last_status_vendor_info="vendor",
+        last_status_timestamp=timezone.now(),
+    )
+
+    called: dict[str, object] = {}
+
+    def mock_sync_forwarded_charge_points(*, refresh_forwarders=True):
+        called["refresh_forwarders"] = refresh_forwarders
+        return 0
+
+    monkeypatch.setattr(
+        "apps.ocpp.forwarder.forwarder.sync_forwarded_charge_points",
+        mock_sync_forwarded_charge_points,
+    )
+
+    async def run_scenario():
+        communicator = WebsocketCommunicator(application, f"/{charger.charger_id}")
+        connected, _ = await communicator.connect()
+        assert connected is True
+        await communicator.disconnect()
+
+    async_to_sync(run_scenario)()
+
+    charger.refresh_from_db()
+
+    assert charger.last_status == ""
+    assert charger.last_error_code == ""
+    assert charger.last_status_vendor_info is None
+    assert called["refresh_forwarders"] is False
 
 
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
