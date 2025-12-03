@@ -4,7 +4,6 @@ from .google_calendar_profile import GoogleCalendarProfile
 from .invite_lead import InviteLead
 from .passkey_credential import PasskeyCredential
 from .profile import Profile
-from .security_group import SecurityGroup
 from .totp_device_settings import TOTPDeviceSettings
 from .user import User
 from .user_phone_number import UserPhoneNumber
@@ -19,9 +18,10 @@ __all__ = [
     "PasskeyCredential",
     "Profile",
     "RFID",
-    "SecurityGroup",
     "TOTPDeviceSettings",
     "User",
+    "SecurityGroup",
     "UserPhoneNumber",
 ]
 from apps.cards.models import RFID
+from apps.groups.models import SecurityGroup

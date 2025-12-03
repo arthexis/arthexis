@@ -17,9 +17,9 @@ from apps.sigils.fields import SigilShortAutoField
 from apps.core.models import (
     InviteLead as CoreInviteLead,
     Profile as CoreProfile,
-    SecurityGroup as CoreSecurityGroup,
     User as CoreUser,
 )
+from apps.groups.models import SecurityGroup as CoreSecurityGroup
 from apps.release.models import ReleaseManager as CoreReleaseManager
 from apps.awg.models import PowerLead as CorePowerLead
 from django_otp.plugins.otp_totp.models import (

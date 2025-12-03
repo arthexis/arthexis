@@ -82,7 +82,6 @@ from .models import (
     User,
     UserPhoneNumber,
     GoogleCalendarProfile,
-    SecurityGroup,
     InviteLead,
 )
 from apps.cards.models import RFID
@@ -412,41 +411,6 @@ class ProfileAdminMixin:
 
     my_profile_action.label = _("Active Profile")
     my_profile_action.short_description = _("Active Profile")
-
-class SecurityGroupAdminForm(forms.ModelForm):
-    users = forms.ModelMultipleChoiceField(
-        queryset=get_user_model().objects.all(),
-        required=False,
-        widget=admin.widgets.FilteredSelectMultiple("users", False),
-    )
-
-    class Meta:
-        model = SecurityGroup
-        fields = "__all__"
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if self.instance.pk:
-            self.fields["users"].initial = self.instance.user_set.all()
-
-    def save(self, commit=True):
-        instance = super().save(commit)
-        users = self.cleaned_data.get("users")
-        if commit:
-            instance.user_set.set(users)
-        else:
-            self.save_m2m = lambda: instance.user_set.set(users)
-        return instance
-
-
-class SecurityGroupAdmin(DjangoGroupAdmin):
-    form = SecurityGroupAdminForm
-    fieldsets = (
-        (None, {"fields": ("name", "parent", "site_template", "users", "permissions")}),
-    )
-    filter_horizontal = ("permissions",)
-    search_fields = ("name", "parent__name")
-
 
 class InviteLeadAdmin(EntityModelAdmin):
     list_display = (
@@ -1411,8 +1375,6 @@ USER_PROFILE_INLINES = [
 GROUP_PROFILE_INLINES = [
     _build_profile_inline(model, "group") for model in PROFILE_MODELS
 ]
-
-SecurityGroupAdmin.inlines = GROUP_PROFILE_INLINES
 
 
 class UserPhoneNumberInline(admin.TabularInline):

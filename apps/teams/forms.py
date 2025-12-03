@@ -4,7 +4,8 @@ from django.contrib.admin.helpers import ActionForm
 from django.core.exceptions import ObjectDoesNotExist
 from django.utils.translation import gettext_lazy as _
 
-from apps.core.models import SecurityGroup, TOTPDeviceSettings
+from apps.core.models import TOTPDeviceSettings
+from apps.groups.models import SecurityGroup
 from django_otp.plugins.otp_totp.models import TOTPDevice
 
 from .models import SlackBotProfile

@@ -20,7 +20,7 @@ class Profile(Entity):
         related_name="+",
     )
     group = models.OneToOneField(
-        "core.SecurityGroup",
+        "groups.SecurityGroup",
         null=True,
         blank=True,
         on_delete=models.CASCADE,
