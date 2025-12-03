@@ -16,6 +16,10 @@ import heapq
 import itertools
 from typing import Iterable, Iterator
 
+from django.conf import settings
+from redis import Redis
+from redis.exceptions import RedisError
+
 from apps.core.log_paths import select_log_dir
 
 IDENTITY_SEPARATOR = "#"
@@ -23,6 +27,22 @@ AGGREGATE_SLUG = "all"
 PENDING_SLUG = "pending"
 
 MAX_CONNECTIONS_PER_IP = 2
+
+_STATE_REDIS: Redis | None = None
+_STATE_REDIS_URL = getattr(settings, "OCPP_STATE_REDIS_URL", "")
+_PENDING_TTL = int(getattr(settings, "OCPP_PENDING_CALL_TTL", 1800) or 1800)
+_IP_CONNECTION_TTL = 3600
+
+def _state_redis() -> Redis | None:
+    global _STATE_REDIS
+    if not _STATE_REDIS_URL:
+        return None
+    if _STATE_REDIS is None:
+        try:
+            _STATE_REDIS = Redis.from_url(_STATE_REDIS_URL, decode_responses=True)
+        except Exception:  # pragma: no cover - best effort fallback
+            _STATE_REDIS = None
+    return _STATE_REDIS
 
 connections: dict[str, object] = {}
 transactions: dict[str, object] = {}
@@ -85,15 +105,68 @@ def identity_key(serial: str, connector: int | str | None) -> str:
     return f"{serial}{IDENTITY_SEPARATOR}{connector_slug(connector)}"
 
 
+def _connection_token(consumer: object) -> str:
+    token = getattr(consumer, "_ocpp_state_token", None)
+    if token:
+        return token
+    token = getattr(consumer, "channel_name", None) or f"consumer-{id(consumer)}"
+    try:
+        setattr(consumer, "_ocpp_state_token", token)
+    except Exception:  # pragma: no cover - best effort
+        pass
+    return token
+
+
+def _redis_ip_key(ip: str) -> str:
+    return f"ocpp:ip-connection:{ip}"
+
+
+def _register_ip_connection_redis(ip: str, consumer: object) -> bool | None:
+    client = _state_redis()
+    if not client:
+        return None
+    key = _redis_ip_key(ip)
+    token = _connection_token(consumer)
+    try:
+        pipe = client.pipeline()
+        pipe.sadd(key, token)
+        pipe.expire(key, _IP_CONNECTION_TTL)
+        pipe.scard(key)
+        added, _expired, count = pipe.execute()
+        if count > MAX_CONNECTIONS_PER_IP and added:
+            client.srem(key, token)
+            return False
+        return count <= MAX_CONNECTIONS_PER_IP
+    except RedisError:
+        return None
+
+
+def _release_ip_connection_redis(ip: str, consumer: object) -> None:
+    client = _state_redis()
+    if not client:
+        return
+    key = _redis_ip_key(ip)
+    token = _connection_token(consumer)
+    try:
+        client.srem(key, token)
+    except RedisError:
+        return
+
+
 def register_ip_connection(ip: str | None, consumer: object) -> bool:
     """Track a websocket connection for the provided client IP."""
 
     if not ip:
         return True
+    allowed = _register_ip_connection_redis(ip, consumer)
+    if allowed is False:
+        return False
     conns = ip_connections.setdefault(ip, set())
     if consumer in conns:
         return True
     if len(conns) >= MAX_CONNECTIONS_PER_IP:
+        if allowed:
+            _release_ip_connection_redis(ip, consumer)
         return False
     conns.add(consumer)
     return True
@@ -104,6 +177,7 @@ def release_ip_connection(ip: str | None, consumer: object) -> None:
 
     if not ip:
         return
+    _release_ip_connection_redis(ip, consumer)
     conns = ip_connections.get(ip)
     if not conns:
         return
@@ -116,6 +190,67 @@ def pending_key(serial: str) -> str:
     """Return the key used before a connector id has been negotiated."""
 
     return f"{serial}{IDENTITY_SEPARATOR}{PENDING_SLUG}"
+
+
+def _pending_metadata_key(message_id: str) -> str:
+    return f"ocpp:pending:{message_id}"
+
+
+def _pending_result_key(message_id: str) -> str:
+    return f"ocpp:pending-result:{message_id}"
+
+
+def _store_pending_metadata_redis(message_id: str, metadata: dict[str, object]) -> None:
+    client = _state_redis()
+    if not client:
+        return
+    try:
+        client.set(_pending_metadata_key(message_id), json.dumps(metadata), ex=_PENDING_TTL)
+    except RedisError:
+        return
+
+
+def _load_pending_metadata_redis(message_id: str) -> dict[str, object] | None:
+    client = _state_redis()
+    if not client:
+        return None
+    try:
+        raw = client.get(_pending_metadata_key(message_id))
+        return json.loads(raw) if raw else None
+    except (RedisError, json.JSONDecodeError):
+        return None
+
+
+def _store_pending_result_redis(message_id: str, payload: dict[str, object]) -> None:
+    client = _state_redis()
+    if not client:
+        return
+    try:
+        client.set(_pending_result_key(message_id), json.dumps(payload), ex=_PENDING_TTL)
+    except RedisError:
+        return
+
+
+def _load_pending_result_redis(message_id: str) -> dict[str, object] | None:
+    client = _state_redis()
+    if not client:
+        return None
+    try:
+        raw = client.get(_pending_result_key(message_id))
+        return json.loads(raw) if raw else None
+    except (RedisError, json.JSONDecodeError):
+        return None
+
+
+def _clear_pending_redis(message_id: str) -> None:
+    client = _state_redis()
+    if not client:
+        return
+    try:
+        client.delete(_pending_metadata_key(message_id))
+        client.delete(_pending_result_key(message_id))
+    except RedisError:
+        return
 
 
 def _candidate_keys(serial: str, connector: int | str | None) -> list[str]:
@@ -230,6 +365,7 @@ def register_pending_call(message_id: str, metadata: dict[str, object]) -> None:
         handle = _pending_call_handles.pop(message_id, None)
     if handle:
         _cancel_timer_handle(handle)
+    _store_pending_metadata_redis(message_id, copy)
 
 
 def pop_pending_call(message_id: str) -> dict[str, object] | None:
@@ -240,6 +376,9 @@ def pop_pending_call(message_id: str) -> dict[str, object] | None:
         handle = _pending_call_handles.pop(message_id, None)
     if handle:
         _cancel_timer_handle(handle)
+    if metadata is None:
+        metadata = _load_pending_metadata_redis(message_id)
+    _clear_pending_redis(message_id)
     return metadata
 
 
@@ -271,6 +410,7 @@ def record_pending_call_result(
         _cancel_timer_handle(handle)
     if event:
         event.set()
+    _store_pending_result_redis(message_id, result)
 
 
 def wait_for_pending_call(
@@ -284,8 +424,17 @@ def wait_for_pending_call(
             return existing
         event = _pending_call_events.get(message_id)
     if not event:
+        cached = _load_pending_result_redis(message_id)
+        if cached is not None:
+            _clear_pending_redis(message_id)
+            return cached
+    if not event:
         return None
     if not event.wait(timeout):
+        cached = _load_pending_result_redis(message_id)
+        if cached is not None:
+            _clear_pending_redis(message_id)
+            return cached
         return None
     with _pending_call_lock:
         result = _pending_call_results.pop(message_id, None)
@@ -412,8 +561,39 @@ def clear_pending_calls(serial: str) -> None:
             handle = _pending_call_handles.pop(key, None)
             if handle:
                 to_cancel.append(handle)
+            _clear_pending_redis(key)
     for handle in to_cancel:
         _cancel_timer_handle(handle)
+
+
+def restore_pending_calls(serial: str) -> list[str]:
+    """Reload any pending calls for ``serial`` that were persisted to Redis."""
+
+    client = _state_redis()
+    restored: list[str] = []
+    if not client:
+        return restored
+    try:
+        for key in client.scan_iter(_pending_metadata_key("*")):
+            raw = client.get(key)
+            if not raw:
+                continue
+            try:
+                metadata = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            charger_id = str(metadata.get("charger_id") or "").lower()
+            if not charger_id or charger_id != serial.lower():
+                continue
+            message_id = key.rsplit(":", 1)[-1]
+            with _pending_call_lock:
+                if message_id in pending_calls:
+                    continue
+            register_pending_call(message_id, metadata)
+            restored.append(message_id)
+    except RedisError:
+        return restored
+    return restored
 
 
 def _run_scheduler_loop(
@@ -532,6 +712,13 @@ def add_log(cid: str, entry: str, log_type: str = "charger") -> None:
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
     entry = f"{timestamp} {entry}"
 
+    key = _append_memory_log(cid, entry, log_type=log_type)
+    if _async_logging_enabled() and _enqueue_log_write(key, entry, log_type=log_type):
+        return
+    _write_log_file(key, entry, log_type=log_type)
+
+
+def _append_memory_log(cid: str, entry: str, *, log_type: str) -> str:
     store = logs[log_type]
     # Store log entries under the cid as provided but allow retrieval using
     # any casing by recording entries in a case-insensitive manner.
@@ -550,9 +737,42 @@ def add_log(cid: str, entry: str, log_type: str = "charger") -> None:
         buffer = deque(buffer, maxlen=MAX_IN_MEMORY_LOG_ENTRIES)
         store[key] = buffer
     buffer.append(entry)
-    path = _file_path(key, log_type)
+    return key
+
+
+def _write_log_file(cid: str, entry: str, *, log_type: str) -> None:
+    path = _file_path(cid, log_type)
     with path.open("a", encoding="utf-8") as handle:
         handle.write(entry + "\n")
+
+
+def _async_logging_enabled() -> bool:
+    enabled = bool(getattr(settings, "OCPP_ASYNC_LOGGING", False))
+    if not enabled:
+        return False
+    try:
+        from apps.celery.utils import is_celery_enabled
+    except Exception:  # pragma: no cover - defensive
+        return False
+    return is_celery_enabled()
+
+
+def _enqueue_log_write(cid: str, entry: str, *, log_type: str) -> bool:
+    try:
+        from .tasks import write_ocpp_log_entry
+    except Exception:  # pragma: no cover - circular import guard
+        return False
+    try:
+        write_ocpp_log_entry.delay(cid, entry, log_type)
+        return True
+    except Exception:  # pragma: no cover - Celery not running
+        return False
+
+
+def persist_log_entry(cid: str, entry: str, *, log_type: str = "charger") -> None:
+    """Write a prepared log entry to disk from a worker context."""
+
+    _write_log_file(cid, entry, log_type=log_type)
 
 
 def start_log_capture(

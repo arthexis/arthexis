@@ -553,7 +553,27 @@ WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
 
 # Channels configuration
-CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
+CHANNEL_REDIS_URL = os.environ.get("CHANNEL_REDIS_URL", "").strip()
+OCPP_STATE_REDIS_URL = os.environ.get("OCPP_STATE_REDIS_URL", "").strip()
+if not OCPP_STATE_REDIS_URL:
+    OCPP_STATE_REDIS_URL = CHANNEL_REDIS_URL or os.environ.get("CELERY_BROKER_URL", "").strip()
+
+if CHANNEL_REDIS_URL or OCPP_STATE_REDIS_URL:
+    from channels_redis.core import RedisChannelLayer
+
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {
+                "hosts": [CHANNEL_REDIS_URL or OCPP_STATE_REDIS_URL],
+            },
+        }
+    }
+else:
+    CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
+
+OCPP_PENDING_CALL_TTL = int(os.environ.get("OCPP_PENDING_CALL_TTL", "1800") or 1800)
+OCPP_ASYNC_LOGGING = _env_bool("OCPP_ASYNC_LOGGING", bool(CHANNEL_REDIS_URL or OCPP_STATE_REDIS_URL))
 
 PAGES_CHAT_ENABLED = _env_bool("PAGES_CHAT_ENABLED", True)
 PAGES_CHAT_NOTIFY_STAFF = _env_bool("PAGES_CHAT_NOTIFY_STAFF", False)
