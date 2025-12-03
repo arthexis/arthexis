@@ -41,6 +41,17 @@ class User(Entity, AbstractUser):
             "required."
         ),
     )
+    site_template = models.ForeignKey(
+        "pages.SiteTemplate",
+        on_delete=models.SET_NULL,
+        related_name="users",
+        null=True,
+        blank=True,
+        verbose_name=_("Site template"),
+        help_text=_(
+            "Branding template to apply for this user when overriding the site default."
+        ),
+    )
     is_active = models.BooleanField(
         _("active"),
         default=True,

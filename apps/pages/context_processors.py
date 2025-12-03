@@ -5,6 +5,7 @@ from django.conf import settings
 from django.db.utils import OperationalError, ProgrammingError
 from pathlib import Path
 from apps.nodes.models import Node, NodeFeature
+from apps.core.models import SecurityGroup
 from apps.links.models import Reference
 from apps.links.reference_utils import filter_visible_references
 from .models import Module, SiteTemplate
@@ -196,7 +197,28 @@ def nav_links(request):
     chat_socket_path = getattr(settings, "PAGES_CHAT_SOCKET_PATH", "/ws/pages/chat/")
 
     site_template = None
-    if site:
+    if user_is_authenticated:
+        try:
+            site_template = getattr(user, "site_template", None)
+        except Exception:
+            site_template = None
+        if site_template is None:
+            try:
+                group_template = (
+                    SecurityGroup.objects.filter(
+                        site_template__isnull=False, user=user
+                    )
+                    .select_related("site_template")
+                    .order_by("name")
+                    .first()
+                )
+            except (OperationalError, ProgrammingError):
+                group_template = None
+            else:
+                if group_template:
+                    site_template = group_template.site_template
+
+    if site_template is None and site:
         site_template = getattr(site, "template", None)
     if site_template is None:
         try:
