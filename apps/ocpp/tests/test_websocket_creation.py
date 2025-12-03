@@ -13,7 +13,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.core.cache import cache
 from django.core.management import call_command
 
-from apps.ocpp import store
+from apps.ocpp import consumers, store
 from apps.ocpp.models import Charger, Simulator
 from apps.ocpp.simulator import ChargePointSimulator
 from apps.rates.models import RateLimit
@@ -24,9 +24,11 @@ pytestmark = pytest.mark.django_db(transaction=True)
 
 @pytest.fixture(autouse=True)
 def clear_store_state():
+    cache.clear()
     store.connections.clear()
     store.ip_connections.clear()
     yield
+    cache.clear()
     store.connections.clear()
     store.ip_connections.clear()
 
@@ -79,6 +81,20 @@ def test_charger_page_reverse_resolves_expected_path():
     cid = "CP-TEST-REVERSE"
 
     assert reverse("charger-page", args=[cid]) == f"/c/{cid}/"
+
+
+def test_select_subprotocol_prioritizes_preference_and_defaults():
+    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+
+    cases = [
+        ((["ocpp1.6", "ocpp2.0.1", "ocpp2.0"], "ocpp2.0"), "ocpp2.0"),
+        ((["ocpp2.0", "ocpp2.0.1"], None), "ocpp2.0.1"),
+        ((["ocpp1.6"], None), "ocpp1.6"),
+        ((["unexpected"], None), None),
+    ]
+
+    for (offered, preferred), expected in cases:
+        assert consumer._select_subprotocol(offered, preferred) == expected
 
 
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
@@ -206,3 +222,51 @@ def test_cp_simulator_connects_with_default_fixture(monkeypatch):
     charger = Charger.objects.filter(charger_id=config.cp_path, connector_id=None).first()
     assert charger is not None
     assert charger.last_path == f"/{config.cp_path}"
+
+
+@override_settings(ROOT_URLCONF="apps.ocpp.urls")
+def test_connect_without_subprotocol_uses_preference_and_accepts():
+    existing = Charger.objects.create(
+        charger_id="CP-NO-SUBPROTO",
+        connector_id=None,
+        preferred_ocpp_version="ocpp2.0",
+    )
+
+    async def run_scenario():
+        communicator = WebsocketCommunicator(application, f"/{existing.charger_id}")
+        connected, accepted_subprotocol = await communicator.connect()
+
+        assert connected is True
+        assert accepted_subprotocol is None
+
+        store_key = store.pending_key(existing.charger_id)
+        consumer = store.connections.get(store_key)
+        assert consumer is not None
+        assert consumer.ocpp_version == "ocpp2.0"
+
+        await communicator.disconnect()
+
+    async_to_sync(run_scenario)()
+
+
+@override_settings(ROOT_URLCONF="apps.ocpp.urls")
+def test_connect_prefers_latest_offered_subprotocol():
+    serial = "CP-SUBPROTO-LATEST"
+
+    async def run_scenario():
+        communicator = WebsocketCommunicator(
+            application, f"/{serial}", subprotocols=["ocpp2.0", "ocpp2.0.1"]
+        )
+
+        connected, accepted_subprotocol = await communicator.connect()
+        assert connected is True
+        assert accepted_subprotocol == "ocpp2.0.1"
+
+        store_key = store.pending_key(serial)
+        consumer = store.connections.get(store_key)
+        assert consumer is not None
+        assert consumer.ocpp_version == "ocpp2.0.1"
+
+        await communicator.disconnect()
+
+    async_to_sync(run_scenario)()
