@@ -105,13 +105,13 @@ def model_rule_status(context, app_label: str, model_name: str):
         return cache_map[normalized_key]
 
     content_type = get_cached_content_type(app_label, model_name)
+    rule = get_cached_dashboard_rule(app_label, model_name)
+
+    if rule is None:
+        cache_map[normalized_key] = None
+        return None
 
     def _evaluate_rule():
-        rule = get_cached_dashboard_rule(app_label, model_name)
-
-        if rule is None:
-            return None
-
         try:
             with bind_rule_model(normalized_key):
                 return rule.evaluate()
@@ -122,10 +122,11 @@ def model_rule_status(context, app_label: str, model_name: str):
             )
             return rule_failure(_("Unable to evaluate dashboard rule."))
 
-    if content_type is None:
+    target = rule.content_type if content_type is None else content_type
+    if target is None:
         result = _evaluate_rule()
     else:
-        result = DashboardRule.get_cached_value(content_type, _evaluate_rule)
+        result = DashboardRule.get_cached_value(target, _evaluate_rule)
 
     cache_map[normalized_key] = result
     return result
