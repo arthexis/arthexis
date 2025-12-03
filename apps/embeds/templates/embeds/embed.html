@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Arthexis Embed</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+      }
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        background: #0b1420;
+        color: #f8f9fa;
+      }
+      .embed-card {
+        background: linear-gradient(135deg, #0d1b2a, #1b263b);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 12px;
+        padding: 16px;
+        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+      }
+      .embed-card h2 {
+        margin: 0 0 8px;
+        font-size: 1.1rem;
+        letter-spacing: 0.02em;
+      }
+      .embed-card p {
+        margin: 0 0 12px;
+        color: rgba(248, 249, 250, 0.85);
+        line-height: 1.4;
+        font-size: 0.95rem;
+      }
+      .embed-actions {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+      }
+      .embed-actions a {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 10px 14px;
+        border-radius: 10px;
+        text-decoration: none;
+        font-weight: 600;
+        letter-spacing: 0.01em;
+        transition: transform 120ms ease, box-shadow 120ms ease;
+      }
+      .embed-actions a.primary {
+        background: #0dcaf0;
+        color: #0b1521;
+        box-shadow: 0 8px 22px rgba(13, 202, 240, 0.35);
+      }
+      .embed-actions a.secondary {
+        background: rgba(255, 255, 255, 0.08);
+        color: #f8f9fa;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+      }
+      .embed-actions a:hover,
+      .embed-actions a:focus-visible {
+        transform: translateY(-1px);
+        box-shadow: 0 10px 26px rgba(0, 0, 0, 0.25);
+      }
+      .embed-meta {
+        margin-top: 10px;
+        font-size: 0.8rem;
+        color: rgba(248, 249, 250, 0.7);
+        word-break: break-word;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="embed-card">
+      <h2>Explore more on Arthexis</h2>
+      <p>Follow this link to view the full experience on our site.</p>
+      <div class="embed-actions">
+        <a class="primary" href="{{ target_url }}" target="_top" rel="noopener">Open Page</a>
+        <a class="secondary" href="{{ target_url }}" target="_blank" rel="noopener">New Tab</a>
+      </div>
+      <div class="embed-meta">{{ target_url }}</div>
+    </div>
+  </body>
+</html>

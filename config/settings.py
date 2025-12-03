@@ -417,6 +417,7 @@ LOCAL_APPS = [
     "apps.core",
     "apps.users",
     "apps.leads",
+    "apps.embeds",
     "apps.release",
     "apps.emails",
     "apps.payments",
