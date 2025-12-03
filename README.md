@@ -11,7 +11,7 @@ Visit our [Changelog Report](https://arthexis.com/changelog/) to browse past and
 
 ## Suite Features
 
-- Compatible with the [Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/) by defaut, while allowing Chargering Stations to upgrade to newer protocols if they support them. 
+- Compatible with the [Open Charge Point Protocol (OCPP) 1.6](https://www.openchargealliance.org/protocols/ocpp-16/) by default, while allowing Charging Stations to upgrade to newer protocols if they support them.
 
   **Charge point → CSMS**
 
