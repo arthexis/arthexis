@@ -1,10 +1,22 @@
 from django.conf import settings
 from django.core.exceptions import ValidationError
+from django.db.utils import OperationalError, ProgrammingError
 from django.utils.translation import gettext_lazy as _
+
+from apps.locale.models import Language
 
 
 def _available_language_codes() -> set[str]:
-    return {code.lower() for code, _ in getattr(settings, "LANGUAGES", [])}
+    try:
+        configured = list(
+            Language.objects.filter(is_deleted=False).values_list("code", flat=True)
+        )
+    except (OperationalError, ProgrammingError):
+        configured = []
+
+    if not configured:
+        configured = [code for code, _ in getattr(settings, "LANGUAGES", [])]
+    return {str(code).lower() for code in configured if str(code).strip()}
 
 
 def default_report_language() -> str:
