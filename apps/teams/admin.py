@@ -19,7 +19,6 @@ from django_otp.plugins.otp_totp.admin import (
     TOTPDeviceAdmin as CoreTOTPDeviceAdmin,
 )
 from django_otp.models import VerifyNotAllowed
-from apps.awg.admin import PowerLeadAdmin as CorePowerLeadAdmin
 from apps.core.admin import (InviteLeadAdmin, SecurityGroupAdmin)
 from apps.release.admin import ReleaseManagerAdmin
 from apps.core.models import (
@@ -48,7 +47,6 @@ from .models import (
     InviteLead,
     SecurityGroup,
     ReleaseManager,
-    PowerLead,
     TOTPDevice,
     SlackBotProfile,
 )
@@ -74,10 +72,6 @@ class SecurityGroupAdminProxy(SecurityGroupAdmin):
 class ReleaseManagerAdminProxy(ReleaseManagerAdmin):
     pass
 
-
-@admin.register(PowerLead)
-class PowerLeadAdminProxy(CorePowerLeadAdmin):
-    pass
 
 
 @admin.register(SlackBotProfile)
