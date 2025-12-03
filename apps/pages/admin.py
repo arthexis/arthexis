@@ -405,13 +405,21 @@ class ApplicationAdmin(EntityModelAdmin):
 class LandingInline(admin.TabularInline):
     model = Landing
     extra = 0
-    fields = ("path", "label", "enabled", "track_leads")
+    fields = ("path", "label", "enabled", "track_leads", "validation_status", "validated_url_at")
+    readonly_fields = ("validation_status", "validated_url_at")
     show_change_link = True
 
 
 @admin.register(Landing)
 class LandingAdmin(EntityModelAdmin):
-    list_display = ("label", "path", "module", "enabled", "track_leads")
+    list_display = (
+        "label",
+        "path",
+        "module",
+        "enabled",
+        "track_leads",
+        "validation_status",
+    )
     list_filter = (
         "enabled",
         "track_leads",
@@ -426,7 +434,17 @@ class LandingAdmin(EntityModelAdmin):
         "module__application__name",
         "module__node_role__name",
     )
-    fields = ("module", "path", "label", "enabled", "track_leads", "description")
+    fields = (
+        "module",
+        "path",
+        "label",
+        "enabled",
+        "track_leads",
+        "description",
+        "validation_status",
+        "validated_url_at",
+    )
+    readonly_fields = ("validation_status", "validated_url_at")
     list_select_related = ("module", "module__application", "module__node_role")
 
 
@@ -441,8 +459,10 @@ class ModuleAdmin(EntityModelAdmin):
         "landings_count",
         "priority",
         "is_default",
+        "security_group",
+        "security_mode",
     )
-    list_filter = ("node_role", "application")
+    list_filter = ("node_role", "application", "security_group", "security_mode")
     fields = (
         "node_role",
         "application",
@@ -451,6 +471,8 @@ class ModuleAdmin(EntityModelAdmin):
         "priority",
         "is_default",
         "favicon",
+        "security_group",
+        "security_mode",
     )
     inlines = [LandingInline]
 

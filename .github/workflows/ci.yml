@@ -24,6 +24,11 @@ jobs:
       - name: Install suite from repository
         run: |
           ./install.sh --clean --no-start
+      - name: Validate migrations
+        run: |
+          source .venv/bin/activate
+          python manage.py makemigrations --check --dry-run
+          python manage.py migrate --noinput --database default
       - name: Run tests
         run: |
           source .venv/bin/activate
