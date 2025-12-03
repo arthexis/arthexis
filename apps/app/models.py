@@ -25,7 +25,7 @@ class Application(Entity):
         return (self.name,)
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
-        return self.name
+        return self.display_name
 
     @property
     def installed(self) -> bool:
@@ -37,6 +37,12 @@ class Application(Entity):
             return django_apps.get_app_config(self.name).verbose_name
         except LookupError:
             return self.name
+
+    @property
+    def display_name(self) -> str:
+        verbose_name = self.verbose_name
+        formatted = self.format_display_name(str(verbose_name))
+        return formatted or self.name
 
     class Meta:
         db_table = "pages_application"
