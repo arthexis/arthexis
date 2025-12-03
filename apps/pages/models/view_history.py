@@ -12,7 +12,7 @@ from apps.core.entity import Entity
 class ViewHistory(Entity):
     """Record of public site visits."""
 
-    path = models.CharField(max_length=500)
+    path = models.CharField(max_length=2048)
     method = models.CharField(max_length=10)
     status_code = models.PositiveSmallIntegerField()
     status_text = models.CharField(max_length=100, blank=True)
