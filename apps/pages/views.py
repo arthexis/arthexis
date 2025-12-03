@@ -25,7 +25,7 @@ from django.contrib.auth.tokens import default_token_generator
 from django.contrib.auth.views import LoginView
 from django import forms
 from django.apps import apps as django_apps
-from utils.decorators import security_group_required
+from apps.groups.decorators import security_group_required
 from utils.sites import get_site
 from django.contrib.staticfiles import finders
 from django.http import (

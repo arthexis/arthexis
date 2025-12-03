@@ -413,6 +413,7 @@ LOCAL_APPS = [
     "apps.screens",
     "apps.counters",
     "apps.energy",
+    "apps.groups",
     "apps.core",
     "apps.users",
     "apps.leads",

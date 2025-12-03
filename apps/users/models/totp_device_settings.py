@@ -23,7 +23,7 @@ class TOTPDeviceSettings(Entity):
         help_text=_("Allow authenticator logins to skip the password step."),
     )
     security_group = models.ForeignKey(
-        "core.SecurityGroup",
+        "groups.SecurityGroup",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

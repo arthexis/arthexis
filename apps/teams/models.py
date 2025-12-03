@@ -15,7 +15,7 @@ from django.utils.translation import gettext_lazy as _
 from apps.core.entity import Entity, EntityAllManager, EntityManager
 from apps.sigils.fields import SigilShortAutoField
 from apps.core.models import InviteLead as CoreInviteLead
-from apps.core.models import SecurityGroup as CoreSecurityGroup
+from apps.groups.models import SecurityGroup as CoreSecurityGroup
 from apps.users.models import Profile as CoreProfile
 from apps.users.models import User as CoreUser
 from apps.release.models import ReleaseManager as CoreReleaseManager
