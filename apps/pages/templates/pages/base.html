@@ -671,17 +671,47 @@
                 {% for module in nav_modules %}
                   {% with landings=module.enabled_landings %}
                     {% if landings|length == 1 %}
-                      <li class="nav-item">
-                        {% if landings.0.nav_is_invalid %}
-                          <span class="nav-link disabled" aria-disabled="true">
-                            <span class="badge rounded-pill text-bg-secondary text-decoration-line-through">{{ module.menu_label|upper }}</span>
-                          </span>
-                        {% else %}
+                      {% if module.enabled_landings_all_invalid %}
+                        <li class="nav-item dropdown">
+                          <a class="nav-link" href="#" role="button">
+                            <span class="badge rounded-pill text-bg-secondary">{{ module.menu_label|upper }}</span>
+                          </a>
+                          <ul class="dropdown-menu">
+                            {% for landing in landings %}
+                              <li>
+                                <a class="dropdown-item disabled text-decoration-line-through" href="#" aria-disabled="true">
+                                  <span class="d-flex align-items-center justify-content-between gap-2 w-100">
+                                    <span class="text-decoration-line-through">{{ landing.label }}</span>
+                                    {% if landing.nav_is_locked %}
+                                      <span class="d-inline-flex align-items-center gap-1">
+                                        <svg aria-hidden="true" class="dropdown-lock-icon opacity-75">
+                                          <use href="#icon-lock"></use>
+                                        </svg>
+                                        <span class="visually-hidden">
+                                          {% if landing.nav_lock_reason == "login" %}
+                                            {% trans "Login required" %}
+                                          {% else %}
+                                            {% trans "Permission required" %}
+                                          {% endif %}
+                                        </span>
+                                      </span>
+                                    {% endif %}
+                                  </span>
+                                </a>
+                                {% if landing.description %}
+                                  <small class="dropdown-item-text text-muted">{{ landing.description }}</small>
+                                {% endif %}
+                              </li>
+                            {% endfor %}
+                          </ul>
+                        </li>
+                      {% else %}
+                        <li class="nav-item">
                           <a class="nav-link" href="{{ landings.0.path }}">
                             <span class="badge rounded-pill text-bg-secondary">{{ module.menu_label|upper }}</span>
                           </a>
-                        {% endif %}
-                      </li>
+                        </li>
+                      {% endif %}
                     {% else %}
                       <li class="nav-item dropdown">
                         <a class="nav-link" href="#" role="button">

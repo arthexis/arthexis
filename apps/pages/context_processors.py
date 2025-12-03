@@ -181,6 +181,9 @@ def nav_links(request):
                 module.menu = "Calculators"
             elif module.path.rstrip("/").lower() == "/man":
                 module.menu = "Manual"
+            module.enabled_landings_all_invalid = all(
+                landing.nav_is_invalid for landing in landings
+            )
             module.enabled_landings = landings
             valid_modules.append(module)
             if request.path.startswith(module.path):
