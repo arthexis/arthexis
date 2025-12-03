@@ -15,6 +15,9 @@ from config.loadenv import loadenv
 from utils import revision
 
 
+_RUNSERVER_STARTED_AT: float | None = None
+
+
 def _resolve_interrupt_main() -> Callable[[], None]:
     """Return a callable that raises ``KeyboardInterrupt`` in the main thread."""
 
@@ -87,6 +90,11 @@ def _execute_django(argv: Sequence[str], base_dir: Path) -> None:
             self.stdout.write(
                 f"Admin available at {http_scheme}://{host}:{server_port}/admin/"
             )
+
+            global _RUNSERVER_STARTED_AT
+            if _RUNSERVER_STARTED_AT is not None:
+                elapsed = time.monotonic() - _RUNSERVER_STARTED_AT
+                self.stdout.write(f"Startup completed in {elapsed:.2f}s.")
 
         original_on_bind = core_runserver.Command.on_bind
         core_runserver.Command.on_bind = patched_on_bind
@@ -249,6 +257,9 @@ class RunserverSession:
 
 
 def _run_runserver(base_dir: Path, argv: list[str], is_debug_session: bool) -> None:
+    global _RUNSERVER_STARTED_AT
+    _RUNSERVER_STARTED_AT = time.monotonic()
+
     session = RunserverSession(base_dir, argv, is_debug_session)
     try:
         with session:
@@ -264,6 +275,8 @@ def _run_runserver(base_dir: Path, argv: list[str], is_debug_session: bool) -> N
                     raise
     except KeyboardInterrupt:
         return
+    finally:
+        _RUNSERVER_STARTED_AT = None
 
 
 def main(argv: Sequence[str] | None = None) -> None:

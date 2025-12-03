@@ -90,6 +90,12 @@ EXCLUDED_DIR_NAMES = {
 }
 
 
+def _format_elapsed(seconds: float) -> str:
+    """Return a short human-readable elapsed time string."""
+
+    return f"{seconds:.2f}s"
+
+
 def _should_skip_dir(parts: Iterable[str]) -> bool:
     """Return ``True`` when any component in *parts* should be ignored."""
 
@@ -180,12 +186,17 @@ def run_env_refresh(base_dir: Path, *, latest: bool = True) -> bool:
 def run_env_refresh_with_report(base_dir: Path, *, latest: bool) -> bool:
     """Execute ``env-refresh`` and print a summary of the outcome."""
 
+    started_at = time.monotonic()
     success = run_env_refresh(base_dir, latest=latest)
+    elapsed = _format_elapsed(time.monotonic() - started_at)
     if success:
-        print("[Migration Server] env-refresh completed successfully.")
+        print(f"[Migration Server] env-refresh completed successfully in {elapsed}.")
         request_runserver_restart(LOCK_DIR)
     else:
-        print("[Migration Server] env-refresh failed. Awaiting further changes.")
+        print(
+            f"[Migration Server] env-refresh failed after {elapsed}."
+            " Awaiting further changes."
+        )
     return success
 
 
