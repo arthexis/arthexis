@@ -110,7 +110,7 @@ def model_rule_status(context, app_label: str, model_name: str):
         rule = get_cached_dashboard_rule(app_label, model_name)
 
         if rule is None:
-            return rule_success()
+            return None
 
         try:
             with bind_rule_model(normalized_key):
