@@ -155,6 +155,43 @@ def _include_temporary_expiration(fieldsets):
     return tuple(updated)
 
 
+def _include_site_template(fieldsets):
+    updated = []
+    inserted = False
+    for name, options in fieldsets:
+        opts = options.copy()
+        fields = list(opts.get("fields", ()))
+        if "groups" in fields and "site_template" not in fields:
+            insert_at = fields.index("groups") + 1
+            fields.insert(insert_at, "site_template")
+            opts["fields"] = tuple(fields)
+            inserted = True
+        updated.append((name, opts))
+    if not inserted:
+        updated.append((_("Preferences"), {"fields": ("site_template",)}))
+    return tuple(updated)
+
+
+def _include_site_template_add(fieldsets):
+    updated = []
+    inserted = False
+    for name, options in fieldsets:
+        opts = options.copy()
+        fields = list(opts.get("fields", ()))
+        if "username" in fields and "site_template" not in fields:
+            if "temporary_expires_at" in fields:
+                insert_at = fields.index("temporary_expires_at") + 1
+            else:
+                insert_at = len(fields)
+            fields.insert(insert_at, "site_template")
+            opts["fields"] = tuple(fields)
+            inserted = True
+        updated.append((name, opts))
+    if not inserted:
+        updated.append((_("Preferences"), {"fields": ("site_template",)}))
+    return tuple(updated)
+
+
 # Add object links for small datasets in changelist view
 original_changelist_view = admin.ModelAdmin.changelist_view
 
@@ -404,7 +441,9 @@ class SecurityGroupAdminForm(forms.ModelForm):
 
 class SecurityGroupAdmin(DjangoGroupAdmin):
     form = SecurityGroupAdminForm
-    fieldsets = ((None, {"fields": ("name", "parent", "users", "permissions")}),)
+    fieldsets = (
+        (None, {"fields": ("name", "parent", "site_template", "users", "permissions")}),
+    )
     filter_horizontal = ("permissions",)
     search_fields = ("name", "parent__name")
 
@@ -470,12 +509,14 @@ class CustomerAccountRFIDInline(admin.TabularInline):
 class UserCreationWithExpirationForm(UserCreationForm):
     class Meta(UserCreationForm.Meta):
         model = User
-        fields = ("username", "temporary_expires_at")
+        fields = ("username", "temporary_expires_at", "site_template")
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if "temporary_expires_at" in self.fields:
             self.fields["temporary_expires_at"].required = False
+        if "site_template" in self.fields:
+            self.fields["site_template"].required = False
 
 
 class UserChangeRFIDForm(forms.ModelForm):
@@ -1395,8 +1436,10 @@ class UserAdmin(UserDatumAdminMixin, DjangoUserAdmin):
     add_form = UserCreationWithExpirationForm
     actions = (DjangoUserAdmin.actions or []) + ["login_as_guest_user"]
     changelist_actions = ["login_as_guest_user"]
-    fieldsets = _include_temporary_expiration(
-        _include_require_2fa(_append_operate_as(DjangoUserAdmin.fieldsets))
+    fieldsets = _include_site_template(
+        _include_temporary_expiration(
+            _include_require_2fa(_append_operate_as(DjangoUserAdmin.fieldsets))
+        )
     )
     add_fieldsets = (
         (
@@ -1412,8 +1455,10 @@ class UserAdmin(UserDatumAdminMixin, DjangoUserAdmin):
             },
         ),
     )
-    add_fieldsets = _include_temporary_expiration(
-        _include_require_2fa(_append_operate_as(add_fieldsets))
+    add_fieldsets = _include_site_template_add(
+        _include_temporary_expiration(
+            _include_require_2fa(_append_operate_as(add_fieldsets))
+        )
     )
     inlines = USER_PROFILE_INLINES + [UserPhoneNumberInline]
     change_form_template = "admin/user_profile_change_form.html"
