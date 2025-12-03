@@ -482,8 +482,11 @@ def _get_current_site_with_request_fallback(request=None):
         return _original_get_current_site(request)
     except Exception as exc:
         from django.contrib.sites.models import Site
+        from django.db.utils import OperationalError, ProgrammingError
 
-        if request is not None and isinstance(exc, Site.DoesNotExist):
+        recoverable_exceptions = (Site.DoesNotExist, OperationalError, ProgrammingError)
+
+        if request is not None and isinstance(exc, recoverable_exceptions):
             return RequestSite(request)
         raise
 

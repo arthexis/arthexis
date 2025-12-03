@@ -1,6 +1,7 @@
 import socket
 
 from django.contrib.sites.models import Site
+from django.db.utils import OperationalError, ProgrammingError
 from django.http import HttpRequest
 from django.conf import settings
 
@@ -19,7 +20,10 @@ def site_and_node(request: HttpRequest):
     known and grey when the value cannot be determined.
     """
     host = request.get_host().split(":")[0]
-    site = Site.objects.filter(domain__iexact=host).first()
+    try:
+        site = Site.objects.filter(domain__iexact=host).first()
+    except (OperationalError, ProgrammingError):
+        site = None
 
     node = None
     try:
