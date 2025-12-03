@@ -63,7 +63,7 @@ def load_fixture_sigil_roots(sender=None, **kwargs) -> None:
                 )
                 continue
 
-        SigilRoot.objects.update_or_create(
+        SigilRoot.all_objects.update_or_create(
             prefix=prefix,
             defaults={
                 "context_type": context_type,
