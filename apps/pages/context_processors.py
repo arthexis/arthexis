@@ -38,13 +38,20 @@ _ROLE_FAVICONS = {
 
 def nav_links(request):
     """Provide navigation links for the current site."""
-    site = get_site(request)
+    site = getattr(request, "badge_site", None) or get_site(request)
+    node = getattr(request, "badge_node", None)
+    role = getattr(request, "badge_role", None)
     try:
-        node = Node.get_local()
-        role = node.role if node else None
+        if node is None:
+            node = Node.get_local()
+        if role is None:
+            role = node.role if node else None
     except (OperationalError, ProgrammingError):
-        node = None
-        role = None
+        node = node or None
+        role = role or None
+    request.badge_site = site
+    request.badge_node = node
+    request.badge_role = role
 
     if role:
         try:

@@ -23,36 +23,45 @@ def site_and_node(request: HttpRequest):
     when the entity is known and grey when the value cannot be determined.
     """
     host = request.get_host().split(":")[0]
-    try:
-        site = Site.objects.filter(domain__iexact=host).first()
-    except (OperationalError, ProgrammingError):
-        site = None
 
-    node = None
-    try:
-        from apps.nodes.models import Node
+    site = getattr(request, "badge_site", None) or getattr(request, "site", None)
+    if site is None:
+        try:
+            site = Site.objects.filter(domain__iexact=host).first()
+        except (OperationalError, ProgrammingError):
+            site = None
+    request.badge_site = site
 
-        node = Node.get_local()
-        if not node:
-            hostname = socket.gethostname()
-            try:
-                addresses = socket.gethostbyname_ex(hostname)[2]
-            except socket.gaierror:
-                addresses = []
+    node = getattr(request, "badge_node", None) or getattr(request, "node", None)
+    if node is None:
+        try:
+            from apps.nodes.models import Node
 
-            node = Node.objects.filter(hostname__iexact=hostname).first()
+            node = Node.get_local()
             if not node:
-                for addr in addresses:
-                    node = Node.objects.filter(address=addr).first()
-                    if node:
-                        break
-            if not node:
-                node = (
-                    Node.objects.filter(hostname__iexact=host).first()
-                    or Node.objects.filter(address=host).first()
-                )
-    except Exception:
-        node = None
+                hostname = socket.gethostname()
+                try:
+                    addresses = socket.gethostbyname_ex(hostname)[2]
+                except socket.gaierror:
+                    addresses = []
+
+                node = Node.objects.filter(hostname__iexact=hostname).first()
+                if not node:
+                    for addr in addresses:
+                        node = Node.objects.filter(address=addr).first()
+                        if node:
+                            break
+                if not node:
+                    node = (
+                        Node.objects.filter(hostname__iexact=host).first()
+                        or Node.objects.filter(address=host).first()
+                    )
+        except Exception:
+            node = None
+    request.badge_node = node
+
+    role = getattr(request, "badge_role", None) or getattr(node, "role", None)
+    request.badge_role = role
 
     role = getattr(node, "role", None)
 
