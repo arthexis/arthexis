@@ -37,12 +37,12 @@
   crossorigin="anonymous"
   defer
 ></script>
-{% if badge_node and badge_node.role %}
-  {% if badge_node.role.name == "Control" %}
+{% if badge_role %}
+  {% if badge_role.name == "Control" %}
 <link rel="icon" href="data:image/png;base64,{% include 'admin/favicon_control.txt' %}">
-  {% elif badge_node.role.name == "Watchtower" or badge_node.role.name == "Constellation" %}
+  {% elif badge_role.name == "Watchtower" or badge_role.name == "Constellation" %}
 <link rel="icon" href="data:image/png;base64,{% include 'admin/favicon_watchtower.txt' %}">
-  {% elif badge_node.role.name == "Satellite" %}
+  {% elif badge_role.name == "Satellite" %}
 <link rel="icon" href="data:image/png;base64,{% include 'admin/favicon_satellite.txt' %}">
   {% else %}
 <link rel="icon" href="data:image/png;base64,{% include 'admin/favicon.txt' %}">
@@ -1246,11 +1246,11 @@ body.user-story-open {
       <a href="{% url 'admin:nodes_node_change' badge_node.pk %}">{{ badge_node.hostname }}</a>
       <span style="display:none">NODE: {{ badge_node.hostname }}</span>
     </span>
-    {% if badge_node.role %}
-      <span class="badge" style="background-color: {{ badge_node_color }};">
+    {% if badge_role %}
+      <span class="badge" style="background-color: {{ badge_role_color }};">
         <a href="{% url 'admin:nodes_noderole_changelist' %}">ROLE</a>:
-        <a href="{% url 'admin:nodes_noderole_change' badge_node.role.pk %}">{{ badge_node.role.name }}</a>
-        <span style="display:none">ROLE: {{ badge_node.role.name }}</span>
+        <a href="{% url 'admin:nodes_noderole_change' badge_role.pk %}">{{ badge_role.name }}</a>
+        <span style="display:none">ROLE: {{ badge_role.name }}</span>
       </span>
     {% endif %}
   {% else %}

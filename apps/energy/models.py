@@ -879,10 +879,7 @@ class ClientReportSchedule(Entity):
                 raise RuntimeError("No recipients available for client report")
             else:
                 try:
-                    from apps.core.models import ClientReport as ProxyClientReport
-
-                    delivered = ProxyClientReport.send_delivery(
-                        report,
+                    delivered = report.send_delivery(
                         to=to,
                         cc=cc,
                         outbox=self.get_outbox(),

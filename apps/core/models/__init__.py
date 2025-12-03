@@ -8,30 +8,14 @@ from .security_group import SecurityGroup
 from .totp_device_settings import TOTPDeviceSettings
 from .user import User
 from .user_phone_number import UserPhoneNumber
-from .energy_proxies import (
-    ClientReport,
-    ClientReportSchedule,
-    CustomerAccount,
-    EnergyCredit,
-    EnergyTariff,
-    EnergyTransaction,
-    Location,
-)
 
 __all__ = [
     "AdminCommandResult",
-    "ClientReport",
-    "ClientReportSchedule",
-    "CustomerAccount",
     "EmailArtifact",
     "EmailTransaction",
     "EmailTransactionAttachment",
-    "EnergyCredit",
-    "EnergyTariff",
-    "EnergyTransaction",
     "GoogleCalendarProfile",
     "InviteLead",
-    "Location",
     "PasskeyCredential",
     "Profile",
     "RFID",

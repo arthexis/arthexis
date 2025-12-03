@@ -1,7 +1,7 @@
 # Development note: prefer rewriting the latest migration over adding new ones; preserve earlier migrations.
 amqp==5.3.1
 anyio==4.9.0
-asgiref==3.10.0
+asgiref==3.11.0
 attrs==25.3.0
 autobahn==24.4.2
 Automat==25.4.16

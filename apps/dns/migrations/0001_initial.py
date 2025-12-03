@@ -130,8 +130,8 @@ class Migration(migrations.Migration):
                         ),
                     ],
                     options={
-                        "verbose_name": "GoDaddy DNS Record",
-                        "verbose_name_plural": "GoDaddy DNS Records",
+                        "verbose_name": "GoDaddy Record",
+                        "verbose_name_plural": "GoDaddy Records",
                         "db_table": "nodes_dnsrecord",
                     },
                 ),
