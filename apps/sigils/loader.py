@@ -35,7 +35,7 @@ def _iter_fixture_entries(fixtures_dir: Path) -> Iterable[dict]:
             yield fields
 
 
-def load_fixture_sigil_roots() -> None:
+def load_fixture_sigil_roots(sender=None, **kwargs) -> None:  # pragma: no cover - signal handler
     """Hydrate bundled SigilRoot fixtures while tolerating missing models."""
 
     fixtures_dir = Path(__file__).resolve().parent / "fixtures"
