@@ -33,6 +33,7 @@ include-package-data = true
 "apps.nodes" = ["**/*"]
 "apps.ocpp" = ["**/*"]
 "apps.pages" = ["**/*"]
+"apps.protocols" = ["**/*"]
 "apps.repos" = ["**/*"]
 "apps.sigils" = ["**/*"]
 "apps.teams" = ["**/*"]
