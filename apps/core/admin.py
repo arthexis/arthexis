@@ -740,9 +740,6 @@ class OpenPayProcessorAdminForm(PaymentProcessorAdminForm):
         self.fields["is_production"].help_text = _(
             "Enable to send requests to OpenPay's live environment."
         )
-        self.fields["is_default"].help_text = _(
-            "Use this OpenPay processor first when charging."
-        )
 
     def clean(self):
         cleaned = super().clean()
@@ -783,9 +780,6 @@ class PayPalProcessorAdminForm(PaymentProcessorAdminForm):
         self.fields["is_production"].help_text = _(
             "Enable to send requests to PayPal's live environment."
         )
-        self.fields["is_default"].help_text = _(
-            "Use this PayPal processor first when charging."
-        )
 
     def clean(self):
         cleaned = super().clean()
@@ -821,9 +815,6 @@ class StripeProcessorAdminForm(PaymentProcessorAdminForm):
         )
         self.fields["is_production"].help_text = _(
             "Enable to mark Stripe as live mode; disable for test mode."
-        )
-        self.fields["is_default"].help_text = _(
-            "Use this Stripe processor first when charging."
         )
 
     def clean(self):
@@ -1851,16 +1842,9 @@ class PaymentProcessorAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityMod
 @admin.register(OpenPayProcessor)
 class OpenPayProcessorAdmin(PaymentProcessorAdmin):
     form = OpenPayProcessorAdminForm
-    list_display = ("owner", "is_default", "environment", "verified_on")
+    list_display = ("owner", "environment", "verified_on")
     fieldsets = (
         (_("Owner"), {"fields": ("user", "group")}),
-        (
-            _("Preferences"),
-            {
-                "fields": ("is_default",),
-                "description": _("Use this OpenPay processor first when charging."),
-            },
-        ),
         (
             _("OpenPay"),
             {
@@ -1888,16 +1872,9 @@ class OpenPayProcessorAdmin(PaymentProcessorAdmin):
 @admin.register(PayPalProcessor)
 class PayPalProcessorAdmin(PaymentProcessorAdmin):
     form = PayPalProcessorAdminForm
-    list_display = ("owner", "is_default", "environment", "verified_on")
+    list_display = ("owner", "environment", "verified_on")
     fieldsets = (
         (_("Owner"), {"fields": ("user", "group")}),
-        (
-            _("Preferences"),
-            {
-                "fields": ("is_default",),
-                "description": _("Use this PayPal processor first when charging."),
-            },
-        ),
         (
             _("PayPal"),
             {
@@ -1924,16 +1901,9 @@ class PayPalProcessorAdmin(PaymentProcessorAdmin):
 @admin.register(StripeProcessor)
 class StripeProcessorAdmin(PaymentProcessorAdmin):
     form = StripeProcessorAdminForm
-    list_display = ("owner", "is_default", "environment", "verified_on")
+    list_display = ("owner", "environment", "verified_on")
     fieldsets = (
         (_("Owner"), {"fields": ("user", "group")}),
-        (
-            _("Preferences"),
-            {
-                "fields": ("is_default",),
-                "description": _("Use this Stripe processor first when charging."),
-            },
-        ),
         (
             _("Stripe"),
             {
