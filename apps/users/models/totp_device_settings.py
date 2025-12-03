@@ -35,3 +35,4 @@ class TOTPDeviceSettings(Entity):
     class Meta:
         verbose_name = _("Authenticator Device Setting")
         verbose_name_plural = _("Authenticator Device Settings")
+        db_table = "core_totpdevicesettings"

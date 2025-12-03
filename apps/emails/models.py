@@ -8,7 +8,8 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.emails import mailer
 from apps.core.entity import Entity
-from apps.core.models import EmailArtifact, Profile as CoreProfile
+from apps.core.models import EmailArtifact
+from apps.users.models import Profile as CoreProfile
 from apps.nodes.models import Node
 from apps.sigils.fields import SigilShortAutoField
 

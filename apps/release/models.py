@@ -17,7 +17,7 @@ from django.utils.translation import gettext_lazy as _
 from urllib.parse import urlparse
 
 from apps.base.models import Entity, EntityManager
-from apps.core.models import Profile
+from apps.users.models import Profile
 from apps.sigils.fields import ConditionCheckResult, ConditionTextField, SigilShortAutoField
 from utils import revision as revision_utils
 

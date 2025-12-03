@@ -254,7 +254,7 @@ def _patch_totp_device():
     if getattr(OTP_TOTPDevice, "_core_user_datum_patch", False):
         return
 
-    from .models import TOTPDeviceSettings
+    from apps.users.models import TOTPDeviceSettings
 
     def _totp_should_persist(settings_obj):
         return bool(

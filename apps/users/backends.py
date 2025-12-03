@@ -15,8 +15,9 @@ from django.http.request import split_domain_port
 from django.db.models import Q
 from django_otp.plugins.otp_totp.models import TOTPDevice
 
+from apps.cards.models import RFID
 from apps.energy.models import CustomerAccount
-from .models import RFID, TOTPDeviceSettings
+from .models import TOTPDeviceSettings
 from . import temp_passwords
 
 

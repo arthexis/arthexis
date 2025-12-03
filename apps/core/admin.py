@@ -78,13 +78,8 @@ from apps.teams.models import SocialProfile
 from apps.energy.models import ClientReport, CustomerAccount
 from apps.repos.forms import PackageRepositoryForm
 from apps.repos.task_utils import GitHubRepositoryError, create_repository_for_package
-from .models import (
-    User,
-    UserPhoneNumber,
-    GoogleCalendarProfile,
-    SecurityGroup,
-    InviteLead,
-)
+from apps.core.models import InviteLead, SecurityGroup
+from apps.users.models import GoogleCalendarProfile, User, UserPhoneNumber
 from apps.cards.models import RFID
 from apps.payments.models import OpenPayProcessor, PayPalProcessor, StripeProcessor
 from apps.odoo.models import OdooEmployee, OdooProduct
@@ -105,7 +100,7 @@ from apps.cards.rfid_import_export import (
 )
 from apps.links.models import ExperienceReference, Reference
 from apps.release import release as release_utils
-from . import temp_passwords
+from apps.users import temp_passwords
 
 logger = logging.getLogger(__name__)
 
@@ -1509,7 +1504,7 @@ class UserAdmin(UserDatumAdminMixin, DjangoUserAdmin):
             guest_user.username, temp_password, expires_at=expires_at
         )
 
-        login(request, guest_user, backend="apps.core.backends.TempPasswordBackend")
+        login(request, guest_user, backend="apps.users.backends.TempPasswordBackend")
 
         expires_display = timezone.localtime(entry.expires_at)
         expires_label = expires_display.strftime("%Y-%m-%d %H:%M %Z")
