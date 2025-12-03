@@ -427,6 +427,7 @@ LOCAL_APPS = [
     "apps.sigils",
     "apps.repos",
     "apps.app",
+    "apps.rates",
     "apps.vehicle",
     "apps.ocpp",
     "apps.ocpp.forwarder",
