@@ -52,46 +52,7 @@ def lcd_feature_enabled_for_paths(base_dir: Path, node_base_path: Path) -> bool:
 
     return lcd_feature_enabled_in_dirs(lock_dirs)
 
-
-def _maybe_setup_django() -> bool:
-    try:
-        import django
-    except Exception:
-        return False
-
-    try:
-        os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
-        django.setup()
-        return True
-    except Exception:
-        logger.debug("Django setup failed for startup notification", exc_info=True)
-        return False
-
-
-def _should_mark_nonrelease(version: str, current_revision: str) -> bool:
-    if not version or not current_revision:
-        return False
-
-    if not _maybe_setup_django():
-        return False
-
-    try:
-        from apps.release.models import PackageRelease
-    except Exception:
-        return False
-
-    try:
-        normalized = version.lstrip("vV") or version
-        base_version = normalized.rstrip("+")
-        return not PackageRelease.matches_revision(base_version, current_revision)
-    except Exception:
-        logger.debug("Startup release comparison failed", exc_info=True)
-        return False
-
-
-def build_startup_message(
-    base_dir: Path, port: str | None = None, *, allow_db_lookup: bool = True
-) -> tuple[str, str]:
+def build_startup_message(base_dir: Path, port: str | None = None) -> tuple[str, str]:
     host = (socket.gethostname() or "").strip()
     port_value = (port if port is not None else os.environ.get("PORT", "8888")).strip()
     if not port_value:
@@ -140,11 +101,8 @@ def queue_startup_message(
     base_dir: Path,
     port: str | None = None,
     lock_file: Path | None = None,
-    allow_db_lookup: bool = True,
 ) -> Path:
-    subject, body = build_startup_message(
-        base_dir=base_dir, port=port, allow_db_lookup=allow_db_lookup
-    )
+    subject, body = build_startup_message(base_dir=base_dir, port=port)
     payload = render_lcd_payload(subject, body, net_message=True)
 
     target = lock_file or (Path(base_dir) / ".locks" / "lcd_screen.lck")
