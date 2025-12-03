@@ -9,19 +9,20 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ("content", "0001_initial"),
-        ("nodes", "0001_initial"),
+        ("emails", "0001_initial"),
+        ("groups", "0001_initial"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name="contentsample",
-            name="node",
-            field=models.ForeignKey(
+            model_name="emailinbox",
+            name="group",
+            field=models.OneToOneField(
                 blank=True,
                 null=True,
-                on_delete=django.db.models.deletion.SET_NULL,
-                to="nodes.node",
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="+",
+                to="groups.securitygroup",
             ),
         ),
     ]

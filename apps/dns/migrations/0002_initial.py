@@ -9,19 +9,20 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ("content", "0001_initial"),
+        ("dns", "0001_initial"),
         ("nodes", "0001_initial"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name="contentsample",
-            name="node",
+            model_name="godaddydnsrecord",
+            name="node_manager",
             field=models.ForeignKey(
                 blank=True,
                 null=True,
                 on_delete=django.db.models.deletion.SET_NULL,
-                to="nodes.node",
+                related_name="dns_records",
+                to="nodes.nodemanager",
             ),
         ),
     ]
