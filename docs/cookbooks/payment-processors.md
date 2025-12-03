@@ -3,7 +3,6 @@
 Configure OpenPay, PayPal, and Stripe credentials for charging workflows.
 
 - [Access points](#access-points)
-- [Choosing the default processor](#choosing-the-default-processor)
 - [OpenPay setup](#openpay-setup)
 - [PayPal setup](#paypal-setup)
 - [Stripe setup](#stripe-setup)
@@ -14,12 +13,6 @@ Configure OpenPay, PayPal, and Stripe credentials for charging workflows.
 - Manage processor credentials in the Django admin at **Payment Processors** (`/admin/payments/openpayprocessor/`, `/admin/payments/paypalprocessor/`, `/admin/payments/stripeprocessor/`).
 - Each processor belongs to a specific user or security group. Use the owner fields at the top of the form to scope credentials.
 - Use the **Verify credentials** action on each change form to validate API access without processing real charges.
-
-## Choosing the default processor
-
-- Mark **Use this processor first when charging** on the provider you want as the default.
-- Configure and verify only one processor as default for a given owner to avoid ambiguity.
-- Update the default only after the corresponding credentials are complete to avoid failed requests.
 
 ## OpenPay setup
 

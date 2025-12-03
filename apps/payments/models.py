@@ -23,11 +23,6 @@ class PaymentProcessor(Profile):
 
     verified_on = models.DateTimeField(null=True, blank=True)
     verification_reference = models.CharField(max_length=255, blank=True, editable=False)
-    is_default = models.BooleanField(
-        default=False,
-        help_text=_("Use this processor first when charging."),
-    )
-
     class Meta:
         abstract = True
         verbose_name = _("Payment Processor")
