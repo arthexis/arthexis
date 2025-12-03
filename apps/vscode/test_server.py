@@ -29,9 +29,9 @@ PREFIX = "[Test Server]"
 
 @pytest.fixture
 def lock_dir(tmp_path: Path) -> Path:
-    """Temporary lock directory for test isolation."""
+    """Provide an isolated lock directory for tests."""
 
-    return tmp_path / ".locks"
+    return tmp_path / "locks"
 
 
 def test_server_state(lock_dir: Path):
