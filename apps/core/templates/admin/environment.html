@@ -31,7 +31,14 @@
   <div class="module environment-variables">
     <h2>{% trans "Environment Variables" %}</h2>
     <div class="environment-filter">
-      <input type="text" id="env-vars-filter" placeholder="{% trans 'Filter' %}" />
+      <label>
+        <span class="sr-only">{% trans "Filter names" %}</span>
+        <input type="text" id="env-vars-filter" placeholder="{% trans 'Filter names' %}" />
+      </label>
+      <label>
+        <span class="sr-only">{% trans "Filter values" %}</span>
+        <input type="text" id="env-vars-value-filter" placeholder="{% trans 'Filter values' %}" />
+      </label>
     </div>
     <table id="env-vars-table" class="table table-striped">
       <thead>
@@ -51,19 +58,39 @@
   </div>
 </div>
 <script>
-  function setupFilter(inputId, tableId) {
+  function applyFilters(table, filters) {
+    if (!table) return;
+    const rows = table.tBodies[0]?.rows || [];
+    for (const row of rows) {
+      let visible = true;
+      for (const { input, columnIndex } of filters) {
+        const term = input.value.toLowerCase();
+        if (!term) continue;
+        const cellText = row.cells[columnIndex]?.textContent.toLowerCase() || '';
+        if (!cellText.includes(term)) {
+          visible = false;
+          break;
+        }
+      }
+      row.style.display = visible ? '' : 'none';
+    }
+  }
+
+  function setupFilter(inputId, tableId, columnIndex, filters) {
     const input = document.getElementById(inputId);
     const table = document.getElementById(tableId);
     if (!input || !table) return;
+    filters.push({ input, columnIndex });
     input.addEventListener('input', function () {
-      const term = this.value.toLowerCase();
-      for (const row of table.tBodies[0].rows) {
-        row.style.display = row.textContent.toLowerCase().includes(term) ? '' : 'none';
-      }
+      applyFilters(table, filters);
     });
   }
   document.addEventListener('DOMContentLoaded', function () {
-    setupFilter('env-vars-filter', 'env-vars-table');
+    const filters = [];
+    setupFilter('env-vars-filter', 'env-vars-table', 0, filters);
+    setupFilter('env-vars-value-filter', 'env-vars-table', 1, filters);
+    const table = document.getElementById('env-vars-table');
+    applyFilters(table, filters);
   });
 </script>
 {% endblock %}
