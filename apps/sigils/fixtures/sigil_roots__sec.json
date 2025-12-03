@@ -7,7 +7,7 @@
       "prefix": "SEC",
       "context_type": "entity",
       "content_type": [
-        "core",
+        "groups",
         "securitygroup"
       ]
     }
