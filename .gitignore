@@ -209,6 +209,7 @@ media/*
 !media/ocpp_coverage.svg
 !media/ocpp201_coverage.svg
 !media/ocpp21_coverage.svg
+!media/watchtowers.svg
 # Collected static files
 /static/
 !/static/.gitignore
