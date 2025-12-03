@@ -16,6 +16,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+        with:
+          clean: false
 
       - name: Run ZAP baseline scan
         id: zap_scan
