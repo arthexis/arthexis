@@ -136,6 +136,7 @@ Upgrade channels (opt-in during install/upgrade or with `scripts/delegated-upgra
 - Onboard and service chargers with the [EVCS Connectivity & Maintenance Cookbook](docs/cookbooks/evcs-connectivity-maintenance.md).
 - Configure payment gateways with the [Payment Processors Cookbook](docs/cookbooks/payment-processors.md).
 - Reference the [Sigils Cookbook](docs/cookbooks/sigils.md) when configuring tokenized settings across environments.
+- Understand seed fixtures and per-user files with [Managing Local Node Data](docs/cookbooks/managing-local-node-data.md).
 - Manage exports, imports, and audit trails with the [User Data Cookbook](docs/cookbooks/user-data.md).
 - Plan feature rollout strategies using the [Node Features Cookbook](docs/cookbooks/node-features.md).
 - Curate shortcuts for power users through the [Favorites Cookbook](docs/cookbooks/favorites.md).
