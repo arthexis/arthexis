@@ -7,7 +7,7 @@
       "prefix": "RPT",
       "context_type": "entity",
       "content_type": [
-        "core",
+        "energy",
         "clientreport"
       ]
     }
