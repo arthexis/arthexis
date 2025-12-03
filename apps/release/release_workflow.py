@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 from pathlib import Path
 from typing import Any
@@ -18,9 +17,9 @@ from apps.core.views import (
     _release_log_name,
     _resolve_release_log_dir,
 )
+from apps.flows import NodeWorkflow, NodeWorkflowStep
 
 logger = logging.getLogger(__name__)
-_LOCK_DIR = Path(settings.BASE_DIR) / ".locks"
 
 
 def resolve_release_severity(version: str | None) -> str:
@@ -69,13 +68,14 @@ class ReleaseWorkflowBlocked(ReleaseWorkflowError):
     """Raised when the release cannot progress without manual intervention."""
 
 
-def _persist_state(lock_path: Path, ctx: dict[str, Any], *, final: bool = False) -> None:
-    if final:
-        if lock_path.exists():
-            lock_path.unlink()
-        return
-    lock_path.parent.mkdir(parents=True, exist_ok=True)
-    lock_path.write_text(json.dumps(ctx), encoding="utf-8")
+_STEP_WORKFLOW_NAME = "release_publish"
+
+
+def _build_release_workflow() -> NodeWorkflow:
+    steps = [
+        NodeWorkflowStep.from_callable(func, name=name) for name, func in PUBLISH_STEPS
+    ]
+    return NodeWorkflow(_STEP_WORKFLOW_NAME, steps)
 
 
 def run_headless_publish(release, *, auto_release: bool = False) -> Path:
@@ -86,7 +86,7 @@ def run_headless_publish(release, *, auto_release: bool = False) -> Path:
     if log_path.exists():
         log_path.unlink()
 
-    lock_path = _LOCK_DIR / f"release_publish_{release.pk}.json"
+    workflow = _build_release_workflow()
     ctx: dict[str, Any] = {
         "step": 0,
         "started": True,
@@ -97,40 +97,33 @@ def run_headless_publish(release, *, auto_release: bool = False) -> Path:
     }
     if warning:
         ctx["log_dir_warning_message"] = warning
-    _persist_state(lock_path, ctx)
 
     _append_log(log_path, "Scheduled release started automatically")
     if warning:
         _append_log(log_path, warning)
 
-    for index, (name, func) in enumerate(PUBLISH_STEPS):
+    def _execute_step(step: NodeWorkflowStep, context: dict[str, Any]):
         try:
-            func(release, ctx, log_path, user=None)
+            return step.func(release, context, log_path, user=None)
         except ApprovalRequired as exc:
             message = "Scheduled release requires manual approval"
             _append_log(log_path, message)
-            ctx["error"] = message
+            context["error"] = message
             logger.warning("%s: %s", release, message)
-            _persist_state(lock_path, ctx, final=True)
             raise ReleaseWorkflowBlocked(message, log_path=log_path) from exc
         except DirtyRepository as exc:
             message = "Scheduled release halted by dirty repository state"
             _append_log(log_path, message)
-            ctx["error"] = message
+            context["error"] = message
             logger.warning("%s: %s", release, message)
-            _persist_state(lock_path, ctx, final=True)
             raise ReleaseWorkflowBlocked(message, log_path=log_path) from exc
         except Exception as exc:  # pragma: no cover - safety net
-            message = f"{name} failed: {exc}"
+            message = f"{step.name} failed: {exc}"
             _append_log(log_path, message)
-            ctx["error"] = message
+            context["error"] = message
             logger.exception("Scheduled release %s failed", release)
-            _persist_state(lock_path, ctx, final=True)
             raise ReleaseWorkflowError(message, log_path=log_path) from exc
-        else:
-            ctx["step"] = index + 1
-            _persist_state(lock_path, ctx)
 
+    workflow.run(str(release.pk), context=ctx, run_step=_execute_step)
     _append_log(log_path, "Scheduled release completed")
-    _persist_state(lock_path, ctx, final=True)
     return log_path
