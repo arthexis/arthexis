@@ -27,11 +27,17 @@ packages = { find = { where = ["."] } }
 include-package-data = true
 
 [tool.setuptools.package-data]
-"apps.core" = [ "**/*",]
-config = [ "**/*",]
-nodes = [ "**/*",]
-ocpp = [ "**/*",]
-pages = [ "**/*",]
+"apps.core" = ["**/*"]
+"apps.awg" = ["**/*"]
+"apps.links" = ["**/*"]
+"apps.nodes" = ["**/*"]
+"apps.ocpp" = ["**/*"]
+"apps.pages" = ["**/*"]
+"apps.repos" = ["**/*"]
+"apps.sigils" = ["**/*"]
+"apps.teams" = ["**/*"]
+"apps.vehicle" = ["**/*"]
+config = ["**/*"]
 
 [tool.pytest.ini_options]
 markers = [
