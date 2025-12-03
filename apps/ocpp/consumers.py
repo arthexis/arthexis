@@ -16,6 +16,8 @@ from apps.energy.models import CustomerAccount
 from apps.links.models import Reference
 from apps.cards.models import RFID as CoreRFID
 from apps.nodes.models import NetMessage
+from apps.protocols.decorators import protocol_call
+from apps.protocols.models import ProtocolCall as ProtocolCallModel
 from django.core.exceptions import ValidationError
 from django.contrib.auth import authenticate
 
@@ -1744,6 +1746,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             log_type="charger",
         )
 
+    @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "BootNotification")
     async def _handle_boot_notification_action(self, payload, msg_id, raw, text_data):
         current_time = datetime.now(dt_timezone.utc).isoformat().replace("+00:00", "Z")
         return {
@@ -1752,9 +1755,11 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             "status": "Accepted",
         }
 
+    @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "DataTransfer")
     async def _handle_data_transfer_action(self, payload, msg_id, raw, text_data):
         return await self._handle_data_transfer(msg_id, payload)
 
+    @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "Heartbeat")
     async def _handle_heartbeat_action(self, payload, msg_id, raw, text_data):
         current_time = datetime.now(dt_timezone.utc).isoformat().replace("+00:00", "Z")
         reply_payload = {"currentTime": current_time}
@@ -1767,6 +1772,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         )(last_heartbeat=now)
         return reply_payload
 
+    @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "StatusNotification")
     async def _handle_status_notification_action(
         self, payload, msg_id, raw, text_data
     ):
@@ -1846,6 +1852,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             )
         return {}
 
+    @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "Authorize")
     async def _handle_authorize_action(self, payload, msg_id, raw, text_data):
         id_tag = payload.get("idTag")
         account = await self._get_account(id_tag)
@@ -1868,6 +1875,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             status = "Accepted"
         return {"idTagInfo": {"status": status}}
 
+    @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "MeterValues")
     async def _handle_meter_values_action(self, payload, msg_id, raw, text_data):
         await self._store_meter_values(payload, text_data)
         self.charger.last_meter_values = payload
@@ -1943,6 +1951,11 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         store.add_log(self.store_key, log_message, log_type="charger")
         return {}
 
+    @protocol_call(
+        "ocpp16",
+        ProtocolCallModel.CP_TO_CSMS,
+        "DiagnosticsStatusNotification",
+    )
     async def _handle_diagnostics_status_notification_action(
         self, payload, msg_id, raw, text_data
     ):
@@ -2240,6 +2253,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
 
         return {}
 
+    @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "StartTransaction")
     async def _handle_start_transaction_action(
         self, payload, msg_id, raw, text_data
     ):
@@ -2306,6 +2320,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         )
         return {"idTagInfo": {"status": "Invalid"}}
 
+    @protocol_call("ocpp16", ProtocolCallModel.CP_TO_CSMS, "StopTransaction")
     async def _handle_stop_transaction_action(
         self, payload, msg_id, raw, text_data
     ):
@@ -2346,6 +2361,11 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         store.stop_session_lock()
         return {"idTagInfo": {"status": "Accepted"}}
 
+    @protocol_call(
+        "ocpp16",
+        ProtocolCallModel.CP_TO_CSMS,
+        "FirmwareStatusNotification",
+    )
     async def _handle_firmware_status_notification_action(
         self, payload, msg_id, raw, text_data
     ):

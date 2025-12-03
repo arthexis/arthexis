@@ -38,6 +38,8 @@ from asgiref.sync import async_to_sync
 from utils.api import api_login_required
 
 from apps.nodes.models import NetMessage, Node
+from apps.protocols.decorators import protocol_call
+from apps.protocols.models import ProtocolCall as ProtocolCallModel
 
 from apps.pages.utils import landing
 
@@ -2185,6 +2187,7 @@ def charger_log_page(request, cid, connector=None):
 
 
 
+@protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "GetConfiguration")
 def _handle_get_configuration(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
     payload: dict[str, object] = {}
     raw_key = data.get("key")
@@ -2217,6 +2220,7 @@ def _handle_get_configuration(context: ActionContext, data: dict) -> JsonRespons
     )
 
 
+@protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "ReserveNow")
 def _handle_reserve_now(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
     reservation_pk = data.get("reservation") or data.get("reservationId")
     if reservation_pk in (None, ""):
@@ -2311,6 +2315,7 @@ def _handle_reserve_now(context: ActionContext, data: dict) -> JsonResponse | Ac
     )
 
 
+@protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "RemoteStopTransaction")
 def _handle_remote_stop(context: ActionContext, _data: dict) -> JsonResponse | ActionCall:
     tx_obj = store.get_transaction(context.cid, context.connector_value)
     if not tx_obj:
@@ -2345,6 +2350,7 @@ def _handle_remote_stop(context: ActionContext, _data: dict) -> JsonResponse | A
     )
 
 
+@protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "RemoteStartTransaction")
 def _handle_remote_start(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
     id_tag = data.get("idTag")
     if not isinstance(id_tag, str) or not id_tag.strip():
@@ -2405,6 +2411,7 @@ def _handle_remote_start(context: ActionContext, data: dict) -> JsonResponse | A
     )
 
 
+@protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "GetDiagnostics")
 def _handle_get_diagnostics(
     context: ActionContext, data: dict
 ) -> JsonResponse | ActionCall:
@@ -2467,6 +2474,7 @@ def _handle_get_diagnostics(
     )
 
 
+@protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "ChangeAvailability")
 def _handle_change_availability(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
     availability_type = data.get("type")
     if availability_type not in {"Operative", "Inoperative"}:
@@ -2515,6 +2523,7 @@ def _handle_change_availability(context: ActionContext, data: dict) -> JsonRespo
     )
 
 
+@protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "ChangeConfiguration")
 def _handle_change_configuration(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
     raw_key = data.get("key")
     if not isinstance(raw_key, str) or not raw_key.strip():
@@ -2578,6 +2587,7 @@ def _handle_change_configuration(context: ActionContext, data: dict) -> JsonResp
     )
 
 
+@protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "ClearCache")
 def _handle_clear_cache(context: ActionContext, _data: dict) -> JsonResponse | ActionCall:
     message_id = uuid.uuid4().hex
     ocpp_action = "ClearCache"
@@ -2602,6 +2612,7 @@ def _handle_clear_cache(context: ActionContext, _data: dict) -> JsonResponse | A
     )
 
 
+@protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "CancelReservation")
 def _handle_cancel_reservation(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
     reservation_pk = data.get("reservation") or data.get("reservationId")
     if reservation_pk in (None, ""):
@@ -2666,6 +2677,7 @@ def _handle_cancel_reservation(context: ActionContext, data: dict) -> JsonRespon
     )
 
 
+@protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "UnlockConnector")
 def _handle_unlock_connector(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
     connector_value: int | None = context.connector_value
     if "connectorId" in data or "connector_id" in data:
@@ -2713,6 +2725,7 @@ def _handle_unlock_connector(context: ActionContext, data: dict) -> JsonResponse
     )
 
 
+@protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "DataTransfer")
 def _handle_data_transfer(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
     vendor_id = data.get("vendorId")
     if not isinstance(vendor_id, str) or not vendor_id.strip():
@@ -2762,6 +2775,7 @@ def _handle_data_transfer(context: ActionContext, data: dict) -> JsonResponse | 
     )
 
 
+@protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "Reset")
 def _handle_reset(context: ActionContext, _data: dict) -> JsonResponse | ActionCall:
     tx_obj = store.get_transaction(context.cid, context.connector_value)
     if tx_obj is not None:
@@ -2793,6 +2807,7 @@ def _handle_reset(context: ActionContext, _data: dict) -> JsonResponse | ActionC
     )
 
 
+@protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "TriggerMessage")
 def _handle_trigger_message(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
     trigger_target = data.get("target") or data.get("triggerTarget")
     if not isinstance(trigger_target, str) or not trigger_target.strip():
@@ -2848,6 +2863,7 @@ def _handle_trigger_message(context: ActionContext, data: dict) -> JsonResponse 
     )
 
 
+@protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "SendLocalList")
 def _handle_send_local_list(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
     entries = data.get("localAuthorizationList")
     if entries is None:
@@ -2908,6 +2924,7 @@ def _handle_send_local_list(context: ActionContext, data: dict) -> JsonResponse 
     )
 
 
+@protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "GetLocalListVersion")
 def _handle_get_local_list_version(context: ActionContext, _data: dict) -> JsonResponse | ActionCall:
     message_id = uuid.uuid4().hex
     ocpp_action = "GetLocalListVersion"
@@ -2938,6 +2955,7 @@ def _handle_get_local_list_version(context: ActionContext, _data: dict) -> JsonR
     )
 
 
+@protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "UpdateFirmware")
 def _handle_update_firmware(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
     firmware_id = (
         data.get("firmwareId")
@@ -3059,6 +3077,7 @@ def _handle_update_firmware(context: ActionContext, data: dict) -> JsonResponse 
     )
 
 
+@protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "SetChargingProfile")
 def _handle_set_charging_profile(
     context: ActionContext, data: dict
 ) -> JsonResponse | ActionCall:

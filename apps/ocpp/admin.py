@@ -34,6 +34,8 @@ from django.utils.html import format_html, format_html_join
 from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _, ngettext
 from requests import RequestException
+from apps.protocols.decorators import protocol_call
+from apps.protocols.models import ProtocolCall as ProtocolCallModel
 
 from .models import (
     Charger,
@@ -3276,6 +3278,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
                 f"Sent ClearCache to {cleared} charger(s)",
             )
 
+    @protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "ClearChargingProfile")
     @admin.action(description="Clear charging profiles")
     def clear_charging_profiles(self, request, queryset):
         cleared = 0

@@ -35,8 +35,10 @@ def _iter_fixture_entries(fixtures_dir: Path) -> Iterable[dict]:
             yield fields
 
 
-def load_fixture_sigil_roots() -> None:
+def load_fixture_sigil_roots(sender=None, **kwargs) -> None:
     """Hydrate bundled SigilRoot fixtures while tolerating missing models."""
+
+    del sender, kwargs
 
     fixtures_dir = Path(__file__).resolve().parent / "fixtures"
 
@@ -54,7 +56,7 @@ def load_fixture_sigil_roots() -> None:
                 ct_obj = ContentType.objects.get_by_natural_key(app_label, model_name)
             except ContentType.DoesNotExist:
                 logger.debug(
-                    "Skipping SigilRoot %%s: missing content type %%s.%%s",
+                    "Skipping SigilRoot %s: missing content type %s.%s",
                     prefix,
                     app_label,
                     model_name,
