@@ -481,6 +481,14 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             log_type="charger",
         )
 
+        restored_calls = store.restore_pending_calls(self.charger_id)
+        if restored_calls:
+            store.add_log(
+                self.store_key,
+                f"Restored {len(restored_calls)} pending call(s) after reconnect",
+                log_type="charger",
+            )
+
         if not created:
             await database_sync_to_async(
                 forwarder.sync_forwarded_charge_points
