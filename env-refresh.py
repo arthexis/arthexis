@@ -26,6 +26,7 @@ from django.core.exceptions import FieldDoesNotExist, ObjectDoesNotExist
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db import connections, connection, close_old_connections
+from django.db.models import Count, F
 from django.db.migrations.exceptions import (
     InconsistentMigrationHistory,
     InvalidBasesError,
@@ -564,6 +565,18 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                                 )
                 for module in Module.objects.all():
                     module.create_landings()
+
+                stale_modules = (
+                    Module.objects.annotate(landing_count=Count("landings"))
+                    .filter(
+                        landing_count=1,
+                        landings__path=F("path"),
+                        application__isnull=False,
+                        is_seed_data=True,
+                    )
+                )
+                if stale_modules:
+                    stale_modules.delete()
 
                 if site_fixture_defaults:
                     preferred = _preferred_site_domain(site_fixture_defaults)
