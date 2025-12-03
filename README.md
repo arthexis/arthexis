@@ -106,14 +106,14 @@ Terminal nodes can start directly with the scripts below without installing; Con
    - Press the green start button. Stop the server with the red square button (`Shift+F5`).
 
 - **[Shell](https://en.wikipedia.org/wiki/Shell_(computing))**
-   - Linux: run [`./start.sh`](start.sh) and stop with [`./stop.sh`](stop.sh).
+   - Linux: run `make start` and stop with `make stop` (wrapping [`start.sh`](start.sh) and [`stop.sh`](stop.sh)).
    - Windows: run [`start.bat`](start.bat) and stop with `Ctrl+C`.
 
 ### 3. Install and upgrade
 - **Linux:**
-   - Run [`./install.sh`](install.sh) with a node role flag; see the Role Architecture table above for the role-specific options and defaults.
-   - Use `./install.sh --help` to list every available flag if you need to customize the node beyond the role defaults.
-   - Upgrade with [`./upgrade.sh`](upgrade.sh).
+   - Run `make install ROLE=terminal` to bootstrap a default Terminal node (pass `ROLE=control`, `satellite`, or `watchtower` as needed). Override the port with `PORT=8888`, auto-start with `START_ON_INSTALL=true`, and control Celery with `CELERY=true|false`; other flags can be forwarded via `EXTRA_INSTALL_ARGS`.
+   - Use `make upgrade` with `CHANNEL=stable|latest|fixed` to wrap [`upgrade.sh`](upgrade.sh).
+   - Call the underlying scripts directly (`./install.sh`, `./upgrade.sh`) when you need flags not covered by the Makefile. Use `./install.sh --help` to see every available option.
    - Consult the [Install & Lifecycle Scripts Manual](docs/development/install-lifecycle-scripts-manual.md) for complete flag descriptions and operational notes.
    - Review the [Auto-Upgrade Flow](docs/auto-upgrade.md) for how delegated upgrades run and how to observe them.
 
