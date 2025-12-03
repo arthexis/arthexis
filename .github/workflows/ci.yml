@@ -16,6 +16,8 @@ jobs:
       - name: Ensure workspace is writable
         run: sudo chown -R "$USER:$USER" "$GITHUB_WORKSPACE"
       - uses: actions/checkout@v6
+        with:
+          clean: false
       - uses: actions/setup-python@v6
         with:
           python-version: '3.x'
