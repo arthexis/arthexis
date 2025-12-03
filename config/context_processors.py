@@ -10,14 +10,17 @@ UNKNOWN_BADGE_COLOR = "#6c757d"
 
 
 def site_and_node(request: HttpRequest):
-    """Provide current Site and Node based on request host.
+    """Provide current Site, Node, and Role based on request host.
 
-    Returns a dict with keys ``badge_site`` and ``badge_node``.
+    Returns a dict with keys ``badge_site``, ``badge_node``, and ``badge_role``.
     ``badge_site`` is a ``Site`` instance or ``None`` if no match.
     ``badge_node`` is a ``Node`` instance or ``None`` if no match.
-    ``badge_site_color`` and ``badge_node_color`` report the palette color used
-    for the corresponding badge. Badges always use green when the entity is
-    known and grey when the value cannot be determined.
+    ``badge_role`` is a ``NodeRole`` instance or ``None`` if the node is
+    missing or unassigned.
+
+    ``badge_site_color`` / ``badge_node_color`` / ``badge_role_color`` report
+    the palette color used for the corresponding badge. Badges always use green
+    when the entity is known and grey when the value cannot be determined.
     """
     host = request.get_host().split(":")[0]
     try:
@@ -51,20 +54,25 @@ def site_and_node(request: HttpRequest):
     except Exception:
         node = None
 
+    role = getattr(node, "role", None)
+
     site_color = DEFAULT_BADGE_COLOR if site else UNKNOWN_BADGE_COLOR
     node_color = DEFAULT_BADGE_COLOR if node else UNKNOWN_BADGE_COLOR
+    role_color = DEFAULT_BADGE_COLOR if role else UNKNOWN_BADGE_COLOR
 
     site_name = site.name if site else ""
-    node_role_name = node.role.name if node and node.role else ""
+    node_role_name = role.name if role else ""
     return {
         "badge_site": site,
         "badge_node": node,
+        "badge_role": role,
         # Public views fall back to the node role when the site name is blank.
         "badge_site_name": site_name or node_role_name,
         # Admin site badge uses the site display name if set, otherwise the domain.
         "badge_admin_site_name": site_name or (site.domain if site else ""),
         "badge_site_color": site_color,
         "badge_node_color": node_color,
+        "badge_role_color": role_color,
         "current_site_domain": site.domain if site else host,
         "TIME_ZONE": settings.TIME_ZONE,
     }
