@@ -10,79 +10,16 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ("core", "0001_initial"),
-        ("emails", "0002_initial"),
+        ("app", "0001_initial"),
+        ("nodes", "0002_initial"),
+        ("pages", "0002_initial"),
+        ("sites", "0001_initial"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
     operations = [
         migrations.AddField(
-            model_name="admincommandresult",
-            name="user",
-            field=models.ForeignKey(
-                blank=True,
-                null=True,
-                on_delete=django.db.models.deletion.SET_NULL,
-                related_name="command_results",
-                to=settings.AUTH_USER_MODEL,
-            ),
-        ),
-        migrations.AddField(
-            model_name="emailartifact",
-            name="collector",
-            field=models.ForeignKey(
-                on_delete=django.db.models.deletion.CASCADE,
-                related_name="artifacts",
-                to="emails.emailcollector",
-            ),
-        ),
-        migrations.AddField(
-            model_name="emailtransaction",
-            name="collector",
-            field=models.ForeignKey(
-                blank=True,
-                help_text="Collector that discovered this message, if applicable.",
-                null=True,
-                on_delete=django.db.models.deletion.SET_NULL,
-                related_name="transactions",
-                to="emails.emailcollector",
-            ),
-        ),
-        migrations.AddField(
-            model_name="emailtransaction",
-            name="inbox",
-            field=models.ForeignKey(
-                blank=True,
-                help_text="Inbox account the message was read from or will use for sending.",
-                null=True,
-                on_delete=django.db.models.deletion.SET_NULL,
-                related_name="transactions",
-                to="emails.emailinbox",
-            ),
-        ),
-        migrations.AddField(
-            model_name="emailtransaction",
-            name="outbox",
-            field=models.ForeignKey(
-                blank=True,
-                help_text="Outbox configuration used to send the message, when known.",
-                null=True,
-                on_delete=django.db.models.deletion.SET_NULL,
-                related_name="transactions",
-                to="emails.emailoutbox",
-            ),
-        ),
-        migrations.AddField(
-            model_name="emailtransactionattachment",
-            name="transaction",
-            field=models.ForeignKey(
-                on_delete=django.db.models.deletion.CASCADE,
-                related_name="attachments",
-                to="core.emailtransaction",
-            ),
-        ),
-        migrations.AddField(
-            model_name="invitelead",
+            model_name="landinglead",
             name="assign_to",
             field=models.ForeignKey(
                 blank=True,
@@ -93,18 +30,16 @@ class Migration(migrations.Migration):
             ),
         ),
         migrations.AddField(
-            model_name="invitelead",
-            name="sent_via_outbox",
+            model_name="landinglead",
+            name="landing",
             field=models.ForeignKey(
-                blank=True,
-                null=True,
-                on_delete=django.db.models.deletion.SET_NULL,
-                related_name="invite_leads",
-                to="emails.emailoutbox",
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="leads",
+                to="pages.landing",
             ),
         ),
         migrations.AddField(
-            model_name="invitelead",
+            model_name="landinglead",
             name="user",
             field=models.ForeignKey(
                 blank=True,
@@ -113,18 +48,92 @@ class Migration(migrations.Migration):
                 to=settings.AUTH_USER_MODEL,
             ),
         ),
-        migrations.AlterUniqueTogether(
-            name="emailartifact",
-            unique_together={("collector", "fingerprint")},
-        ),
-        migrations.AddIndex(
-            model_name="emailtransaction",
-            index=models.Index(fields=["message_id"], name="email_txn_msgid"),
-        ),
-        migrations.AddIndex(
-            model_name="emailtransaction",
-            index=models.Index(
-                fields=["direction", "status"], name="email_txn_dir_status"
+        migrations.AddField(
+            model_name="module",
+            name="application",
+            field=models.ForeignKey(
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="modules",
+                to="app.application",
             ),
+        ),
+        migrations.AddField(
+            model_name="module",
+            name="node_role",
+            field=models.ForeignKey(
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="modules",
+                to="nodes.noderole",
+            ),
+        ),
+        migrations.AddField(
+            model_name="landing",
+            name="module",
+            field=models.ForeignKey(
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="landings",
+                to="pages.module",
+            ),
+        ),
+        migrations.AddField(
+            model_name="sitebadge",
+            name="landing_override",
+            field=models.ForeignKey(
+                blank=True,
+                null=True,
+                on_delete=django.db.models.deletion.SET_NULL,
+                to="pages.landing",
+            ),
+        ),
+        migrations.AddField(
+            model_name="sitebadge",
+            name="site",
+            field=models.OneToOneField(
+                on_delete=django.db.models.deletion.CASCADE,
+                related_name="badge",
+                to="sites.site",
+            ),
+        ),
+        migrations.AddField(
+            model_name="userstory",
+            name="assign_to",
+            field=models.ForeignKey(
+                blank=True,
+                null=True,
+                on_delete=django.db.models.deletion.SET_NULL,
+                related_name="%(app_label)s_%(class)s_assignments",
+                to=settings.AUTH_USER_MODEL,
+            ),
+        ),
+        migrations.AddField(
+            model_name="userstory",
+            name="owner",
+            field=models.ForeignKey(
+                blank=True,
+                help_text="Internal owner for this feedback.",
+                null=True,
+                on_delete=django.db.models.deletion.SET_NULL,
+                related_name="owned_user_stories",
+                to=settings.AUTH_USER_MODEL,
+            ),
+        ),
+        migrations.AddField(
+            model_name="userstory",
+            name="user",
+            field=models.ForeignKey(
+                blank=True,
+                null=True,
+                on_delete=django.db.models.deletion.SET_NULL,
+                related_name="user_stories",
+                to=settings.AUTH_USER_MODEL,
+            ),
+        ),
+        migrations.AlterUniqueTogether(
+            name="module",
+            unique_together={("node_role", "path")},
+        ),
+        migrations.AlterUniqueTogether(
+            name="landing",
+            unique_together={("module", "path")},
         ),
     ]
