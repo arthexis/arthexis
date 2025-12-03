@@ -38,6 +38,26 @@ class MissingBranchSplinterError(RuntimeError):
         self.merge_migration = merge_migration
 
 
+class BranchTagConflictError(RuntimeError):
+    """Raised when a rebuild guard detects an incompatible migration history."""
+
+    def __init__(self, branch_id: str, migration_label: str, *, conflicts: list[str]):
+        conflict_list = ", ".join(conflicts)
+        message = (
+            "This project rebuilt its migrations and detected existing entries "
+            "from the previous branch. Apply the new migrations only on a clean "
+            "database created after the rebuild."
+        )
+        message += f"\nBranch id: {branch_id}"
+        message += f"\nGuard migration: {migration_label}"
+        if conflict_list:
+            message += f"\nExisting migrations: {conflict_list}"
+        super().__init__(message)
+        self.branch_id = branch_id
+        self.migration_label = migration_label
+        self.conflicts = conflicts
+
+
 @dataclass(slots=True)
 class _BranchMarker:
     branch_id: str
@@ -185,6 +205,74 @@ class BranchMergeOperation(_BranchOperation):
 
     def deconstruct(self):
         kwargs = {"branch_id": self.branch_id}
+        if self.migration_label:
+            kwargs["migration_label"] = self.migration_label
+        return (
+            f"{self.__class__.__module__}.{self.__class__.__qualname__}",
+            [],
+            kwargs,
+        )
+
+
+class BranchTagOperation(_BranchOperation):
+    """Tag a rebuilt migration branch and block incompatible histories."""
+
+    def __init__(
+        self,
+        branch_id: str,
+        *,
+        migration_label: str | None = None,
+        project_apps: tuple[str, ...] | list[str] | set[str],
+    ):
+        super().__init__(branch_id, migration_label=migration_label)
+        apps = tuple(sorted(set(project_apps)))
+        if not apps:
+            raise ValueError("project_apps must include at least one app label")
+        self.project_apps = apps
+
+    def describe(self) -> str:  # pragma: no cover - description only
+        return f"Record rebuild branch tag for {self.branch_id}"
+
+    def _existing_migrations(self, schema_editor) -> list[str]:
+        placeholders = ", ".join(["%s"] * len(self.project_apps))
+        query = (
+            f"SELECT app, name FROM django_migrations WHERE app IN ({placeholders})"
+        )
+        with schema_editor.connection.cursor() as cursor:
+            cursor.execute(query, list(self.project_apps))
+            rows = cursor.fetchall()
+        return [f"{app}.{name}" for app, name in rows]
+
+    def database_forwards(self, app_label, schema_editor, from_state, to_state):
+        self._ensure_table(schema_editor)
+
+        marker = self._read_marker(schema_editor, self.branch_id)
+        if not marker:
+            conflicts = self._existing_migrations(schema_editor)
+            if conflicts:
+                raise BranchTagConflictError(
+                    self.branch_id,
+                    self.migration_label or "(unknown)",
+                    conflicts=conflicts,
+                )
+
+            self._upsert_marker(
+                schema_editor,
+                branch_id=self.branch_id,
+                splinter_migration=self.migration_label,
+                merge_migration=self.migration_label,
+            )
+            return
+
+        self._upsert_marker(
+            schema_editor,
+            branch_id=self.branch_id,
+            splinter_migration=marker.splinter_migration or self.migration_label,
+            merge_migration=marker.merge_migration or self.migration_label,
+        )
+
+    def deconstruct(self):
+        kwargs = {"branch_id": self.branch_id, "project_apps": self.project_apps}
         if self.migration_label:
             kwargs["migration_label"] = self.migration_label
         return (
