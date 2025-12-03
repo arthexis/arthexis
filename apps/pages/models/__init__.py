@@ -7,7 +7,6 @@ from .module import Module, ModuleManager
 from .site_badge import SiteBadge
 from .site_proxy import SiteProxy
 from .site_template import SiteTemplate, SiteTemplateManager
-from .user_manual import UserManual
 from .user_story import UserStory
 from .view_history import ViewHistory
 
@@ -32,7 +31,6 @@ __all__ = [
     "SiteProxy",
     "SiteTemplate",
     "SiteTemplateManager",
-    "UserManual",
     "UserStory",
     "ViewHistory",
     "_create_landings",

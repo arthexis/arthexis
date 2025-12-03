@@ -1,4 +1,3 @@
-import base64
 import csv
 import json
 import logging
@@ -332,7 +331,6 @@ from .forms import (
 )
 from .models import (
     Module,
-    UserManual,
     UserStory,
 )
 from apps.chats.models import ChatSession
@@ -2006,24 +2004,6 @@ def admin_user_tools(request):
     )
 
 
-def admin_manual_list(request):
-    manuals = UserManual.objects.order_by("title")
-    return _render_admin_template(
-        request,
-        "admin_doc/manuals.html",
-        {"manuals": manuals},
-    )
-
-
-def admin_manual_detail(request, slug):
-    manual = get_object_or_404(UserManual, slug=slug)
-    return _render_admin_template(
-        request,
-        "admin_doc/manual_detail.html",
-        {"manual": manual},
-    )
-
-
 # WhatsApp callbacks originate outside the site and cannot include CSRF tokens.
 @csrf_exempt
 def whatsapp_webhook(request):
@@ -2080,20 +2060,3 @@ def whatsapp_webhook(request):
     return JsonResponse(response_payload, status=201)
 
 
-def manual_pdf(request, slug):
-    manual = get_object_or_404(UserManual, slug=slug)
-    pdf_data = base64.b64decode(manual.content_pdf)
-    response = HttpResponse(pdf_data, content_type="application/pdf")
-    response["Content-Disposition"] = f'attachment; filename="{manual.slug}.pdf"'
-    return response
-
-
-@landing(_("Manuals"))
-def manual_list(request):
-    manuals = UserManual.objects.order_by("title")
-    return render(request, "pages/manual_list.html", {"manuals": manuals})
-
-
-def manual_detail(request, slug):
-    manual = get_object_or_404(UserManual, slug=slug)
-    return render(request, "pages/manual_detail.html", {"manual": manual})

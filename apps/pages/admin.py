@@ -31,7 +31,6 @@ from django.core.management import CommandError, call_command
 
 from apps.nodes.models import NodeRole
 
-from .forms import UserManualAdminForm
 from .module_defaults import reload_default_modules as restore_default_modules
 from .site_config import ensure_site_fields
 from .utils import landing_leads_supported
@@ -44,7 +43,6 @@ from .models import (
     Landing,
     LandingLead,
     ViewHistory,
-    UserManual,
     UserStory,
 )
 from apps.chats.models import ChatMessage, ChatSession
@@ -618,14 +616,6 @@ class LandingLeadAdmin(EntityModelAdmin):
     @admin.display(description=_("Referrer"))
     def referer_display(self, obj):
         return obj.referer or ""
-
-
-@admin.register(UserManual)
-class UserManualAdmin(EntityModelAdmin):
-    form = UserManualAdminForm
-    list_display = ("title", "slug", "languages", "is_seed_data", "is_user_data")
-    search_fields = ("title", "slug", "description")
-    list_filter = ("is_seed_data", "is_user_data")
 
 
 @admin.register(ViewHistory)

@@ -41,8 +41,5 @@ urlpatterns = [
         views.invitation_login,
         name="invitation-login",
     ),
-    path("man/", views.manual_list, name="manual-list"),
-    path("man/<slug:slug>/", views.manual_detail, name="manual-detail"),
-    path("man/<slug:slug>/pdf/", views.manual_pdf, name="manual-pdf"),
     path("feedback/user-story/", views.submit_user_story, name="user-story-submit"),
 ]
