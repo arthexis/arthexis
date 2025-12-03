@@ -7,7 +7,7 @@
       "prefix": "USER",
       "context_type": "entity",
       "content_type": [
-        "core",
+        "users",
         "user"
       ]
     }
