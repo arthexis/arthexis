@@ -34,30 +34,48 @@ def lock_dir(tmp_path: Path) -> Path:
     return tmp_path / "locks"
 
 
-def test_server_state(lock_dir: Path):
+@contextmanager
+def server_state(lock_dir: Path):
     """Context manager that records the test server PID."""
 
     lock_dir.mkdir(parents=True, exist_ok=True)
     state_path = lock_dir / "test_server.json"
 
-    @contextmanager
-    def _manager():
-        payload = {"pid": os.getpid(), "timestamp": time.time()}
+    payload = {"pid": os.getpid(), "timestamp": time.time()}
+    try:
+        state_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    except OSError:
+        pass
+    try:
+        yield state_path
+    finally:
         try:
-            state_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+            state_path.unlink()
+        except FileNotFoundError:
+            pass
         except OSError:
             pass
-        try:
-            yield state_path
-        finally:
-            try:
-                state_path.unlink()
-            except FileNotFoundError:
-                pass
-            except OSError:
-                pass
 
-    return _manager()
+
+@pytest.fixture(name="test_server_state")
+def test_server_state_fixture(lock_dir: Path):
+    """Fixture wrapper to align with existing test usage."""
+
+    with server_state(lock_dir) as state_path:
+        yield state_path
+
+
+def test_server_state_creates_and_cleans(lock_dir: Path):
+    """Ensure the server state file is created and then removed."""
+
+    with server_state(lock_dir) as state_path:
+        assert state_path.exists()
+
+        payload = json.loads(state_path.read_text(encoding="utf-8"))
+        assert payload.get("pid") == os.getpid()
+        assert "timestamp" in payload
+
+    assert not state_path.exists()
 
 
 def update_requirements(base_dir: Path) -> bool:
@@ -206,7 +224,7 @@ def main(argv: list[str] | None = None) -> int:
     print(PREFIX, "Starting in", BASE_DIR)
     snapshot = collect_source_mtimes(BASE_DIR)
     print(PREFIX, "Watching for changes... Press Ctrl+C to stop.")
-    with test_server_state(LOCK_DIR):
+    with server_state(LOCK_DIR):
         run_env_refresh_with_tests(BASE_DIR, latest=args.latest)
         snapshot = collect_source_mtimes(BASE_DIR)
 
