@@ -33,9 +33,10 @@ class LocationAdmin(EntityModelAdmin):
         "contract_type",
         "city",
         "state",
+        "is_public",
         "assigned_to",
     )
-    list_filter = ("zone", "contract_type", "city", "state", "country")
+    list_filter = ("zone", "contract_type", "city", "state", "country", "is_public")
     search_fields = ("name", "city", "state", "postal_code", "country")
     autocomplete_fields = ("assigned_to",)
     change_form_template = "admin/ocpp/location/change_form.html"

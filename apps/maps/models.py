@@ -80,6 +80,11 @@ class Location(Entity):
         blank=True,
         default="",
     )
+    is_public = models.BooleanField(
+        _("Public"),
+        default=True,
+        help_text=_("Allow this location to be visible to unauthenticated visitors."),
+    )
     assigned_to = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,

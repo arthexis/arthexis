@@ -1,0 +1,76 @@
+{% extends "pages/base.html" %}
+{% load i18n static %}
+
+{% block title %}{% trans "Charge Point Map" %}{% endblock %}
+
+{% block content %}
+<div class="row">
+  <div class="col-12">
+    <h1 class="mb-3">{% trans "Charge Point Map" %}</h1>
+    <p class="text-muted">
+      {% if shows_private_locations %}
+        {% trans "Showing all known charge point locations you can access." %}
+      {% else %}
+        {% trans "Showing public charge point locations." %}
+      {% endif %}
+    </p>
+  </div>
+</div>
+<div class="row">
+  <div class="col-12">
+    <div id="evcs-map" class="w-100" style="height: 520px;"></div>
+  </div>
+</div>
+
+{{ markers|json_script:"evcs-marker-data" }}
+
+<link
+  rel="stylesheet"
+  href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  integrity="sha256-sA+zWATbFveLLvJ70dPGs46FjPe4hDc7XkIrP3S0W70="
+  crossorigin=""
+/>
+<script
+  src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+  integrity="sha256-o9N1jGDf3t0tHTv05KQ1tWmE7HnO+y0E72lMJZ4Lk0A="
+  crossorigin=""
+></script>
+<script>
+  (function() {
+    const dataElement = document.getElementById('evcs-marker-data');
+    const markers = dataElement ? JSON.parse(dataElement.textContent) : [];
+    const mapElement = document.getElementById('evcs-map');
+    if (!mapElement) {
+      return;
+    }
+
+    const map = L.map(mapElement);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors',
+      maxZoom: 18,
+    }).addTo(map);
+
+    if (markers.length === 0) {
+      map.setView([20, 0], 2);
+      return;
+    }
+
+    const bounds = L.latLngBounds([]);
+    markers.forEach((marker) => {
+      const position = [marker.latitude, marker.longitude];
+      bounds.extend(position);
+      const popupLines = [];
+      popupLines.push(`<strong>${marker.name}</strong>`);
+      if (marker.location && marker.location !== marker.name) {
+        popupLines.push(marker.location);
+      }
+      if (marker.address) {
+        popupLines.push(marker.address);
+      }
+      L.marker(position).addTo(map).bindPopup(popupLines.join('<br>'));
+    });
+
+    map.fitBounds(bounds, { padding: [20, 20], maxZoom: 14 });
+  })();
+</script>
+{% endblock %}
