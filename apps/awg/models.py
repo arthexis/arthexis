@@ -5,8 +5,8 @@ from apps.leads.models import Lead
 
 
 class CableSizeManager(EntityManager):
-    def get_by_natural_key(self, awg_size, material):
-        return self.get(awg_size=awg_size, material=material)
+    def get_by_natural_key(self, awg_size, material, line_num):
+        return self.get(awg_size=awg_size, material=material, line_num=line_num)
 
 
 class ConduitFillManager(EntityManager):
@@ -25,7 +25,7 @@ class CableSize(Entity):
     objects = CableSizeManager()
 
     def natural_key(self):
-        return (self.awg_size, self.material)
+        return (self.awg_size, self.material, self.line_num)
 
     awg_size = models.CharField(max_length=5)
     material = models.CharField(max_length=2)
