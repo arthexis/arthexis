@@ -176,19 +176,7 @@ def _extract_vehicle_identifier(payload: dict) -> tuple[str, str]:
     return vid_value, vin_value
 
 
-async def _get_transaction_by_ocpp_id(
-    charger: Charger, ocpp_transaction_id: str
-) -> Transaction | None:
-    """Return a transaction for the provided OCPP id when stored."""
-
-    if not ocpp_transaction_id:
-        return None
-    return await database_sync_to_async(Transaction.objects.filter(
-        charger=charger, ocpp_transaction_id=ocpp_transaction_id
-    ).first)()
-
-
-class SinkConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
+class SinkConsumer(AsyncWebsocketConsumer):
     """Accept any message without validation."""
 
     rate_limit_scope = "sink-connect"
@@ -2187,7 +2175,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         if event_type == "ended":
             tx_obj = store.transactions.pop(self.store_key, None)
             if not tx_obj and ocpp_tx_id:
-                tx_obj = await _get_transaction_by_ocpp_id(self.charger, ocpp_tx_id)
+                tx_obj = await Transaction.aget_by_ocpp_id(self.charger, ocpp_tx_id)
             if not tx_obj and ocpp_tx_id.isdigit():
                 tx_obj = await database_sync_to_async(
                     Transaction.objects.filter(
@@ -2226,7 +2214,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         if event_type == "updated":
             tx_obj = store.transactions.get(self.store_key)
             if not tx_obj and ocpp_tx_id:
-                tx_obj = await _get_transaction_by_ocpp_id(self.charger, ocpp_tx_id)
+                tx_obj = await Transaction.aget_by_ocpp_id(self.charger, ocpp_tx_id)
             if not tx_obj and ocpp_tx_id.isdigit():
                 tx_obj = await database_sync_to_async(
                     Transaction.objects.filter(
