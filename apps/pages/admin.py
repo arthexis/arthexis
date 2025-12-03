@@ -380,18 +380,11 @@ class ApplicationForm(forms.ModelForm):
         self.fields["name"].choices = get_local_app_choices()
 
 
-class ApplicationModuleInline(admin.TabularInline):
-    model = Module
-    fk_name = "application"
-    extra = 0
-
-
 @admin.register(Application)
 class ApplicationAdmin(EntityModelAdmin):
     form = ApplicationForm
     list_display = ("name", "order", "app_verbose_name", "description", "installed")
     readonly_fields = ("installed",)
-    inlines = [ApplicationModuleInline]
 
     @admin.display(description="Verbose name")
     def app_verbose_name(self, obj):
