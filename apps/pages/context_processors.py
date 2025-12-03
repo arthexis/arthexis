@@ -5,7 +5,7 @@ from django.conf import settings
 from django.db.utils import OperationalError, ProgrammingError
 from pathlib import Path
 from apps.nodes.models import Node, NodeFeature
-from apps.core.models import SecurityGroup
+from apps.groups.models import SecurityGroup
 from apps.links.models import Reference
 from apps.links.reference_utils import filter_visible_references
 from .models import Module, SiteTemplate

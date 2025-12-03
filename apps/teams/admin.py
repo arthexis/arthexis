@@ -19,12 +19,11 @@ from django_otp.plugins.otp_totp.admin import (
     TOTPDeviceAdmin as CoreTOTPDeviceAdmin,
 )
 from django_otp.models import VerifyNotAllowed
-from apps.core.admin import (InviteLeadAdmin, SecurityGroupAdmin)
+from apps.core.admin import InviteLeadAdmin
 from apps.release.admin import ReleaseManagerAdmin
-from apps.core.models import (
-    InviteLead as CoreInviteLead,
-    SecurityGroup as CoreSecurityGroup,
-)
+from apps.core.models import InviteLead as CoreInviteLead
+from apps.groups.admin import SecurityGroupAdmin
+from apps.groups.models import SecurityGroup as CoreSecurityGroup
 from apps.release.models import ReleaseManager as CoreReleaseManager
 from apps.locals.user_data import (
     EntityModelAdmin,

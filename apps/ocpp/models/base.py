@@ -31,7 +31,7 @@ from apps.energy.models import CustomerAccount, EnergyTariff
 from apps.maps.models import Location
 from apps.links.models import Reference
 from apps.cards.models import RFID as CoreRFID
-from apps.core.models import SecurityGroup
+from apps.groups.models import SecurityGroup
 from apps.media.models import MediaBucket, MediaFile, media_bucket_slug, media_file_path
 from apps.links.reference_utils import url_targets_local_loopback
 
