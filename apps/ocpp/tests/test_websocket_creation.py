@@ -5,9 +5,12 @@ from channels.db import database_sync_to_async
 from channels.testing import WebsocketCommunicator
 from django.urls import reverse
 from django.test.utils import override_settings
+from django.contrib.contenttypes.models import ContentType
+from django.core.cache import cache
 
 from apps.ocpp import store
 from apps.ocpp.models import Charger
+from apps.rates.models import RateLimit
 from config.asgi import application
 
 pytestmark = pytest.mark.django_db(transaction=True)
@@ -70,3 +73,32 @@ def test_charger_page_reverse_resolves_expected_path():
     cid = "CP-TEST-REVERSE"
 
     assert reverse("charger-page", args=[cid]) == f"/c/{cid}/"
+
+
+@override_settings(ROOT_URLCONF="apps.ocpp.urls")
+def test_ocpp_websocket_rate_limit_enforced():
+    async def run_scenario():
+        serial = "CP-RATE-LIMIT"
+        path = f"/{serial}"
+
+        first = WebsocketCommunicator(application, path)
+        connected, _ = await first.connect()
+        assert connected is True
+
+        second = WebsocketCommunicator(application, path)
+        connected, _ = await second.connect()
+        assert connected is False
+        await second.disconnect()
+
+        await first.disconnect()
+
+    RateLimit.objects.create(
+        content_type=ContentType.objects.get_for_model(Charger),
+        scope_key="ocpp-connect",
+        limit=1,
+        window_seconds=120,
+    )
+
+    cache.clear()
+
+    async_to_sync(run_scenario)()
