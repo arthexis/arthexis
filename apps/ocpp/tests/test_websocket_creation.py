@@ -16,7 +16,7 @@ from django.test.utils import override_settings
 from django.urls import reverse
 from django.utils import timezone
 
-from apps.ocpp import store
+from apps.ocpp import consumers, store
 from apps.ocpp.models import Charger, Simulator
 from apps.ocpp.simulator import ChargePointSimulator
 from apps.rates.models import RateLimit
@@ -99,6 +99,20 @@ def test_charger_page_reverse_resolves_expected_path():
     cid = "CP-TEST-REVERSE"
 
     assert reverse("charger-page", args=[cid]) == f"/c/{cid}/"
+
+
+def test_select_subprotocol_prioritizes_preference_and_defaults():
+    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+
+    cases = [
+        ((["ocpp1.6", "ocpp2.0.1", "ocpp2.0"], "ocpp2.0"), "ocpp2.0"),
+        ((["ocpp2.0", "ocpp2.0.1"], None), "ocpp2.0.1"),
+        ((["ocpp1.6"], None), "ocpp1.6"),
+        ((["unexpected"], None), None),
+    ]
+
+    for (offered, preferred), expected in cases:
+        assert consumer._select_subprotocol(offered, preferred) == expected
 
 
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
