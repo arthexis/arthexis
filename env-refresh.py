@@ -414,8 +414,8 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
     # disturbing operator-managed records.
     Site = apps.get_model("sites", "Site")
 
-    # Ensure Application and Module entries exist for local apps before loading
-    # fixtures that reference them.
+    # Ensure Application entries exist for local apps before loading fixtures
+    # that reference them.
     call_command("register_site_apps")
 
     fixture_hash_file = locks_dir / "fixtures.md5"
