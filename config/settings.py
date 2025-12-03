@@ -28,6 +28,7 @@ from django.middleware.csrf import CsrfViewMiddleware
 from django.core.exceptions import DisallowedHost, ImproperlyConfigured
 from django.contrib.sites import shortcuts as sites_shortcuts
 from django.contrib.sites.requests import RequestSite
+from django.db import DatabaseError
 from urllib.parse import urlsplit
 import django.utils.encoding as encoding
 from apps.celery.utils import resolve_celery_shutdown_timeout
@@ -483,7 +484,7 @@ def _get_current_site_with_request_fallback(request=None):
     except Exception as exc:
         from django.contrib.sites.models import Site
 
-        if request is not None and isinstance(exc, Site.DoesNotExist):
+        if request is not None and isinstance(exc, (Site.DoesNotExist, DatabaseError)):
             return RequestSite(request)
         raise
 
