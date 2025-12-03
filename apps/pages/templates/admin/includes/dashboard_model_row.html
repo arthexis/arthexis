@@ -25,6 +25,7 @@
           id="{{ status_container_id }}"
           class="dashboard-model-status"
           data-model-status-loader
+          hx-ext="intersect"
           data-fallback-template="{{ status_container_id }}-fallback"
           hx-get="{% url 'admin:dashboard_model_status' %}?app={{ app_label }}&model={{ model.object_name|urlencode }}"
           hx-trigger="intersect once"
