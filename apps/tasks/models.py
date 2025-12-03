@@ -15,7 +15,8 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.celery.utils import is_celery_enabled
 from apps.core.entity import Entity, EntityAllManager, EntityManager
-from apps.core.models import SecurityGroup as CoreSecurityGroup, User as CoreUser
+from apps.core.models import SecurityGroup as CoreSecurityGroup
+from apps.users.models import User as CoreUser
 from apps.emails import mailer
 from apps.odoo.models import OdooProduct as CoreOdooProduct
 
@@ -70,7 +71,7 @@ class TaskCategory(Entity):
         help_text=_("Typical time expected to complete tasks in this category."),
     )
     manager = models.ForeignKey(
-        "core.User",
+        "users.User",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -151,7 +152,7 @@ class ManualTask(Entity):
         help_text=_("Select the standardized category for this work."),
     )
     assigned_user = models.ForeignKey(
-        "core.User",
+        "users.User",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -169,7 +170,7 @@ class ManualTask(Entity):
         help_text=_("Security group containing users who can fulfill the task."),
     )
     manager = models.ForeignKey(
-        "core.User",
+        "users.User",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,

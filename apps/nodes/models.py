@@ -13,7 +13,7 @@ from django.db.utils import DatabaseError, IntegrityError
 from django.db.models.signals import post_delete
 from django.dispatch import Signal, receiver
 from apps.base.models import Entity
-from apps.core.models import Profile
+from apps.users.models import Profile
 from apps.release.models import PackageRelease
 from apps.sigils.fields import SigilShortAutoField
 from django.utils.translation import gettext_lazy as _

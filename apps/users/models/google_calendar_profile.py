@@ -53,6 +53,7 @@ class GoogleCalendarProfile(Profile):
     class Meta:
         verbose_name = _("Google Calendar")
         verbose_name_plural = _("Google Calendars")
+        db_table = "core_googlecalendarprofile"
         constraints = [
             models.CheckConstraint(
                 condition=(

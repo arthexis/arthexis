@@ -11,7 +11,7 @@ from django.utils.translation import gettext_lazy as _
 from django.views.decorators.debug import sensitive_variables
 
 from apps.base.models import Entity, EntityUserManager
-from apps.core import temp_passwords
+from apps.users import temp_passwords
 
 from .profile import Profile
 
@@ -295,3 +295,4 @@ class User(Entity, AbstractUser):
     class Meta(AbstractUser.Meta):
         verbose_name = _("User")
         verbose_name_plural = _("Users")
+        db_table = "core_user"
