@@ -319,19 +319,6 @@ class LandingLead(Lead):
         return f"{self.landing.label} ({self.path})"
 
 
-class LandingLead(Lead):
-    landing = models.ForeignKey(
-        "pages.Landing", on_delete=models.CASCADE, related_name="leads"
-    )
-
-    class Meta:
-        verbose_name = _("Landing Lead")
-        verbose_name_plural = _("Landing Leads")
-
-    def __str__(self) -> str:  # pragma: no cover - simple representation
-        return f"{self.landing.label} ({self.path})"
-
-
 
 class UserManual(Entity):
     class PdfOrientation(models.TextChoices):
