@@ -414,6 +414,7 @@ LOCAL_APPS = [
     "apps.counters",
     "apps.energy",
     "apps.core",
+    "apps.users",
     "apps.leads",
     "apps.release",
     "apps.emails",
@@ -564,14 +565,14 @@ PAGES_CHAT_SOCKET_PATH = os.environ.get("PAGES_CHAT_SOCKET_PATH", "/ws/pages/cha
 
 
 # Custom user model
-AUTH_USER_MODEL = "core.User"
+AUTH_USER_MODEL = "users.User"
 
 # Enable RFID authentication backend and restrict default admin login to localhost
 AUTHENTICATION_BACKENDS = [
-    "apps.core.backends.TempPasswordBackend",
-    "apps.core.backends.LocalhostAdminBackend",
-    "apps.core.backends.TOTPBackend",
-    "apps.core.backends.RFIDBackend",
+    "apps.users.backends.TempPasswordBackend",
+    "apps.users.backends.LocalhostAdminBackend",
+    "apps.users.backends.TOTPBackend",
+    "apps.users.backends.RFIDBackend",
 ]
 
 # Use the custom login view for all authentication redirects.

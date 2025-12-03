@@ -58,7 +58,7 @@ from .reports import (
     resolve_period,
 )
 from apps.camera import capture_rpi_snapshot
-from apps.core import temp_passwords
+from apps.users import temp_passwords
 from apps.core.admin import EmailOutboxAdminForm, SaveBeforeChangeAction
 from apps.ocpp.models import CPForwarder
 from .models import (

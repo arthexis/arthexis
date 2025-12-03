@@ -56,7 +56,7 @@ from django_otp import DEVICE_ID_SESSION_KEY
 from apps.core import changelog
 from apps.emails import mailer
 from apps.links.templatetags.ref_tags import build_footer_context
-from apps.core.backends import (
+from apps.users.backends import (
     TOTP_DEVICE_NAME,
     get_user_totp_devices,
     totp_devices_allow_passwordless,
@@ -1455,7 +1455,7 @@ def invitation_login(request, uidb64, token):
             user.set_password(password)
         user.is_active = True
         user.save()
-        login(request, user, backend="apps.core.backends.LocalhostAdminBackend")
+        login(request, user, backend="apps.users.backends.LocalhostAdminBackend")
         return redirect(reverse("admin:index") if user.is_staff else "/")
     return render(request, "pages/invitation_login.html", {"form": form})
 

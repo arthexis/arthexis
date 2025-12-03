@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 
 PYPI_REQUEST_TIMEOUT = 10
 
-from . import temp_passwords
+from apps.users import temp_passwords
 from apps.release.models import PackageRelease
 from .models import RFID
 from apps.odoo.models import OdooEmployee, OdooProduct

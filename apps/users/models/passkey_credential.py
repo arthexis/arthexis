@@ -34,6 +34,7 @@ class PasskeyCredential(Entity):
         ordering = ("name", "created_at")
         verbose_name = _("Passkey")
         verbose_name_plural = _("Passkeys")
+        db_table = "core_passkeycredential"
         constraints = [
             models.UniqueConstraint(
                 fields=("user", "name"),

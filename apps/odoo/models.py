@@ -15,7 +15,7 @@ from django.utils.translation import gettext, gettext_lazy as _
 
 from apps.chats.models import ChatBridge, ChatBridgeManager
 from apps.core.entity import Entity
-from apps.core.models import Profile
+from apps.users.models import Profile
 from apps.sigils.fields import SigilShortAutoField
 
 
