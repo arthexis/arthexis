@@ -22,6 +22,7 @@ from django.contrib.auth import authenticate
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from asgiref.sync import sync_to_async
+from apps.rates.mixins import RateLimitedConsumerMixin
 from config.offline import requires_network
 
 from . import store
@@ -178,11 +179,14 @@ def _extract_vehicle_identifier(payload: dict) -> tuple[str, str]:
 class SinkConsumer(AsyncWebsocketConsumer):
     """Accept any message without validation."""
 
+    rate_limit_scope = "sink-connect"
+    rate_limit_fallback = store.MAX_CONNECTIONS_PER_IP
+    rate_limit_window = 60
+
     @requires_network
     async def connect(self) -> None:
         self.client_ip = _resolve_client_ip(self.scope)
-        if not store.register_ip_connection(self.client_ip, self):
-            await self.close(code=4003)
+        if not await self.enforce_rate_limit():
             return
         await self.accept()
 
@@ -202,10 +206,14 @@ class SinkConsumer(AsyncWebsocketConsumer):
             pass
 
 
-class CSMSConsumer(AsyncWebsocketConsumer):
+class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
     """Very small subset of OCPP 1.6 CSMS behaviour."""
 
     consumption_update_interval = 300
+    rate_limit_target = Charger
+    rate_limit_scope = "ocpp-connect"
+    rate_limit_fallback = store.MAX_CONNECTIONS_PER_IP
+    rate_limit_window = 60
 
     def _extract_serial_identifier(self) -> str:
         """Return the charge point serial from the query string or path."""
@@ -417,13 +425,12 @@ class CSMSConsumer(AsyncWebsocketConsumer):
         if existing is not None:
             store.release_ip_connection(getattr(existing, "client_ip", None), existing)
             await existing.close()
-        if not store.register_ip_connection(self.client_ip, self):
+        if not await self.enforce_rate_limit():
             store.add_log(
                 self.store_key,
                 f"Rejected connection from {self.client_ip or 'unknown'}: rate limit exceeded",
                 log_type="charger",
             )
-            await self.close(code=4003)
             return
         await self.accept(subprotocol=subprotocol)
         store.add_log(
