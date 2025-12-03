@@ -27,11 +27,15 @@ _RULE_MODEL_CONTEXT: ContextVar[str | None] = ContextVar(
 
 
 def rule_success(message: str = DEFAULT_SUCCESS_MESSAGE) -> dict[str, object]:
-    return {"success": True, "message": message, "icon": SUCCESS_ICON}
+    """Return a serializable success payload for dashboard rules."""
+
+    return {"success": True, "message": str(message), "icon": SUCCESS_ICON}
 
 
 def rule_failure(message: str) -> dict[str, object]:
-    return {"success": False, "message": message, "icon": ERROR_ICON}
+    """Return a serializable failure payload for dashboard rules."""
+
+    return {"success": False, "message": str(message), "icon": ERROR_ICON}
 
 
 @contextmanager
