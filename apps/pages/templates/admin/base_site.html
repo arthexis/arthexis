@@ -440,18 +440,41 @@ document.addEventListener('DOMContentLoaded', function () {
 
 .chat-message {
     display: flex;
-    flex-direction: column;
-    gap: 0.2rem;
+    align-items: flex-start;
+    gap: 0.75rem;
     font-size: 0.9rem;
     line-height: 1.45;
 }
 
+.chat-message .chat-body {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
 .chat-message.staff {
+    flex-direction: row-reverse;
+}
+
+.chat-message.staff .chat-body {
     align-items: flex-end;
 }
 
 .chat-message.staff .chat-meta {
     text-align: right;
+}
+
+.chat-avatar {
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: 50%;
+    object-fit: cover;
+    box-shadow: 0 0.35rem 0.75rem rgba(15, 23, 42, 0.25);
+    border: 1px solid rgba(21, 128, 61, 0.25);
+    background: rgba(22, 163, 74, 0.1);
+    flex-shrink: 0;
 }
 
 .chat-bubble {

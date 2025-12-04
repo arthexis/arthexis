@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import logging
 import uuid
 from datetime import timedelta
@@ -87,6 +88,16 @@ class ChatAvatar(Entity):
                 if getattr(member, "is_online", False):
                     return True
         return False
+
+
+def gravatar_url(email: str, *, size: int = 128, default: str = "identicon") -> str:
+    """Return the Gravatar URL for the given email address."""
+
+    normalized = (email or "").strip().lower()
+    if not normalized:
+        return ""
+    digest = hashlib.md5(normalized.encode("utf-8"), usedforsecurity=False).hexdigest()
+    return f"https://www.gravatar.com/avatar/{digest}?s={size}&d={default}"
 
 
 class ChatBridgeManager(EntityManager):
@@ -404,6 +415,20 @@ class ChatMessage(Entity):
             )
         return gettext("Visitor") if not self.from_staff else gettext("Staff")
 
+    def author_avatar_url(self) -> str:
+        if self.sender_id and self.sender:
+            avatar = getattr(self.sender, "chat_avatars", None)
+            if avatar:
+                linked_avatar = avatar.filter(is_enabled=True).first()
+                if linked_avatar and linked_avatar.photo and linked_avatar.photo.url:
+                    return linked_avatar.photo.url
+            email = getattr(self.sender, "email", "")
+            if email:
+                size = getattr(settings, "CHATS_GRAVATAR_SIZE", 128)
+                default = getattr(settings, "CHATS_GRAVATAR_DEFAULT", "identicon")
+                return gravatar_url(email, size=size, default=default)
+        return ""
+
     def to_payload(self) -> dict[str, object]:
         return {
             "id": self.pk,
@@ -411,4 +436,5 @@ class ChatMessage(Entity):
             "created": self.created_at.isoformat(),
             "from_staff": self.from_staff,
             "author": self.author_label(),
+            "avatar": self.author_avatar_url(),
         }
