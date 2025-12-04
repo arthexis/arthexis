@@ -101,7 +101,7 @@
                 "cwd": "${workspaceFolder}"
             },
             "windows": {
-                "command": "${workspaceFolder}\\.venv\\Scripts\\python.exe ${workspaceFolder}\\manage.py migrate --check && ${workspaceFolder}\\.venv\\Scripts\\python.exe ${workspaceFolder}\\manage.py check"
+                "command": "${workspaceFolder}\\.venv\\Scripts\\python.exe ${workspaceFolder}\\manage.py migrate --check; if ($?) { ${workspaceFolder}\\.venv\\Scripts\\python.exe ${workspaceFolder}\\manage.py check }"
             },
             "problemMatcher": [],
             "detail": "Run migration and system checks once before starting runserver"
