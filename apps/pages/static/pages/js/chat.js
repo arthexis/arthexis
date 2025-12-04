@@ -161,20 +161,32 @@
       const content = (message.content || '').toString();
       const author = (message.author || '').toString();
       const time = formatTime(message.created);
+      const avatar = (message.avatar || '').toString();
       const item = document.createElement('div');
       item.className = 'chat-message';
       if (message.from_staff) {
         item.classList.add('staff');
       }
       resetPlaceholder();
+      if (avatar) {
+        const avatarImg = document.createElement('img');
+        avatarImg.className = 'chat-avatar';
+        avatarImg.src = avatar;
+        avatarImg.alt = author || '';
+        avatarImg.loading = 'lazy';
+        item.appendChild(avatarImg);
+      }
+      const body = document.createElement('div');
+      body.className = 'chat-body';
       const meta = document.createElement('div');
       meta.className = 'chat-meta';
       meta.textContent = time ? `${author} · ${time}` : author;
       const bubble = document.createElement('div');
       bubble.className = 'chat-bubble';
       bubble.textContent = content;
-      item.appendChild(meta);
-      item.appendChild(bubble);
+      body.appendChild(meta);
+      body.appendChild(bubble);
+      item.appendChild(body);
       messages.appendChild(item);
       scrollToBottom();
       addUnread();
