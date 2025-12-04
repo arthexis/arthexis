@@ -51,10 +51,10 @@ Visita el [Informe de cambios](https://arthexis.com/changelog/) para explorar la
   | `UnlockConnector` | ✅ | ✅ | ✅ | Liberamos conectores bloqueados sin intervención en sitio. |
   | `UpdateFirmware` | ✅ | ✅ | ✅ | Entregamos paquetes de firmware a los cargadores con tokens de descarga seguros y seguimos las respuestas de instalación. |
 
-  **Hoja de ruta OCPP.** Consulta el [cookbook de la hoja de ruta OCPP](docs/cookbooks/ocpp-roadmap.md) para conocer el trabajo planificado de los catálogos OCPP 1.6, 2.0.1 y 2.1.
+  **Hoja de ruta OCPP.** Consulta el [cookbook de la hoja de ruta OCPP](apps/docs/cookbooks/ocpp-roadmap.md) para conocer el trabajo planificado de los catálogos OCPP 1.6, 2.0.1 y 2.1.
 
 - Reservas de puntos de carga con asignación automática de conectores, vinculación a cuentas de energía y RFIDs, confirmación del EVCS y cancelación desde el centro de control.
-- Consulta el [cookbook de integración de API con Odoo](docs/cookbooks/odoo-integrations.md) para ver cómo sincronizamos credenciales de empleados mediante `res.users` y consultas al catálogo de productos mediante `product.product`.
+- Consulta el [cookbook de integración de API con Odoo](apps/docs/cookbooks/odoo-integrations.md) para ver cómo sincronizamos credenciales de empleados mediante `res.users` y consultas al catálogo de productos mediante `product.product`.
 - Funciona en [Windows 11](https://www.microsoft.com/es-es/windows/windows-11) y [Ubuntu 22.04 LTS](https://releases.ubuntu.com/22.04/)
 - Probado para la [Raspberry Pi 4 Modelo B](https://www.raspberrypi.com/products/raspberry-pi-4-model-b/)
 
@@ -127,14 +127,14 @@ Los scripts de ciclo de vida para servicios y actualizaciones ahora viven en [`s
 - Accede al [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) en [`http://localhost:8888/admin/`](http://localhost:8888/admin/) para revisar y gestionar datos en vivo. Usa `--port` con los scripts de inicio o el instalador si necesitas exponer otro puerto.
 - Consulta la [documentación de administración](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/) en [`http://localhost:8888/admindocs/`](http://localhost:8888/admindocs/) para leer la API generada automáticamente a partir de tus modelos.
 - Canales de actualización: las instalaciones nuevas usan `--fixed` por defecto para mantener desactivada la actualización automática. Activa las actualizaciones en el canal estable con `--stable` (revisiones cada 24 horas alineadas con las versiones), sigue la rama principal rápidamente con `--unstable` (revisiones cada 15 minutos) o usa el canal latest con `--latest` (revisiones cada hora).
-- Sigue la [Guía de instalación y administración](docs/cookbooks/install-start-stop-upgrade-uninstall.md) para tareas de despliegue, ciclo de vida y runbooks operativos.
-- Integra y da mantenimiento a los cargadores con el [Cookbook de conectividad y mantenimiento EVCS](docs/cookbooks/evcs-connectivity-maintenance.md).
-- Configura pasarelas de pago con el [Cookbook de procesadores de pago](docs/cookbooks/payment-processors.md).
-- Revisa el [Cookbook de sigilos](docs/cookbooks/sigils.md) cuando configures ajustes tokenizados entre entornos.
-- Gestiona exportaciones, importaciones y trazabilidad con el [Cookbook de datos de usuario](docs/cookbooks/user-data.md).
-- Planifica estrategias de despliegue de funciones con el [Cookbook de características de nodos](docs/cookbooks/node-features.md).
-- Organiza accesos directos para usuarios avanzados mediante el [Cookbook de favoritos](docs/cookbooks/favorites.md).
-- Conecta espacios de trabajo de Slack con el [Cookbook de incorporación de Slack Bot](docs/cookbooks/slack-bot-onboarding.md).
+- Sigue la [Guía de instalación y administración](apps/docs/cookbooks/install-start-stop-upgrade-uninstall.md) para tareas de despliegue, ciclo de vida y runbooks operativos.
+- Integra y da mantenimiento a los cargadores con el [Cookbook de conectividad y mantenimiento EVCS](apps/docs/cookbooks/evcs-connectivity-maintenance.md).
+- Configura pasarelas de pago con el [Cookbook de procesadores de pago](apps/docs/cookbooks/payment-processors.md).
+- Revisa el [Cookbook de sigilos](apps/docs/cookbooks/sigils.md) cuando configures ajustes tokenizados entre entornos.
+- Gestiona exportaciones, importaciones y trazabilidad con el [Cookbook de datos de usuario](apps/docs/cookbooks/user-data.md).
+- Planifica estrategias de despliegue de funciones con el [Cookbook de características de nodos](apps/docs/cookbooks/node-features.md).
+- Organiza accesos directos para usuarios avanzados mediante el [Cookbook de favoritos](apps/docs/cookbooks/favorites.md).
+- Conecta espacios de trabajo de Slack con el [Cookbook de incorporación de Slack Bot](apps/docs/cookbooks/slack-bot-onboarding.md).
 
 ## Soporte
 

@@ -1,0 +1,132 @@
+[
+  {
+    "model": "docs.cookbook",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "slug": "arthexis-deployment-script-manual",
+      "title": "Arthexis Deployment Script Manual",
+      "file_name": "install-start-stop-upgrade-uninstall.md"
+    }
+  },
+  {
+    "model": "docs.cookbook",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "slug": "cookbook-audit",
+      "title": "Cookbook audit",
+      "file_name": "outdated-cookbook-review.md"
+    }
+  },
+  {
+    "model": "docs.cookbook",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "slug": "evcs-connectivity-maintenance",
+      "title": "EVCS Connectivity & Maintenance Cookbook",
+      "file_name": "evcs-connectivity-maintenance.md"
+    }
+  },
+  {
+    "model": "docs.cookbook",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "slug": "favorites",
+      "title": "Favorites Cookbook",
+      "file_name": "favorites.md"
+    }
+  },
+  {
+    "model": "docs.cookbook",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "slug": "lcd-screen-flicker-troubleshooting",
+      "title": "LCD screen flicker during boot or upgrade",
+      "file_name": "lcd-screen-flicker-troubleshooting.md"
+    }
+  },
+  {
+    "model": "docs.cookbook",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "slug": "managing-local-node-data",
+      "title": "Managing Local Node Data",
+      "file_name": "managing-local-node-data.md"
+    }
+  },
+  {
+    "model": "docs.cookbook",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "slug": "node-features",
+      "title": "Node Features Cookbook",
+      "file_name": "node-features.md"
+    }
+  },
+  {
+    "model": "docs.cookbook",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "slug": "ocpp-roadmap",
+      "title": "OCPP Roadmap Cookbook",
+      "file_name": "ocpp-roadmap.md"
+    }
+  },
+  {
+    "model": "docs.cookbook",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "slug": "odoo-integrations",
+      "title": "Odoo Integrations Cookbook",
+      "file_name": "odoo-integrations.md"
+    }
+  },
+  {
+    "model": "docs.cookbook",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "slug": "payment-processors",
+      "title": "Payment Processors Cookbook",
+      "file_name": "payment-processors.md"
+    }
+  },
+  {
+    "model": "docs.cookbook",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "slug": "sigils",
+      "title": "Arthexis Sigils Cookbook",
+      "file_name": "sigils.md"
+    }
+  },
+  {
+    "model": "docs.cookbook",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "slug": "slack-bot-onboarding",
+      "title": "Slack Bot Onboarding Cookbook",
+      "file_name": "slack-bot-onboarding.md"
+    }
+  },
+  {
+    "model": "docs.cookbook",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "slug": "user-data",
+      "title": "User Data Cookbook",
+      "file_name": "user-data.md"
+    }
+  }
+]

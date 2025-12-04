@@ -51,10 +51,10 @@ Besuche den [Changelog-Bericht](https://arthexis.com/changelog/), um vergangene 
   | `UnlockConnector` | ✅ | ✅ | ✅ | Entriegeln blockierte Anschlüsse ohne Vor-Ort-Einsatz. |
   | `UpdateFirmware` | ✅ | ✅ | ✅ | Liefern Firmwarepakete an Ladepunkte mit sicheren Download-Tokens und verfolgen Installationsrückmeldungen. |
 
-  **OCPP-Roadmap.** Die geplante Arbeit für die OCPP-1.6-, 2.0.1- und 2.1-Kataloge findest du im [OCPP-Roadmap-Cookbook](docs/cookbooks/ocpp-roadmap.md).
+  **OCPP-Roadmap.** Die geplante Arbeit für die OCPP-1.6-, 2.0.1- und 2.1-Kataloge findest du im [OCPP-Roadmap-Cookbook](apps/docs/cookbooks/ocpp-roadmap.md).
 
 - Ladepunktreservierungen mit automatischer Anschlusswahl, Verknüpfung zu Energiekonten und RFID-Tags, EVCS-Bestätigung sowie Stornierung über die Leitwarte.
-- Details findest du im [Odoo-API-Integrations-Cookbook](docs/cookbooks/odoo-integrations.md) zur Synchronisierung von Mitarbeiterzugängen über `res.users` und Produktkatalogabfragen über `product.product`.
+- Details findest du im [Odoo-API-Integrations-Cookbook](apps/docs/cookbooks/odoo-integrations.md) zur Synchronisierung von Mitarbeiterzugängen über `res.users` und Produktkatalogabfragen über `product.product`.
 - Läuft auf [Windows 11](https://www.microsoft.com/windows/windows-11) und [Ubuntu 22.04 LTS](https://releases.ubuntu.com/22.04/)
 - Getestet für den [Raspberry Pi 4 Model B](https://www.raspberrypi.com/products/raspberry-pi-4-model-b/)
 
@@ -127,14 +127,14 @@ Lebenszyklus-Helferskripte für Dienste und Upgrades befinden sich jetzt im Ordn
 - Greife über [`http://localhost:8888/admin/`](http://localhost:8888/admin/) auf den [Django-Admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) zu, um Live-Daten zu prüfen und zu pflegen. Verwende `--port` mit den Startskripten oder dem Installer, wenn du einen anderen Port freigeben musst.
 - Durchstöbere die [admindocs](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/) unter [`http://localhost:8888/admindocs/`](http://localhost:8888/admindocs/), um automatisch generierte API-Dokumentation deiner Modelle zu lesen.
 - Upgrade-Kanäle: Neue Installationen setzen standardmäßig `--fixed` und lassen Auto-Upgrade deaktiviert. Aktiviere automatische Updates auf dem stabilen Kanal mit `--stable` (24-Stunden-Prüfungen gemäß den Releases), verfolge Hauptzweig-Revisionen schnell mit `--unstable` (Prüfungen alle 15 Minuten) oder nutze den Latest-Kanal mit `--latest` (stündliche Prüfungen).
-- Folge dem [Installations- und Administrationshandbuch](docs/cookbooks/install-start-stop-upgrade-uninstall.md) für Deployment, Lifecycle-Aufgaben und operative Runbooks.
-- Nimm Ladepunkte mit dem [EVCS-Konnektivitäts- und Wartungs-Cookbook](docs/cookbooks/evcs-connectivity-maintenance.md) in Betrieb und halte sie instand.
-- Konfiguriere Zahlungs-Gateways mit dem [Payment Processors Cookbook](docs/cookbooks/payment-processors.md).
-- Nutze das [Sigil-Cookbook](docs/cookbooks/sigils.md), wenn du tokenbasierte Einstellungen über Umgebungen hinweg konfigurierst.
-- Verwalte Exporte, Importe und Prüfprotokolle mit dem [User-Data-Cookbook](docs/cookbooks/user-data.md).
-- Plane Feature-Rollouts mit dem [Node-Features-Cookbook](docs/cookbooks/node-features.md).
-- Kuratiere Abkürzungen für Power-User über das [Favorites-Cookbook](docs/cookbooks/favorites.md).
-- Verbinde Slack-Workspaces mit dem [Slack-Bot-Onboarding-Cookbook](docs/cookbooks/slack-bot-onboarding.md).
+- Folge dem [Installations- und Administrationshandbuch](apps/docs/cookbooks/install-start-stop-upgrade-uninstall.md) für Deployment, Lifecycle-Aufgaben und operative Runbooks.
+- Nimm Ladepunkte mit dem [EVCS-Konnektivitäts- und Wartungs-Cookbook](apps/docs/cookbooks/evcs-connectivity-maintenance.md) in Betrieb und halte sie instand.
+- Konfiguriere Zahlungs-Gateways mit dem [Payment Processors Cookbook](apps/docs/cookbooks/payment-processors.md).
+- Nutze das [Sigil-Cookbook](apps/docs/cookbooks/sigils.md), wenn du tokenbasierte Einstellungen über Umgebungen hinweg konfigurierst.
+- Verwalte Exporte, Importe und Prüfprotokolle mit dem [User-Data-Cookbook](apps/docs/cookbooks/user-data.md).
+- Plane Feature-Rollouts mit dem [Node-Features-Cookbook](apps/docs/cookbooks/node-features.md).
+- Kuratiere Abkürzungen für Power-User über das [Favorites-Cookbook](apps/docs/cookbooks/favorites.md).
+- Verbinde Slack-Workspaces mit dem [Slack-Bot-Onboarding-Cookbook](apps/docs/cookbooks/slack-bot-onboarding.md).
 
 ## Support
 
