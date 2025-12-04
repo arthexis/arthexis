@@ -14,7 +14,7 @@ Coordinate capabilities across nodes by managing `nodes.NodeFeature` records in 
 
 1. Open the Django admin and locate the **Nodes** application.
 2. Click **Node features** (model `nodes.NodeFeature`) to open the changelist (`admin:nodes_nodefeature_changelist`).
-3. The changelist is registered in [`nodes/admin.py`](../../nodes/admin.py) and displays columns for the display name, slug, default roles, enablement status, and available actions.
+3. The changelist is registered in [`apps/nodes/admin.py`](../../apps/nodes/admin.py#L1955-L2144) and displays columns for the display name, slug, default roles, enablement status, and available actions.
 
 ## Reviewing feature metadata
 
@@ -49,13 +49,13 @@ Manual features (those without default roles) still appear in the changelist and
 Node roles and individual nodes both control feature availability:
 
 - **Default roles** – Selecting roles on the feature form ensures new nodes that join the role automatically inherit the feature. The admin prepopulates `NodeFeature.roles` through the horizontal selector.
-- **Node-specific assignments** – Open a node change form (`admin:nodes_node_change`) to adjust the inline **Node feature assignments** table. The inline is provided by `NodeFeatureAssignmentInline` (`nodes/admin.py` lines 96-100) and writes to the `NodeFeatureAssignment` through model.
+- **Node-specific assignments** – Open a node change form (`admin:nodes_node_change`) to adjust the inline **Node feature assignments** table. The inline is provided by `NodeFeatureAssignmentInline` (`apps/nodes/admin.py` lines 115-144) and writes to the `NodeFeatureAssignment` through model.
 
 Changes to assignments are applied immediately after saving the node or feature form. Use Django’s history view to audit adjustments.
 
 ## Running eligibility checks
 
-Select one or more features on the changelist and choose **Check features for eligibility**. The admin action (`NodeFeatureAdmin.check_features_for_eligibility`) calls the registry in [`nodes/feature_checks.py`](../../nodes/feature_checks.py) to evaluate whether the local node satisfies hardware or software requirements. Results appear as Django messages with success, warning, or error levels.
+Select one or more features on the changelist and choose **Check features for eligibility**. The admin action (`NodeFeatureAdmin.check_features_for_eligibility`) calls the registry in [`apps/nodes/feature_checks.py`](../../apps/nodes/feature_checks.py) to evaluate whether the local node satisfies hardware or software requirements. Results appear as Django messages with success, warning, or error levels.
 
 Eligibility runs also report whether a feature can be enabled manually. The helper `_manual_enablement_message` in `NodeFeatureAdmin` communicates whether the feature belongs to `Node.MANUAL_FEATURE_SLUGS` or requires automation.
 
@@ -71,12 +71,12 @@ The nodes app loads these hooks from every installed app so features can own the
 
 ## Enabling features manually
 
-To toggle features outside of automatic provisioning, select them in the changelist and execute **Enable selected features**. When a local node is registered, the action creates `NodeFeatureAssignment` rows for that node (see `NodeFeatureAssignment.objects.update_or_create` calls in [`nodes/models.py`](../../nodes/models.py) lines 1009-1191).
+To toggle features outside of automatic provisioning, select them in the changelist and execute **Enable selected features**. When a local node is registered, the action creates `NodeFeatureAssignment` rows for that node (see `NodeFeatureAssignment.objects.update_or_create` calls in [`apps/nodes/models.py`](../../apps/nodes/models.py#L1009-L1191)).
 
 If no local node exists, the admin posts an informational message. Register a node first via the Nodes interface, then re-run the enable action.
 
 ## Troubleshooting
 
-- **Actions menu shows em dash (—)** – The feature is not currently enabled, or no default actions exist. Enable the feature or configure `DEFAULT_ACTIONS` in [`nodes/models.py`](../../nodes/models.py).
-- **Eligibility checks always warn about missing checks** – Add an implementation to the `feature_checks` registry in [`nodes/feature_checks.py`](../../nodes/feature_checks.py) to cover the slug in question.
+- **Actions menu shows em dash (—)** – The feature is not currently enabled, or no default actions exist. Enable the feature or configure `DEFAULT_ACTIONS` in [`apps/nodes/models.py`](../../apps/nodes/models.py).
+- **Eligibility checks always warn about missing checks** – Add an implementation to the `feature_checks` registry in [`apps/nodes/feature_checks.py`](../../apps/nodes/feature_checks.py) to cover the slug in question.
 - **Assignments disappear after deployments** – Verify that fixtures in `nodes/fixtures/` or migrations are not removing the feature (`nodes/migrations/0018`, `0027`, etc.). Reapply role assignments if a migration intentionally deprecates the feature.
