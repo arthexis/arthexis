@@ -88,16 +88,18 @@ class AuthenticatorLoginForm(AuthenticationForm):
                 except UserModel.DoesNotExist:
                     raise self.get_invalid_login_error()
                 devices = list(get_user_totp_devices(user))
-                if not devices:
-                    raise self.get_invalid_token_error()
                 enforce_password = bool(getattr(user, "require_2fa", False))
-                allows_passwordless = totp_devices_allow_passwordless(devices)
-                requires_password = enforce_password or totp_devices_require_password(
-                    devices, enforce=enforce_password
-                )
-                password_optional = (
-                    requires_password and allows_passwordless and not enforce_password
-                )
+                allows_passwordless = False
+                requires_password = True
+                password_optional = False
+                if devices:
+                    allows_passwordless = totp_devices_allow_passwordless(devices)
+                    requires_password = enforce_password or totp_devices_require_password(
+                        devices, enforce=enforce_password
+                    )
+                    password_optional = (
+                        requires_password and allows_passwordless and not enforce_password
+                    )
                 self.cleaned_data["otp_requires_password"] = (
                     "1" if requires_password else "0"
                 )

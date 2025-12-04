@@ -56,6 +56,7 @@ from apps.links.templatetags.ref_tags import build_footer_context
 from apps.users.backends import (
     TOTP_DEVICE_NAME,
     get_user_totp_devices,
+    simulate_totp_verification,
     totp_devices_allow_passwordless,
     totp_devices_require_password,
 )
@@ -691,41 +692,34 @@ def authenticator_login_check(request):
             status=400,
         )
 
+    requires_password = True
+    password_optional = False
     UserModel = get_user_model()
     try:
         user = UserModel._default_manager.get_by_natural_key(username)
     except UserModel.DoesNotExist:
+        simulate_totp_verification()
         return JsonResponse(
             {
-                "error": _(
-                    "No authenticator enrollment was found for the provided username."
-                )
-            },
-            status=404,
+                "requires_password": requires_password,
+                "password_optional": password_optional,
+            }
         )
 
     devices = list(get_user_totp_devices(user))
-    if not devices:
-        return JsonResponse(
-            {
-                "error": _(
-                    "No authenticator enrollment was found for the provided username."
-                )
-            },
-            status=404,
+    if devices:
+        enforce_password = bool(getattr(user, "require_2fa", False))
+        allows_passwordless = totp_devices_allow_passwordless(devices)
+        requires_password = enforce_password or totp_devices_require_password(
+            devices, enforce=enforce_password
         )
+        password_optional = requires_password and allows_passwordless and not enforce_password
 
-    enforce_password = bool(getattr(user, "require_2fa", False))
-    allows_passwordless = totp_devices_allow_passwordless(devices)
-    requires_password = enforce_password or totp_devices_require_password(
-        devices, enforce=enforce_password
-    )
-    password_optional = requires_password and allows_passwordless and not enforce_password
+    simulate_totp_verification()
     return JsonResponse(
         {
             "requires_password": requires_password,
             "password_optional": password_optional,
-            "username": user.get_username(),
         }
     )
 
