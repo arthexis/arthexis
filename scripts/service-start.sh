@@ -284,6 +284,23 @@ if [ "$LCD_FEATURE" = true ]; then
   fi
 fi
 
+RUNSERVER_EXTRA_ARGS=()
+run_runserver_preflight() {
+  if [ "${RUNSERVER_PREFLIGHT_DONE:-false}" = true ]; then
+    return 0
+  fi
+
+  echo "Running Django migration check once before runserver..."
+  python manage.py migrate --check
+
+  echo "Running Django system checks once before runserver..."
+  python manage.py check
+
+  RUNSERVER_PREFLIGHT_DONE=true
+  export DJANGO_SUPPRESS_MIGRATION_CHECK=1
+  RUNSERVER_EXTRA_ARGS+=("--skip-checks")
+}
+
 # Start Celery components to handle queued email if enabled
 if [ "$CELERY" = true ]; then
   celery -A config worker -l info --concurrency=2 &
@@ -298,11 +315,16 @@ if [ "$LCD_EMBEDDED" = true ]; then
 fi
 
 # Start the Django development server
+if ! run_runserver_preflight; then
+  echo "Runserver preflight checks failed; aborting startup." >&2
+  exit 1
+fi
+
 if [ "$AWAIT_START" = true ]; then
   if [ "$RELOAD" = true ]; then
-    python manage.py runserver 0.0.0.0:"$PORT" &
+    python manage.py runserver 0.0.0.0:"$PORT" "${RUNSERVER_EXTRA_ARGS[@]}" &
   else
-    python manage.py runserver 0.0.0.0:"$PORT" --noreload &
+    python manage.py runserver 0.0.0.0:"$PORT" --noreload "${RUNSERVER_EXTRA_ARGS[@]}" &
   fi
   DJANGO_SERVER_PID=$!
 
@@ -313,8 +335,8 @@ if [ "$AWAIT_START" = true ]; then
   fi
 else
   if [ "$RELOAD" = true ]; then
-    python manage.py runserver 0.0.0.0:"$PORT"
+    python manage.py runserver 0.0.0.0:"$PORT" "${RUNSERVER_EXTRA_ARGS[@]}"
   else
-    python manage.py runserver 0.0.0.0:"$PORT" --noreload
+    python manage.py runserver 0.0.0.0:"$PORT" --noreload "${RUNSERVER_EXTRA_ARGS[@]}"
   fi
 fi
