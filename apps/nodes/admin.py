@@ -72,7 +72,6 @@ from .models import (
     NetMessage,
     NodeManager,
     _format_upgrade_body,
-    NodeProfile,
 )
 from apps.cards.models import RFID
 from apps.emails.models import EmailOutbox
@@ -118,15 +117,6 @@ class NodeFeatureAssignmentInline(admin.TabularInline):
     model = NodeFeatureAssignment
     extra = 0
     autocomplete_fields = ("feature",)
-
-
-
-
-@admin.register(NodeProfile)
-class NodeProfileAdmin(EntityModelAdmin):
-    list_display = ("name",)
-    search_fields = ("name",)
-    fields = ("name", "data")
 
 
 @admin.register(NodeService)
