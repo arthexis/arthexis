@@ -9,32 +9,10 @@ ModuleDefinition = Mapping[str, object]
 LandingDefinition = tuple[str, str]
 
 
-ROLE_MODULE_DEFAULTS: Mapping[str, tuple[ModuleDefinition, ...]] = {
-    "Watchtower": (
-        {
-            "application": "ocpp",
-            "path": "/ocpp/",
-            "menu": "Charge Points",
-            "priority": 2,
-            "landings": (
-                ("/ocpp/cpms/dashboard/", "CPMS Online Dashboard"),
-                ("/ocpp/maintenance/request/", "Maintenance Request"),
-                ("/ocpp/evcs/simulator/", "Charge Point Simulator"),
-                ("/ocpp/rfid/validator/", "Identity Validator"),
-            ),
-        },
-        {
-            "application": "awg",
-            "path": "/awg/",
-            "menu": "",
-            "priority": 3,
-            "landings": (
-                ("/awg/", "AWG Cable Calculator"),
-                ("/awg/energy-tariff/", "Energy Tariff Calculator"),
-            ),
-        },
-    ),
-}
+# Default modules and landings are no longer provisioned via fixtures.
+# Keeping the structure in place allows admin tools to continue operating
+# without attempting to seed any defaults.
+ROLE_MODULE_DEFAULTS: Mapping[str, tuple[ModuleDefinition, ...]] = {}
 
 
 @dataclass
