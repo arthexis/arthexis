@@ -378,11 +378,44 @@ class ApplicationForm(forms.ModelForm):
         self.fields["name"].choices = get_local_app_choices()
 
 
+class ApplicationInstalledListFilter(admin.SimpleListFilter):
+    title = _("Installed state")
+    parameter_name = "installed"
+
+    def lookups(self, request, model_admin):  # pragma: no cover - admin UI
+        return (("1", _("Installed")), ("0", _("Not installed")))
+
+    def queryset(self, request, queryset):  # pragma: no cover - admin UI
+        value = self.value()
+        if value not in {"0", "1"}:
+            return queryset
+
+        installed_labels = set()
+        installed_names = set()
+        for config in django_apps.get_app_configs():
+            installed_labels.add(config.label)
+            installed_names.add(config.name)
+            installed_names.add(config.name.rsplit(".", 1)[-1])
+
+        installed_values = installed_labels | installed_names
+        if value == "1":
+            return queryset.filter(name__in=installed_values)
+        return queryset.exclude(name__in=installed_values)
+
+
 @admin.register(Application)
 class ApplicationAdmin(EntityModelAdmin):
     form = ApplicationForm
     list_display = ("name", "order", "app_verbose_name", "description", "installed")
+    search_fields = ("name", "description")
     readonly_fields = ("installed",)
+    list_filter = (
+        ApplicationInstalledListFilter,
+        "order",
+        "is_deleted",
+        "is_seed_data",
+        "is_user_data",
+    )
 
     @admin.display(description="Verbose name")
     def app_verbose_name(self, obj):
