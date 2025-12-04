@@ -1,0 +1,50 @@
+[
+  {
+    "model": "locale.language",
+    "pk": 1,
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "code": "en",
+      "english_name": "English",
+      "native_name": "English",
+      "is_default": true
+    }
+  },
+  {
+    "model": "locale.language",
+    "pk": 2,
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "code": "es",
+      "english_name": "Spanish (Latin America)",
+      "native_name": "Español (Latinoamérica)",
+      "is_default": false
+    }
+  },
+  {
+    "model": "locale.language",
+    "pk": 3,
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "code": "it",
+      "english_name": "Italian",
+      "native_name": "Italiano",
+      "is_default": false
+    }
+  },
+  {
+    "model": "locale.language",
+    "pk": 4,
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "code": "de",
+      "english_name": "German",
+      "native_name": "Deutsch",
+      "is_default": false
+    }
+  }
+]

@@ -38,6 +38,7 @@ include-package-data = true
 "apps.sigils" = ["**/*"]
 "apps.teams" = ["**/*"]
 "apps.vehicle" = ["**/*"]
+"apps.locale" = ["**/*"]
 config = ["**/*"]
 
 [tool.pytest.ini_options]

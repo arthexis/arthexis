@@ -42,7 +42,6 @@ def serialize_charger_for_network(
 ) -> dict[str, object]:
     simple_fields = [
         "display_name",
-        "language",
         "public_display",
         "require_rfid",
         "firmware_status",
@@ -78,6 +77,8 @@ def serialize_charger_for_network(
         "export_transactions": charger.export_transactions,
         "last_meter_values": charger.last_meter_values or {},
     }
+
+    data["language"] = charger.language_code()
 
     for field in simple_fields:
         data[field] = getattr(charger, field)

@@ -425,6 +425,7 @@ LOCAL_APPS = [
     "apps.links",
     "apps.maps",
     "apps.locals",
+    "apps.locale",
     "apps.content",
     "apps.media",
     "apps.odoo",
@@ -709,7 +710,7 @@ LANGUAGES = [
     ("de", _("German")),
 ]
 
-LOCALE_PATHS = [BASE_DIR / "locale"]
+LOCALE_PATHS = [BASE_DIR / "apps" / "locale" / "locale"]
 
 FORMAT_MODULE_PATH = ["config.formats"]
 

@@ -20,6 +20,7 @@ from django.utils.text import slugify
 from django.urls import NoReverseMatch, reverse
 from django.conf import settings
 from django.utils import translation, timezone, formats
+from django.db.utils import OperationalError, ProgrammingError
 from django.core.exceptions import ValidationError
 from django.db.models import (
     ExpressionWrapper,
@@ -38,6 +39,7 @@ from asgiref.sync import async_to_sync
 from utils.api import api_login_required
 
 from apps.nodes.models import NetMessage, Node
+from apps.locale.models import Language
 from apps.protocols.decorators import protocol_call
 from apps.protocols.models import ProtocolCall as ProtocolCallModel
 
@@ -820,13 +822,60 @@ def _live_sessions(
     return sessions
 
 
+def _supported_language_codes() -> list[str]:
+    codes: list[str] = []
+    try:
+        codes = [
+            str(code).strip()
+            for code in Language.objects.filter(is_deleted=False)
+            .values_list("code", flat=True)
+            if str(code).strip()
+        ]
+    except (OperationalError, ProgrammingError):
+        codes = []
+
+    if codes:
+        return codes
+
+    return [
+        str(code).strip()
+        for code, _ in getattr(settings, "LANGUAGES", [])
+        if str(code).strip()
+    ]
+
+
+def _default_language_code() -> str:
+    try:
+        code = (
+            Language.objects.filter(is_deleted=False, is_default=True)
+            .values_list("code", flat=True)
+            .first()
+            or ""
+        )
+    except (OperationalError, ProgrammingError):
+        code = ""
+
+    normalized = str(code).strip()
+    if normalized:
+        return normalized
+
+    configured = str(getattr(settings, "LANGUAGE_CODE", "") or "").strip()
+    if configured:
+        base = configured.replace("_", "-")
+        parts = base.split("-", 1)
+        return parts[0] if parts else base
+
+    supported = _supported_language_codes()
+    return supported[0] if supported else ""
+
+
 @lru_cache(maxsize=1)
 def _landing_page_translations() -> dict[str, dict[str, str]]:
     """Return static translations used by the charger public landing page."""
 
     catalog: dict[str, dict[str, str]] = {}
     seen_codes: set[str] = set()
-    for code, _name in settings.LANGUAGES:
+    for code in _supported_language_codes():
         normalized = str(code).strip()
         if not normalized or normalized in seen_codes:
             continue
@@ -1671,14 +1720,10 @@ def charger_page(request, cid, connector=None):
     state_source = tx if charger.connector_id is not None else (sessions if sessions else None)
     state, color = _charger_state(charger, state_source)
     language_cookie = request.COOKIES.get(settings.LANGUAGE_COOKIE_NAME)
-    available_languages = [
-        str(code).strip()
-        for code, _ in settings.LANGUAGES
-        if str(code).strip()
-    ]
+    available_languages = _supported_language_codes()
     supported_languages = set(available_languages)
     language_candidates: list[str] = []
-    connector_language = (charger.language or "").strip()
+    connector_language = charger.language_code()
     if connector_language:
         language_candidates.append(connector_language)
     if charger.connector_id is not None:
@@ -1686,17 +1731,17 @@ def charger_page(request, cid, connector=None):
             Charger.objects.filter(
                 charger_id=charger.charger_id, connector_id=None
             )
-            .values_list("language", flat=True)
+            .values_list("language__code", flat=True)
             .first()
             or ""
         ).strip()
         if parent_language:
             language_candidates.append(parent_language)
-    fallback_language = "es" if "es" in supported_languages else ""
-    if not fallback_language and available_languages:
-        fallback_language = available_languages[0]
-    if fallback_language:
+    fallback_language = _default_language_code()
+    if fallback_language and fallback_language in supported_languages:
         language_candidates.append(fallback_language)
+    elif available_languages:
+        language_candidates.append(available_languages[0])
     charger_language = ""
     for code in language_candidates:
         if code in supported_languages:

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from apps.locale.models import Language
+
 from .base import *
 
 class Charger(Entity):
@@ -45,12 +47,13 @@ class Charger(Entity):
         default=True,
         help_text="Display this charger on the public status dashboard.",
     )
-    language = models.CharField(
-        _("Language"),
-        max_length=12,
-        choices=settings.LANGUAGES,
-        default="",
+    language = models.ForeignKey(
+        Language,
+        on_delete=models.SET_NULL,
+        null=True,
         blank=True,
+        related_name="chargers",
+        verbose_name=_("Language"),
         help_text=_("Preferred language for the public landing page."),
     )
     preferred_ocpp_version = models.CharField(
@@ -312,6 +315,12 @@ class Charger(Entity):
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.charger_id
+
+    def language_code(self) -> str:
+        """Return the configured language code for this charger, if any."""
+
+        language = getattr(self, "language", None)
+        return (language.code or "").strip() if language else ""
 
     @classmethod
     def visible_for_user(cls, user):

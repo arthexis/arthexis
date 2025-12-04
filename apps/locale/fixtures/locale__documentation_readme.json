@@ -1,0 +1,62 @@
+[
+  {
+    "model": "locale.documentation",
+    "pk": 1,
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "slug": "constellation-readme",
+      "title": "Constelación Arthexis README",
+      "description": "Localized README landing content for the platform.",
+      "default_language": 1
+    }
+  },
+  {
+    "model": "locale.documentationtranslation",
+    "pk": 1,
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "documentation": 1,
+      "language": 1,
+      "source_path": "README.md",
+      "body": ""
+    }
+  },
+  {
+    "model": "locale.documentationtranslation",
+    "pk": 2,
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "documentation": 1,
+      "language": 2,
+      "source_path": "apps/locale/docs/README.es.md",
+      "body": ""
+    }
+  },
+  {
+    "model": "locale.documentationtranslation",
+    "pk": 3,
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "documentation": 1,
+      "language": 3,
+      "source_path": "apps/locale/docs/README.it.md",
+      "body": ""
+    }
+  },
+  {
+    "model": "locale.documentationtranslation",
+    "pk": 4,
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "documentation": 1,
+      "language": 4,
+      "source_path": "apps/locale/docs/README.de.md",
+      "body": ""
+    }
+  }
+]
