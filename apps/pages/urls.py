@@ -7,15 +7,6 @@ app_name = "pages"
 urlpatterns = [
     path("", views.index, name="index"),
     path("footer/", views.footer_fragment, name="footer-fragment"),
-    path("docs/", views.readme_docs_redirect, name="docs-redirect"),
-    path("docs/<path:doc>", views.readme_docs_redirect, name="docs-document-redirect"),
-    path(
-        "read/assets/<str:source>/<path:asset>",
-        views.readme_asset,
-        name="readme-asset",
-    ),
-    path("read/", views.readme, name="readme"),
-    path("read/<path:doc>", views.readme, name="readme-document"),
     path("sitemap.xml", views.sitemap, name="pages-sitemap"),
     path("changelog/", views.changelog_report, name="changelog"),
     path("changelog/data/", views.changelog_report_data, name="changelog-data"),
