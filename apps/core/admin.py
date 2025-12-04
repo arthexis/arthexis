@@ -323,7 +323,16 @@ class ProfileAdminMixin:
         if not getattr(user, "is_authenticated", False):
             return user, None, 0
 
-        queryset = self.model._default_manager.filter(user=user)
+        group_ids = list(user.groups.values_list("id", flat=True))
+        owner_filter = Q(user=user)
+        if group_ids:
+            owner_filter |= Q(group_id__in=group_ids)
+        if hasattr(self.model, "avatar"):
+            owner_filter |= Q(avatar__user=user)
+            if group_ids:
+                owner_filter |= Q(avatar__group_id__in=group_ids)
+
+        queryset = self.model._default_manager.filter(owner_filter)
         profiles = list(queryset[:2])
         if not profiles:
             return user, None, 0

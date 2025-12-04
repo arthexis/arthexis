@@ -13,7 +13,7 @@ from django.utils import timezone
 from django.utils.html import conditional_escape, format_html
 from django.utils.translation import gettext, gettext_lazy as _
 
-from apps.chats.models import ChatBridge, ChatBridgeManager
+from apps.chats.models import ChatAvatar, ChatBridge, ChatBridgeManager
 from apps.core.entity import Entity
 from apps.users.models import Profile
 from apps.sigils.fields import SigilShortAutoField
@@ -59,6 +59,14 @@ class OdooEmployee(Profile):
     name = models.CharField(max_length=255, blank=True, editable=False)
     email = models.EmailField(blank=True, editable=False)
     partner_id = models.PositiveIntegerField(null=True, blank=True, editable=False)
+    avatar = models.ForeignKey(
+        ChatAvatar,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="odoo_profiles",
+        help_text=_("Chat avatar that owns these Odoo credentials."),
+    )
 
     def _clear_verification(self):
         self.verified_on = None
@@ -114,6 +122,20 @@ class OdooEmployee(Profile):
         if update_fields_set is not None:
             kwargs["update_fields"] = list(update_fields_set)
         super().save(*args, **kwargs)
+
+    def clean(self):
+        super().clean()
+        errors: dict[str, list[str]] = {}
+        if not self.avatar_id:
+            errors.setdefault("avatar", []).append(
+                _("Select an avatar to own these credentials."),
+            )
+        if self.user_id or self.group_id:
+            errors.setdefault("avatar", []).append(
+                _("Assign the profile to an avatar instead of a direct user or group."),
+            )
+        if errors:
+            raise ValidationError(errors)
 
     @property
     def is_verified(self):
@@ -217,10 +239,14 @@ class OdooEmployee(Profile):
         constraints = [
             models.CheckConstraint(
                 condition=(
-                    (Q(user__isnull=False) & Q(group__isnull=True))
-                    | (Q(user__isnull=True) & Q(group__isnull=False))
+                    Q(avatar__isnull=True)
+                    | (
+                        Q(avatar__isnull=False)
+                        & Q(user__isnull=True)
+                        & Q(group__isnull=True)
+                    )
                 ),
-                name="odooemployee_requires_owner",
+                name="odooemployee_avatar_exclusive",
             )
         ]
 

@@ -26,23 +26,39 @@ class Profile(Entity):
         on_delete=models.CASCADE,
         related_name="+",
     )
+    avatar = models.ForeignKey(
+        "chats.ChatAvatar",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="+",
+        help_text=_("Avatar that owns this profile when not linked directly to a user or group."),
+    )
 
     class Meta:
         abstract = True
 
     def clean(self):
         super().clean()
-        if self.user_id and self.group_id:
+        owner_fields = {
+            "user": self.user_id,
+            "group": self.group_id,
+            "avatar": self.avatar_id,
+        }
+        provided = [field for field, value in owner_fields.items() if value]
+        if len(provided) > 1:
             raise ValidationError(
                 {
-                    "user": _("Select either a user or a security group, not both."),
-                    "group": _("Select either a user or a security group, not both."),
+                    field: _("Select only one owner between user, group, and avatar.")
+                    for field in provided
                 }
             )
-        if not self.user_id and not self.group_id:
+        if not provided:
             raise ValidationError(
-                _("Profiles must be assigned to a user or a security group."),
+                _("Profiles must be assigned to a user, security group, or avatar."),
             )
+        if self.avatar_id:
+            return
         if self.user_id:
             user_model = get_user_model()
             username_cache = {"value": None}
@@ -94,6 +110,8 @@ class Profile(Entity):
     def owner(self):
         """Return the assigned user or group."""
 
+        if self.avatar_id:
+            return self.avatar
         return self.user if self.user_id else self.group
 
     def owner_display(self) -> str:

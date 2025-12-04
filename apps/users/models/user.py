@@ -6,6 +6,7 @@ from django.contrib.auth.models import AbstractUser, UserManager as DjangoUserMa
 from django.core.exceptions import ValidationError
 from django.core.validators import validate_ipv46_address
 from django.db import models
+from django.db.models import Q
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from django.views.decorators.debug import sensitive_variables
@@ -221,13 +222,16 @@ class User(Entity, AbstractUser):
         if hasattr(profile_cls, "is_enabled"):
             queryset = queryset.filter(is_enabled=True)
 
-        profile = queryset.filter(user=user).first()
-        if profile:
-            return profile
         group_ids = list(user.groups.values_list("id", flat=True))
+        owner_filter = Q(user=user)
         if group_ids:
-            return queryset.filter(group_id__in=group_ids).first()
-        return None
+            owner_filter |= Q(group_id__in=group_ids)
+        if hasattr(profile_cls, "avatar"):
+            owner_filter |= Q(avatar__user=user)
+            if group_ids:
+                owner_filter |= Q(avatar__group_id__in=group_ids)
+
+        return queryset.filter(owner_filter).first()
 
     def get_profile(self, profile_cls: Type[Profile]):
         """Return the first matching profile for the user or their delegate chain."""
