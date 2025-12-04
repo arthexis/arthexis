@@ -29,7 +29,17 @@ class Application(Entity):
 
     @property
     def installed(self) -> bool:
-        return django_apps.is_installed(self.name)
+        name = (self.name or "").strip()
+        if not name:
+            return False
+
+        if django_apps.is_installed(name):
+            return True
+
+        return any(
+            config.name == name or config.name.endswith(f".{name}")
+            for config in django_apps.get_app_configs()
+        )
 
     @property
     def verbose_name(self) -> str:
