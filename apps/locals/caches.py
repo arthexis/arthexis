@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import datetime
+import itertools
 from typing import Callable, Iterable
 
 from django.db import models
@@ -104,6 +105,49 @@ def cache_store(
         return wrapper
 
     return decorator
+
+
+def build_cache_key(*parts: object) -> str:
+    """Join cache key parts using ``:`` separators."""
+
+    return ":".join(str(part) for part in parts)
+
+
+def cache_key_boolean_variants(
+    base_key: str, **boolean_options: bool | None
+) -> list[str]:
+    """Return cache keys for boolean option combinations.
+
+    Each boolean option produces ``0``/``1`` suffixes on the ``base_key``. A
+    ``None`` value expands to both ``False`` and ``True`` combinations, which is
+    useful for cache invalidation across variations.
+    """
+
+    variant_values = [
+        (False, True) if value is None else (bool(value),)
+        for value in boolean_options.values()
+    ]
+
+    if not variant_values:
+        return [base_key]
+
+    return [
+        f"{base_key}:{':'.join(str(int(value)) for value in combination)}"
+        for combination in itertools.product(*variant_values)
+    ]
+
+
+def get_cached_value_for_key(
+    cache_key: str,
+    builder: Callable[[], object],
+    *,
+    refresh_interval: datetime.timedelta | None = None,
+    force_refresh: bool = False,
+) -> object:
+    """Return a cached value for ``cache_key`` backed by :class:`CacheStore`."""
+
+    store = get_cache_store(cache_key, refresh_interval=refresh_interval)
+    return store.get_value(builder, force_refresh=force_refresh)
 
 
 def get_cache_store(
