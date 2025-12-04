@@ -482,8 +482,11 @@ def _configure_lock_dependent_tasks(config):
 def _connect_sqlite_wal():
     from django.db import connections
     from django.db.backends.signals import connection_created
+    from django.apps import apps
 
     def enable_sqlite_wal(**kwargs):
+        if not apps.ready:
+            return
         connection = kwargs.get("connection")
         if connection and connection.vendor == "sqlite":
             cursor = connection.cursor()
