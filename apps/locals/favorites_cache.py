@@ -1,8 +1,13 @@
 """Utilities for caching per-user admin favorites blocks."""
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable
 
-from .caches import CacheStore, get_cache_store, invalidate_cache_keys
+from .caches import (
+    build_cache_key,
+    cache_key_boolean_variants,
+    get_cached_value_for_key,
+    invalidate_cache_keys,
+)
 
 
 def _user_cache_keys(
@@ -11,29 +16,14 @@ def _user_cache_keys(
     show_changelinks: bool | None = None,
     show_model_badges: bool | None = None,
 ) -> list[str]:
-    """Return cache keys for a user's favorites block.
+    """Return cache keys for a user's favorites block."""
 
-    If ``show_changelinks`` or ``show_model_badges`` are ``None``, keys for both
-    boolean states are returned to support cache invalidation across variants.
-    """
-
-    changelinks_options: Iterable[bool]
-    if show_changelinks is None:
-        changelinks_options = (False, True)
-    else:
-        changelinks_options = (bool(show_changelinks),)
-
-    model_badges_options: Iterable[bool]
-    if show_model_badges is None:
-        model_badges_options = (False, True)
-    else:
-        model_badges_options = (bool(show_model_badges),)
-
-    return [
-        f"admin:favorites:block:{user_id}:{int(changelinks)}:{int(model_badges)}"
-        for changelinks in changelinks_options
-        for model_badges in model_badges_options
-    ]
+    base_key = build_cache_key("admin", "favorites", "block", user_id)
+    return cache_key_boolean_variants(
+        base_key,
+        changelinks=show_changelinks,
+        model_badges=show_model_badges,
+    )
 
 
 def user_favorites_cache_key(
@@ -48,17 +38,6 @@ def user_favorites_cache_key(
     )[0]
 
 
-def _favorites_store(
-    user_id: int, *, show_changelinks: bool, show_model_badges: bool
-) -> CacheStore:
-    cache_key = user_favorites_cache_key(
-        user_id,
-        show_changelinks=show_changelinks,
-        show_model_badges=show_model_badges,
-    )
-    return get_cache_store(cache_key)
-
-
 def get_cached_user_favorites(
     user_id: int,
     *,
@@ -66,12 +45,12 @@ def get_cached_user_favorites(
     show_model_badges: bool,
     builder: Callable[[], object],
 ):
-    store = _favorites_store(
+    cache_key = user_favorites_cache_key(
         user_id,
         show_changelinks=show_changelinks,
         show_model_badges=show_model_badges,
     )
-    return store.get_value(builder)
+    return get_cached_value_for_key(cache_key, builder)
 
 
 def clear_user_favorites_cache(
