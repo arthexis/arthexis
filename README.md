@@ -51,10 +51,10 @@ Visit our [Changelog Report](https://arthexis.com/changelog/) to browse past and
   | `UnlockConnector` | ✅ | ✅ | ✅ | Release stuck connectors without on-site intervention. |
   | `UpdateFirmware` | ✅ | ✅ | ✅ | Deliver firmware packages to chargers with secure download tokens and track installation responses. |
 
-  **OCPP roadmap.** Explore the upcoming OCPP 1.6, 2.0.1, and 2.1 catalogue work in the [OCPP roadmap cookbook](docs/cookbooks/ocpp-roadmap.md).
+  **OCPP roadmap.** Explore the upcoming OCPP 1.6, 2.0.1, and 2.1 catalogue work in the [OCPP roadmap cookbook](apps/docs/cookbooks/ocpp-roadmap.md).
 
 - Charge point reservations with automated connector assignment, energy account and RFID linkage, EVCS confirmation tracking, and control-center cancellation support.
-- Review the [Odoo API Integrations Cookbook](docs/cookbooks/odoo-integrations.md) for details on syncing employee credentials via `res.users` and product catalog lookups via `product.product`.
+- Review the [Odoo API Integrations Cookbook](apps/docs/cookbooks/odoo-integrations.md) for details on syncing employee credentials via `res.users` and product catalog lookups via `product.product`.
 - Runs on [Windows 11](https://www.microsoft.com/windows/windows-11) and [Ubuntu 22.04 LTS](https://releases.ubuntu.com/22.04/)
 - Tested for the [Raspberry Pi 4 Model B](https://www.raspberrypi.com/products/raspberry-pi-4-model-b/)
 
@@ -132,15 +132,15 @@ Upgrade channels (opt-in during install/upgrade or with `scripts/delegated-upgra
 ### 4. Administration
 - Access the [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) at [`http://localhost:8888/admin/`](http://localhost:8888/admin/) to review and manage live data. Use `--port` with the start scripts or installer when you need to expose a different port.
 - Browse the [admindocs](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/) at [`http://localhost:8888/admindocs/`](http://localhost:8888/admindocs/) for API documentation that is generated from your models.
-- Follow the [Install & Administration Guide](docs/cookbooks/install-start-stop-upgrade-uninstall.md) for deployment, lifecycle tasks, and operational runbooks.
-- Onboard and service chargers with the [EVCS Connectivity & Maintenance Cookbook](docs/cookbooks/evcs-connectivity-maintenance.md).
-- Configure payment gateways with the [Payment Processors Cookbook](docs/cookbooks/payment-processors.md).
-- Reference the [Sigils Cookbook](docs/cookbooks/sigils.md) when configuring tokenized settings across environments.
-- Understand seed fixtures and per-user files with [Managing Local Node Data](docs/cookbooks/managing-local-node-data.md).
-- Manage exports, imports, and audit trails with the [User Data Cookbook](docs/cookbooks/user-data.md).
-- Plan feature rollout strategies using the [Node Features Cookbook](docs/cookbooks/node-features.md).
-- Curate shortcuts for power users through the [Favorites Cookbook](docs/cookbooks/favorites.md).
-- Connect Slack workspaces through the [Slack Bot Onboarding Cookbook](docs/cookbooks/slack-bot-onboarding.md).
+- Follow the [Install & Administration Guide](apps/docs/cookbooks/install-start-stop-upgrade-uninstall.md) for deployment, lifecycle tasks, and operational runbooks.
+- Onboard and service chargers with the [EVCS Connectivity & Maintenance Cookbook](apps/docs/cookbooks/evcs-connectivity-maintenance.md).
+- Configure payment gateways with the [Payment Processors Cookbook](apps/docs/cookbooks/payment-processors.md).
+- Reference the [Sigils Cookbook](apps/docs/cookbooks/sigils.md) when configuring tokenized settings across environments.
+- Understand seed fixtures and per-user files with [Managing Local Node Data](apps/docs/cookbooks/managing-local-node-data.md).
+- Manage exports, imports, and audit trails with the [User Data Cookbook](apps/docs/cookbooks/user-data.md).
+- Plan feature rollout strategies using the [Node Features Cookbook](apps/docs/cookbooks/node-features.md).
+- Curate shortcuts for power users through the [Favorites Cookbook](apps/docs/cookbooks/favorites.md).
+- Connect Slack workspaces through the [Slack Bot Onboarding Cookbook](apps/docs/cookbooks/slack-bot-onboarding.md).
 
 ## Support
 
