@@ -1,18 +1,23 @@
+from django.apps import apps
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db.utils import OperationalError, ProgrammingError
 from django.utils.translation import gettext_lazy as _
 
-from apps.locale.models import Language
-
 
 def _available_language_codes() -> set[str]:
-    try:
-        configured = list(
-            Language.objects.filter(is_deleted=False).values_list("code", flat=True)
-        )
-    except (OperationalError, ProgrammingError):
-        configured = []
+    configured: list[str] = []
+    if apps.ready:
+        Language = apps.get_model("locale", "Language")
+        if Language is not None:
+            try:
+                configured = list(
+                    Language.objects.filter(is_deleted=False).values_list(
+                        "code", flat=True
+                    )
+                )
+            except (OperationalError, ProgrammingError):
+                configured = []
 
     if not configured:
         configured = [code for code, _ in getattr(settings, "LANGUAGES", [])]
