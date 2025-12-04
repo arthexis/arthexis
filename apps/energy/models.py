@@ -22,7 +22,7 @@ from django.utils.translation import gettext, gettext_lazy as _, override
 
 from apps.celery.utils import normalize_periodic_task_name
 from apps.core.entity import Entity, EntityManager
-from apps.core.language import (
+from apps.locale.language import (
     default_report_language,
     normalize_report_language,
     normalize_report_title,
