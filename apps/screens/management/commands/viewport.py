@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.screens.models import PyxelViewport
+from apps.screens.models import PyxelUnavailableError, PyxelViewport
 
 
 class Command(BaseCommand):
@@ -20,4 +20,7 @@ class Command(BaseCommand):
             raise CommandError(f"Viewport '{identifier}' was not found")
 
         self.stdout.write(f"Opening viewport '{viewport.name}' ({viewport.slug})")
-        viewport.open_viewport()
+        try:
+            viewport.open_viewport()
+        except PyxelUnavailableError as exc:
+            raise CommandError(str(exc)) from exc
