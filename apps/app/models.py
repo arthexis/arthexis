@@ -36,10 +36,13 @@ class Application(Entity):
         if django_apps.is_installed(name):
             return True
 
-        return any(
-            config.name == name or config.name.endswith(f".{name}")
-            for config in django_apps.get_app_configs()
-        )
+        for config in django_apps.get_app_configs():
+            if config.label == name:
+                return True
+            if config.name == name or config.name.endswith(f".{name}"):
+                return True
+
+        return False
 
     @property
     def verbose_name(self) -> str:

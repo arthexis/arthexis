@@ -395,6 +395,7 @@ class ApplicationInstalledListFilter(admin.SimpleListFilter):
         for config in django_apps.get_app_configs():
             installed_labels.add(config.label)
             installed_names.add(config.name)
+            installed_names.add(config.name.rsplit(".", 1)[-1])
 
         installed_values = installed_labels | installed_names
         if value == "1":
