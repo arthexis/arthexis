@@ -4,7 +4,9 @@ import ipaddress
 import logging
 from urllib.parse import urlparse
 
+from django.conf import settings
 from django.http import HttpRequest, HttpResponse, HttpResponseBadRequest
+from django.http.request import validate_host
 from django.shortcuts import render
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.translation import gettext as _
@@ -41,12 +43,29 @@ def embed_card(request: HttpRequest) -> HttpResponse:
     if not target:
         return HttpResponseBadRequest(_("A target URL is required."))
 
-    is_absolute = urlparse(target).scheme in {"http", "https"}
+    parsed_target = urlparse(target)
+    is_absolute = parsed_target.scheme in {"http", "https"}
     if not is_absolute and not target.startswith("/"):
         return HttpResponseBadRequest(_("The target must be a valid URL or path."))
 
-    if is_absolute and not url_has_allowed_host_and_scheme(target, allowed_hosts=None):
-        return HttpResponseBadRequest(_("The target URL is not allowed."))
+    if is_absolute:
+        allowed_hosts: set[str] = set(settings.ALLOWED_HOSTS or [])
+        if parsed_target.hostname:
+            allowed_hosts.add(parsed_target.hostname)
+        if parsed_target.netloc:
+            allowed_hosts.add(parsed_target.netloc)
+        try:
+            allowed_hosts.add(request.get_host())
+        except Exception:  # pragma: no cover - defensive, request host should be valid
+            pass
+
+        referer_host = urlparse(request.META.get("HTTP_REFERER", "")).hostname
+        if referer_host:
+            allowed_hosts.add(referer_host)
+
+        if not url_has_allowed_host_and_scheme(target, allowed_hosts=allowed_hosts):
+            if not validate_host(parsed_target.netloc, allowed_hosts):
+                return HttpResponseBadRequest(_("The target URL is not allowed."))
 
     target_url = target if is_absolute else request.build_absolute_uri(target)
 
