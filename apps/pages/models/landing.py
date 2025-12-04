@@ -9,10 +9,8 @@ from .module import Module
 
 
 class LandingManager(models.Manager):
-    def get_by_natural_key(self, role: str, module_path: str, path: str):
-        return self.get(
-            module__node_role__name=role, module__path=module_path, path=path
-        )
+    def get_by_natural_key(self, module_path: str, path: str):
+        return self.get(module__path=module_path, path=path)
 
 
 class Landing(Entity):

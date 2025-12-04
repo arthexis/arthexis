@@ -2,7 +2,6 @@ from utils.sites import get_site
 from django.urls import Resolver404, resolve
 from django.shortcuts import resolve_url
 from django.conf import settings
-from django.db.models import Q
 from django.db.utils import OperationalError, ProgrammingError
 from pathlib import Path
 from apps.nodes.models import Node, NodeFeature
@@ -54,17 +53,14 @@ def nav_links(request):
     request.badge_node = node
     request.badge_role = role
 
-    if role:
-        try:
-            modules = (
-                Module.objects.filter(is_deleted=False)
-                .filter(Q(node_role=role) | Q(security_mode=Module.SECURITY_INCLUSIVE))
-                .select_related("application", "security_group", "node_role")
-                .prefetch_related("landings")
-            )
-        except (OperationalError, ProgrammingError):
-            modules = []
-    else:
+    try:
+        modules = (
+            Module.objects.for_role(role)
+            .filter(is_deleted=False)
+            .select_related("application", "security_group")
+            .prefetch_related("landings", "roles")
+        )
+    except (OperationalError, ProgrammingError):
         modules = []
 
     valid_modules = []
@@ -95,7 +91,9 @@ def nav_links(request):
         return enabled
 
     for module in modules:
-        site_matches = bool(role and module.node_role_id == getattr(role, "id", None))
+        module_roles = getattr(module, "roles")
+        role_ids = {r.id for r in module_roles.all()} if module_roles else set()
+        role_matches = not role_ids or (role and role.id in role_ids)
         group_matches = bool(
             module.security_group_id
             and user_is_authenticated
@@ -103,12 +101,12 @@ def nav_links(request):
         )
         if module.security_group_id:
             if module.security_mode == Module.SECURITY_EXCLUSIVE:
-                if not (site_matches and group_matches):
+                if not (role_matches and group_matches):
                     continue
             else:
-                if not (site_matches or group_matches):
+                if not (role_matches or group_matches):
                     continue
-        elif role and not site_matches:
+        elif not role_matches:
             continue
         landings = []
         seen_paths: set[str] = set()

@@ -1,5 +1,6 @@
 from __future__ import annotations
 from django.db import models
+from django.db.models import Q
 from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _
 
@@ -9,16 +10,17 @@ from apps.nodes.models import NodeRole
 
 
 class ModuleManager(models.Manager):
-    def get_by_natural_key(self, role: str, path: str):
-        return self.get(node_role__name=role, path=path)
+    def get_by_natural_key(self, path: str):
+        return self.get(path=path)
+
+    def for_role(self, role: NodeRole | None):
+        role_filter = Q(roles__isnull=True)
+        if role is not None:
+            role_filter |= Q(roles=role)
+        return self.filter(role_filter | Q(security_mode=Module.SECURITY_INCLUSIVE)).distinct()
 
 
 class Module(Entity):
-    node_role = models.ForeignKey(
-        NodeRole,
-        on_delete=models.CASCADE,
-        related_name="modules",
-    )
     application = models.ForeignKey(
         "app.Application",
         on_delete=models.SET_NULL,
@@ -61,21 +63,24 @@ class Module(Entity):
         default=SECURITY_INCLUSIVE,
         help_text="Exclusive requires site and group match; inclusive allows either.",
     )
+    roles = models.ManyToManyField(
+        NodeRole,
+        related_name="modules",
+        blank=True,
+        help_text="Leave blank to apply this module to all node roles.",
+    )
 
     objects = ModuleManager()
 
     class Meta:
         verbose_name = _("Module")
         verbose_name_plural = _("Modules")
-        unique_together = ("node_role", "path")
+        constraints = [
+            models.UniqueConstraint(fields=["path"], name="unique_module_path"),
+        ]
 
     def natural_key(self):  # pragma: no cover - simple representation
-        role_name = None
-        if getattr(self, "node_role_id", None):
-            role_name = self.node_role.name
-        return (role_name, self.path)
-
-    natural_key.dependencies = ["nodes.NodeRole"]
+        return (self.path,)
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         label = self.menu_label or "Module"

@@ -132,7 +132,8 @@ class ViewHistoryMiddleware:
                     enabled=True,
                     is_deleted=False,
                 )
-                .select_related("module", "module__application", "module__node_role")
+                .select_related("module", "module__application")
+                .prefetch_related("module__roles")
                 .first()
             )
         except Exception:  # pragma: no cover - best effort logging

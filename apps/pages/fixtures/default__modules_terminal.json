@@ -1,0 +1,69 @@
+[
+  {
+    "model": "pages.module",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "roles": [],
+      "application": ["awg"],
+      "path": "/awg/",
+      "menu": "Calculators",
+      "priority": 0,
+      "is_default": false,
+      "security_mode": "inclusive"
+    }
+  },
+  {
+    "model": "pages.landing",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "module": ["/awg/"],
+      "path": "/awg/",
+      "label": "AWG Cable Sizing Calculator",
+      "enabled": true,
+      "track_leads": false,
+      "description": ""
+    }
+  },
+  {
+    "model": "pages.module",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "roles": [],
+      "application": ["ocpp"],
+      "path": "/ocpp/",
+      "menu": "Charge Points",
+      "priority": 0,
+      "is_default": false,
+      "security_mode": "inclusive"
+    }
+  },
+  {
+    "model": "pages.landing",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "module": ["/ocpp/"],
+      "path": "/ocpp/cpms/dashboard/",
+      "label": "Charging Station Dashboards",
+      "enabled": true,
+      "track_leads": false,
+      "description": ""
+    }
+  },
+  {
+    "model": "pages.landing",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "module": ["/ocpp/"],
+      "path": "/ocpp/evcs/simulator/",
+      "label": "EVCS Online Simulator",
+      "enabled": true,
+      "track_leads": false,
+      "description": ""
+    }
+  }
+]
