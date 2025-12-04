@@ -48,7 +48,6 @@ from apps.pages.utils import landing
 from django.utils.dateparse import parse_datetime
 
 from . import store
-from .forms import MaintenanceRequestForm
 from .status_resets import clear_stale_cached_statuses
 from .models import (
     Transaction,
@@ -1457,29 +1456,6 @@ def dashboard(request):
             return HttpResponse(html)
         return JsonResponse({"html": html})
     return render(request, "ocpp/dashboard.html", context)
-
-
-@login_required(login_url="pages:login")
-@landing("Maintenance Request")
-def maintenance_request(request):
-    """Allow authenticated users to schedule manual maintenance tasks."""
-
-    form = MaintenanceRequestForm(request.POST or None)
-
-    if request.method == "POST" and form.is_valid():
-        task = form.save(commit=False)
-        task.assigned_user = request.user if request.user.is_authenticated else None
-        task.node = task.node or Node.get_local()
-        task.is_user_data = True
-        task.save()
-        messages.success(
-            request,
-            _("Maintenance request scheduled for %(location)s.")
-            % {"location": task.location or _("the selected location")},
-        )
-        return redirect("ocpp:maintenance-request")
-
-    return render(request, "ocpp/maintenance_request.html", {"form": form})
 
 
 @login_required(login_url="pages:login")
