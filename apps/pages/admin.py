@@ -29,9 +29,6 @@ from django.conf import settings
 from django.utils.translation import gettext_lazy as _, ngettext
 from django.core.management import CommandError, call_command
 
-from apps.nodes.models import NodeRole
-
-from .module_defaults import reload_default_modules as restore_default_modules
 from .site_config import ensure_site_fields
 from .utils import landing_leads_supported
 
@@ -51,6 +48,7 @@ from apps.odoo.models import OdooChatBridge
 from apps.release.models import ReleaseManager
 from apps.locals.user_data import EntityModelAdmin
 from apps.app.models import Application
+from apps.nodes.forms import NodeRoleMultipleChoiceField
 
 
 logger = logging.getLogger(__name__)
@@ -416,7 +414,7 @@ class LandingAdmin(EntityModelAdmin):
     list_filter = (
         "enabled",
         "track_leads",
-        "module__node_role",
+        "module__roles",
         "module__application",
     )
     search_fields = (
@@ -425,7 +423,6 @@ class LandingAdmin(EntityModelAdmin):
         "description",
         "module__path",
         "module__application__name",
-        "module__node_role__name",
     )
     fields = (
         "module",
@@ -438,15 +435,36 @@ class LandingAdmin(EntityModelAdmin):
         "validated_url_at",
     )
     readonly_fields = ("validation_status", "validated_url_at")
-    list_select_related = ("module", "module__application", "module__node_role")
+    list_select_related = ("module", "module__application")
+
+
+class ModuleAdminForm(forms.ModelForm):
+    roles = NodeRoleMultipleChoiceField()
+
+    class Meta:
+        model = Module
+        fields = (
+            "roles",
+            "application",
+            "path",
+            "menu",
+            "priority",
+            "is_default",
+            "favicon",
+            "security_group",
+            "security_mode",
+        )
+
+    class Media:
+        css = {"all": ("nodes/css/node_role_multiselect.css",)}
 
 
 @admin.register(Module)
 class ModuleAdmin(EntityModelAdmin):
-    change_list_template = "admin/pages/module/change_list.html"
+    form = ModuleAdminForm
     list_display = (
         "application",
-        "node_role",
+        "roles_display",
         "path",
         "menu",
         "landings_count",
@@ -455,111 +473,25 @@ class ModuleAdmin(EntityModelAdmin):
         "security_group",
         "security_mode",
     )
-    list_filter = ("node_role", "application", "security_group", "security_mode")
-    fields = (
-        "node_role",
-        "application",
-        "path",
-        "menu",
-        "priority",
-        "is_default",
-        "favicon",
-        "security_group",
-        "security_mode",
-    )
+    list_filter = ("roles", "application", "security_group", "security_mode")
+    fields = ModuleAdminForm.Meta.fields
     inlines = [LandingInline]
-
-    def get_urls(self):
-        urls = super().get_urls()
-        custom = [
-            path(
-                "reload-default-modules/",
-                self.admin_site.admin_view(self.reload_default_modules_view),
-                name="pages_module_reload_default_modules",
-            ),
-        ]
-        return custom + urls
+    list_select_related = ("application", "security_group")
 
     def get_queryset(self, request):
         queryset = super().get_queryset(request)
-        return queryset.annotate(landing_count=Count("landings", distinct=True))
+        return queryset.annotate(landing_count=Count("landings", distinct=True)).prefetch_related(
+            "roles"
+        )
 
     @admin.display(description=_("Landings"), ordering="landing_count")
     def landings_count(self, obj):
         return obj.landing_count
 
-    def reload_default_modules_view(self, request):
-        if request.method != "POST":
-            return redirect("..")
-
-        summary = restore_default_modules(Application, Module, Landing, NodeRole)
-
-        if summary.roles_processed == 0:
-            self.message_user(
-                request,
-                _("No default modules were reloaded because the required node roles are missing."),
-                messages.WARNING,
-            )
-        elif summary.has_changes:
-            parts: list[str] = []
-            if summary.modules_created:
-                parts.append(
-                    ngettext(
-                        "%(count)d module created",
-                        "%(count)d modules created",
-                        summary.modules_created,
-                    )
-                    % {"count": summary.modules_created}
-                )
-            if summary.modules_updated:
-                parts.append(
-                    ngettext(
-                        "%(count)d module updated",
-                        "%(count)d modules updated",
-                        summary.modules_updated,
-                    )
-                    % {"count": summary.modules_updated}
-                )
-            if summary.landings_created:
-                parts.append(
-                    ngettext(
-                        "%(count)d landing created",
-                        "%(count)d landings created",
-                        summary.landings_created,
-                    )
-                    % {"count": summary.landings_created}
-                )
-            if summary.landings_updated:
-                parts.append(
-                    ngettext(
-                        "%(count)d landing updated",
-                        "%(count)d landings updated",
-                        summary.landings_updated,
-                    )
-                    % {"count": summary.landings_updated}
-                )
-
-            details = "; ".join(parts)
-            if details:
-                message = _(
-                    "Reloaded default modules for %(roles)d role(s). %(details)s."
-                ) % {"roles": summary.roles_processed, "details": details}
-            else:
-                message = _(
-                    "Reloaded default modules for %(roles)d role(s)."
-                ) % {"roles": summary.roles_processed}
-            self.message_user(request, message, messages.SUCCESS)
-        else:
-            self.message_user(
-                request,
-                _(
-                    "Default modules are already up to date for %(roles)d role(s)."
-                )
-                % {"roles": summary.roles_processed},
-                messages.INFO,
-            )
-
-        return redirect("..")
+    @admin.display(description=_("Roles"))
+    def roles_display(self, obj):
+        roles = [role.name for role in obj.roles.all()]
+        return ", ".join(roles) if roles else _("All")
 
 
 @admin.register(LandingLead)
@@ -574,7 +506,7 @@ class LandingLeadAdmin(EntityModelAdmin):
     )
     list_filter = (
         "status",
-        "landing__module__node_role",
+        "landing__module__roles",
         "landing__module__application",
     )
     search_fields = (

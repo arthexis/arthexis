@@ -488,7 +488,7 @@ def sitemap(request):
     site = get_site(request)
     node = Node.get_local()
     role = node.role if node else None
-    applications = Module.objects.filter(node_role=role)
+    applications = Module.objects.for_role(role).filter(is_deleted=False)
     base = request.build_absolute_uri("/").rstrip("/")
     lines = [
         '<?xml version="1.0" encoding="UTF-8"?>',
