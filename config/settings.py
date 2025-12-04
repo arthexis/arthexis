@@ -815,7 +815,9 @@ configure_library_loggers(DEBUG, LOGGING)
 # Celery configuration
 CELERY_BROKER_URL = os.environ.get("CELERY_BROKER_URL", "memory://")
 CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", "cache+memory://")
-CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
+# Keep Celery Beat schedules in memory to avoid database-backed scheduling
+# (e.g., django-celery-beat), which can contend with migrations.
+CELERY_BEAT_SCHEDULER = "celery.beat:Scheduler"
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_ENABLE_UTC = True
 # Allow Celery workers extra time to finish acknowledged jobs before SIGTERM.
