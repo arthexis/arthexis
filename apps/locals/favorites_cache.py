@@ -2,9 +2,7 @@
 
 from collections.abc import Callable, Iterable
 
-from django.utils import timezone
-
-from .caches import CacheStore
+from .caches import CacheStore, get_cache_store, invalidate_cache_keys
 
 
 def _user_cache_keys(
@@ -53,13 +51,12 @@ def user_favorites_cache_key(
 def _favorites_store(
     user_id: int, *, show_changelinks: bool, show_model_badges: bool
 ) -> CacheStore:
-    return CacheStore.objects.get_or_create(
-        key=user_favorites_cache_key(
-            user_id,
-            show_changelinks=show_changelinks,
-            show_model_badges=show_model_badges,
-        )
-    )[0]
+    cache_key = user_favorites_cache_key(
+        user_id,
+        show_changelinks=show_changelinks,
+        show_model_badges=show_model_badges,
+    )
+    return get_cache_store(cache_key)
 
 
 def get_cached_user_favorites(
@@ -90,6 +87,4 @@ def clear_user_favorites_cache(
         show_changelinks=show_changelinks,
         show_model_badges=show_model_badges,
     )
-    CacheStore.objects.filter(key__in=keys).update(
-        payload=None, refreshed_at=timezone.now()
-    )
+    invalidate_cache_keys(keys)

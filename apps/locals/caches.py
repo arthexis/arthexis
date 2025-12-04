@@ -70,17 +70,7 @@ class CacheStoreMixin:
     @classmethod
     def get_cache_store(cls, identifier: int | str) -> CacheStore:
         cache_key = cls.cache_key_for_identifier(identifier)
-        defaults = cls._refresh_defaults()
-        store, _created = CacheStore.objects.get_or_create(
-            key=cache_key, defaults=defaults
-        )
-        if (
-            cls.cache_refresh_interval is not None
-            and store.refresh_interval != cls.cache_refresh_interval
-        ):
-            store.refresh_interval = cls.cache_refresh_interval
-            store.save(update_fields=["refresh_interval"])
-        return store
+        return get_cache_store(cache_key, refresh_interval=cls.cache_refresh_interval)
 
     @classmethod
     def get_cached_value(
@@ -108,13 +98,33 @@ def cache_store(
 
     def decorator(func: Callable[..., object]) -> Callable[..., object]:
         def wrapper(*args: Iterable[object], **kwargs: object) -> object:
-            defaults = {"refresh_interval": refresh_interval} if refresh_interval else {}
-            store, _created = CacheStore.objects.get_or_create(key=key, defaults=defaults)
-            if refresh_interval and store.refresh_interval != refresh_interval:
-                store.refresh_interval = refresh_interval
-                store.save(update_fields=["refresh_interval"])
+            store = get_cache_store(key, refresh_interval=refresh_interval)
             return store.get_value(lambda: func(*args, **kwargs))
 
         return wrapper
 
     return decorator
+
+
+def get_cache_store(
+    key: str, *, refresh_interval: datetime.timedelta | None = None
+) -> CacheStore:
+    """Return a :class:`CacheStore`, ensuring refresh interval alignment."""
+
+    defaults = {"refresh_interval": refresh_interval} if refresh_interval else {}
+    store, _created = CacheStore.objects.get_or_create(key=key, defaults=defaults)
+    if refresh_interval and store.refresh_interval != refresh_interval:
+        store.refresh_interval = refresh_interval
+        store.save(update_fields=["refresh_interval"])
+    return store
+
+
+def invalidate_cache_keys(keys: Iterable[str]) -> int:
+    """Invalidate cache entries for the given keys and return the rows updated."""
+
+    keys = tuple(keys)
+    if not keys:
+        return 0
+    return CacheStore.objects.filter(key__in=keys).update(
+        payload=None, refreshed_at=timezone.now()
+    )
