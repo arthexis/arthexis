@@ -26,7 +26,6 @@ from django.core.exceptions import FieldDoesNotExist, ObjectDoesNotExist
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.db import connections, connection, close_old_connections
-from django.db.models import Count, F
 from django.db.migrations.exceptions import (
     InconsistentMigrationHistory,
     InvalidBasesError,
@@ -41,9 +40,6 @@ from utils.migration_branches import MissingBranchSplinterError
 os.environ.setdefault("NET_MESSAGE_DISABLE_PROPAGATION", "1")
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 django.setup()
-
-from django.db.models.signals import post_save
-from apps.pages.models import Module, Landing, _create_landings
 from apps.nodes.models import Node
 from django.contrib.sites.models import Site
 from django.contrib.auth import get_user_model
@@ -540,72 +536,51 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                     target = str(source)
                 if patched_data:
                     patched.setdefault(priority, []).append(target)
-            post_save.disconnect(_create_landings, sender=Module)
-            try:
-                for priority in sorted(patched):
-                    for fixture in patched[priority]:
-                        try:
-                            _load_fixture_with_retry(
-                                fixture,
-                                using_sqlite=using_sqlite,
+            for priority in sorted(patched):
+                for fixture in patched[priority]:
+                    try:
+                        _load_fixture_with_retry(
+                            fixture,
+                            using_sqlite=using_sqlite,
+                        )
+                    except DeserializationError as exc:
+                        print(f"Skipping fixture {fixture} due to: {exc}")
+                    else:
+                        print(".", end="", flush=True)
+            if pending_user_m2m:
+                for user_pk, assignments in pending_user_m2m.items():
+                    user = get_user_model().objects.filter(pk=user_pk).first()
+                    if not user:
+                        continue
+                    for field_name, value in assignments:
+                        if not _assign_many_to_many(user, field_name, value):
+                            raise ValueError(
+                                f"Unable to resolve many-to-many values for user {user_pk}"
                             )
-                        except DeserializationError as exc:
-                            print(f"Skipping fixture {fixture} due to: {exc}")
-                        else:
-                            print(".", end="", flush=True)
-                if pending_user_m2m:
-                    for user_pk, assignments in pending_user_m2m.items():
-                        user = get_user_model().objects.filter(pk=user_pk).first()
-                        if not user:
-                            continue
-                        for field_name, value in assignments:
-                            if not _assign_many_to_many(user, field_name, value):
-                                raise ValueError(
-                                    f"Unable to resolve many-to-many values for user {user_pk}"
-                                )
-                for module in Module.objects.all():
-                    module.create_landings()
 
-                stale_modules = (
-                    Module.objects.annotate(landing_count=Count("landings"))
-                    .filter(
-                        landing_count=1,
-                        landings__path=F("path"),
-                        application__isnull=False,
-                        is_seed_data=True,
-                    )
-                )
-                if stale_modules:
-                    stale_modules.delete()
+            if site_fixture_defaults:
+                preferred = _preferred_site_domain(site_fixture_defaults)
+                if preferred:
+                    defaults = dict(site_fixture_defaults[preferred])
+                    defaults["domain"] = preferred
+                    site_id = getattr(settings, "SITE_ID", 1)
+                    existing = Site.objects.filter(pk=site_id).first()
+                    Site.objects.filter(domain=preferred).exclude(pk=site_id).delete()
+                    if existing:
+                        for field, value in defaults.items():
+                            setattr(existing, field, value)
+                        existing.save(update_fields=list(defaults.keys()))
+                    else:
+                        Site.objects.update_or_create(
+                            pk=site_id,
+                            defaults=defaults,
+                        )
+                Site.objects.clear_cache()
 
-                if site_fixture_defaults:
-                    preferred = _preferred_site_domain(site_fixture_defaults)
-                    if preferred:
-                        defaults = dict(site_fixture_defaults[preferred])
-                        defaults["domain"] = preferred
-                        site_id = getattr(settings, "SITE_ID", 1)
-                        existing = Site.objects.filter(pk=site_id).first()
-                        Site.objects.filter(domain=preferred).exclude(pk=site_id).delete()
-                        if existing:
-                            for field, value in defaults.items():
-                                setattr(existing, field, value)
-                            existing.save(update_fields=list(defaults.keys()))
-                        else:
-                            Site.objects.update_or_create(
-                                pk=site_id,
-                                defaults=defaults,
-                            )
-                    Site.objects.clear_cache()
-
-                if model_counts:
-                    print()
-                    for label, count in sorted(model_counts.items()):
-                        print(f"{label}: {count}")
-            finally:
-                post_save.connect(_create_landings, sender=Module)
-
-        # Refresh seed flags for Landing entries created during fixture loading.
-        Landing.objects.update(is_seed_data=True)
+            if model_counts:
+                print()
+                for label, count in sorted(model_counts.items()):
+                    print(f"{label}: {count}")
 
         # Load shared fixtures once before personal data
         load_shared_user_fixtures(force=True)

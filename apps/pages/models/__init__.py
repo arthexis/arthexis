@@ -16,11 +16,6 @@ ensure_site_fields()
 from . import signals  # noqa: E402,F401
 
 
-def _create_landings(sender, instance: Module, created: bool, raw: bool, **kwargs):
-    """Compat shim for legacy imports expecting a post-save handler."""
-
-    instance.handle_post_save(created=created, raw=raw)
-
 __all__ = [
     "Landing",
     "LandingLead",
@@ -33,5 +28,4 @@ __all__ = [
     "SiteTemplateManager",
     "UserStory",
     "ViewHistory",
-    "_create_landings",
 ]
