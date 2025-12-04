@@ -29,7 +29,6 @@ from .models import (
     ClientReport,
     ClientReportSchedule,
     CustomerAccount,
-    EnergyCredit,
     EnergyTariff,
     EnergyTransaction,
 )
@@ -63,20 +62,16 @@ class CustomerAccountRFIDInline(admin.TabularInline):
     verbose_name_plural = "RFIDs"
 
 
-class EnergyCreditInline(admin.TabularInline):
-    model = EnergyCredit
-    fields = ("amount_kw", "created_by", "created_on")
-    readonly_fields = ("created_by", "created_on")
-    extra = 0
-
-
 class EnergyTransactionInline(admin.TabularInline):
     model = EnergyTransaction
     fields = (
+        "direction",
+        "delta_kw",
         "tariff",
-        "purchased_kw",
         "charged_amount_mxn",
         "conversion_factor",
+        "source",
+        "reference",
         "created_on",
     )
     readonly_fields = ("created_on",)
@@ -125,7 +120,7 @@ class CustomerAccountAdmin(EntityModelAdmin):
         "balance_kw",
         "authorized",
     )
-    inlines = [CustomerAccountRFIDInline, EnergyCreditInline, EnergyTransactionInline]
+    inlines = [CustomerAccountRFIDInline, EnergyTransactionInline]
     actions = ["test_authorization"]
     fieldsets = (
         (None, {"fields": ("name", "user", ("service_account", "authorized"))}),
@@ -184,14 +179,6 @@ class CustomerAccountAdmin(EntityModelAdmin):
                 self.message_user(request, f"{acc.user} denied")
 
     test_authorization.short_description = "Test authorization"
-
-    def save_formset(self, request, form, formset, change):
-        objs = formset.save(commit=False)
-        for obj in objs:
-            if isinstance(obj, EnergyCredit) and not obj.created_by:
-                obj.created_by = request.user
-            obj.save()
-        formset.save_m2m()
 
     def get_urls(self):
         urls = super().get_urls()
@@ -527,27 +514,18 @@ class CustomerAccountAdmin(EntityModelAdmin):
         )
 
 
-@admin.register(EnergyCredit)
-class EnergyCreditAdmin(EntityModelAdmin):
-    list_display = ("account", "amount_kw", "created_by", "created_on")
-    readonly_fields = ("created_by", "created_on")
-
-    def save_model(self, request, obj, form, change):
-        if not obj.created_by:
-            obj.created_by = request.user
-        super().save_model(request, obj, form, change)
-
-
 @admin.register(EnergyTransaction)
 class EnergyTransactionAdmin(EntityModelAdmin):
     list_display = (
         "account",
-        "tariff",
-        "purchased_kw",
+        "direction",
+        "delta_kw",
         "charged_amount_mxn",
-        "conversion_factor",
+        "source",
         "created_on",
     )
+    list_filter = ("direction", "source", "created_on")
+    search_fields = ("account__name", "account__user__username", "reference")
     readonly_fields = ("created_on",)
     autocomplete_fields = ["account", "tariff"]
 
