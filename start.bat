@@ -60,7 +60,21 @@ echo Failed to compute static files hash; running collectstatic.
 if errorlevel 1 goto collectstatic_failed
 
 :startserver
-%VENV%\Scripts\python.exe manage.py runserver 0.0.0.0:%PORT% %NORELOAD%
+echo Running Django preflight checks once before runserver...
+set DJANGO_SUPPRESS_MIGRATION_CHECK=1
+set RUNSERVER_SKIP_CHECKS=
+%VENV%\Scripts\python.exe manage.py migrate --check
+if errorlevel 1 (
+    set EXIT_CODE=1
+    goto cleanup
+)
+%VENV%\Scripts\python.exe manage.py check
+if errorlevel 1 (
+    set EXIT_CODE=1
+    goto cleanup
+)
+set RUNSERVER_SKIP_CHECKS=--skip-checks
+%VENV%\Scripts\python.exe manage.py runserver 0.0.0.0:%PORT% %NORELOAD% %RUNSERVER_SKIP_CHECKS%
 set EXIT_CODE=%ERRORLEVEL%
 goto cleanup
 

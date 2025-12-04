@@ -76,6 +76,14 @@ def _execute_django(argv: Sequence[str], base_dir: Path) -> None:
         if static_runserver is not None:
             static_runserver.Command = DaphneRunserver
 
+        def _suppress_migration_check(*_: object, **__: object) -> list[object]:
+            return []
+
+        if os.environ.get("DJANGO_SUPPRESS_MIGRATION_CHECK"):
+            core_runserver.Command.check_migrations = _suppress_migration_check
+            if static_runserver is not None:
+                static_runserver.Command.check_migrations = _suppress_migration_check
+
         def patched_on_bind(self, server_port):
             original_on_bind(self, server_port)
             host = self.addr or (
