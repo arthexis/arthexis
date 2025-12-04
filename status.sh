@@ -157,7 +157,9 @@ fi
 
 # Determine nginx mode and port
 MODE="internal"
-if [ -f "$LOCK_DIR/nginx_mode.lck" ]; then
+if [ -f "$LOCK_DIR/nginx_disabled.lck" ]; then
+  MODE="none"
+elif [ -f "$LOCK_DIR/nginx_mode.lck" ]; then
   MODE="$(cat "$LOCK_DIR/nginx_mode.lck")"
 fi
 PORT="$(arthexis_detect_backend_port "$BASE_DIR")"

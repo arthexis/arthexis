@@ -18,6 +18,8 @@ exec > >(tee "$LOG_FILE") 2>&1
 SERVICE=""
 NODE_ROLE=""
 NGINX_MODE="internal"
+DISABLE_NGINX=false
+PORT=""
 ENABLE_CELERY=false
 ENABLE_LCD_SCREEN=false
 ENABLE_CONTROL=false
@@ -35,8 +37,13 @@ INSTALL_WATCHDOG=false
 
 LOCK_DIR="$BASE_DIR/.locks"
 
+if arthexis_nginx_disabled "$BASE_DIR"; then
+    DISABLE_NGINX=true
+    NGINX_MODE="none"
+fi
+
 usage() {
-    echo "Usage: $0 [--service NAME] [--latest|--stable|--regular] [--check] [--auto-upgrade|--no-auto-upgrade] [--debug|--no-debug] [--satellite|--terminal|--control|--watchtower] [--watchdog] [--repair [--failover ROLE]]]" >&2
+    echo "Usage: $0 [--service NAME] [--port PORT] [--latest|--stable|--regular] [--check] [--auto-upgrade|--no-auto-upgrade] [--debug|--no-debug] [--satellite|--terminal|--control|--watchtower] [--watchdog] [--no-nginx] [--repair [--failover ROLE]]]" >&2
     exit 1
 }
 
@@ -52,6 +59,9 @@ reset_role_features() {
     ENABLE_CONTROL=false
     REQUIRES_REDIS=false
     NGINX_MODE="internal"
+    if [ "$DISABLE_NGINX" = true ]; then
+        NGINX_MODE="none"
+    fi
 }
 
 configure_role_from_name() {
@@ -252,6 +262,11 @@ detect_service_port() {
 
 
 require_nginx() {
+    if [ "$DISABLE_NGINX" = true ] || arthexis_nginx_disabled "$BASE_DIR"; then
+        echo "Skipping nginx requirement for the $1 role because nginx management is disabled."
+        return 0
+    fi
+
     if ! command -v nginx >/dev/null 2>&1; then
         echo "Nginx is required for the $1 role but is not installed." >&2
         exit 1
@@ -338,6 +353,11 @@ while [[ $# -gt 0 ]]; do
             set_upgrade_channel "version"
             shift
             ;;
+        --port)
+            [ -z "$2" ] && usage
+            PORT="$2"
+            shift 2
+            ;;
         --check)
             CHECK=true
             shift
@@ -378,14 +398,18 @@ while [[ $# -gt 0 ]]; do
             require_nginx "satellite"
             NODE_ROLE="Satellite"
             ENABLE_CELERY=true
-            NGINX_MODE="internal"
+            if [ "$DISABLE_NGINX" != true ]; then
+                NGINX_MODE="internal"
+            fi
             REQUIRES_REDIS=true
             shift
             ;;
         --terminal)
             NODE_ROLE="Terminal"
             ENABLE_CELERY=true
-            NGINX_MODE="internal"
+            if [ "$DISABLE_NGINX" != true ]; then
+                NGINX_MODE="internal"
+            fi
             shift
             ;;
         --control)
@@ -394,7 +418,9 @@ while [[ $# -gt 0 ]]; do
             ENABLE_CELERY=true
             ENABLE_LCD_SCREEN=true
             ENABLE_CONTROL=true
-            NGINX_MODE="internal"
+            if [ "$DISABLE_NGINX" != true ]; then
+                NGINX_MODE="internal"
+            fi
             REQUIRES_REDIS=true
             shift
             ;;
@@ -402,8 +428,15 @@ while [[ $# -gt 0 ]]; do
             require_nginx "watchtower"
             NODE_ROLE="Watchtower"
             ENABLE_CELERY=true
-            NGINX_MODE="public"
+            if [ "$DISABLE_NGINX" != true ]; then
+                NGINX_MODE="public"
+            fi
             REQUIRES_REDIS=true
+            shift
+            ;;
+        --no-nginx)
+            DISABLE_NGINX=true
+            NGINX_MODE="none"
             shift
             ;;
         --watchdog)
@@ -428,6 +461,10 @@ done
 
 if [ -n "$UPGRADE_CHANNEL" ] && [ -z "$AUTO_UPGRADE_MODE" ]; then
     AUTO_UPGRADE_MODE="enable"
+fi
+
+if [ -z "$PORT" ]; then
+    PORT="$(arthexis_detect_backend_port "$BASE_DIR")"
 fi
 
 if [ -n "$FAILOVER_ROLE" ] && [ "$REPAIR" != true ]; then
@@ -629,7 +666,7 @@ if [ "$SKIP_SERVICE_RESTART" != true ] && [ -n "$SERVICE" ] && systemctl list-un
     fi
 fi
 
-for lock_name in celery.lck lcd_screen.lck lcd_screen_enabled.lck control.lck nginx_mode.lck role.lck service.lck; do
+for lock_name in celery.lck lcd_screen.lck lcd_screen_enabled.lck control.lck nginx_mode.lck nginx_disabled.lck role.lck service.lck; do
     rm -f "$LOCK_DIR/$lock_name"
 done
 rm -f "$BASE_DIR"/*.role "$BASE_DIR"/.*.role 2>/dev/null || true
@@ -647,6 +684,12 @@ fi
 
 echo "$NGINX_MODE" > "$LOCK_DIR/nginx_mode.lck"
 echo "$NODE_ROLE" > "$LOCK_DIR/role.lck"
+if [ "$DISABLE_NGINX" = true ]; then
+    arthexis_disable_nginx "$BASE_DIR"
+else
+    arthexis_enable_nginx "$BASE_DIR"
+fi
+echo "$PORT" > "$LOCK_DIR/backend_port.lck"
 if [ -n "$SERVICE" ]; then
     echo "$SERVICE" > "$LOCK_DIR/service.lck"
 fi
@@ -677,7 +720,7 @@ elif [ "$AUTO_UPGRADE_MODE" = "disable" ]; then
     echo "Auto-upgrade disabled."
 fi
 
-if arthexis_can_manage_nginx; then
+if [ "$DISABLE_NGINX" != true ] && arthexis_can_manage_nginx; then
     arthexis_refresh_nginx_maintenance "$BASE_DIR" "/etc/nginx/sites-enabled/arthexis.conf"
 fi
 
