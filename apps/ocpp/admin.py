@@ -2136,7 +2136,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
                 response.close()
         relative_asset = destination.relative_to(user_dir).as_posix()
         asset_url = reverse(
-            "pages:readme-asset",
+            "docs:readme-asset",
             kwargs={"source": "work", "asset": relative_asset},
         )
         absolute_url = request.build_absolute_uri(asset_url)
