@@ -24,6 +24,36 @@ arthexis_ensure_nginx_in_path() {
   return 1
 }
 
+ARTHEXIS_NGINX_DISABLED_LOCK="nginx_disabled.lck"
+
+arthexis_nginx_disabled() {
+  local base_dir="$1"
+  if [ -z "$base_dir" ]; then
+    return 1
+  fi
+
+  [ -f "$base_dir/.locks/$ARTHEXIS_NGINX_DISABLED_LOCK" ]
+}
+
+arthexis_disable_nginx() {
+  local base_dir="$1"
+  if [ -z "$base_dir" ]; then
+    return 0
+  fi
+
+  mkdir -p "$base_dir/.locks"
+  : > "$base_dir/.locks/$ARTHEXIS_NGINX_DISABLED_LOCK"
+}
+
+arthexis_enable_nginx() {
+  local base_dir="$1"
+  if [ -z "$base_dir" ]; then
+    return 0
+  fi
+
+  rm -f "$base_dir/.locks/$ARTHEXIS_NGINX_DISABLED_LOCK"
+}
+
 arthexis_can_manage_nginx() {
   if ! command -v sudo >/dev/null 2>&1; then
     return 1
