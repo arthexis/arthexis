@@ -27,12 +27,13 @@ def generate_model_sigils(**kwargs) -> None:
     for prefix in ["ENV", "CONF", "SYS"]:
         # Ensure built-in configuration roots exist without violating the
         # unique ``prefix`` constraint, even if older databases already have
-        # entries with a different ``context_type``.
-        root = SigilRoot.objects.filter(prefix__iexact=prefix).first()
+        # entries with a different ``context_type`` or are soft deleted.
+        root = SigilRoot.all_objects.filter(prefix__iexact=prefix).first()
         if root:
             root.prefix = prefix
             root.context_type = SigilRoot.Context.CONFIG
-            root.save(update_fields=["prefix", "context_type"])
+            root.is_deleted = False
+            root.save(update_fields=["prefix", "context_type", "is_deleted"])
         else:
             SigilRoot.objects.create(
                 prefix=prefix,
