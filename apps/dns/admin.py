@@ -12,7 +12,7 @@ from .models import GoDaddyDNSRecord
 
 class DeployDNSRecordsForm(forms.Form):
     manager = forms.ModelChoiceField(
-        label="Node Profile",
+        label="Node Manager",
         queryset=NodeManager.objects.none(),
         help_text="Credentials used to authenticate with the DNS provider.",
     )
