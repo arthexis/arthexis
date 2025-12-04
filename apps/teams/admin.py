@@ -20,11 +20,9 @@ from django_otp.plugins.otp_totp.admin import (
 )
 from django_otp.models import VerifyNotAllowed
 from apps.core.admin import InviteLeadAdmin
-from apps.release.admin import ReleaseManagerAdmin
 from apps.core.models import InviteLead as CoreInviteLead
 from apps.groups.admin import SecurityGroupAdmin
 from apps.groups.models import SecurityGroup as CoreSecurityGroup
-from apps.release.models import ReleaseManager as CoreReleaseManager
 from apps.locals.user_data import (
     EntityModelAdmin,
     UserDatumAdminMixin,
@@ -45,16 +43,9 @@ from .forms import (
 from .models import (
     InviteLead,
     SecurityGroup,
-    ReleaseManager,
     TOTPDevice,
     SlackBotProfile,
 )
-
-
-try:
-    admin.site.unregister(CoreReleaseManager)
-except NotRegistered:
-    pass
 
 
 @admin.register(InviteLead)
@@ -64,11 +55,6 @@ class InviteLeadAdminProxy(InviteLeadAdmin):
 
 @admin.register(SecurityGroup)
 class SecurityGroupAdminProxy(SecurityGroupAdmin):
-    pass
-
-
-@admin.register(ReleaseManager)
-class ReleaseManagerAdminProxy(ReleaseManagerAdmin):
     pass
 
 
