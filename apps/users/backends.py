@@ -3,6 +3,7 @@
 import contextlib
 import ipaddress
 import os
+import secrets
 import socket
 import subprocess
 import sys
@@ -83,6 +84,27 @@ def totp_devices_allow_passwordless(devices):
     return any(totp_device_allows_passwordless(device) for device in devices)
 
 
+def simulate_totp_verification(token: str | None = None) -> None:
+    """Run a dummy TOTP verification to keep timing consistent.
+
+    When an authenticator device is missing we still want to exercise the
+    verification path so that request duration does not leak configuration
+    details. The dummy device never authenticates successfully, but it
+    mirrors the usual verification cost.
+    """
+
+    dummy_device = TOTPDevice(confirmed=True)
+    sanitized_token = str(token or "").strip().replace(" ", "")
+    if not sanitized_token:
+        sanitized_token = f"{secrets.randbelow(10**6):06d}"
+
+    try:
+        dummy_device.verify_token(sanitized_token)
+    except Exception:
+        # We intentionally ignore all failures; this is solely for timing.
+        pass
+
+
 def _get_or_clone_device_for_user(device, user, settings_obj):
     """Return a device bound to the provided user, cloning shared devices when needed."""
 
@@ -131,14 +153,21 @@ def verify_user_totp_token(
 
     group_ids = set(user.groups.values_list("id", flat=True))
     devices = list(get_user_totp_devices(user))
-    if not devices:
-        return None, {"error": "missing_device", "requires_password": False}
 
     password_value = password or ""
     if enforce_password is None:
         enforce_password = bool(getattr(user, "require_2fa", False))
     password_valid = bool(password_value and user.check_password(password_value))
     requires_password = False
+
+    if not devices:
+        simulate_totp_verification(token)
+        requires_password = True
+        if requires_password and not password_valid:
+            if not password_value:
+                return None, {"error": "password_required", "requires_password": True}
+            return None, {"error": "invalid_password", "requires_password": True}
+        return None, {"error": "invalid_token", "requires_password": requires_password}
 
     for device in devices:
         device_requires_password = enforce_password or totp_device_requires_password(device)
