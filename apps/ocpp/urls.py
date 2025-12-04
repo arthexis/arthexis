@@ -7,7 +7,6 @@ app_name = "ocpp"
 
 urlpatterns = [
     path("cpms/dashboard/", views.dashboard, name="ocpp-dashboard"),
-    path("maintenance/request/", views.maintenance_request, name="maintenance-request"),
     path("evcs/simulator/", views.cp_simulator, name="cp-simulator"),
     path(
         "firmware/<int:deployment_id>/<slug:token>/",
