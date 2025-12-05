@@ -74,7 +74,6 @@ from apps.ocpp.models import Charger, Transaction
 from apps.vehicle.models import ElectricVehicle
 from apps.cards.utils import build_mode_toggle
 from apps.emails.models import EmailCollector, EmailInbox, EmailOutbox
-from apps.teams.models import SocialProfile
 from apps.energy.models import ClientReport, CustomerAccount
 from apps.repos.forms import PackageRepositoryForm
 from apps.repos.task_utils import GitHubRepositoryError, create_repository_for_package
@@ -1044,24 +1043,6 @@ class EmailInboxInlineForm(ProfileFormMixin, EmailInboxAdminForm):
         exclude = ("user", "group")
 
 
-class SocialProfileInlineForm(ProfileFormMixin, forms.ModelForm):
-    profile_fields = SocialProfile.profile_fields
-
-    class Meta:
-        model = SocialProfile
-        fields = (
-            "network",
-            "handle",
-            "domain",
-            "did",
-            "application_id",
-            "public_key",
-            "guild_id",
-            "bot_token",
-            "default_channel_id",
-        )
-
-
 class EmailOutboxAdminForm(MaskedPasswordFormMixin, forms.ModelForm):
     """Admin form for :class:`apps.emails.models.EmailOutbox` with hidden password."""
 
@@ -1163,56 +1144,6 @@ PROFILE_INLINE_CONFIG = {
             "from_email",
         ),
     },
-    SocialProfile: {
-        "form": SocialProfileInlineForm,
-        "fieldsets": (
-            (
-                _("Network"),
-                {
-                    "fields": ("network",),
-                },
-            ),
-            (
-                _("Configuration: Bluesky"),
-                {
-                    "fields": ("handle", "domain", "did"),
-                    "description": _(
-                        "1. Set your Bluesky handle to the domain managed by Arthexis. "
-                        "2. Publish a _atproto TXT record or /.well-known/atproto-did file pointing to the DID below. "
-                        "3. Save once Bluesky confirms the domain matches the DID."
-                    ),
-                },
-            ),
-            (
-                _("Configuration: Discord"),
-                {
-                    "fields": (
-                        "application_id",
-                        "public_key",
-                        "guild_id",
-                        "bot_token",
-                        "default_channel_id",
-                    ),
-                    "description": _(
-                        "Provide the Discord application and guild identifiers plus a bot token so Arthexis can control the bot. "
-                        "The public key verifies interaction requests and the default channel is optional."
-                    ),
-                },
-            ),
-        ),
-        "fieldset_visibility": (
-            {
-                "name": _("Configuration: Bluesky"),
-                "field": "network",
-                "values": (SocialProfile.Network.BLUESKY,),
-            },
-            {
-                "name": _("Configuration: Discord"),
-                "field": "network",
-                "values": (SocialProfile.Network.DISCORD,),
-            },
-        ),
-    },
 }
 
 
@@ -1256,7 +1187,6 @@ PROFILE_MODELS = (
     OdooEmployee,
     EmailInbox,
     EmailOutbox,
-    SocialProfile,
 )
 USER_PROFILE_INLINES = [
     _build_profile_inline(model, "user") for model in PROFILE_MODELS
@@ -1550,53 +1480,6 @@ class EmailCollectorAdmin(EntityModelAdmin):
         return TemplateResponse(
             request, "admin/core/emailcollector/preview.html", context
         )
-
-
-@admin.register(SocialProfile)
-class SocialProfileAdmin(
-    ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdmin
-):
-    list_display = ("owner", "network", "handle", "domain", "guild_id")
-    list_filter = ("network",)
-    search_fields = ("handle", "domain", "did", "application_id", "guild_id")
-    changelist_actions = ["my_profile"]
-    change_actions = ["my_profile_action"]
-    fieldsets = (
-        (_("Owner"), {"fields": ("user", "group")}),
-        (_("Network"), {"fields": ("network",)}),
-        (
-            _("Configuration: Bluesky"),
-            {
-                "fields": ("handle", "domain", "did"),
-                "description": _(
-                    "Link Arthexis to Bluesky by using a verified domain handle. "
-                    "Publish a _atproto TXT record or /.well-known/atproto-did file "
-                    "that returns the DID stored here before saving."
-                ),
-            },
-        ),
-        (
-            _("Configuration: Discord"),
-            {
-                "fields": (
-                    "application_id",
-                    "public_key",
-                    "guild_id",
-                    "bot_token",
-                    "default_channel_id",
-                ),
-                "description": _(
-                    "Store the Discord application and guild identifiers plus the bot token "
-                    "used for automation. The public key verifies interaction callbacks and the "
-                    "default channel is optional."
-                ),
-            },
-        ),
-    )
-
-    @admin.display(description=_("Owner"))
-    def owner(self, obj):
-        return obj.owner_display()
 
 
 @admin.register(OdooEmployee)

@@ -286,11 +286,20 @@ class User(Entity, AbstractUser):
 
     @property
     def social_profile(self):
-        model = apps.get_model("teams", "SocialProfile")
-        try:
-            return self.get_profile(model)
-        except TypeError:
+        avatars = getattr(self, "chat_avatars", None)
+        if avatars is None:
             return None
+
+        for avatar in avatars.all():
+            for app_label, model_name in (
+                ("socials", "BlueskyProfile"),
+                ("socials", "DiscordProfile"),
+            ):
+                model = apps.get_model(app_label, model_name)
+                profile = model.objects.filter(avatar=avatar).first()
+                if profile is not None:
+                    return profile
+        return None
 
     @property
     def google_calendar_profile(self):
