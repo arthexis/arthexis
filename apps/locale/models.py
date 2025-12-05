@@ -4,7 +4,26 @@ from django.db import models
 from django.db.models import Q
 from django.utils.translation import gettext_lazy as _
 
-from apps.core.entity import Entity
+from apps.core.entity import Entity, EntityManager
+
+
+class LanguageManager(EntityManager):
+    def get_by_natural_key(self, code: str):  # pragma: no cover - used by fixtures
+        return self.get(code=code)
+
+
+class DocumentationManager(EntityManager):
+    def get_by_natural_key(self, slug: str):  # pragma: no cover - used by fixtures
+        return self.get(slug=slug)
+
+
+class DocumentationTranslationManager(EntityManager):
+    def get_by_natural_key(  # pragma: no cover - used by fixtures
+        self, documentation_slug: str, language_code: str
+    ):
+        return self.select_related("documentation", "language").get(
+            documentation__slug=documentation_slug, language__code=language_code
+        )
 
 
 class Language(Entity):
@@ -14,6 +33,8 @@ class Language(Entity):
     english_name = models.CharField(max_length=100)
     native_name = models.CharField(max_length=100, blank=True)
     is_default = models.BooleanField(default=False)
+
+    objects = LanguageManager()
 
     class Meta:
         ordering = ["code"]
@@ -30,6 +51,9 @@ class Language(Entity):
     def __str__(self) -> str:  # pragma: no cover - simple representation
         label = self.native_name or self.english_name or self.code
         return f"{label} ({self.code})" if label else self.code
+
+    def natural_key(self):  # pragma: no cover - used by fixtures
+        return (self.code,)
 
     @classmethod
     def default(cls) -> "Language | None":
@@ -49,6 +73,8 @@ class Documentation(Entity):
         verbose_name=_("Default language"),
     )
 
+    objects = DocumentationManager()
+
     class Meta:
         ordering = ["slug"]
         verbose_name = _("Documentation")
@@ -56,6 +82,9 @@ class Documentation(Entity):
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.title
+
+    def natural_key(self):  # pragma: no cover - used by fixtures
+        return (self.slug,)
 
 
 class DocumentationTranslation(Entity):
@@ -81,6 +110,8 @@ class DocumentationTranslation(Entity):
         help_text=_("Optional cached content for the localized document."),
     )
 
+    objects = DocumentationTranslationManager()
+
     class Meta:
         ordering = ["documentation__slug", "language__code"]
         unique_together = ("documentation", "language")
@@ -89,6 +120,9 @@ class DocumentationTranslation(Entity):
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return f"{self.documentation.slug} ({self.language.code})"
+
+    def natural_key(self):  # pragma: no cover - used by fixtures
+        return (*self.documentation.natural_key(), *self.language.natural_key())
 
 
 __all__ = ["Documentation", "DocumentationTranslation", "Language"]
