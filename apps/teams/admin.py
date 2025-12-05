@@ -14,7 +14,7 @@ from django.utils import formats, timezone
 from django.utils.translation import gettext_lazy as _, ngettext
 from django_object_actions import DjangoObjectActions
 
-from django_otp.plugins.otp_totp.models import TOTPDevice as CoreTOTPDevice
+from apps.users.models import TOTPDevice
 from django_otp.plugins.otp_totp.admin import (
     TOTPDeviceAdmin as CoreTOTPDeviceAdmin,
 )
@@ -39,7 +39,6 @@ from .forms import (
 )
 from .models import (
     InviteLead,
-    TOTPDevice,
     SlackBotProfile,
 )
 
@@ -449,7 +448,7 @@ class SlackBotProfileAdmin(DjangoObjectActions, EntityModelAdmin):
 
 
 try:
-    admin.site.unregister(CoreTOTPDevice)
+    admin.site.unregister(TOTPDevice)
 except NotRegistered:
     pass
 

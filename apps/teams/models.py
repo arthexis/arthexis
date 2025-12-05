@@ -18,9 +18,6 @@ from apps.core.models import InviteLead as CoreInviteLead
 from apps.users.models import Profile as CoreProfile
 from apps.users.models import User as CoreUser
 from apps.awg.models import PowerLead as CorePowerLead
-from django_otp.plugins.otp_totp.models import (
-    TOTPDevice as CoreTOTPDevice,
-)
 from apps.nodes.models import Node
 
 
@@ -222,17 +219,6 @@ class SocialProfile(CoreProfile):
                 name="socialprofile_requires_owner",
             ),
         ]
-
-
-class TOTPDevice(CoreTOTPDevice):
-    supports_user_datum = True
-    supports_seed_datum = True
-
-    class Meta:
-        proxy = True
-        app_label = "teams"
-        verbose_name = _("TOTP Device")
-        verbose_name_plural = _("TOTP Devices")
 
 
 class SlackBotProfile(CoreProfile):

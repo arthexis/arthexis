@@ -5,8 +5,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.utils.translation import gettext_lazy as _
 
 from apps.groups.models import SecurityGroup
-from apps.users.models import TOTPDeviceSettings
-from django_otp.plugins.otp_totp.models import TOTPDevice
+from apps.users.models import TOTPDevice, TOTPDeviceSettings
 
 from .models import SlackBotProfile
 
