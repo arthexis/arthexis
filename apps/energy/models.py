@@ -323,33 +323,37 @@ class CustomerAccount(Entity):
 
     @property
     def credits_kw(self):
-        """Total kW energy credits added to the customer account."""
+        """Total kW credits recorded in the energy ledger."""
         from django.db.models import Sum
         from decimal import Decimal
 
-        total = self.credits.aggregate(total=Sum("amount_kw"))["total"]
+        total = self.energy_transactions.filter(
+            direction=EnergyTransaction.Direction.CREDIT
+        ).aggregate(total=Sum("delta_kw"))["total"]
         return total if total is not None else Decimal("0")
 
     @property
     def total_kw_spent(self):
-        """Total kW consumed across all transactions."""
-        from django.db.models import F, Sum, ExpressionWrapper, FloatField
+        """Total kW debited from the account via the energy ledger."""
+        from django.db.models import Sum
         from decimal import Decimal
 
-        expr = ExpressionWrapper(
-            F("meter_stop") - F("meter_start"), output_field=FloatField()
-        )
-        total = self.transactions.filter(
-            meter_start__isnull=False, meter_stop__isnull=False
-        ).aggregate(total=Sum(expr))["total"]
+        total = self.energy_transactions.filter(
+            direction=EnergyTransaction.Direction.DEBIT
+        ).aggregate(total=Sum("delta_kw"))["total"]
         if total is None:
             return Decimal("0")
-        return Decimal(str(total))
+        # Debits are stored as negative deltas
+        return Decimal("0") - Decimal(str(total))
 
     @property
     def balance_kw(self):
         """Remaining kW available for the customer account."""
-        return self.credits_kw - self.total_kw_spent
+        from django.db.models import Sum
+        from decimal import Decimal
+
+        total = self.energy_transactions.aggregate(total=Sum("delta_kw"))["total"]
+        return total if total is not None else Decimal("0")
 
     @property
     def potential_purchase_kw(self):
@@ -411,40 +415,18 @@ def _rfid_unique_customer_account(
                 )
 
 
-class EnergyCredit(Entity):
-    """Energy credits added to a customer account."""
-
-    account = models.ForeignKey(
-        CustomerAccount, on_delete=models.CASCADE, related_name="credits"
-    )
-    amount_kw = models.DecimalField(
-        max_digits=10, decimal_places=2, verbose_name="Energy (kW)"
-    )
-    created_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="credit_entries",
-    )
-    created_on = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self) -> str:  # pragma: no cover - simple representation
-        user = (
-            self.account.user
-            if self.account.user
-            else f"Customer Account {self.account_id}"
-        )
-        return f"{self.amount_kw} kW for {user}"
-
-    class Meta:
-        verbose_name = "Energy Credit"
-        verbose_name_plural = "Energy Credits"
-        db_table = "core_credit"
-
-
 class EnergyTransaction(Entity):
-    """Record of currency-to-energy purchases for an account."""
+    """Unified ledger entry for kW credits and debits."""
+
+    class Direction(models.TextChoices):
+        CREDIT = "credit", "Credit"
+        DEBIT = "debit", "Debit"
+
+    class Source(models.TextChoices):
+        CARD_TOPUP = "card_topup", "Card top-up"
+        SUBSCRIPTION = "subscription", "Subscription"
+        SESSION_CLOSE = "session_close", "Session close"
+        MANUAL_ADJUSTMENT = "manual_adjustment", "Manual adjustment"
 
     account = models.ForeignKey(
         CustomerAccount, on_delete=models.CASCADE, related_name="energy_transactions"
@@ -457,20 +439,42 @@ class EnergyTransaction(Entity):
         related_name="energy_transactions",
         help_text="Tariff in effect when the purchase occurred.",
     )
-    purchased_kw = models.DecimalField(
-        max_digits=10,
-        decimal_places=2,
-        help_text="Number of kW purchased for the account.",
+    direction = models.CharField(
+        max_length=10,
+        choices=Direction.choices,
+        default=Direction.CREDIT,
+        help_text="Whether this ledger entry is a credit or debit.",
+    )
+    delta_kw = models.DecimalField(
+        max_digits=12,
+        decimal_places=4,
+        help_text="Signed kW impact on the account balance (credits positive).",
     )
     charged_amount_mxn = models.DecimalField(
         max_digits=12,
         decimal_places=2,
-        help_text="Currency amount used for the purchase.",
+        null=True,
+        blank=True,
+        help_text="Currency amount for the transaction when applicable.",
     )
     conversion_factor = models.DecimalField(
         max_digits=12,
         decimal_places=6,
+        null=True,
+        blank=True,
         help_text="Conversion factor (kW per MXN) applied at purchase time.",
+    )
+    source = models.CharField(
+        max_length=32,
+        choices=Source.choices,
+        default=Source.MANUAL_ADJUSTMENT,
+        help_text="Originating flow for this ledger entry.",
+    )
+    reference = models.CharField(
+        max_length=64,
+        blank=True,
+        default="",
+        help_text="Optional reference identifier for reconciliation.",
     )
     created_on = models.DateTimeField(auto_now_add=True)
 
@@ -479,9 +483,15 @@ class EnergyTransaction(Entity):
         verbose_name_plural = "Energy Transactions"
         ordering = ("-created_on",)
         db_table = "core_energytransaction"
+        indexes = [
+            models.Index(
+                fields=["account", "created_on", "direction"],
+                name="energy_txn_acct_dir_idx",
+            )
+        ]
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
-        return f"{self.purchased_kw} kW on {self.created_on:%Y-%m-%d}"
+        return f"{self.delta_kw} kW ({self.direction}) on {self.created_on:%Y-%m-%d}"
 
 
 class ClientReportSchedule(Entity):
