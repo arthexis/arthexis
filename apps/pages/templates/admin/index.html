@@ -372,6 +372,32 @@
     .dashboard-main .module.is-collapsed tbody {
         display: none;
     }
+    .dashboard-app-wiki {
+        display: none;
+        padding: 0 8px 12px;
+        border-top: 1px solid var(--hairline-color, #e5e7eb);
+        color: var(--body-quiet-color);
+        line-height: 1.45;
+    }
+    .dashboard-main .module.is-collapsed .dashboard-app-wiki {
+        display: block;
+    }
+    .dashboard-app-wiki__title {
+        margin: 6px 0 4px;
+        font-weight: 700;
+        color: var(--body-fg, #0f172a);
+    }
+    .dashboard-app-wiki__body {
+        margin: 0;
+    }
+    .dashboard-app-wiki__link {
+        margin: 6px 0 0;
+        font-weight: 600;
+    }
+    .dashboard-app-wiki__loading {
+        margin: 6px 0 0;
+        color: var(--body-quiet-color);
+    }
     .dashboard-main .badge-counter,
     .dashboard-main .lead-open-badge,
     .dashboard-main .node-count-badge,
@@ -800,10 +826,34 @@
           button.setAttribute('aria-expanded', String(!isCollapsed));
           target.hidden = isCollapsed;
 
+          const notifyToggle = (collapsed) => {
+            module.dispatchEvent(
+              new CustomEvent('app:toggle', {
+                bubbles: true,
+                detail: { appLabel, collapsed },
+              }),
+            );
+
+            if (collapsed) {
+              module.dispatchEvent(
+                new CustomEvent('app:collapsed', {
+                  bubbles: true,
+                  detail: { appLabel },
+                }),
+              );
+            }
+          };
+
+          if (isCollapsed) {
+            notifyToggle(true);
+          }
+
           button.addEventListener('click', () => {
             const nowCollapsed = module.classList.toggle('is-collapsed');
             button.setAttribute('aria-expanded', String(!nowCollapsed));
             target.hidden = nowCollapsed;
+
+            notifyToggle(nowCollapsed);
 
             if (nowCollapsed) {
               collapsedState[appLabel] = true;
@@ -862,7 +912,36 @@
         });
       };
 
-      document.addEventListener('DOMContentLoaded', configureStatusLoaders);
+      const configureWikiLoaders = () => {
+        const loaders = document.querySelectorAll('[data-dashboard-app-wiki-loader]');
+        if (!loaders.length) {
+          return;
+        }
+
+        loaders.forEach((loader) => {
+          const fallbackId = loader.dataset.fallbackTemplate;
+          if (!fallbackId) {
+            return;
+          }
+
+          const fallbackTemplate = document.getElementById(fallbackId);
+          const render = () => renderStatusFallback(loader, fallbackTemplate);
+
+          if (!window.htmx) {
+            render();
+            return;
+          }
+
+          htmx.on(loader, 'htmx:responseError', render);
+          htmx.on(loader, 'htmx:sendError', render);
+          htmx.on(loader, 'htmx:timeout', render);
+        });
+      };
+
+      document.addEventListener('DOMContentLoaded', () => {
+        configureStatusLoaders();
+        configureWikiLoaders();
+      });
     })();
   </script>
 {% endblock %}

@@ -47,6 +47,8 @@ from apps.odoo.models import OdooChatBridge
 from apps.release.models import ReleaseManager
 from apps.locals.user_data import EntityModelAdmin
 from apps.app.models import Application
+from apps.nodes.forms import NodeRoleMultipleChoiceField
+from apps.wikis.services import wiki_summary_or_placeholder
 
 
 logger = logging.getLogger(__name__)
@@ -1175,6 +1177,33 @@ def dashboard_model_status(request):
     )
 
 
+def dashboard_app_wiki(request):
+    """Return wiki summary markup for a dashboard app."""
+
+    if request.method != "GET":
+        return HttpResponseNotAllowed(["GET"])
+
+    topic = request.GET.get("topic")
+
+    if not topic:
+        return HttpResponseBadRequest(_("A valid topic is required."))
+
+    summary = wiki_summary_or_placeholder(topic)
+
+    context = {
+        **admin.site.each_context(request),
+        "summary": summary,
+        "topic": topic,
+    }
+
+    return TemplateResponse(
+        request,
+        "admin/includes/dashboard_app_wiki.html",
+        context,
+        status=200,
+    )
+
+
 def get_admin_urls(original_get_urls):
     def get_urls():
         urls = original_get_urls()
@@ -1183,6 +1212,11 @@ def get_admin_urls(original_get_urls):
                 "dashboard/model-status/",
                 admin.site.admin_view(dashboard_model_status),
                 name="dashboard_model_status",
+            ),
+            path(
+                "dashboard/app-wiki/",
+                admin.site.admin_view(dashboard_app_wiki),
+                name="dashboard_app_wiki",
             ),
             path(
                 "logs/viewer/",
