@@ -20,7 +20,7 @@ from django.conf import settings
 from redis import Redis
 from redis.exceptions import RedisError
 
-from apps.core.log_paths import select_log_dir
+from apps.loggers.paths import select_log_dir
 
 IDENTITY_SEPARATOR = "#"
 AGGREGATE_SLUG = "all"
