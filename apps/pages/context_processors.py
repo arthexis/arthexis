@@ -8,7 +8,8 @@ from apps.nodes.models import Node, NodeFeature
 from apps.groups.models import SecurityGroup
 from apps.links.models import Reference
 from apps.links.reference_utils import filter_visible_references
-from .models import Module, SiteTemplate
+from apps.modules.models import Module
+from .models import SiteTemplate
 
 _FAVICON_DIR = Path(settings.BASE_DIR) / "pages" / "fixtures" / "data"
 _FAVICON_FILENAMES = {

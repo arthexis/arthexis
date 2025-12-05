@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 from django.db import models
 from django.db.models import Q
 from django.utils.text import slugify
@@ -75,6 +76,7 @@ class Module(Entity):
     class Meta:
         verbose_name = _("Module")
         verbose_name_plural = _("Modules")
+        db_table = "pages_module"
         constraints = [
             models.UniqueConstraint(fields=["path"], name="unique_module_path"),
         ]
@@ -100,3 +102,5 @@ class Module(Entity):
             self.path = f"/{slugify(base)}/"
         super().save(*args, **kwargs)
 
+
+__all__ = ["Module", "ModuleManager"]

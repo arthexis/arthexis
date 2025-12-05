@@ -1,6 +1,6 @@
 [
   {
-    "model": "pages.module",
+    "model": "modules.module",
     "fields": {
       "is_seed_data": true,
       "is_deleted": false,
@@ -27,7 +27,7 @@
     }
   },
   {
-    "model": "pages.module",
+    "model": "modules.module",
     "fields": {
       "is_seed_data": true,
       "is_deleted": false,

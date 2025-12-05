@@ -5,7 +5,7 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.core.entity import Entity
 
-from .module import Module
+from apps.modules.models import Module
 
 
 class LandingManager(models.Manager):
