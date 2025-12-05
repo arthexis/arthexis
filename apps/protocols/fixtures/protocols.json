@@ -1,7 +1,6 @@
 [
   {
     "model": "protocols.protocol",
-    "pk": 1,
     "fields": {
       "slug": "ocpp16",
       "name": "OCPP",
@@ -11,268 +10,296 @@
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 2,
     "fields": {
-      "protocol": 1,
+      "protocol": [
+        "ocpp16"
+      ],
       "name": "Authorize",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 3,
     "fields": {
-      "protocol": 1,
+      "protocol": [
+        "ocpp16"
+      ],
       "name": "BootNotification",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 4,
     "fields": {
-      "protocol": 1,
+      "protocol": [
+        "ocpp16"
+      ],
       "name": "DataTransfer",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 5,
     "fields": {
-      "protocol": 1,
+      "protocol": [
+        "ocpp16"
+      ],
       "name": "DiagnosticsStatusNotification",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 6,
     "fields": {
-      "protocol": 1,
+      "protocol": [
+        "ocpp16"
+      ],
       "name": "FirmwareStatusNotification",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 7,
     "fields": {
-      "protocol": 1,
+      "protocol": [
+        "ocpp16"
+      ],
       "name": "Heartbeat",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 8,
     "fields": {
-      "protocol": 1,
+      "protocol": [
+        "ocpp16"
+      ],
       "name": "MeterValues",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 9,
     "fields": {
-      "protocol": 1,
+      "protocol": [
+        "ocpp16"
+      ],
       "name": "StartTransaction",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 10,
     "fields": {
-      "protocol": 1,
+      "protocol": [
+        "ocpp16"
+      ],
       "name": "StatusNotification",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 11,
     "fields": {
-      "protocol": 1,
+      "protocol": [
+        "ocpp16"
+      ],
       "name": "StopTransaction",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 12,
     "fields": {
-      "protocol": 1,
+      "protocol": [
+        "ocpp16"
+      ],
       "name": "CancelReservation",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 13,
     "fields": {
-      "protocol": 1,
+      "protocol": [
+        "ocpp16"
+      ],
       "name": "ChangeAvailability",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 14,
     "fields": {
-      "protocol": 1,
+      "protocol": [
+        "ocpp16"
+      ],
       "name": "ChangeConfiguration",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 15,
     "fields": {
-      "protocol": 1,
+      "protocol": [
+        "ocpp16"
+      ],
       "name": "ClearCache",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 16,
     "fields": {
-      "protocol": 1,
+      "protocol": [
+        "ocpp16"
+      ],
       "name": "ClearChargingProfile",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 17,
     "fields": {
-      "protocol": 1,
+      "protocol": [
+        "ocpp16"
+      ],
       "name": "DataTransfer",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 18,
     "fields": {
-      "protocol": 1,
+      "protocol": [
+        "ocpp16"
+      ],
       "name": "GetCompositeSchedule",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 19,
     "fields": {
-      "protocol": 1,
+      "protocol": [
+        "ocpp16"
+      ],
       "name": "GetConfiguration",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 20,
     "fields": {
-      "protocol": 1,
+      "protocol": [
+        "ocpp16"
+      ],
       "name": "GetDiagnostics",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 21,
     "fields": {
-      "protocol": 1,
+      "protocol": [
+        "ocpp16"
+      ],
       "name": "GetLocalListVersion",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 22,
     "fields": {
-      "protocol": 1,
+      "protocol": [
+        "ocpp16"
+      ],
       "name": "RemoteStartTransaction",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 23,
     "fields": {
-      "protocol": 1,
+      "protocol": [
+        "ocpp16"
+      ],
       "name": "RemoteStopTransaction",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 24,
     "fields": {
-      "protocol": 1,
+      "protocol": [
+        "ocpp16"
+      ],
       "name": "ReserveNow",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 25,
     "fields": {
-      "protocol": 1,
+      "protocol": [
+        "ocpp16"
+      ],
       "name": "Reset",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 26,
     "fields": {
-      "protocol": 1,
+      "protocol": [
+        "ocpp16"
+      ],
       "name": "SendLocalList",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 27,
     "fields": {
-      "protocol": 1,
+      "protocol": [
+        "ocpp16"
+      ],
       "name": "SetChargingProfile",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 28,
     "fields": {
-      "protocol": 1,
+      "protocol": [
+        "ocpp16"
+      ],
       "name": "TriggerMessage",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 29,
     "fields": {
-      "protocol": 1,
+      "protocol": [
+        "ocpp16"
+      ],
       "name": "UnlockConnector",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 30,
     "fields": {
-      "protocol": 1,
+      "protocol": [
+        "ocpp16"
+      ],
       "name": "UpdateFirmware",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocol",
-    "pk": 31,
     "fields": {
       "slug": "ocpp201",
       "name": "OCPP",
@@ -282,574 +309,636 @@
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 32,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "Authorize",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 33,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "BootNotification",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 34,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "ClearedChargingLimit",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 35,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "DataTransfer",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 36,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "FirmwareStatusNotification",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 37,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "Get15118EVCertificate",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 38,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "GetCertificateStatus",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 39,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "Heartbeat",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 40,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "LogStatusNotification",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 41,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "MeterValues",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 42,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "NotifyChargingLimit",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 43,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "NotifyCustomerInformation",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 44,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "NotifyDisplayMessages",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 45,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "NotifyEVChargingNeeds",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 46,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "NotifyEVChargingSchedule",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 47,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "NotifyEvent",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 48,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "NotifyMonitoringReport",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 49,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "NotifyReport",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 50,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "PublishFirmwareStatusNotification",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 51,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "ReportChargingProfiles",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 52,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "SecurityEventNotification",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 53,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "SignCertificate",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 54,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "StatusNotification",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 55,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "TransactionEvent",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 56,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "CancelReservation",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 57,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "CertificateSigned",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 58,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "ChangeAvailability",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 59,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "ClearCache",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 60,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "ClearChargingProfile",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 61,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "ClearDisplayMessage",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 62,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "ClearVariableMonitoring",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 63,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "CustomerInformation",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 64,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "DataTransfer",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 65,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "DeleteCertificate",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 66,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "GetBaseReport",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 67,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "GetChargingProfiles",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 68,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "GetCompositeSchedule",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 69,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "GetDisplayMessages",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 70,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "GetInstalledCertificateIds",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 71,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "GetLocalListVersion",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 72,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "GetLog",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 73,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "GetMonitoringReport",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 74,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "GetReport",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 75,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "GetTransactionStatus",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 76,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "GetVariables",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 77,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "InstallCertificate",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 78,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "PublishFirmware",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 79,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "RequestStartTransaction",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 80,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "RequestStopTransaction",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 81,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "ReserveNow",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 82,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "Reset",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 83,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "SendLocalList",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 84,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "SetChargingProfile",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 85,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "SetDisplayMessage",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 86,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "SetMonitoringBase",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 87,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "SetMonitoringLevel",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 88,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "SetNetworkProfile",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 89,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "SetVariableMonitoring",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 90,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "SetVariables",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 91,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "TriggerMessage",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 92,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "UnlockConnector",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 93,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "UnpublishFirmware",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 94,
     "fields": {
-      "protocol": 31,
+      "protocol": [
+        "ocpp201"
+      ],
       "name": "UpdateFirmware",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocol",
-    "pk": 95,
     "fields": {
       "slug": "ocpp21",
       "name": "OCPP",
@@ -859,585 +948,650 @@
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 96,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "Authorize",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 97,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "BootNotification",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 98,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "ClearedChargingLimit",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 99,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "CostUpdated",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 100,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "DataTransfer",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 101,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "FirmwareStatusNotification",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 102,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "Get15118EVCertificate",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 103,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "GetCertificateStatus",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 104,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "Heartbeat",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 105,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "LogStatusNotification",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 106,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "MeterValues",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 107,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "NotifyChargingLimit",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 108,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "NotifyCustomerInformation",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 109,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "NotifyDisplayMessages",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 110,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "NotifyEVChargingNeeds",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 111,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "NotifyEVChargingSchedule",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 112,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "NotifyEvent",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 113,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "NotifyMonitoringReport",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 114,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "NotifyReport",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 115,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "PublishFirmwareStatusNotification",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 116,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "ReportChargingProfiles",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 117,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "ReservationStatusUpdate",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 118,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "SecurityEventNotification",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 119,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "SignCertificate",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 120,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "StatusNotification",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 121,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "TransactionEvent",
       "direction": "cp_to_csms"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 122,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "CancelReservation",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 123,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "CertificateSigned",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 124,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "ChangeAvailability",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 125,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "ClearCache",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 126,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "ClearChargingProfile",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 127,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "ClearDisplayMessage",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 128,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "ClearVariableMonitoring",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 129,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "CustomerInformation",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 130,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "DataTransfer",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 131,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "DeleteCertificate",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 132,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "GetBaseReport",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 133,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "GetChargingProfiles",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 134,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "GetCompositeSchedule",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 135,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "GetDisplayMessages",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 136,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "GetInstalledCertificateIds",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 137,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "GetLocalListVersion",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 138,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "GetLog",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 139,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "GetMonitoringReport",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 140,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "GetReport",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 141,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "GetTransactionStatus",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 142,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "GetVariables",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 143,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "InstallCertificate",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 144,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "PublishFirmware",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 145,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "RequestStartTransaction",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 146,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "RequestStopTransaction",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 147,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "ReserveNow",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 148,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "Reset",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 149,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "SendLocalList",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 150,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "SetChargingProfile",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 151,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "SetDisplayMessage",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 152,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "SetMonitoringBase",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 153,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "SetMonitoringLevel",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 154,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "SetNetworkProfile",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 155,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "SetVariableMonitoring",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 156,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "SetVariables",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 157,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "TriggerMessage",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 158,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "UnlockConnector",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 159,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "UnpublishFirmware",
       "direction": "csms_to_cp"
     }
   },
   {
     "model": "protocols.protocolcall",
-    "pk": 160,
     "fields": {
-      "protocol": 95,
+      "protocol": [
+        "ocpp21"
+      ],
       "name": "UpdateFirmware",
       "direction": "csms_to_cp"
     }
