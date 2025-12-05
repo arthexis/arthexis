@@ -7,7 +7,7 @@
       "prefix": "MOD",
       "context_type": "entity",
       "content_type": [
-        "pages",
+        "modules",
         "module"
       ]
     }
