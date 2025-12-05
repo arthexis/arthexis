@@ -231,7 +231,7 @@ def _setup_celery_beat_integrations():
 def _patch_totp_device():
     from django.core.exceptions import ObjectDoesNotExist
 
-    from django_otp.plugins.otp_totp.models import TOTPDevice as OTP_TOTPDevice
+    from apps.users.models import TOTPDevice as OTP_TOTPDevice
 
     if not hasattr(
         OTP_TOTPDevice._read_str_from_settings, "_core_totp_issuer_patch"

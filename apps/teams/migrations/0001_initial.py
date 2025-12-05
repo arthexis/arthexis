@@ -19,7 +19,7 @@ class Migration(migrations.Migration):
         ("core", "0001_initial"),
         ("groups", "0002_initial"),
         ("nodes", "0001_initial"),
-        ("otp_totp", "0003_add_timestamps"),
+        ("users", "0002_totpdevicesettings"),
     ]
 
     operations = [
@@ -194,7 +194,7 @@ class Migration(migrations.Migration):
                 "indexes": [],
                 "constraints": [],
             },
-            bases=("otp_totp.totpdevice",),
+            bases=("users.totpdevice",),
         ),
         migrations.CreateModel(
             name="SlackBotProfile",
