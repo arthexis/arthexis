@@ -104,7 +104,7 @@ else:
         graphviz_logger.addFilter(_GraphvizDeprecationFilter())
 
 from django_otp import login as otp_login
-from django_otp.plugins.otp_totp.models import TOTPDevice
+from apps.users.models import TOTPDevice
 import qrcode
 from .forms import (
     AuthenticatorEnrollmentForm,
