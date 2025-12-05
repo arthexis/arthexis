@@ -1,3 +1,3 @@
-from django_otp.plugins.otp_totp.models import TOTPDevice
+from django_otp.plugins.otp_totp.models import TOTPDevice, default_key
 
-__all__ = ["TOTPDevice"]
+__all__ = ["TOTPDevice", "default_key"]
