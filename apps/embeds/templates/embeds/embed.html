@@ -19,46 +19,82 @@
         background: linear-gradient(135deg, #0d1b2a, #1b263b);
         border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 12px;
-        padding: 16px;
+        padding: 18px;
         box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+        max-width: 640px;
+      }
+      .embed-header {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+      }
+      .embed-favicon {
+        width: 28px;
+        height: 28px;
+        border-radius: 6px;
+        background: #08101a;
+        padding: 4px;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
+      }
+      .embed-title {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
       }
       .embed-card h2 {
-        margin: 0 0 8px;
+        margin: 0;
         font-size: 1.1rem;
         letter-spacing: 0.02em;
       }
-      .embed-card p {
-        margin: 0 0 12px;
-        color: rgba(248, 249, 250, 0.85);
-        line-height: 1.4;
-        font-size: 0.95rem;
+      .embed-subtitle {
+        margin: 0;
+        color: rgba(248, 249, 250, 0.7);
+        font-size: 0.9rem;
+        letter-spacing: 0.01em;
+      }
+      .embed-body {
+        display: grid;
+        grid-template-columns: 120px 1fr;
+        align-items: center;
+        gap: 16px;
+        margin-top: 16px;
+      }
+      .qr-wrapper {
+        width: 120px;
+        height: 120px;
+        padding: 8px;
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        display: grid;
+        place-items: center;
+      }
+      .qr-wrapper img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        border-radius: 8px;
       }
       .embed-actions {
         display: flex;
+        flex-direction: column;
         gap: 8px;
-        flex-wrap: wrap;
       }
       .embed-actions a {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        gap: 8px;
+        gap: 10px;
         padding: 10px 14px;
         border-radius: 10px;
         text-decoration: none;
         font-weight: 600;
         letter-spacing: 0.01em;
         transition: transform 120ms ease, box-shadow 120ms ease;
-      }
-      .embed-actions a.primary {
         background: #0dcaf0;
         color: #0b1521;
         box-shadow: 0 8px 22px rgba(13, 202, 240, 0.35);
-      }
-      .embed-actions a.secondary {
-        background: rgba(255, 255, 255, 0.08);
-        color: #f8f9fa;
-        border: 1px solid rgba(255, 255, 255, 0.12);
       }
       .embed-actions a:hover,
       .embed-actions a:focus-visible {
@@ -66,22 +102,41 @@
         box-shadow: 0 10px 26px rgba(0, 0, 0, 0.25);
       }
       .embed-meta {
-        margin-top: 10px;
+        margin-top: 14px;
         font-size: 0.8rem;
         color: rgba(248, 249, 250, 0.7);
         word-break: break-word;
+        line-height: 1.4;
       }
     </style>
   </head>
   <body>
     <div class="embed-card">
-      <h2>Explore more on Arthexis</h2>
-      <p>Follow this link to view the full experience on our site.</p>
-      <div class="embed-actions">
-        <a class="primary" href="{{ target_url }}" target="_top" rel="noopener">Open Page</a>
-        <a class="secondary" href="{{ target_url }}" target="_blank" rel="noopener">New Tab</a>
+      <div class="embed-header">
+        {% if favicon_url %}
+        <img class="embed-favicon" src="{{ favicon_url }}" alt="Site icon" />
+        {% endif %}
+        <div class="embed-title">
+          <h2>{{ page_title }}</h2>
+          {% if subtitle %}<p class="embed-subtitle">#{{ subtitle }}</p>{% endif %}
+        </div>
       </div>
-      <div class="embed-meta">{{ target_url }}</div>
+      <div class="embed-body">
+        <div class="qr-wrapper">
+          <img src="data:image/png;base64,{{ qr_code_data }}" alt="QR code for {{ share_url }}" />
+        </div>
+        <div class="embed-actions">
+          <a href="{{ share_url }}" target="_blank" rel="noopener noreferrer">
+            {% if not favicon_url %}
+            <span aria-hidden="true">↗</span>
+            {% else %}
+            <img class="embed-favicon" src="{{ favicon_url }}" alt="" />
+            {% endif %}
+            <span>Open Full Page</span>
+          </a>
+        </div>
+      </div>
+      <div class="embed-meta">{{ share_url }}</div>
     </div>
   </body>
 </html>
