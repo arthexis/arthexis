@@ -11,12 +11,12 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 import contextlib
-import os
-import sys
 import ipaddress
+import os
 import socket
+import sys
 from pathlib import Path
-from apps.core.log_paths import select_log_dir
+from apps.loggers import build_logging_settings
 from django.utils.translation import gettext_lazy as _
 from datetime import timedelta
 
@@ -32,7 +32,6 @@ from urllib.parse import urlsplit
 import django.utils.encoding as encoding
 from apps.celery.utils import resolve_celery_shutdown_timeout
 
-from config.logging import configure_library_loggers
 from config.settings_helpers import (
     discover_local_ip_addresses,
     extract_ip_from_host,
@@ -765,49 +764,7 @@ GITHUB_ISSUE_REPORTING_ENABLED = True
 GITHUB_ISSUE_REPORTING_COOLDOWN = 3600  # seconds
 
 # Logging configuration
-LOG_DIR = select_log_dir(BASE_DIR)
-os.environ.setdefault("ARTHEXIS_LOG_DIR", str(LOG_DIR))
-LOG_FILE_NAME = "tests.log" if "test" in sys.argv else f"{socket.gethostname()}.log"
-
-LOGGING = {
-    "version": 1,
-    "disable_existing_loggers": False,
-    "formatters": {
-        "standard": {
-            "format": "%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        }
-    },
-    "handlers": {
-        "file": {
-            "class": "config.logging.ActiveAppFileHandler",
-            "filename": str(LOG_DIR / LOG_FILE_NAME),
-            "when": "midnight",
-            "backupCount": 30,
-            "encoding": "utf-8",
-            "formatter": "standard",
-        },
-        "error_file": {
-            "class": "config.logging.ErrorFileHandler",
-            "filename": str(LOG_DIR / "error.log"),
-            "when": "midnight",
-            "backupCount": 30,
-            "encoding": "utf-8",
-            "formatter": "standard",
-            "level": "ERROR",
-        },
-        "console": {
-            "class": "logging.StreamHandler",
-            "level": "ERROR",
-            "formatter": "standard",
-        },
-    },
-    "root": {
-        "handlers": ["file", "error_file", "console"],
-        "level": "DEBUG",
-    },
-}
-
-configure_library_loggers(DEBUG, LOGGING)
+LOG_DIR, LOG_FILE_NAME, LOGGING = build_logging_settings(BASE_DIR, DEBUG)
 
 
 # Celery configuration

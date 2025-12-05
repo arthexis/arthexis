@@ -383,7 +383,7 @@ def version_info(request):
 
 
 from apps.release import release as release_utils
-from .log_paths import select_log_dir
+from apps.loggers.paths import select_log_dir
 
 
 DIRTY_COMMIT_DEFAULT_MESSAGE = "chore: commit pending changes"
