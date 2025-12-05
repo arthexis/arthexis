@@ -1256,10 +1256,24 @@
           select.addEventListener('change', () => {
             const form = select.form;
             const data = new FormData(form);
-            fetch(form.action, { method: 'POST', body: data }).then(() => {
-              const next = form.querySelector('input[name="next"]').value || '/';
-              window.location.href = next;
-            });
+            const csrfToken = form.querySelector('input[name="csrfmiddlewaretoken"]')?.value;
+            fetch(form.action, {
+              method: 'POST',
+              body: data,
+              credentials: 'same-origin',
+              headers: csrfToken ? { 'X-CSRFToken': csrfToken } : {},
+            })
+              .then(response => {
+                if (!response || !response.ok) {
+                  form.submit();
+                  return;
+                }
+                const next = form.querySelector('input[name="next"]').value || '/';
+                window.location.href = next;
+              })
+              .catch(() => {
+                form.submit();
+              });
           });
         });
       </script>
