@@ -167,7 +167,9 @@ def _assign_many_to_many(instance: "Model", field_name: str, value: Any) -> bool
 def _fixture_sort_key(name: str) -> tuple[int, str]:
     """Sort fixtures to satisfy foreign key dependencies."""
     filename = Path(name).name
-    if filename.startswith("group__"):
+    if filename.startswith("locale__languages"):
+        priority = -2
+    elif filename.startswith("group__"):
         priority = -1
     elif filename.startswith("users__"):
         priority = 0
