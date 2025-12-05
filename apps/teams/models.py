@@ -15,7 +15,6 @@ from django.utils.translation import gettext_lazy as _
 from apps.core.entity import Entity, EntityAllManager, EntityManager
 from apps.sigils.fields import SigilShortAutoField
 from apps.core.models import InviteLead as CoreInviteLead
-from apps.groups.models import SecurityGroup as CoreSecurityGroup
 from apps.users.models import Profile as CoreProfile
 from apps.users.models import User as CoreUser
 from apps.awg.models import PowerLead as CorePowerLead
@@ -46,14 +45,6 @@ class PowerLead(CorePowerLead):
         app_label = "teams"
         verbose_name = CorePowerLead._meta.verbose_name
         verbose_name_plural = CorePowerLead._meta.verbose_name_plural
-
-
-class SecurityGroup(CoreSecurityGroup):
-    class Meta:
-        proxy = True
-        app_label = "teams"
-        verbose_name = CoreSecurityGroup._meta.verbose_name
-        verbose_name_plural = CoreSecurityGroup._meta.verbose_name_plural
 
 
 _SOCIAL_DOMAIN_PATTERN = re.compile(

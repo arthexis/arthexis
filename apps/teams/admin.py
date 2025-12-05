@@ -20,9 +20,6 @@ from django_otp.plugins.otp_totp.admin import (
 )
 from django_otp.models import VerifyNotAllowed
 from apps.core.admin import InviteLeadAdmin
-from apps.core.models import InviteLead as CoreInviteLead
-from apps.groups.admin import SecurityGroupAdmin
-from apps.groups.models import SecurityGroup as CoreSecurityGroup
 from apps.locals.user_data import (
     EntityModelAdmin,
     UserDatumAdminMixin,
@@ -42,7 +39,6 @@ from .forms import (
 )
 from .models import (
     InviteLead,
-    SecurityGroup,
     TOTPDevice,
     SlackBotProfile,
 )
@@ -51,12 +47,6 @@ from .models import (
 @admin.register(InviteLead)
 class InviteLeadAdminProxy(InviteLeadAdmin):
     pass
-
-
-@admin.register(SecurityGroup)
-class SecurityGroupAdminProxy(SecurityGroupAdmin):
-    pass
-
 
 
 @admin.register(SlackBotProfile)
