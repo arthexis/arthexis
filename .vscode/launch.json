@@ -17,7 +17,6 @@
             ],
             "django": true,
             "noDebug": true,
-            "preLaunchTask": "Dev: runserver preflight",
             "env": {
                 "DJANGO_SUPPRESS_MIGRATION_CHECK": "1"
             }
@@ -39,8 +38,7 @@
                 "DEBUG": "1",
                 "DJANGO_SUPPRESS_MIGRATION_CHECK": "1"
             },
-            "subProcess": true,
-            "preLaunchTask": "Dev: runserver preflight"
+            "subProcess": true
         },
         {
             "name": "Migration Server",

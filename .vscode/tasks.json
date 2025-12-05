@@ -91,22 +91,6 @@
             "detail": "Collect static files"
         },
         {
-            "label": "Dev: runserver preflight",
-            "type": "shell",
-            "dependsOn": [
-                "Dev: collectstatic"
-            ],
-            "command": "${workspaceFolder}/.venv/bin/python ${workspaceFolder}/manage.py migrate --check && ${workspaceFolder}/.venv/bin/python ${workspaceFolder}/manage.py check",
-            "options": {
-                "cwd": "${workspaceFolder}"
-            },
-            "windows": {
-                "command": "${workspaceFolder}\\.venv\\Scripts\\python.exe ${workspaceFolder}\\manage.py migrate --check; if ($?) { ${workspaceFolder}\\.venv\\Scripts\\python.exe ${workspaceFolder}\\manage.py check }"
-            },
-            "problemMatcher": [],
-            "detail": "Run migration and system checks once before starting runserver"
-        },
-        {
             "label": "Update requirements",
             "type": "shell",
             "command": "${workspaceFolder}/install.sh && ${workspaceFolder}/.venv/bin/python ${workspaceFolder}/freeze_requirements.py",
