@@ -10,32 +10,30 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ("maps", "0001_initial"),
+        ("embeds", "0001_initial"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
     operations = [
         migrations.AddField(
-            model_name="location",
-            name="assigned_to",
+            model_name="embedlead",
+            name="assign_to",
             field=models.ForeignKey(
                 blank=True,
-                help_text="Optional user responsible for this location.",
                 null=True,
                 on_delete=django.db.models.deletion.SET_NULL,
-                related_name="assigned_locations",
+                related_name="%(app_label)s_%(class)s_assignments",
                 to=settings.AUTH_USER_MODEL,
-                verbose_name="Assigned to",
             ),
         ),
         migrations.AddField(
-            model_name="googlemapslocation",
-            name="location",
-            field=models.OneToOneField(
-                on_delete=django.db.models.deletion.CASCADE,
-                related_name="google_maps_details",
-                to="maps.location",
-                verbose_name="Location",
+            model_name="embedlead",
+            name="user",
+            field=models.ForeignKey(
+                blank=True,
+                null=True,
+                on_delete=django.db.models.deletion.SET_NULL,
+                to=settings.AUTH_USER_MODEL,
             ),
         ),
     ]
