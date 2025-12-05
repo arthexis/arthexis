@@ -19,7 +19,7 @@ from django.utils._os import safe_join
 from django.views.decorators.cache import never_cache
 
 from apps.nodes.models import Node
-from apps.pages.models import Module
+from apps.modules.models import Module
 
 
 logger = logging.getLogger(__name__)

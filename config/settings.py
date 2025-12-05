@@ -441,6 +441,7 @@ LOCAL_APPS = [
     "apps.meta",
     "apps.awg",
     "apps.chats",
+    "apps.modules",
     "apps.pages",
     "apps.cards",
     "apps.tasks",

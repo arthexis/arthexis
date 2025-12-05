@@ -111,8 +111,8 @@ from .forms import (
     AuthenticatorLoginForm,
     UserStoryForm,
 )
+from apps.modules.models import Module
 from .models import (
-    Module,
     UserStory,
 )
 from apps.chats.models import ChatSession
