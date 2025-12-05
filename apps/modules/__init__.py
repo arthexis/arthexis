@@ -1,3 +1,3 @@
-from .models import Module, ModuleManager
+"""Modules app package."""
 
-__all__ = ["Module", "ModuleManager"]
+__all__ = []
