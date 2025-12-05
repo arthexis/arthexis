@@ -12,7 +12,7 @@ class Migration(migrations.Migration):
     initial = True
 
     dependencies = [
-        ("chats", "0003_initial"),
+        ("chats", "0001_initial"),
         ("groups", "0002_initial"),
         ("nodes", "0001_initial"),
         ("users", "0001_initial"),
