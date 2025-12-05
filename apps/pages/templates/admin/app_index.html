@@ -1,0 +1,109 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls static admin_modify wikis %}
+
+{% block extrahead %}
+  {{ block.super }}
+  <style>
+    .wiki-summary-widget {
+      margin: 0 0 1rem;
+      padding: 0.75rem 1rem;
+      border: 1px solid var(--hairline-color, #e5e7eb);
+      border-radius: 8px;
+      background: var(--darkened-bg, #f8fafc);
+    }
+
+    .wiki-summary-widget__header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      justify-content: space-between;
+      margin-bottom: 0.35rem;
+    }
+
+    .wiki-summary-widget__title {
+      margin: 0;
+      font-size: 1rem;
+      font-weight: 700;
+    }
+
+    .wiki-summary-widget__link {
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+
+    .wiki-summary-widget__body {
+      margin: 0;
+      color: var(--body-fg, #0f172a);
+      line-height: 1.45;
+      white-space: pre-line;
+    }
+  </style>
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+  &rsaquo; {{ app_label|capfirst }}
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+{% if app_list %}
+  {% for app in app_list %}
+    <div class="app-{{ app.app_label }} module">
+      {% wiki_summary app.name as wiki_description %}
+      {% if wiki_description %}
+        <div class="wiki-summary-widget" role="note" aria-label="{% translate 'Wikipedia description' %}">
+          <div class="wiki-summary-widget__header">
+            <p class="wiki-summary-widget__title">{{ wiki_description.title }}</p>
+            {% if wiki_description.url %}
+              <a class="wiki-summary-widget__link" href="{{ wiki_description.url }}" target="_blank" rel="noopener">
+                {% translate "Open on Wikipedia" %}
+              </a>
+            {% endif %}
+          </div>
+          <p class="wiki-summary-widget__body">{{ wiki_description.extract }}</p>
+        </div>
+      {% endif %}
+      <table>
+        <caption>
+          {% blocktranslate with name=app.name %}Models in the {{ name }} application{% endblocktranslate %}
+        </caption>
+        <thead class="visually-hidden">
+          <tr>
+            <th scope="col">{% translate 'Model' %}</th>
+            <th scope="col">{% translate 'Actions' %}</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for model in app.models %}
+          <tr class="model-{{ model.object_name|lower }}">
+            {% if model.admin_url %}
+              <th scope="row"><a href="{{ model.admin_url }}">{{ model.name }}</a></th>
+            {% else %}
+              <th scope="row">{{ model.name }}</th>
+            {% endif %}
+            <td class="model-actions">
+              {% if model.add_url %}
+                <a href="{{ model.add_url }}" class="addlink">{% translate 'Add' %}</a>
+              {% else %}
+                <span class="addlink">{% translate 'Add' %}</span>
+              {% endif %}
+              {% if model.admin_url %}
+                <a href="{{ model.admin_url }}" class="changelink">{% translate 'Change' %}</a>
+              {% else %}
+                <span class="changelink">{% translate 'Change' %}</span>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endfor %}
+{% else %}
+  <p>{% translate "You don't have permission to edit anything." %}</p>
+{% endif %}
+</div>
+{% endblock %}
