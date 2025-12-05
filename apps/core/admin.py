@@ -1028,27 +1028,6 @@ class OdooEmployeeInlineForm(ProfileFormMixin, OdooEmployeeAdminForm):
         return cleaned
 
 
-class OpenPayProcessorInlineForm(ProfileFormMixin, OpenPayProcessorAdminForm):
-    profile_fields = OpenPayProcessor.profile_fields
-
-    class Meta(OpenPayProcessorAdminForm.Meta):
-        exclude = ("user", "group", "verified_on", "verification_reference")
-
-
-class PayPalProcessorInlineForm(ProfileFormMixin, PayPalProcessorAdminForm):
-    profile_fields = PayPalProcessor.profile_fields
-
-    class Meta(PayPalProcessorAdminForm.Meta):
-        exclude = ("user", "group", "verified_on", "verification_reference")
-
-
-class StripeProcessorInlineForm(ProfileFormMixin, StripeProcessorAdminForm):
-    profile_fields = StripeProcessor.profile_fields
-
-    class Meta(StripeProcessorAdminForm.Meta):
-        exclude = ("user", "group", "verified_on", "verification_reference")
-
-
 class GoogleCalendarProfileInlineForm(
     ProfileFormMixin, GoogleCalendarProfileAdminForm
 ):
@@ -1148,99 +1127,6 @@ PROFILE_INLINE_CONFIG = {
             ),
         ),
         "readonly_fields": ("verified_on", "odoo_uid", "name", "email"),
-    },
-    OpenPayProcessor: {
-        "form": OpenPayProcessorInlineForm,
-        "fieldsets": (
-            (
-                _("Preferences"),
-                {
-                    "fields": ("is_default",),
-                    "description": _(
-                        "Use this OpenPay processor first when processing payments."
-                    ),
-                },
-            ),
-            (
-                _("OpenPay"),
-                {
-                    "fields": (
-                        "merchant_id",
-                        "public_key",
-                        "private_key",
-                        "webhook_secret",
-                        "is_production",
-                    )
-                },
-            ),
-            (
-                _("Verification"),
-                {"fields": ("verified_on", "verification_reference")},
-            ),
-        ),
-        "readonly_fields": ("verified_on", "verification_reference"),
-    },
-    PayPalProcessor: {
-        "form": PayPalProcessorInlineForm,
-        "fieldsets": (
-            (
-                _("Preferences"),
-                {
-                    "fields": ("is_default",),
-                    "description": _(
-                        "Use this PayPal processor first when processing payments."
-                    ),
-                },
-            ),
-            (
-                _("PayPal"),
-                {
-                    "fields": (
-                        "client_id",
-                        "client_secret",
-                        "webhook_id",
-                        "is_production",
-                    ),
-                    "description": _("Configure PayPal REST API access."),
-                },
-            ),
-            (
-                _("Verification"),
-                {"fields": ("verified_on", "verification_reference")},
-            ),
-        ),
-        "readonly_fields": ("verified_on", "verification_reference"),
-    },
-    StripeProcessor: {
-        "form": StripeProcessorInlineForm,
-        "fieldsets": (
-            (
-                _("Preferences"),
-                {
-                    "fields": ("is_default",),
-                    "description": _(
-                        "Use this Stripe processor first when processing payments."
-                    ),
-                },
-            ),
-            (
-                _("Stripe"),
-                {
-                    "fields": (
-                        "secret_key",
-                        "publishable_key",
-                        "webhook_secret",
-                        "is_production",
-                    ),
-                    "description": _("Configure Stripe API access."),
-                },
-            ),
-            (
-                _("Verification"),
-                {"fields": ("verified_on", "verification_reference")},
-            ),
-        ),
-        "readonly_fields": ("verified_on", "verification_reference"),
     },
     GoogleCalendarProfile: {
         "form": GoogleCalendarProfileInlineForm,
@@ -1368,9 +1254,6 @@ def _build_profile_inline(model, owner_field):
 
 PROFILE_MODELS = (
     OdooEmployee,
-    OpenPayProcessor,
-    PayPalProcessor,
-    StripeProcessor,
     EmailInbox,
     EmailOutbox,
     SocialProfile,
@@ -1766,38 +1649,37 @@ class OdooEmployeeAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAd
     ) = _build_credentials_actions("verify_credentials", "_verify_credentials")
 
 
-class PaymentProcessorAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdmin):
+class PaymentProcessorAdmin(SaveBeforeChangeAction, EntityModelAdmin):
     change_form_template = "django_object_actions/change_form.html"
     readonly_fields = ("verified_on", "verification_reference")
     actions = ["verify_credentials"]
-    change_actions = ["verify_credentials_action", "my_profile_action"]
-    changelist_actions = ["my_profile"]
+    change_actions = ["verify_credentials_action"]
 
-    @admin.display(description=_("Owner"))
-    def owner(self, obj):
-        return obj.owner_display()
+    @admin.display(description=_("Payment Processor"))
+    def display_name(self, obj):
+        return obj.identifier()
 
     def _verify_credentials(self, request, profile):
-        owner = profile.owner_display() or _("Payment Processor")
+        identifier = profile.identifier()
         try:
             profile.verify()
         except ValidationError as exc:
             message = "; ".join(exc.messages)
             self.message_user(
                 request,
-                f"{owner}: {message}",
+                f"{identifier}: {message}",
                 level=messages.ERROR,
             )
         except Exception as exc:  # pragma: no cover - admin feedback
             self.message_user(
                 request,
-                f"{owner}: {exc}",
+                f"{identifier}: {exc}",
                 level=messages.ERROR,
             )
         else:
             self.message_user(
                 request,
-                _("%(owner)s verified") % {"owner": owner},
+                _("%(name)s verified") % {"name": identifier},
                 level=messages.SUCCESS,
             )
 
@@ -1810,9 +1692,8 @@ class PaymentProcessorAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityMod
 @admin.register(OpenPayProcessor)
 class OpenPayProcessorAdmin(PaymentProcessorAdmin):
     form = OpenPayProcessorAdminForm
-    list_display = ("owner", "environment", "verified_on")
+    list_display = ("display_name", "environment", "verified_on")
     fieldsets = (
-        (_("Owner"), {"fields": ("user", "group")}),
         (
             _("OpenPay"),
             {
@@ -1840,9 +1721,8 @@ class OpenPayProcessorAdmin(PaymentProcessorAdmin):
 @admin.register(PayPalProcessor)
 class PayPalProcessorAdmin(PaymentProcessorAdmin):
     form = PayPalProcessorAdminForm
-    list_display = ("owner", "environment", "verified_on")
+    list_display = ("display_name", "environment", "verified_on")
     fieldsets = (
-        (_("Owner"), {"fields": ("user", "group")}),
         (
             _("PayPal"),
             {
@@ -1869,9 +1749,8 @@ class PayPalProcessorAdmin(PaymentProcessorAdmin):
 @admin.register(StripeProcessor)
 class StripeProcessorAdmin(PaymentProcessorAdmin):
     form = StripeProcessorAdminForm
-    list_display = ("owner", "environment", "verified_on")
+    list_display = ("display_name", "environment", "verified_on")
     fieldsets = (
-        (_("Owner"), {"fields": ("user", "group")}),
         (
             _("Stripe"),
             {
