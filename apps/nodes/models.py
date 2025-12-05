@@ -118,65 +118,6 @@ class NodeRole(Entity):
         return self.name
 
 
-class NodeProfile(Entity):
-    """Reusable metadata that can be attached to nodes."""
-
-    name = models.CharField(max_length=150, unique=True)
-    data = models.JSONField(
-        default=dict,
-        blank=True,
-        help_text="Key/value pairs exported to automation tools and sigils.",
-    )
-
-    class Meta:
-        ordering = ["name"]
-        verbose_name = "Node Profile"
-        verbose_name_plural = "Node Profiles"
-
-    def __str__(self) -> str:  # pragma: no cover - simple representation
-        return self.name
-
-    def clean(self):
-        super().clean()
-        payload = self.data or {}
-        if not isinstance(payload, dict):
-            raise ValidationError({"data": "Enter a mapping of key/value pairs."})
-        invalid_keys = [
-            key
-            for key in payload.keys()
-            if not str(key).strip()
-        ]
-        if invalid_keys:
-            raise ValidationError({"data": "Profile data keys must be non-empty strings."})
-
-    def normalized_data(self) -> dict[str, object]:
-        """Return ``data`` with whitespace-trimmed keys."""
-
-        payload = self.data or {}
-        normalized: dict[str, object] = {}
-        for key, value in payload.items():
-            text_key = str(key).strip()
-            if not text_key:
-                continue
-            normalized[text_key] = value
-        return normalized
-
-    def get_value(self, field: str) -> object | None:
-        """Return a stored value for ``field`` ignoring case."""
-
-        if not field:
-            return None
-        normalized = field.strip().lower().replace("-", "_")
-        if not normalized:
-            return None
-        if normalized == "name":
-            return self.name
-        payload = self.normalized_data()
-        for key, value in payload.items():
-            candidate = key.strip().lower().replace("-", "_")
-            if candidate == normalized:
-                return value
-        return None
 class NodeFeatureManager(models.Manager):
     def get_by_natural_key(self, slug: str):
         return self.get(slug=slug)
@@ -537,15 +478,6 @@ class Node(Entity):
         related_name="nodes",
         blank=True,
     )
-    profile = models.OneToOneField(
-        "nodes.NodeProfile",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="node",
-        help_text="Optional profile providing metadata for automation tasks.",
-    )
-
     preferred_port: int = int(os.environ.get("PORT", 8888))
 
     FEATURE_LOCK_MAP = {
@@ -588,64 +520,6 @@ class Node(Entity):
 
         base_path = (self.base_path or "").strip()
         return Path(base_path) if base_path else self.default_base_path()
-
-    def _get_profile_instance(self) -> "NodeProfile | None":
-        if hasattr(self, "_cached_node_profile"):
-            return getattr(self, "_cached_node_profile")
-        related = getattr(self, "profile", None)
-        if isinstance(related, NodeProfile):
-            self._cached_node_profile = related
-            return related
-        if self.profile_id:
-            self._cached_node_profile = NodeProfile.objects.filter(
-                pk=self.profile_id
-            ).first()
-            return self._cached_node_profile
-        self._cached_node_profile = None
-        return None
-
-    def get_node_profile(self) -> "NodeProfile | None":
-        """Return the assigned :class:`NodeProfile` when available."""
-
-        return self._get_profile_instance()
-
-    def get_profile_data(self) -> dict[str, object]:
-        """Return normalized profile data for automation tasks."""
-
-        profile = self._get_profile_instance()
-        if profile is None:
-            return {}
-        return dict(profile.normalized_data())
-
-    def resolve_profile_field_value(self, key: str) -> tuple[bool, object | None]:
-        """Resolve profile-backed sigils for :mod:`apps.sigils.sigil_resolver`."""
-
-        raw_key = (key or "").strip()
-        if not raw_key:
-            return (False, None)
-        lowered = raw_key.lower()
-        if lowered == "profile":
-            profile = self._get_profile_instance()
-            if profile is None:
-                return (True, "")
-            data = profile.normalized_data()
-            return (True, data if data else "")
-
-        if lowered.startswith("profile."):
-            lookup = raw_key.split(".", 1)[1]
-        else:
-            node_fields = {field.name.lower() for field in self._meta.fields}
-            if lowered in node_fields or f"{lowered}_id" in node_fields:
-                return (False, None)
-            lookup = raw_key
-
-        profile = self._get_profile_instance()
-        if profile is None:
-            return (True, "")
-        value = profile.get_value(lookup)
-        if value is None:
-            return (True, "")
-        return (True, value)
 
     @staticmethod
     def _ip_preference(ip_value: str) -> tuple[int, str]:
