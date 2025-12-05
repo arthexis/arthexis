@@ -29,6 +29,31 @@ logger = logging.getLogger(__name__)
 STARTUP_NET_MESSAGE_CACHE_KEY = "nodes:startup_net_message:sent"
 
 
+@shared_task(bind=True, name="nodes.tasks.kickstart_constellation_udp")
+def kickstart_constellation_udp(self) -> str:
+    """Alias for retired constellation bootstrap tasks.
+
+    Celery beat schedules may still dispatch the legacy name used by
+    constellation nodes. Registering it prevents worker errors and
+    provides a clear indicator in logs while remaining a safe no-op.
+    """
+
+    request = getattr(self, "request", None)
+    if request:
+        logger.warning(
+            "Received legacy kickstart_constellation_udp task; purge old beat schedules or broker queues",
+            extra={
+                "celery_id": getattr(request, "id", None),
+                "delivery_info": getattr(request, "delivery_info", None),
+                "origin": getattr(request, "hostname", None),
+                "headers": getattr(request, "headers", None),
+            },
+        )
+
+    logger.info("Received legacy kickstart_constellation_udp task; no action taken")
+    return "noop:legacy-task"
+
+
 @shared_task
 def send_startup_net_message(lock_file: str | None = None, port: str | None = None) -> str:
     """Queue the LCD startup Net Message once Celery is available."""
