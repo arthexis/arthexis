@@ -1,0 +1,123 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  <style>
+    #add-current-location {
+      max-width: 720px;
+    }
+    #add-current-location .help {
+      margin: 0.5rem 0 1rem;
+      color: var(--body-quiet-color);
+    }
+    #add-current-location .error-note {
+      color: #ba2121;
+    }
+    #add-current-location .loading-note {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+    #add-current-location .loading-note .loader-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+      animation: blink 1s infinite ease-in-out;
+    }
+    #add-current-location .loading-note .loader-dot:nth-child(2) {
+      animation-delay: 0.15s;
+    }
+    #add-current-location .loading-note .loader-dot:nth-child(3) {
+      animation-delay: 0.3s;
+    }
+    @keyframes blink {
+      0%,
+      100% {
+        opacity: 0.25;
+      }
+      50% {
+        opacity: 1;
+      }
+    }
+  </style>
+{% endblock %}
+
+{% block content_title %}{{ title }}{% endblock %}
+
+{% block content %}
+  <div id="add-current-location" class="module">
+    <h2>{% translate "Use your device to add a location" %}</h2>
+    <p class="help">{% translate "We'll request access to your browser or device location to create a new Location entry automatically." %}</p>
+    <form method="post" id="add-current-location-form" novalidate>
+      {% csrf_token %}
+      <input type="hidden" name="latitude" id="id_latitude">
+      <input type="hidden" name="longitude" id="id_longitude">
+      <input type="hidden" name="name" id="id_name">
+      <p id="location-status" class="help loading-note">
+        <span class="loader-dot" aria-hidden="true"></span>
+        <span class="loader-dot" aria-hidden="true"></span>
+        <span class="loader-dot" aria-hidden="true"></span>
+        <span>{% translate "Waiting for permission to read your location…" %}</span>
+      </p>
+      <div class="submit-row">
+        <button type="submit" class="button default" id="submit-location" disabled>{% translate "Create location" %}</button>
+        <a href="{% url 'admin:maps_location_changelist' %}" class="button cancel-link">{% translate "Back to locations" %}</a>
+      </div>
+    </form>
+  </div>
+{% endblock %}
+
+{% block extrahead %}
+  {{ block.super }}
+  <script>
+    (function() {
+      const form = document.getElementById('add-current-location-form');
+      const statusEl = document.getElementById('location-status');
+      const submitBtn = document.getElementById('submit-location');
+      const latInput = document.getElementById('id_latitude');
+      const lonInput = document.getElementById('id_longitude');
+      const nameInput = document.getElementById('id_name');
+
+      const setStatus = (message, isError = false) => {
+        statusEl.textContent = message;
+        statusEl.classList.toggle('error-note', isError);
+        submitBtn.disabled = isError;
+      };
+
+      const submitWithCoords = (coords) => {
+        const { latitude, longitude } = coords;
+        latInput.value = latitude.toFixed(6);
+        lonInput.value = longitude.toFixed(6);
+        if (!nameInput.value) {
+          const timestamp = new Date().toISOString().replace('T', ' ').replace(/\..+/, '');
+          nameInput.value = `${gettext('Current Location')} ${timestamp}`;
+        }
+        setStatus(gettext('Creating location for your coordinates…'));
+        submitBtn.disabled = false;
+        form.submit();
+      };
+
+      if (!navigator.geolocation) {
+        setStatus(gettext('Geolocation is not supported by this browser. Please add the location manually.'), true);
+        return;
+      }
+
+      const handleError = (error) => {
+        let message = gettext('Unable to read your current location.');
+        if (error && error.message) {
+          message = `${message} ${error.message}`;
+        }
+        message += ` ${gettext('Please allow location access and try again or add the location manually.')}`;
+        setStatus(message, true);
+      };
+
+      navigator.geolocation.getCurrentPosition(
+        (position) => submitWithCoords(position.coords),
+        handleError,
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+      );
+    })();
+  </script>
+{% endblock %}
