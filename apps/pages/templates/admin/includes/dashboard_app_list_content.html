@@ -28,9 +28,7 @@
           {% with model_name=model.object_name|lower %}
             {% favorite_ct_id model_app_label model.object_name as ct_id %}
             {% favorite_from_map favorites_map ct_id as fav %}
-            {% if not fav %}
             {% include "admin/includes/dashboard_model_row.html" with app_label=app.app_label model=model fav=fav ct_id=ct_id model_app_label=model_app_label model_name=model_name row_dom_id=model_app_label|add:"-"|add:model_name %}
-            {% endif %}
           {% endwith %}
         {% endfor %}
         </tbody>
