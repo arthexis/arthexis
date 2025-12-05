@@ -72,6 +72,8 @@ stop_existing_units_for_repair() {
 clean_previous_installation_state() {
     local service_name="$1"
     local backup_dir="$BASE_DIR/backups"
+    local work_dir="$BASE_DIR/work"
+    local static_root="$BASE_DIR/static"
     local -a recorded_units=()
 
     mkdir -p "$LOCK_DIR"
@@ -108,12 +110,23 @@ clean_previous_installation_state() {
     if [ -d "$LOG_DIR" ]; then
         if [ -f "$LOG_FILE" ]; then
             find "$LOG_DIR" -type f ! -samefile "$LOG_FILE" -delete
+            : > "$LOG_FILE"
         else
             find "$LOG_DIR" -type f -delete
         fi
 
+        find "$LOG_DIR" -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} +
         mkdir -p "$LOG_DIR/old"
         touch "$LOG_DIR/.gitkeep" "$LOG_DIR/old/.gitkeep"
+    fi
+
+    if [ -d "$work_dir" ]; then
+        find "$work_dir" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+        touch "$work_dir/.gitkeep"
+    fi
+
+    if [ -d "$static_root" ]; then
+        find "$static_root" -mindepth 1 -maxdepth 1 ! -name '.gitignore' -exec rm -rf {} +
     fi
 
     if [ -f "$DB_FILE" ]; then
@@ -133,6 +146,8 @@ clean_previous_installation_state() {
           "$LOCK_DIR/fixtures.md5" \
           "$BASE_DIR/redis.env" \
           "$BASE_DIR/debug.env"
+
+    rm -rf "$LOCK_DIR"
 }
 
 reset_service_units_for_repair() {
