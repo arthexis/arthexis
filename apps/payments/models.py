@@ -10,16 +10,15 @@ from typing import Iterable
 import requests
 from django.core.exceptions import ValidationError
 from django.db import models
-from django.db.models import Q
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
-from apps.users.models import Profile
+from apps.base.models import Entity
 from apps.sigils.fields import SigilShortAutoField
 
 
-class PaymentProcessor(Profile):
-    """Abstract base for payment processors tied to a user or group."""
+class PaymentProcessor(Entity):
+    """Abstract base for global payment processors."""
 
     verified_on = models.DateTimeField(null=True, blank=True)
     verification_reference = models.CharField(max_length=255, blank=True, editable=False)
@@ -54,6 +53,17 @@ class PaymentProcessor(Profile):
     def verify(self):  # pragma: no cover - implemented by subclasses
         raise NotImplementedError
 
+    def identifier(self) -> str:
+        reference = (self.verification_reference or "").strip()
+        if reference:
+            return reference
+        if self.pk:
+            return f"{self._meta.verbose_name} #{self.pk}"
+        return str(self._meta.verbose_name)
+
+    def __str__(self):  # pragma: no cover - presentation
+        return self.identifier()
+
 
 class OpenPayProcessor(PaymentProcessor):
     """Store OpenPay credentials."""
@@ -79,16 +89,6 @@ class OpenPayProcessor(PaymentProcessor):
     class Meta:
         verbose_name = _("OpenPay Processor")
         verbose_name_plural = _("OpenPay Processors")
-        constraints = [
-            models.CheckConstraint(
-                condition=(
-                    (Q(user__isnull=False) & Q(group__isnull=True))
-                    | (Q(user__isnull=True) & Q(group__isnull=False))
-                ),
-                name="openpayprocessor_requires_owner",
-            )
-        ]
-
     def get_api_base_url(self) -> str:
         return self.PRODUCTION_API_URL if self.is_production else self.SANDBOX_API_URL
 
@@ -218,16 +218,6 @@ class PayPalProcessor(PaymentProcessor):
     class Meta:
         verbose_name = _("PayPal Processor")
         verbose_name_plural = _("PayPal Processors")
-        constraints = [
-            models.CheckConstraint(
-                condition=(
-                    (Q(user__isnull=False) & Q(group__isnull=True))
-                    | (Q(user__isnull=True) & Q(group__isnull=False))
-                ),
-                name="paypalprocessor_requires_owner",
-            )
-        ]
-
     def get_api_base_url(self) -> str:
         return (
             self.PAYPAL_PRODUCTION_API_URL
@@ -303,16 +293,6 @@ class StripeProcessor(PaymentProcessor):
     class Meta:
         verbose_name = _("Stripe Processor")
         verbose_name_plural = _("Stripe Processors")
-        constraints = [
-            models.CheckConstraint(
-                condition=(
-                    (Q(user__isnull=False) & Q(group__isnull=True))
-                    | (Q(user__isnull=True) & Q(group__isnull=False))
-                ),
-                name="stripeprocessor_requires_owner",
-            )
-        ]
-
     def get_api_base_url(self) -> str:
         return self.STRIPE_API_URL
 
