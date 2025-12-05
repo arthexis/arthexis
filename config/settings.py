@@ -767,8 +767,6 @@ GITHUB_ISSUE_REPORTING_COOLDOWN = 3600  # seconds
 # Logging configuration
 LOG_DIR = select_log_dir(BASE_DIR)
 os.environ.setdefault("ARTHEXIS_LOG_DIR", str(LOG_DIR))
-OLD_LOG_DIR = LOG_DIR / "old"
-OLD_LOG_DIR.mkdir(parents=True, exist_ok=True)
 LOG_FILE_NAME = "tests.log" if "test" in sys.argv else f"{socket.gethostname()}.log"
 
 LOGGING = {
@@ -784,7 +782,7 @@ LOGGING = {
             "class": "config.logging.ActiveAppFileHandler",
             "filename": str(LOG_DIR / LOG_FILE_NAME),
             "when": "midnight",
-            "backupCount": 7,
+            "backupCount": 30,
             "encoding": "utf-8",
             "formatter": "standard",
         },
@@ -792,7 +790,7 @@ LOGGING = {
             "class": "config.logging.ErrorFileHandler",
             "filename": str(LOG_DIR / "error.log"),
             "when": "midnight",
-            "backupCount": 7,
+            "backupCount": 30,
             "encoding": "utf-8",
             "formatter": "standard",
             "level": "ERROR",
