@@ -6,6 +6,7 @@ from apps.leads.models import Lead
 
 class EmbedLead(Lead):
     target_url = models.TextField(blank=True)
+    share_referer = models.CharField(max_length=150, blank=True)
 
     class Meta:
         verbose_name = _("Embed Lead")
