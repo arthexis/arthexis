@@ -3,7 +3,6 @@ from __future__ import annotations
 from django.conf import settings
 from django.contrib import admin
 from django.contrib.contenttypes.models import ContentType
-from django.http import HttpResponseNotAllowed
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import path
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -75,24 +74,18 @@ def favorite_toggle(request, ct_id):
             )
         clear_user_favorites_cache(request.user)
         return redirect(next_url or "admin:index")
-    if fav:
-        return render(
-            request,
-            "admin/favorite_confirm.html",
-            {
-                "content_type": ct,
-                "favorite": fav,
-                "next": next_url,
-                "initial_label": fav.custom_label if fav else "",
-                "initial_priority": fav.priority if fav else 0,
-                "is_checked": fav.user_data if fav else True,
-            },
-        )
-
-    if next_url:
-        return HttpResponseNotAllowed(["POST"])
-
-    return redirect("admin:index")
+    return render(
+        request,
+        "admin/favorite_confirm.html",
+        {
+            "content_type": ct,
+            "favorite": fav,
+            "next": next_url,
+            "initial_label": fav.custom_label if fav else "",
+            "initial_priority": fav.priority if fav else 0,
+            "is_checked": fav.user_data if fav else True,
+        },
+    )
 
 
 def favorite_list(request):
