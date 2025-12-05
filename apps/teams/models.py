@@ -18,7 +18,6 @@ from apps.core.models import InviteLead as CoreInviteLead
 from apps.groups.models import SecurityGroup as CoreSecurityGroup
 from apps.users.models import Profile as CoreProfile
 from apps.users.models import User as CoreUser
-from apps.release.models import ReleaseManager as CoreReleaseManager
 from apps.awg.models import PowerLead as CorePowerLead
 from django_otp.plugins.otp_totp.models import (
     TOTPDevice as CoreTOTPDevice,
@@ -232,14 +231,6 @@ class SocialProfile(CoreProfile):
                 name="socialprofile_requires_owner",
             ),
         ]
-
-
-class ReleaseManager(CoreReleaseManager):
-    class Meta:
-        proxy = True
-        app_label = "teams"
-        verbose_name = CoreReleaseManager._meta.verbose_name
-        verbose_name_plural = CoreReleaseManager._meta.verbose_name_plural
 
 
 class TOTPDevice(CoreTOTPDevice):

@@ -243,7 +243,8 @@ def _resolve_work_asset(user, path: str) -> Path:
 
 def _locate_readme_document(role, doc: str | None, lang: str) -> SimpleNamespace:
     app = (
-        Module.objects.filter(node_role=role, is_default=True)
+        Module.objects.for_role(role)
+        .filter(is_default=True, is_deleted=False)
         .select_related("application")
         .first()
     )

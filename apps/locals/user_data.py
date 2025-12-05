@@ -357,7 +357,7 @@ def _fixture_targets_installed_apps(data) -> bool:
         app_label, model_name = label.split(".", 1)
         if not app_label or not model_name:
             continue
-        if not apps.is_installed(app_label):
+        if app_label not in apps.app_configs and not apps.is_installed(app_label):
             return False
         try:
             apps.get_model(label)

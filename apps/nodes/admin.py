@@ -38,6 +38,8 @@ import json
 import subprocess
 import uuid
 
+from .forms import NodeRoleMultipleChoiceField
+
 import requests
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
@@ -115,8 +117,6 @@ class NodeFeatureAssignmentInline(admin.TabularInline):
     model = NodeFeatureAssignment
     extra = 0
     autocomplete_fields = ("feature",)
-
-
 
 
 @admin.register(NodeService)
@@ -1944,9 +1944,20 @@ class NodeRoleAdmin(EntityModelAdmin):
         obj.node_set.set(form.cleaned_data.get("nodes", []))
 
 
+class NodeFeatureAdminForm(forms.ModelForm):
+    roles = NodeRoleMultipleChoiceField()
+
+    class Meta:
+        model = NodeFeature
+        fields = "__all__"
+
+    class Media:
+        css = {"all": ("nodes/css/node_role_multiselect.css",)}
+
+
 @admin.register(NodeFeature)
 class NodeFeatureAdmin(EntityModelAdmin):
-    filter_horizontal = ("roles",)
+    form = NodeFeatureAdminForm
     list_display = (
         "display",
         "slug",

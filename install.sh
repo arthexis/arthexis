@@ -30,9 +30,15 @@ arthexis_resolve_log_dir "$SCRIPT_DIR" LOG_DIR || exit 1
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 exec > >(tee "$LOG_FILE") 2>&1
 
+if arthexis_nginx_disabled "$SCRIPT_DIR"; then
+    DISABLE_NGINX=true
+    NGINX_MODE="none"
+fi
+
 # Default configuration flags populated by CLI parsing below.
 SERVICE=""
 NGINX_MODE="internal"
+DISABLE_NGINX=false
 PORT=""
 AUTO_UPGRADE=false
 CHANNEL="stable"
@@ -52,7 +58,7 @@ REPAIR=false
 ENABLE_WATCHDOG=true
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--public|--internal] [--port PORT] [--upgrade] [--fixed] [--stable|--regular|--normal|--unstable|--latest] [--satellite] [--terminal] [--control] [--watchtower] [--celery] [--embedded|--systemd] [--lcd-screen|--no-lcd-screen] [--watchdog|--no-watchdog] [--clean] [--start|--no-start] [--repair]" >&2
+    echo "Usage: $0 [--service NAME] [--public|--internal|--no-nginx] [--port PORT] [--upgrade] [--fixed] [--stable|--regular|--normal|--unstable|--latest] [--satellite] [--terminal] [--control] [--watchtower] [--celery] [--embedded|--systemd] [--lcd-screen|--no-lcd-screen] [--watchdog|--no-watchdog] [--clean] [--start|--no-start] [--repair]" >&2
     exit 1
 }
 
@@ -171,6 +177,11 @@ ensure_nginx_in_path() {
 }
 
 require_nginx() {
+    if [ "$DISABLE_NGINX" = true ]; then
+        echo "Skipping nginx requirement for $1 because --no-nginx was requested."
+        return 0
+    fi
+
     if ! ensure_nginx_in_path; then
         echo "Nginx is required for the $1 role but is not installed."
         echo "Install nginx and re-run this script. For Debian/Ubuntu:"
@@ -201,6 +212,11 @@ EOF
 configure_nginx_site() {
     local setup_script="$SCRIPT_DIR/scripts/nginx-setup.sh"
 
+    if [ "$DISABLE_NGINX" = true ]; then
+        echo "Skipping nginx configuration because --no-nginx was requested."
+        return 0
+    fi
+
     if [ ! -x "$setup_script" ]; then
         echo "nginx setup script missing at $setup_script; skipping nginx configuration." >&2
         return 0
@@ -222,8 +238,10 @@ check_nginx_and_redis() {
     local role="$1"
     local missing=()
 
-    if ! ensure_nginx_in_path; then
-        missing+=("nginx")
+    if [ "$DISABLE_NGINX" != true ]; then
+        if ! ensure_nginx_in_path; then
+            missing+=("nginx")
+        fi
     fi
     if ! command -v redis-cli >/dev/null 2>&1; then
         missing+=("redis-server")
@@ -276,6 +294,11 @@ while [[ $# -gt 0 ]]; do
             ;;
         --public)
             NGINX_MODE="public"
+            shift
+            ;;
+        --no-nginx)
+            DISABLE_NGINX=true
+            NGINX_MODE="none"
             shift
             ;;
         --port)
@@ -422,6 +445,10 @@ if [ "$REPAIR" = true ]; then
     if [ -f "$LOCK_DIR_PATH/nginx_mode.lck" ]; then
         NGINX_MODE="$(cat "$LOCK_DIR_PATH/nginx_mode.lck")"
     fi
+    if arthexis_nginx_disabled "$SCRIPT_DIR" || [ "$NGINX_MODE" = "none" ]; then
+        DISABLE_NGINX=true
+        NGINX_MODE="none"
+    fi
     if [ "$ENABLE_CELERY" = false ] && [ -f "$LOCK_DIR_PATH/celery.lck" ]; then
         ENABLE_CELERY=true
     fi
@@ -535,6 +562,11 @@ if [ ! -d .venv ]; then
 fi
 
 echo "$PORT" > "$LOCK_DIR/backend_port.lck"
+if [ "$DISABLE_NGINX" = true ]; then
+    arthexis_disable_nginx "$BASE_DIR"
+else
+    arthexis_enable_nginx "$BASE_DIR"
+fi
 echo "$NGINX_MODE" > "$LOCK_DIR/nginx_mode.lck"
 echo "$NODE_ROLE" > "$LOCK_DIR/role.lck"
 

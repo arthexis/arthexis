@@ -36,7 +36,6 @@ from urllib.parse import urlparse, urlunsplit
 from utils import revision
 from apps.core.notifications import notify_async
 from apps.celery.utils import normalize_periodic_task_name, periodic_task_name_variants
-from django.core.exceptions import ValidationError
 from django.core.validators import validate_ipv46_address, validate_ipv6_address
 
 if TYPE_CHECKING:  # pragma: no cover - used for type checking

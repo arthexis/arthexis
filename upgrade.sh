@@ -59,6 +59,10 @@ LOCK_DIR="$BASE_DIR/.locks"
 SYSTEMD_UNITS_LOCK="$LOCK_DIR/systemd_services.lck"
 SERVICE_NAME=""
 [ -f "$LOCK_DIR/service.lck" ] && SERVICE_NAME="$(cat "$LOCK_DIR/service.lck")"
+DISABLE_NGINX=0
+if arthexis_nginx_disabled "$BASE_DIR"; then
+  DISABLE_NGINX=1
+fi
 
 mkdir -p "$LOCK_DIR"
 
@@ -148,6 +152,11 @@ ensure_virtualenv() {
 
 configure_nginx_site() {
   local setup_script="$BASE_DIR/scripts/nginx-setup.sh"
+
+  if [ "$DISABLE_NGINX" -eq 1 ]; then
+    echo "Skipping nginx configuration because nginx management is disabled."
+    return 0
+  fi
 
   if [ ! -x "$setup_script" ]; then
     return 0
@@ -709,6 +718,11 @@ while [[ $# -gt 0 ]]; do
       DETACHED=1
       shift
       ;;
+    --no-nginx)
+      DISABLE_NGINX=1
+      FORWARDED_ARGS+=("$1")
+      shift
+      ;;
     --branch)
       if [[ -z "${2:-}" ]]; then
         echo "--branch requires an argument" >&2
@@ -751,6 +765,10 @@ run_detached_upgrade() {
 
 if (( DETACHED )); then
   run_detached_upgrade
+fi
+
+if [ "$DISABLE_NGINX" -eq 1 ]; then
+  arthexis_disable_nginx "$BASE_DIR"
 fi
 
 mkdir -p "$LOCK_DIR"
@@ -1340,7 +1358,7 @@ fi
 
 configure_nginx_site
 
-if arthexis_can_manage_nginx; then
+if [ "$DISABLE_NGINX" -ne 1 ] && arthexis_can_manage_nginx; then
   arthexis_refresh_nginx_maintenance "$BASE_DIR" \
     "/etc/nginx/sites-enabled/arthexis.conf" \
     "/etc/nginx/conf.d/arthexis-internal.conf" \
