@@ -11,7 +11,30 @@
       <table>
         <caption class="app-caption">
           <div class="app-caption-inner">
-            <a href="{{ app.app_url }}" class="section" title="{% blocktranslate with name=app.name %}Models in the {{ name }} application{% endblocktranslate %}">{{ app.name }}</a>
+            <button
+              type="button"
+              class="section app-collapse-toggle"
+              data-app-label="{{ app.app_label }}"
+              aria-controls="app-{{ app.app_label }}-models"
+              aria-expanded="true"
+              title="{% blocktranslate with name=app.name %}Models in the {{ name }} application{% endblocktranslate %}"
+            >
+              {{ app.name }}
+            </button>
+            <div
+              class="dashboard-app-wiki"
+              hx-get="{% url 'admin:dashboard_app_wiki' %}?topic={{ app.name|urlencode }}"
+              hx-trigger="app:collapsed from:closest .module once"
+              hx-swap="innerHTML"
+              role="status"
+              aria-live="polite"
+              data-dashboard-app-wiki-loader
+              data-fallback-template="dashboard-app-wiki-loading-{{ app.app_label }}"
+            >
+              <template id="dashboard-app-wiki-loading-{{ app.app_label }}">
+                <p class="dashboard-app-wiki__loading">{% translate "Loading info…" %}</p>
+              </template>
+            </div>
           </div>
         </caption>
         <thead class="visually-hidden">
