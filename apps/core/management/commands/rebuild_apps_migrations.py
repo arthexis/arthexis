@@ -87,13 +87,18 @@ class Command(BaseCommand):
         if "BranchTagOperation" in content:
             return False
 
-        import_hook = "from django.db import migrations"
+        import_hooks = (
+            "from django.db import migrations, models",
+            "from django.db import migrations",
+        )
         guard_import = "from utils.migration_branches import BranchTagOperation"
         if guard_import not in content:
-            if import_hook in content:
-                content = content.replace(
-                    import_hook, f"{import_hook}\n{guard_import}", 1
-                )
+            for import_hook in import_hooks:
+                if import_hook in content:
+                    content = content.replace(
+                        import_hook, f"{import_hook}\n{guard_import}", 1
+                    )
+                    break
             else:
                 content = f"{guard_import}\n{content}"
 
