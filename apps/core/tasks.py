@@ -105,6 +105,30 @@ def heartbeat() -> None:
     logger.info("Heartbeat task executed")
 
 
+@shared_task(bind=True, name="core.tasks.heartbeat")
+def legacy_heartbeat(self) -> None:
+    """Backward-compatible alias for the heartbeat task.
+
+    Older Celery schedules may still reference ``core.tasks.heartbeat``.
+    Register the legacy name so workers avoid "unregistered task" errors
+    while routing through the current implementation.
+    """
+
+    request = getattr(self, "request", None)
+    if request:
+        logger.warning(
+            "Received legacy heartbeat task; inspect scheduler and broker for stale entries",
+            extra={
+                "celery_id": getattr(request, "id", None),
+                "delivery_info": getattr(request, "delivery_info", None),
+                "origin": getattr(request, "hostname", None),
+                "headers": getattr(request, "headers", None),
+            },
+        )
+
+    heartbeat()
+
+
 def _auto_upgrade_log_path(base_dir: Path) -> Path:
     """Return the log file used for auto-upgrade events."""
 
