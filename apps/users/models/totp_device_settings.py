@@ -8,7 +8,7 @@ class TOTPDeviceSettings(Entity):
     """Per-device configuration options for authenticator enrollments."""
 
     device = models.OneToOneField(
-        "otp_totp.TOTPDevice",
+        "users.TOTPDevice",
         on_delete=models.CASCADE,
         related_name="custom_settings",
     )

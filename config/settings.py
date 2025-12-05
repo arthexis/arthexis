@@ -455,7 +455,6 @@ INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.admindocs",
     "django_otp",
-    "django_otp.plugins.otp_totp",
     "config.auth_app.AuthConfig",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
