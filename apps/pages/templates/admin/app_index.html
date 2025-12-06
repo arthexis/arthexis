@@ -62,7 +62,6 @@
         {% wiki_summary app.name as wiki_description %}
         {% if wiki_description %}
           <div class="module wiki-summary-module" role="note" aria-label="{% translate 'Wikipedia description' %}">
-            <h2 class="wiki-summary-module__heading">{{ app.name }}</h2>
             <div class="wiki-summary-widget">
               <div class="wiki-summary-widget__header">
                 <p class="wiki-summary-widget__title">{{ wiki_description.title }}</p>
@@ -78,7 +77,7 @@
         {% endif %}
       {% endfor %}
 
-      {% include "admin/dashboard_app_list.html" with app_list=app_list show_changelinks=True show_model_badges=True %}
+      {% include "admin/dashboard_app_list.html" with app_list=app_list show_changelinks=True show_model_badges=True show_favorites=False %}
     </div>
     <div class="dashboard-side" id="app-dashboard-sidebar" aria-hidden="true"></div>
   </div>
