@@ -8,7 +8,6 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("users", "0001_initial"),
-        ("django_otp", "__first__"),
     ]
 
     operations = [
