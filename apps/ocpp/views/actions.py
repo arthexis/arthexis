@@ -3,6 +3,7 @@ import uuid
 from datetime import timedelta
 
 from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
