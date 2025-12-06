@@ -482,7 +482,13 @@ if DEBUG:
 
 SITE_ID = 1
 
-MIGRATION_MODULES = {"sites": "apps.core.sites_migrations"}
+MIGRATION_MODULES = {
+    "sites": "apps.core.sites_migrations",
+    # Pin django_celery_beat migrations to a local copy so we can override
+    # upstream changes that introduce optional dependencies (e.g. Google
+    # Calendar profile) and avoid InvalidBases errors during migrate.
+    "django_celery_beat": "apps.celery.beat_migrations",
+}
 
 _original_get_current_site = sites_shortcuts.get_current_site
 
