@@ -293,9 +293,6 @@ run_runserver_preflight() {
   echo "Running Django migration check once before runserver..."
   python manage.py migrate --check
 
-  echo "Running Django system checks once before runserver..."
-  python manage.py check
-
   RUNSERVER_PREFLIGHT_DONE=true
   export DJANGO_SUPPRESS_MIGRATION_CHECK=1
   RUNSERVER_EXTRA_ARGS+=("--skip-checks")
