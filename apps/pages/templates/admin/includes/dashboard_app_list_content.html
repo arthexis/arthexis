@@ -21,20 +21,6 @@
             >
               {{ app.name }}
             </button>
-            <div
-              class="dashboard-app-wiki"
-              hx-get="{% url 'admin:dashboard_app_wiki' %}?topic={{ app.name|urlencode }}"
-              hx-trigger="app:collapsed from:closest .module once"
-              hx-swap="innerHTML"
-              role="status"
-              aria-live="polite"
-              data-dashboard-app-wiki-loader
-              data-fallback-template="dashboard-app-wiki-loading-{{ app.app_label }}"
-            >
-              <template id="dashboard-app-wiki-loading-{{ app.app_label }}">
-                <p class="dashboard-app-wiki__loading">{% translate "Loading info…" %}</p>
-              </template>
-            </div>
           </div>
         </caption>
         <thead class="visually-hidden">
