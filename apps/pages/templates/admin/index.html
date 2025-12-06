@@ -340,37 +340,20 @@
         align-items: center;
         gap: 8px;
     }
-    .app-caption-inner .section {
-        flex: 1 1 auto;
-    }
-    .app-collapse-toggle {
-        border: none;
-        background: transparent;
+    .app-caption-link {
+        display: block;
+        width: 100%;
         color: inherit;
+        text-decoration: none;
         padding: 2px;
         margin-left: auto;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 28px;
-        height: 28px;
-        cursor: pointer;
     }
-    .app-collapse-toggle:focus-visible {
-        outline: 2px solid var(--button-bg, #0d6efd);
-        outline-offset: 2px;
+    .app-caption-link:focus-visible,
+    .app-caption-link:hover {
+        text-decoration: underline;
     }
-    .app-collapse-toggle::before {
-        content: '▾';
-        font-size: 1rem;
-        line-height: 1;
-        transition: transform 120ms ease-in-out;
-    }
-    .module.is-collapsed .app-collapse-toggle::before {
-        transform: rotate(90deg);
-    }
-    .dashboard-main .module.is-collapsed tbody {
-        display: none;
+    .app-caption-inner .section {
+        flex: 1 1 auto;
     }
     .dashboard-main .badge-counter,
     .dashboard-main .lead-open-badge,
@@ -748,98 +731,6 @@
     };
 
     window.addEventListener('load', scheduleMiniTrafficChart);
-  </script>
-  <script>
-    (function () {
-      const storageKey = 'adminDashboardCollapsedSections';
-
-      const loadState = () => {
-        try {
-          const raw = window.localStorage.getItem(storageKey);
-          if (!raw) {
-            return {};
-          }
-          const parsed = JSON.parse(raw);
-          if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-            return parsed;
-          }
-        } catch (error) {
-          /* ignore localStorage errors */
-        }
-        return {};
-      };
-
-      const saveState = (state) => {
-        try {
-          window.localStorage.setItem(storageKey, JSON.stringify(state));
-        } catch (error) {
-          /* ignore persistence errors */
-        }
-      };
-
-      document.addEventListener('DOMContentLoaded', () => {
-        const toggles = document.querySelectorAll('.app-collapse-toggle');
-        if (!toggles.length) {
-          return;
-        }
-
-        const collapsedState = loadState();
-
-        toggles.forEach((button) => {
-          const module = button.closest('.module[data-app-label]');
-          const appLabel = button.dataset.appLabel;
-          const targetId = button.getAttribute('aria-controls');
-          const target = targetId ? document.getElementById(targetId) : null;
-
-          if (!module || !target || !appLabel) {
-            return;
-          }
-
-          const isCollapsed = collapsedState[appLabel] === true;
-          module.classList.toggle('is-collapsed', isCollapsed);
-          button.setAttribute('aria-expanded', String(!isCollapsed));
-          target.hidden = isCollapsed;
-
-          const notifyToggle = (collapsed) => {
-            module.dispatchEvent(
-              new CustomEvent('app:toggle', {
-                bubbles: true,
-                detail: { appLabel, collapsed },
-              }),
-            );
-
-            if (collapsed) {
-              module.dispatchEvent(
-                new CustomEvent('app:collapsed', {
-                  bubbles: true,
-                  detail: { appLabel },
-                }),
-              );
-            }
-          };
-
-          if (isCollapsed) {
-            notifyToggle(true);
-          }
-
-          button.addEventListener('click', () => {
-            const nowCollapsed = module.classList.toggle('is-collapsed');
-            button.setAttribute('aria-expanded', String(!nowCollapsed));
-            target.hidden = nowCollapsed;
-
-            notifyToggle(nowCollapsed);
-
-            if (nowCollapsed) {
-              collapsedState[appLabel] = true;
-            } else {
-              delete collapsedState[appLabel];
-            }
-
-            saveState(collapsedState);
-          });
-        });
-      });
-    })();
   </script>
   <script>
     (function () {

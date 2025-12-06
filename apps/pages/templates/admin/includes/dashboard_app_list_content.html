@@ -11,16 +11,13 @@
       <table>
         <caption class="app-caption">
           <div class="app-caption-inner">
-            <button
-              type="button"
-              class="section app-collapse-toggle"
-              data-app-label="{{ app.app_label }}"
-              aria-controls="app-{{ app.app_label }}-models"
-              aria-expanded="true"
+            <a
+              class="section app-caption-link"
+              href="{{ app.app_url }}"
               title="{% blocktranslate with name=app.name %}Models in the {{ name }} application{% endblocktranslate %}"
             >
               {{ app.name }}
-            </button>
+            </a>
           </div>
         </caption>
         <thead class="visually-hidden">
