@@ -53,23 +53,6 @@ from apps.nodes.forms import NodeRoleMultipleChoiceField
 logger = logging.getLogger(__name__)
 
 
-def get_local_app_choices():
-    application_apps = getattr(settings, "LOCAL_APPS", [])
-    choices = []
-    for app_label in application_apps:
-        try:
-            config = django_apps.get_app_config(app_label)
-        except LookupError:
-            continue
-        choices.append(
-            (
-                config.label,
-                Application.format_display_name(str(config.label)),
-            ),
-        )
-    return choices
-
-
 class SiteBadgeInline(admin.StackedInline):
     model = SiteBadge
     can_delete = False
@@ -366,15 +349,11 @@ class SiteTemplateAdmin(EntityModelAdmin):
 
 
 class ApplicationForm(forms.ModelForm):
-    name = forms.ChoiceField(choices=[])
+    name = forms.CharField(required=False)
 
     class Meta:
         model = Application
         fields = "__all__"
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.fields["name"].choices = get_local_app_choices()
 
 
 class ApplicationInstalledListFilter(admin.SimpleListFilter):

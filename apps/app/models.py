@@ -15,7 +15,7 @@ class ApplicationManager(models.Manager):
 
 
 class Application(Entity):
-    name = models.CharField(max_length=100, unique=True)
+    name = models.CharField(max_length=100, unique=True, blank=True)
     description = models.TextField(blank=True)
     order = models.PositiveIntegerField(blank=True, null=True)
 
@@ -53,9 +53,13 @@ class Application(Entity):
 
     @property
     def display_name(self) -> str:
+        formatted_name = self.format_display_name(str(self.name))
+        if formatted_name:
+            return formatted_name
+
         verbose_name = self.verbose_name
-        formatted = self.format_display_name(str(verbose_name))
-        return formatted or self.name
+        formatted_verbose = self.format_display_name(str(verbose_name))
+        return formatted_verbose or self.name
 
     class Meta:
         db_table = "pages_application"
