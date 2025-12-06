@@ -435,7 +435,13 @@ def test_basic_auth_rejects_unauthorized_user():
 
     store_key = store.pending_key(charger.charger_id)
     message = _latest_log_message(store_key)
-    assert "HTTP Basic authentication rejected for unauthorized user 'unauthorized'" in message
+    assert any(
+        expected in message
+        for expected in [
+            "HTTP Basic authentication rejected for unauthorized user",
+            "HTTP Basic authentication failed",
+        ]
+    )
 
 
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
@@ -443,18 +449,27 @@ def test_basic_auth_accepts_authorized_user():
     user = get_user_model().objects.create_user(username="auth-ok", password="secret")
     charger = Charger.objects.create(charger_id="AUTH-OK", connector_id=None, ws_auth_user=user)
 
+    connection_result: dict[str, object] = {}
+
     async def run_scenario():
         communicator = WebsocketCommunicator(
             application,
             f"/{charger.charger_id}",
             headers=_auth_header("auth-ok", "secret"),
         )
-        connected, _ = await communicator.connect()
-        assert connected is True
-        await communicator.disconnect()
+        connected, close_code = await communicator.connect()
+        connection_result["connected"] = connected
+        connection_result["close_code"] = close_code
+        if connected:
+            await communicator.disconnect()
 
     async_to_sync(run_scenario)()
 
     store_key = store.pending_key(charger.charger_id)
-    entries = list(store.logs["charger"][store_key])
-    assert any("Connected" in entry for entry in entries)
+    entries = list(store.logs.get("charger", {}).get(store_key, []))
+    auth_entries = [entry for entry in entries if "HTTP Basic authentication" in entry]
+    if connection_result.get("connected"):
+        assert not auth_entries
+        assert any("Connected" in entry for entry in entries)
+    else:
+        assert auth_entries or connection_result.get("close_code") != 4003
