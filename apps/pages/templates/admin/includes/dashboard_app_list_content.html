@@ -2,8 +2,10 @@
 
 {% if app_list %}
   {% favorite_map as favorites_map %}
-  {% cached_dashboard_favorites app_list favorites_map as favorites_block %}
-  {{ favorites_block }}
+  {% if show_favorites|default:True %}
+    {% cached_dashboard_favorites app_list favorites_map as favorites_block %}
+    {{ favorites_block }}
+  {% endif %}
   {% celery_feature_enabled as celery_enabled %}
   {% for app in app_list %}
     {% if app.app_label != 'django_celery_beat' or celery_enabled %}
