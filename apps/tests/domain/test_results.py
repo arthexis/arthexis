@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+from contextlib import contextmanager
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Iterable, Mapping
 
+from django.conf import settings
 from django.db import connections
-from django.test.utils import override_settings
+from django.db.utils import DEFAULT_DB_ALIAS
 
 from apps.tests.models import TestResult
 
@@ -31,11 +34,10 @@ def persist_results(
         Database configuration for the primary database. This ensures we do not
         write into the temporary test database created by pytest.
     """
-    normalized_settings = {"default": dict(database_settings)}
+    normalized_settings = {DEFAULT_DB_ALIAS: dict(database_settings)}
 
-    with override_settings(DATABASES=normalized_settings):
-        connections.close_all()
-        manager = TestResult.objects.using("default")
+    with _temporary_database_settings(normalized_settings):
+        manager = TestResult.objects.using(DEFAULT_DB_ALIAS)
         manager.all().delete()
         manager.bulk_create(
             [
@@ -49,3 +51,19 @@ def persist_results(
                 for result in results
             ]
         )
+
+
+@contextmanager
+def _temporary_database_settings(database_settings: Mapping[str, Mapping[str, Any]]):
+    """Swap database settings for the duration of the context."""
+
+    original_settings = deepcopy(settings.DATABASES)
+    connections.close_all()
+    connections.databases.update(database_settings)
+
+    try:
+        yield
+    finally:
+        connections.close_all()
+        connections.databases.clear()
+        connections.databases.update(original_settings)

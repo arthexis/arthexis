@@ -94,4 +94,5 @@ class SlackBotWizardSetupForm(forms.Form):
     redirect_uri = forms.URLField(
         label=_("Redirect URI"),
         help_text=_("URL Slack redirects to after OAuth approval."),
+        assume_scheme="https",
     )
