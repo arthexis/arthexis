@@ -1,0 +1,20 @@
+[
+  {
+    "model": "widgets.widgetzone",
+    "fields": {
+      "slug": "sidebar",
+      "name": "Sidebar",
+      "description": "Widgets displayed on the admin dashboard sidebar.",
+      "is_seed_data": true
+    }
+  },
+  {
+    "model": "widgets.widgetzone",
+    "fields": {
+      "slug": "application",
+      "name": "Application",
+      "description": "Widgets displayed on application dashboards.",
+      "is_seed_data": true
+    }
+  }
+]

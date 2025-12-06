@@ -1,0 +1,167 @@
+{% load i18n static %}
+<div class="module" id="viewhistory-mini-module">
+  <h2>{% translate 'Public site traffic' %}</h2>
+  <div class="chart-wrapper">
+    <canvas id="viewhistory-mini-chart" role="img" aria-label="{% translate 'Mini chart of public visits' %}" height="160"></canvas>
+    <p id="viewhistory-mini-empty" class="quiet" hidden>{% translate 'No visit data yet.' %}</p>
+  </div>
+  <p class="chart-link"><a id="viewhistory-mini-link" href="{% url 'admin:pages_viewhistory_traffic_graph' %}">{% translate 'Open full report' %}</a></p>
+</div>
+<script>
+  const initializeMiniTrafficChart = () => {
+    const canvas = document.getElementById('viewhistory-mini-chart');
+    const emptyLabel = document.getElementById('viewhistory-mini-empty');
+    if (!canvas) return;
+
+    const chartJsUrl = "{% static 'core/vendor/chart.umd.min.js' %}";
+
+    const ensureChartJs = () => {
+      if (window.Chart) {
+        return Promise.resolve(window.Chart);
+      }
+
+      const waitForChart = (resolve) => {
+        if (window.Chart) {
+          resolve(window.Chart);
+          return true;
+        }
+        return false;
+      };
+
+      return new Promise((resolve) => {
+        const existing = document.querySelector('script[data-chartjs]');
+        if (existing) {
+          if (existing.dataset.chartjsState === 'error') {
+            resolve(null);
+            return;
+          }
+
+          if (waitForChart(resolve)) {
+            return;
+          }
+
+          existing.addEventListener(
+            'load',
+            () => {
+              existing.dataset.chartjsState = 'loaded';
+              resolve(window.Chart || null);
+            },
+            { once: true },
+          );
+          existing.addEventListener(
+            'error',
+            () => {
+              existing.dataset.chartjsState = 'error';
+              resolve(null);
+            },
+            { once: true },
+          );
+
+          if (existing.readyState === 'complete') {
+            waitForChart(resolve);
+          }
+          return;
+        }
+
+        const script = document.createElement('script');
+        script.src = chartJsUrl;
+        script.async = true;
+        script.dataset.chartjs = 'true';
+        script.dataset.chartjsState = 'loading';
+        script.addEventListener(
+          'load',
+          () => {
+            script.dataset.chartjsState = 'loaded';
+            resolve(window.Chart || null);
+          },
+          { once: true },
+        );
+        script.addEventListener(
+          'error',
+          () => {
+            script.dataset.chartjsState = 'error';
+            resolve(null);
+          },
+          { once: true },
+        );
+        document.head.appendChild(script);
+      });
+    };
+
+    const chartDataUrl = new URL(
+      '{% url "admin:pages_viewhistory_traffic_data" %}',
+      window.location,
+    );
+    chartDataUrl.searchParams.set('days', '7');
+
+    const fetchData = () =>
+      fetch(chartDataUrl.toString(), {
+        headers: { Accept: 'application/json' },
+      }).then((response) => (response.ok ? response.json() : Promise.reject()));
+
+    ensureChartJs()
+      .then((Chart) => {
+        if (!Chart) {
+          throw new Error('chartjs');
+        }
+        return fetchData().then((data) => ({ Chart, data }));
+      })
+      .then(({ Chart, data }) => {
+        if (!data || !Array.isArray(data.datasets) || !data.datasets.length) {
+          canvas.hidden = true;
+          if (emptyLabel) {
+            emptyLabel.hidden = false;
+            emptyLabel.textContent = '{% translate "No visit data yet." %}';
+          }
+          return;
+        }
+
+        if (emptyLabel) {
+          emptyLabel.hidden = true;
+        }
+        canvas.hidden = false;
+        const context = canvas.getContext('2d');
+        new Chart(context, {
+          type: 'line',
+          data: {
+            labels: data.labels,
+            datasets: data.datasets.map((dataset) => ({
+              ...dataset,
+              pointRadius: 0,
+              pointHoverRadius: 3,
+              borderWidth: 2,
+            })),
+          },
+          options: {
+            animation: false,
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { display: false },
+              tooltip: {
+                mode: 'nearest',
+                intersect: false,
+              },
+            },
+            elements: {
+              line: { tension: 0.3 },
+            },
+            scales: {
+              x: {
+                ticks: { autoSkip: true, maxTicksLimit: 7 },
+              },
+            },
+          },
+        });
+      })
+      .catch(() => {
+        canvas.hidden = true;
+        if (emptyLabel) {
+          emptyLabel.hidden = false;
+          emptyLabel.textContent = '{% translate "Unable to render chart." %}';
+        }
+      });
+  };
+
+  document.addEventListener('DOMContentLoaded', initializeMiniTrafficChart);
+</script>

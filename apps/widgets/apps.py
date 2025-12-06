@@ -1,0 +1,8 @@
+from django.apps import AppConfig
+
+
+class WidgetsConfig(AppConfig):
+    default_auto_field = "django.db.models.BigAutoField"
+    name = "apps.widgets"
+    label = "widgets"
+    verbose_name = "Widgets"

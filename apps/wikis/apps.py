@@ -6,3 +6,6 @@ class WikisConfig(AppConfig):
     name = "apps.wikis"
     label = "wikis"
     verbose_name = "Wikis"
+
+    def ready(self):  # pragma: no cover - import for side effects
+        from . import widgets  # noqa: F401

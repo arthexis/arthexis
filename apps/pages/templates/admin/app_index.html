@@ -1,45 +1,10 @@
 {% extends "admin/base_site.html" %}
-{% load i18n admin_urls static admin_modify wikis %}
+{% load i18n admin_urls static admin_modify widgets %}
 
 {% block extrahead %}
   {{ block.super }}
   <link rel="stylesheet" href="{% static 'admin/css/dashboard.css' %}">
   {% include "admin/includes/dashboard_styles.html" %}
-  <style>
-    .wiki-summary-widget {
-      margin: 0 0 1rem;
-      padding: 0.75rem 1rem;
-      border: 1px solid var(--hairline-color, #e5e7eb);
-      border-radius: 8px;
-      background: var(--darkened-bg, #f8fafc);
-    }
-
-    .wiki-summary-widget__header {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      justify-content: space-between;
-      margin-bottom: 0.35rem;
-    }
-
-    .wiki-summary-widget__title {
-      margin: 0;
-      font-size: 1rem;
-      font-weight: 700;
-    }
-
-    .wiki-summary-widget__link {
-      font-size: 0.85rem;
-      font-weight: 600;
-    }
-
-    .wiki-summary-widget__body {
-      margin: 0;
-      color: var(--body-fg, #0f172a);
-      line-height: 1.45;
-      white-space: pre-line;
-    }
-  </style>
 {% endblock %}
 
 {% block bodyclass %}{{ block.super }} dashboard{% endblock %}
@@ -59,22 +24,7 @@
   <div class="dashboard admin-app-dashboard">
     <div id="content-main" class="dashboard-main dashboard-main--app">
       {% for app in app_list %}
-        {% wiki_summary app.name as wiki_description %}
-        {% if wiki_description %}
-          <div class="module wiki-summary-module" role="note" aria-label="{% translate 'Wikipedia description' %}">
-            <div class="wiki-summary-widget">
-              <div class="wiki-summary-widget__header">
-                <p class="wiki-summary-widget__title">{{ wiki_description.title }}</p>
-                {% if wiki_description.url %}
-                  <a class="wiki-summary-widget__link" href="{{ wiki_description.url }}" target="_blank" rel="noopener">
-                    {% translate "Open on Wikipedia" %}
-                  </a>
-                {% endif %}
-              </div>
-              <p class="wiki-summary-widget__body">{{ wiki_description.extract }}</p>
-            </div>
-          </div>
-        {% endif %}
+        {% render_widgets 'application' app=app %}
       {% endfor %}
 
       {% include "admin/dashboard_app_list.html" with app_list=app_list show_changelinks=True show_model_badges=True show_favorites=False %}
