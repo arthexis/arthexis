@@ -1,149 +1,7 @@
 from django import forms
-from django.conf import settings
-from django.contrib.admin.helpers import ActionForm
-from django.core.exceptions import ObjectDoesNotExist
 from django.utils.translation import gettext_lazy as _
 
-from apps.groups.models import SecurityGroup
-from apps.users.models import TOTPDevice, TOTPDeviceSettings
-
 from .models import SlackBotProfile
-
-
-class TOTPDeviceAdminForm(forms.ModelForm):
-    issuer = forms.CharField(
-        label=_("Issuer"),
-        required=False,
-        help_text=_("Label shown in authenticator apps. Leave blank to use Arthexis."),
-    )
-    allow_without_password = forms.BooleanField(
-        label=_("Allow without a password"),
-        required=False,
-        help_text=_("Let this authenticator work without requiring the user's password."),
-    )
-    security_group = forms.ModelChoiceField(
-        label=_("Security group"),
-        required=False,
-        queryset=SecurityGroup.objects.all(),
-        help_text=_("Share this authenticator with every user in the selected group."),
-    )
-
-    class Meta:
-        model = TOTPDevice
-        fields = "__all__"
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        try:
-            settings_obj = self.instance.custom_settings
-        except ObjectDoesNotExist:
-            settings_obj = None
-        if settings_obj is not None:
-            self.fields["issuer"].initial = settings_obj.issuer
-            self.fields["allow_without_password"].initial = (
-                settings_obj.allow_without_password
-            )
-            self.fields["security_group"].initial = settings_obj.security_group
-        default_issuer = getattr(settings, "OTP_TOTP_ISSUER", "Arthexis")
-        self.fields["issuer"].widget.attrs.setdefault("placeholder", default_issuer)
-
-    def _save_settings(self, instance):
-        issuer = (self.cleaned_data.get("issuer") or "").strip()
-        allow_without_password = bool(
-            self.cleaned_data.get("allow_without_password")
-        )
-        security_group = self.cleaned_data.get("security_group")
-        try:
-            settings_obj = instance.custom_settings
-        except ObjectDoesNotExist:
-            settings_obj = None
-
-        if issuer or allow_without_password or security_group or settings_obj is not None:
-            if settings_obj is None:
-                settings_obj = TOTPDeviceSettings(device=instance)
-            settings_obj.issuer = issuer
-            settings_obj.allow_without_password = allow_without_password
-            settings_obj.security_group = security_group
-            if settings_obj.pk:
-                settings_obj.save(
-                    update_fields=[
-                        "issuer",
-                        "allow_without_password",
-                        "security_group",
-                        "is_seed_data",
-                        "is_user_data",
-                    ]
-                )
-            else:
-                settings_obj.save()
-        if (
-            settings_obj is not None
-            and not issuer
-            and not allow_without_password
-            and security_group is None
-        ):
-            if settings_obj.is_seed_data or settings_obj.is_user_data:
-                settings_obj.allow_without_password = False
-                settings_obj.security_group = None
-                settings_obj.save(
-                    update_fields=[
-                        "issuer",
-                        "allow_without_password",
-                        "security_group",
-                        "is_seed_data",
-                        "is_user_data",
-                    ]
-                )
-            else:
-                settings_obj.delete()
-
-    def save(self, commit=True):
-        instance = super().save(commit=commit)
-        if commit:
-            self._save_settings(instance)
-        else:
-            self._pending_instance = instance
-        return instance
-
-    def _save_m2m(self):
-        super()._save_m2m()
-        pending_instance = getattr(self, "_pending_instance", None)
-        if pending_instance is not None:
-            self._save_settings(pending_instance)
-            delattr(self, "_pending_instance")
-
-class TOTPDeviceCalibrationActionForm(ActionForm):
-    token = forms.CharField(
-        label=_("OTP"),
-        required=False,
-        help_text=_(
-            "Enter the current authenticator code when running the"
-            " calibration action."
-        ),
-    )
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        token_field = self.fields["token"]
-        token_field.widget.attrs.setdefault(
-            "title", _("Enter your one-time password for testing")
-        )
-        existing_classes = token_field.widget.attrs.get("class", "")
-        spacing_class = "totp-token-spacing"
-        if spacing_class not in existing_classes.split():
-            token_field.widget.attrs["class"] = (existing_classes + " " + spacing_class).strip()
-
-    def clean(self):
-        cleaned_data = super().clean()
-        token = cleaned_data.get("token")
-        if token is not None:
-            cleaned_data["token"] = token.strip()
-        return cleaned_data
-
-    class Media:
-        css = {
-            "all": ("teams/css/totp_admin.css",)
-        }
 
 
 class SlackBotProfileAdminForm(forms.ModelForm):
@@ -219,20 +77,21 @@ class SlackBotWizardSetupForm(forms.Form):
         label=_("Slack Signing Secret"),
         help_text=_("Copy from your Slack app's Basic Information page."),
     )
-    scopes = forms.CharField(
-        label=_("OAuth Scopes"),
-        required=False,
-        help_text=_(
-            "Comma-separated scopes to request for the bot. "
-            "Defaults to chat access when left blank."
-        ),
+    bot_token = forms.CharField(
+        label=_("Slack Bot Token"),
+        help_text=_("Copy the bot token (starts with xoxb-) from the Install App page."),
     )
-
-    def clean(self):
-        cleaned_data = super().clean()
-        for key in ("client_id", "client_secret", "signing_secret", "scopes"):
-            value = cleaned_data.get(key)
-            if isinstance(value, str):
-                cleaned_data[key] = value.strip()
-        return cleaned_data
-
+    team_id = forms.CharField(
+        label=_("Slack Team ID"),
+        help_text=_("Optional. Specify a team if your Slack app is installed in multiple workspaces."),
+        required=False,
+    )
+    scope = forms.CharField(
+        label=_("Requested scopes"),
+        help_text=_("Comma-separated scopes requested during Slack app installation."),
+        required=False,
+    )
+    redirect_uri = forms.URLField(
+        label=_("Redirect URI"),
+        help_text=_("URL Slack redirects to after OAuth approval."),
+    )

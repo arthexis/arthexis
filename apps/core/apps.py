@@ -13,7 +13,6 @@ class CoreConfig(AppConfig):
 
     def ready(self):  # pragma: no cover - called by Django
         _setup_celery_beat_integrations()
-        _patch_totp_device()
         _register_admin_and_post_migrate_handlers(self)
         _patch_entity_deserialization()
         _configure_lock_dependent_tasks(self)
@@ -226,117 +225,6 @@ def _setup_celery_beat_integrations():
     PeriodicTask.save = _core_periodic_task_save
     PeriodicTask._core_fixture_save_patch = True
     PeriodicTask._core_fixture_original_save = original_save
-
-
-def _patch_totp_device():
-    from django.core.exceptions import ObjectDoesNotExist
-
-    from apps.users.models import TOTPDevice as OTP_TOTPDevice
-
-    if not hasattr(
-        OTP_TOTPDevice._read_str_from_settings, "_core_totp_issuer_patch"
-    ):
-        original_read_str = OTP_TOTPDevice._read_str_from_settings
-
-        def _core_totp_read_str(self, key):
-            if key == "OTP_TOTP_ISSUER":
-                try:
-                    settings_obj = self.custom_settings
-                except ObjectDoesNotExist:
-                    settings_obj = None
-                if settings_obj and settings_obj.issuer:
-                    return settings_obj.issuer
-            return original_read_str(self, key)
-
-        _core_totp_read_str._core_totp_issuer_patch = True
-        OTP_TOTPDevice._read_str_from_settings = _core_totp_read_str
-
-    if getattr(OTP_TOTPDevice, "_core_user_datum_patch", False):
-        return
-
-    from apps.users.models import TOTPDeviceSettings
-
-    def _totp_should_persist(settings_obj):
-        return bool(
-            settings_obj
-            and (
-                settings_obj.issuer
-                or getattr(settings_obj, "allow_without_password", False)
-                or getattr(settings_obj, "security_group_id", None)
-                or settings_obj.is_seed_data
-                or settings_obj.is_user_data
-            )
-        )
-
-    def _totp_save_or_delete(settings_obj):
-        if settings_obj is None:
-            return
-        if _totp_should_persist(settings_obj):
-            if settings_obj.pk:
-                settings_obj.save(
-                    update_fields=[
-                        "issuer",
-                        "allow_without_password",
-                        "security_group",
-                        "is_seed_data",
-                        "is_user_data",
-                    ]
-                )
-            else:
-                settings_obj.save()
-        elif settings_obj.pk:
-            settings_obj.delete()
-
-    def _totp_get_flag(instance, attr):
-        cache_key = f"_{attr}"
-        if cache_key in instance.__dict__:
-            return instance.__dict__[cache_key]
-        try:
-            settings_obj = instance.custom_settings
-        except ObjectDoesNotExist:
-            value = False
-        else:
-            value = bool(getattr(settings_obj, attr, False))
-        instance.__dict__[cache_key] = value
-        return value
-
-    def _totp_set_flag(instance, attr, value):
-        cache_key = f"_{attr}"
-        value = bool(value)
-        try:
-            settings_obj = instance.custom_settings
-        except ObjectDoesNotExist:
-            if not value:
-                instance.__dict__[cache_key] = False
-                return
-            settings_obj = TOTPDeviceSettings(device=instance)
-        setattr(settings_obj, attr, value)
-        _totp_save_or_delete(settings_obj)
-        instance.__dict__[cache_key] = value
-
-    def _totp_get_user_data(instance):
-        return _totp_get_flag(instance, "is_user_data")
-
-    def _totp_set_user_data(instance, value):
-        _totp_set_flag(instance, "is_user_data", value)
-
-    def _totp_get_seed_data(instance):
-        return _totp_get_flag(instance, "is_seed_data")
-
-    def _totp_set_seed_data(instance, value):
-        _totp_set_flag(instance, "is_seed_data", value)
-
-    OTP_TOTPDevice.is_user_data = property(
-        _totp_get_user_data, _totp_set_user_data
-    )
-    OTP_TOTPDevice.is_seed_data = property(
-        _totp_get_seed_data, _totp_set_seed_data
-    )
-    if not hasattr(OTP_TOTPDevice, "all_objects"):
-        OTP_TOTPDevice.all_objects = OTP_TOTPDevice._default_manager
-    OTP_TOTPDevice.supports_user_datum = True
-    OTP_TOTPDevice.supports_seed_datum = True
-    OTP_TOTPDevice._core_user_datum_patch = True
 
 
 def _register_admin_and_post_migrate_handlers(config):

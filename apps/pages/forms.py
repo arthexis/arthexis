@@ -3,68 +3,25 @@
 from __future__ import annotations
 
 from django import forms
-from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.forms import AuthenticationForm
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
 from django.views.decorators.debug import sensitive_variables
 
-from apps.users.backends import (
-    get_user_totp_devices,
-    totp_devices_allow_passwordless,
-    totp_devices_require_password,
-    verify_user_totp_token,
-)
-
 from .models import UserStory
 
 
 class AuthenticatorLoginForm(AuthenticationForm):
-    """Authentication form that supports password or authenticator codes."""
-
-    otp_token = forms.CharField(
-        label=_("Authenticator code"),
-        required=False,
-        widget=forms.TextInput(
-            attrs={
-                "autocomplete": "one-time-code",
-                "inputmode": "numeric",
-                "pattern": "[0-9]*",
-            }
-        ),
-    )
-    auth_method = forms.CharField(required=False, widget=forms.HiddenInput(), initial="password")
-    otp_ready = forms.CharField(required=False, widget=forms.HiddenInput(), initial="0")
-    otp_requires_password = forms.CharField(
-        required=False,
-        widget=forms.HiddenInput(),
-        initial="1",
-    )
-    otp_password_optional = forms.CharField(
-        required=False,
-        widget=forms.HiddenInput(),
-        initial="0",
-    )
+    """Authentication form that relies solely on username and password."""
 
     error_messages = {
         **AuthenticationForm.error_messages,
-        "invalid_token": _("The authenticator code is invalid or has expired."),
-        "token_required": _("Enter the code from your authenticator app."),
         "password_required": _("Enter your password."),
     }
 
     def __init__(self, request=None, *args, **kwargs):
         super().__init__(request=request, *args, **kwargs)
-        self.fields["password"].required = False
-        self.fields["otp_token"].strip = True
-        self.fields["auth_method"].initial = "password"
         self.verified_device = None
-
-    def get_invalid_token_error(self) -> ValidationError:
-        return ValidationError(self.error_messages["invalid_token"], code="invalid_token")
-
-    def get_token_required_error(self) -> ValidationError:
-        return ValidationError(self.error_messages["token_required"], code="token_required")
 
     def get_password_required_error(self) -> ValidationError:
         return ValidationError(self.error_messages["password_required"], code="password_required")
@@ -72,144 +29,17 @@ class AuthenticatorLoginForm(AuthenticationForm):
     @sensitive_variables()
     def clean(self):
         username = self.cleaned_data.get("username")
-        method = (self.cleaned_data.get("auth_method") or "password").lower()
-        if method not in {"password", "otp"}:
-            method = "password"
-        self.cleaned_data["auth_method"] = method
+        password = self.cleaned_data.get("password")
 
-        if username is not None:
-            if method == "otp":
-                token = (self.cleaned_data.get("otp_token") or "").strip().replace(" ", "")
-                if not token:
-                    raise self.get_token_required_error()
-                UserModel = get_user_model()
-                try:
-                    user = UserModel._default_manager.get_by_natural_key(username)
-                except UserModel.DoesNotExist:
-                    raise self.get_invalid_login_error()
-                devices = list(get_user_totp_devices(user))
-                enforce_password = bool(getattr(user, "require_2fa", False))
-                allows_passwordless = False
-                requires_password = True
-                password_optional = False
-                if devices:
-                    allows_passwordless = totp_devices_allow_passwordless(devices)
-                    requires_password = enforce_password or totp_devices_require_password(
-                        devices, enforce=enforce_password
-                    )
-                    password_optional = (
-                        requires_password and allows_passwordless and not enforce_password
-                    )
-                self.cleaned_data["otp_requires_password"] = (
-                    "1" if requires_password else "0"
-                )
-                self.cleaned_data["otp_password_optional"] = (
-                    "1" if password_optional else "0"
-                )
-                password = self.cleaned_data.get("password") or ""
-                if requires_password and not password and not password_optional:
-                    raise self.get_password_required_error()
-                device, result = verify_user_totp_token(
-                    user, token, password, enforce_password=enforce_password
-                )
-                if device is None:
-                    error_code = (result or {}).get("error")
-                    if error_code == "password_required":
-                        raise self.get_password_required_error()
-                    if error_code == "invalid_password":
-                        raise self.get_invalid_login_error()
-                    raise self.get_invalid_token_error()
-                if device.user_id != user.pk:
-                    device.user = user
-                    device.user_id = user.pk
-                user.otp_device = device
-                backend_path = "apps.users.backends.TOTPBackend"
-                user.backend = backend_path
-                self.user_cache = user
-                self.cleaned_data["otp_token"] = token
-                self.verified_device = device
-            else:
-                password = self.cleaned_data.get("password")
-                if not password:
-                    raise self.get_password_required_error()
-                self.user_cache = authenticate(
-                    self.request, username=username, password=password
-                )
-                if self.user_cache is None:
-                    raise self.get_invalid_login_error()
-                if getattr(self.user_cache, "require_2fa", False):
-                    token = (
-                        (self.cleaned_data.get("otp_token") or "")
-                        .strip()
-                        .replace(" ", "")
-                    )
-                    if not token:
-                        raise self.get_token_required_error()
-                    device, result = verify_user_totp_token(
-                        self.user_cache,
-                        token,
-                        password,
-                        enforce_password=True,
-                    )
-                    if device is None:
-                        error_code = (result or {}).get("error")
-                        if error_code == "invalid_password":
-                            raise self.get_invalid_login_error()
-                        raise self.get_invalid_token_error()
-                    if device.user_id != self.user_cache.pk:
-                        device.user = self.user_cache
-                        device.user_id = self.user_cache.pk
-                    self.cleaned_data["otp_token"] = token
-                    self.verified_device = device
-            self.confirm_login_allowed(self.user_cache)
+        if username and not password:
+            raise self.get_password_required_error()
 
-        return self.cleaned_data
+        cleaned = super().clean()
+        self.user_cache = getattr(self, "user_cache", None)
+        return cleaned
 
     def get_verified_device(self):
-        return self.verified_device
-
-
-class AuthenticatorEnrollmentForm(forms.Form):
-    """Form used to confirm a pending authenticator enrollment."""
-
-    token = forms.CharField(
-        label=_("Authenticator code"),
-        min_length=6,
-        max_length=8,
-        widget=forms.TextInput(
-            attrs={
-                "autocomplete": "one-time-code",
-                "inputmode": "numeric",
-                "pattern": "[0-9]*",
-            }
-        ),
-    )
-
-    error_messages = {
-        "invalid_token": _("The provided code is invalid or has expired."),
-        "missing_device": _("Generate a new authenticator secret before confirming it."),
-    }
-
-    def __init__(self, *args, device=None, **kwargs):
-        self.device = device
-        super().__init__(*args, **kwargs)
-
-    def clean_token(self):
-        token = (self.cleaned_data.get("token") or "").strip().replace(" ", "")
-        if not token:
-            raise forms.ValidationError(self.error_messages["invalid_token"], code="invalid_token")
-        if self.device is None:
-            raise forms.ValidationError(self.error_messages["missing_device"], code="missing_device")
-        try:
-            verified = self.device.verify_token(token)
-        except Exception:
-            verified = False
-        if not verified:
-            raise forms.ValidationError(self.error_messages["invalid_token"], code="invalid_token")
-        return token
-
-    def get_verified_device(self):
-        return self.device
+        return None
 
 
 class UserStoryForm(forms.ModelForm):
@@ -258,13 +88,25 @@ class UserStoryForm(forms.ModelForm):
         comments = (self.cleaned_data.get("comments") or "").strip()
         if len(comments) > 400:
             raise forms.ValidationError(
-                _("Feedback must be 400 characters or fewer."), code="max_length"
+                _("Please keep your comment under 400 characters."), code="too_long"
             )
         return comments
 
     def clean_name(self):
-        if self.user is not None and self.user.is_authenticated:
-            return (self.user.get_username() or "")[:40]
-
         name = (self.cleaned_data.get("name") or "").strip()
-        return name[:40]
+        if len(name) > 40:
+            raise forms.ValidationError(
+                _("Names must be 40 characters or fewer."), code="too_long"
+            )
+        return name
+
+    def clean_path(self):
+        return (self.cleaned_data.get("path") or "").strip()
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        if self.user is not None and self.user.is_authenticated:
+            instance.user = self.user
+        if commit:
+            instance.save()
+        return instance
