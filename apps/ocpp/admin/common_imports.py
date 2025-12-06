@@ -70,3 +70,6 @@ from ..transactions_io import export_transactions, import_transactions as import
 from ..status_display import STATUS_BADGE_MAP, ERROR_OK_VALUES
 from ..status_resets import clear_stale_cached_statuses
 from ..views import _charger_state, _live_sessions
+
+# Ensure gettext alias is available when using wildcard imports.
+__all__ = [name for name in globals().keys() if not name.startswith("_")] + ["_"]
