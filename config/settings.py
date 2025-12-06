@@ -446,6 +446,7 @@ LOCAL_APPS = [
     "apps.pages",
     "apps.cards",
     "apps.tasks",
+    "apps.tests",
     "apps.teams",
     "apps.nmcli",
     "apps.wikis",
