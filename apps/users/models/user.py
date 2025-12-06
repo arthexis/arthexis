@@ -301,10 +301,6 @@ class User(Entity, AbstractUser):
                     return profile
         return None
 
-    @property
-    def google_calendar_profile(self):
-        return self._direct_profile("GoogleCalendarProfile")
-
     class Meta(AbstractUser.Meta):
         verbose_name = _("User")
         verbose_name_plural = _("Users")

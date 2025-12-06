@@ -16,7 +16,6 @@ from django.urls import NoReverseMatch, reverse
 from django.utils.text import capfirst
 from django.utils.translation import gettext_lazy as _
 from apps.celery.utils import celery_feature_enabled as celery_feature_enabled_helper
-from apps.users.models import GoogleCalendarProfile
 from apps.core.entity import Entity
 from apps.nodes.models import NetMessage, Node
 
@@ -402,32 +401,6 @@ def related_admin_models(opts):
 
     related.sort(key=lambda item: item["label"])
     return related
-
-
-@register.simple_tag(takes_context=True)
-def user_google_calendar(context):
-    """Return Google Calendar details for the authenticated user."""
-
-    request = context.get("request")
-    user = getattr(request, "user", None)
-    if not user or not user.is_authenticated:
-        return None
-
-    profile = user.get_profile(GoogleCalendarProfile)
-    if not profile:
-        return None
-
-    events = profile.fetch_events()
-    title = profile.get_display_name() or str(GoogleCalendarProfile._meta.verbose_name)
-    calendar_url = profile.build_calendar_url()
-
-    return {
-        "title": title,
-        "events": events,
-        "calendar_url": calendar_url,
-        "identifier": profile.resolved_calendar_id(),
-        "profile": profile,
-    }
 
 
 @register.simple_tag(takes_context=True)
