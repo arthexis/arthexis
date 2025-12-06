@@ -49,19 +49,11 @@ from django.utils.http import (
     urlsafe_base64_decode,
     urlsafe_base64_encode,
 )
-from django_otp import DEVICE_ID_SESSION_KEY
 from apps.core import changelog
 from apps.emails import mailer
 from apps.links.templatetags.ref_tags import build_footer_context
-from apps.users.backends import (
-    TOTP_DEVICE_NAME,
-    get_user_totp_devices,
-    simulate_totp_verification,
-    totp_devices_allow_passwordless,
-    totp_devices_require_password,
-)
 from django.utils.translation import gettext as _
-from django.views.decorators.csrf import csrf_exempt, csrf_protect, ensure_csrf_cookie
+from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_POST
 from django.core.cache import cache
 from django.views.decorators.cache import never_cache
@@ -103,14 +95,7 @@ else:
     ):
         graphviz_logger.addFilter(_GraphvizDeprecationFilter())
 
-from django_otp import login as otp_login
-from apps.users.models import TOTPDevice
-import qrcode
-from .forms import (
-    AuthenticatorEnrollmentForm,
-    AuthenticatorLoginForm,
-    UserStoryForm,
-)
+from .forms import AuthenticatorLoginForm, UserStoryForm
 from apps.modules.models import Module
 from .models import (
     UserStory,
@@ -640,7 +625,6 @@ class CustomLoginView(LoginView):
                 "username_readonly": getattr(self, "_login_check_mode", False),
             }
         )
-        context["authenticator_check_url"] = reverse("pages:authenticator-login-check")
         node = Node.get_local()
         has_rfid_scanner = False
         had_rfid_feature = False
@@ -666,62 +650,11 @@ class CustomLoginView(LoginView):
 
     def form_valid(self, form):
         response = super().form_valid(form)
-        device = form.get_verified_device()
-        if device is not None:
-            if device.user_id != self.request.user.pk:
-                device.user = self.request.user
-                device.user_id = self.request.user.pk
-            self.request.session[DEVICE_ID_SESSION_KEY] = device.persistent_id
-            self.request.user.otp_device = device
-            otp_login(self.request, device)
         return response
 
 
 login_view = CustomLoginView.as_view()
 
-
-@require_POST
-@csrf_protect
-def authenticator_login_check(request):
-    """Return whether an authenticator login requires a password."""
-
-    username = (request.POST.get("username") or "").strip()
-    if not username:
-        return JsonResponse(
-            {"error": _("Enter your username to continue with the authenticator.")},
-            status=400,
-        )
-
-    requires_password = True
-    password_optional = False
-    UserModel = get_user_model()
-    try:
-        user = UserModel._default_manager.get_by_natural_key(username)
-    except UserModel.DoesNotExist:
-        simulate_totp_verification()
-        return JsonResponse(
-            {
-                "requires_password": requires_password,
-                "password_optional": password_optional,
-            }
-        )
-
-    devices = list(get_user_totp_devices(user))
-    if devices:
-        enforce_password = bool(getattr(user, "require_2fa", False))
-        allows_passwordless = totp_devices_allow_passwordless(devices)
-        requires_password = enforce_password or totp_devices_require_password(
-            devices, enforce=enforce_password
-        )
-        password_optional = requires_password and allows_passwordless and not enforce_password
-
-    simulate_totp_verification()
-    return JsonResponse(
-        {
-            "requires_password": requires_password,
-            "password_optional": password_optional,
-        }
-    )
 
 @ensure_csrf_cookie
 def rfid_login_page(request):
@@ -750,95 +683,7 @@ def rfid_login_page(request):
 
 @staff_member_required
 def authenticator_setup(request):
-    """Allow staff to enroll an authenticator app for TOTP logins."""
-
-    user = request.user
-    device_qs = TOTPDevice.objects.filter(user=user)
-    if TOTP_DEVICE_NAME:
-        device_qs = device_qs.filter(name=TOTP_DEVICE_NAME)
-
-    pending_device = device_qs.filter(confirmed=False).order_by("-id").first()
-    confirmed_device = device_qs.filter(confirmed=True).order_by("-id").first()
-    enrollment_form = AuthenticatorEnrollmentForm(device=pending_device)
-
-    if request.method == "POST":
-        action = request.POST.get("action")
-        if action == "generate":
-            device = pending_device or confirmed_device or TOTPDevice(user=user)
-            if TOTP_DEVICE_NAME:
-                device.name = TOTP_DEVICE_NAME
-            if device.pk is None:
-                device.save()
-            device.key = TOTPDevice._meta.get_field("key").get_default()
-            device.confirmed = False
-            device.drift = 0
-            device.last_t = -1
-            device.throttling_failure_count = 0
-            device.throttling_failure_timestamp = None
-            device.throttle_reset(commit=False)
-            device.save()
-            messages.success(
-                request,
-                _(
-                    "Scan the QR code with your authenticator app, then "
-                    "enter a code below to confirm enrollment."
-                ),
-            )
-            return redirect("pages:authenticator-setup")
-        if action == "confirm" and pending_device is not None:
-            enrollment_form = AuthenticatorEnrollmentForm(
-                request.POST, device=pending_device
-            )
-            if enrollment_form.is_valid():
-                pending_device.confirmed = True
-                pending_device.save(update_fields=["confirmed"])
-                messages.success(
-                    request,
-                    _(
-                        "Authenticator app confirmed. You can now log in "
-                        "with codes from your device."
-                    ),
-                )
-                return redirect("pages:authenticator-setup")
-        if action == "remove":
-            if device_qs.exists():
-                device_qs.delete()
-                messages.success(
-                    request,
-                    _(
-                        "Authenticator enrollment removed. Password logins "
-                        "remain available."
-                    ),
-                )
-            return redirect("pages:authenticator-setup")
-
-    pending_device = device_qs.filter(confirmed=False).order_by("-id").first()
-    confirmed_device = device_qs.filter(confirmed=True).order_by("-id").first()
-
-    qr_data_uri = None
-    manual_key = None
-    if pending_device is not None:
-        config_url = pending_device.config_url
-        qr = qrcode.QRCode(box_size=10, border=4)
-        qr.add_data(config_url)
-        qr.make(fit=True)
-        image = qr.make_image(fill_color="black", back_color="white")
-        buffer = io.BytesIO()
-        image.save(buffer, format="PNG")
-        qr_data_uri = "data:image/png;base64," + base64.b64encode(buffer.getvalue()).decode(
-            "ascii"
-        )
-        secret = pending_device.key or ""
-        manual_key = " ".join(secret[i : i + 4] for i in range(0, len(secret), 4))
-
-    context = {
-        "pending_device": pending_device,
-        "confirmed_device": confirmed_device,
-        "qr_data_uri": qr_data_uri,
-        "manual_key": manual_key,
-        "enrollment_form": enrollment_form,
-    }
-    return TemplateResponse(request, "pages/authenticator_setup.html", context)
+    raise Http404
 
 
 

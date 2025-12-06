@@ -457,7 +457,6 @@ INSTALLED_APPS = [
     "whitenoise.runserver_nostatic",
     "django.contrib.admin",
     "django.contrib.admindocs",
-    "django_otp",
     "config.auth_app.AuthConfig",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
@@ -515,7 +514,6 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
-    "django_otp.middleware.OTPMiddleware",
     "apps.sigils.middleware.SigilContextMiddleware",
     "apps.pages.middleware.ViewHistoryMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
@@ -600,15 +598,11 @@ AUTH_USER_MODEL = "users.User"
 AUTHENTICATION_BACKENDS = [
     "apps.users.backends.TempPasswordBackend",
     "apps.users.backends.LocalhostAdminBackend",
-    "apps.users.backends.TOTPBackend",
     "apps.users.backends.RFIDBackend",
 ]
 
 # Use the custom login view for all authentication redirects.
 LOGIN_URL = "pages:login"
-
-# Issuer name used when generating otpauth URLs for authenticator apps.
-OTP_TOTP_ISSUER = os.environ.get("OTP_TOTP_ISSUER", "Arthexis")
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases

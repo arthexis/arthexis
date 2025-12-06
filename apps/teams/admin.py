@@ -1,6 +1,5 @@
 from django.conf import settings
 from django.contrib import admin, messages
-from django.contrib.admin.sites import NotRegistered
 from django.http import HttpResponseRedirect
 from django.http.request import split_domain_port
 from django.template.response import TemplateResponse
@@ -13,12 +12,6 @@ import requests
 from django.utils import formats, timezone
 from django.utils.translation import gettext_lazy as _, ngettext
 from django_object_actions import DjangoObjectActions
-
-from apps.users.models import TOTPDevice
-from django_otp.plugins.otp_totp.admin import (
-    TOTPDeviceAdmin as CoreTOTPDeviceAdmin,
-)
-from django_otp.models import VerifyNotAllowed
 from apps.core.admin import InviteLeadAdmin
 from apps.locals.user_data import (
     EntityModelAdmin,
@@ -34,8 +27,6 @@ from apps.nodes.models import Node
 from .forms import (
     SlackBotProfileAdminForm,
     SlackBotWizardSetupForm,
-    TOTPDeviceAdminForm,
-    TOTPDeviceCalibrationActionForm,
 )
 from .models import (
     InviteLead,
@@ -445,143 +436,3 @@ class SlackBotProfileAdmin(DjangoObjectActions, EntityModelAdmin):
         return HttpResponseRedirect(
             reverse("admin:teams_slackbotprofile_change", args=[bot.pk])
         )
-
-
-try:
-    admin.site.unregister(TOTPDevice)
-except NotRegistered:
-    pass
-
-
-@admin.register(TOTPDevice)
-class TOTPDeviceAdminProxy(UserDatumAdminMixin, CoreTOTPDeviceAdmin):
-    raw_id_fields = ()
-    form = TOTPDeviceAdminForm
-    action_form = TOTPDeviceCalibrationActionForm
-    actions = tuple(CoreTOTPDeviceAdmin.actions or ()) + ("calibrate_device",)
-    change_form_template = "admin/user_datum_change_form.html"
-
-    def get_fieldsets(self, request, obj=None):
-        fieldsets = super().get_fieldsets(request, obj=obj)
-        if fieldsets:
-            identity_fields = list(fieldsets[0][1].get("fields", ()))
-            if "issuer" not in identity_fields:
-                try:
-                    insert_at = identity_fields.index("name") + 1
-                except ValueError:
-                    insert_at = len(identity_fields)
-                identity_fields.insert(insert_at, "issuer")
-            if "allow_without_password" not in identity_fields:
-                try:
-                    issuer_index = identity_fields.index("issuer") + 1
-                except ValueError:
-                    issuer_index = len(identity_fields)
-                identity_fields.insert(issuer_index, "allow_without_password")
-            if "security_group" not in identity_fields:
-                try:
-                    password_index = identity_fields.index("allow_without_password") + 1
-                except ValueError:
-                    password_index = len(identity_fields)
-                identity_fields.insert(password_index, "security_group")
-            fieldsets[0][1]["fields"] = identity_fields
-        return fieldsets
-
-    @admin.action(description=_("Test/calibrate selected device"))
-    def calibrate_device(self, request, queryset):
-        if request.POST.get("action") != "calibrate_device":
-            return
-
-        token = (request.POST.get("token") or "").strip()
-
-        if queryset.count() != 1:
-            self.message_user(
-                request,
-                _("Select exactly one device to calibrate."),
-                level=messages.ERROR,
-            )
-            return
-
-        if not token:
-            self.message_user(
-                request,
-                _("Enter the current authenticator code to test the device."),
-                level=messages.ERROR,
-            )
-            return
-
-        device = queryset.first()
-
-        allowed, data = device.verify_is_allowed()
-        if not allowed:
-            message = None
-            if data:
-                reason = data.get("reason")
-                if reason == VerifyNotAllowed.N_FAILED_ATTEMPTS:
-                    locked_until = data.get("locked_until")
-                    if locked_until:
-                        locked_until = timezone.localtime(locked_until)
-                        locked_until_display = formats.date_format(
-                            locked_until, "DATETIME_FORMAT"
-                        )
-                        message = _("Too many failed attempts. Try again after %(time)s.") % {
-                            "time": locked_until_display
-                        }
-                    else:
-                        message = _("Too many failed attempts. Try again later.")
-                elif data.get("error_message"):
-                    message = data["error_message"]
-            if message is None:
-                message = _("Verification is not allowed at this time.")
-            self.message_user(request, message, level=messages.ERROR)
-            return
-
-        if device.verify_token(token):
-            self.message_user(
-                request,
-                _("Token accepted. The device has been calibrated."),
-                level=messages.SUCCESS,
-            )
-        else:
-            self.message_user(
-                request,
-                _("Token rejected. The device was not calibrated."),
-                level=messages.ERROR,
-            )
-
-    def save_model(self, request, obj, form, change):
-        super().save_model(request, obj, form, change)
-
-        obj.is_seed_data = request.POST.get("_seed_datum") == "on"
-
-        if getattr(self, "_skip_entity_user_datum", False):
-            return
-
-        target_user = _resolve_fixture_user(obj, request.user)
-        allow_user_data = _user_allows_user_data(target_user)
-
-        if request.POST.get("_user_datum") == "on":
-            if allow_user_data:
-                if not obj.is_user_data:
-                    obj.is_user_data = True
-                dump_user_fixture(obj, target_user)
-                if target_user is None:
-                    target_user = _resolve_fixture_user(obj, None)
-                if target_user is not None:
-                    path = _fixture_path(target_user, obj)
-                    self.message_user(
-                        request,
-                        _("User datum saved to %(path)s") % {"path": path},
-                    )
-            else:
-                if obj.is_user_data:
-                    obj.is_user_data = False
-                    delete_user_fixture(obj, target_user)
-                self.message_user(
-                    request,
-                    _("User data is not available for this account."),
-                    level=messages.WARNING,
-                )
-        elif obj.is_user_data:
-            obj.is_user_data = False
-            delete_user_fixture(obj, target_user)
-

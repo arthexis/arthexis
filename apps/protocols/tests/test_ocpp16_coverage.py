@@ -20,6 +20,7 @@ class Ocpp16CoverageTests(TestCase):
         for module_path in (
             "apps.ocpp.consumers",
             "apps.ocpp.views",
+            "apps.ocpp.views.actions",
             "apps.ocpp.tasks",
             "apps.ocpp.admin",
         ):

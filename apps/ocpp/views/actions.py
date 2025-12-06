@@ -34,6 +34,9 @@ from .common import (
     _normalize_connector_slug,
     _parse_request_body,
 )
+
+
+@protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "GetConfiguration")
 def _handle_get_configuration(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
     payload: dict[str, object] = {}
     raw_key = data.get("key")
