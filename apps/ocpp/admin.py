@@ -1889,6 +1889,9 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
                 "fields": (
                     "public_display",
                     "require_rfid",
+                    "configuration_check_enabled",
+                    "power_projection_enabled",
+                    "firmware_snapshot_enabled",
                     "configuration",
                     "network_profile",
                 )
