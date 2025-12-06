@@ -142,4 +142,13 @@ class TOTPDevice(TimestampMixin, ThrottlingMixin, Device):
         return None
 
 
-__all__ = ["TOTPDevice"]
+
+class TOTPDevice(OTPTOTPDevice):
+    """Local proxy for the django-otp TOTP device model."""
+
+    class Meta:
+        proxy = True
+        app_label = "users"
+
+
+__all__ = ["TOTPDevice", "default_key"]
