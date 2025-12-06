@@ -1,9 +1,10 @@
 """Custom authentication backends for the core app."""
 
+from __future__ import annotations
+
 import contextlib
 import ipaddress
 import os
-import secrets
 import socket
 import subprocess
 import sys
@@ -11,242 +12,12 @@ import sys
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.backends import ModelBackend
-from django.core.exceptions import DisallowedHost, ObjectDoesNotExist
+from django.core.exceptions import DisallowedHost
 from django.http.request import split_domain_port
-from django.db.models import Q
 
 from apps.cards.models import RFID
 from apps.energy.models import CustomerAccount
-from .models import TOTPDevice, TOTPDeviceSettings
 from . import temp_passwords
-
-
-TOTP_DEVICE_NAME = "authenticator"
-
-
-def get_user_totp_device(user):
-    """Return the most appropriate authenticator device for the user."""
-
-    devices = list(get_user_totp_devices(user))
-    if not devices:
-        return None
-    if TOTP_DEVICE_NAME:
-        named = [device for device in devices if device.name == TOTP_DEVICE_NAME]
-        if named:
-            return named[0]
-    return devices[0]
-
-
-def get_user_totp_devices(user):
-    """Return confirmed authenticator devices available to the user."""
-
-    group_ids = list(user.groups.values_list("id", flat=True))
-    device_qs = TOTPDevice.objects.filter(confirmed=True, user=user)
-    if group_ids:
-        device_qs = TOTPDevice.objects.filter(confirmed=True).filter(
-            Q(user=user) | Q(custom_settings__security_group_id__in=group_ids)
-        )
-    return device_qs.select_related("custom_settings").order_by("-id").distinct()
-
-
-def totp_device_allows_passwordless(device):
-    """Return True when the device can be used without a password."""
-
-    if device is None:
-        return False
-    try:
-        settings_obj = device.custom_settings
-    except ObjectDoesNotExist:
-        settings_obj = None
-    if settings_obj is None:
-        return False
-    return bool(getattr(settings_obj, "allow_without_password", False))
-
-
-def totp_device_requires_password(device):
-    """Return True when the device requires a password alongside the OTP."""
-
-    return not totp_device_allows_passwordless(device)
-
-
-def totp_devices_require_password(devices, *, enforce=True):
-    """Return True when any device requires a password alongside the OTP."""
-
-    if not enforce:
-        return False
-    return any(totp_device_requires_password(device) for device in devices)
-
-
-def totp_devices_allow_passwordless(devices):
-    """Return True when any device allows passwordless authentication."""
-
-    return any(totp_device_allows_passwordless(device) for device in devices)
-
-
-def simulate_totp_verification(token: str | None = None) -> None:
-    """Run a dummy TOTP verification to keep timing consistent.
-
-    When an authenticator device is missing we still want to exercise the
-    verification path so that request duration does not leak configuration
-    details. The dummy device never authenticates successfully, but it
-    mirrors the usual verification cost.
-    """
-
-    dummy_device = TOTPDevice(confirmed=True)
-    sanitized_token = str(token or "").strip().replace(" ", "")
-    if not sanitized_token:
-        sanitized_token = f"{secrets.randbelow(10**6):06d}"
-
-    try:
-        dummy_device.verify_token(sanitized_token)
-    except Exception:
-        # We intentionally ignore all failures; this is solely for timing.
-        pass
-
-
-def _get_or_clone_device_for_user(device, user, settings_obj):
-    """Return a device bound to the provided user, cloning shared devices when needed."""
-
-    existing = (
-        TOTPDevice.objects.filter(
-            user=user, confirmed=True, key=device.key, name=device.name
-        )
-        .order_by("-id")
-        .first()
-    )
-    if existing:
-        return existing
-
-    cloned = TOTPDevice.objects.create(
-        user=user,
-        name=device.name,
-        key=device.key,
-        step=device.step,
-        t0=device.t0,
-        digits=device.digits,
-        tolerance=device.tolerance,
-        drift=device.drift,
-        last_t=device.last_t,
-        confirmed=True,
-        throttling_failure_count=0,
-        throttling_failure_timestamp=None,
-    )
-
-    if settings_obj is not None:
-        TOTPDeviceSettings.objects.update_or_create(
-            device=cloned,
-            defaults={
-                "issuer": settings_obj.issuer,
-                "allow_without_password": settings_obj.allow_without_password,
-                "security_group": settings_obj.security_group,
-            },
-        )
-
-    return cloned
-
-
-def verify_user_totp_token(
-    user, token: str, password: str | None = None, *, enforce_password: bool | None = None
-):
-    """Verify a TOTP token against all of the user's available devices."""
-
-    group_ids = set(user.groups.values_list("id", flat=True))
-    devices = list(get_user_totp_devices(user))
-
-    password_value = password or ""
-    if enforce_password is None:
-        enforce_password = bool(getattr(user, "require_2fa", False))
-    password_valid = bool(password_value and user.check_password(password_value))
-    requires_password = False
-
-    if not devices:
-        simulate_totp_verification(token)
-        requires_password = True
-        if requires_password and not password_valid:
-            if not password_value:
-                return None, {"error": "password_required", "requires_password": True}
-            return None, {"error": "invalid_password", "requires_password": True}
-        return None, {"error": "invalid_token", "requires_password": requires_password}
-
-    for device in devices:
-        device_requires_password = enforce_password or totp_device_requires_password(device)
-        requires_password = requires_password or device_requires_password
-
-        if device_requires_password and not password_valid:
-            try:
-                matches = device.verify_token(token)
-            except Exception:
-                matches = False
-
-            if matches:
-                if not password_value:
-                    return None, {
-                        "error": "password_required",
-                        "requires_password": True,
-                    }
-                return None, {
-                    "error": "invalid_password",
-                    "requires_password": True,
-                }
-            continue
-
-        try:
-            verified = device.verify_token(token)
-        except Exception:
-            verified = False
-
-        if verified:
-            try:
-                settings_obj = device.custom_settings
-            except ObjectDoesNotExist:
-                settings_obj = None
-            if device.user_id != user.pk:
-                security_group_id = getattr(settings_obj, "security_group_id", None)
-                if security_group_id and security_group_id in group_ids:
-                    device = _get_or_clone_device_for_user(device, user, settings_obj)
-                else:
-                    device.user = user
-                    device.user_id = user.pk
-            return device, {"requires_password": device_requires_password}
-
-    return None, {"error": "invalid_token", "requires_password": requires_password}
-
-
-class TOTPBackend(ModelBackend):
-    """Authenticate using a TOTP code from an enrolled authenticator app."""
-
-    def authenticate(self, request, username=None, otp_token=None, password=None, **kwargs):
-        if not username or otp_token in (None, ""):
-            return None
-
-        token = str(otp_token).strip().replace(" ", "")
-        if not token:
-            return None
-
-        password = kwargs.get("password", password)
-
-        UserModel = get_user_model()
-        try:
-            user = UserModel._default_manager.get_by_natural_key(username)
-        except UserModel.DoesNotExist:
-            return None
-
-        if not user.is_active:
-            return None
-
-        device, result = verify_user_totp_token(user, token, password)
-        if device is None:
-            return None
-
-        user.otp_device = device
-        return user
-
-    def get_user(self, user_id):
-        UserModel = get_user_model()
-        try:
-            return UserModel._default_manager.get(pk=user_id)
-        except UserModel.DoesNotExist:
-            return None
 
 
 class RFIDBackend:
@@ -380,21 +151,34 @@ class LocalhostAdminBackend(ModelBackend):
             return True
         server_name = ""
         if request is not None:
-            server_name = request.META.get("SERVER_NAME", "")
-        return server_name.lower() == "testserver"
+            try:
+                server_name = request.META.get("SERVER_NAME", "")
+            except Exception:
+                server_name = ""
+        return server_name.endswith(".local")
+
+    def user_can_authenticate(self, user):
+        return True
 
     def authenticate(self, request, username=None, password=None, **kwargs):
-        if not self._is_admin_login_attempt(request, username, password):
-            return super().authenticate(request, username, password, **kwargs)
-
-        if not self._has_valid_host(request):
+        if not username or not password:
             return None
 
-        remote_ip = self._get_remote_ip(request)
-        if remote_ip is None or not self._is_remote_allowed(remote_ip):
-            return None
+        if self._is_admin_login_attempt(request, username, password):
+            if not self._has_valid_host(request):
+                return None
 
-        return self._get_admin_user()
+            remote_ip = self._get_remote_ip(request)
+            if remote_ip is None or not self._is_remote_allowed(remote_ip):
+                return None
+
+            user = self._get_admin_user()
+            if user is None:
+                return None
+            user.backend = f"{self.__module__}.{self.__class__.__name__}"
+            return user
+
+        return None
 
     def get_user(self, user_id):
         User = get_user_model()
@@ -518,11 +302,3 @@ class TempPasswordBackend(ModelBackend):
             user.is_active = True
             user.save(update_fields=["is_active"])
         return user
-
-    def get_user(self, user_id):
-        UserModel = get_user_model()
-        manager = getattr(UserModel, "all_objects", UserModel._default_manager)
-        try:
-            return manager.get(pk=user_id)
-        except UserModel.DoesNotExist:
-            return None
