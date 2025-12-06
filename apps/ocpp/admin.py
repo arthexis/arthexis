@@ -55,9 +55,13 @@ from .models import (
     CPFirmwareDeployment,
     CPNetworkProfile,
     CPNetworkProfileDeployment,
+    CPFirmwareRequest,
     SecurityEvent,
     ChargerLogRequest,
     CPForwarder,
+    RFID,
+    RFIDSessionAttempt,
+    EVCSChargePoint,
 )
 from .simulator import ChargePointSimulator
 from . import store
@@ -68,7 +72,7 @@ from .transactions_io import (
 from .status_display import STATUS_BADGE_MAP, ERROR_OK_VALUES
 from .status_resets import clear_stale_cached_statuses
 from .views import _charger_state, _live_sessions
-from apps.core.admin import SaveBeforeChangeAction
+from apps.core.admin import RFIDAdmin, SaveBeforeChangeAction
 from apps.energy.models import EnergyTariff
 from apps.cards.models import RFID as CoreRFID
 from apps.core.form_fields import SchedulePeriodsField
@@ -4511,3 +4515,94 @@ class CPForwarderAdmin(EntityModelAdmin):
                 _("No forwarders were selected."),
                 messages.WARNING,
             )
+
+
+@admin.register(StationModel)
+class StationModelAdmin(EntityModelAdmin):
+    list_display = (
+        "vendor",
+        "model_family",
+        "model",
+        "preferred_ocpp_version",
+        "max_power_kw",
+        "max_voltage_v",
+    )
+    search_fields = ("vendor", "model_family", "model")
+    list_filter = ("preferred_ocpp_version",)
+
+
+@admin.register(CPNetworkProfile)
+class CPNetworkProfileAdmin(EntityModelAdmin):
+    list_display = (
+        "name",
+        "configuration_slot",
+        "created_at",
+        "updated_at",
+    )
+    list_filter = ("configuration_slot",)
+    search_fields = ("name", "description")
+    readonly_fields = ("created_at", "updated_at")
+
+
+@admin.register(CPNetworkProfileDeployment)
+class CPNetworkProfileDeploymentAdmin(EntityModelAdmin):
+    list_display = (
+        "network_profile",
+        "charger",
+        "status",
+        "status_timestamp",
+        "requested_at",
+        "completed_at",
+    )
+    list_filter = ("status",)
+    search_fields = (
+        "network_profile__name",
+        "charger__charger_id",
+        "ocpp_message_id",
+    )
+    readonly_fields = ("requested_at", "created_at", "updated_at")
+
+
+@admin.register(CPFirmwareRequest)
+class CPFirmwareRequestAdmin(EntityModelAdmin):
+    list_display = (
+        "charger",
+        "connector_id",
+        "vendor_id",
+        "status",
+        "requested_at",
+        "responded_at",
+    )
+    list_filter = ("status",)
+    search_fields = ("charger__charger_id", "vendor_id")
+    readonly_fields = ("requested_at", "updated_at")
+
+
+@admin.register(RFIDSessionAttempt)
+class RFIDSessionAttemptAdmin(EntityModelAdmin):
+    list_display = (
+        "rfid",
+        "status",
+        "charger",
+        "account",
+        "transaction",
+        "attempted_at",
+    )
+    list_filter = ("status",)
+    search_fields = (
+        "rfid",
+        "charger__charger_id",
+        "account__name",
+        "transaction__ocpp_id",
+    )
+    readonly_fields = ("attempted_at",)
+
+
+@admin.register(EVCSChargePoint)
+class EVCSChargePointAdmin(ChargerAdmin):
+    pass
+
+
+@admin.register(RFID)
+class OCPPRFIDAdmin(RFIDAdmin):
+    pass
