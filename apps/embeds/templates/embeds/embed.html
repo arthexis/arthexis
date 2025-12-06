@@ -28,15 +28,6 @@
         gap: 12px;
         align-items: center;
       }
-      .embed-favicon {
-        width: 28px;
-        height: 28px;
-        border-radius: 6px;
-        background: #08101a;
-        padding: 4px;
-        border: 1px solid rgba(255, 255, 255, 0.12);
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35);
-      }
       .embed-title {
         display: flex;
         flex-direction: column;
@@ -113,9 +104,6 @@
   <body>
     <div class="embed-card">
       <div class="embed-header">
-        {% if favicon_url %}
-        <img class="embed-favicon" src="{{ favicon_url }}" alt="Site icon" />
-        {% endif %}
         <div class="embed-title">
           <h2>{{ page_title }}</h2>
           {% if subtitle %}<p class="embed-subtitle">#{{ subtitle }}</p>{% endif %}
@@ -127,11 +115,7 @@
         </div>
         <div class="embed-actions">
           <a href="{{ share_url }}" target="_blank" rel="noopener noreferrer">
-            {% if not favicon_url %}
             <span aria-hidden="true">↗</span>
-            {% else %}
-            <img class="embed-favicon" src="{{ favicon_url }}" alt="" />
-            {% endif %}
             <span>Open Full Page</span>
           </a>
         </div>
