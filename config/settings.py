@@ -789,7 +789,7 @@ CELERY_BEAT_SCHEDULE = {
     },
     "ocpp_power_projection": {
         "task": "apps.ocpp.tasks.schedule_power_projection_requests",
-        "schedule": crontab(minute=0),
+        "schedule": crontab(minute=0, hour=1),
     },
     "ocpp_firmware_snapshot": {
         "task": "apps.ocpp.tasks.schedule_daily_firmware_snapshot_requests",

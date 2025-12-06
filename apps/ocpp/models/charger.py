@@ -77,6 +77,21 @@ class Charger(Entity):
         default=False,
         help_text="Require a valid RFID before starting a charging session.",
     )
+    configuration_check_enabled = models.BooleanField(
+        _("Configuration Check"),
+        default=False,
+        help_text=_("Allow scheduled configuration checks for this charger."),
+    )
+    power_projection_enabled = models.BooleanField(
+        _("Power Projection"),
+        default=False,
+        help_text=_("Allow scheduled power projection requests for this charger."),
+    )
+    firmware_snapshot_enabled = models.BooleanField(
+        _("Firmware Snapshot"),
+        default=False,
+        help_text=_("Allow scheduled firmware snapshot requests for this charger."),
+    )
     firmware_status = models.CharField(
         _("Status"),
         max_length=32,

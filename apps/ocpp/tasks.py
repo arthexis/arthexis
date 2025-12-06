@@ -320,7 +320,9 @@ def schedule_daily_firmware_snapshot_requests() -> int:
     """Dispatch firmware snapshot requests for eligible charge points."""
 
     charger_ids = list(
-        Charger.objects.filter(connector_id__isnull=True).values_list("pk", flat=True)
+        Charger.objects.filter(
+            connector_id__isnull=True, firmware_snapshot_enabled=True
+        ).values_list("pk", flat=True)
     )
     if not charger_ids:
         logger.debug("No eligible charge points available for firmware snapshot")
@@ -360,7 +362,9 @@ def schedule_daily_charge_point_configuration_checks() -> int:
     """Dispatch configuration requests for eligible charge points."""
 
     charger_ids = list(
-        Charger.objects.filter(connector_id__isnull=True).values_list("pk", flat=True)
+        Charger.objects.filter(
+            connector_id__isnull=True, configuration_check_enabled=True
+        ).values_list("pk", flat=True)
     )
     if not charger_ids:
         logger.debug("No eligible charge points available for configuration check")
@@ -479,7 +483,9 @@ def schedule_power_projection_requests(
     """Dispatch GetCompositeSchedule requests for each EVCS."""
 
     charger_ids = list(
-        Charger.objects.filter(connector_id__isnull=True).values_list("pk", flat=True)
+        Charger.objects.filter(
+            connector_id__isnull=True, power_projection_enabled=True
+        ).values_list("pk", flat=True)
     )
     if not charger_ids:
         logger.debug("No eligible charge points available for power projection")
