@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 from typing import Iterable
 
-import boto3
 from django import forms
 from django.utils.translation import gettext_lazy as _
 
@@ -11,6 +10,11 @@ from .models import AWSCredentials
 
 
 def _region_choices() -> list[tuple[str, str]]:
+    try:
+        import boto3
+    except ModuleNotFoundError:
+        return [("us-east-1", "us-east-1")]
+
     session = boto3.session.Session()
     regions: Iterable[str] = session.get_available_regions("lightsail") or []
     normalized = sorted({code for code in regions})

@@ -2,8 +2,20 @@ from __future__ import annotations
 
 from typing import Any, Optional
 
-import boto3
-from botocore.exceptions import BotoCoreError, ClientError
+try:
+    import boto3
+    from botocore.exceptions import BotoCoreError, ClientError
+except ModuleNotFoundError:
+    boto3 = None
+    BotoCoreError = ClientError = Exception
+
+
+def _require_boto3():
+    if boto3 is None:
+        raise ImportError(
+            "boto3 is required for AWS Lightsail operations. Install the optional AWS dependencies."
+        )
+    return boto3
 
 from .models import AWSCredentials, LightsailDatabase, LightsailInstance
 
@@ -19,6 +31,7 @@ def _lightsail_client(
     access_key_id: str | None = None,
     secret_access_key: str | None = None,
 ):
+    module = _require_boto3()
     session_kwargs: dict[str, Any] = {"region_name": region}
     if credentials is not None:
         session_kwargs.update(
@@ -34,7 +47,7 @@ def _lightsail_client(
                 "aws_secret_access_key": secret_access_key,
             }
         )
-    session = boto3.session.Session(**session_kwargs)
+    session = module.session.Session(**session_kwargs)
     return session.client("lightsail")
 
 
