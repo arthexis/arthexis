@@ -17,6 +17,7 @@ from apps.tests.domain import RecordedTestResult, persist_results  # noqa: E402
 
 PRIMARY_DATABASE_SETTINGS: Dict[str, Any] = copy.deepcopy(settings.DATABASES["default"])
 COLLECTED_RESULTS: Dict[str, Dict[str, Any]] = defaultdict(lambda: {"logs": []})
+DB_BLOCKER = None
 
 
 def _append_log(report: pytest.TestReport, entry: Dict[str, Any]) -> None:
@@ -50,6 +51,12 @@ def _store_result(report: pytest.TestReport, item: pytest.Item) -> None:
     _append_log(report, entry)
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _capture_db_blocker(django_db_blocker: Any) -> None:
+    global DB_BLOCKER
+    DB_BLOCKER = django_db_blocker
+
+
 @pytest.hookimpl(tryfirst=True, hookwrapper=True)
 def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo) -> Any:
     outcome = yield
@@ -73,7 +80,11 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     ]
 
     try:
-        persist_results(results, PRIMARY_DATABASE_SETTINGS)
+        if DB_BLOCKER:
+            with DB_BLOCKER.unblock():
+                persist_results(results, PRIMARY_DATABASE_SETTINGS)
+        else:
+            persist_results(results, PRIMARY_DATABASE_SETTINGS)
     except Exception as exc:  # pragma: no cover - best effort logging
         reporter = session.config.pluginmanager.get_plugin("terminalreporter")
         message = f"Unable to persist test results to primary database: {exc}"
