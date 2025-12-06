@@ -18,22 +18,11 @@ class Migration(migrations.Migration):
     dependencies = [
         ("auth", "0012_alter_user_first_name_max_length"),
         ("chats", "0002_initial"),
-        ("django_otp", "__first__"),
         ("groups", "0002_initial"),
         ("pages", "0002_initial"),
     ]
 
     operations = [
-        migrations.CreateModel(
-            name="TOTPDevice",
-            fields=[],
-            options={
-                "proxy": True,
-                "indexes": [],
-                "constraints": [],
-            },
-            bases=("django_otp.totpdevice",),
-        ),
         migrations.CreateModel(
             name="User",
             fields=[
@@ -235,63 +224,6 @@ class Migration(migrations.Migration):
                 "verbose_name_plural": "Phone Numbers",
                 "db_table": "core_userphonenumber",
                 "ordering": ("priority", "id"),
-            },
-        ),
-        migrations.CreateModel(
-            name="TOTPDeviceSettings",
-            fields=[
-                (
-                    "id",
-                    models.BigAutoField(
-                        auto_created=True,
-                        primary_key=True,
-                        serialize=False,
-                        verbose_name="ID",
-                    ),
-                ),
-                ("is_seed_data", models.BooleanField(default=False, editable=False)),
-                ("is_user_data", models.BooleanField(default=False, editable=False)),
-                ("is_deleted", models.BooleanField(default=False, editable=False)),
-                (
-                    "issuer",
-                    models.CharField(
-                        blank=True,
-                        default="",
-                        help_text="Label shown in authenticator apps. Leave blank to use Arthexis.",
-                        max_length=64,
-                    ),
-                ),
-                (
-                    "allow_without_password",
-                    models.BooleanField(
-                        default=False,
-                        help_text="Allow authenticator logins to skip the password step.",
-                    ),
-                ),
-                (
-                    "security_group",
-                    models.ForeignKey(
-                        blank=True,
-                        help_text="Share this authenticator with every user in the selected security group.",
-                        null=True,
-                        on_delete=django.db.models.deletion.SET_NULL,
-                        related_name="totp_devices",
-                        to="groups.securitygroup",
-                    ),
-                ),
-                (
-                    "device",
-                    models.OneToOneField(
-                        on_delete=django.db.models.deletion.CASCADE,
-                        related_name="custom_settings",
-                        to="users.totpdevice",
-                    ),
-                ),
-            ],
-            options={
-                "verbose_name": "Authenticator Device Setting",
-                "verbose_name_plural": "Authenticator Device Settings",
-                "db_table": "core_totpdevicesettings",
             },
         ),
         migrations.CreateModel(
