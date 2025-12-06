@@ -3,6 +3,8 @@ from django.utils import timezone
 
 
 class TestResult(models.Model):
+    __test__ = False
+
     class Status(models.TextChoices):
         PASSED = "passed", "Passed"
         FAILED = "failed", "Failed"
