@@ -4,24 +4,8 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ("django_otp", "0001_initial"),
         ("users", "0006_delete_totpdevice_totpdevice"),
     ]
 
-    operations = [
-        migrations.DeleteModel(
-            name="TOTPDevice",
-        ),
-        migrations.CreateModel(
-            name="TOTPDevice",
-            fields=[],
-            options={
-                "proxy": True,
-                "indexes": [],
-                "constraints": [],
-            },
-            bases=("django_otp.totpdevice",),
-        ),
-    ]
+    operations = []
