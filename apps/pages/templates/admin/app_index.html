@@ -6,14 +6,6 @@
   <link rel="stylesheet" href="{% static 'admin/css/dashboard.css' %}">
   {% include "admin/includes/dashboard_styles.html" %}
   <style>
-    .admin-app-dashboard .dashboard-main {
-      order: 2;
-    }
-
-    .admin-app-dashboard .dashboard-side {
-      order: 1;
-    }
-
     .wiki-summary-widget {
       margin: 0 0 1rem;
       padding: 0.75rem 1rem;
@@ -65,7 +57,7 @@
 {% block content %}
 {% if app_list %}
   <div class="dashboard admin-app-dashboard">
-    <div class="dashboard-side" id="app-info">
+    <div id="content-main" class="dashboard-main dashboard-main--app">
       {% for app in app_list %}
         {% wiki_summary app.name as wiki_description %}
         {% if wiki_description %}
@@ -85,10 +77,10 @@
           </div>
         {% endif %}
       {% endfor %}
-    </div>
-    <div id="content-main" class="dashboard-main dashboard-main--app">
+
       {% include "admin/dashboard_app_list.html" with app_list=app_list show_changelinks=True show_model_badges=True %}
     </div>
+    <div class="dashboard-side" id="app-dashboard-sidebar" aria-hidden="true"></div>
   </div>
 {% else %}
   <p>{% translate "You don't have permission to edit anything." %}</p>
