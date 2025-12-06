@@ -462,6 +462,13 @@ def _delegate_upgrade_via_script(base_dir: Path, args: list[str]) -> str | None:
         )
         return None
 
+    if not WATCH_UPGRADE_BINARY.exists():
+        _append_auto_upgrade_log(
+            base_dir,
+            "watch-upgrade helper missing; skipping delegated auto-upgrade",
+        )
+        return None
+
     command = [str(script), *args]
     result = subprocess.run(
         command,
