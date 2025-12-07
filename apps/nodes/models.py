@@ -58,6 +58,11 @@ logger = logging.getLogger(__name__)
 ROLE_RENAMES: dict[str, str] = {"Constellation": "Watchtower"}
 
 
+def _upgrade_in_progress() -> bool:
+    lock_file = Path(settings.BASE_DIR) / ".locks" / "upgrade_in_progress.lck"
+    return lock_file.exists()
+
+
 SERVICE_TEMPLATE_DIR = Path(__file__).resolve().parent / "service_templates"
 
 
@@ -2370,6 +2375,12 @@ class NetMessage(Entity):
         from apps.core.notifications import notify
         import random
         import requests
+
+        if _upgrade_in_progress():
+            logger.info(
+                "Skipping NetMessage propagation during upgrade in progress", extra={"id": self.pk}
+            )
+            return
 
         displayed = notify(self.subject, self.body)
         local = Node.get_local()
