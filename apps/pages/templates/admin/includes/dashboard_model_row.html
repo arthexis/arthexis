@@ -14,37 +14,41 @@
         <button type="submit" class="favorite-star{% if fav %} favorited{% endif %}" title="{% translate 'Toggle favorite' %}" aria-label="{% translate 'Toggle favorite' %}">&#9733;</button>
       </form>
     {% endif %}
-    {% if model.admin_url %}
-      <a href="{{ model.admin_url }}"{% if model.admin_url in request.path|urlencode %} aria-current="page"{% endif %}>{{ fav.custom_label|default:model.name }}</a>
-    {% else %}
-      {{ fav.custom_label|default:model.name }}
-    {% endif %}
-    {% if show_model_badges %}
-      {% with status_container_id="model-status-"|add:row_dom_id %}
-        <span
-          id="{{ status_container_id }}"
-          class="dashboard-model-status"
-          data-model-status-loader
-          hx-ext="intersect"
-          data-fallback-template="{{ status_container_id }}-fallback"
-          hx-get="{% url 'admin:dashboard_model_status' %}?app={{ app_label }}&model={{ model.object_name|urlencode }}"
-          hx-trigger="intersect once"
-          hx-swap="innerHTML"
-          aria-live="polite"
-        >
-          <span class="visually-hidden">{% translate "Loading badges and rules…" %}</span>
+      <span class="dashboard-model-heading">
+        <span class="dashboard-model-name">
+          {% if model.admin_url %}
+            <a href="{{ model.admin_url }}"{% if model.admin_url in request.path|urlencode %} aria-current="page"{% endif %}>{{ fav.custom_label|default:model.name }}</a>
+          {% else %}
+            {{ fav.custom_label|default:model.name }}
+          {% endif %}
         </span>
-        <template id="{{ status_container_id }}-fallback">
-          <span class="model-rule-status model-rule-status--error">
-            <span class="model-rule-status__icon" aria-hidden="true">!</span>
-            <span class="model-rule-status__message">{% translate "Unable to load status." %}</span>
-          </span>
-        </template>
-        <noscript>
-          {% include "admin/includes/dashboard_model_status.html" with app_label=app_label model_name=model.object_name %}
-        </noscript>
-      {% endwith %}
-    {% endif %}
+        {% if show_model_badges %}
+          {% with status_container_id="model-status-"|add:row_dom_id %}
+            <span
+              id="{{ status_container_id }}"
+              class="dashboard-model-status"
+              data-model-status-loader
+              hx-ext="intersect"
+              data-fallback-template="{{ status_container_id }}-fallback"
+              hx-get="{% url 'admin:dashboard_model_status' %}?app={{ app_label }}&model={{ model.object_name|urlencode }}"
+              hx-trigger="intersect once"
+              hx-swap="innerHTML"
+              aria-live="polite"
+            >
+              <span class="visually-hidden">{% translate "Loading badges and rules…" %}</span>
+            </span>
+            <template id="{{ status_container_id }}-fallback">
+              <span class="model-rule-status model-rule-status--error">
+                <span class="model-rule-status__icon" aria-hidden="true">!</span>
+                <span class="model-rule-status__message">{% translate "Unable to load status." %}</span>
+              </span>
+            </template>
+            <noscript>
+              {% include "admin/includes/dashboard_model_status.html" with app_label=app_label model_name=model.object_name %}
+            </noscript>
+          {% endwith %}
+        {% endif %}
+      </span>
   </th>
 
   {% if model.admin_url and show_changelinks %}
