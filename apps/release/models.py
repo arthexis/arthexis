@@ -17,6 +17,7 @@ from django.utils.translation import gettext_lazy as _
 from urllib.parse import urlparse
 
 from apps.base.models import Entity, EntityManager
+from apps.core.fixtures import ensure_seed_data_flags
 from apps.users.models import Profile
 from apps.sigils.fields import ConditionCheckResult, ConditionTextField, SigilShortAutoField
 from utils import revision as revision_utils
@@ -336,13 +337,15 @@ class PackageRelease(Entity):
         for release in cls.objects.all():
             name = f"releases__packagerelease_{release.version.replace('.', '_')}.json"
             path = base / name
-            data = serializers.serialize(
-                "json",
-                [release],
-                use_natural_foreign_keys=True,
-                use_natural_primary_keys=True,
+            content = ensure_seed_data_flags(
+                serializers.serialize(
+                    "json",
+                    [release],
+                    use_natural_foreign_keys=True,
+                    use_natural_primary_keys=True,
+                )
             )
-            data = json.dumps(json.loads(data), indent=2) + "\n"
+            data = json.dumps(json.loads(content), indent=2) + "\n"
             expected.add(name)
             try:
                 current = path.read_text(encoding="utf-8")

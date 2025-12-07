@@ -2,8 +2,11 @@
   {
     "model": "vehicle.wmicode",
     "fields": {
-      "brand": ["Audi"],
-      "code": "WA1"
+      "brand": [
+        "Audi"
+      ],
+      "code": "WA1",
+      "is_seed_data": true
     }
   }
 ]

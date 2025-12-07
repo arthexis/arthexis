@@ -13,7 +13,8 @@
       "amps_60c": 210,
       "amps_75c": 252,
       "amps_90c": 283,
-      "line_num": 3
+      "line_num": 3,
+      "is_seed_data": true
     }
   }
 ]

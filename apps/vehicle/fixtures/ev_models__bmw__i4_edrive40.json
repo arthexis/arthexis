@@ -2,9 +2,12 @@
   {
     "model": "vehicle.evmodel",
     "fields": {
-      "brand": ["BMW"],
+      "brand": [
+        "BMW"
+      ],
       "name": "i4 eDrive40",
-      "est_battery_kwh": "81.50"
+      "est_battery_kwh": "81.50",
+      "is_seed_data": true
     }
   }
 ]

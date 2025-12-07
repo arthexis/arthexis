@@ -2,11 +2,11 @@
   {
     "model": "release.package",
     "fields": {
-      "is_seed_data": false,
+      "is_seed_data": true,
       "is_deleted": false,
       "name": "arthexis",
       "description": "Power & Energy Infrastructure",
-      "author": "Rafael J. Guillén-Osorio",
+      "author": "Rafael J. Guill\u00e9n-Osorio",
       "email": "tecnologia@gelectriic.com",
       "python_requires": ">=3.10",
       "license": "GPL-3.0-only",

@@ -2,7 +2,8 @@
   {
     "model": "vehicle.brand",
     "fields": {
-      "name": "JAC"
+      "name": "JAC",
+      "is_seed_data": true
     }
   }
 ]

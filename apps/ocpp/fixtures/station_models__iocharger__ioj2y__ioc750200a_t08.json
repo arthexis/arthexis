@@ -8,7 +8,8 @@
       "max_power_kw": "7.50",
       "max_voltage_v": 480,
       "connector_type": "CCS Type 1",
-      "notes": "Factory 7.5kW single-port configuration for IOCHARGER IOJ2Y series."
+      "notes": "Factory 7.5kW single-port configuration for IOCHARGER IOJ2Y series.",
+      "is_seed_data": true
     }
   }
 ]

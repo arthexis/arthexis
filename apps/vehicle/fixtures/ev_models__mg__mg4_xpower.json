@@ -2,9 +2,12 @@
   {
     "model": "vehicle.evmodel",
     "fields": {
-      "brand": ["MG"],
+      "brand": [
+        "MG"
+      ],
       "name": "MG4 XPower",
-      "est_battery_kwh": "64.00"
+      "est_battery_kwh": "64.00",
+      "is_seed_data": true
     }
   }
 ]

@@ -2,7 +2,8 @@
   {
     "model": "vehicle.brand",
     "fields": {
-      "name": "MG"
+      "name": "MG",
+      "is_seed_data": true
     }
   }
 ]

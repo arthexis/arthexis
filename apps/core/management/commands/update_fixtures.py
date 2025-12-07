@@ -9,6 +9,8 @@ from django.conf import settings
 from django.core import serializers
 from django.core.management.base import BaseCommand
 
+from apps.core.fixtures import ensure_seed_data_flags
+
 
 class Command(BaseCommand):
     """Persist database changes back to fixture files."""
@@ -69,6 +71,6 @@ class Command(BaseCommand):
                 )
             else:
                 content = "[]"
-            if not content.endswith("\n"):
-                content += "\n"
+
+            content = ensure_seed_data_flags(content)
             path.write_text(content)

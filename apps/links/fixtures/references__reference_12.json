@@ -17,7 +17,8 @@
         [
           "arthexis.com"
         ]
-      ]
+      ],
+      "is_seed_data": true
     }
   }
 ]

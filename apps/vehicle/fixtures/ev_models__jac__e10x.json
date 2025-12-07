@@ -2,9 +2,12 @@
   {
     "model": "vehicle.evmodel",
     "fields": {
-      "brand": ["JAC"],
+      "brand": [
+        "JAC"
+      ],
       "name": "E10X",
-      "est_battery_kwh": "31.40"
+      "est_battery_kwh": "31.40",
+      "is_seed_data": true
     }
   }
 ]
