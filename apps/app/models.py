@@ -9,6 +9,10 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.core.entity import Entity
 
+DEFAULT_MODEL_WIKI_URLS: dict[tuple[str, str], str] = {
+    ("app", "app.Application"): "https://en.wikipedia.org/wiki/Application_software",
+}
+
 
 class ApplicationManager(models.Manager):
     def get_by_natural_key(self, name: str):
@@ -91,6 +95,7 @@ class ApplicationModel(models.Model):
     label = models.CharField(max_length=255)
     model_name = models.CharField(max_length=100)
     verbose_name = models.CharField(max_length=255, blank=True)
+    wiki_url = models.URLField(blank=True)
 
     class Meta:
         db_table = "pages_applicationmodel"
@@ -119,6 +124,13 @@ def _refresh_application_models(using: str) -> None:
         return
 
     for application in Application.objects.using(using).all():
+        existing_wiki_urls = {
+            model.label: model.wiki_url
+            for model in ApplicationModel.objects.using(using)
+            .filter(application=application)
+            .only("label", "wiki_url")
+        }
+
         try:
             app_config = django_apps.get_app_config(application.name)
         except LookupError:
@@ -130,6 +142,12 @@ def _refresh_application_models(using: str) -> None:
                 label=model._meta.label,
                 model_name=model._meta.model_name,
                 verbose_name=str(model._meta.verbose_name),
+                wiki_url=(
+                    existing_wiki_urls.get(model._meta.label, "")
+                    or DEFAULT_MODEL_WIKI_URLS.get(
+                        (application.name, model._meta.label), ""
+                    )
+                ),
             )
             for model in _get_models_for_application(app_config)
         ]

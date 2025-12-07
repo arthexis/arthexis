@@ -385,8 +385,8 @@ class ApplicationModelInline(admin.TabularInline):
     model = ApplicationModel
     extra = 0
     can_delete = False
-    fields = ("label", "model_name", "verbose_name")
-    readonly_fields = fields
+    fields = ("label", "model_name", "verbose_name", "wiki_url")
+    readonly_fields = ("label", "model_name", "verbose_name")
     ordering = ("label",)
 
     def has_add_permission(self, request, obj=None):  # pragma: no cover - admin UI
