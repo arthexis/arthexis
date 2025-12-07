@@ -459,7 +459,7 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
                         close()
         updated = 0
         restored = 0
-        missing: list[str] = []
+        missing: list[tuple[str, datetime.datetime | None]] = []
 
         for version, files in releases.items():
             release_on = self._release_on_from_files(files)
@@ -484,7 +484,7 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
                 if update_fields:
                     release.save(update_fields=update_fields)
                 continue
-            missing.append(version)
+            missing.append((version, release_on))
 
         if updated or restored:
             PackageRelease.dump_fixture()
@@ -503,13 +503,26 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             self.message_user(request, "No matching releases found", messages.INFO)
 
         if missing:
-            versions = ", ".join(sorted(missing))
-            count = len(missing)
+            new_releases = [
+                PackageRelease(
+                    package=package,
+                    release_manager=package.release_manager,
+                    version=version,
+                    pypi_url=f"https://pypi.org/project/{package.name}/{version}/",
+                    release_on=release_on,
+                )
+                for version, release_on in missing
+            ]
+            PackageRelease.objects.bulk_create(new_releases, ignore_conflicts=True)
+            PackageRelease.dump_fixture()
+
+            created_count = len(new_releases)
+            versions = ", ".join(sorted(version for version, _ in missing))
             message = (
-                "Manual creation required for "
-                f"{count} release{'s' if count != 1 else ''}: {versions}"
+                f"Created {created_count} release{'s' if created_count != 1 else ''} "
+                f"from PyPI: {versions}"
             )
-            self.message_user(request, message, messages.WARNING)
+            self.message_user(request, message, messages.SUCCESS)
 
     refresh_from_pypi.label = "Refresh from PyPI"
     refresh_from_pypi.short_description = "Refresh from PyPI"
