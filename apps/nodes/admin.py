@@ -85,6 +85,7 @@ from apps.ocpp.models import (
 )
 from apps.ocpp.network import serialize_charger_for_network
 from apps.locals.user_data import EntityModelAdmin
+from apps.core.system import _systemd_unit_status
 
 
 class NodeAdminForm(forms.ModelForm):
@@ -136,7 +137,7 @@ class NodeServiceAdmin(EntityModelAdmin):
         "template_content",
         "template_preview",
     )
-    actions = ["validate_service_configuration"]
+    actions = ["validate_service_configuration", "validate_service_active"]
 
     @admin.display(description=_("Template"))
     def template_preview(self, obj):
@@ -167,6 +168,38 @@ class NodeServiceAdmin(EntityModelAdmin):
                     "detail": detail,
                 }
                 self.message_user(request, message, level=messages.WARNING)
+
+    @admin.action(description=_("Validate Service is Active"))
+    def validate_service_active(self, request, queryset):
+        base_dir = Path(settings.BASE_DIR)
+        for service in queryset:
+            context = service.build_context(base_dir=base_dir)
+            unit_name = service.resolve_unit_name(context)
+            if not unit_name:
+                message = _("Could not resolve a unit name for %(service)s.") % {
+                    "service": service.display
+                }
+                self.message_user(request, message, level=messages.WARNING)
+                continue
+
+            status = _systemd_unit_status(unit_name)
+            unit_status = status.get("status") or str(_("unknown"))
+            enabled_state = status.get("enabled") or ""
+            if status.get("missing"):
+                message = _("%(unit)s is not installed.") % {"unit": unit_name}
+                level = messages.WARNING
+            elif unit_status == "active":
+                message = _("%(unit)s is active.") % {"unit": unit_name}
+                level = messages.SUCCESS
+            else:
+                detail = enabled_state or unit_status
+                message = _("%(unit)s is %(status)s.") % {
+                    "unit": unit_name,
+                    "status": detail,
+                }
+                level = messages.WARNING
+
+            self.message_user(request, message, level=level)
 
 
 @admin.register(NodeManager)
