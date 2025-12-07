@@ -898,11 +898,13 @@ service_was_active() {
   local service_name="$1"
 
   if [ -z "$service_name" ]; then
-    return 1
+    return 2
   fi
 
+  local unit_known=0
   if [ ${#SYSTEMCTL_CMD[@]} -gt 0 ] && \
      "${SYSTEMCTL_CMD[@]}" list-unit-files | awk '{print $1}' | grep -Fxq "${service_name}.service"; then
+    unit_known=1
     if "${SYSTEMCTL_CMD[@]}" is-active --quiet "$service_name"; then
       return 0
     fi
@@ -911,6 +913,10 @@ service_was_active() {
 
   if pgrep -f "manage.py runserver" >/dev/null 2>&1; then
     return 0
+  fi
+
+  if [ "$unit_known" -eq 0 ]; then
+    return 2
   fi
 
   return 1
@@ -1118,7 +1124,7 @@ upgrade_failure_recovery() {
     exit "$exit_code"
   fi
 
-  if [[ ${SERVICE_WAS_ACTIVE:-1} -eq 0 ]] && [[ $FORCE_START -eq 0 ]]; then
+  if [[ ${SERVICE_ACTIVITY_KNOWN:-0} -eq 1 ]] && [[ ${SERVICE_WAS_ACTIVE:-1} -eq 0 ]] && [[ $FORCE_START -eq 0 ]]; then
     echo "Automatic recovery skipped because services were stopped before the upgrade." >&2
     exit "$exit_code"
   fi
@@ -1286,10 +1292,23 @@ VENV_PRESENT=1
 [ -d .venv ] || VENV_PRESENT=0
 
 SERVICE_WAS_ACTIVE=0
+SERVICE_ACTIVITY_KNOWN=0
 if service_was_active "$SERVICE_NAME"; then
   SERVICE_WAS_ACTIVE=1
-elif [[ $RERUN_AFTER_SELF_UPDATE -eq 1 ]] && [[ ${RERUN_SERVICE_WAS_ACTIVE:-0} -eq 1 ]]; then
+  SERVICE_ACTIVITY_KNOWN=1
+else
+  case $? in
+    1)
+      SERVICE_ACTIVITY_KNOWN=1
+      ;;
+    2)
+      SERVICE_WAS_ACTIVE=1
+      ;;
+  esac
+fi
+if [[ $RERUN_AFTER_SELF_UPDATE -eq 1 ]] && [[ ${RERUN_SERVICE_WAS_ACTIVE:-0} -eq 1 ]]; then
   SERVICE_WAS_ACTIVE=1
+  SERVICE_ACTIVITY_KNOWN=1
 fi
 LCD_WAS_ACTIVE=0
 if lcd_service_was_active "$SERVICE_NAME"; then
