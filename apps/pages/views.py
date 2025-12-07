@@ -760,7 +760,6 @@ class InvitationRequestForm(forms.Form):
         return cleaned
 
 
-@csrf_exempt
 @ensure_csrf_cookie
 def request_invite(request):
     form = InvitationRequestForm(request.POST if request.method == "POST" else None)
