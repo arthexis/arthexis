@@ -1,0 +1,49 @@
+{% load i18n %}
+<div class="module wiki-summary-module" role="note" aria-label="{% translate 'Wikipedia description' %}">
+  <style>
+    .wiki-summary-widget {
+      margin: 0 0 1rem;
+      padding: 0.75rem 1rem;
+      border: 1px solid var(--hairline-color, #e5e7eb);
+      border-radius: 8px;
+      background: var(--darkened-bg, #f8fafc);
+    }
+
+    .wiki-summary-widget__header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      justify-content: space-between;
+      margin-bottom: 0.35rem;
+    }
+
+    .wiki-summary-widget__title {
+      margin: 0;
+      font-size: 1rem;
+      font-weight: 700;
+    }
+
+    .wiki-summary-widget__link {
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+
+    .wiki-summary-widget__body {
+      margin: 0;
+      color: var(--body-fg, #0f172a);
+      line-height: 1.45;
+      white-space: pre-line;
+    }
+  </style>
+  <div class="wiki-summary-widget">
+    <div class="wiki-summary-widget__header">
+      <p class="wiki-summary-widget__title">{{ summary.title }}</p>
+      {% if summary.url %}
+        <a class="wiki-summary-widget__link" href="{{ summary.url }}" target="_blank" rel="noopener">
+          {% translate "Open on Wikipedia" %}
+        </a>
+      {% endif %}
+    </div>
+    <p class="wiki-summary-widget__body">{{ summary.extract }}</p>
+  </div>
+</div>

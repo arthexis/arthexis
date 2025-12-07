@@ -42,6 +42,7 @@ include-package-data = true
 "apps.locale" = ["**/*"]
 "apps.docs" = ["**/*"]
 "apps.wikis" = ["**/*"]
+"apps.widgets" = ["**/*"]
 config = ["**/*"]
 
 [tool.pytest.ini_options]

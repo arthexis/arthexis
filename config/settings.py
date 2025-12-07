@@ -444,6 +444,7 @@ LOCAL_APPS = [
     "apps.aws",
     "apps.socials",
     "apps.modules",
+    "apps.widgets",
     "apps.pages",
     "apps.cards",
     "apps.tasks",
