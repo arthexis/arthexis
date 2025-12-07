@@ -349,6 +349,22 @@
     .app-caption-inner .section {
         flex: 1 1 auto;
     }
+    .dashboard-main .dashboard-model-heading {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+    }
+    .dashboard-main .dashboard-model-name {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+    .dashboard-main .dashboard-model-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin-left: auto;
+    }
     .dashboard-main .badge-counter,
     .dashboard-main .lead-open-badge,
     .dashboard-main .node-count-badge,
@@ -358,7 +374,7 @@
         align-items: center;
         justify-content: center;
         margin-left: 8px;
-        padding: 0.125rem 0.5rem;
+        padding: 0 0.5rem;
         min-width: 1.5rem;
         font-size: 0.75rem;
         font-weight: 600;
@@ -461,6 +477,18 @@
             gap: 8px;
             padding: 0;
             margin: 0;
+        }
+
+        .dashboard-main .dashboard-model-heading {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            flex: 1 1 auto;
+        }
+
+        .dashboard-main .dashboard-model-name {
+            flex: 1 1 auto;
+            min-width: 0;
         }
 
         .dashboard-main .module th[scope="row"] .favorite-star {
