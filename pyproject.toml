@@ -43,6 +43,7 @@ include-package-data = true
 "apps.docs" = ["**/*"]
 "apps.wikis" = ["**/*"]
 "apps.widgets" = ["**/*"]
+"apps.release" = ["**/*"]
 config = ["**/*"]
 
 [tool.pytest.ini_options]
