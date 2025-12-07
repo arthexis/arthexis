@@ -21,7 +21,7 @@ def _app_name(app: Any) -> str:
     slug="wikipedia-summary",
     name=_("Wikipedia summary"),
     zone=WidgetZone.ZONE_APPLICATION,
-    template_name="wikis/widgets/wiki_summary.html",
+    template_name="widgets/wiki_summary.html",
     description=_("Show a Wikipedia description for the current application."),
 )
 def wikipedia_summary_widget(*, app=None, **_kwargs):
