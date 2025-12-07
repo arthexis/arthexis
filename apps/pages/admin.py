@@ -46,7 +46,7 @@ from apps.meta.models import WhatsAppChatBridge
 from apps.odoo.models import OdooChatBridge
 from apps.release.models import ReleaseManager
 from apps.locals.user_data import EntityModelAdmin
-from apps.app.models import Application
+from apps.app.models import Application, ApplicationModel
 from apps.nodes.forms import NodeRoleMultipleChoiceField
 
 
@@ -381,12 +381,25 @@ class ApplicationInstalledListFilter(admin.SimpleListFilter):
         return queryset.exclude(name__in=installed_values)
 
 
+class ApplicationModelInline(admin.TabularInline):
+    model = ApplicationModel
+    extra = 0
+    can_delete = False
+    fields = ("label", "model_name", "verbose_name")
+    readonly_fields = fields
+    ordering = ("label",)
+
+    def has_add_permission(self, request, obj=None):  # pragma: no cover - admin UI
+        return False
+
+
 @admin.register(Application)
 class ApplicationAdmin(EntityModelAdmin):
     form = ApplicationForm
     list_display = ("name", "order", "app_verbose_name", "description", "installed")
     search_fields = ("name", "description")
     readonly_fields = ("installed",)
+    inlines = (ApplicationModelInline,)
     list_filter = (
         ApplicationInstalledListFilter,
         "order",
