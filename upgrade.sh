@@ -671,6 +671,7 @@ FORCE_START=0
 NO_WARN=0
 LOCAL_ONLY=0
 DETACHED=0
+CHECK_ONLY=0
 REQUESTED_BRANCH=""
 FORWARDED_ARGS=()
 # Parse CLI options controlling the upgrade strategy.
@@ -721,6 +722,10 @@ while [[ $# -gt 0 ]]; do
     --no-nginx)
       DISABLE_NGINX=1
       FORWARDED_ARGS+=("$1")
+      shift
+      ;;
+    --check)
+      CHECK_ONLY=1
       shift
       ;;
     --branch)
@@ -1326,7 +1331,7 @@ if [[ $SERVICE_WAS_ACTIVE -eq 1 ]] && [[ $UPGRADE_PLANNED -eq 1 ]]; then
 fi
 
 # Stop running instance only if the node is installed
-if [[ $VENV_PRESENT -eq 1 ]]; then
+if [[ $CHECK_ONLY -ne 1 ]] && [[ $VENV_PRESENT -eq 1 ]]; then
   echo "Stopping running instance..."
   STOP_ARGS=(--all)
   if [[ $FORCE_STOP -eq 1 ]]; then
@@ -1345,6 +1350,11 @@ if [[ $VENV_PRESENT -eq 1 ]]; then
 # Pull latest changes
 if [[ $LOCAL_ONLY -eq 1 ]]; then
   echo "Skipping git pull for local refresh."
+  if [[ $CHECK_ONLY -eq 1 ]]; then
+    echo "Upgrade check complete; no remote updates were pulled."
+    restore_stashed_changes_after_upgrade
+    exit 0
+  fi
 else
   echo "Pulling latest changes..."
   stash_local_changes_for_upgrade
@@ -1357,6 +1367,12 @@ else
   fi
   if [ -n "$INITIAL_UPGRADE_HASH" ] && [ -n "$POST_PULL_UPGRADE_HASH" ] && \
      [ "$POST_PULL_UPGRADE_HASH" != "$INITIAL_UPGRADE_HASH" ]; then
+    if [[ $CHECK_ONLY -eq 1 ]]; then
+      echo "upgrade.sh was updated during git pull; run ./upgrade.sh without --check to continue with the new script."
+      restore_stashed_changes_after_upgrade
+      exit 0
+    fi
+
     {
       printf 'REMOTE_VERSION=%s\n' "$REMOTE_VERSION"
       printf 'SERVICE_WAS_ACTIVE=%s\n' "$SERVICE_WAS_ACTIVE"
@@ -1364,6 +1380,12 @@ else
     } > "$UPGRADE_RERUN_LOCK"
     echo "upgrade.sh was updated during git pull; please run the upgrade again to use the new script." >&2
     exit "$UPGRADE_RERUN_EXIT_CODE"
+  fi
+
+  if [[ $CHECK_ONLY -eq 1 ]]; then
+    echo "Upgrade check complete; upgrade.sh did not change. No follow-up upgrade run is required for the script itself."
+    restore_stashed_changes_after_upgrade
+    exit 0
   fi
 fi
 
