@@ -36,14 +36,15 @@ def open_lead_count(badge=None):
 def rfid_release_stats(badge=None):
     counts = RFID.objects.aggregate(
         total=Count("pk"),
-        released_allowed=Count("pk", filter=Q(released=True, allowed=True)),
+        released=Count("pk", filter=Q(released=True)),
     )
-    released_allowed = counts.get("released_allowed") or 0
+    released = counts.get("released") or 0
     total = counts.get("total") or 0
-    label = gettext(
-        "%(released_allowed)s released and allowed RFIDs out of %(registered)s registered RFIDs"
-    ) % {"released_allowed": released_allowed, "registered": total}
-    return BadgeCounterResult(primary=released_allowed, secondary=total, label=label)
+    label = gettext("%(released)s released RFIDs out of %(registered)s registered RFIDs") % {
+        "released": released,
+        "registered": total,
+    }
+    return BadgeCounterResult(primary=released, secondary=total, label=label)
 
 
 def charger_availability_stats(badge=None):
