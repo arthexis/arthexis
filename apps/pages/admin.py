@@ -20,7 +20,7 @@ from django.http import (
 )
 from django.utils import timezone
 from django.db.models import Count
-from django.core.exceptions import FieldError
+from django.core.exceptions import FieldDoesNotExist, FieldError
 from django.db.models.functions import TruncDate
 from datetime import datetime, time, timedelta
 import ipaddress
@@ -122,7 +122,7 @@ class SiteAdmin(DjangoSiteAdmin):
         "managed",
         "require_https",
     )
-    list_select_related = ("default_landing",)
+    list_select_related = ()
     list_filter = (ManagedSiteListFilter, RequireHttpsListFilter)
     def _has_siteproxy_permission(self, request, action: str) -> bool:
         """Return True when the user has the requested proxy or sites perm."""
@@ -182,6 +182,14 @@ class SiteAdmin(DjangoSiteAdmin):
             ),
             messages.INFO,
         )
+
+    def get_queryset(self, request):
+        queryset = super().get_queryset(request)
+        try:
+            Site._meta.get_field("default_landing")
+        except FieldDoesNotExist:
+            return queryset
+        return queryset.select_related("default_landing")
 
     def _reload_site_fixtures(self, request):
         fixtures_dir = Path(settings.BASE_DIR) / "apps" / "links" / "fixtures"
