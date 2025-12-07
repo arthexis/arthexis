@@ -48,10 +48,89 @@
       }
       const metaLabel = document.getElementById('viewhistory-meta');
       const emptyLabel = document.getElementById('viewhistory-empty');
+      const chartJsUrl = '{% static "core/vendor/chart.umd.min.js" %}';
 
-      fetch("{{ chart_endpoint }}", {headers: {"Accept": "application/json"}})
-        .then((response) => response.ok ? response.json() : Promise.reject(response))
-        .then((data) => {
+      const waitForChart = (resolve) => {
+        if (window.Chart) {
+          resolve(window.Chart);
+          return true;
+        }
+        return false;
+      };
+
+      const ensureChartJs = () => {
+        const existing = document.querySelector('script[data-chartjs]');
+        if (existing) {
+          if (existing.dataset.chartjsState === 'error') {
+            return Promise.resolve(null);
+          }
+
+          if (existing.dataset.chartjsState !== 'loaded') {
+            return new Promise((resolve) => {
+              existing.addEventListener(
+                'load',
+                () => {
+                  existing.dataset.chartjsState = 'loaded';
+                  resolve(window.Chart || null);
+                },
+                { once: true },
+              );
+              existing.addEventListener(
+                'error',
+                () => {
+                  existing.dataset.chartjsState = 'error';
+                  resolve(null);
+                },
+                { once: true },
+              );
+            });
+          }
+
+          return Promise.resolve(window.Chart || null);
+        }
+
+        return new Promise((resolve) => {
+          const script = document.createElement('script');
+          script.src = chartJsUrl;
+          script.async = true;
+          script.dataset.chartjs = 'true';
+          script.dataset.chartjsState = 'loading';
+          script.addEventListener(
+            'load',
+            () => {
+              script.dataset.chartjsState = 'loaded';
+              resolve(window.Chart || null);
+            },
+            { once: true },
+          );
+          script.addEventListener(
+            'error',
+            () => {
+              script.dataset.chartjsState = 'error';
+              resolve(null);
+            },
+            { once: true },
+          );
+          document.head.appendChild(script);
+        });
+      };
+
+      const chartEndpoint = new URL('{{ chart_endpoint }}', window.location);
+
+      const fetchData = () =>
+        fetch(chartEndpoint.toString(), {
+          headers: { Accept: 'application/json' },
+          credentials: 'same-origin',
+        }).then((response) => (response.ok ? response.json() : Promise.reject()));
+
+      ensureChartJs()
+        .then((Chart) => {
+          if (!Chart && !waitForChart(() => {})) {
+            throw new Error('Chart.js unavailable');
+          }
+          return fetchData().then((data) => ({ Chart: window.Chart, data }));
+        })
+        .then(({ Chart, data }) => {
           if (!data || !Array.isArray(data.labels) || !Array.isArray(data.datasets)) {
             throw new Error('Invalid chart data');
           }
