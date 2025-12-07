@@ -1,0 +1,22 @@
+[
+  {
+    "model": "release.package",
+    "fields": {
+      "is_seed_data": false,
+      "is_deleted": false,
+      "name": "arthexis",
+      "description": "Power & Energy Infrastructure",
+      "author": "Rafael J. Guillén-Osorio",
+      "email": "tecnologia@gelectriic.com",
+      "python_requires": ">=3.10",
+      "license": "GPL-3.0-only",
+      "repository_url": "https://github.com/arthexis/arthexis",
+      "homepage_url": "https://arthexis.com",
+      "version_path": "",
+      "dependencies_path": "",
+      "test_command": "",
+      "release_manager": null,
+      "is_active": true
+    }
+  }
+]
