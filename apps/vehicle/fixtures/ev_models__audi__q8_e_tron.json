@@ -2,9 +2,12 @@
   {
     "model": "vehicle.evmodel",
     "fields": {
-      "brand": ["Audi"],
+      "brand": [
+        "Audi"
+      ],
       "name": "Q8 e-tron",
-      "est_battery_kwh": "106.00"
+      "est_battery_kwh": "106.00",
+      "is_seed_data": true
     }
   }
 ]

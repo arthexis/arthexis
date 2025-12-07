@@ -2,9 +2,12 @@
   {
     "model": "vehicle.evmodel",
     "fields": {
-      "brand": ["Volvo"],
+      "brand": [
+        "Volvo"
+      ],
       "name": "EX30",
-      "est_battery_kwh": "69.00"
+      "est_battery_kwh": "69.00",
+      "is_seed_data": true
     }
   }
 ]

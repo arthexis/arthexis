@@ -2,9 +2,12 @@
   {
     "model": "vehicle.evmodel",
     "fields": {
-      "brand": ["Tesla"],
+      "brand": [
+        "Tesla"
+      ],
       "name": "Model 3 RWD",
-      "est_battery_kwh": "57.50"
+      "est_battery_kwh": "57.50",
+      "is_seed_data": true
     }
   }
 ]

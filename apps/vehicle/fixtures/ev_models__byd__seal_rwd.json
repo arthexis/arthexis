@@ -2,9 +2,12 @@
   {
     "model": "vehicle.evmodel",
     "fields": {
-      "brand": ["BYD"],
+      "brand": [
+        "BYD"
+      ],
       "name": "SEAL RWD",
-      "est_battery_kwh": "61.40"
+      "est_battery_kwh": "61.40",
+      "is_seed_data": true
     }
   }
 ]

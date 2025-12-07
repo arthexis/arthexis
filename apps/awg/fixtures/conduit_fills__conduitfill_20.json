@@ -16,7 +16,8 @@
       "awg_00": 3,
       "awg_0000": 1,
       "awg_3": 7,
-      "awg_2": 6
+      "awg_2": 6,
+      "is_seed_data": true
     }
   }
 ]

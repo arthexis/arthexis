@@ -2,9 +2,12 @@
   {
     "model": "vehicle.evmodel",
     "fields": {
-      "brand": ["BYD"],
+      "brand": [
+        "BYD"
+      ],
       "name": "Dolphin",
-      "est_battery_kwh": "60.50"
+      "est_battery_kwh": "60.50",
+      "is_seed_data": true
     }
   }
 ]

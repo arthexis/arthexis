@@ -11,7 +11,8 @@
       "phases": 2,
       "temperature": 60,
       "ground": 1,
-      "show_in_pages": true
+      "show_in_pages": true,
+      "is_seed_data": true
     }
   }
 ]

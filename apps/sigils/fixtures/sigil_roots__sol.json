@@ -2,7 +2,7 @@
   {
     "model": "sigils.sigilroot",
     "fields": {
-      "is_seed_data": false,
+      "is_seed_data": true,
       "is_deleted": false,
       "prefix": "SOL",
       "context_type": "entity",

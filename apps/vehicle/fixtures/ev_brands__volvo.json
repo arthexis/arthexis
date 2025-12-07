@@ -2,7 +2,8 @@
   {
     "model": "vehicle.brand",
     "fields": {
-      "name": "Volvo"
+      "name": "Volvo",
+      "is_seed_data": true
     }
   }
 ]

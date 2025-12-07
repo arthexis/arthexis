@@ -2,9 +2,12 @@
   {
     "model": "vehicle.evmodel",
     "fields": {
-      "brand": ["Volkswagen"],
+      "brand": [
+        "Volkswagen"
+      ],
       "name": "ID.4",
-      "est_battery_kwh": "82.00"
+      "est_battery_kwh": "82.00",
+      "is_seed_data": true
     }
   }
 ]

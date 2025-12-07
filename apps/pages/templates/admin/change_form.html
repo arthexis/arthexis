@@ -16,6 +16,20 @@
     .inline-heading {
       scroll-margin-top: 80px;
     }
+
+    .seed-data-warning {
+      margin: 0 0 12px;
+      padding: 12px;
+      border-radius: 4px;
+      border-left: 4px solid #ffb300;
+      background: #fff8e1;
+      color: #5f4300;
+    }
+
+    .seed-data-warning strong {
+      display: block;
+      margin-bottom: 4px;
+    }
   </style>
   {% include "admin/includes/related_models_styles.html" %}
 {% endblock %}
@@ -92,7 +106,17 @@
 {% endfor %}
 {% endblock %}
 
-{% block after_related_objects %}{% endblock %}
+{% block after_related_objects %}
+  {{ block.super }}
+  {% if original and original.is_seed_data %}
+    <div class="seed-data-warning">
+      <strong>{% translate "Seed data item" %}</strong>
+      <div>
+        {% translate "This record comes from seed data and may be replaced during an upgrade." %}
+      </div>
+    </div>
+  {% endif %}
+{% endblock %}
 
 {% block submit_buttons_bottom %}{% submit_row %}{% endblock %}
 

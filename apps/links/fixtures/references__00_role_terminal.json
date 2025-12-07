@@ -3,7 +3,8 @@
     "model": "nodes.noderole",
     "fields": {
       "name": "Terminal",
-      "description": ""
+      "description": "",
+      "is_seed_data": true
     }
   }
 ]
