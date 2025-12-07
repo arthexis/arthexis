@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import re
+from typing import Iterable
 
 from django.apps import apps as django_apps
-from django.db import models
+from django.db import connections, models, transaction
 from django.utils.translation import gettext_lazy as _
 
 from apps.core.entity import Entity
@@ -79,3 +80,67 @@ class Application(Entity):
     def format_display_name(name: str) -> str:
         cleaned_name = re.sub(r"^\s*\d+\.\s*", "", name or "").strip()
         return cleaned_name or str(name or "")
+
+
+class ApplicationModel(models.Model):
+    application = models.ForeignKey(
+        Application,
+        on_delete=models.CASCADE,
+        related_name="models",
+    )
+    label = models.CharField(max_length=255)
+    model_name = models.CharField(max_length=100)
+    verbose_name = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        db_table = "pages_applicationmodel"
+        verbose_name = _("Application model")
+        verbose_name_plural = _("Application models")
+        unique_together = ("application", "label")
+        ordering = ("label",)
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return self.label
+
+
+def _get_models_for_application(app_config) -> Iterable[type[models.Model]]:
+    return app_config.get_models() if app_config else []
+
+
+def _refresh_application_models(using: str) -> None:
+    connection = connections[using]
+    existing_tables = set(connection.introspection.table_names())
+    required_tables = {
+        Application._meta.db_table,
+        ApplicationModel._meta.db_table,
+    }
+
+    if not required_tables.issubset(existing_tables):
+        return
+
+    for application in Application.objects.using(using).all():
+        try:
+            app_config = django_apps.get_app_config(application.name)
+        except LookupError:
+            app_config = None
+
+        application_models = [
+            ApplicationModel(
+                application=application,
+                label=model._meta.label,
+                model_name=model._meta.model_name,
+                verbose_name=str(model._meta.verbose_name),
+            )
+            for model in _get_models_for_application(app_config)
+        ]
+
+        with transaction.atomic(using=using):
+            ApplicationModel.objects.using(using).filter(
+                application=application
+            ).delete()
+            ApplicationModel.objects.using(using).bulk_create(application_models)
+
+
+def refresh_application_models(using: str | None = None, **kwargs) -> None:
+    database = using or kwargs.get("using") or "default"
+    _refresh_application_models(database)
