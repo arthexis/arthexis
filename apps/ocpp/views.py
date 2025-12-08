@@ -2698,6 +2698,7 @@ def _handle_cancel_reservation(context: ActionContext, data: dict) -> JsonRespon
     )
 
 
+@protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "UnlockConnector")
 @protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "UnlockConnector")
 def _handle_unlock_connector(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
     connector_value: int | None = context.connector_value
@@ -2884,6 +2885,7 @@ def _handle_trigger_message(context: ActionContext, data: dict) -> JsonResponse 
     )
 
 
+@protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "SendLocalList")
 @protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "SendLocalList")
 def _handle_send_local_list(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
     entries = data.get("localAuthorizationList")
@@ -3098,6 +3100,7 @@ def _handle_update_firmware(context: ActionContext, data: dict) -> JsonResponse 
     )
 
 
+@protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "SetChargingProfile")
 @protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "SetChargingProfile")
 def _handle_set_charging_profile(
     context: ActionContext, data: dict
