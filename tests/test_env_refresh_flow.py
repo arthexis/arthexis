@@ -94,3 +94,17 @@ def test_env_refresh_leaves_no_pending_migrations(refreshed_environment, env_ref
 
     executor = MigrationExecutor(connection)
     assert executor.loader.detect_conflicts() == {}
+
+
+@pytest.mark.usefixtures("refreshed_environment")
+def test_public_site_is_reachable(client):
+    response = client.get("/")
+
+    assert response.status_code == 200
+
+
+@pytest.mark.usefixtures("refreshed_environment")
+def test_admin_is_reachable(client):
+    response = client.get("/admin/", follow=True)
+
+    assert response.status_code == 200
