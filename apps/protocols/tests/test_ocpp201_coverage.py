@@ -10,7 +10,7 @@ from apps.protocols.registry import (
 )
 
 
-class Ocpp16CoverageTests(TestCase):
+class Ocpp201CoverageTests(TestCase):
     fixtures = ["protocols.json"]
 
     def setUp(self):
@@ -29,8 +29,8 @@ class Ocpp16CoverageTests(TestCase):
             module = reload(module)
             rehydrate_from_module(module)
 
-    def test_all_ocpp16_calls_have_registered_paths(self):
-        protocol = Protocol.objects.get(slug="ocpp16")
+    def test_all_ocpp201_calls_have_registered_paths(self):
+        protocol = Protocol.objects.get(slug="ocpp201")
         missing: list[str] = []
         for call in protocol.calls.order_by("direction", "name"):
             registered = get_registered_calls(protocol.slug, call.direction)
