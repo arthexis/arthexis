@@ -1,6 +1,7 @@
 import asyncio
 import json
 import base64
+import asyncio
 from urllib.parse import urlparse
 
 import pytest
@@ -199,6 +200,80 @@ def test_pending_connection_replaced_on_reconnect():
 
         await second.disconnect()
         await first.wait()
+
+    async_to_sync(run_scenario)()
+
+
+@override_settings(ROOT_URLCONF="apps.ocpp.urls")
+def test_assign_connector_rebinds_store_preserves_state():
+    async def run_scenario():
+        serial = "CP-CONNECTOR-REASSIGN"
+        path = f"/{serial}"
+
+        pending_key = store.pending_key(serial)
+        aggregate_key = store.identity_key(serial, None)
+        connector_key = store.identity_key(serial, 1)
+
+        communicator = WebsocketCommunicator(application, path)
+        connected, _ = await communicator.connect()
+        assert connected is True
+
+        consumer = store.connections[pending_key]
+
+        boot_notification = [
+            2,
+            "boot-1",
+            "BootNotification",
+            {"chargePointModel": "UnitTest", "chargePointVendor": "UnitVendor"},
+        ]
+        await communicator.send_json_to(boot_notification)
+        boot_reply = await communicator.receive_json_from()
+        assert boot_reply[0] == 3
+
+        assert store.connections.get(aggregate_key) is consumer
+        assert store.connections.get(pending_key) is None
+
+        store.start_session_log(aggregate_key, tx_id=101)
+        store.add_session_message(aggregate_key, "boot-message")
+        store.add_log(aggregate_key, "pre-connector log", log_type="charger")
+
+        status_notification = [
+            2,
+            "status-1",
+            "StatusNotification",
+            {"connectorId": 1, "status": "Available", "errorCode": "NoError"},
+        ]
+        await communicator.send_json_to(status_notification)
+        status_reply = await communicator.receive_json_from()
+        assert status_reply[0] == 3
+
+        assert store.connections.get(connector_key) is consumer
+        assert store.connections.get(aggregate_key) is None
+
+        charger_logs = list(store.logs["charger"].get(connector_key, []))
+        assert any("pre-connector log" in entry for entry in charger_logs)
+
+        session_history = store.history.get(connector_key)
+        assert session_history is not None
+        assert any("boot-message" in chunk for chunk in session_history["buffer"])
+
+        async def fetch_chargers():
+            aggregate = await database_sync_to_async(Charger.objects.get)(
+                charger_id=serial, connector_id=None
+            )
+            connector = await database_sync_to_async(Charger.objects.get)(
+                charger_id=serial, connector_id=1
+            )
+            return aggregate, connector
+
+        aggregate, connector = await fetch_chargers()
+        assert aggregate.pk is not None
+        assert connector.pk is not None
+
+        await asyncio.sleep(0.05)
+        assert communicator.future.done() is False
+
+        await communicator.disconnect()
 
     async_to_sync(run_scenario)()
 
