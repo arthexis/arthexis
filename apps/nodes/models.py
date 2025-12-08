@@ -58,6 +58,30 @@ logger = logging.getLogger(__name__)
 ROLE_RENAMES: dict[str, str] = {"Constellation": "Watchtower"}
 
 
+class Platform(Entity):
+    """Supported hardware and operating system combinations."""
+
+    name = models.CharField(max_length=100, unique=True)
+    hardware = models.CharField(max_length=100)
+    architecture = models.CharField(max_length=50, blank=True)
+    os_name = models.CharField(max_length=100)
+    os_version = models.CharField(max_length=50)
+
+    class Meta:
+        ordering = ["name"]
+        verbose_name = "Platform"
+        verbose_name_plural = "Platforms"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["hardware", "architecture", "os_name", "os_version"],
+                name="nodes_platform_hardware_os_unique",
+            )
+        ]
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return self.name
+
+
 def _upgrade_in_progress() -> bool:
     lock_file = Path(settings.BASE_DIR) / ".locks" / "upgrade_in_progress.lck"
     return lock_file.exists()
