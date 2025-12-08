@@ -23,6 +23,7 @@ class Ocpp21CoverageTests(TestCase):
             "apps.ocpp.views.actions",
             "apps.ocpp.tasks",
             "apps.ocpp.admin",
+            "apps.ocpp.coverage_stubs",
         ):
             module = import_module(module_path)
             module = reload(module)
