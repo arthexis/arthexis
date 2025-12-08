@@ -23,6 +23,7 @@ from apps.core.auto_upgrade import (
     AUTO_UPGRADE_FALLBACK_INTERVAL,
     AUTO_UPGRADE_INTERVAL_MINUTES,
     DEFAULT_AUTO_UPGRADE_MODE,
+    auto_upgrade_base_dir,
 )
 from apps.release import release_workflow
 from django.conf import settings
@@ -140,12 +141,7 @@ def _auto_upgrade_log_path(base_dir: Path) -> Path:
 def _project_base_dir() -> Path:
     """Return the filesystem base directory for runtime operations."""
 
-    base_dir = getattr(settings, "BASE_DIR", None)
-    if not base_dir:
-        return Path(__file__).resolve().parent.parent
-    if isinstance(base_dir, Path):
-        return base_dir
-    return Path(str(base_dir))
+    return auto_upgrade_base_dir()
 
 
 def _append_auto_upgrade_log(base_dir: Path, message: str) -> None:
