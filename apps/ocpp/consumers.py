@@ -323,12 +323,12 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         preferred_normalized = (preferred or "").strip()
         if preferred_normalized and preferred_normalized in available:
             return preferred_normalized
-        # Prefer the latest OCPP 2.0.1 protocol when the charger requests it,
-        # otherwise fall back to older versions.
+        # Prefer the latest supported OCPP 2.x protocol when the charger
+        # requests it, otherwise fall back to older versions.
+        if "ocpp2.1" in available:
+            return "ocpp2.1"
         if "ocpp2.0.1" in available:
             return "ocpp2.0.1"
-        if "ocpp2.0" in available:
-            return "ocpp2.0"
         # Operational safeguard: never reject a charger solely because it omits
         # or sends an unexpected subprotocol.  We negotiate ``ocpp1.6`` when the
         # charger offers it, but otherwise continue without a subprotocol so we
@@ -384,7 +384,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         subprotocol = self._select_subprotocol(offered, preferred_version)
         self.preferred_ocpp_version = preferred_version
         negotiated_version = subprotocol
-        if not negotiated_version and preferred_version in {"ocpp2.0", "ocpp2.0.1"}:
+        if not negotiated_version and preferred_version in {"ocpp2.0.1", "ocpp2.1"}:
             negotiated_version = preferred_version
         self.ocpp_version = negotiated_version or "ocpp1.6"
         if existing_charger and existing_charger.requires_ws_auth:
