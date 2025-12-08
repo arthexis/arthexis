@@ -1,3 +1,5 @@
+import json
+
 import pytest
 from django.contrib.auth import get_user_model
 from django.contrib.contenttypes.models import ContentType
@@ -42,3 +44,60 @@ def test_user_data_persisted_and_reloaded_after_db_flush(tmp_path):
     restored = Favorite.objects.get(user=user)
     assert restored.custom_label == "Example"
     assert restored.is_user_data is True
+
+
+@pytest.mark.django_db(transaction=True)
+def test_user_data_applied_after_seed_fixture(tmp_path):
+    user_model = get_user_model()
+    user = user_model.objects.create_user(
+        username="alice", password="password", data_path=str(tmp_path)
+    )
+    content_type = ContentType.objects.get_for_model(user_model)
+
+    seed_path = tmp_path / "seed_favorite.json"
+    seed_payload = [
+        {
+            "model": "locals.favorite",
+            "pk": 9999,
+            "fields": {
+                "user": user.pk,
+                "content_type": content_type.pk,
+                "custom_label": "Seed label",
+                "user_data": False,
+                "priority": 1,
+                "is_seed_data": True,
+            },
+        }
+    ]
+    seed_path.write_text(json.dumps(seed_payload))
+
+    user_fixture_path = user_data._data_dir(user) / "locals_favorite_9999.json"
+    user_fixture_payload = [
+        {
+            "model": "locals.favorite",
+            "pk": 9999,
+            "fields": {
+                "user": user.pk,
+                "content_type": content_type.pk,
+                "custom_label": "User label",
+                "user_data": True,
+                "priority": 2,
+                "is_user_data": True,
+            },
+        }
+    ]
+    user_fixture_path.write_text(json.dumps(user_fixture_payload))
+
+    call_command("load_user_data", str(seed_path), verbosity=0)
+
+    seeded = Favorite.objects.get(pk=9999)
+    assert seeded.custom_label == "Seed label"
+    assert seeded.is_seed_data is True
+    assert seeded.is_user_data is False
+
+    user_data.load_user_fixtures(user)
+
+    updated = Favorite.objects.get(pk=9999)
+    assert updated.custom_label == "User label"
+    assert updated.is_user_data is True
+    assert updated.is_seed_data is True
