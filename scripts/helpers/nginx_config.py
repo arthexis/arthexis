@@ -27,7 +27,7 @@ def maintenance_block() -> str:
     return textwrap.dedent(
         f"""
         error_page 404 /maintenance/404.html;
-        error_page 500 502 503 504 /maintenance/index.html;
+        error_page 500 502 503 504 /maintenance/app-down.html;
 
         location = /maintenance/index.html {{
             root {MAINTENANCE_ROOT};
@@ -35,6 +35,11 @@ def maintenance_block() -> str:
         }}
 
         location = /maintenance/404.html {{
+            root {MAINTENANCE_ROOT};
+            add_header Cache-Control \"no-store\";
+        }}
+
+        location = /maintenance/app-down.html {{
             root {MAINTENANCE_ROOT};
             add_header Cache-Control \"no-store\";
         }}

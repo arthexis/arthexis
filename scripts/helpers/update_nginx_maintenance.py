@@ -8,13 +8,17 @@ from pathlib import Path
 
 ERROR_LINES = (
     "error_page 404 /maintenance/404.html;",
-    "error_page 500 502 503 504 /maintenance/index.html;",
+    "error_page 500 502 503 504 /maintenance/app-down.html;",
 )
 INDEX_BLOCK = """location = /maintenance/index.html {
     root /usr/share/arthexis-fallback;
     add_header Cache-Control \"no-store\";
 }"""
 NOT_FOUND_BLOCK = """location = /maintenance/404.html {
+    root /usr/share/arthexis-fallback;
+    add_header Cache-Control \"no-store\";
+}"""
+DOWN_BLOCK = """location = /maintenance/app-down.html {
     root /usr/share/arthexis-fallback;
     add_header Cache-Control \"no-store\";
 }"""
@@ -81,6 +85,7 @@ def ensure_blocks(block: str) -> tuple[str, bool]:
     file_blocks = (
         ("location = /maintenance/index.html", INDEX_BLOCK),
         ("location = /maintenance/404.html", NOT_FOUND_BLOCK),
+        ("location = /maintenance/app-down.html", DOWN_BLOCK),
     )
 
     for identifier, block in file_blocks:
