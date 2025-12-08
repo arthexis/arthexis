@@ -2016,6 +2016,14 @@ def _system_changelog_report_data_view(request):
 def _trigger_upgrade_check(*, channel_override: str | None = None) -> bool:
     """Return ``True`` when the upgrade check was queued asynchronously."""
 
+    broker_url = str(getattr(settings, "CELERY_BROKER_URL", "")).strip()
+    if not broker_url or broker_url.startswith("memory://"):
+        if channel_override:
+            check_github_updates(channel_override=channel_override)
+        else:
+            check_github_updates()
+        return False
+
     try:
         if channel_override:
             check_github_updates.delay(channel_override=channel_override)

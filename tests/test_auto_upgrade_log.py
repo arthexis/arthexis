@@ -35,3 +35,22 @@ def test_auto_upgrade_report_reads_from_env_base(monkeypatch, settings, tmp_path
 
     assert report["log_entries"][0]["message"] == "logged entry"
     assert Path(report["settings"]["log_path"]) == log_file
+
+
+def test_trigger_upgrade_check_runs_inline_with_memory_broker(monkeypatch, settings):
+    calls: list[str | None] = []
+
+    class Runner:
+        def __call__(self, channel_override=None):
+            calls.append(channel_override)
+
+        def delay(self, channel_override=None):  # pragma: no cover - defensive
+            raise AssertionError("delay should not be used")
+
+    monkeypatch.setattr(system, "check_github_updates", Runner())
+    settings.CELERY_BROKER_URL = "memory://"
+
+    queued = system._trigger_upgrade_check()
+
+    assert not queued
+    assert calls == [None]
