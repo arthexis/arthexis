@@ -473,3 +473,33 @@ def test_basic_auth_accepts_authorized_user():
         assert any("Connected" in entry for entry in entries)
     else:
         assert auth_entries or connection_result.get("close_code") != 4003
+
+
+@override_settings(ROOT_URLCONF="apps.ocpp.urls")
+def test_unknown_extension_action_replies_with_empty_call_result():
+    async def run_scenario():
+        serial = "CP-EXT-ACTION"
+        communicator = WebsocketCommunicator(application, f"/{serial}")
+        connected, _ = await communicator.connect()
+        assert connected is True
+
+        message_id = "ext-call"
+        await communicator.send_json_to(
+            [2, message_id, "VendorSpecificAction", {"vendorId": "ACME"}]
+        )
+        response = await communicator.receive_json_from()
+        assert response == [3, message_id, {}]
+
+        follow_up_id = "ext-follow"
+        await communicator.send_json_to([2, follow_up_id, "AnotherVendorAction", {}])
+        follow_up_response = await communicator.receive_json_from()
+        assert follow_up_response == [3, follow_up_id, {}]
+
+        await communicator.disconnect()
+
+    async_to_sync(run_scenario)()
+
+    all_entries = [
+        entry for buffer in store.logs["charger"].values() for entry in buffer
+    ]
+    assert any('[3, "ext-call", {}]' in entry for entry in all_entries), all_entries
