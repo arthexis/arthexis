@@ -841,7 +841,20 @@ def _seed_data_view(request):
                 args=[obj.pk],
             )
             fixture = _seed_fixture_path(obj, index=fixture_index)
-            items.append({"url": url, "label": str(obj), "fixture": fixture})
+            try:
+                user_fixture = _fixture_path(request.user, obj)
+            except ValueError:
+                custom_override = False
+            else:
+                custom_override = user_fixture.exists()
+            items.append(
+                {
+                    "url": url,
+                    "label": str(obj),
+                    "fixture": fixture,
+                    "custom_override": custom_override,
+                }
+            )
         sections.append({"opts": model._meta, "items": items})
     context = admin.site.each_context(request)
     context.update({"title": _("Seed Data"), "sections": sections})
