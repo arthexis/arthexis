@@ -841,18 +841,17 @@ def _seed_data_view(request):
                 args=[obj.pk],
             )
             fixture = _seed_fixture_path(obj, index=fixture_index)
-            try:
-                user_fixture = _fixture_path(request.user, obj)
-            except ValueError:
-                custom_override = False
-            else:
-                custom_override = user_fixture.exists()
+            target_user = _resolve_fixture_user(obj, request.user)
+            allow_user_data = _user_allows_user_data(target_user)
+            custom = False
+            if allow_user_data and target_user:
+                custom = _fixture_path(target_user, obj).exists()
             items.append(
                 {
                     "url": url,
                     "label": str(obj),
                     "fixture": fixture,
-                    "custom_override": custom_override,
+                    "custom": custom,
                 }
             )
         sections.append({"opts": model._meta, "items": items})
