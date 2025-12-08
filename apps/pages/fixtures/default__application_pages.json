@@ -5,7 +5,8 @@
       "is_seed_data": true,
       "is_deleted": false,
       "name": "pages",
-      "description": "Scheduling, Periodicity and Event Signaling,"
+      "description": "Scheduling, Periodicity and Event Signaling,",
+      "importance": "critical"
     }
   }
 ]
