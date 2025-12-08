@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Dashboard Badge Counters Preview</title>
+    <style>
+      :root {
+        --body-quiet-color: #6b7280;
+        --button-bg: #0d6efd;
+        --button-fg: #ffffff;
+        --success-fg: #1e7f47;
+        --error-fg: #b42318;
+      }
+
+      body {
+        font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        margin: 0;
+        background: #f7f7f9;
+        color: #111827;
+      }
+
+      .dashboard-preview {
+        max-width: 960px;
+        margin: 32px auto;
+        padding: 24px;
+        background: #fff;
+        border-radius: 16px;
+        box-shadow: 0 15px 30px rgba(0, 0, 0, 0.08);
+      }
+
+      .dashboard-preview__title {
+        margin: 0 0 16px;
+        font-weight: 700;
+        font-size: 1.25rem;
+      }
+
+      .dashboard-table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      .dashboard-table th,
+      .dashboard-table td {
+        padding: 12px 10px;
+        border-bottom: 1px solid #e5e7eb;
+      }
+
+      .dashboard-model-heading {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        width: 100%;
+      }
+
+      .dashboard-model-name {
+        font-weight: 600;
+        flex: 1 1 auto;
+      }
+
+      .dashboard-model-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+        margin-left: auto;
+      }
+
+      .badge-counter,
+      .lead-open-badge,
+      .node-count-badge,
+      .rfid-release-badge,
+      .charger-availability-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        margin-left: 8px;
+        padding: 0 0.65rem;
+        min-width: 1.5rem;
+        font-size: 0.8rem;
+        font-weight: 700;
+        line-height: 1.1;
+        border-radius: 999px;
+        background-color: var(--button-bg);
+        color: var(--button-fg);
+        border: none;
+      }
+
+      .model-rule-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        margin-left: 8px;
+        font-size: 0.8rem;
+        font-weight: 700;
+      }
+
+      .model-rule-status__icon {
+        font-size: 0.85rem;
+        line-height: 1;
+      }
+
+      .model-rule-status--success {
+        color: var(--success-fg);
+      }
+
+      .model-rule-status--error {
+        color: var(--error-fg);
+      }
+
+      .rfid-release-separator {
+        font-weight: 700;
+        color: var(--body-quiet-color);
+      }
+
+      .badge-description {
+        margin: 8px 0 0;
+        color: #4b5563;
+        font-size: 0.95rem;
+      }
+    </style>
+  </head>
+  <body>
+    <section class="dashboard-preview">
+      <h1 class="dashboard-preview__title">Badge Counters on the Admin Dashboard</h1>
+      <p class="badge-description">
+        Badge counters render next to each model name in the dashboard table. They use HTMX
+        to fetch live values and are styled as rounded pills. Primary values appear first
+        and, when present, secondary values are separated by a bullet or slash character.
+      </p>
+      <table class="dashboard-table" aria-label="Dashboard models with badge counters">
+        <thead>
+          <tr>
+            <th scope="col">Model</th>
+            <th scope="col">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <th scope="row">
+              <span class="dashboard-model-heading">
+                <span class="dashboard-model-name">Accounts</span>
+                <span class="dashboard-model-status">
+                  <span class="badge-counter" title="Accounts">7 • 3</span>
+                  <span class="model-rule-status model-rule-status--success" title="All clear">
+                    <span class="model-rule-status__icon" aria-hidden="true">✔</span>
+                    <span class="model-rule-status__message">All clear</span>
+                  </span>
+                </span>
+              </span>
+            </th>
+            <td>Badges and rules fetched successfully.</td>
+          </tr>
+          <tr>
+            <th scope="row">
+              <span class="dashboard-model-heading">
+                <span class="dashboard-model-name">Deployments</span>
+                <span class="dashboard-model-status">
+                  <span class="badge-counter" title="Deployments">12</span>
+                  <span class="badge-counter rfid-release-badge" title="Pending Releases">4 / 10</span>
+                  <span class="model-rule-status model-rule-status--error" title="Needs attention">
+                    <span class="model-rule-status__icon" aria-hidden="true">!</span>
+                    <span class="model-rule-status__message">Needs attention</span>
+                  </span>
+                </span>
+              </span>
+            </th>
+            <td>Example with primary and secondary badge values.</td>
+          </tr>
+          <tr>
+            <th scope="row">
+              <span class="dashboard-model-heading">
+                <span class="dashboard-model-name">Sensors</span>
+                <span class="dashboard-model-status">
+                  <span class="node-count-badge" title="Nodes">128</span>
+                </span>
+              </span>
+            </th>
+            <td>Single badge counter without rule status.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+  </body>
+</html>
