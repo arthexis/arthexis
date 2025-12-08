@@ -60,6 +60,12 @@ check_github_updates.delay()
 ## Common issues
 
 - **watch-upgrade missing**: rerun `./env-refresh.sh` to install the helper.
+- **Permission denied copying watch-upgrade**: `/usr/local/bin` is usually
+  root-owned, so the copy step in `env-refresh.sh` needs write access. Grant the
+  invoking user permission to write to `/usr/local/bin` or ensure passwordless
+  `sudo` is available so the helper can be installed. When the helper is
+  missing, delegated upgrades cannot start because the transient systemd unit
+  launches `/usr/local/bin/watch-upgrade`.
 - **Permission denied on systemd-run**: grant the service user access or provide
   passwordless sudo for `systemd-run`.
 - **Service not restarted**: ensure `.locks/service.lck` contains the correct
