@@ -14,6 +14,7 @@ from django.contrib import admin, messages
 from django.http import HttpResponseNotAllowed
 from django.shortcuts import get_object_or_404, redirect
 from django.template.response import TemplateResponse
+from django.templatetags.static import static
 from django.urls import path, reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
