@@ -7,7 +7,7 @@ DEFAULT_APPLICATION_DESCRIPTIONS: Dict[str, str] = {
     "app": "Application registry and metadata.",
     "base": "Core configurations and shared utilities.",
     "cards": "Reusable UI cards and layout helpers.",
-    "celery_app": "Celery integration and scheduled task tooling.",
+    "celery": "Celery integration and scheduled task tooling.",
     "chats": "Chat messaging and conversational flows.",
     "awg": "Power, Energy and Cost calculations.",
     "content": "Static content blocks and editorial assets.",
