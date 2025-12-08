@@ -125,27 +125,48 @@ install_watch_upgrade_helper() {
     return 0
   fi
 
-  if [ ! -x "$helper_path" ]; then
-    chmod +x "$helper_path"
+  if [ ! -x "$helper_path" ] && [ -w "$helper_path" ]; then
+    chmod +x "$helper_path" 2>/dev/null || true
   fi
+
+  echo "Ensuring watch-upgrade helper for delegated/systemd auto-upgrades is available (optional)" >&2
 
   local target_dir
   target_dir="$(dirname "$target_path")"
 
-  local mkdir_cmd=(mkdir -p "$target_dir")
-  local copy_cmd=(cp "$helper_path" "$target_path")
-  local chmod_cmd=(chmod +x "$target_path")
-
+  local needs_sudo=0
   if [ ! -w "$target_dir" ] || { [ -f "$target_path" ] && [ ! -w "$target_path" ]; }; then
     if command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then
-      mkdir_cmd=(sudo -n mkdir -p "$target_dir")
-      copy_cmd=(sudo -n cp "$helper_path" "$target_path")
-      chmod_cmd=(sudo -n chmod +x "$target_path")
+      needs_sudo=1
+    else
+      echo "Skipping watch-upgrade helper installation: insufficient permissions for $target_dir." >&2
+      echo "Re-run env-refresh.sh with elevated privileges to install /usr/local/bin/watch-upgrade." >&2
+      return 0
     fi
   fi
 
-  "${mkdir_cmd[@]}" || return 0
-  "${copy_cmd[@]}" && "${chmod_cmd[@]}"
+  local -a prefix=()
+  if [ "$needs_sudo" -eq 1 ]; then
+    prefix=(sudo -n)
+  fi
+
+  if ! "${prefix[@]}" mkdir -p "$target_dir"; then
+    echo "Unable to create $target_dir; skipping watch-upgrade helper installation." >&2
+    echo "Re-run env-refresh.sh with appropriate privileges to complete installation." >&2
+    return 0
+  fi
+
+  if ! "${prefix[@]}" cp "$helper_path" "$target_path"; then
+    echo "Failed to copy watch-upgrade helper to $target_path; skipping installation." >&2
+    echo "Re-run env-refresh.sh with appropriate privileges to complete installation." >&2
+    return 0
+  fi
+
+  if ! "${prefix[@]}" chmod +x "$target_path"; then
+    echo "Unable to set executable permissions on $target_path; skipping installation." >&2
+    echo "Re-run env-refresh.sh with appropriate privileges to complete installation." >&2
+    return 0
+  fi
 }
 
 
@@ -208,7 +229,7 @@ elif [ -f "$REQ_FILE" ]; then
   fi
 fi
 
-install_watch_upgrade_helper
+install_watch_upgrade_helper || echo "watch-upgrade helper setup failed unexpectedly; delegated auto-upgrades may be unavailable"
 
 # Ensure systemd units run as the project owner, matching the install user.
 arthexis_update_systemd_service_user "$SCRIPT_DIR" "$SCRIPT_DIR/.locks" || true
