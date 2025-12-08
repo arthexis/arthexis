@@ -115,6 +115,8 @@ def check_charge_point_configuration(charger_pk: int) -> bool:
     return True
 
 
+@protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "GetLog")
+@protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "GetLog")
 @shared_task
 def request_charge_point_log(charger_pk: int, log_type: str = "Diagnostics") -> int:
     """Request logs from a connected charge point via GetLog."""
