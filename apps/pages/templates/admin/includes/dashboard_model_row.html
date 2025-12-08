@@ -31,7 +31,7 @@
               data-model-status-loader
               data-fallback-template="{{ status_container_id }}-fallback"
               hx-get="{% url 'admin:dashboard_model_status' %}?app={{ app_label }}&model={{ model.object_name|urlencode }}"
-              hx-trigger="revealed"
+              hx-trigger="intersect once"
               hx-swap="innerHTML"
               hx-on::after-request="if(!event.detail.successful){const fallback=document.getElementById(this.dataset.fallbackTemplate);if(fallback){this.innerHTML=fallback.innerHTML;}}"
               aria-live="polite"
