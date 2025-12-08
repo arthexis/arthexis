@@ -619,7 +619,7 @@ fi
 
 if [ "$ACTION_PERFORMED" = true ] && [ -z "$NODE_ROLE" ]; then
     if [ -n "$DEBUG_MODE" ]; then
-        if [ -n "$SERVICE" ] || [ -n "$UPGRADE_CHANNEL" ]; then
+        if [ -n "$SERVICE" ] || { [ -n "$UPGRADE_CHANNEL" ] && [ -z "$AUTO_UPGRADE_MODE" ]; }; then
             echo "--debug/--no-debug cannot be combined with service or upgrade options without specifying a node role" >&2
             usage
         fi
