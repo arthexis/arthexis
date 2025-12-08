@@ -31,6 +31,7 @@ from django.contrib.sites.requests import RequestSite
 from urllib.parse import urlsplit
 import django.utils.encoding as encoding
 from apps.celery.utils import resolve_celery_shutdown_timeout
+from config.whitenoise import add_headers as whitenoise_add_headers
 
 from config.settings_helpers import (
     discover_local_ip_addresses,
@@ -732,7 +733,7 @@ USE_TZ = True
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "static"
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
-WHITENOISE_ADD_HEADERS_FUNCTION = "config.whitenoise.add_headers"
+WHITENOISE_ADD_HEADERS_FUNCTION = whitenoise_add_headers
 
 # Allow development and freshly-updated environments to serve assets which have
 # not yet been collected into ``STATIC_ROOT``. Without this setting WhiteNoise
