@@ -31,24 +31,73 @@
 {% block title %}{% if title %}{{ title }} | {% endif %}{{ site_title|default:_('Django site admin') }}{% endblock %}
 {% block extrahead %}
 {{ block.super }}
-<script
-  src="https://unpkg.com/htmx.org@1.9.12/dist/htmx.min.js"
-  integrity="sha384-ujb1lZYygJmzgSwoxRggbCHcjc0rB2XoQrxeTUQyRjrOnlCoYta87iKBWq3EsdM2"
-  crossorigin="anonymous"
-  defer
-></script>
-<script
-  src="https://unpkg.com/htmx.org@1.9.12/dist/ext/reveal.js"
-  integrity="sha384-OLBgp1GsljhM2TJ+sbHjaiH9txEUvgdDTAzHv2P24donTt6/529l+9Ua0vFImLlb"
-  crossorigin="anonymous"
-  defer
-></script>
-<script
-  src="https://unpkg.com/htmx.org@1.9.12/dist/ext/intersect.js"
-  integrity="sha384-A9Z1GkHAcDBJImGN556gTE78AEeDfoZFXR6f75BLyrWKI1DUip+KK0W3ZKHIIo1+"
-  crossorigin="anonymous"
-  defer
-></script>
+<script>
+  (function loadHtmxWithFallbacks() {
+    const head = document.head;
+
+    function loadScript(src, onload) {
+      const script = document.createElement('script');
+      script.src = src;
+      script.async = true;
+      script.crossOrigin = 'anonymous';
+      script.referrerPolicy = 'no-referrer';
+      script.onload = function (event) {
+        if (onload) {
+          onload(false, event);
+        }
+      };
+      script.onerror = function (event) {
+        if (onload) {
+          onload(true, event);
+        }
+      };
+
+      head.appendChild(script);
+    }
+
+    function loadWithFallback(cdnSrc, localSrc, checkFn, afterLoad) {
+      loadScript(cdnSrc, function (hadError) {
+        if (hadError || (checkFn && !checkFn())) {
+          loadScript(localSrc, afterLoad);
+          return;
+        }
+
+        if (afterLoad) {
+          afterLoad();
+        }
+      });
+    }
+
+    const htmxLocal = '{% static "htmx/htmx.min.js" %}';
+    const revealLocal = '{% static "htmx/reveal.js" %}';
+    const intersectLocal = '{% static "htmx/intersect.js" %}';
+
+    loadWithFallback(
+      'https://unpkg.com/htmx.org@1.9.12/dist/htmx.min.js',
+      htmxLocal,
+      function () {
+        return !!window.htmx;
+      },
+      function () {
+        loadWithFallback(
+          'https://unpkg.com/htmx.org@1.9.12/dist/ext/reveal.js',
+          revealLocal,
+          function () {
+            return Boolean(window.htmx && window.htmx.extensions && window.htmx.extensions.reveal);
+          }
+        );
+
+        loadWithFallback(
+          'https://unpkg.com/htmx.org@1.9.12/dist/ext/intersect.js',
+          intersectLocal,
+          function () {
+            return Boolean(window.htmx && window.htmx.extensions && window.htmx.extensions.intersect);
+          }
+        );
+      }
+    );
+  })();
+</script>
 {% if badge_role %}
   {% if badge_role.name == "Control" %}
 <link rel="icon" href="data:image/png;base64,{% include 'admin/favicon_control.txt' %}">

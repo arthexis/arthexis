@@ -732,6 +732,7 @@ USE_TZ = True
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "static"
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+WHITENOISE_ADD_HEADERS_FUNCTION = "config.whitenoise.add_headers"
 
 # Allow development and freshly-updated environments to serve assets which have
 # not yet been collected into ``STATIC_ROOT``. Without this setting WhiteNoise
