@@ -145,6 +145,36 @@ def test_ocpp_websocket_rate_limit_enforced():
 
 
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
+def test_local_ip_bypasses_rate_limit_with_custom_scope_client():
+    async def run_scenario():
+        serial = "CP-LOCAL-BYPASS"
+        path = f"/{serial}"
+
+        throttled = WebsocketCommunicator(application, path)
+        throttled.scope["client"] = ("8.8.8.8", 1000)
+        connected, _ = await throttled.connect()
+        assert connected is False
+
+        local = WebsocketCommunicator(application, path)
+        local.scope["client"] = ("127.0.0.1", 1001)
+        connected, _ = await local.connect()
+        assert connected is True
+
+        await local.disconnect()
+
+    RateLimit.objects.create(
+        content_type=ContentType.objects.get_for_model(Charger),
+        scope_key="ocpp-connect",
+        limit=0,
+        window_seconds=120,
+    )
+
+    cache.clear()
+
+    async_to_sync(run_scenario)()
+
+
+@override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_pending_connection_replaced_on_reconnect():
     async def run_scenario():
         serial = "CP-REPLACE"
