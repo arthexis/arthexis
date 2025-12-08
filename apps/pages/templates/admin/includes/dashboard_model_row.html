@@ -2,18 +2,19 @@
 
 <tr class="model-{{ model_name }}{% if model.admin_url in request.path|urlencode %} current-model{% endif %}">
   <th scope="row" id="{{ row_dom_id }}">
-    {% if ct_id %}
-      <form method="post" action="{% url 'admin:favorite_toggle' ct_id %}" class="favorite-toggle-form">
-        {% csrf_token %}
-        <input type="hidden" name="next" value="{{ request.get_full_path|urlencode }}">
-        {% if fav %}
-          <input type="hidden" name="remove" value="1">
-        {% else %}
-          <input type="hidden" name="user_data" value="on">
-        {% endif %}
-        <button type="submit" class="favorite-star{% if fav %} favorited{% endif %}" title="{% translate 'Toggle favorite' %}" aria-label="{% translate 'Toggle favorite' %}">&#9733;</button>
-      </form>
-    {% endif %}
+    <span class="dashboard-model-cell">
+      {% if ct_id %}
+        <form method="post" action="{% url 'admin:favorite_toggle' ct_id %}" class="favorite-toggle-form">
+          {% csrf_token %}
+          <input type="hidden" name="next" value="{{ request.get_full_path|urlencode }}">
+          {% if fav %}
+            <input type="hidden" name="remove" value="1">
+          {% else %}
+            <input type="hidden" name="user_data" value="on">
+          {% endif %}
+          <button type="submit" class="favorite-star{% if fav %} favorited{% endif %}" title="{% translate 'Toggle favorite' %}" aria-label="{% translate 'Toggle favorite' %}">&#9733;</button>
+        </form>
+      {% endif %}
       <span class="dashboard-model-heading">
         <span class="dashboard-model-name">
           {% if model.admin_url %}
@@ -33,6 +34,7 @@
               hx-get="{% url 'admin:dashboard_model_status' %}?app={{ app_label }}&model={{ model.object_name|urlencode }}"
               hx-trigger="intersect once"
               hx-swap="innerHTML"
+              hx-on::after-request="if(!event.detail.successful){const fallback=document.getElementById(this.dataset.fallbackTemplate);if(fallback){this.innerHTML=fallback.innerHTML;}}"
               aria-live="polite"
             >
               <span class="visually-hidden">{% translate "Loading badges and rules…" %}</span>
@@ -49,6 +51,7 @@
           {% endwith %}
         {% endif %}
       </span>
+    </span>
   </th>
 
   {% if model.admin_url and show_changelinks %}

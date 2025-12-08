@@ -201,6 +201,42 @@
         text-decoration: underline;
         color: var(--link-fg);
     }
+
+    .dashboard-main .dashboard-model-cell {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+    }
+
+    .dashboard-main .module th[scope="row"] .favorite-toggle-form {
+        display: inline-flex;
+        align-items: center;
+    }
+
+    .dashboard-main .dashboard-model-heading {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .dashboard-main .dashboard-model-name {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .dashboard-main .dashboard-model-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+    }
+
+    .dashboard-main .module th[scope="row"] .favorite-star {
+        margin-right: 8px;
+    }
     #release-manager-module {
         margin-bottom: 16px;
     }
@@ -359,12 +395,13 @@
         flex: 1 1 auto;
         min-width: 0;
     }
-    .dashboard-main .dashboard-model-status {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        margin-left: auto;
-    }
+      .dashboard-main .dashboard-model-status {
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          flex-wrap: wrap;
+          margin-left: auto;
+      }
     .dashboard-main .badge-counter,
     .dashboard-main .lead-open-badge,
     .dashboard-main .node-count-badge,
@@ -479,20 +516,11 @@
             margin: 0;
         }
 
-        .dashboard-main .dashboard-model-heading {
-            display: inline-flex;
+        .dashboard-main .dashboard-model-cell {
+            display: flex;
             align-items: center;
             gap: 8px;
-            flex: 1 1 auto;
-        }
-
-        .dashboard-main .dashboard-model-name {
-            flex: 1 1 auto;
-            min-width: 0;
-        }
-
-        .dashboard-main .module th[scope="row"] .favorite-star {
-            margin-right: 8px;
+            width: 100%;
         }
 
         .dashboard-main .module td {
