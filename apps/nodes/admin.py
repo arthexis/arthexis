@@ -64,6 +64,7 @@ from apps.users import temp_passwords
 from apps.core.admin import EmailOutboxAdminForm, SaveBeforeChangeAction
 from apps.ocpp.models import CPForwarder
 from .models import (
+    Platform,
     Node,
     NodeRole,
     NodeFeature,
@@ -1975,6 +1976,13 @@ class NodeRoleAdmin(EntityModelAdmin):
 
     def save_model(self, request, obj, form, change):
         obj.node_set.set(form.cleaned_data.get("nodes", []))
+
+
+@admin.register(Platform)
+class PlatformAdmin(EntityModelAdmin):
+    list_display = ("name", "hardware", "architecture", "os_name", "os_version")
+    list_filter = ("architecture", "os_name")
+    search_fields = ("name", "hardware", "architecture", "os_name", "os_version")
 
 
 class NodeFeatureAdminForm(forms.ModelForm):
