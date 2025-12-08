@@ -64,6 +64,11 @@ FORWARDED_PAIR_RE = re.compile(r"for=(?:\"?)(?P<value>[^;,\"\s]+)(?:\"?)", re.IG
 logger = logging.getLogger(__name__)
 
 
+OCPP_VERSION_16 = "ocpp1.6"
+OCPP_VERSION_201 = "ocpp2.0.1"
+OCPP_VERSION_21 = "ocpp2.1"
+
+
 # Query parameter keys that may contain the charge point serial. Keys are
 # matched case-insensitively and trimmed before use.
 SERIAL_QUERY_PARAM_NAMES = (
@@ -323,18 +328,18 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         preferred_normalized = (preferred or "").strip()
         if preferred_normalized and preferred_normalized in available:
             return preferred_normalized
-        # Prefer the latest OCPP 2.0.1 protocol when the charger requests it,
-        # otherwise fall back to older versions.
-        if "ocpp2.0.1" in available:
-            return "ocpp2.0.1"
-        if "ocpp2.0" in available:
-            return "ocpp2.0"
+        # Prefer the latest supported OCPP 2.x protocol when the charger
+        # requests it, otherwise fall back to older versions.
+        if OCPP_VERSION_21 in available:
+            return OCPP_VERSION_21
+        if OCPP_VERSION_201 in available:
+            return OCPP_VERSION_201
         # Operational safeguard: never reject a charger solely because it omits
         # or sends an unexpected subprotocol.  We negotiate ``ocpp1.6`` when the
         # charger offers it, but otherwise continue without a subprotocol so we
         # accept as many real-world stations as possible.
-        if "ocpp1.6" in available:
-            return "ocpp1.6"
+        if OCPP_VERSION_16 in available:
+            return OCPP_VERSION_16
         return None
 
     @requires_network
@@ -384,9 +389,9 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         subprotocol = self._select_subprotocol(offered, preferred_version)
         self.preferred_ocpp_version = preferred_version
         negotiated_version = subprotocol
-        if not negotiated_version and preferred_version in {"ocpp2.0", "ocpp2.0.1"}:
+        if not negotiated_version and preferred_version in {OCPP_VERSION_201, OCPP_VERSION_21}:
             negotiated_version = preferred_version
-        self.ocpp_version = negotiated_version or "ocpp1.6"
+        self.ocpp_version = negotiated_version or OCPP_VERSION_16
         if existing_charger and existing_charger.requires_ws_auth:
             credentials, error_code = self._parse_basic_auth_header()
             rejection_reason: str | None = None

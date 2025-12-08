@@ -106,14 +106,59 @@ def test_select_subprotocol_prioritizes_preference_and_defaults():
     consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
 
     cases = [
-        ((["ocpp1.6", "ocpp2.0.1", "ocpp2.0"], "ocpp2.0"), "ocpp2.0"),
-        ((["ocpp2.0", "ocpp2.0.1"], None), "ocpp2.0.1"),
-        ((["ocpp1.6"], None), "ocpp1.6"),
+        (
+            (
+                [
+                    consumers.OCPP_VERSION_16,
+                    consumers.OCPP_VERSION_201,
+                    consumers.OCPP_VERSION_21,
+                ],
+                consumers.OCPP_VERSION_21,
+            ),
+            consumers.OCPP_VERSION_21,
+        ),
+        (
+            (
+                [consumers.OCPP_VERSION_21, consumers.OCPP_VERSION_201],
+                None,
+            ),
+            consumers.OCPP_VERSION_21,
+        ),
+        (([consumers.OCPP_VERSION_16], None), consumers.OCPP_VERSION_16),
         ((["unexpected"], None), None),
     ]
 
     for (offered, preferred), expected in cases:
         assert consumer._select_subprotocol(offered, preferred) == expected
+
+
+@override_settings(ROOT_URLCONF="apps.ocpp.urls")
+@pytest.mark.parametrize(
+    "preferred",
+    [consumers.OCPP_VERSION_201, consumers.OCPP_VERSION_21],
+)
+def test_connect_prefers_stored_ocpp2_without_offered_subprotocol(preferred):
+    charger = Charger.objects.create(
+        charger_id=f"CP-PREFERRED-{preferred}",
+        connector_id=None,
+        preferred_ocpp_version=preferred,
+    )
+
+    async def run_scenario():
+        communicator = WebsocketCommunicator(application, f"/{charger.charger_id}")
+        communicator.scope["subprotocols"] = []
+
+        connected, agreed = await communicator.connect()
+
+        assert connected is True
+        assert agreed is None
+
+        consumer = store.connections[store.pending_key(charger.charger_id)]
+        assert consumer.ocpp_version == preferred
+
+        await communicator.disconnect()
+
+    async_to_sync(run_scenario)()
 
 
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
