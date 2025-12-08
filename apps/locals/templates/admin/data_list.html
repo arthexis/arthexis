@@ -38,6 +38,7 @@
         <tr>
           <th>{% trans "App" %}</th>
           <th>{% trans "Model" %}</th>
+          <th>{% trans "Custom" %}</th>
           <th>{% trans "Entity" %}</th>
           <th>{% trans "Fixture" %}</th>
         </tr>
@@ -48,6 +49,13 @@
           <tr>
             <td>{{ section.opts.app_config.verbose_name|capfirst }}</td>
             <td>{{ section.opts.verbose_name|capfirst }}</td>
+            <td>
+              {% if item.custom_override %}
+                ✓
+              {% else %}
+                ✕
+              {% endif %}
+            </td>
             <td><a href="{{ item.url }}">{{ item.label }}</a></td>
             <td>{{ item.fixture.name }}</td>
           </tr>
