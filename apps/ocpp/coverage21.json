@@ -1,8 +1,8 @@
 {
   "coverage": {
     "cp_to_csms": {
-      "count": 9,
-      "percent": 34.62,
+      "count": 10,
+      "percent": 41.67,
       "supported": [
         "Authorize",
         "BootNotification",
@@ -12,86 +12,108 @@
         "LogStatusNotification",
         "MeterValues",
         "SecurityEventNotification",
-        "StatusNotification"
+        "StatusNotification",
+        "TransactionEvent"
       ],
-      "total": 26
+      "total": 24
     },
     "csms_to_cp": {
-      "count": 5,
-      "percent": 12.82,
+      "count": 17,
+      "percent": 43.59,
       "supported": [
+        "CancelReservation",
         "ChangeAvailability",
         "ClearCache",
+        "ClearChargingProfile",
         "DataTransfer",
+        "GetCompositeSchedule",
+        "GetLocalListVersion",
+        "GetLog",
+        "RequestStartTransaction",
+        "RequestStopTransaction",
+        "ReserveNow",
         "Reset",
-        "TriggerMessage"
+        "SendLocalList",
+        "SetChargingProfile",
+        "TriggerMessage",
+        "UnlockConnector",
+        "UpdateFirmware"
       ],
       "total": 39
     },
     "overall": {
-      "count": 19,
-      "percent": 29.69,
+      "count": 26,
+      "percent": 41.94,
       "supported": [
         "Authorize",
         "BootNotification",
         "CancelReservation",
         "ChangeAvailability",
         "ClearCache",
+        "ClearChargingProfile",
         "DataTransfer",
         "FirmwareStatusNotification",
+        "GetCompositeSchedule",
         "GetLocalListVersion",
         "GetLog",
         "Heartbeat",
         "LogStatusNotification",
         "MeterValues",
+        "RequestStartTransaction",
+        "RequestStopTransaction",
         "ReserveNow",
         "Reset",
         "SecurityEventNotification",
         "SendLocalList",
+        "SetChargingProfile",
         "StatusNotification",
+        "TransactionEvent",
         "TriggerMessage",
+        "UnlockConnector",
         "UpdateFirmware"
       ],
-      "total": 64
+      "total": 62
     }
   },
   "implemented": {
     "cp_to_csms": [
       "Authorize",
       "BootNotification",
-      "CancelReservation",
-      "ChangeConfiguration",
-      "ClearCache",
       "DataTransfer",
       "DiagnosticsStatusNotification",
       "FirmwareStatusNotification",
-      "GetConfiguration",
-      "GetLocalListVersion",
-      "GetLog",
       "Heartbeat",
       "LogStatusNotification",
       "MeterValues",
-      "RemoteStartTransaction",
-      "RemoteStopTransaction",
-      "ReserveNow",
-      "Reset",
       "SecurityEventNotification",
-      "SendLocalList",
       "StartTransaction",
       "StatusNotification",
       "StopTransaction",
-      "TriggerMessage",
-      "UpdateFirmware"
+      "TransactionEvent"
     ],
     "csms_to_cp": [
+      "CancelReservation",
       "ChangeAvailability",
       "ChangeConfiguration",
       "ClearCache",
+      "ClearChargingProfile",
       "DataTransfer",
+      "GetCompositeSchedule",
+      "GetConfiguration",
+      "GetDiagnostics",
+      "GetLocalListVersion",
+      "GetLog",
       "RemoteStartTransaction",
       "RemoteStopTransaction",
+      "RequestStartTransaction",
+      "RequestStopTransaction",
+      "ReserveNow",
       "Reset",
-      "TriggerMessage"
+      "SendLocalList",
+      "SetChargingProfile",
+      "TriggerMessage",
+      "UnlockConnector",
+      "UpdateFirmware"
     ]
   },
   "spec": {
@@ -99,7 +121,6 @@
       "Authorize",
       "BootNotification",
       "ClearedChargingLimit",
-      "CostUpdated",
       "DataTransfer",
       "FirmwareStatusNotification",
       "Get15118EVCertificate",
@@ -117,7 +138,6 @@
       "NotifyReport",
       "PublishFirmwareStatusNotification",
       "ReportChargingProfiles",
-      "ReservationStatusUpdate",
       "SecurityEventNotification",
       "SignCertificate",
       "StatusNotification",
