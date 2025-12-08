@@ -51,15 +51,6 @@ Visit our [Changelog Report](https://arthexis.com/changelog/) to browse past and
   | `UnlockConnector` | ✅ | ✅ | ✅ | Release stuck connectors without on-site intervention. |
   | `UpdateFirmware` | ✅ | ✅ | ✅ | Deliver firmware packages to chargers with secure download tokens and track installation responses. |
 
-  **OCPP roadmap.** Explore the upcoming OCPP 1.6, 2.0.1, and 2.1 catalogue work in the [OCPP roadmap cookbook](apps/docs/cookbooks/ocpp-roadmap.md).
-
-- Charge point reservations with automated connector assignment, energy account and RFID linkage, EVCS confirmation tracking, and control-center cancellation support.
-- Review the [Odoo API Integrations Cookbook](apps/docs/cookbooks/odoo-integrations.md) for details on syncing employee credentials via `res.users` and product catalog lookups via `product.product`.
-- Runs on [Windows 11](https://www.microsoft.com/windows/windows-11) and [Ubuntu 22.04 LTS](https://releases.ubuntu.com/22.04/)
-- Tested for the [Raspberry Pi 4 Model B](https://www.raspberrypi.com/products/raspberry-pi-4-model-b/)
-
-Project under rapid active and open development.
-
 ## Role Architecture
 
 Arthexis Constellation ships in four node roles tailored to different deployment scenarios.
