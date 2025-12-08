@@ -404,13 +404,21 @@ class ApplicationModelInline(admin.TabularInline):
 @admin.register(Application)
 class ApplicationAdmin(EntityModelAdmin):
     form = ApplicationForm
-    list_display = ("name", "order", "app_verbose_name", "description", "installed")
+    list_display = (
+        "name",
+        "order",
+        "importance",
+        "app_verbose_name",
+        "description",
+        "installed",
+    )
     search_fields = ("name", "description")
     readonly_fields = ("installed",)
     inlines = (ApplicationModelInline,)
     list_filter = (
         ApplicationInstalledListFilter,
         "order",
+        "importance",
         "is_deleted",
         "is_seed_data",
         "is_user_data",

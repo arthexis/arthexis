@@ -4,8 +4,8 @@
     "fields": {
       "is_seed_data": true,
       "is_deleted": false,
-      "name": "ocpp",
-      "description": "Compatibility with Standards and Good Practices.",
+      "name": "core",
+      "description": "Shared platform primitives and system services.",
       "importance": "critical"
     }
   }
