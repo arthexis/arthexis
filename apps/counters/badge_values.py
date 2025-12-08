@@ -5,6 +5,7 @@ from apps.cards.models import RFID
 from apps.leads.models import Lead
 from apps.ocpp.models import Charger
 from apps.nodes.models import Node
+from apps.counters.models import BadgeCounter
 
 from .badge_utils import BadgeCounterResult
 
@@ -89,6 +90,16 @@ def node_known_count(badge=None):
     label = ngettext(
         "%(count)s node known to this deployment",
         "%(count)s nodes known to this deployment",
+        total,
+    ) % {"count": total}
+    return BadgeCounterResult(primary=total, label=label)
+
+
+def badge_counter_count(badge=None):
+    total = BadgeCounter.objects.count()
+    label = ngettext(
+        "%(count)s badge counter configured",
+        "%(count)s badge counters configured",
         total,
     ) % {"count": total}
     return BadgeCounterResult(primary=total, label=label)
