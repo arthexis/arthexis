@@ -22,6 +22,22 @@ AUTO_UPGRADE_INTERVAL_MINUTES = {
 AUTO_UPGRADE_FALLBACK_INTERVAL = AUTO_UPGRADE_INTERVAL_MINUTES[DEFAULT_AUTO_UPGRADE_MODE]
 
 
+def auto_upgrade_base_dir() -> Path:
+    """Return the runtime base directory for auto-upgrade state."""
+
+    env_base_dir = environ.get("ARTHEXIS_BASE_DIR")
+    if env_base_dir:
+        return Path(env_base_dir)
+
+    base_dir = getattr(settings, "BASE_DIR", None)
+    if base_dir:
+        if isinstance(base_dir, Path):
+            return base_dir
+        return Path(str(base_dir))
+
+    return Path(__file__).resolve().parent.parent
+
+
 def ensure_auto_upgrade_periodic_task(
     sender=None, *, base_dir: Path | None = None, **kwargs
 ) -> None:

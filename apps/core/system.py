@@ -38,6 +38,7 @@ from apps.celery.utils import is_celery_enabled
 from apps.core.auto_upgrade import (
     AUTO_UPGRADE_TASK_NAME,
     AUTO_UPGRADE_TASK_PATH,
+    auto_upgrade_base_dir,
     ensure_auto_upgrade_periodic_task,
 )
 from apps.release.release import (
@@ -1282,7 +1283,7 @@ def _build_auto_upgrade_report(
 ) -> dict[str, object]:
     """Assemble the composite auto-upgrade report for the admin view."""
 
-    base_dir = Path(settings.BASE_DIR)
+    base_dir = auto_upgrade_base_dir()
     mode_info = _read_auto_upgrade_mode(base_dir)
     log_info = _load_auto_upgrade_log_entries(base_dir, limit=limit)
     skip_revisions = _load_auto_upgrade_skip_revisions(base_dir)
