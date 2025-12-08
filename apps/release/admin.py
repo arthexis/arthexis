@@ -11,6 +11,7 @@ import requests
 from django import forms
 from django.conf import settings
 from django.contrib import admin, messages
+from django.core.exceptions import PermissionDenied
 from django.http import HttpResponseNotAllowed
 from django.shortcuts import get_object_or_404, redirect
 from django.template.response import TemplateResponse
@@ -425,6 +426,17 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         url = reverse("admin:release_package_change", args=[obj.package_id])
         return format_html('<a href="{}">{}</a>', url, obj.package)
 
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            path(
+                "refresh-from-pypi/",
+                self.admin_site.admin_view(self.refresh_from_pypi_view),
+                name="release_packagerelease_refresh_from_pypi",
+            ),
+        ]
+        return custom + urls
+
     def revision_short(self, obj):
         return obj.revision_short
 
@@ -525,8 +537,19 @@ class PackageReleaseAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             )
             self.message_user(request, message, messages.SUCCESS)
 
+    refresh_from_pypi.requires_queryset = False
     refresh_from_pypi.label = "Refresh from PyPI"
     refresh_from_pypi.short_description = "Refresh from PyPI"
+
+    def refresh_from_pypi_view(self, request):
+        if not self.has_change_permission(request):
+            raise PermissionDenied
+
+        response = self.refresh_from_pypi(request, queryset=None)
+        if response:
+            return response
+
+        return redirect("admin:release_packagerelease_changelist")
 
     @staticmethod
     def _release_on_from_files(files):
