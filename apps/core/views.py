@@ -2182,14 +2182,19 @@ def release_progress(request, pk: int, action: str):
     )
     can_resume = ctx.get("started") and paused and not done and not ctx.get("error")
     release_manager_owner = manager.owner_display() if manager else ""
-    try:
-        current_user_admin_url = reverse(
-            "admin:teams_user_change", args=[request.user.pk]
-        )
-    except NoReverseMatch:
-        current_user_admin_url = reverse(
-            "admin:core_user_change", args=[request.user.pk]
-        )
+    user_opts = request.user._meta
+    admin_user_url_names = [
+        f"admin:{user_opts.app_label}_{user_opts.model_name}_change",
+        "admin:teams_user_change",
+        "admin:core_user_change",
+    ]
+    current_user_admin_url = None
+    for admin_url_name in admin_user_url_names:
+        try:
+            current_user_admin_url = reverse(admin_url_name, args=[request.user.pk])
+            break
+        except NoReverseMatch:
+            continue
 
     fixtures_summary = ctx.get("fixtures")
     if (
