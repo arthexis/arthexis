@@ -38,12 +38,12 @@
 {% block nav-sidebar %}{% endblock %}
 
 {% block content %}
-<div class="dashboard" id="admin-dashboard">
-  <div id="content-main" class="dashboard-main">
-    {% include "admin/dashboard_app_list.html" with app_list=app_list %}
-  </div>
-  <div class="dashboard-side" id="recent-boxes">
-    {% render_widgets 'sidebar' %}
+  <div class="dashboard" id="admin-dashboard">
+    <div id="content-main" class="dashboard-main">
+    {% include "admin/dashboard_app_list.html" with app_list=app_list show_model_badges=True %}
+    </div>
+    <div class="dashboard-side" id="recent-boxes">
+      {% render_widgets 'sidebar' %}
   </div>
 </div>
 {% endblock %}

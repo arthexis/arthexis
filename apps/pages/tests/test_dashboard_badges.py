@@ -117,3 +117,36 @@ class DashboardBadgeTests(TestCase):
         rule_index = content.index("model-rule-status")
 
         self.assertLess(badge_index, rule_index)
+
+    def test_dashboard_status_view_rejects_invalid_methods(self):
+        response = self.client.post(
+            reverse("admin:dashboard_model_status"),
+            {"app": self.content_type.app_label, "model": self.user_model.__name__},
+        )
+
+        self.assertEqual(response.status_code, 405)
+        self.assertIn("GET", response.headers.get("Allow", ""))
+
+    def test_dashboard_status_requires_valid_model_and_permissions(self):
+        response = self.client.get(reverse("admin:dashboard_model_status"))
+        self.assertEqual(response.status_code, 400)
+
+        limited_user = self.user_model.objects.create_user(
+            username="limited",
+            email="limited@example.com",
+            password="password",
+            is_staff=True,
+        )
+        self.client.force_login(limited_user)
+
+        response = self.client.get(
+            reverse("admin:dashboard_model_status"),
+            {"app": self.content_type.app_label, "model": "unknown"},
+        )
+        self.assertEqual(response.status_code, 400)
+
+        response = self.client.get(
+            reverse("admin:dashboard_model_status"),
+            {"app": self.content_type.app_label, "model": self.user_model.__name__},
+        )
+        self.assertEqual(response.status_code, 403)
