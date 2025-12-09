@@ -22,7 +22,7 @@
                 {% if ct_id %}
                   <form method="post" action="{% url 'admin:favorite_toggle' ct_id %}" class="favorite-toggle-form">
                     {% csrf_token %}
-                    <input type="hidden" name="next" value="{{ request.get_full_path|urlencode }}">
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
                     <input type="hidden" name="remove" value="1">
                     <button type="submit" class="favorite-star favorited" title="{% translate 'Toggle favorite' %}" aria-label="{% translate 'Toggle favorite' %}">&#9733;</button>
                   </form>
@@ -66,7 +66,7 @@
                 {% if ct_id %}
                   <form method="post" action="{% url 'admin:favorite_toggle' ct_id %}" class="favorite-toggle-form">
                     {% csrf_token %}
-                    <input type="hidden" name="next" value="{{ request.get_full_path|urlencode }}">
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
                     {% if fav %}
                       <input type="hidden" name="remove" value="1">
                     {% else %}
