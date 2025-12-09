@@ -37,6 +37,7 @@ include-package-data = true
 "apps.protocols" = ["**/*"]
 "apps.repos" = ["**/*"]
 "apps.sigils" = ["**/*"]
+"apps.selenium" = ["**/*"]
 "apps.teams" = ["**/*"]
 "apps.vehicle" = ["**/*"]
 "apps.locale" = ["**/*"]
