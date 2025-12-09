@@ -4,6 +4,7 @@ from django.test import TestCase
 from django.urls import reverse
 
 from apps.locals.models import Favorite
+from apps.locals.templatetags.favorites import favorite_entries
 
 
 class DashboardFavoritesTests(TestCase):
@@ -28,3 +29,32 @@ class DashboardFavoritesTests(TestCase):
         response = self.client.get(self.dashboard_url)
 
         self.assertContains(response, "favorites-users-user")
+
+    def test_favorites_do_not_duplicate_same_content_type(self):
+        content_type = ContentType.objects.get_for_model(Favorite)
+        favorite = Favorite.objects.create(
+            user=self.user,
+            content_type=content_type,
+        )
+
+        app_list = [
+            {
+                "app_label": "locals",
+                "models": [
+                    {
+                        "object_name": "Favorite",
+                        "app_label": "locals",
+                        "model": Favorite,
+                    },
+                    {
+                        "object_name": "Favorite",
+                        "app_label": "locals",
+                        "model": Favorite,
+                    },
+                ],
+            }
+        ]
+
+        entries = favorite_entries(app_list, {content_type.id: favorite})
+
+        self.assertEqual(len(entries), 1)

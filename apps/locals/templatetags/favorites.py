@@ -92,6 +92,7 @@ def favorite_entries(app_list, favorites_map):
         return []
 
     entries = []
+    seen_ct_ids = set()
     ct_cache = {}
 
     for app in app_list:
@@ -144,6 +145,10 @@ def favorite_entries(app_list, favorites_map):
             if not favorite:
                 continue
 
+            if ct_id in seen_ct_ids:
+                continue
+
+            seen_ct_ids.add(ct_id)
             entries.append({
                 "app": app,
                 "model": model,
