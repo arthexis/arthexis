@@ -667,6 +667,7 @@ FORCE_STOP=0
 FORCE_UPGRADE=0
 CLEAN=0
 NO_RESTART=0
+STOP_ONLY=0
 FORCE_START=0
 NO_WARN=0
 LOCAL_ONLY=0
@@ -694,6 +695,13 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --no-start|--no-restart)
+      NO_RESTART=1
+      FORCE_START=0
+      FORWARDED_ARGS+=("$1")
+      shift
+      ;;
+    --stop)
+      STOP_ONLY=1
       NO_RESTART=1
       FORCE_START=0
       FORWARDED_ARGS+=("$1")
@@ -1323,6 +1331,31 @@ elif [[ $RERUN_AFTER_SELF_UPDATE -eq 1 ]] && [[ ${RERUN_LCD_WAS_ACTIVE:-0} -eq 1
 fi
 LCD_RESTART_REQUIRED=$LCD_WAS_ACTIVE
 
+stop_running_instance() {
+  local skip_if_inactive="${1:-0}"
+
+  if [[ $skip_if_inactive -eq 1 ]] && [[ ${SERVICE_ACTIVITY_KNOWN:-0} -eq 1 ]] && [[ ${SERVICE_WAS_ACTIVE:-0} -eq 0 ]]; then
+    echo "Services are not running; nothing to stop."
+    return 0
+  fi
+
+  if [[ $CHECK_ONLY -ne 1 ]] && [[ $VENV_PRESENT -eq 1 ]]; then
+    echo "Stopping running instance..."
+    STOP_ARGS=(--all)
+    if [[ $FORCE_STOP -eq 1 ]]; then
+      STOP_ARGS+=(--force)
+    fi
+    if ! ARTHEXIS_SKIP_LCD_STOP=1 ./stop.sh "${STOP_ARGS[@]}"; then
+      if [[ $FORCE_STOP -eq 1 ]]; then
+        echo "Upgrade aborted even after forcing stop. Resolve active charging sessions before retrying." >&2
+      else
+        echo "Upgrade aborted because active charging sessions are in progress. Resolve active charging sessions before retrying." >&2
+      fi
+      exit 1
+    fi
+  fi
+}
+
 DEFER_BROADCAST_MESSAGE=0
 if [[ $SERVICE_WAS_ACTIVE -eq 1 ]] && [[ $UPGRADE_PLANNED -eq 1 ]]; then
   if [[ -n "$LOCAL_REVISION" || -n "$REMOTE_REVISION" ]]; then
@@ -1331,21 +1364,12 @@ if [[ $SERVICE_WAS_ACTIVE -eq 1 ]] && [[ $UPGRADE_PLANNED -eq 1 ]]; then
 fi
 
 # Stop running instance only if the node is installed
-if [[ $CHECK_ONLY -ne 1 ]] && [[ $VENV_PRESENT -eq 1 ]]; then
-  echo "Stopping running instance..."
-  STOP_ARGS=(--all)
-  if [[ $FORCE_STOP -eq 1 ]]; then
-    STOP_ARGS+=(--force)
-  fi
-  if ! ARTHEXIS_SKIP_LCD_STOP=1 ./stop.sh "${STOP_ARGS[@]}"; then
-    if [[ $FORCE_STOP -eq 1 ]]; then
-      echo "Upgrade aborted even after forcing stop. Resolve active charging sessions before retrying." >&2
-    else
-      echo "Upgrade aborted because active charging sessions are in progress. Resolve active charging sessions before retrying." >&2
-    fi
-    exit 1
-  fi
-  fi
+if [[ $STOP_ONLY -eq 1 ]]; then
+  stop_running_instance 1
+  exit 0
+fi
+
+stop_running_instance 0
 
 # Pull latest changes
 if [[ $LOCAL_ONLY -eq 1 ]]; then
