@@ -4,7 +4,7 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import TestCase
 
-from apps.screens.models import DeviceScreen, PyxelUnavailableError, PyxelViewport
+from apps.pyxel.models import PyxelUnavailableError, PyxelViewport
 
 
 class ViewportCommandTests(TestCase):
@@ -12,7 +12,6 @@ class ViewportCommandTests(TestCase):
         viewport = PyxelViewport.objects.create(
             slug="cmd-viewport",
             name="Command Viewport",
-            category=DeviceScreen.Category.PIXEL,
             skin="virtual",
             columns=8,
             rows=8,
@@ -27,7 +26,6 @@ class ViewportCommandTests(TestCase):
         viewport = PyxelViewport.objects.create(
             slug="cmd-viewport",
             name="Command Viewport",
-            category=DeviceScreen.Category.PIXEL,
             skin="virtual",
             columns=8,
             rows=8,
