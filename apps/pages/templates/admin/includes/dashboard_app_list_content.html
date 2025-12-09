@@ -3,8 +3,10 @@
 {% if app_list %}
   {% favorite_map as favorites_map %}
   {% if show_favorites|default:True %}
-    {% cached_dashboard_favorites app_list favorites_map as favorites_block %}
-    {{ favorites_block }}
+    {% with show_model_badges=False %}
+      {% cached_dashboard_favorites app_list favorites_map as favorites_block %}
+      {{ favorites_block }}
+    {% endwith %}
   {% endif %}
   {% celery_feature_enabled as celery_enabled %}
   {% for app in app_list %}
