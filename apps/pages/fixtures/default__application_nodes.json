@@ -1,0 +1,12 @@
+[
+  {
+    "model": "pages.application",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "name": "nodes",
+      "description": "Edge node lifecycle management and telemetry.",
+      "importance": "critical"
+    }
+  }
+]
