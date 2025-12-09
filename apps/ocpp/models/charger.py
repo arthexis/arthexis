@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from django.urls import NoReverseMatch
+
 from apps.locale.models import Language
 
 from .base import *
@@ -657,8 +659,14 @@ class Charger(Entity):
         serial, connector = self.identity_tuple()
         connector_slug = type(self).connector_slug_from_value(connector)
         if connector_slug == self.AGGREGATE_CONNECTOR_SLUG:
-            return reverse("charger-page", args=[serial])
-        return reverse("charger-page-connector", args=[serial, connector_slug])
+            try:
+                return reverse("ocpp:charger-page", args=[serial])
+            except NoReverseMatch:
+                return reverse("charger-page", args=[serial])
+        try:
+            return reverse("ocpp:charger-page-connector", args=[serial, connector_slug])
+        except NoReverseMatch:
+            return reverse("charger-page-connector", args=[serial, connector_slug])
 
     def _fallback_domain(self) -> str:
         """Return a best-effort hostname when the Sites framework is unset."""
