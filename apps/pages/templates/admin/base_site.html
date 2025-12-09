@@ -55,10 +55,11 @@
       head.appendChild(script);
     }
 
-    function loadWithFallback(cdnSrc, localSrc, checkFn, afterLoad) {
-      loadScript(cdnSrc, function (hadError) {
+    function loadWithFallback(localSrc, cdnSrc, checkFn, afterLoad) {
+      // Prefer locally served assets to avoid CORS or availability issues with the CDN.
+      loadScript(localSrc, function (hadError) {
         if (hadError || (checkFn && !checkFn())) {
-          loadScript(localSrc, afterLoad);
+          loadScript(cdnSrc, afterLoad);
           return;
         }
 
@@ -68,33 +69,22 @@
       });
     }
 
-    const htmxLocal = '{% static "htmx/htmx.min.js" %}';
-    const revealLocal = '{% static "htmx/reveal.js" %}';
-    const intersectLocal = '{% static "htmx/intersect.js" %}';
+    function loadHtmxExtensions() {
+      if (!window.htmx) {
+        return;
+      }
+
+      loadScript('{% static "htmx/reveal.js" %}');
+      loadScript('{% static "htmx/intersect.js" %}');
+    }
 
     loadWithFallback(
+      '{% static "htmx/htmx.min.js" %}',
       'https://unpkg.com/htmx.org@1.9.12/dist/htmx.min.js',
-      htmxLocal,
       function () {
         return !!window.htmx;
       },
-      function () {
-        loadWithFallback(
-          'https://unpkg.com/htmx.org@1.9.12/dist/ext/reveal.js',
-          revealLocal,
-          function () {
-            return Boolean(window.htmx && window.htmx.extensions && window.htmx.extensions.reveal);
-          }
-        );
-
-        loadWithFallback(
-          'https://unpkg.com/htmx.org@1.9.12/dist/ext/intersect.js',
-          intersectLocal,
-          function () {
-            return Boolean(window.htmx && window.htmx.extensions && window.htmx.extensions.intersect);
-          }
-        );
-      }
+      loadHtmxExtensions
     );
   })();
 </script>
