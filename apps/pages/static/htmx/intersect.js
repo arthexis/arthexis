@@ -49,9 +49,15 @@
     root.querySelectorAll('[hx-trigger~="intersect"]').forEach(track);
   }
 
-  document.addEventListener("DOMContentLoaded", () => {
+  function init() {
     scan(document);
-  });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
 
   document.body.addEventListener("htmx:afterSwap", (event) => {
     const target = event.detail && event.detail.target;
