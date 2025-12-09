@@ -58,7 +58,7 @@ def build_footer_context(*, request=None, badge_site=None, badge_node=None, forc
         if rev_short:
             release_name = f"{release_name}-{rev_short}"
         if release:
-            release_url = reverse("admin:core_packagerelease_change", args=[release.pk])
+            release_url = reverse("admin:release_packagerelease_change", args=[release.pk])
 
     show_footer = force_footer or bool(visible_refs) or has_release_info
     if not show_footer:
