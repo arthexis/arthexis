@@ -303,9 +303,13 @@ def main(argv: Sequence[str] | None = None) -> None:
         celery_enabled = False
         args.remove("--no-celery")
 
+    debug_flag = "--debug" in args
+    if debug_flag:
+        args.remove("--debug")
+
     worker = beat = None
     is_runserver = bool(args) and args[0] == "runserver"
-    is_debug_session = "DEBUGPY_LAUNCHER_PORT" in os.environ
+    is_debug_session = debug_flag or "DEBUGPY_LAUNCHER_PORT" in os.environ
     if is_runserver:
         if is_debug_session:
             os.environ["DEBUG"] = "1"
