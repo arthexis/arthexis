@@ -6,8 +6,8 @@ from django.contrib.contenttypes.models import ContentType
 from django.db.models.signals import post_delete, post_save
 from django.utils.translation import gettext_lazy as _
 
-from apps.counters.dashboard_rules import bind_rule_model, rule_failure, rule_success
-from apps.counters.models import BadgeCounter, DashboardRule
+from apps.counters.dashboard_rules import bind_rule_model, rule_failure
+from apps.counters.models import DashboardRule
 
 register = template.Library()
 
@@ -60,56 +60,6 @@ post_save.connect(_clear_dashboard_rule_caches, sender=DashboardRule)
 post_delete.connect(_clear_dashboard_rule_caches, sender=DashboardRule)
 post_save.connect(_clear_dashboard_rule_caches, sender=ContentType)
 post_delete.connect(_clear_dashboard_rule_caches, sender=ContentType)
-
-
-@register.simple_tag(takes_context=True)
-def badge_counters(context, app_label: str, model_name: str) -> list[dict[str, object]]:
-    """Return cached badge counters for the requested model."""
-
-    cache_map = context.setdefault("_badge_counters", {})
-    cache_key = f"{app_label}.{model_name}".lower()
-    if cache_key in cache_map:
-        return cache_map[cache_key]
-
-    content_type = get_cached_content_type(app_label, model_name)
-    if content_type is None:
-        counters: list[dict[str, object]] = []
-    else:
-        counters = BadgeCounter.get_cached_value(
-            content_type,
-            lambda: _build_badge_counters(app_label, model_name, content_type),
-        )
-
-    cache_map[cache_key] = counters
-    return counters
-
-
-def _build_badge_counters(app_label, model_name, content_type):
-    counters: list[dict[str, object]] = []
-    missing_displays: list[int] = []
-    for counter in (
-        BadgeCounter.objects.filter(content_type=content_type, is_enabled=True)
-        .order_by("priority", "pk")
-        .iterator()
-    ):
-        display = counter.build_display()
-        if display:
-            counters.append(display)
-            continue
-
-        missing_displays.append(counter.pk)
-
-    if missing_displays:
-        logger.info(
-            "Badge counters did not render a display",
-            extra={
-                "model": f"{app_label}.{model_name}",
-                "content_type_id": content_type.pk,
-                "counter_ids": missing_displays,
-            },
-        )
-
-    return counters
 
 
 @register.simple_tag(takes_context=True)
