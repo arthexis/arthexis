@@ -32,7 +32,6 @@ from .cp_forwarder import (
     sync_forwarded_charge_points,
 )
 from .evcs_charge_point import EVCSChargePoint, EVCSChargePointManager
-from .rfid import RFID
 
 __all__ = [
     "Charger",
@@ -70,5 +69,4 @@ __all__ = [
     "sync_forwarded_charge_points",
     "EVCSChargePointManager",
     "EVCSChargePoint",
-    "RFID",
 ]
