@@ -30,6 +30,7 @@
               class="dashboard-model-status"
               data-model-status-loader
               data-fallback-template="{{ status_container_id }}-fallback"
+              hx-ext="reveal"
               hx-get="{% url 'admin:dashboard_model_status' %}?app={{ app_label }}&model={{ model.object_name|urlencode }}"
               hx-trigger="revealed"
               hx-swap="innerHTML"
