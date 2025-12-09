@@ -10,4 +10,4 @@ __all__ = [
     "InviteLead",
     "RFID",
 ]
-from apps.cards.models import RFID
+from apps.rfids.models import RFID

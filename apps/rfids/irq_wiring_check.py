@@ -11,7 +11,7 @@ class IRQPinSetupManualTest(TestCase):
 
     def test_irq_pin_setup(self):
         with (
-            patch("apps.cards.background_reader.GPIO") as mock_gpio,
+            patch("apps.rfids.background_reader.GPIO") as mock_gpio,
             patch.dict("sys.modules", {"mfrc522": MagicMock(MFRC522=MagicMock())}),
         ):
             _setup_hardware()

@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-from .base import *
+from django.db import models
+from django.utils.translation import gettext_lazy as _
+
+from apps.base.models import Entity
+from apps.energy.models import CustomerAccount
+
 
 class RFIDSessionAttempt(Entity):
     """Record RFID authorisation attempts received via StartTransaction."""
@@ -10,7 +15,7 @@ class RFIDSessionAttempt(Entity):
         REJECTED = "rejected", _("Rejected")
 
     charger = models.ForeignKey(
-        "Charger",
+        "ocpp.Charger",
         on_delete=models.CASCADE,
         related_name="rfid_attempts",
         null=True,
@@ -27,7 +32,7 @@ class RFIDSessionAttempt(Entity):
         related_name="rfid_attempts",
     )
     transaction = models.ForeignKey(
-        "Transaction",
+        "ocpp.Transaction",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -38,6 +43,7 @@ class RFIDSessionAttempt(Entity):
         ordering = ["-attempted_at"]
         verbose_name = _("RFID Session Attempt")
         verbose_name_plural = _("RFID Session Attempts")
+        db_table = "ocpp_rfidsessionattempt"
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         status = self.get_status_display() or ""

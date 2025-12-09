@@ -449,7 +449,7 @@ LOCAL_APPS = [
     "apps.modules",
     "apps.widgets",
     "apps.pages",
-    "apps.cards",
+    "apps.rfids",
     "apps.tasks",
     "apps.tests",
     "apps.teams",

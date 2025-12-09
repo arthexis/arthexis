@@ -12,5 +12,5 @@ class EVCSChargePoint(Charger):
 
     class Meta:
         proxy = True
-        verbose_name = _("EVCS Charge Point")
-        verbose_name_plural = _("EVCS Charge Points")
+        verbose_name = _("Charge Point")
+        verbose_name_plural = _("Charge Points")

@@ -60,8 +60,6 @@ from .models import (
     SecurityEvent,
     ChargerLogRequest,
     CPForwarder,
-    EVCSChargePoint,
-    RFIDSessionAttempt,
 )
 from .simulator import ChargePointSimulator
 from . import store
@@ -74,7 +72,7 @@ from .status_resets import clear_stale_cached_statuses
 from .views import _charger_state, _live_sessions
 from apps.core.admin import SaveBeforeChangeAction
 from apps.energy.models import EnergyTariff
-from apps.cards.models import RFID as CoreRFID
+from apps.rfids.models import RFID as CoreRFID
 from apps.core.form_fields import SchedulePeriodsField
 from apps.locals.user_data import EntityModelAdmin
 from apps.nodes.models import Node
@@ -101,8 +99,6 @@ for _model in (
     CPNetworkProfile,
     CPNetworkProfileDeployment,
     CPFirmwareRequest,
-    RFIDSessionAttempt,
-    EVCSChargePoint,
 ):
     try:
         admin.site.unregister(_model)
@@ -4609,30 +4605,5 @@ class CPFirmwareRequestAdmin(EntityModelAdmin):
     list_filter = ("status",)
     search_fields = ("charger__charger_id", "vendor_id")
     readonly_fields = ("requested_at", "updated_at")
-
-
-@admin.register(RFIDSessionAttempt)
-class RFIDSessionAttemptAdmin(EntityModelAdmin):
-    list_display = (
-        "rfid",
-        "status",
-        "charger",
-        "account",
-        "transaction",
-        "attempted_at",
-    )
-    list_filter = ("status",)
-    search_fields = (
-        "rfid",
-        "charger__charger_id",
-        "account__name",
-        "transaction__ocpp_id",
-    )
-    readonly_fields = ("attempted_at",)
-
-
-@admin.register(EVCSChargePoint)
-class EVCSChargePointAdmin(ChargerAdmin):
-    pass
 
 

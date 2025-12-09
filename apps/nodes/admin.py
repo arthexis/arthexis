@@ -46,7 +46,7 @@ from cryptography.hazmat.primitives.asymmetric import padding
 from requests import RequestException
 from asgiref.sync import async_to_sync
 
-from apps.cards.sync import apply_rfid_payload, serialize_rfid
+from apps.rfids.sync import apply_rfid_payload, serialize_rfid
 from .utils import (
     capture_screenshot,
     record_microphone_sample,
@@ -74,7 +74,7 @@ from .models import (
     NodeManager,
     _format_upgrade_body,
 )
-from apps.cards.models import RFID
+from apps.rfids.models import RFID
 from apps.emails.models import EmailOutbox
 from apps.ocpp import store
 from apps.ocpp.models import (

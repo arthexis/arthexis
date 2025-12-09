@@ -10,7 +10,7 @@ from typing import Any, TYPE_CHECKING
 from django.utils.dateparse import parse_date, parse_datetime
 
 from apps.energy.models import CustomerAccount
-from apps.cards.models import RFID
+from apps.rfids.models import RFID
 
 if TYPE_CHECKING:  # pragma: no cover - imported only for type checking
     from apps.nodes.models import Node

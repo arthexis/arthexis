@@ -5,7 +5,7 @@ import time
 from django.utils import timezone
 from django.core.exceptions import ValidationError
 
-from apps.cards.models import RFID
+from apps.rfids.models import RFID
 from apps.core.notifications import notify_async
 
 from .constants import (

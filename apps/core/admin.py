@@ -72,14 +72,14 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 from apps.ocpp.models import Charger, Transaction
 from apps.vehicle.models import ElectricVehicle
-from apps.cards.utils import build_mode_toggle
+from apps.rfids.utils import build_mode_toggle
 from apps.emails.models import EmailCollector, EmailInbox, EmailOutbox
 from apps.energy.models import ClientReport, CustomerAccount
 from apps.repos.forms import PackageRepositoryForm
 from apps.repos.task_utils import GitHubRepositoryError, create_repository_for_package
 from apps.core.models import InviteLead
 from apps.users.models import User, UserPhoneNumber
-from apps.cards.models import RFID
+from apps.rfids.models import RFID
 from apps.payments.models import OpenPayProcessor, PayPalProcessor, StripeProcessor
 from apps.odoo.models import OdooEmployee, OdooProduct
 from apps.locals.user_data import (
@@ -92,7 +92,7 @@ from apps.locals.user_data import (
     _user_allows_user_data,
 )
 from .widgets import OdooProductWidget, RFIDDataWidget
-from apps.cards.rfid_import_export import (
+from apps.rfids.rfid_import_export import (
     account_column_for_field,
     parse_accounts,
     serialize_accounts,
@@ -2972,8 +2972,8 @@ class RFIDAdmin(EntityModelAdmin, ImportExportModelAdmin):
         return render(request, "admin/cards/rfid/scan.html", context)
 
     def scan_next(self, request):
-        from apps.cards.scanner import scan_sources
-        from apps.cards.reader import validate_rfid_value
+        from apps.rfids.scanner import scan_sources
+        from apps.rfids.reader import validate_rfid_value
 
         if request.method == "POST":
             try:

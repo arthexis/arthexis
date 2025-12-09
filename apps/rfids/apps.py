@@ -4,9 +4,9 @@ from django.apps import AppConfig
 from django.conf import settings
 
 
-class CardsConfig(AppConfig):
+class RfidsConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
-    name = "apps.cards"
+    name = "apps.rfids"
     label = "cards"
 
     def ready(self):  # pragma: no cover - startup side effects

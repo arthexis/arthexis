@@ -1,6 +1,6 @@
 from django.db import IntegrityError
 
-from apps.cards.models import RFID
+from apps.rfids.models import RFID
 
 from .background_reader import get_next_tag, is_configured, start, stop
 from .irq_wiring_check import check_irq_pin

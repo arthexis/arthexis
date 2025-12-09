@@ -423,7 +423,7 @@ class ManualTask(Entity):
 
     def resolve_reservation_credentials(self):
         from apps.energy.models import CustomerAccount
-        from apps.cards.models import RFID
+        from apps.rfids.models import RFID
 
         account: CustomerAccount | None = None
         rfid: RFID | None = None

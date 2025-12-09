@@ -15,7 +15,7 @@ from django.contrib.auth.backends import ModelBackend
 from django.core.exceptions import DisallowedHost
 from django.http.request import split_domain_port
 
-from apps.cards.models import RFID
+from apps.rfids.models import RFID
 from apps.energy.models import CustomerAccount
 from . import temp_passwords
 

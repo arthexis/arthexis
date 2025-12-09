@@ -10,12 +10,12 @@ from django.contrib.auth.views import redirect_to_login
 from django.contrib.admin.views.decorators import staff_member_required
 from apps.nodes.models import Node, NodeFeature
 from apps.pages.utils import landing
-from apps.cards.sync import apply_rfid_payload, serialize_rfid
+from apps.rfids.sync import apply_rfid_payload, serialize_rfid
 from apps.nodes.views import _clean_requester_hint, _load_signed_node
 
 from .scanner import scan_sources, enable_deep_read_mode
 from .reader import validate_rfid_value
-from apps.cards.models import RFID
+from apps.rfids.models import RFID
 from .utils import build_mode_toggle
 from apps.camera.rfid import scan_camera_qr
 

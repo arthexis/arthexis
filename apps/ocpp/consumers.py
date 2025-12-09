@@ -14,7 +14,7 @@ from django.conf import settings
 from django.utils import timezone
 from apps.energy.models import CustomerAccount
 from apps.links.models import Reference
-from apps.cards.models import RFID as CoreRFID
+from apps.rfids.models import RFID as CoreRFID, RFIDSessionAttempt
 from apps.nodes.models import NetMessage
 from apps.protocols.decorators import protocol_call
 from apps.protocols.models import ProtocolCall as ProtocolCallModel
@@ -44,7 +44,6 @@ from .models import (
     CPFirmware,
     CPFirmwareDeployment,
     CPFirmwareRequest,
-    RFIDSessionAttempt,
     SecurityEvent,
     ChargerLogRequest,
     PowerProjection,

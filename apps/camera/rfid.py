@@ -131,7 +131,7 @@ def scan_camera_qr(*, endianness: str | None = None) -> dict[str, Any]:
         return {"rfid": None, "label_id": None}
 
     try:
-        from apps.cards.reader import validate_rfid_value
+        from apps.rfids.reader import validate_rfid_value
     except Exception as exc:  # pragma: no cover - defensive guard
         logger.exception("Unable to validate QR payload")
         return {"error": str(exc)}

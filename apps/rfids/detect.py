@@ -92,7 +92,7 @@ def detect_scanner() -> Dict[str, Any]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """CLI entry point for ``python -m apps.cards.detect``."""
+    """CLI entry point for ``python -m apps.rfids.detect``."""
     result = detect_scanner()
     if result.get("detected"):
         if result.get("assumed"):

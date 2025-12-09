@@ -17,7 +17,7 @@ from django.utils.translation import gettext_lazy as _
 from apps.base.models import Entity
 
 
-__all__ = ["RFID"]
+__all__ = ["RFID", "RFIDSessionAttempt"]
 
 
 class RFID(Entity):
@@ -485,4 +485,7 @@ class RFID(Entity):
         verbose_name = "RFID"
         verbose_name_plural = "RFIDs"
         db_table = "core_rfid"
+
+
+from .rfid_session_attempt import RFIDSessionAttempt  # noqa: E402  pylint: disable=wrong-import-position
 
