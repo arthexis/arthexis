@@ -20,9 +20,19 @@ class ApplicationManager(models.Manager):
 
 
 class Application(Entity):
+    class Importance(models.TextChoices):
+        CRITICAL = "critical", _("Critical")
+        BASELINE = "baseline", _("Baseline")
+        PROTOTYPE = "prototype", _("Prototype")
+
     name = models.CharField(max_length=100, unique=True, blank=True)
     description = models.TextField(blank=True)
     order = models.PositiveIntegerField(blank=True, null=True)
+    importance = models.CharField(
+        max_length=20,
+        choices=Importance.choices,
+        default=Importance.BASELINE,
+    )
 
     objects = ApplicationManager()
 
