@@ -35,7 +35,7 @@ django-mermaid==0.1.0
 django-import-export==4.3.14
 django-object-actions==5.0.0
 django-otp==1.6.3
-django-timezone-field==7.1
+django-timezone-field==7.2.1
 dnspython==2.7.0
 docutils==0.22.3
 gpiozero==2.0.1; sys_platform == "linux"
