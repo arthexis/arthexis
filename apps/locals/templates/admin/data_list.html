@@ -49,11 +49,11 @@
           <tr>
             <td>{{ section.opts.app_config.verbose_name|capfirst }}</td>
             <td>{{ section.opts.verbose_name|capfirst }}</td>
-            <td>
-              {% if item.custom_override %}
+            <td aria-label="{% trans 'Custom' %}">
+              {% if item.custom %}
                 ✓
               {% else %}
-                ✕
+                ✗
               {% endif %}
             </td>
             <td><a href="{{ item.url }}">{{ item.label }}</a></td>

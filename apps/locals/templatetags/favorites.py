@@ -183,6 +183,21 @@ def cached_dashboard_favorites(context, app_list, favorites_map=None):
         ),
     )
 
+    if not cached and favorites_map:
+        cached = get_cached_user_favorites(
+            user.pk,
+            show_changelinks=show_changelinks,
+            show_model_badges=show_model_badges,
+            builder=lambda: _render_favorites(
+                app_list,
+                favorites_map,
+                show_changelinks,
+                show_model_badges,
+                request,
+            ),
+            force_refresh=True,
+        )
+
     if cached is None:
         return ""
 

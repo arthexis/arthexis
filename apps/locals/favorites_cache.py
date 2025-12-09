@@ -44,13 +44,16 @@ def get_cached_user_favorites(
     show_changelinks: bool,
     show_model_badges: bool,
     builder: Callable[[], object],
+    force_refresh: bool = False,
 ):
     cache_key = user_favorites_cache_key(
         user_id,
         show_changelinks=show_changelinks,
         show_model_badges=show_model_badges,
     )
-    return get_cached_value_for_key(cache_key, builder)
+    return get_cached_value_for_key(
+        cache_key, builder, force_refresh=force_refresh
+    )
 
 
 def clear_user_favorites_cache(
