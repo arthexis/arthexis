@@ -16,6 +16,95 @@ ERROR_LOG="$LOG_DIR/error.log"
 : > "$ERROR_LOG"
 exec > >(tee "$LOG_FILE") 2> >(tee -a "$ERROR_LOG" >&2)
 cd "$BASE_DIR"
+LOG_FOLLOW_PID=""
+
+normalize_log_level() {
+  local raw_level="$1"
+  if [ -z "$raw_level" ]; then
+    return 1
+  fi
+
+  local normalized
+  normalized=$(echo "$raw_level" | tr '[:lower:]' '[:upper:]')
+  case "$normalized" in
+    DEBUG|INFO|WARNING|ERROR|CRITICAL)
+      echo "$normalized"
+      return 0
+      ;;
+    WARN)
+      echo "WARNING"
+      return 0
+      ;;
+    FATAL)
+      echo "CRITICAL"
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+log_level_priority() {
+  case "$1" in
+    DEBUG)
+      echo 0
+      ;;
+    INFO)
+      echo 1
+      ;;
+    WARNING)
+      echo 2
+      ;;
+    ERROR)
+      echo 3
+      ;;
+    CRITICAL)
+      echo 4
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+extract_line_level() {
+  local line="$1"
+  if [[ "$line" =~ \[([A-Z]+)\] ]]; then
+    echo "${BASH_REMATCH[1]}"
+  fi
+}
+
+start_log_follower() {
+  local log_file="$1"
+  local minimum_level="$2"
+
+  if [ -z "$minimum_level" ]; then
+    return 0
+  fi
+
+  local min_priority
+  min_priority=$(log_level_priority "$minimum_level") || return 1
+  touch "$log_file"
+  echo "Streaming log entries from $log_file at level $minimum_level or higher..."
+
+  tail -n0 -F "$log_file" | while IFS= read -r line; do
+    local line_level
+    line_level=$(extract_line_level "$line")
+    if [ -z "$line_level" ]; then
+      echo "$line"
+      continue
+    fi
+
+    local priority
+    priority=$(log_level_priority "$line_level") || priority=""
+    if [ -z "$priority" ] || [ "$priority" -ge "$min_priority" ]; then
+      echo "$line"
+    fi
+  done &
+
+  LOG_FOLLOW_PID=$!
+}
 LOCK_DIR="$BASE_DIR/.locks"
 STARTUP_LOCK="$LOCK_DIR/startup_started_at.lck"
 SYSTEMD_LOCK_FILE="$LOCK_DIR/systemd_services.lck"
@@ -73,6 +162,9 @@ RELOAD=false
 # Whether to wait for the suite to become reachable after launching
 AWAIT_START=false
 STARTUP_TIMEOUT=300
+DEBUG_MODE=false
+SHOW_LEVEL=""
+APP_LOG_FILE="$LOG_DIR/$(hostname).log"
 # Celery workers process Post Office's email queue; prefer embedded mode.
 CELERY_MANAGEMENT_MODE="$SERVICE_MANAGEMENT_MODE"
 CELERY_FLAG_SET=false
@@ -96,6 +188,9 @@ cleanup_background_processes() {
   fi
   if [ -n "$DJANGO_SERVER_PID" ]; then
     kill "$DJANGO_SERVER_PID" 2>/dev/null || true
+  fi
+  if [ -n "$LOG_FOLLOW_PID" ]; then
+    kill "$LOG_FOLLOW_PID" 2>/dev/null || true
   fi
 }
 trap cleanup_background_processes EXIT
@@ -139,6 +234,18 @@ while [[ $# -gt 0 ]]; do
       AWAIT_START=true
       shift
       ;;
+    --debug)
+      DEBUG_MODE=true
+      shift
+      ;;
+    --show)
+      if [ -z "${2:-}" ]; then
+        echo "Usage: $0 [--port PORT] [--reload] [--await] [--debug] [--show LEVEL] [--public|--internal] [--embedded|--systemd|--no-celery]" >&2
+        exit 1
+      fi
+      SHOW_LEVEL="$2"
+      shift 2
+      ;;
     --embedded|--celery)
       CELERY_MANAGEMENT_MODE="$ARTHEXIS_SERVICE_MODE_EMBEDDED"
       CELERY_FLAG_SET=true
@@ -163,11 +270,28 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     *)
-      echo "Usage: $0 [--port PORT] [--reload] [--await] [--public|--internal] [--embedded|--systemd|--no-celery]" >&2
+      echo "Usage: $0 [--port PORT] [--reload] [--await] [--debug] [--show LEVEL] [--public|--internal] [--embedded|--systemd|--no-celery]" >&2
       exit 1
       ;;
   esac
 done
+
+if [ -n "$SHOW_LEVEL" ]; then
+  if ! SHOW_LEVEL=$(normalize_log_level "$SHOW_LEVEL"); then
+    echo "Invalid log level: $SHOW_LEVEL" >&2
+    exit 1
+  fi
+fi
+
+if [ "$SHOW_LEVEL" = "DEBUG" ]; then
+  DEBUG_MODE=true
+fi
+
+if [ "$DEBUG_MODE" = true ]; then
+  export DEBUG=1
+fi
+
+start_log_follower "$APP_LOG_FILE" "$SHOW_LEVEL"
 
 arthexis_suite_reachable() {
   local port="$1"

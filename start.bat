@@ -14,6 +14,8 @@ if exist .locks\backend_port.lck (
     for /f %%p in ('findstr /R "^[0-9][0-9]*$" .locks\backend_port.lck') do set PORT=%%p
 )
 set RELOAD=
+set DEBUG_MODE=
+set SHOW_LEVEL=
 :parse
 if "%1"=="" goto run
 if "%1"=="--port" (
@@ -27,11 +29,48 @@ if "%1"=="--reload" (
     shift
     goto parse
 )
-echo Usage: %0 [--port PORT] [--reload]
+if "%1"=="--debug" (
+    set DEBUG_MODE=1
+    shift
+    goto parse
+)
+if "%1"=="--show" (
+    if "%~2"=="" (
+        echo Usage: %0 [--port PORT] [--reload] [--debug] [--show LEVEL]
+        set EXIT_CODE=1
+        goto cleanup
+    )
+    set SHOW_LEVEL=%2
+    shift
+    shift
+    goto parse
+)
+echo Usage: %0 [--port PORT] [--reload] [--debug] [--show LEVEL]
 set EXIT_CODE=1
 goto cleanup
 
 :run
+if defined SHOW_LEVEL (
+    call :normalize_level "%SHOW_LEVEL%" NORMALIZED_LEVEL
+    if errorlevel 1 (
+        echo Invalid log level: %SHOW_LEVEL%
+        set EXIT_CODE=1
+        goto cleanup
+    )
+    set SHOW_LEVEL=%NORMALIZED_LEVEL%
+)
+
+if /I "%SHOW_LEVEL%"=="DEBUG" set DEBUG_MODE=1
+if defined DEBUG_MODE set DEBUG=1
+
+set LOG_DIR=%ARTHEXIS_LOG_DIR%
+if "%LOG_DIR%"=="" set LOG_DIR=%SCRIPT_DIR%logs
+if not exist "%LOG_DIR%" mkdir "%LOG_DIR%"
+if not defined COMPUTERNAME for /f %%h in ('hostname') do set COMPUTERNAME=%%h
+set LOG_FILE=%LOG_DIR%\%COMPUTERNAME%.log
+
+if defined SHOW_LEVEL call :start_log_listener "%LOG_FILE%" %SHOW_LEVEL%
+
 if not defined RELOAD set NORELOAD=--noreload
 set STATIC_MD5=staticfiles.md5
 set NEW_STATIC_HASH=
@@ -82,6 +121,45 @@ goto cleanup
 echo collectstatic failed
 set EXIT_CODE=1
 goto cleanup
+
+:normalize_level
+set "RAW_LEVEL=%~1"
+set "OUT_VAR=%~2"
+set "LEVEL=%RAW_LEVEL%"
+if /I "%LEVEL%"=="warn" set "LEVEL=WARNING"
+if /I "%LEVEL%"=="fatal" set "LEVEL=CRITICAL"
+set "VALID_LEVEL="
+for %%L in (DEBUG INFO WARNING ERROR CRITICAL) do (
+    if /I "%%L"=="%LEVEL%" (
+        set "LEVEL=%%L"
+        set VALID_LEVEL=1
+    )
+)
+if not defined VALID_LEVEL exit /b 1
+set "%OUT_VAR%=%LEVEL%"
+exit /b 0
+
+:start_log_listener
+set "TARGET_LOG=%~1"
+set "MIN_LEVEL=%~2"
+start "" /B powershell -NoProfile -Command ^
+ "$logPath = '%TARGET_LOG%';" ^
+ "$minLevel = '%MIN_LEVEL%';" ^
+ "$map = @{DEBUG=0;INFO=1;WARNING=2;ERROR=3;CRITICAL=4};" ^
+ "if (-not $map.ContainsKey($minLevel)) { Write-Error 'Invalid log level'; exit 1 }" ^
+ "if (-not (Test-Path $logPath)) { New-Item -Path $logPath -ItemType File -Force ^| Out-Null }" ^
+ "Write-Host \"Streaming log entries from $logPath at level $minLevel or higher...\";" ^
+ "$minPriority = $map[$minLevel];" ^
+ "Get-Content -Path $logPath -Tail 0 -Wait ^|" ^
+ "  ForEach-Object {" ^
+ "    $line = $_;" ^
+ "    if ($line -match '\\[(?<lvl>[A-Z]+)\\]') {" ^
+ "      $lvl = $Matches['lvl'];" ^
+ "      if ($map.ContainsKey($lvl) -and $map[$lvl] -lt $minPriority) { return }" ^
+ "    }" ^
+ "    Write-Host $line" ^
+ "  }"
+exit /b 0
 
 :cleanup
 if not "%SCRIPT_DIR%"=="" popd

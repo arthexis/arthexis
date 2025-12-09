@@ -23,6 +23,8 @@ refresh_suite_uptime_lock_safe() {
 }
 
 SILENT=false
+DEBUG_MODE=false
+SHOW_LEVEL=""
 SERVICE_ARGS=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -30,12 +32,30 @@ while [[ $# -gt 0 ]]; do
       SILENT=true
       shift
       ;;
+    --debug)
+      DEBUG_MODE=true
+      SERVICE_ARGS+=("$1")
+      shift
+      ;;
+    --show)
+      if [ -z "${2:-}" ]; then
+        echo "Usage: $0 [--silent] [--debug] [--show LEVEL] [service args...]" >&2
+        exit 1
+      fi
+      SHOW_LEVEL="$2"
+      SERVICE_ARGS+=("$1" "$2")
+      shift 2
+      ;;
     *)
       SERVICE_ARGS+=("$1")
       shift
       ;;
   esac
 done
+
+if [ -n "$SHOW_LEVEL" ] && [ "${SHOW_LEVEL^^}" = "DEBUG" ]; then
+  DEBUG_MODE=true
+fi
 
 echo "Manual start requested." >>"$BASE_DIR/logs/start.log" 2>/dev/null || true
 
@@ -104,7 +124,8 @@ if [ -f "$LOCK_DIR/service.lck" ]; then
   SERVICE_NAME="$(tr -d '\r\n' < "$LOCK_DIR/service.lck")"
 fi
 
-if [ -n "$SERVICE_NAME" ] && [ ${#SYSTEMCTL_CMD[@]} -gt 0 ] \
+if [ "$DEBUG_MODE" = false ] && [ -z "$SHOW_LEVEL" ] \
+  && [ -n "$SERVICE_NAME" ] && [ ${#SYSTEMCTL_CMD[@]} -gt 0 ] \
   && "${SYSTEMCTL_CMD[@]}" list-unit-files | grep -Fq "${SERVICE_NAME}.service"; then
   "${SYSTEMCTL_CMD[@]}" restart "$SERVICE_NAME"
   if [ "$SILENT" = true ]; then
