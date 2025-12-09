@@ -18,6 +18,7 @@ from django.utils.translation import gettext_lazy as _
 from apps.celery.utils import celery_feature_enabled as celery_feature_enabled_helper
 from apps.core.entity import Entity
 from apps.nodes.models import NetMessage, Node
+from apps.counters.models import DashboardRule
 
 register = template.Library()
 
@@ -306,6 +307,33 @@ def admin_changelist_url(ct: ContentType) -> str:
         return reverse(f"admin:{ct.app_label}_{ct.model}_changelist")
     except NoReverseMatch:
         return ""
+
+
+@register.simple_tag
+def dashboard_model_status(app_label: str, model_name: str) -> dict | None:
+    """Return dashboard rule status for a model when configured."""
+
+    try:
+        model = apps.get_model(app_label, model_name)
+    except LookupError:
+        return None
+
+    content_type = ContentType.objects.get_for_model(
+        model, for_concrete_model=False
+    )
+
+    try:
+        rule = DashboardRule.objects.select_related("content_type").get(
+            content_type=content_type
+        )
+    except DashboardRule.DoesNotExist:
+        return None
+
+    try:
+        return DashboardRule.get_cached_value(content_type, rule.evaluate)
+    except Exception:
+        logger.exception("Unable to evaluate dashboard rule for %s", content_type)
+        return None
 
 
 @register.simple_tag

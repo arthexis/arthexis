@@ -8,6 +8,7 @@
       {{ favorites_block }}
     {% endwith %}
   {% endif %}
+  {% with show_model_badges=show_model_badges|default:True %}
   {% celery_feature_enabled as celery_enabled %}
   {% for app in app_list %}
     {% if app.app_label != 'django_celery_beat' or celery_enabled %}
@@ -38,7 +39,7 @@
           {% with model_name=model.object_name|lower %}
             {% favorite_ct_id model_app_label model.object_name as ct_id %}
             {% favorite_from_map favorites_map ct_id as fav %}
-            {% include "admin/includes/dashboard_model_row.html" with app_label=app.app_label model=model fav=fav ct_id=ct_id model_app_label=model_app_label model_name=model_name row_dom_id=model_app_label|add:"-"|add:model_name %}
+            {% include "admin/includes/dashboard_model_row.html" with app_label=app.app_label model=model fav=fav ct_id=ct_id model_app_label=model_app_label model_name=model_name row_dom_id=model_app_label|add:"-"|add:model_name show_model_badges=show_model_badges %}
           {% endwith %}
         {% endfor %}
         </tbody>
@@ -46,6 +47,7 @@
     </div>
     {% endif %}
   {% endfor %}
+  {% endwith %}
 {% else %}
   <p>{% translate 'You don’t have permission to view or edit anything.' %}</p>
 {% endif %}
