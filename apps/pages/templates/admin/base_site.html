@@ -69,33 +69,22 @@
       });
     }
 
-    const htmxLocal = '{% static "htmx/htmx.min.js" %}';
-    const revealLocal = '{% static "htmx/reveal.js" %}';
-    const intersectLocal = '{% static "htmx/intersect.js" %}';
+    function loadHtmxExtensions() {
+      if (!window.htmx) {
+        return;
+      }
+
+      loadScript('{% static "htmx/reveal.js" %}');
+      loadScript('{% static "htmx/intersect.js" %}');
+    }
 
     loadWithFallback(
-      htmxLocal,
+      '{% static "htmx/htmx.min.js" %}',
       'https://unpkg.com/htmx.org@1.9.12/dist/htmx.min.js',
       function () {
         return !!window.htmx;
       },
-      function () {
-        loadWithFallback(
-          revealLocal,
-          'https://unpkg.com/htmx.org@1.9.12/dist/ext/reveal.js',
-          function () {
-            return Boolean(window.htmx && window.htmx.extensions && window.htmx.extensions.reveal);
-          }
-        );
-
-        loadWithFallback(
-          intersectLocal,
-          'https://unpkg.com/htmx.org@1.9.12/dist/ext/intersect.js',
-          function () {
-            return Boolean(window.htmx && window.htmx.extensions && window.htmx.extensions.intersect);
-          }
-        );
-      }
+      loadHtmxExtensions
     );
   })();
 </script>
