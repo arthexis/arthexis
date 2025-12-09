@@ -411,6 +411,7 @@ LOCAL_APPS = [
     "apps.nodes",
     "apps.dns",
     "apps.screens",
+    "apps.pyxel",
     "apps.counters",
     "apps.energy",
     "apps.groups",

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.screens.models import PyxelUnavailableError, PyxelViewport
+from apps.pyxel.models import PyxelUnavailableError, PyxelViewport
 
 
 class Command(BaseCommand):
