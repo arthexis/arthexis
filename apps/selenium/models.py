@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import os
 import logging
 import shutil
 
@@ -103,7 +104,11 @@ class SeleniumBrowser(Entity):
         binary = self._find_firefox_binary()
         if binary:
             options.binary_location = binary
-        if self.mode == self.Mode.HEADLESS:
+        mode = self.mode
+        if mode == self.Mode.HEADED and not os.environ.get("DISPLAY"):
+            logger.warning("DISPLAY not set; forcing headless mode for %s", self)
+            mode = self.Mode.HEADLESS
+        if mode == self.Mode.HEADLESS:
             options.add_argument("-headless")
         return options
 
