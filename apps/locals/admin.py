@@ -3,6 +3,7 @@ from __future__ import annotations
 from django.conf import settings
 from django.contrib import admin
 from django.contrib.contenttypes.models import ContentType
+from django.db import IntegrityError
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import path
 from django.utils.http import url_has_allowed_host_and_scheme
@@ -65,13 +66,29 @@ def favorite_toggle(request, ct_id):
                 priority = int(priority_raw)
             except (TypeError, ValueError):
                 priority = 0
-            Favorite.objects.create(
-                user=request.user,
-                content_type=ct,
-                custom_label=label,
-                user_data=user_data,
-                priority=priority,
-            )
+            try:
+                Favorite.objects.create(
+                    user=request.user,
+                    content_type=ct,
+                    custom_label=label,
+                    user_data=user_data,
+                    priority=priority,
+                )
+            except IntegrityError:
+                fav = Favorite.objects.filter(user=request.user, content_type=ct).first()
+                if fav:
+                    update_fields = []
+                    if fav.custom_label != label:
+                        fav.custom_label = label
+                        update_fields.append("custom_label")
+                    if fav.user_data != user_data:
+                        fav.user_data = user_data
+                        update_fields.append("user_data")
+                    if fav.priority != priority:
+                        fav.priority = priority
+                        update_fields.append("priority")
+                    if update_fields:
+                        fav.save(update_fields=update_fields)
         clear_user_favorites_cache(request.user)
         return redirect(next_url or "admin:index")
     return render(
