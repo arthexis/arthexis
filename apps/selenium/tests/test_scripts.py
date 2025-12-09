@@ -55,3 +55,12 @@ def test_callable_path_runs_after_start_url(monkeypatch):
 
     assert driver.visited == ["https://start.test", "https://callable.test"]
     assert driver.quit_called is True
+
+
+def test_firefox_options_force_headless_without_display(monkeypatch):
+    monkeypatch.delenv("DISPLAY", raising=False)
+    browser = SeleniumBrowser(name="Example")
+
+    options = browser._build_firefox_options()
+
+    assert "-headless" in options.arguments
