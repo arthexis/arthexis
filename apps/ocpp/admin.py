@@ -1,4 +1,5 @@
 from django.contrib import admin, messages
+from django.contrib.admin.sites import NotRegistered
 from django.contrib.admin import helpers
 from django import forms
 
@@ -78,6 +79,37 @@ from apps.cards.models import RFID as CoreRFID
 from apps.core.form_fields import SchedulePeriodsField
 from apps.locals.user_data import EntityModelAdmin
 from apps.nodes.models import Node
+
+
+# Ensure admin reloads (e.g., in tests) do not fail due to existing registrations.
+for _model in (
+    ChargerConfiguration,
+    ConfigurationKey,
+    DataTransferMessage,
+    CPFirmware,
+    CPFirmwareDeployment,
+    ChargingProfile,
+    CPReservation,
+    PowerProjection,
+    Charger,
+    Simulator,
+    Transaction,
+    MeterValue,
+    SecurityEvent,
+    ChargerLogRequest,
+    CPForwarder,
+    StationModel,
+    CPNetworkProfile,
+    CPNetworkProfileDeployment,
+    CPFirmwareRequest,
+    RFIDSessionAttempt,
+    EVCSChargePoint,
+    RFID,
+):
+    try:
+        admin.site.unregister(_model)
+    except NotRegistered:
+        pass
 
 
 class TransactionExportForm(forms.Form):
