@@ -77,16 +77,38 @@ def badge_counters(context, app_label: str, model_name: str) -> list[dict[str, o
     else:
         counters = BadgeCounter.get_cached_value(
             content_type,
-            lambda: [
-                display
-                for counter in BadgeCounter.objects.filter(
-                    content_type=content_type, is_enabled=True
-                ).order_by("priority", "pk")
-                if (display := counter.build_display())
-            ],
+            lambda: _build_badge_counters(app_label, model_name, content_type),
         )
 
     cache_map[cache_key] = counters
+    return counters
+
+
+def _build_badge_counters(app_label, model_name, content_type):
+    counters: list[dict[str, object]] = []
+    missing_displays: list[int] = []
+    for counter in (
+        BadgeCounter.objects.filter(content_type=content_type, is_enabled=True)
+        .order_by("priority", "pk")
+        .iterator()
+    ):
+        display = counter.build_display()
+        if display:
+            counters.append(display)
+            continue
+
+        missing_displays.append(counter.pk)
+
+    if missing_displays:
+        logger.info(
+            "Badge counters did not render a display",
+            extra={
+                "model": f"{app_label}.{model_name}",
+                "content_type_id": content_type.pk,
+                "counter_ids": missing_displays,
+            },
+        )
+
     return counters
 
 
