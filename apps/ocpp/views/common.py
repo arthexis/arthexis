@@ -44,6 +44,7 @@ from apps.protocols.decorators import protocol_call
 from apps.protocols.models import ProtocolCall as ProtocolCallModel
 
 from apps.pages.utils import landing
+from apps.cards.models import RFID as CoreRFID
 
 from django.utils.dateparse import parse_datetime
 
@@ -55,7 +56,6 @@ from ..models import (
     ChargerLogRequest,
     DataTransferMessage,
     ChargingProfile,
-    RFID,
     CPReservation,
     CPFirmware,
     CPFirmwareDeployment,
@@ -359,7 +359,7 @@ def _transaction_rfid_details(
         if cache is not None and cache_key in cache:
             return cache[cache_key]
         tag = (
-            RFID.matching_queryset(normalized)
+            CoreRFID.matching_queryset(normalized)
             .only("pk", "label_id", "custom_label")
             .first()
         )
