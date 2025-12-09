@@ -60,9 +60,8 @@ from .models import (
     SecurityEvent,
     ChargerLogRequest,
     CPForwarder,
-    RFID,
-    RFIDSessionAttempt,
     EVCSChargePoint,
+    RFIDSessionAttempt,
 )
 from .simulator import ChargePointSimulator
 from . import store
@@ -73,7 +72,7 @@ from .transactions_io import (
 from .status_display import STATUS_BADGE_MAP, ERROR_OK_VALUES
 from .status_resets import clear_stale_cached_statuses
 from .views import _charger_state, _live_sessions
-from apps.core.admin import RFIDAdmin, SaveBeforeChangeAction
+from apps.core.admin import SaveBeforeChangeAction
 from apps.energy.models import EnergyTariff
 from apps.cards.models import RFID as CoreRFID
 from apps.core.form_fields import SchedulePeriodsField
@@ -104,7 +103,6 @@ for _model in (
     CPFirmwareRequest,
     RFIDSessionAttempt,
     EVCSChargePoint,
-    RFID,
 ):
     try:
         admin.site.unregister(_model)
@@ -4638,6 +4636,3 @@ class EVCSChargePointAdmin(ChargerAdmin):
     pass
 
 
-@admin.register(RFID)
-class OCPPRFIDAdmin(RFIDAdmin):
-    pass
