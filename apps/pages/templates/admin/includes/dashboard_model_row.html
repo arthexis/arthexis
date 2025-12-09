@@ -23,33 +23,6 @@
             {{ fav.custom_label|default:model.name }}
           {% endif %}
         </span>
-        {% if show_model_badges %}
-          {% with status_container_id="model-status-"|add:row_dom_id %}
-            <span
-              id="{{ status_container_id }}"
-              class="dashboard-model-status"
-              data-model-status-loader
-              data-fallback-template="{{ status_container_id }}-fallback"
-              hx-ext="reveal"
-              hx-get="{% url 'admin:dashboard_model_status' %}?app={{ app_label }}&model={{ model.object_name|urlencode }}"
-              hx-trigger="revealed"
-              hx-swap="innerHTML"
-              hx-on::after-request="if(!event.detail.successful){const fallback=document.getElementById(this.dataset.fallbackTemplate);if(fallback){this.innerHTML=fallback.innerHTML;}}"
-              aria-live="polite"
-            >
-              <span class="visually-hidden">{% translate "Loading model status…" %}</span>
-            </span>
-            <template id="{{ status_container_id }}-fallback">
-              <span class="model-rule-status model-rule-status--error">
-                <span class="model-rule-status__icon" aria-hidden="true">!</span>
-                <span class="model-rule-status__message">{% translate "Unable to load status." %}</span>
-              </span>
-            </template>
-            <noscript>
-              {% include "admin/includes/dashboard_model_status.html" with app_label=app_label model_name=model.object_name %}
-            </noscript>
-          {% endwith %}
-        {% endif %}
       </span>
     </span>
   </th>

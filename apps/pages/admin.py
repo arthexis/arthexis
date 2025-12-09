@@ -11,13 +11,7 @@ from django.urls import NoReverseMatch, path, reverse
 from django.utils.html import format_html
 
 from django.template.response import TemplateResponse
-from django.http import (
-    FileResponse,
-    HttpResponseBadRequest,
-    HttpResponseForbidden,
-    HttpResponseNotAllowed,
-    JsonResponse,
-)
+from django.http import FileResponse, JsonResponse
 from django.utils import timezone
 from django.db.models import Count
 from django.core.exceptions import FieldDoesNotExist, FieldError
@@ -1138,61 +1132,10 @@ def log_viewer(request):
     return TemplateResponse(request, "admin/log_viewer.html", context)
 
 
-def _resolve_dashboard_model(app_label: str, model_name: str):
-    """Return the registered model and admin instance for the dashboard lookup."""
-
-    normalized_model = model_name.lower()
-
-    for model_cls, model_admin in admin.site._registry.items():
-        opts = model_cls._meta
-        if opts.app_label == app_label and opts.model_name == normalized_model:
-            return model_cls, model_admin
-
-    return None, None
-
-
-def dashboard_model_status(request):
-    """Return rule status markup for dashboard models."""
-
-    if request.method != "GET":
-        return HttpResponseNotAllowed(["GET"])
-
-    app_label = request.GET.get("app")
-    model_name = request.GET.get("model")
-
-    if not app_label or not model_name:
-        return HttpResponseBadRequest(_("A valid app and model are required."))
-
-    model, model_admin = _resolve_dashboard_model(app_label, model_name)
-    if model_admin is None:
-        return HttpResponseBadRequest(_("The requested model is not available."))
-
-    if not model_admin.has_view_or_change_permission(request):
-        return HttpResponseForbidden(_("You do not have permission to view this model."))
-
-    context = {
-        **admin.site.each_context(request),
-        "app_label": model._meta.app_label,
-        "model_name": model._meta.object_name,
-    }
-
-    return TemplateResponse(
-        request,
-        "admin/includes/dashboard_model_status.html",
-        context,
-        status=200,
-    )
-
-
 def get_admin_urls(original_get_urls):
     def get_urls():
         urls = original_get_urls()
         my_urls = [
-            path(
-                "dashboard/model-status/",
-                admin.site.admin_view(dashboard_model_status),
-                name="dashboard_model_status",
-            ),
             path(
                 "logs/viewer/",
                 admin.site.admin_view(log_viewer),

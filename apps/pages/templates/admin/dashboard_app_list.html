@@ -1,15 +1,7 @@
 {% load i18n admin_extras favorites %}
 
 {% if show_changelinks is False %}
-  {% if show_model_badges is False %}
-    {% include 'admin/includes/dashboard_app_list_content.html' with show_changelinks=False show_model_badges=False show_favorites=show_favorites|default:True %}
-  {% else %}
-    {% include 'admin/includes/dashboard_app_list_content.html' with show_changelinks=False show_model_badges=True show_favorites=show_favorites|default:True %}
-  {% endif %}
+  {% include 'admin/includes/dashboard_app_list_content.html' with show_changelinks=False show_favorites=show_favorites|default:True %}
 {% else %}
-  {% if show_model_badges is False %}
-    {% include 'admin/includes/dashboard_app_list_content.html' with show_changelinks=True show_model_badges=False show_favorites=show_favorites|default:True %}
-  {% else %}
-    {% include 'admin/includes/dashboard_app_list_content.html' with show_changelinks=True show_model_badges=True show_favorites=show_favorites|default:True %}
-  {% endif %}
+  {% include 'admin/includes/dashboard_app_list_content.html' with show_changelinks=True show_favorites=show_favorites|default:True %}
 {% endif %}

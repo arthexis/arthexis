@@ -1,5 +1,5 @@
 {% extends "admin/base_site.html" %}
-{% load i18n static admin_extras counter_extras tz widgets %}
+{% load i18n static admin_extras tz widgets %}
 
 {% block extrastyle %}
   {{ block.super }}
@@ -40,7 +40,7 @@
 {% block content %}
   <div class="dashboard" id="admin-dashboard">
     <div id="content-main" class="dashboard-main">
-    {% include "admin/dashboard_app_list.html" with app_list=app_list show_model_badges=True %}
+    {% include "admin/dashboard_app_list.html" with app_list=app_list %}
     </div>
     <div class="dashboard-side" id="recent-boxes">
       {% render_widgets 'sidebar' %}
