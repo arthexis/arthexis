@@ -142,8 +142,8 @@
     <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a> ›
     {% url 'admin:app_list' 'release' as core_admin_url %}
     <a href="{{ core_admin_url }}">{% trans '2. Business' %}</a> ›
-    <a href="{% url 'admin:core_packagerelease_changelist' %}">{% trans 'Package Releases' %}</a> ›
-    <a href="{% url 'admin:core_packagerelease_change' release.pk %}">{{ release }}</a> ›
+    <a href="{% url 'admin:release_packagerelease_changelist' %}">{% trans 'Package Releases' %}</a> ›
+    <a href="{% url 'admin:release_packagerelease_change' release.pk %}">{{ release }}</a> ›
     {{ action|capfirst }}
   </div>
 </nav>
