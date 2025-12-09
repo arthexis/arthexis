@@ -1289,6 +1289,14 @@ def _build_auto_upgrade_report(
     skip_revisions = _load_auto_upgrade_skip_revisions(base_dir)
     schedule_info = _load_auto_upgrade_schedule()
 
+    # ``last_run_at`` may be empty when Celery Beat has not executed the
+    # periodic task yet or when inline task execution bypasses the scheduler,
+    # so fall back to the most recent log entry for display purposes.
+    if not schedule_info.get("last_run_at") and log_info.get("entries"):
+        last_log_entry = log_info["entries"][0]
+        if last_log_entry.get("timestamp"):
+            schedule_info["last_run_at"] = last_log_entry["timestamp"]
+
     raw_mode_value = str(mode_info.get("mode", "stable"))
     normalized_mode = raw_mode_value.lower() or "stable"
     resolved_mode = {
