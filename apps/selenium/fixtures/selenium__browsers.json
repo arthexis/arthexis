@@ -1,0 +1,26 @@
+[
+  {
+    "model": "selenium.seleniumbrowser",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "name": "Firefox (Headed)",
+      "engine": "firefox",
+      "mode": "headed",
+      "binary_path": "",
+      "is_default": true
+    }
+  },
+  {
+    "model": "selenium.seleniumbrowser",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "name": "Firefox (Headless)",
+      "engine": "firefox",
+      "mode": "headless",
+      "binary_path": "",
+      "is_default": false
+    }
+  }
+]

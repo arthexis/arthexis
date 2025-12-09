@@ -431,6 +431,7 @@ LOCAL_APPS = [
     "apps.media",
     "apps.odoo",
     "apps.sigils",
+    "apps.selenium",
     "apps.repos",
     "apps.app",
     "apps.rates",
