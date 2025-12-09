@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+import re
 from typing import Any
 
 from django.db import models
@@ -80,6 +81,19 @@ class WikiSummary:
     @property
     def has_content(self) -> bool:
         return bool(self.extract)
+
+    @property
+    def first_paragraph(self) -> str:
+        text = (self.extract or "").strip()
+        if not text:
+            return ""
+
+        for paragraph in re.split(r"\n\s*\n", text):
+            cleaned = paragraph.strip()
+            if cleaned:
+                return cleaned
+
+        return text
 
 
 __all__ = [
