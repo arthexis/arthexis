@@ -1,21 +1,17 @@
-import inspect
 import logging
 from typing import Callable
 
-from django.conf import settings
 from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
-from django.utils.module_loading import import_string
-from django.utils.translation import gettext, gettext_lazy as _
+from django.utils.translation import gettext_lazy as _
 
 from apps.base.models import Entity
 from apps.locals.caches import CacheStoreMixin
 from apps.sigils.fields import ConditionTextField
 
-from .badge_utils import BadgeCounterResult
 from .dashboard_rules import (
     DEFAULT_SUCCESS_MESSAGE,
     bind_rule_model,
@@ -26,7 +22,6 @@ from .dashboard_rules import (
 
 logger = logging.getLogger(__name__)
 
-_BADGE_COUNTER_CACHE_PREFIX = "admin.dashboard.badge_counters"
 _DASHBOARD_RULE_CACHE_PREFIX = "admin.dashboard.rules"
 
 
@@ -88,255 +83,6 @@ class StoredCounter(CacheStoreMixin, Entity):
 class DashboardRuleManager(models.Manager):
     def get_by_natural_key(self, name: str):
         return self.get(name=name)
-
-
-class BadgeCounter(StoredCounter):
-    """Configurable badge counters for the admin dashboard."""
-
-    cache_prefix = _BADGE_COUNTER_CACHE_PREFIX
-    cache_timeout = None
-
-    class ValueSource(models.TextChoices):
-        SIGIL_TEXT = "sigil", _("Sigil string")
-        CALLABLE = "callable", _("Python callable")
-
-    content_type = models.ForeignKey(
-        ContentType,
-        on_delete=models.CASCADE,
-        related_name="badge_counters",
-        verbose_name=_("model"),
-    )
-    name = models.CharField(max_length=150)
-    label_template = models.CharField(
-        max_length=255,
-        blank=True,
-        help_text=_(
-            "Optional label template that can reference {name}, {primary}, {secondary}, "
-            "and {separator}. Badge counters are intended for values that do not change "
-            "often; remember to invalidate the cache after updates."
-        ),
-    )
-    priority = models.PositiveIntegerField(
-        default=0,
-        help_text=_("Lower values appear first from left to right."),
-    )
-    separator = models.CharField(
-        max_length=8,
-        default="/",
-        help_text=_("Symbol shown between counters when two values are present."),
-    )
-    primary_source_type = models.CharField(
-        max_length=20,
-        choices=ValueSource.choices,
-        default=ValueSource.SIGIL_TEXT,
-    )
-    primary_source = models.CharField(
-        max_length=255,
-        help_text=_(
-            "Value source expressed as [sigils] or a dotted callable path. Badge counters "
-            "are intended for values that do not change often and may require manual "
-            "cache invalidation."
-        ),
-    )
-    secondary_source_type = models.CharField(
-        max_length=20,
-        choices=ValueSource.choices,
-        blank=True,
-        null=True,
-    )
-    secondary_source = models.CharField(max_length=255, blank=True)
-    css_class = models.CharField(
-        max_length=100,
-        default="badge-counter",
-        help_text=_("Additional CSS classes applied to the badge span."),
-    )
-    is_enabled = models.BooleanField(default=True)
-
-    class Meta:
-        ordering = ("priority", "pk")
-        verbose_name = _("Badge Counter")
-        verbose_name_plural = _("Badge Counters")
-        unique_together = ("content_type", "name")
-
-    def __str__(self) -> str:  # pragma: no cover - simple representation
-        return f"{self.name} ({self.content_type})"
-
-    def _invoke_callable(self, func):
-        try:
-            signature = inspect.signature(func)
-        except (TypeError, ValueError):  # pragma: no cover - signature edge cases
-            signature = None
-
-        if signature:
-            parameters = list(signature.parameters.values())
-            if len(parameters) == 0:
-                return func()
-            if len(parameters) == 1:
-                return func(self)
-
-        try:
-            return func(self)
-        except TypeError:
-            return func()
-
-    def _resolve_source(self, source: str, source_type: str | None):
-        if not source:
-            return None
-
-        if source_type == self.ValueSource.CALLABLE:
-            func = self._import_callable(source)
-            if func is None:
-                return None
-
-            try:
-                return self._invoke_callable(func)
-            except Exception:
-                logger.exception(
-                    "Badge counter callable failed",
-                    extra={"badge_id": self.pk, "callable": source},
-                )
-            return None
-
-        from apps.sigils.sigil_resolver import resolve_sigils
-
-        return resolve_sigils(source)
-
-    def _import_callable(self, source: str):
-        last_error: Exception | None = None
-        attempts = [source]
-
-        legacy_source = self._legacy_callable_source(source)
-        if legacy_source:
-            attempts.append(legacy_source)
-
-        for path in attempts:
-            try:
-                return import_string(path)
-            except Exception as exc:  # pragma: no cover - runtime import errors
-                last_error = exc
-                continue
-
-        logger.exception(
-            "Unable to import badge counter callable",
-            extra={"badge_id": self.pk, "callable": attempts[-1]},
-            exc_info=last_error,
-        )
-        return None
-
-    @staticmethod
-    def _legacy_callable_source(source: str) -> str | None:
-        if source.startswith("apps.") or "." not in source:
-            return None
-
-        app_prefix, _, remainder = source.partition(".")
-        if not remainder:
-            return None
-
-        local_apps = getattr(settings, "LOCAL_APPS", [])
-        known_modules = {
-            app.split(".", 1)[1] for app in local_apps if app.startswith("apps.")
-        }
-
-        if app_prefix in known_modules:
-            return f"apps.{source}"
-
-        return None
-
-    def _format_label(self, primary, secondary):
-        template = (self.label_template or "").strip()
-        values = {
-            "name": self.name,
-            "primary": primary,
-            "secondary": secondary,
-            "separator": self.separator,
-        }
-
-        if template:
-            try:
-                return template.format(**values)
-            except Exception:
-                logger.exception(
-                    "Badge counter label formatting failed", extra={"badge_id": self.pk}
-                )
-
-        if secondary is None:
-            return _("%(name)s: %(primary)s") % {
-                "name": self.name,
-                "primary": primary,
-            }
-
-        return _("%(name)s: %(primary)s%(separator)s%(secondary)s") % {
-            "name": self.name,
-            "primary": primary,
-            "secondary": secondary,
-            "separator": values["separator"],
-        }
-
-    def _normalize_result(self, result, secondary_override):
-        if result is None and secondary_override is None:
-            return None
-
-        primary = None
-        secondary = None
-        label = None
-
-        if isinstance(result, BadgeCounterResult):
-            primary = result.primary
-            secondary = result.secondary
-            label = result.label
-        elif isinstance(result, dict):
-            primary = result.get("primary")
-            secondary = result.get("secondary")
-            label = result.get("label")
-        elif isinstance(result, (list, tuple)):
-            primary = result[0] if result else None
-            if len(result) > 1:
-                secondary = result[1]
-        else:
-            primary = result
-
-        if secondary_override is not None:
-            secondary = secondary_override
-
-        if primary is None:
-            return None
-
-        return BadgeCounterResult(primary=primary, secondary=secondary, label=label)
-
-    def build_display(self):
-        if not self.is_enabled:
-            return None
-
-        primary_value = self._resolve_source(
-            self.primary_source, self.primary_source_type
-        )
-        secondary_value = None
-        if self.secondary_source:
-            secondary_type = self.secondary_source_type or self.primary_source_type
-            secondary_value = self._resolve_source(
-                self.secondary_source, secondary_type
-            )
-
-        normalized = self._normalize_result(primary_value, secondary_value)
-        if normalized is None:
-            return None
-
-        label = normalized.label or self._format_label(
-            normalized.primary, normalized.secondary
-        )
-        separator = self.separator or "/"
-        css_class = f"badge-counter {self.css_class}" if self.css_class else "badge-counter"
-        css_class = " ".join(css_class.split())
-
-        return {
-            "primary": str(normalized.primary),
-            "secondary": None
-            if normalized.secondary is None
-            else str(normalized.secondary),
-            "label": label,
-            "separator": separator,
-            "css_class": css_class,
-        }
 
 
 class DashboardRule(StoredCounter):
@@ -417,12 +163,6 @@ class DashboardRule(StoredCounter):
         if result.error:
             message = f"{message} ({result.error})"
         return rule_failure(message)
-
-
-@receiver(post_save, sender=BadgeCounter)
-@receiver(post_delete, sender=BadgeCounter)
-def clear_badge_counter_cache(sender, instance: BadgeCounter, **_kwargs):
-    BadgeCounter.invalidate_model_cache(instance.content_type)
 
 
 @receiver(post_save, sender=DashboardRule)

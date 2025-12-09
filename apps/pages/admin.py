@@ -1152,7 +1152,7 @@ def _resolve_dashboard_model(app_label: str, model_name: str):
 
 
 def dashboard_model_status(request):
-    """Return badge counter and rule status markup for dashboard models."""
+    """Return rule status markup for dashboard models."""
 
     if request.method != "GET":
         return HttpResponseNotAllowed(["GET"])
