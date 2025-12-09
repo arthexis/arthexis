@@ -55,11 +55,11 @@
       head.appendChild(script);
     }
 
-    function loadWithFallback(localSrc, cdnSrc, checkFn, afterLoad) {
-      // Prefer locally served assets to avoid CORS or availability issues with the CDN.
-      loadScript(localSrc, function (hadError) {
-        if (hadError || (checkFn && !checkFn())) {
-          loadScript(cdnSrc, afterLoad);
+    function loadLocalHtmx(afterLoad) {
+      // Load the bundled htmx copy to avoid cross-origin requests to the CDN.
+      loadScript('{% static "htmx/htmx.min.js" %}', function (hadError) {
+        if (hadError || !window.htmx) {
+          console.error('Failed to load local htmx');
           return;
         }
 
@@ -78,14 +78,7 @@
       loadScript('{% static "htmx/intersect.js" %}');
     }
 
-    loadWithFallback(
-      '{% static "htmx/htmx.min.js" %}',
-      'https://unpkg.com/htmx.org@1.9.12/dist/htmx.min.js',
-      function () {
-        return !!window.htmx;
-      },
-      loadHtmxExtensions
-    );
+    loadLocalHtmx(loadHtmxExtensions);
   })();
 </script>
 {% if badge_role %}
