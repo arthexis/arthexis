@@ -410,6 +410,12 @@ class Charger(Entity):
             return False
         return self.node_origin_id == local.pk
 
+    @property
+    def last_seen(self):
+        """Return the most recent activity timestamp for the charger."""
+
+        return self.last_status_timestamp or self.last_heartbeat
+
     def save(self, *args, **kwargs):
         if self.node_origin_id is None:
             local = Node.get_local()
