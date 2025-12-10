@@ -26,10 +26,16 @@ SILENT=false
 DEBUG_MODE=false
 SHOW_LEVEL=""
 SERVICE_ARGS=()
+RELOAD_REQUESTED=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --silent)
       SILENT=true
+      shift
+      ;;
+    --reload)
+      RELOAD_REQUESTED=true
+      SERVICE_ARGS+=("$1")
       shift
       ;;
     --debug)
@@ -124,7 +130,7 @@ if [ -f "$LOCK_DIR/service.lck" ]; then
   SERVICE_NAME="$(tr -d '\r\n' < "$LOCK_DIR/service.lck")"
 fi
 
-if [ "$DEBUG_MODE" = false ] && [ -z "$SHOW_LEVEL" ] \
+if [ "$DEBUG_MODE" = false ] && [ -z "$SHOW_LEVEL" ] && [ "$RELOAD_REQUESTED" = false ] \
   && [ -n "$SERVICE_NAME" ] && [ ${#SYSTEMCTL_CMD[@]} -gt 0 ] \
   && "${SYSTEMCTL_CMD[@]}" list-unit-files | grep -Fq "${SERVICE_NAME}.service"; then
   "${SYSTEMCTL_CMD[@]}" restart "$SERVICE_NAME"
