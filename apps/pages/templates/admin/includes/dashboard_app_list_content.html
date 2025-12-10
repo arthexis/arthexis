@@ -2,7 +2,7 @@
 
 {% if app_list %}
   {% favorite_map as favorites_map %}
-  {% if show_favorites|default:True %}
+  {% if show_favorites|default_if_none:True %}
     {% with show_model_badges=False %}
       {% cached_dashboard_favorites app_list favorites_map as favorites_block %}
       {{ favorites_block }}
