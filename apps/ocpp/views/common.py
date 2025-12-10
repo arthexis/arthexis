@@ -318,6 +318,25 @@ def _visible_chargers(user):
     return Charger.visible_for_user(user).prefetch_related("owner_users", "owner_groups")
 
 
+def _charger_last_seen(charger: Charger | object):
+    """Return the last activity timestamp for ``charger`` safely.
+
+    Some environments may serve an older charger model that lacks the
+    ``last_seen`` helper property. Access the field defensively and fall back to
+    known status fields so the dashboard rendering does not crash.
+    """
+
+    try:
+        last_seen = getattr(charger, "last_seen")
+    except AttributeError:
+        last_seen = None
+    if last_seen is None:
+        last_seen = getattr(charger, "last_status_timestamp", None) or getattr(
+            charger, "last_heartbeat", None
+        )
+    return last_seen
+
+
 def _ensure_charger_access(
     user,
     charger: Charger,
