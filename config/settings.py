@@ -51,17 +51,6 @@ install_validate_host_with_subnets()
 BASE_DIR = Path(__file__).resolve().parent.parent
 APPS_DIR = BASE_DIR / "apps"
 
-ACRONYMS: list[str] = []
-with contextlib.suppress(FileNotFoundError):
-    ACRONYMS = [
-        line.strip()
-        for line in (BASE_DIR / "config" / "data" / "ACRONYMS.txt")
-        .read_text()
-        .splitlines()
-        if line.strip()
-    ]
-
-
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
