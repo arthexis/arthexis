@@ -4,7 +4,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("rfids", "0002_initial"),
+        ("cards", "0002_initial"),
         ("ocpp", "0005_move_rfid_session_attempt"),
         ("energy", "0004_initial"),
     ]
