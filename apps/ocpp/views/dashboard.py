@@ -27,6 +27,7 @@ from ..status_display import STATUS_BADGE_MAP
 from . import common as view_common
 from .common import (
     _aggregate_dashboard_state,
+    _charger_last_seen,
     _charger_state,
     _clear_stale_statuses_for_view,
     _connector_overview,
@@ -159,7 +160,7 @@ def dashboard(request):
             "today_energy": today_energy,
             "today_hours": hours,
             "entries": entries,
-            "last_seen": charger.last_seen,
+            "last_seen": _charger_last_seen(charger),
             "connected": store.is_connected(cid, charger.connector_id),
             "location": charger.location,
         }
