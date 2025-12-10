@@ -270,11 +270,19 @@ def _locate_readme_document(role, doc: str | None, lang: str) -> SimpleNamespace
             if path not in relative_candidates:
                 relative_candidates.append(path)
 
-        add_candidate(doc_path)
-        if doc_path.suffix.lower() != ".md" or doc_path.suffix != ".md":
-            add_candidate(doc_path.with_suffix(".md"))
+        def add_localized_candidates(path: Path) -> None:
+            if lang:
+                if path.suffix:
+                    add_candidate(path.with_name(f"{path.stem}.{lang}{path.suffix}"))
+                    short = lang.split("-")[0]
+                    if short and short != lang:
+                        add_candidate(path.with_name(f"{path.stem}.{short}{path.suffix}"))
+            add_candidate(path)
+
+        add_localized_candidates(doc_path)
         if doc_path.suffix.lower() != ".md":
-            add_candidate(doc_path / "README.md")
+            add_localized_candidates(doc_path.with_suffix(".md"))
+            add_localized_candidates(doc_path / "README.md")
 
         search_roots = [readme_base]
         if readme_base != root_base:
