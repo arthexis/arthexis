@@ -60,7 +60,6 @@ from .models import (
     SecurityEvent,
     ChargerLogRequest,
     CPForwarder,
-    EVCSChargePoint,
     RFIDSessionAttempt,
 )
 from .simulator import ChargePointSimulator
@@ -102,7 +101,6 @@ for _model in (
     CPNetworkProfileDeployment,
     CPFirmwareRequest,
     RFIDSessionAttempt,
-    EVCSChargePoint,
 ):
     try:
         admin.site.unregister(_model)
@@ -4629,10 +4627,5 @@ class RFIDSessionAttemptAdmin(EntityModelAdmin):
         "transaction__ocpp_id",
     )
     readonly_fields = ("attempted_at",)
-
-
-@admin.register(EVCSChargePoint)
-class EVCSChargePointAdmin(ChargerAdmin):
-    pass
 
 
