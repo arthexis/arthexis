@@ -7,7 +7,7 @@
     }
     #admin-home-header {
         display: grid;
-        grid-template-columns: auto auto minmax(0, 1fr) auto;
+        grid-template-columns: auto auto auto 1fr;
         align-items: center;
         gap: 1rem;
         margin-bottom: 1.25rem;
@@ -62,6 +62,9 @@
     }
     .admin-home-net-message__content--empty {
         color: var(--body-quiet-color);
+    }
+    .admin-home-net-message {
+        justify-self: start;
     }
     .admin-home-search-toggle {
         display: inline-grid;
