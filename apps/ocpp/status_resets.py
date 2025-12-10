@@ -6,6 +6,8 @@ from datetime import datetime, timedelta
 from typing import Iterable
 
 from django.apps import apps
+from django.db import connections
+from django.db.utils import OperationalError, ProgrammingError
 from django.db.models import Q
 from django.utils import timezone
 
@@ -22,6 +24,20 @@ STATUS_RESET_UPDATES = {
 }
 
 
+def _charger_table_exists() -> bool:
+    """Return ``True`` when the charger table is available on the default DB."""
+
+    connection = connections["default"]
+    try:
+        with connection.cursor() as cursor:
+            table_names = set(connection.introspection.table_names(cursor))
+    except (OperationalError, ProgrammingError):
+        return False
+
+    charger_model = apps.get_model("ocpp", "Charger")
+    return charger_model._meta.db_table in table_names
+
+
 def clear_cached_statuses(charger_ids: Iterable[str] | None = None) -> int:
     """Clear cached status fields for the provided charger ids.
 
@@ -30,6 +46,8 @@ def clear_cached_statuses(charger_ids: Iterable[str] | None = None) -> int:
     """
 
     charger_model = apps.get_model("ocpp", "Charger")
+    if not _charger_table_exists():
+        return 0
     queryset = charger_model.objects.all()
     if charger_ids is not None:
         queryset = queryset.filter(charger_id__in=charger_ids)
@@ -46,6 +64,8 @@ def clear_stale_cached_statuses(max_age: timedelta = timedelta(minutes=5)) -> in
     """
 
     charger_model = apps.get_model("ocpp", "Charger")
+    if not _charger_table_exists():
+        return 0
     cutoff = timezone.now() - max_age
     stale_chargers = charger_model.objects.filter(
         Q(last_heartbeat__isnull=True) | Q(last_heartbeat__lt=cutoff)
