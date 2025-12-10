@@ -1171,6 +1171,7 @@ def get_logs(
     """Return all log entries for the given id and type."""
 
     entries_list: list[str] = []
+    seen_entries: set[str] = set()
     max_entries: int | None = None
     entries_deque: deque[str] | None = None
     if limit is not None:
@@ -1189,21 +1190,32 @@ def get_logs(
         path = _log_file_for_identifier(resolved, name, log_type)
         if path.exists() and path not in seen_paths:
             if max_entries is None:
-                entries_list.extend(path.read_text(encoding="utf-8").splitlines())
+                for entry in path.read_text(encoding="utf-8").splitlines():
+                    if entry not in seen_entries:
+                        entries_list.append(entry)
+                        seen_entries.add(entry)
             else:
                 with path.open("r", encoding="utf-8") as handle:
                     for line in handle:
                         if entries_deque is not None:
-                            entries_deque.append(line.rstrip("\r\n"))
+                            entry = line.rstrip("\r\n")
+                            if entry not in seen_entries:
+                                entries_deque.append(entry)
+                                seen_entries.add(entry)
             seen_paths.add(path)
         memory_entries = _memory_logs_for_identifier(resolved, log_type)
         lower_key = resolved.lower()
         if memory_entries and lower_key not in seen_keys:
             if max_entries is None:
-                entries_list.extend(memory_entries)
+                for entry in memory_entries:
+                    if entry not in seen_entries:
+                        entries_list.append(entry)
+                        seen_entries.add(entry)
             elif entries_deque is not None:
                 for entry in memory_entries:
-                    entries_deque.append(entry)
+                    if entry not in seen_entries:
+                        entries_deque.append(entry)
+                        seen_entries.add(entry)
             seen_keys.add(lower_key)
     if max_entries is None:
         return entries_list
