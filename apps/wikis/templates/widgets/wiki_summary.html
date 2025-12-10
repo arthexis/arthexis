@@ -44,6 +44,6 @@
         </a>
       {% endif %}
     </div>
-    <p class="wiki-summary-widget__body">{{ summary.first_paragraph }}</p>
+    <p class="wiki-summary-widget__body">{{ summary.first_paragraph_html|safe }}</p>
   </div>
 </div>

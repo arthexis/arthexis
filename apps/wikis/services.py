@@ -43,7 +43,6 @@ class WikiRequest:
             "format": "json",
             "redirects": 1,
             "exintro": 1,
-            "explaintext": 1,
             "titles": self.title,
             "inprop": "url",
             "formatversion": 2,

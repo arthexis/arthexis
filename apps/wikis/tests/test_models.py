@@ -23,3 +23,29 @@ def test_wiki_summary_first_paragraph_ignores_leading_blank_lines():
     )
 
     assert summary.first_paragraph == "First paragraph after blanks."
+
+
+def test_wiki_summary_first_paragraph_strips_html_tags():
+    summary = WikiSummary(
+        title="Example",
+        extract='<p>Here is a <a href="https://example.com">link</a> and text.</p><p>More text.</p>',
+        url=None,
+        language="en",
+    )
+
+    assert summary.first_paragraph == "Here is a link and text."
+
+
+def test_wiki_summary_first_paragraph_html_preserves_links_and_sanitizes():
+    summary = WikiSummary(
+        title="Example",
+        extract='<p>Intro with <a href="https://example.com" onclick="evil()">safe link</a> and <script>alert(1)</script>.</p>',
+        url=None,
+        language="en",
+    )
+
+    html = summary.first_paragraph_html
+
+    assert "onclick" not in html
+    assert "script" not in html
+    assert '<a href="https://example.com"' in html

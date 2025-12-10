@@ -5,7 +5,9 @@ from dataclasses import dataclass
 import re
 from typing import Any
 
+import bleach
 from django.db import models
+from django.utils.html import mark_safe
 from django.utils.translation import gettext_lazy as _
 
 from apps.base.models import Entity
@@ -84,16 +86,48 @@ class WikiSummary:
 
     @property
     def first_paragraph(self) -> str:
+        paragraph, is_html = self._first_paragraph_body()
+        if not paragraph:
+            return ""
+
+        if is_html:
+            return bleach.clean(paragraph, tags=[], strip=True)
+
+        return paragraph
+
+    @property
+    def first_paragraph_html(self) -> str:
+        paragraph, is_html = self._first_paragraph_body()
+        if not paragraph:
+            return ""
+
+        allowed_tags = ["a", "b", "strong", "i", "em", "u", "span", "sup", "sub", "code", "br"]
+        allowed_attributes = {"a": ["href", "title", "rel"]}
+        cleaned = bleach.clean(
+            paragraph,
+            tags=allowed_tags,
+            attributes=allowed_attributes,
+            protocols=["http", "https"],
+            strip=True,
+        )
+        linked = bleach.linkify(cleaned)
+        return mark_safe(linked)
+
+    def _first_paragraph_body(self) -> tuple[str, bool]:
         text = (self.extract or "").strip()
         if not text:
-            return ""
+            return "", False
+
+        html_match = re.search(r"<p[^>]*>(.*?)</p>", text, flags=re.IGNORECASE | re.DOTALL)
+        if html_match:
+            return html_match.group(1).strip(), True
 
         for paragraph in re.split(r"\n\s*\n", text):
             cleaned = paragraph.strip()
             if cleaned:
-                return cleaned
+                return cleaned, False
 
-        return text
+        return text, False
 
 
 __all__ = [
