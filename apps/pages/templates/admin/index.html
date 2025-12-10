@@ -15,9 +15,28 @@
 {% last_net_message as admin_last_net_message %}
 <div id="admin-home-header">
   <h1>Home</h1>
+  <button
+    type="button"
+    class="admin-home-search-toggle"
+    aria-label="{% translate 'Search apps' %}"
+    aria-pressed="false"
+  >
+    <span aria-hidden="true" class="admin-home-search-toggle__icon"></span>
+  </button>
   <div class="admin-home-net-message" role="status" aria-live="polite">
     <a class="admin-home-net-message__label admin-home-net-message__link" href="{% url 'admin:nodes_netmessage_send' %}">{% translate 'Net message' %}</a>
     <span class="admin-home-net-message__content{% if not admin_last_net_message.has_content %} admin-home-net-message__content--empty{% endif %}" title="{% if admin_last_net_message.has_content %}{{ admin_last_net_message.text }}{% else %}{% translate 'No net messages available' %}{% endif %}">{% if admin_last_net_message.has_content %}{{ admin_last_net_message.text }}{% else %}{% translate 'No net messages available' %}{% endif %}</span>
+  </div>
+  <div class="admin-home-search" hidden>
+    <label class="visually-hidden" for="admin-dashboard-search">{% translate 'Search apps' %}</label>
+    <input
+      type="search"
+      id="admin-dashboard-search"
+      name="dashboard-search"
+      placeholder="{% translate 'Filter apps and models…' %}"
+      autocomplete="off"
+      inputmode="search"
+    >
   </div>
   <div class="admin-home-actions">
     <a class="button" href="{% url 'admin:seed_data' %}">{% translate 'Seed Data' %}</a>
@@ -52,4 +71,82 @@
 
 {% block extrahead %}
   {{ block.super }}
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const netMessage = document.querySelector('.admin-home-net-message');
+      const searchContainer = document.querySelector('.admin-home-search');
+      const searchInput = document.getElementById('admin-dashboard-search');
+      const toggle = document.querySelector('.admin-home-search-toggle');
+      const appModules = Array.from(document.querySelectorAll('.dashboard-main .module'));
+
+      if (!netMessage || !searchContainer || !searchInput || !toggle || appModules.length === 0) {
+        return;
+      }
+
+      const showSearch = () => {
+        netMessage.hidden = true;
+        searchContainer.hidden = false;
+        toggle.setAttribute('aria-pressed', 'true');
+        searchInput.focus();
+      };
+
+      const showNetMessage = () => {
+        searchInput.value = '';
+        searchContainer.hidden = true;
+        netMessage.hidden = false;
+        toggle.setAttribute('aria-pressed', 'false');
+        resetFilters();
+      };
+
+      const resetFilters = () => {
+        appModules.forEach((module) => {
+          module.style.display = '';
+          module.querySelectorAll('tbody tr').forEach((row) => {
+            row.style.display = '';
+          });
+        });
+      };
+
+      const applyFilter = (query) => {
+        const normalizedQuery = query.trim().toLowerCase();
+
+        if (!normalizedQuery) {
+          resetFilters();
+          return;
+        }
+
+        appModules.forEach((module) => {
+          const rows = Array.from(module.querySelectorAll('tbody tr'));
+          let visibleRows = 0;
+
+          rows.forEach((row) => {
+            const nameCell = row.querySelector('.dashboard-model-name');
+            const text = nameCell ? nameCell.textContent.toLowerCase() : row.textContent.toLowerCase();
+            const isMatch = text.includes(normalizedQuery);
+            row.style.display = isMatch ? '' : 'none';
+            visibleRows += isMatch ? 1 : 0;
+          });
+
+          module.style.display = visibleRows > 0 ? '' : 'none';
+        });
+      };
+
+      toggle.addEventListener('click', () => {
+        if (searchContainer.hidden) {
+          showSearch();
+        } else {
+          showNetMessage();
+        }
+      });
+
+      searchInput.addEventListener('input', (event) => {
+        const value = event.target.value;
+        applyFilter(value);
+
+        if (!value.trim()) {
+          showNetMessage();
+        }
+      });
+    });
+  </script>
 {% endblock %}
