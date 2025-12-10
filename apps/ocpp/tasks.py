@@ -36,13 +36,6 @@ DEFAULT_FIRMWARE_VENDOR_ID = "org.openchargealliance.firmware"
 
 
 @shared_task
-def write_ocpp_log_entry(cid: str, entry: str, log_type: str = "charger") -> None:
-    """Persist an already formatted OCPP log entry to disk."""
-
-    store.persist_log_entry(cid, entry, log_type=log_type)
-
-
-@shared_task
 def check_charge_point_configuration(charger_pk: int) -> bool:
     """Request the latest configuration from a connected charge point."""
 
