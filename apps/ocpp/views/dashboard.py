@@ -15,12 +15,12 @@ from apps.pages.utils import landing
 from .. import store
 from ..models import Charger, Transaction
 from ..status_display import STATUS_BADGE_MAP
+from . import common as view_common
 from .common import (
     _aggregate_dashboard_state,
     _charger_state,
     _clear_stale_statuses_for_view,
     _connector_overview,
-    _visible_chargers,
 )
 
 
@@ -44,7 +44,7 @@ def dashboard(request):
         .values("pk")[:1]
     )
     visible_chargers_qs = (
-        _visible_chargers(request.user)
+        view_common._visible_chargers(request.user)
         .select_related("location")
         .annotate(latest_tx_id=Subquery(latest_tx_subquery))
         .order_by("charger_id", "connector_id")
