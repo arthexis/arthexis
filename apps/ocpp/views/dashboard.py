@@ -1,7 +1,16 @@
 from datetime import datetime, time, timedelta
 
 from django.contrib.auth.views import redirect_to_login
-from django.db.models import ExpressionWrapper, F, FloatField, OuterRef, Subquery, Sum
+from django.db.models import (
+    ExpressionWrapper,
+    F,
+    FloatField,
+    OuterRef,
+    Subquery,
+    Sum,
+    Value,
+)
+from django.db.models.functions import Coalesce
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.template.loader import render_to_string
@@ -13,7 +22,7 @@ from apps.nodes.models import Node
 from apps.pages.utils import landing
 
 from .. import store
-from ..models import Charger, Transaction
+from ..models import Charger, Transaction, annotate_transaction_energy_bounds
 from ..status_display import STATUS_BADGE_MAP
 from . import common as view_common
 from .common import (
@@ -81,9 +90,27 @@ def dashboard(request):
         cached = stats_cache.get(charger.pk)
         if cached:
             return cached.get("energy") or 0.0, cached.get("hours") or 0.0
-        today_energy = Transaction.objects.filter(
-            charger=charger, start_time__gte=day_start, start_time__lt=day_end
-        ).aggregate(total_energy=Sum("meter_energy"))["total_energy"]
+        today_energy = (
+            annotate_transaction_energy_bounds(
+                Transaction.objects.filter(
+                    charger=charger, start_time__gte=day_start, start_time__lt=day_end
+                )
+            )
+            .annotate(
+                kw_value=Coalesce(
+                    ExpressionWrapper(
+                        (F("meter_stop") - F("meter_start")) / Value(1000.0),
+                        output_field=FloatField(),
+                    ),
+                    ExpressionWrapper(
+                        F("meter_energy_end") - F("meter_energy_start"),
+                        output_field=FloatField(),
+                    ),
+                    output_field=FloatField(),
+                )
+            )
+            .aggregate(total_energy=Sum("kw_value"))["total_energy"]
+        )
         total_seconds = Transaction.objects.filter(
             charger=charger,
             start_time__gte=day_start,
