@@ -3,7 +3,9 @@ import uuid
 
 from django.contrib import admin
 from django.http import JsonResponse
-from django.urls import path
+from django.http import Http404
+from django.template.response import TemplateResponse
+from django.urls import path, reverse
 from django.utils.html import format_html
 from django.views.decorators.csrf import csrf_exempt
 
@@ -17,6 +19,7 @@ class ReferenceAdmin(EntityModelAdmin):
         "alt_text",
         "content_type",
         "link",
+        "open_in_admin_frame",
         "header",
         "footer",
         "visibility",
@@ -80,6 +83,16 @@ class ReferenceAdmin(EntityModelAdmin):
             )
         return ""
 
+    @admin.display(description="Open in Admin Frame")
+    def open_in_admin_frame(self, obj):
+        if obj.value:
+            url = reverse("admin:links_reference_frame", args=[obj.pk])
+            return format_html(
+                '<a href="{}" target="_blank" rel="noopener noreferrer">open</a>',
+                url,
+            )
+        return ""
+
     def get_urls(self):
         urls = super().get_urls()
         custom = [
@@ -87,6 +100,11 @@ class ReferenceAdmin(EntityModelAdmin):
                 "bulk/",
                 self.admin_site.admin_view(csrf_exempt(self.bulk_create)),
                 name="links_reference_bulk",
+            ),
+            path(
+                "<int:reference_id>/frame/",
+                self.admin_site.admin_view(self.frame_view),
+                name="links_reference_frame",
             ),
         ]
         return custom + urls
@@ -111,6 +129,25 @@ class ReferenceAdmin(EntityModelAdmin):
             created_ids.append(ref.id)
         return JsonResponse(
             {"transaction_uuid": str(transaction_uuid), "ids": created_ids}
+        )
+
+    def frame_view(self, request, reference_id):
+        obj = self.get_object(request, reference_id)
+        if obj is None:
+            raise Http404("Reference does not exist")
+
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "original": obj,
+            "title": str(obj),
+            "iframe_url": obj.value,
+        }
+
+        return TemplateResponse(
+            request,
+            "admin/links/reference/frame.html",
+            context,
         )
 
     def qr_code(self, obj):
