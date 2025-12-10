@@ -28,6 +28,20 @@ STATUS_RESET_UPDATES = {
 }
 
 
+def _charger_table_exists() -> bool:
+    """Return ``True`` when the charger table is available on the default DB."""
+
+    connection = connections["default"]
+    try:
+        with connection.cursor() as cursor:
+            table_names = set(connection.introspection.table_names(cursor))
+    except (OperationalError, ProgrammingError):
+        return False
+
+    charger_model = apps.get_model("ocpp", "Charger")
+    return charger_model._meta.db_table in table_names
+
+
 def clear_cached_statuses(charger_ids: Iterable[str] | None = None) -> int:
     """Clear cached status fields for the provided charger ids.
 
@@ -69,6 +83,8 @@ def clear_stale_cached_statuses(max_age: timedelta = timedelta(minutes=5)) -> in
     """
 
     charger_model = apps.get_model("ocpp", "Charger")
+    if not _charger_table_exists():
+        return 0
     cutoff = timezone.now() - max_age
     try:
         stale_chargers = charger_model.objects.filter(

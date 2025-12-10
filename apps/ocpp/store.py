@@ -713,8 +713,6 @@ def add_log(cid: str, entry: str, log_type: str = "charger") -> None:
     entry = f"{timestamp} {entry}"
 
     key = _append_memory_log(cid, entry, log_type=log_type)
-    if _async_logging_enabled() and _enqueue_log_write(key, entry, log_type=log_type):
-        return
     _write_log_file(key, entry, log_type=log_type)
 
 
@@ -744,35 +742,6 @@ def _write_log_file(cid: str, entry: str, *, log_type: str) -> None:
     path = _file_path(cid, log_type)
     with path.open("a", encoding="utf-8") as handle:
         handle.write(entry + "\n")
-
-
-def _async_logging_enabled() -> bool:
-    enabled = bool(getattr(settings, "OCPP_ASYNC_LOGGING", False))
-    if not enabled:
-        return False
-    try:
-        from apps.celery.utils import is_celery_enabled
-    except Exception:  # pragma: no cover - defensive
-        return False
-    return is_celery_enabled()
-
-
-def _enqueue_log_write(cid: str, entry: str, *, log_type: str) -> bool:
-    try:
-        from .tasks import write_ocpp_log_entry
-    except Exception:  # pragma: no cover - circular import guard
-        return False
-    try:
-        write_ocpp_log_entry.delay(cid, entry, log_type)
-        return True
-    except Exception:  # pragma: no cover - Celery not running
-        return False
-
-
-def persist_log_entry(cid: str, entry: str, *, log_type: str = "charger") -> None:
-    """Write a prepared log entry to disk from a worker context."""
-
-    _write_log_file(cid, entry, log_type=log_type)
 
 
 def start_log_capture(
