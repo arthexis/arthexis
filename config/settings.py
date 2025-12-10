@@ -22,7 +22,7 @@ from datetime import timedelta
 
 from django.apps import AppConfig as DjangoAppConfig
 from celery.schedules import crontab
-from django.http import request as http_request
+from django.http import HttpRequest, request as http_request
 from django.http.request import split_domain_port
 from django.middleware.csrf import CsrfViewMiddleware
 from django.core.exceptions import DisallowedHost, ImproperlyConfigured
@@ -537,7 +537,22 @@ if DEBUG:
         pass
     else:
         MIDDLEWARE.insert(0, "debug_toolbar.middleware.DebugToolbarMiddleware")
-        INTERNAL_IPS = ["127.0.0.1", "localhost"]
+        INTERNAL_IPS = ["127.0.0.1", "localhost", "0.0.0.0"]
+
+
+        def _show_toolbar(_: HttpRequest) -> bool:
+            """Always show the toolbar when running in DEBUG mode.
+
+            Docker and remote development environments can present requests from
+            gateway addresses that fall outside ``INTERNAL_IPS``. Returning
+            ``True`` here ensures the toolbar is available whenever the debug
+            flag is enabled.
+            """
+
+            return True
+
+
+        DEBUG_TOOLBAR_CONFIG = {"SHOW_TOOLBAR_CALLBACK": _show_toolbar}
 
 CSRF_FAILURE_VIEW = "apps.pages.views.csrf_failure"
 
