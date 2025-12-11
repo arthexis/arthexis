@@ -154,26 +154,26 @@ def cp_simulator(request):
             message = _("Simulator start requested")
             if sim_params["demo_mode"]:
                 dashboard_link = reverse("ocpp:ocpp-dashboard")
-    status = get_simulator_state(simulator_slot)
-    status_message = status.message if status else ""
-    if message:
-        if status_message:
-            status_message = f"{message}. {status_message}"
-        else:
-            status_message = message
-    host = request.get_host()
+            if sim_params.get("delay"):
+                _broadcast_simulator_started(name, sim_params.get("delay"), sim_params)
+    refresh_state = is_htmx or request.method == "POST"
+    state = get_simulator_state(cp=simulator_slot, refresh_file=refresh_state)
+    state_params = state.get("params") or {}
+
+    form_params = {key: state_params.get(key, default_params[key]) for key in default_params}
+    form_params["password"] = ""
+
+    if not default_simulator:
+        message = message or "No default CP Simulator is configured; using local defaults."
+
     context = {
-        "status": status,
-        "status_message": status_message,
-        "default": SimpleNamespace(**default_params),
-        "default_ws_port": default_ws_port,
-        "host": host,
-        "simulator_slot": simulator_slot,
+        "message": message,
         "dashboard_link": dashboard_link,
+        "state": state,
+        "form_params": form_params,
+        "simulator_slot": simulator_slot,
+        "default_simulator": default_simulator,
     }
-    if is_htmx or request.headers.get("x-requested-with") == "XMLHttpRequest":
-        html = render_to_string(
-            "ocpp/includes/simulator_form.html", context, request=request
-        )
-        return HttpResponse(html)
-    return render(request, "ocpp/cp_simulator.html", context)
+
+    template = "ocpp/includes/cp_simulator_panel.html" if is_htmx else "ocpp/cp_simulator.html"
+    return render(request, template, context)
