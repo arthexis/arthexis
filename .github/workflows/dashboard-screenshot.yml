@@ -89,7 +89,8 @@ jobs:
 
       - name: Install Playwright Chromium
         run: |
-          npx playwright@1.45.2 install --with-deps chromium
+          npm install --no-save playwright@1.45.2
+          npx playwright install --with-deps chromium
 
       - name: Capture dashboard screenshot
         env:
