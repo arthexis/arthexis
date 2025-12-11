@@ -799,7 +799,7 @@ class Charger(Entity):
     @property
     def total_kw(self) -> float:
         """Return total energy delivered by this charger in kW."""
-        from . import store
+        from .. import store
 
         total = 0.0
         for charger in self._target_chargers():
@@ -809,7 +809,7 @@ class Charger(Entity):
     def _store_keys(self) -> list[str]:
         """Return keys used for store lookups with fallbacks."""
 
-        from . import store
+        from .. import store
 
         base = self.charger_id
         connector = self.connector_id
@@ -842,7 +842,7 @@ class Charger(Entity):
     ) -> float:
         """Return total energy delivered within ``start``/``end`` window."""
 
-        from . import store
+        from .. import store
 
         total = 0.0
         for charger in self._target_chargers():
@@ -890,7 +890,7 @@ class Charger(Entity):
         return total
 
     def purge(self):
-        from . import store
+        from .. import store
 
         for charger in self._target_chargers():
             charger.transactions.all().delete()
@@ -902,7 +902,7 @@ class Charger(Entity):
 
     def delete(self, *args, **kwargs):
         from django.db.models.deletion import ProtectedError
-        from . import store
+        from .. import store
 
         for charger in self._target_chargers():
             has_db_data = charger.transactions.exists() or charger.meter_values.exists()
