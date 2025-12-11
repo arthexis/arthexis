@@ -56,7 +56,7 @@ jobs:
         run: |
           source .venv/bin/activate
           python manage.py migrate --noinput --database default
-          python manage.py check admin --force
+          python manage.py check_admin --force
           python manage.py collectstatic --noinput
 
       - name: Launch application server
