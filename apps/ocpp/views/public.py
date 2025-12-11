@@ -1,3 +1,5 @@
+from django.utils.translation import gettext as _
+
 from .common import *  # noqa: F401,F403
 from .common import (
     _charger_state,
