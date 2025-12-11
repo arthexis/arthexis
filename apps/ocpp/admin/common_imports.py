@@ -19,6 +19,7 @@ from django.conf import settings
 from django.contrib import admin, messages
 from django.contrib.admin import helpers
 from django.contrib.admin.utils import quote
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Q, Max
 from django.db.models.deletion import ProtectedError
