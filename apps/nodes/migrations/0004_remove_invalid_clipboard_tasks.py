@@ -16,6 +16,7 @@ def remove_invalid_clipboard_tasks(apps, schema_editor):
 class Migration(migrations.Migration):
     dependencies = [
         ("nodes", "0003_platform"),
+        ("django_celery_beat", "0001_initial"),
     ]
 
     operations = [
