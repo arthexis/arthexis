@@ -1,4 +1,13 @@
-from .common import *  # noqa: F401,F403
+from django.contrib.auth.decorators import login_required
+from django.http.request import split_domain_port
+from django.shortcuts import render
+from django.urls import NoReverseMatch, reverse
+
+from apps.nodes.models import NetMessage
+from apps.pages.utils import landing
+
+from ..evcs import _start_simulator, _stop_simulator, get_simulator_state
+from ..models import Simulator
 
 
 @login_required(login_url="pages:login")
@@ -115,47 +124,61 @@ def cp_simulator(request):
             "interval": _cast_value(
                 request.POST.get("interval"), float, default_params["interval"]
             ),
-            "pre_charge_delay": _cast_value(
-                request.POST.get("pre_charge_delay"), float, default_params["pre_charge_delay"]
-            ),
             "average_kwh": _cast_value(
-                request.POST.get("average_kwh"), float, default_params["average_kwh"]
+                request.POST.get("average_kwh"),
+                float,
+                default_params["average_kwh"],
             ),
             "amperage": _cast_value(
                 request.POST.get("amperage"), float, default_params["amperage"]
             ),
-            "repeat": bool(repeat_value),
-            "username": request.POST.get("username", ""),
-            "password": request.POST.get("password", ""),
+            "pre_charge_delay": _cast_value(
+                request.POST.get("pre_charge_delay"),
+                float,
+                default_params["pre_charge_delay"],
+            ),
+            "repeat": default_params["repeat"],
+            "daemon": True,
+            "username": request.POST.get("username")
+            or default_params["username"]
+            or None,
+            "password": request.POST.get("password")
+            or default_params["password"]
+            or None,
         }
-        simulator_slot = _cast_value(
-            request.POST.get("simulator_slot"), int, simulator_slot
-        )
-        if simulator_slot not in {1, 2}:
-            simulator_slot = 1
-        action = request.POST.get("action")
-        if action == "stop":
-            _stop_simulator(simulator_slot)
-            message = _("Simulator stop requested")
+        if repeat_value is not None:
+            sim_params["repeat"] = repeat_value == "True"
+
+        if action == "start":
+            try:
+                started, status, log_file = _start_simulator(sim_params, cp=simulator_slot)
+                prefix = default_simulator.name if default_simulator else "CP Simulator"
+                if started:
+                    message = f"{prefix} started: {status}. Logs: {log_file}"
+                    _broadcast_simulator_started(
+                        prefix,
+                        sim_params.get("pre_charge_delay"),
+                        sim_params,
+                    )
+                    try:
+                        dashboard_link = reverse(
+                            "ocpp:charger-status", args=[sim_params["cp_path"]]
+                        )
+                    except NoReverseMatch:  # pragma: no cover - defensive
+                        dashboard_link = None
+                else:
+                    message = f"{prefix} {status}. Logs: {log_file}"
+            except Exception as exc:  # pragma: no cover - unexpected
+                message = f"Failed to start simulator: {exc}"
+        elif action == "stop":
+            try:
+                _stop_simulator(cp=simulator_slot)
+                message = "Simulator stop requested."
+            except Exception as exc:  # pragma: no cover - unexpected
+                message = f"Failed to stop simulator: {exc}"
         else:
-            name = request.POST.get("simulator_name") or "Simulator"
-            delay_value = request.POST.get("start_delay")
-            delay = _cast_value(delay_value, float, 0.0)
-            sim_params["name"] = name
-            sim_params["delay"] = delay
-            sim_params["reconnect_slots"] = request.POST.get("reconnect_slots")
-            sim_params["demo_mode"] = bool(request.POST.get("demo_mode"))
-            sim_params["meter_interval"] = _cast_value(
-                request.POST.get("meter_interval"), float, default_params["interval"]
-            )
-            _start_simulator(simulator_slot, **sim_params)
-            sim_details = {key: value for key, value in sim_params.items() if key != "password"}
-            NetMessage.broadcast(subject="simulator", body=json.dumps(sim_details))
-            message = _("Simulator start requested")
-            if sim_params["demo_mode"]:
-                dashboard_link = reverse("ocpp:ocpp-dashboard")
-            if sim_params.get("delay"):
-                _broadcast_simulator_started(name, sim_params.get("delay"), sim_params)
+            message = "Unknown action."
+
     refresh_state = is_htmx or request.method == "POST"
     state = get_simulator_state(cp=simulator_slot, refresh_file=refresh_state)
     state_params = state.get("params") or {}

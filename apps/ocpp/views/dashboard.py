@@ -1,15 +1,7 @@
 from datetime import datetime, time, timedelta
 
 from django.contrib.auth.views import redirect_to_login
-from django.db.models import (
-    ExpressionWrapper,
-    F,
-    FloatField,
-    OuterRef,
-    Subquery,
-    Sum,
-    Value,
-)
+from django.db.models import ExpressionWrapper, FloatField, F, OuterRef, Subquery, Sum, Value
 from django.db.models.functions import Coalesce
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
@@ -17,27 +9,27 @@ from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.encoding import force_str
-from django.utils.translation import gettext_lazy as _
 
 from apps.nodes.models import Node
 from apps.pages.utils import landing
 
-from .. import store
-from ..models import Charger, Transaction, annotate_transaction_energy_bounds
-from ..status_display import STATUS_BADGE_MAP
-from . import common as view_common
-from .common import (
-    _charger_last_seen,
+from ..models import Charger, Transaction
+from .charger import (
+    STATUS_BADGE_MAP,
+    annotate_transaction_energy_bounds,
+    store,
     _charger_state,
     _clear_stale_statuses_for_view,
     _has_active_session,
     _reverse_connector_url,
+    _visible_chargers,
 )
 
 
 @landing("CPMS Online Dashboard")
 def dashboard(request):
     """Landing page listing all known chargers and their status."""
+
     is_htmx = request.headers.get("HX-Request") == "true"
     _clear_stale_statuses_for_view()
     node = Node.get_local()
@@ -55,7 +47,7 @@ def dashboard(request):
         .values("pk")[:1]
     )
     visible_chargers_qs = (
-        view_common._visible_chargers(request.user)
+        _visible_chargers(request.user)
         .select_related("location")
         .annotate(latest_tx_id=Subquery(latest_tx_subquery))
         .order_by("charger_id", "connector_id")
@@ -187,7 +179,6 @@ def dashboard(request):
             "state": state,
             "color": color,
             "display_name": _charger_display_name(charger),
-            "last_seen": _charger_last_seen(charger),
             "stats": _charger_stats(charger, tx_obj),
             "status_url": _status_url(charger),
         }
