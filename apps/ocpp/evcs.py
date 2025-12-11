@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import inspect
 import json
 import os
 import random
@@ -784,7 +785,17 @@ def _start_simulator(
     """
 
     state = _simulators[cp]
-    cp_path = (params or {}).get(
+    params = params or {}
+
+    simulate_signature = inspect.signature(simulate)
+    allowed_params = {
+        name
+        for name, param in simulate_signature.parameters.items()
+        if param.kind != inspect.Parameter.VAR_KEYWORD and name != "cp"
+    }
+    filtered_params = {key: value for key, value in params.items() if key in allowed_params}
+
+    cp_path = filtered_params.get(
         "cp_path", (state.params or {}).get("cp_path", f"CP{cp}")
     )
     log_file = str(store._file_path(cp_path, log_type="simulator"))
@@ -797,7 +808,7 @@ def _start_simulator(
     state.last_status = "Simulator launching..."
     state.last_message = ""
     state.phase = "Starting"
-    state.params = params or {}
+    state.params = filtered_params
     state.running = True
     state.start_time = time.strftime("%Y-%m-%d %H:%M:%S")
     state.stop_time = None
