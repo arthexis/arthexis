@@ -4,6 +4,7 @@ from django.urls import NoReverseMatch
 
 from apps.locale.models import Language
 
+from .. import store
 from .base import *
 from .transaction import annotate_transaction_energy_bounds
 
@@ -843,8 +844,6 @@ class Charger(Entity):
     ) -> float:
         """Return total energy delivered within ``start``/``end`` window."""
 
-        from .. import store
-
         total = 0.0
         for charger in self._target_chargers():
             total += charger._total_kw_range_single(store, start, end)
@@ -891,8 +890,6 @@ class Charger(Entity):
         return total
 
     def purge(self):
-        from .. import store
-
         for charger in self._target_chargers():
             charger.transactions.all().delete()
             charger.meter_values.all().delete()
@@ -903,7 +900,6 @@ class Charger(Entity):
 
     def delete(self, *args, **kwargs):
         from django.db.models.deletion import ProtectedError
-        from .. import store
 
         for charger in self._target_chargers():
             has_db_data = charger.transactions.exists() or charger.meter_values.exists()
