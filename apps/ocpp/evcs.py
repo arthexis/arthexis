@@ -577,6 +577,12 @@ def simulate(
     username: Optional[str] = None,
     password: Optional[str] = None,
     cp: int = 1,
+    name: str = "Simulator",
+    delay: Optional[float] = None,
+    reconnect_slots: Optional[str] = None,
+    demo_mode: bool = False,
+    meter_interval: Optional[float] = None,
+    **_: object,
 ):
     """Entry point used by the admin interface.
 
@@ -610,6 +616,11 @@ def simulate(
         "interval": interval,
         "username": username,
         "password": password,
+        "name": name,
+        "delay": delay,
+        "reconnect_slots": reconnect_slots,
+        "demo_mode": demo_mode,
+        "meter_interval": meter_interval,
     }
     state.start_time = time.strftime("%Y-%m-%d %H:%M:%S")
     state.stop_time = None
