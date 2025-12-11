@@ -148,7 +148,7 @@ def cp_simulator(request):
             sim_params["meter_interval"] = _cast_value(
                 request.POST.get("meter_interval"), float, default_params["interval"]
             )
-            _start_simulator(simulator_slot, **sim_params)
+            _start_simulator(sim_params, cp=simulator_slot)
             sim_details = {key: value for key, value in sim_params.items() if key != "password"}
             NetMessage.broadcast(subject="simulator", body=json.dumps(sim_details))
             message = _("Simulator start requested")
