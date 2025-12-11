@@ -18,6 +18,7 @@ from django.http.request import split_domain_port
 from apps.cards.models import RFID
 from apps.energy.models import CustomerAccount
 from . import temp_passwords
+from .system import ensure_system_user
 
 
 class RFIDBackend:
@@ -229,6 +230,7 @@ class LocalhostAdminBackend(ModelBackend):
 
     def _get_admin_user(self):
         User = get_user_model()
+        system_user = ensure_system_user()
         user, created = User.all_objects.get_or_create(
             username="admin",
             defaults={
@@ -241,8 +243,12 @@ class LocalhostAdminBackend(ModelBackend):
             return None
 
         arthexis_user = (
-            User.all_objects.filter(username="arthexis").exclude(pk=user.pk).first()
+            User.all_objects.filter(username=User.SYSTEM_USERNAME)
+            .exclude(pk=user.pk)
+            .first()
         )
+        if arthexis_user is None:
+            arthexis_user = system_user
 
         if created:
             if arthexis_user and user.operate_as_id is None:

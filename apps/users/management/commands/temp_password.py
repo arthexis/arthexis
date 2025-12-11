@@ -9,6 +9,7 @@ from django.db.utils import OperationalError
 from django.utils import timezone
 
 from apps.users import temp_passwords
+from apps.users.system import ensure_system_user
 
 
 class Command(BaseCommand):
@@ -48,6 +49,10 @@ class Command(BaseCommand):
 
         User = get_user_model()
         manager = getattr(User, "all_objects", User._default_manager)
+
+        system_username = getattr(User, "SYSTEM_USERNAME", "")
+        if system_username and identifier.casefold() == system_username.casefold():
+            ensure_system_user()
 
         users = self._resolve_users(manager, identifier)
         if not users:
