@@ -1,4 +1,4 @@
-name: Dashboard Screenshot
+name: Screenshot
 
 env:
   PYTHONDONTWRITEBYTECODE: '1'
@@ -133,6 +133,39 @@ jobs:
         with:
           name: admin-dashboard
           path: artifacts/admin-dashboard.png
+
+      - name: Capture public screenshot
+        env:
+          BASE_URL: http://localhost:8888/
+        run: |
+          mkdir -p artifacts
+          cat > artifacts/capture-public.js <<'NODE'
+          const { chromium } = require('playwright');
+
+          const baseUrl = process.env.BASE_URL || 'http://localhost:8888/';
+
+          (async () => {
+            const browser = await chromium.launch({ headless: true });
+            const page = await browser.newPage();
+
+            await page.goto(baseUrl, { waitUntil: 'networkidle' });
+            await page.waitForLoadState('networkidle');
+            await page.screenshot({ path: 'artifacts/public-site.png', fullPage: true });
+
+            await browser.close();
+          })().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
+          NODE
+
+          node artifacts/capture-public.js
+
+      - name: Upload public screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-site
+          path: artifacts/public-site.png
 
       - name: Stop application server
         if: always()
