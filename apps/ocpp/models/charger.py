@@ -5,6 +5,7 @@ from django.urls import NoReverseMatch
 from apps.locale.models import Language
 
 from .base import *
+from .transaction import annotate_transaction_energy_bounds
 
 class Charger(Entity):
     """Known charge point."""
