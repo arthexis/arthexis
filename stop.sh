@@ -17,6 +17,36 @@ cd "$BASE_DIR"
 
 LOCK_DIR="$BASE_DIR/.locks"
 SERVICE_MANAGEMENT_MODE="$(arthexis_detect_service_mode "$LOCK_DIR")"
+DJANGO_PID_FILE="$LOCK_DIR/django.pid"
+CELERY_WORKER_PID_FILE="$LOCK_DIR/celery_worker.pid"
+CELERY_BEAT_PID_FILE="$LOCK_DIR/celery_beat.pid"
+LCD_PID_FILE="$LOCK_DIR/lcd.pid"
+
+kill_from_pid_file() {
+  local pid_file="$1"
+  local name="$2"
+
+  if [ ! -f "$pid_file" ]; then
+    return 0
+  fi
+
+  local pid
+  pid=$(tr -d '\r\n' < "$pid_file")
+
+  if [ -z "$pid" ]; then
+    rm -f "$pid_file"
+    return 0
+  fi
+
+  if kill -0 "$pid" 2>/dev/null; then
+    if [ -n "$name" ]; then
+      echo "Stopping $name process (PID $pid) from $pid_file"
+    fi
+    kill "$pid" 2>/dev/null || true
+  fi
+
+  rm -f "$pid_file"
+}
 
 # Use non-interactive sudo if available
 SUDO="sudo -n"
@@ -154,6 +184,14 @@ if [ -f "$LOCK_DIR/service.lck" ]; then
 
     exit 0
   fi
+fi
+
+# Stop locally tracked processes when not using systemd
+kill_from_pid_file "$DJANGO_PID_FILE" "Django server"
+kill_from_pid_file "$CELERY_WORKER_PID_FILE" "Celery worker"
+kill_from_pid_file "$CELERY_BEAT_PID_FILE" "Celery beat"
+if [ "$SKIP_LCD_STOP" != "1" ] && [ "$SKIP_LCD_STOP" != "true" ]; then
+  kill_from_pid_file "$LCD_PID_FILE" "LCD screen"
 fi
 
 # Fall back to stopping locally-run processes
