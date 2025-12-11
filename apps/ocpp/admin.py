@@ -2589,7 +2589,7 @@ class ChargerAdmin(LogViewAdminMixin, EntityModelAdmin):
         from django.urls import reverse
 
         url = reverse(
-            "charger-status-connector",
+            "ocpp:charger-status-connector",
             args=[obj.charger_id, obj.connector_slug],
         )
         tx_obj = store.get_transaction(obj.charger_id, obj.connector_id)

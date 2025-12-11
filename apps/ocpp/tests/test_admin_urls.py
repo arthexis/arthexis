@@ -24,6 +24,26 @@ def test_charger_admin_changelist_accessible(client):
     assert b"Charge Point" in response.content
 
 
+def test_charger_admin_changelist_populates_quick_stats(client):
+    User = get_user_model()
+    user = User.objects.create_superuser(username="admin", password="pass", email="admin@example.com")
+    client.force_login(user)
+
+    Charger.objects.create(charger_id="CP-ADMIN")
+    Charger.objects.create(charger_id="CP-ADMIN", connector_id=1)
+
+    response = client.get(reverse("admin:ocpp_charger_changelist"))
+
+    assert response.status_code == 200
+    context = response.context[-1]
+    assert "charger_quick_stats" in context
+    stats = context["charger_quick_stats"]
+    assert stats["total_kw"] == 0.0
+    assert stats["today_kw"] == 0.0
+    assert stats["estimated_cost"] is None
+    assert stats["availability_percentage"] is None
+
+
 def test_charger_admin_reports_validation_error(db):
     User = get_user_model()
     admin_user = User.objects.create_superuser(
