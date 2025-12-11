@@ -38,6 +38,14 @@ class Command(BaseCommand):
                 "password when changing the permanent password."
             ),
         )
+        parser.add_argument(
+            "--create",
+            action="store_true",
+            help=(
+                "Create the user if it does not exist. The account will be created "
+                "with only the generated temporary password."
+            ),
+        )
 
     def handle(self, *args, **options):
         identifier = options["identifier"]
@@ -45,13 +53,16 @@ class Command(BaseCommand):
         if expires_in <= 0:
             raise CommandError("Expiration must be a positive number of seconds.")
         allow_change = bool(options.get("allow_change"))
+        create_user = bool(options.get("create"))
 
         User = get_user_model()
         manager = getattr(User, "all_objects", User._default_manager)
 
         users = self._resolve_users(manager, identifier)
         if not users:
-            raise CommandError(f"No user found for identifier {identifier!r}.")
+            if not create_user:
+                raise CommandError(f"No user found for identifier {identifier!r}.")
+            users = [self._create_user(manager, identifier)]
         if len(users) > 1:
             usernames = ", ".join(sorted({user.username for user in users}))
             raise CommandError(
@@ -98,4 +109,14 @@ class Command(BaseCommand):
                     "`require_2fa` column before generating temporary passwords."
                 ) from exc
             raise
+
+    def _create_user(self, manager, identifier):
+        kwargs = {"username": identifier}
+        if "@" in identifier and not identifier.startswith("@"):
+            kwargs["email"] = identifier
+
+        user = manager.create_user(**kwargs)
+        user.set_unusable_password()
+        user.save(update_fields=["password"])
+        return user
 
