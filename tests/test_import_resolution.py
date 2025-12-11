@@ -6,7 +6,15 @@ from typing import Iterable, Iterator, NamedTuple
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 IGNORED_DIRS = {"media", "static", "venv", ".venv", "env", "node_modules", "__pycache__", ".git"}
-OPTIONAL_MODULES = {"plyer", "smbus", "build"}
+OPTIONAL_MODULES = {
+    "plyer",
+    "smbus",
+    "build",
+    "RPi.GPIO",
+    "mfrc522",
+    "pwd",
+    "resource",
+}
 
 
 class ImportIssue(NamedTuple):
