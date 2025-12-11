@@ -29,6 +29,10 @@ from apps.core.admindocs import (
 )
 from apps.pages import views as pages_views
 
+# Ensure admin registrations (e.g., OCPP chargers) are loaded before URL
+# resolution to avoid missing admin views such as /admin/ocpp/charger/.
+admin.autodiscover()
+
 admin.site.site_header = _("Constellation")
 admin.site.site_title = _("Constellation")
 
