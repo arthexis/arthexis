@@ -43,7 +43,7 @@ def dashboard(request):
     node = Node.get_local()
     role = node.role if node else None
     role_name = role.name if role else ""
-    allow_anonymous_roles = {"Watchtower", "Constellation", "Satellite"}
+    allow_anonymous_roles = {"Watchtower", "Constellation", "Satellite", "Terminal"}
     if not request.user.is_authenticated and role_name not in allow_anonymous_roles:
         return redirect_to_login(
             request.get_full_path(), login_url=reverse("pages:login")

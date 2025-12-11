@@ -37,3 +37,17 @@ def test_dashboard_includes_last_seen(client, django_user_model):
 
     assert response.status_code == 200
     assert response.context["chargers"][0]["last_seen"] == heartbeat
+
+
+def test_dashboard_allows_anonymous_terminal_role(client, monkeypatch):
+    from types import SimpleNamespace
+
+    from apps.nodes.models import Node, NodeRole
+
+    terminal_role = NodeRole.objects.create(name="Terminal")
+    terminal_node = SimpleNamespace(role=terminal_role)
+    monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: terminal_node))
+
+    response = client.get(reverse("ocpp:ocpp-dashboard"))
+
+    assert response.status_code == 200
