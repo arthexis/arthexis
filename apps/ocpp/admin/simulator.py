@@ -1,6 +1,53 @@
-from .common_imports import *
-from .common import LogViewAdminMixin
+from django.contrib import admin, messages
+from django.contrib import admin, messages
+from django.contrib.admin import helpers
+from django import forms
 
+import asyncio
+import base64
+import contextlib
+import json
+import time as time_module
+import uuid
+from datetime import datetime, time, timedelta
+from decimal import Decimal, ROUND_HALF_UP
+from pathlib import Path
+from typing import Any
+from urllib.parse import unquote, urlparse
+
+import requests
+from asgiref.sync import async_to_sync
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import padding
+from django.conf import settings
+from django.contrib.admin.utils import quote
+from django.core.exceptions import ValidationError
+from django.db import transaction
+from django.db.models import Q
+from django.db.models.deletion import ProtectedError
+from django.http import Http404, HttpResponse, HttpResponseRedirect, JsonResponse
+from django.shortcuts import redirect
+from django.template.response import TemplateResponse
+from django.urls import path, reverse
+from django.utils import formats, timezone, translation
+from django.utils.dateparse import parse_datetime
+from django.utils.html import format_html, format_html_join
+from django.utils.text import slugify
+from django.utils.translation import gettext_lazy as _, ngettext
+from requests import RequestException
+
+from apps.protocols.decorators import protocol_call
+from apps.protocols.models import ProtocolCall as ProtocolCallModel
+
+from apps.core.admin import SaveBeforeChangeAction
+from apps.locals.user_data import EntityModelAdmin
+from ..models import Simulator
+from ..status_display import STATUS_BADGE_MAP, ERROR_OK_VALUES
+from .. import store
+from .maintenance import LogViewAdminMixin
+
+
+@admin.register(Simulator)
 class SimulatorAdmin(SaveBeforeChangeAction, LogViewAdminMixin, EntityModelAdmin):
     list_display = (
         "name",
@@ -256,3 +303,5 @@ class SimulatorAdmin(SaveBeforeChangeAction, LogViewAdminMixin, EntityModelAdmin
 
     def get_log_identifier(self, obj):
         return obj.cp_path
+
+

@@ -61,6 +61,7 @@ from ..models import (
     CPFirmwareDeployment,
     CPNetworkProfile,
     CPNetworkProfileDeployment,
+    RFIDSessionAttempt,
     SecurityEvent,
     ChargerLogRequest,
     CPForwarder,
