@@ -1,0 +1,146 @@
+name: Dashboard Screenshot
+
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/dashboard-screenshot.yml'
+      - 'apps/**'
+      - 'config/**'
+      - 'scripts/**'
+      - 'start.sh'
+      - 'install.sh'
+      - 'requirements.txt'
+  pull_request:
+    paths:
+      - '.github/workflows/dashboard-screenshot.yml'
+      - 'apps/**'
+      - 'config/**'
+      - 'scripts/**'
+      - 'start.sh'
+      - 'install.sh'
+      - 'requirements.txt'
+
+jobs:
+  capture-dashboard:
+    name: Capture admin dashboard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure workspace is writable
+        run: sudo chown -R "$USER:$USER" "$GITHUB_WORKSPACE"
+
+      - uses: actions/checkout@v6
+        with:
+          clean: false
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            pip-${{ runner.os }}-
+
+      - name: Install suite from repository
+        run: |
+          ./install.sh --clean --no-start
+
+      - name: Prepare database and admin account
+        run: |
+          source .venv/bin/activate
+          python manage.py migrate --noinput --database default
+          python manage.py check admin --force
+          python manage.py collectstatic --noinput
+
+      - name: Launch application server
+        env:
+          PORT: 8888
+        run: |
+          source .venv/bin/activate
+          DJANGO_SUPPRESS_MIGRATION_CHECK=1 python manage.py runserver 0.0.0.0:"${PORT}" --noreload > /tmp/django-server.log 2>&1 &
+          echo $! > /tmp/django-server.pid
+
+          echo "Waiting for server to become healthy..."
+          healthy=false
+          for attempt in {1..30}; do
+            if curl -fsS "http://localhost:${PORT}/admin/login/?next=/admin/" >/dev/null; then
+              healthy=true
+              break
+            fi
+            sleep 2
+          done
+
+          if [ "$healthy" = false ]; then
+            echo "Server failed to start in time. Recent logs:"
+            tail -n 50 /tmp/django-server.log || true
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Playwright Chromium
+        run: |
+          npx playwright@1.45.2 install --with-deps chromium
+
+      - name: Capture dashboard screenshot
+        env:
+          BASE_URL: http://localhost:8888/admin/login/?next=/admin/
+          ADMIN_USERNAME: admin
+          ADMIN_PASSWORD: admin
+        run: |
+          mkdir -p artifacts
+          cat > artifacts/capture.js <<'NODE'
+          const { chromium } = require('playwright');
+
+          const baseUrl = process.env.BASE_URL || 'http://localhost:8888/admin/login/?next=/admin/';
+          const username = process.env.ADMIN_USERNAME || 'admin';
+          const password = process.env.ADMIN_PASSWORD || 'admin';
+
+          (async () => {
+            const browser = await chromium.launch({ headless: true });
+            const page = await browser.newPage();
+
+            await page.goto(baseUrl, { waitUntil: 'networkidle' });
+            await page.fill('input[name="username"]', username);
+            await page.fill('input[name="password"]', password);
+            await Promise.all([
+              page.waitForNavigation({ waitUntil: 'networkidle' }),
+              page.click('input[type="submit"], button[type="submit"]'),
+            ]);
+            await page.waitForLoadState('networkidle');
+            await page.screenshot({ path: 'artifacts/admin-dashboard.png', fullPage: true });
+
+            await browser.close();
+          })().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
+          NODE
+
+          node artifacts/capture.js
+
+      - name: Upload dashboard screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: admin-dashboard
+          path: artifacts/admin-dashboard.png
+
+      - name: Stop application server
+        if: always()
+        run: |
+          if [ -f /tmp/django-server.pid ]; then
+            kill $(cat /tmp/django-server.pid) || true
+            rm /tmp/django-server.pid
+          fi
+          if [ -f /tmp/django-server.log ]; then
+            echo "Server log tail:" && tail -n 20 /tmp/django-server.log || true
+          fi
