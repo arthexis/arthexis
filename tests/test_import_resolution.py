@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Iterable, Iterator, NamedTuple
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-IGNORED_DIRS = {"media", "static", "venv", ".venv", "env", "node_modules", "__pycache__"}
+IGNORED_DIRS = {"media", "static", "venv", ".venv", "env", "node_modules", "__pycache__", ".git"}
 OPTIONAL_MODULES = {"plyer", "smbus", "build"}
 
 
