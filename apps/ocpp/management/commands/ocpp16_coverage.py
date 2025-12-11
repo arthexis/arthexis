@@ -180,11 +180,20 @@ def _collect_csms_to_cp_actions(source: str) -> set[str]:
 
 def _implemented_csms_to_cp(app_dir: Path) -> set[str]:
     actions: set[str] = set()
+    candidate_files: list[Path] = []
+
     for filename in ("views.py", "admin.py", "tasks.py"):
         path = app_dir / filename
-        if not path.exists():
-            continue
+        if path.exists():
+            candidate_files.append(path)
+
+    admin_pkg = app_dir / "admin"
+    if admin_pkg.is_dir():
+        candidate_files.extend(admin_pkg.glob("*.py"))
+
+    for path in candidate_files:
         actions.update(_collect_csms_to_cp_actions(path.read_text(encoding="utf-8")))
+
     return actions
 
 
