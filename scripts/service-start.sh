@@ -116,6 +116,25 @@ fi
 
 mkdir -p "$LOCK_DIR"
 
+DJANGO_PID_FILE="$LOCK_DIR/django.pid"
+CELERY_WORKER_PID_FILE="$LOCK_DIR/celery_worker.pid"
+CELERY_BEAT_PID_FILE="$LOCK_DIR/celery_beat.pid"
+LCD_PID_FILE="$LOCK_DIR/lcd.pid"
+
+record_pid_file() {
+  local pid="$1"
+  local file="$2"
+  if [ -n "$pid" ] && [ -n "$file" ]; then
+    printf '%s\n' "$pid" > "$file"
+  fi
+}
+
+clear_pid_files() {
+  rm -f "$DJANGO_PID_FILE" "$CELERY_WORKER_PID_FILE" "$CELERY_BEAT_PID_FILE" "$LCD_PID_FILE"
+}
+
+clear_pid_files
+
 # Ensure virtual environment is available
 if [ ! -d .venv ]; then
   echo "Virtual environment not found. Run ./install.sh first." >&2
@@ -192,6 +211,7 @@ cleanup_background_processes() {
   if [ -n "$LOG_FOLLOW_PID" ]; then
     kill "$LOG_FOLLOW_PID" 2>/dev/null || true
   fi
+  clear_pid_files
 }
 trap cleanup_background_processes EXIT
 if [ -n "$SERVICE_NAME" ] && [ -f "$SYSTEMD_LOCK_FILE" ]; then
@@ -426,13 +446,16 @@ run_runserver_preflight() {
 if [ "$CELERY" = true ]; then
   celery -A config worker -l info --concurrency=2 &
   CELERY_WORKER_PID=$!
+  record_pid_file "$CELERY_WORKER_PID" "$CELERY_WORKER_PID_FILE"
   celery -A config beat -l info &
   CELERY_BEAT_PID=$!
+  record_pid_file "$CELERY_BEAT_PID" "$CELERY_BEAT_PID_FILE"
 fi
 
 if [ "$LCD_EMBEDDED" = true ]; then
   python -m apps.screens.lcd_screen &
   LCD_PROCESS_PID=$!
+  record_pid_file "$LCD_PROCESS_PID" "$LCD_PID_FILE"
 fi
 
 # Start the Django development server
@@ -448,6 +471,7 @@ if [ "$AWAIT_START" = true ]; then
     python manage.py runserver 0.0.0.0:"$PORT" --noreload "${RUNSERVER_EXTRA_ARGS[@]}" &
   fi
   DJANGO_SERVER_PID=$!
+  record_pid_file "$DJANGO_SERVER_PID" "$DJANGO_PID_FILE"
 
   if wait_for_suite_startup "$PORT" "$DJANGO_SERVER_PID" "$STARTUP_TIMEOUT"; then
     wait "$DJANGO_SERVER_PID"
@@ -456,8 +480,11 @@ if [ "$AWAIT_START" = true ]; then
   fi
 else
   if [ "$RELOAD" = true ]; then
-    python manage.py runserver 0.0.0.0:"$PORT" "${RUNSERVER_EXTRA_ARGS[@]}"
+    python manage.py runserver 0.0.0.0:"$PORT" "${RUNSERVER_EXTRA_ARGS[@]}" &
   else
-    python manage.py runserver 0.0.0.0:"$PORT" --noreload "${RUNSERVER_EXTRA_ARGS[@]}"
+    python manage.py runserver 0.0.0.0:"$PORT" --noreload "${RUNSERVER_EXTRA_ARGS[@]}" &
   fi
+  DJANGO_SERVER_PID=$!
+  record_pid_file "$DJANGO_SERVER_PID" "$DJANGO_PID_FILE"
+  wait "$DJANGO_SERVER_PID"
 fi
