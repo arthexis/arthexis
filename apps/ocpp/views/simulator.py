@@ -1,3 +1,5 @@
+from django.utils.translation import gettext_lazy as _
+
 from .common import *  # noqa: F401,F403
 from ..evcs import _start_simulator, _stop_simulator
 
