@@ -38,19 +38,19 @@ Incoming `DataTransfer` requests are written to the `DataTransferMessage` table 
 Outgoing calls originate from the control endpoint that proxies UI and admin actions to the live WebSocket session.
 
 ### RemoteStartTransaction
-A remote start request requires an `idTag` and optionally a connector id or charging profile. The view validates the payload, injects defaults from the current connector context, and asynchronously sends the `RemoteStartTransaction` message to the active connection.【F:ocpp/views.py†L1280-L1320】
+A remote start request requires an `idTag` and optionally a connector id or charging profile. The view validates the payload, injects defaults from the current connector context, and asynchronously sends the `RemoteStartTransaction` message to the active connection.【F:apps/ocpp/views/actions.py†L203-L259】
 
 ### RemoteStopTransaction
-Remote stop requests must target an active transaction. The view fetches the current session from the in-memory store and, if present, sends `RemoteStopTransaction` with the transaction identifier back to the charger.【F:ocpp/views.py†L1253-L1279】
+Remote stop requests must target an active transaction. The view fetches the current session from the in-memory store and, if present, sends `RemoteStopTransaction` with the transaction identifier back to the charger.【F:apps/ocpp/views/actions.py†L168-L199】
 
 ### Reset
-Reset commands always request a soft reset and are dispatched as asynchronous WebSocket sends. Additional metadata is not persisted because reset responses do not currently update model state.【F:ocpp/views.py†L1402-L1416】
+Reset commands always request a soft reset and are dispatched as asynchronous WebSocket sends. Additional metadata is not persisted because reset responses do not currently update model state.【F:apps/ocpp/views/actions.py†L629-L657】
 
 ### ChangeAvailability
-Change availability requests enforce `Operative`/`Inoperative` validation, normalise the connector id, and send the `ChangeAvailability` call with a unique message id. The view registers pending-call metadata so the WebSocket consumer can reconcile the eventual response, and resets the request tracking fields on the affected `Charger` record to indicate a new change is in progress.【F:ocpp/views.py†L1321-L1359】【F:ocpp/store.py†L1-L138】【F:ocpp/models.py†L116-L166】
+Change availability requests enforce `Operative`/`Inoperative` validation, normalise the connector id, and send the `ChangeAvailability` call with a unique message id. The view registers pending-call metadata so the WebSocket consumer can reconcile the eventual response, and resets the request tracking fields on the affected `Charger` record to indicate a new change is in progress.【F:apps/ocpp/views/actions.py†L327-L372】【F:ocpp/store.py†L1-L138】【F:ocpp/models.py†L116-L166】
 
 ### DataTransfer
-Operators can issue a `DataTransfer` via the control endpoint by providing the vendor id, optional message id, and payload data. The view validates the request, persists a `DataTransferMessage` row flagged as `csms_to_cp`, sends the call to the charger, and registers a pending call keyed to that record. When the charger replies, the consumer matches the message id, updates the stored status, response data, or error details, and timestamps the outcome so outbound diagnostics remain traceable.【F:ocpp/views.py†L1361-L1399】【F:ocpp/consumers.py†L674-L826】【F:ocpp/models.py†L842-L870】
+Operators can issue a `DataTransfer` via the control endpoint by providing the vendor id, optional message id, and payload data. The view validates the request, persists a `DataTransferMessage` row flagged as `csms_to_cp`, sends the call to the charger, and registers a pending call keyed to that record. When the charger replies, the consumer matches the message id, updates the stored status, response data, or error details, and timestamps the outcome so outbound diagnostics remain traceable.【F:apps/ocpp/views/actions.py†L579-L625】【F:ocpp/consumers.py†L674-L826】【F:ocpp/models.py†L842-L870】
 
 ### Handling responses
 When a charger replies to `ChangeAvailability`, the consumer matches the message id against the pending-call registry. Call results mark the request as accepted and update the requested state, while call errors flag the request as rejected and capture the error details. The stored status feeds the admin interface so operators can track whether the requested availability state took effect.【F:ocpp/consumers.py†L674-L826】【F:ocpp/consumers.py†L827-L906】
