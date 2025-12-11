@@ -1,4 +1,4 @@
-from .common import *  # noqa: F401,F403
+from .misc import *  # noqa: F401,F403
 
 
 @login_required(login_url="pages:login")

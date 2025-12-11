@@ -4,8 +4,8 @@ import pytest
 
 from apps.ocpp import store
 from apps.ocpp.tasks import request_charge_point_log
-from apps.ocpp.views import actions
-from apps.ocpp.views.common import ActionContext, ActionCall
+from apps.ocpp.views import charger as charger_module
+from apps.ocpp.views.misc import ActionContext, ActionCall
 
 
 class DummyWebSocket:
@@ -39,7 +39,7 @@ def stub_store(monkeypatch):
 
 def test_unlock_connector_supports_ocpp201(ws, stub_store):
     context = ActionContext("CID", 2, charger=None, ws=ws, log_key="log-key")
-    result = actions._handle_unlock_connector(context, {})
+    result = charger_module._handle_unlock_connector(context, {})
 
     assert isinstance(result, ActionCall)
     assert ws.sent and json.loads(ws.sent[0])[2] == "UnlockConnector"
@@ -47,9 +47,9 @@ def test_unlock_connector_supports_ocpp201(ws, stub_store):
 
 
 def test_send_local_list_supports_ocpp201(ws, stub_store):
-    charger = type("ChargerStub", (), {"local_auth_list_version": 4})
-    context = ActionContext("CID", None, charger=charger, ws=ws, log_key="log-key")
-    result = actions._handle_send_local_list(
+    charger_stub = type("ChargerStub", (), {"local_auth_list_version": 4})
+    context = ActionContext("CID", None, charger=charger_stub, ws=ws, log_key="log-key")
+    result = charger_module._handle_send_local_list(
         context,
         {"localAuthorizationList": [{"idTag": "ABC"}]},
     )
@@ -82,10 +82,14 @@ def test_set_charging_profile_supports_ocpp201(monkeypatch, ws, stub_store):
         def first(self):
             return profile
 
-    monkeypatch.setattr(actions, "ChargingProfile", type("CPModel", (), {"objects": QueryStub()}))
+    monkeypatch.setattr(
+        charger_module, "ChargingProfile", type("CPModel", (), {"objects": QueryStub()})
+    )
 
     context = ActionContext("CID", 1, charger=None, ws=ws, log_key="log-key")
-    result = actions._handle_set_charging_profile(context, {"profileId": profile.charging_profile_id})
+    result = charger_module._handle_set_charging_profile(
+        context, {"profileId": profile.charging_profile_id}
+    )
 
     assert isinstance(result, ActionCall)
     assert ws.sent and json.loads(ws.sent[0])[2] == "SetChargingProfile"

@@ -25,8 +25,8 @@ from apps.pages.utils import landing
 from .. import store
 from ..models import Charger, Transaction, annotate_transaction_energy_bounds
 from ..status_display import STATUS_BADGE_MAP
-from . import common as view_common
-from .common import (
+from . import misc as view_common
+from .misc import (
     _charger_last_seen,
     _charger_state,
     _clear_stale_statuses_for_view,
