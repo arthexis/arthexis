@@ -154,7 +154,7 @@ def collect_missing_imports(files: Iterable[Path]) -> list[ImportIssue]:
     issues: list[ImportIssue] = []
     for file_path in files:
         module_path = module_path_from_file(file_path)
-        tree = ast.parse(file_path.read_text())
+        tree = ast.parse(file_path.read_text(encoding="utf-8"))
         collector = ImportCollector(file_path, module_path.rpartition(".")[0] or None if module_path else None)
         collector.visit(tree)
         issues.extend(collector.issues)
