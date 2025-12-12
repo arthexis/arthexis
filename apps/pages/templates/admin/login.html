@@ -49,6 +49,9 @@
           access this page. Would you like to login to a different account?
         {% endblocktranslate %}
       </p>
+      <p class="public-login-link">
+        <a href="{% url 'admin:logout' %}">{% translate "Log out" %}</a>
+      </p>
     {% endif %}
 
     <form action="{{ app_path }}" method="post" id="login-form">{% csrf_token %}

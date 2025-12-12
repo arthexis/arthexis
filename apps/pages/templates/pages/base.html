@@ -812,7 +812,7 @@
                 </svg>
                 {% if request.user.is_authenticated %}
                 <div class="user-info-tooltip">
-                  {{ request.user.username }} - {% if request.user.is_staff %}{% trans "Staff" %}{% else %}{% trans "Not staff" %}{% endif %}
+                  {{ request.user.username }}{% if request.user.is_staff %} - {% trans "Staff" %}{% endif %}
                 </div>
                 {% endif %}
               </a>
