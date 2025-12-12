@@ -58,6 +58,24 @@ class TempPasswordCommandTests(TestCase):
         User.objects.create_user(username=identifier, email=identifier)
 
         with self.assertRaisesMessage(
-            CommandError, "--staff and --superuser can only be used with --create."
+            CommandError,
+            "--staff and --superuser can only be used with --create or --update.",
         ):
             call_command("temp_password", identifier, staff=True)
+
+    def test_update_user_permissions(self):
+        identifier = "existing-staff@example.com"
+        User = get_user_model()
+        user = User.objects.create_user(username=identifier, email=identifier)
+
+        call_command(
+            "temp_password",
+            identifier,
+            update=True,
+            staff=True,
+            superuser=True,
+        )
+
+        user.refresh_from_db()
+        assert user.is_staff
+        assert user.is_superuser

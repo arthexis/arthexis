@@ -47,16 +47,27 @@ class Command(BaseCommand):
             ),
         )
         parser.add_argument(
+            "--update",
+            action="store_true",
+            help=(
+                "Update an existing user when generating the temporary password. "
+                "Allows adjusting permissions such as --staff or --superuser."
+            ),
+        )
+        parser.add_argument(
             "--staff",
             action="store_true",
-            help="Grant staff privileges to the newly created user (requires --create).",
+            help=(
+                "Grant staff privileges to the user when creating or updating the "
+                "account."
+            ),
         )
         parser.add_argument(
             "--superuser",
             action="store_true",
             help=(
-                "Grant superuser privileges to the newly created user "
-                "(requires --create)."
+                "Grant superuser privileges to the user when creating or updating "
+                "the account."
             ),
         )
 
@@ -67,11 +78,14 @@ class Command(BaseCommand):
             raise CommandError("Expiration must be a positive number of seconds.")
         allow_change = bool(options.get("allow_change"))
         create_user = bool(options.get("create"))
+        update_user = bool(options.get("update"))
         staff = bool(options.get("staff"))
         superuser = bool(options.get("superuser"))
 
-        if (staff or superuser) and not create_user:
-            raise CommandError("--staff and --superuser can only be used with --create.")
+        if (staff or superuser) and not (create_user or update_user):
+            raise CommandError(
+                "--staff and --superuser can only be used with --create or --update."
+            )
 
         User = get_user_model()
         manager = getattr(User, "all_objects", User._default_manager)
@@ -89,6 +103,8 @@ class Command(BaseCommand):
             )
 
         user = users[0]
+        if update_user:
+            self._update_user(user, staff=staff, superuser=superuser)
         password = temp_passwords.generate_password()
         expires_at = timezone.now() + timedelta(seconds=expires_in)
         entry = temp_passwords.store_temp_password(
@@ -145,4 +161,19 @@ class Command(BaseCommand):
             fields.extend(["is_superuser", "is_staff"])
         user.save(update_fields=fields)
         return user
+
+    def _update_user(self, user, *, staff: bool = False, superuser: bool = False) -> None:
+        fields = []
+        if staff and not user.is_staff:
+            user.is_staff = True
+            fields.append("is_staff")
+        if superuser and not user.is_superuser:
+            user.is_superuser = True
+            fields.append("is_superuser")
+        if superuser and not user.is_staff:
+            user.is_staff = True
+            if "is_staff" not in fields:
+                fields.append("is_staff")
+        if fields:
+            user.save(update_fields=fields)
 
