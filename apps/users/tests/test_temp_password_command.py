@@ -35,3 +35,29 @@ class TempPasswordCommandTests(TestCase):
         output = stdout.getvalue()
         assert f"Temporary password for {identifier}:" in output
         assert "Temporary password created." in output
+
+    def test_create_user_with_staff_and_superuser_flags(self):
+        identifier = "privileged@example.com"
+
+        call_command(
+            "temp_password",
+            identifier,
+            create=True,
+            staff=True,
+            superuser=True,
+        )
+
+        User = get_user_model()
+        user = User.all_objects.get(username=identifier)
+        assert user.is_staff
+        assert user.is_superuser
+
+    def test_staff_superuser_flags_require_create(self):
+        identifier = "existing@example.com"
+        User = get_user_model()
+        User.objects.create_user(username=identifier, email=identifier)
+
+        with self.assertRaisesMessage(
+            CommandError, "--staff and --superuser can only be used with --create."
+        ):
+            call_command("temp_password", identifier, staff=True)
