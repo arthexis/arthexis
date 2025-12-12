@@ -16,15 +16,32 @@ if [ ! -d .venv ]; then
 fi
 source .venv/bin/activate
 
+celery_flag="--no-celery"
+
 if [ $# -eq 0 ]; then
   echo "Available Django management commands:"
-  python manage.py help --commands
+  python manage.py help --commands "$celery_flag"
   echo
-  echo "Usage: $0 <command> [args...]"
+  echo "Usage: $0 [--celery|--no-celery] <command> [args...]"
   exit 0
+fi
+
+case "$1" in
+  --celery)
+    celery_flag="--celery"
+    shift
+    ;;
+  --no-celery)
+    shift
+    ;;
+esac
+
+if [ $# -eq 0 ]; then
+  echo "Usage: $0 [--celery|--no-celery] <command> [args...]" >&2
+  exit 1
 fi
 
 COMMAND="${1//-/_}"
 shift
 
-python manage.py "$COMMAND" "$@"
+python manage.py "$COMMAND" "$@" "$celery_flag"
