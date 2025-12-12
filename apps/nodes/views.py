@@ -4,6 +4,7 @@ import json
 import re
 import socket
 import uuid
+from dataclasses import dataclass
 from datetime import timedelta
 from collections.abc import Mapping
 from django.apps import apps
@@ -462,6 +463,317 @@ def _announce_visitor_join(new_node: Node, relation: Node.Relation | None) -> No
     return None
 
 
+@dataclass
+class NodeRegistrationPayload:
+    hostname: str
+    mac_address: str
+    address: str
+    network_hostname: str
+    ipv4_candidates: list[str]
+    ipv6_address: str
+    port: int
+    features: object
+    public_key: str | None
+    token: str | None
+    signature: str | None
+    installed_version: object | None
+    installed_revision: object | None
+    relation_value: Node.Relation | None
+    trusted_requested: object
+    role_name: str
+    deactivate_user: bool
+
+    @classmethod
+    def from_data(cls, data):
+        features = _extract_features(data)
+        hostname = (data.get("hostname") or "").strip()
+        address = (data.get("address") or "").strip()
+        network_hostname = (data.get("network_hostname") or "").strip()
+        ipv4_candidates = _extract_ipv4_candidates(data)
+        ipv6_address = (data.get("ipv6_address") or "").strip()
+        port = _coerce_port(data.get("port", 8888))
+        mac_address = (data.get("mac_address") or "").strip()
+        public_key = data.get("public_key")
+        token = data.get("token")
+        signature = data.get("signature")
+        installed_version = data.get("installed_version")
+        installed_revision = data.get("installed_revision")
+        raw_relation = data.get("current_relation")
+        relation_present = (
+            hasattr(data, "getlist") and "current_relation" in data
+        ) or ("current_relation" in data)
+        relation_value = (
+            Node.normalize_relation(raw_relation) if relation_present else None
+        )
+        trusted_requested = data.get("trusted")
+        role_name = str(data.get("role") or data.get("role_name") or "").strip()
+        deactivate_user = _coerce_bool(data.get("deactivate_user"))
+
+        return cls(
+            hostname=hostname,
+            mac_address=mac_address,
+            address=address,
+            network_hostname=network_hostname,
+            ipv4_candidates=ipv4_candidates,
+            ipv6_address=ipv6_address,
+            port=port,
+            features=features,
+            public_key=public_key,
+            token=token,
+            signature=signature,
+            installed_version=installed_version,
+            installed_revision=installed_revision,
+            relation_value=relation_value,
+            trusted_requested=trusted_requested,
+            role_name=role_name,
+            deactivate_user=deactivate_user,
+        )
+
+
+def _extract_request_data(request):
+    try:
+        return json.loads(request.body.decode())
+    except json.JSONDecodeError:
+        return request.POST
+
+
+def _extract_features(data):
+    if hasattr(data, "getlist"):
+        raw_features = data.getlist("features")
+        if not raw_features:
+            return None
+        if len(raw_features) == 1:
+            return raw_features[0]
+        return raw_features
+    return data.get("features")
+
+
+def _extract_ipv4_candidates(data) -> list[str]:
+    if hasattr(data, "getlist"):
+        ipv4_values = data.getlist("ipv4_address")
+        raw_ipv4 = ipv4_values if ipv4_values else data.get("ipv4_address")
+    else:
+        raw_ipv4 = data.get("ipv4_address")
+    return Node.sanitize_ipv4_addresses(raw_ipv4)
+
+
+def _coerce_port(value) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 8888
+
+
+def _ensure_authenticated_user(request):
+    authenticated_user = getattr(request, "user", None)
+    if not getattr(authenticated_user, "is_authenticated", False):
+        authenticated_user = _authenticate_basic_credentials(request)
+    return authenticated_user
+
+
+def _validate_payload(payload: NodeRegistrationPayload):
+    if not payload.hostname or not payload.mac_address:
+        return JsonResponse(
+            {"detail": "hostname and mac_address required"}, status=400
+        )
+    if not any(
+        [
+            payload.address,
+            payload.network_hostname,
+            bool(payload.ipv4_candidates),
+            payload.ipv6_address,
+        ]
+    ):
+        return JsonResponse(
+            {
+                "detail": "at least one of address, network_hostname, "
+                "ipv4_address, or ipv6_address must be provided",
+            },
+            status=400,
+        )
+    return None
+
+
+def _verify_signature(payload: NodeRegistrationPayload):
+    if not (payload.public_key and payload.token and payload.signature):
+        return False, None
+    try:
+        pub = serialization.load_pem_public_key(payload.public_key.encode())
+        pub.verify(
+            base64.b64decode(payload.signature),
+            payload.token.encode(),
+            padding.PSS(
+                mgf=padding.MGF1(hashes.SHA256()),
+                salt_length=padding.PSS.MAX_LENGTH,
+            ),
+            hashes.SHA256(),
+        )
+        return True, None
+    except Exception:
+        return False, JsonResponse({"detail": "invalid signature"}, status=403)
+
+
+def _enforce_authentication(request, *, verified: bool):
+    if verified:
+        return None
+    if not request.user.is_authenticated:
+        return JsonResponse({"detail": "authentication required"}, status=401)
+    required_perms = ("nodes.add_node", "nodes.change_node")
+    if not request.user.has_perms(required_perms):
+        return JsonResponse({"detail": "permission denied"}, status=403)
+    return None
+
+
+def _normalize_addresses(payload: NodeRegistrationPayload):
+    mac_address = payload.mac_address.lower()
+    address_value = payload.address or ""
+    ipv6_value = payload.ipv6_address or ""
+    ipv4_candidates = list(payload.ipv4_candidates)
+    for candidate in Node.sanitize_ipv4_addresses(
+        [payload.address, payload.network_hostname, payload.hostname]
+    ):
+        if candidate not in ipv4_candidates:
+            ipv4_candidates.append(candidate)
+    ipv4_value = Node.serialize_ipv4_addresses(ipv4_candidates) or ""
+
+    for candidate in (payload.address, payload.network_hostname, payload.hostname):
+        candidate = (candidate or "").strip()
+        if not candidate:
+            continue
+        try:
+            parsed_ip = ipaddress.ip_address(candidate)
+        except ValueError:
+            continue
+        if parsed_ip.version == 6 and not ipv6_value:
+            ipv6_value = str(parsed_ip)
+    return mac_address, address_value, ipv6_value, ipv4_value
+
+
+def _resolve_role(role_name: str, *, can_assign: bool):
+    if not (role_name and can_assign):
+        return None
+    return NodeRole.objects.filter(name=role_name).first()
+
+
+def _update_features(node: Node, features, *, allow_update: bool):
+    if features is None or not allow_update:
+        return
+    if isinstance(features, (str, bytes)):
+        feature_list = [features]
+    else:
+        feature_list = list(features)
+    node.update_manual_features(feature_list)
+
+
+def _refresh_last_seen(node: Node, update_fields: list[str]):
+    timestamp = timezone.now()
+    node.last_seen = timestamp
+    if "last_seen" not in update_fields:
+        update_fields.append("last_seen")
+
+
+def _deactivate_user_if_requested(request, deactivate_user: bool):
+    if not deactivate_user:
+        return
+    deactivate = getattr(request.user, "deactivate_temporary_credentials", None)
+    if callable(deactivate):
+        deactivate()
+
+
+def _update_existing_node(
+    node: Node,
+    *,
+    hostname: str,
+    network_hostname: str,
+    address_value: str,
+    ipv4_value: str,
+    ipv6_value: str,
+    port: int,
+    verified: bool,
+    public_key: str | None,
+    installed_version: object | None,
+    installed_revision: object | None,
+    relation_value: Node.Relation | None,
+    desired_role: NodeRole | None,
+    trusted_allowed: bool,
+    features,
+    request,
+    deactivate_user: bool,
+):
+    previous_version = (node.installed_version or "").strip()
+    previous_revision = (node.installed_revision or "").strip()
+    update_fields: list[str] = []
+    for field, value in (
+        ("hostname", hostname),
+        ("network_hostname", network_hostname),
+        ("address", address_value),
+        ("ipv4_address", ipv4_value),
+        ("ipv6_address", ipv6_value),
+        ("port", port),
+    ):
+        current = getattr(node, field)
+        if isinstance(value, str):
+            value = value or ""
+            current = current or ""
+        if current != value:
+            setattr(node, field, value)
+            update_fields.append(field)
+    if verified:
+        node.public_key = public_key
+        update_fields.append("public_key")
+    if installed_version is not None:
+        node.installed_version = str(installed_version)[:20]
+        if "installed_version" not in update_fields:
+            update_fields.append("installed_version")
+    if installed_revision is not None:
+        node.installed_revision = str(installed_revision)[:40]
+        if "installed_revision" not in update_fields:
+            update_fields.append("installed_revision")
+    if relation_value is not None and node.current_relation != relation_value:
+        node.current_relation = relation_value
+        update_fields.append("current_relation")
+    if desired_role and node.role_id != desired_role.id:
+        node.role = desired_role
+        update_fields.append("role")
+    if trusted_allowed and not node.trusted:
+        node.trusted = True
+        update_fields.append("trusted")
+
+    _refresh_last_seen(node, update_fields)
+
+    if update_fields:
+        # ``auto_now`` fields such as ``last_seen`` are not updated when
+        # ``update_fields`` is provided unless they are explicitly included.
+        # Ensure the heartbeat timestamp is always refreshed so remote syncs
+        # reflect the latest contact time even when no other fields changed.
+        node.save(update_fields=update_fields)
+    current_version = (node.installed_version or "").strip()
+    current_revision = (node.installed_revision or "").strip()
+    node_information_updated.send(
+        sender=Node,
+        node=node,
+        previous_version=previous_version,
+        previous_revision=previous_revision,
+        current_version=current_version,
+        current_revision=current_revision,
+        request=request,
+    )
+    _update_features(
+        node,
+        features,
+        allow_update=verified or request.user.is_authenticated,
+    )
+    response = JsonResponse(
+        {
+            "id": node.id,
+            "uuid": str(node.uuid),
+            "detail": f"Node already exists (id: {node.id})",
+        }
+    )
+    _deactivate_user_if_requested(request, deactivate_user)
+    return response
+
+
 # CSRF exemption retained so gateway hardware posting signed JSON without
 # browser cookies can register successfully.
 @csrf_exempt
@@ -476,248 +788,83 @@ def register_node(request):
         response = JsonResponse({"detail": "POST required"}, status=400)
         return _add_cors_headers(request, response)
 
-    try:
-        data = json.loads(request.body.decode())
-    except json.JSONDecodeError:
-        data = request.POST
+    data = _extract_request_data(request)
+    _ensure_authenticated_user(request)
+    payload = NodeRegistrationPayload.from_data(data)
 
-    authenticated_user = getattr(request, "user", None)
-    if not getattr(authenticated_user, "is_authenticated", False):
-        authenticated_user = _authenticate_basic_credentials(request)
+    validation_response = _validate_payload(payload)
+    if validation_response:
+        return _add_cors_headers(request, validation_response)
 
-    if hasattr(data, "getlist"):
-        raw_features = data.getlist("features")
-        if not raw_features:
-            features = None
-        elif len(raw_features) == 1:
-            features = raw_features[0]
-        else:
-            features = raw_features
-    else:
-        features = data.get("features")
+    verified, signature_error = _verify_signature(payload)
+    if signature_error:
+        return _add_cors_headers(request, signature_error)
 
-    hostname = (data.get("hostname") or "").strip()
-    address = (data.get("address") or "").strip()
-    network_hostname = (data.get("network_hostname") or "").strip()
-    if hasattr(data, "getlist"):
-        ipv4_values = data.getlist("ipv4_address")
-        raw_ipv4 = ipv4_values if ipv4_values else data.get("ipv4_address")
-    else:
-        raw_ipv4 = data.get("ipv4_address")
-    ipv4_candidates = Node.sanitize_ipv4_addresses(raw_ipv4)
-    ipv6_address = (data.get("ipv6_address") or "").strip()
-    port = data.get("port", 8888)
-    mac_address = (data.get("mac_address") or "").strip()
-    public_key = data.get("public_key")
-    token = data.get("token")
-    signature = data.get("signature")
-    installed_version = data.get("installed_version")
-    installed_revision = data.get("installed_revision")
-    relation_present = False
-    if hasattr(data, "getlist"):
-        relation_present = "current_relation" in data
-    else:
-        relation_present = "current_relation" in data
-    raw_relation = data.get("current_relation")
-    relation_value = (
-        Node.normalize_relation(raw_relation) if relation_present else None
+    auth_error = _enforce_authentication(request, verified=verified)
+    if auth_error:
+        return _add_cors_headers(request, auth_error)
+
+    mac_address, address_value, ipv6_value, ipv4_value = _normalize_addresses(
+        payload
     )
-
-    deactivate_user = _coerce_bool(data.get("deactivate_user"))
-
-    if not hostname or not mac_address:
-        response = JsonResponse(
-            {"detail": "hostname and mac_address required"}, status=400
-        )
-        return _add_cors_headers(request, response)
-
-    if not any([
-        address,
-        network_hostname,
-        bool(ipv4_candidates),
-        ipv6_address,
-    ]):
-        response = JsonResponse(
-            {
-                "detail": "at least one of address, network_hostname, "
-                "ipv4_address, or ipv6_address must be provided",
-            },
-            status=400,
-        )
-        return _add_cors_headers(request, response)
-
-    try:
-        port = int(port)
-    except (TypeError, ValueError):
-        port = 8888
-
-    verified = False
-    if public_key and token and signature:
-        try:
-            pub = serialization.load_pem_public_key(public_key.encode())
-            pub.verify(
-                base64.b64decode(signature),
-                token.encode(),
-                padding.PSS(
-                    mgf=padding.MGF1(hashes.SHA256()),
-                    salt_length=padding.PSS.MAX_LENGTH,
-                ),
-                hashes.SHA256(),
-            )
-            verified = True
-        except Exception:
-            response = JsonResponse({"detail": "invalid signature"}, status=403)
-            return _add_cors_headers(request, response)
-
-    if not verified and not request.user.is_authenticated:
-        response = JsonResponse({"detail": "authentication required"}, status=401)
-        return _add_cors_headers(request, response)
-
-    if not verified and request.user.is_authenticated:
-        required_perms = ("nodes.add_node", "nodes.change_node")
-        if not request.user.has_perms(required_perms):
-            response = JsonResponse({"detail": "permission denied"}, status=403)
-            return _add_cors_headers(request, response)
-
-    trusted_requested = data.get("trusted")
-    trusted_allowed = bool(trusted_requested) and (
+    trusted_allowed = bool(payload.trusted_requested) and (
         verified or request.user.is_authenticated
     )
+    can_assign_role = verified or request.user.is_authenticated
+    desired_role = _resolve_role(payload.role_name, can_assign=can_assign_role)
 
-    mac_address = mac_address.lower()
-    address_value = address or ""
-    ipv6_value = ipv6_address or ""
-    for candidate in Node.sanitize_ipv4_addresses([address, network_hostname, hostname]):
-        if candidate not in ipv4_candidates:
-            ipv4_candidates.append(candidate)
-    ipv4_value = Node.serialize_ipv4_addresses(ipv4_candidates) or ""
-
-    for candidate in (address, network_hostname, hostname):
-        candidate = (candidate or "").strip()
-        if not candidate:
-            continue
-        try:
-            parsed_ip = ipaddress.ip_address(candidate)
-        except ValueError:
-            continue
-        if parsed_ip.version == 6 and not ipv6_value:
-            ipv6_value = str(parsed_ip)
     defaults = {
-        "hostname": hostname,
-        "network_hostname": network_hostname,
+        "hostname": payload.hostname,
+        "network_hostname": payload.network_hostname,
         "address": address_value,
         "ipv4_address": ipv4_value,
         "ipv6_address": ipv6_value,
-        "port": port,
+        "port": payload.port,
     }
     if trusted_allowed:
         defaults["trusted"] = True
-    role_name = str(data.get("role") or data.get("role_name") or "").strip()
-    desired_role = None
-    if role_name and (verified or request.user.is_authenticated):
-        desired_role = NodeRole.objects.filter(name=role_name).first()
-        if desired_role:
-            defaults["role"] = desired_role
+    if desired_role:
+        defaults["role"] = desired_role
     if verified:
-        defaults["public_key"] = public_key
-    if installed_version is not None:
-        defaults["installed_version"] = str(installed_version)[:20]
-    if installed_revision is not None:
-        defaults["installed_revision"] = str(installed_revision)[:40]
-    if relation_value is not None:
-        defaults["current_relation"] = relation_value
+        defaults["public_key"] = payload.public_key
+    if payload.installed_version is not None:
+        defaults["installed_version"] = str(payload.installed_version)[:20]
+    if payload.installed_revision is not None:
+        defaults["installed_revision"] = str(payload.installed_revision)[:40]
+    if payload.relation_value is not None:
+        defaults["current_relation"] = payload.relation_value
 
     node, created = Node.objects.get_or_create(
         mac_address=mac_address,
         defaults=defaults,
     )
     if not created:
-        previous_version = (node.installed_version or "").strip()
-        previous_revision = (node.installed_revision or "").strip()
-        update_fields: list[str] = []
-        for field, value in (
-            ("hostname", hostname),
-            ("network_hostname", network_hostname),
-            ("address", address_value),
-            ("ipv4_address", ipv4_value),
-            ("ipv6_address", ipv6_value),
-            ("port", port),
-        ):
-            current = getattr(node, field)
-            if isinstance(value, str):
-                value = value or ""
-                current = current or ""
-            if current != value:
-                setattr(node, field, value)
-                update_fields.append(field)
-        if verified:
-            node.public_key = public_key
-            update_fields.append("public_key")
-        if installed_version is not None:
-            node.installed_version = str(installed_version)[:20]
-            if "installed_version" not in update_fields:
-                update_fields.append("installed_version")
-        if installed_revision is not None:
-            node.installed_revision = str(installed_revision)[:40]
-            if "installed_revision" not in update_fields:
-                update_fields.append("installed_revision")
-        if relation_value is not None and node.current_relation != relation_value:
-            node.current_relation = relation_value
-            update_fields.append("current_relation")
-        if desired_role and node.role_id != desired_role.id:
-            node.role = desired_role
-            update_fields.append("role")
-        if trusted_allowed and not node.trusted:
-            node.trusted = True
-            update_fields.append("trusted")
-        timestamp = timezone.now()
-        node.last_seen = timestamp
-        if "last_seen" not in update_fields:
-            update_fields.append("last_seen")
-
-        if update_fields:
-            # ``auto_now`` fields such as ``last_seen`` are not updated when
-            # ``update_fields`` is provided unless they are explicitly
-            # included. Ensure the heartbeat timestamp is always refreshed so
-            # remote syncs reflect the latest contact time even when no other
-            # fields changed.
-            node.save(update_fields=update_fields)
-        current_version = (node.installed_version or "").strip()
-        current_revision = (node.installed_revision or "").strip()
-        node_information_updated.send(
-            sender=Node,
-            node=node,
-            previous_version=previous_version,
-            previous_revision=previous_revision,
-            current_version=current_version,
-            current_revision=current_revision,
+        response = _update_existing_node(
+            node,
+            hostname=payload.hostname,
+            network_hostname=payload.network_hostname,
+            address_value=address_value,
+            ipv4_value=ipv4_value,
+            ipv6_value=ipv6_value,
+            port=payload.port,
+            verified=verified,
+            public_key=payload.public_key,
+            installed_version=payload.installed_version,
+            installed_revision=payload.installed_revision,
+            relation_value=payload.relation_value,
+            desired_role=desired_role,
+            trusted_allowed=trusted_allowed,
+            features=payload.features,
             request=request,
+            deactivate_user=payload.deactivate_user,
         )
-        if features is not None and (verified or request.user.is_authenticated):
-            if isinstance(features, (str, bytes)):
-                feature_list = [features]
-            else:
-                feature_list = list(features)
-            node.update_manual_features(feature_list)
-        response = JsonResponse(
-            {
-                "id": node.id,
-                "uuid": str(node.uuid),
-                "detail": f"Node already exists (id: {node.id})",
-            }
-        )
-        if deactivate_user:
-            deactivate = getattr(request.user, "deactivate_temporary_credentials", None)
-            if callable(deactivate):
-                deactivate()
         return _add_cors_headers(request, response)
 
-    if features is not None and (verified or request.user.is_authenticated):
-        if isinstance(features, (str, bytes)):
-            feature_list = [features]
-        else:
-            feature_list = list(features)
-        node.update_manual_features(feature_list)
+    _update_features(
+        node,
+        payload.features,
+        allow_update=verified or request.user.is_authenticated,
+    )
 
     current_version = (node.installed_version or "").strip()
     current_revision = (node.installed_revision or "").strip()
@@ -731,13 +878,10 @@ def register_node(request):
         request=request,
     )
 
-    _announce_visitor_join(node, relation_value)
+    _announce_visitor_join(node, payload.relation_value)
 
     response = JsonResponse({"id": node.id, "uuid": str(node.uuid)})
-    if deactivate_user:
-        deactivate = getattr(request.user, "deactivate_temporary_credentials", None)
-        if callable(deactivate):
-            deactivate()
+    _deactivate_user_if_requested(request, payload.deactivate_user)
     return _add_cors_headers(request, response)
 
 
