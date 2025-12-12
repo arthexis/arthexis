@@ -152,6 +152,14 @@ def import_transactions(data: dict) -> int:
         vin_text = str(vin_value).strip() if vin_value is not None else ""
         if not vid_text and vin_text:
             vid_text = vin_text
+        try:
+            start_time = _parse_dt(tx.get("start_time"))
+            stop_time = _parse_dt(tx.get("stop_time"))
+            received_start_time = _parse_dt(tx.get("received_start_time")) or start_time
+            received_stop_time = _parse_dt(tx.get("received_stop_time")) or stop_time
+        except ValueError:
+            continue
+
         transaction = Transaction.objects.create(
             charger=charger,
             account_id=tx.get("account"),
@@ -171,22 +179,24 @@ def import_transactions(data: dict) -> int:
             temperature_stop=tx.get("temperature_stop"),
             soc_start=tx.get("soc_start"),
             soc_stop=tx.get("soc_stop"),
-            start_time=_parse_dt(tx.get("start_time")),
-            stop_time=_parse_dt(tx.get("stop_time")),
-            received_start_time=_parse_dt(tx.get("received_start_time"))
-            or _parse_dt(tx.get("start_time")),
-            received_stop_time=_parse_dt(tx.get("received_stop_time"))
-            or _parse_dt(tx.get("stop_time")),
+            start_time=start_time,
+            stop_time=stop_time,
+            received_start_time=received_start_time,
+            received_stop_time=received_stop_time,
         )
         for mv in tx.get("meter_values", []):
             connector_id = mv.get("connector_id")
             if isinstance(connector_id, str):
                 connector_id = int(connector_id)
+            try:
+                timestamp = _parse_dt(mv.get("timestamp"))
+            except ValueError:
+                continue
             MeterValue.objects.create(
                 charger=charger,
                 transaction=transaction,
                 connector_id=connector_id,
-                timestamp=_parse_dt(mv.get("timestamp")),
+                timestamp=timestamp,
                 context=mv.get("context", ""),
                 energy=mv.get("energy"),
                 voltage=mv.get("voltage"),
