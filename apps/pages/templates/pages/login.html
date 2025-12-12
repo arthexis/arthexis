@@ -7,6 +7,11 @@
 <div class="d-flex justify-content-center">
   <div class="card p-4" style="max-width: 400px; width: 100%;">
     <h1 class="text-center mb-4">{% trans "Login" %}</h1>
+    {% if request.user.is_authenticated %}
+    <div class="mb-3 text-center">
+      <a href="{% url 'pages:logout' %}?next={{ request.get_full_path|urlencode }}">{% trans "Log out" %}</a>
+    </div>
+    {% endif %}
     {% if restricted_notice %}
     <div class="alert alert-info" role="alert">
       {{ restricted_notice }}

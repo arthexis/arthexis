@@ -17,7 +17,7 @@ from django.contrib import admin
 from django.contrib import messages
 from django.contrib.sites.models import Site
 from django.contrib.admin.views.decorators import staff_member_required
-from django.contrib.auth import get_user_model, login
+from django.contrib.auth import get_user_model, login, logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.tokens import default_token_generator
 from django.contrib.auth.views import LoginView
@@ -679,6 +679,25 @@ def rfid_login_page(request):
         "back_url": reverse("pages:login"),
     }
     return render(request, "pages/rfid_login.html", context)
+
+
+def logout_view(request):
+    """Log out the current user and redirect to a safe target."""
+
+    redirect_target = request.GET.get(CustomLoginView.redirect_field_name, "")
+    if redirect_target and not url_has_allowed_host_and_scheme(
+        redirect_target,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure(),
+    ):
+        redirect_target = ""
+
+    logout(request)
+
+    if redirect_target:
+        return redirect(redirect_target)
+
+    return redirect(reverse("pages:login"))
 
 
 @staff_member_required
