@@ -43,7 +43,8 @@ class UpgradeHolderRequestHandler(http.server.BaseHTTPRequestHandler):
         return
 
     def _write_response(self, content: bytes) -> None:
-        self.send_response(503)
+        # Use 200 to avoid nginx error interception replacing the holder page
+        self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
         self.send_header("Content-Length", str(len(content)))
         self.send_header("Retry-After", "30")
