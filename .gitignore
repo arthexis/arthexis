@@ -274,7 +274,7 @@ AUTO_UPGRADE
 work/
 
 # Local simulator state
-ocpp/simulator.json
+apps/ocpp/simulator.json
 
 # Runtime cache directory
 cache/
