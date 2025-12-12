@@ -199,89 +199,110 @@ async def simulate_cp(
     if the server closes the connection.
     """
 
-    if ws_port:
-        uri = f"ws://{host}:{ws_port}/{cp_path}"
-    else:
-        uri = f"ws://{host}/{cp_path}"
-    headers: dict[str, str] = {}
-    if username and password:
-        userpass = f"{username}:{password}"
-        b64 = base64.b64encode(userpass.encode("utf-8")).decode("ascii")
-        headers["Authorization"] = f"Basic {b64}"
+    class ChargePointSimulator:
+        def __init__(self):
+            self.cp_idx = cp_idx
+            self.host = host
+            self.ws_port = ws_port
+            self.rfid = rfid
+            self.vin = vin
+            self.cp_path = cp_path
+            self.serial_number = serial_number
+            self.connector_id = connector_id
+            self.duration = duration
+            self.average_kwh = average_kwh
+            self.amperage = amperage
+            self.pre_charge_delay = pre_charge_delay
+            self.interval = interval
+            self.username = username
+            self.password = password
+            self.state = sim_state or _simulators.get(cp_idx + 1, _simulators[1])
 
-    connect_kwargs: dict[str, object] = {}
-    if headers:
-        connect_kwargs["additional_headers"] = headers
+            base_uri = f"ws://{self.host}:{self.ws_port}" if self.ws_port else f"ws://{self.host}"
+            self.uri = f"{base_uri}/{self.cp_path}"
+            self.connect_kwargs: dict[str, object] = {}
 
-    state = sim_state or _simulators.get(cp_idx + 1, _simulators[1])
+            if self.username and self.password:
+                userpass = f"{self.username}:{self.password}"
+                b64 = base64.b64encode(userpass.encode("utf-8")).decode("ascii")
+                self.connect_kwargs["additional_headers"] = {"Authorization": f"Basic {b64}"}
 
-    loop_count = 0
-    while loop_count < session_count and state.running:
-        ws = None
-        reset_event: asyncio.Event | None = None
-        try:
+        def log(self, message: str) -> None:
+            store.add_log(self.cp_path, message, log_type="simulator")
+
+        async def send(self, ws, payload) -> None:
+            text = json.dumps(payload)
+            await ws.send(text)
+            self.log(f"> {text}")
+
+        async def recv(self, ws):
+            raw = await ws.recv()
+            self.log(f"< {raw}")
+            return raw
+
+        def jitter(self, value: float) -> float:
+            return value * random.uniform(0.95, 1.05)
+
+        async def connect(self):
             try:
                 ws = await websockets.connect(
-                    uri, subprotocols=["ocpp1.6"], **connect_kwargs
+                    self.uri, subprotocols=["ocpp1.6"], **self.connect_kwargs
                 )
             except Exception as exc:
-                store.add_log(
-                    cp_path,
-                    f"Connection with subprotocol failed: {exc}",
-                    log_type="simulator",
-                )
-                ws = await websockets.connect(uri, **connect_kwargs)
+                self.log(f"Connection with subprotocol failed: {exc}")
+                ws = await websockets.connect(self.uri, **self.connect_kwargs)
 
-            state.phase = "Connected"
-            state.last_message = ""
-            store.add_log(
-                cp_path,
-                f"Connected (subprotocol={ws.subprotocol or 'none'})",
-                log_type="simulator",
+            self.state.phase = "Connected"
+            self.state.last_message = ""
+            self.log(f"Connected (subprotocol={ws.subprotocol or 'none'})")
+            return ws
+
+        async def handle_boot_and_authorize(self, ws) -> None:
+            await self.send(
+                ws,
+                [
+                    2,
+                    "boot",
+                    "BootNotification",
+                    {
+                        "chargePointModel": "Simulator",
+                        "chargePointVendor": "SimVendor",
+                        "serialNumber": self.serial_number,
+                    },
+                ],
             )
+            self.state.last_message = "BootNotification"
+            await self.recv(ws)
 
-            async def _send(payload):
-                text = json.dumps(payload)
-                await ws.send(text)
-                store.add_log(cp_path, f"> {text}", log_type="simulator")
+            await self.send(ws, [2, "auth", "Authorize", {"idTag": self.rfid}])
+            self.state.last_message = "Authorize"
+            await self.recv(ws)
+            self.state.phase = "Available"
 
-            async def _recv():
-                raw = await ws.recv()
-                store.add_log(cp_path, f"< {raw}", log_type="simulator")
-                return raw
-
-            # listen for remote commands
+        def setup_command_listener(self, ws):
             stop_event = asyncio.Event()
             reset_event = asyncio.Event()
 
             async def listen():
                 def terminate(message: str) -> None:
-                    state.last_error = message
-                    state.last_status = message
-                    state.phase = "Error"
-                    state.running = False
+                    self.state.last_error = message
+                    self.state.last_status = message
+                    self.state.phase = "Error"
+                    self.state.running = False
                     stop_event.set()
-                    store.add_log(
-                        cp_path,
-                        message,
-                        log_type="simulator",
-                    )
+                    self.log(message)
 
                 try:
                     while True:
-                        raw = await _recv()
+                        raw = await self.recv(ws)
                         try:
                             msg = json.loads(raw)
                         except json.JSONDecodeError:
-                            terminate(
-                                "Received non-JSON response from CSMS; terminating simulator"
-                            )
+                            terminate("Received non-JSON response from CSMS; terminating simulator")
                             return
 
                         if not isinstance(msg, list) or not msg:
-                            terminate(
-                                "Received invalid OCPP frame from CSMS; terminating simulator"
-                            )
+                            terminate("Received invalid OCPP frame from CSMS; terminating simulator")
                             return
 
                         message_type = msg[0]
@@ -297,28 +318,29 @@ async def simulate_cp(
                         action_name = str(action)
 
                         if action_name == "RemoteStopTransaction":
-                            await _send([3, msg_id, {}])
-                            state.last_message = "RemoteStopTransaction"
+                            await self.send(ws, [3, msg_id, {}])
+                            self.state.last_message = "RemoteStopTransaction"
                             stop_event.set()
                             continue
 
                         if action_name == "Reset":
-                            await _send([3, msg_id, {}])
-                            state.last_message = "Reset"
+                            await self.send(ws, [3, msg_id, {}])
+                            self.state.last_message = "Reset"
                             reset_event.set()
                             stop_event.set()
                             continue
 
-                        await _send(
+                        await self.send(
+                            ws,
                             [
                                 4,
                                 msg_id,
                                 "NotSupported",
                                 f"Simulator does not implement {action_name}",
                                 {},
-                            ]
+                            ],
                         )
-                        state.last_message = action_name
+                        self.state.last_message = action_name
                         terminate(
                             f"Received unsupported action '{action_name}' from CSMS; terminating simulator"
                         )
@@ -326,117 +348,108 @@ async def simulate_cp(
                 except websockets.ConnectionClosed:
                     stop_event.set()
 
-            await _send(
-                [
-                    2,
-                    "boot",
-                    "BootNotification",
-                    {
-                        "chargePointModel": "Simulator",
-                        "chargePointVendor": "SimVendor",
-                        "serialNumber": serial_number,
-                    },
-                ]
-            )
-            state.last_message = "BootNotification"
-            await _recv()
-            await _send([2, "auth", "Authorize", {"idTag": rfid}])
-            state.last_message = "Authorize"
-            await _recv()
+            return stop_event, reset_event, asyncio.create_task(listen())
 
-            state.phase = "Available"
-
+        def metering_plan(self) -> tuple[int, float]:
             meter_start = random.randint(1000, 2000)
-            steps = max(1, int(duration / interval))
-
-            def _jitter(value: float) -> float:
-                return value * random.uniform(0.95, 1.05)
-
-            target_kwh = _jitter(average_kwh)
+            steps = max(1, int(self.duration / self.interval))
+            target_kwh = self.jitter(self.average_kwh)
             step_avg = (target_kwh * 1000) / steps if steps else target_kwh * 1000
+            return meter_start, step_avg
 
-            # optional pre‑charge delay while still sending heartbeats
-            if pre_charge_delay > 0:
-                start_delay = time.monotonic()
-                next_meter = meter_start
-                last_mv = time.monotonic()
-                while time.monotonic() - start_delay < pre_charge_delay:
-                    await _send([2, "hb", "Heartbeat", {}])
-                    state.last_message = "Heartbeat"
-                    await _recv()
-                    await asyncio.sleep(5)
-                    if time.monotonic() - last_mv >= 30:
-                        idle_step = max(2, int(step_avg / 100))
-                        next_meter += random.randint(0, idle_step)
-                        next_kwh = next_meter / 1000.0
-                        await _send(
-                            [
-                                2,
-                                "meter",
-                                "MeterValues",
-                                {
-                                    "connectorId": connector_id,
-                                    "meterValue": [
-                                        {
-                                                "timestamp": time.strftime(
-                                                    "%Y-%m-%dT%H:%M:%S"
-                                                )
-                                                + "Z",
-                                                "sampledValue": [
-                                                    {
-                                                        "value": f"{next_kwh:.3f}",
-                                                        "measurand": "Energy.Active.Import.Register",
-                                                        "unit": "kWh",
-                                                        "context": "Sample.Clock",
-                                                    }
-                                                ],
-                                            }
-                                    ],
-                                },
-                            ]
-                        )
-                        state.last_message = "MeterValues"
-                        await _recv()
-                        last_mv = time.monotonic()
+        async def pre_charge(self, ws, meter_start: int, step_avg: float) -> int:
+            if self.pre_charge_delay <= 0:
+                return meter_start
 
-            await _send(
+            start_delay = time.monotonic()
+            next_meter = meter_start
+            last_mv = time.monotonic()
+            while time.monotonic() - start_delay < self.pre_charge_delay:
+                await self.send(ws, [2, "hb", "Heartbeat", {}])
+                self.state.last_message = "Heartbeat"
+                await self.recv(ws)
+                await asyncio.sleep(5)
+                if time.monotonic() - last_mv >= 30:
+                    idle_step = max(2, int(step_avg / 100))
+                    next_meter += random.randint(0, idle_step)
+                    next_kwh = next_meter / 1000.0
+                    await self.send(
+                        ws,
+                        [
+                            2,
+                            "meter",
+                            "MeterValues",
+                            {
+                                "connectorId": self.connector_id,
+                                "meterValue": [
+                                    {
+                                            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S")
+                                            + "Z",
+                                            "sampledValue": [
+                                                {
+                                                    "value": f"{next_kwh:.3f}",
+                                                    "measurand": "Energy.Active.Import.Register",
+                                                    "unit": "kWh",
+                                                    "context": "Sample.Clock",
+                                                }
+                                            ],
+                                        }
+                                ],
+                            },
+                        ],
+                    )
+                    self.state.last_message = "MeterValues"
+                    await self.recv(ws)
+                    last_mv = time.monotonic()
+            return next_meter
+
+        async def start_transaction(self, ws, meter_start: int):
+            await self.send(
+                ws,
                 [
                     2,
                     "start",
                     "StartTransaction",
                     {
-                        "connectorId": connector_id,
-                        "idTag": rfid,
+                        "connectorId": self.connector_id,
+                        "idTag": self.rfid,
                         "meterStart": meter_start,
-                        "vin": vin,
+                        "vin": self.vin,
                     },
-                ]
+                ],
             )
-            state.last_message = "StartTransaction"
-            resp = await _recv()
+            self.state.last_message = "StartTransaction"
+            resp = await self.recv(ws)
             tx_id = json.loads(resp)[2].get("transactionId")
+            self.state.last_status = "Running"
+            self.state.phase = "Charging"
+            return tx_id
 
-            state.last_status = "Running"
-            state.phase = "Charging"
-
-            listener = asyncio.create_task(listen())
-
+        async def publish_meter_values(
+            self,
+            ws,
+            tx_id: int,
+            meter_start: int,
+            step_avg: float,
+            stop_event: asyncio.Event,
+        ) -> int:
             meter = meter_start
             start_time = time.monotonic()
-            while time.monotonic() - start_time < duration:
+            while time.monotonic() - start_time < self.duration:
                 if stop_event.is_set():
                     break
-                inc = _jitter(step_avg)
+                inc = self.jitter(step_avg)
                 meter += max(1, int(inc))
                 meter_kwh = meter / 1000.0
-                current_amp = _jitter(amperage)
-                await _send(
+                current_amp = self.jitter(self.amperage)
+                await self.send(
+                    ws,
                     [
                         2,
                         "meter",
                         "MeterValues",
                         {
-                            "connectorId": connector_id,
+                            "connectorId": self.connector_id,
                             "transactionId": tx_id,
                             "meterValue": [
                                 {
@@ -459,53 +472,51 @@ async def simulate_cp(
                                     }
                                 ],
                             },
-                        ]
+                        ],
                 )
-                state.last_message = "MeterValues"
-                await asyncio.sleep(interval)
+                self.state.last_message = "MeterValues"
+                await asyncio.sleep(self.interval)
+            return meter
 
-            listener.cancel()
-            try:
-                await listener
-            except asyncio.CancelledError:
-                pass
-
-            await _send(
+        async def stop_transaction(self, ws, tx_id: int, meter: int) -> None:
+            await self.send(
+                ws,
                 [
                     2,
                     "stop",
                     "StopTransaction",
                     {
                         "transactionId": tx_id,
-                        "idTag": rfid,
+                        "idTag": self.rfid,
                         "meterStop": meter,
                     },
-                ]
+                ],
             )
-            state.last_message = "StopTransaction"
-            state.phase = "Available"
-            await _recv()
+            self.state.last_message = "StopTransaction"
+            self.state.phase = "Available"
+            await self.recv(ws)
 
-            # Idle phase: heartbeats and idle meter values
+        async def idle(self, ws, meter: int, step_avg: float, stop_event: asyncio.Event):
             idle_time = 20 if session_count == 1 else 60
             next_meter = meter
             last_mv = time.monotonic()
             start_idle = time.monotonic()
             while time.monotonic() - start_idle < idle_time and not stop_event.is_set():
-                await _send([2, "hb", "Heartbeat", {}])
-                state.last_message = "Heartbeat"
+                await self.send(ws, [2, "hb", "Heartbeat", {}])
+                self.state.last_message = "Heartbeat"
                 await asyncio.sleep(5)
                 if time.monotonic() - last_mv >= 30:
                     idle_step = max(2, int(step_avg / 100))
                     next_meter += random.randint(0, idle_step)
                     next_kwh = next_meter / 1000.0
-                    await _send(
+                    await self.send(
+                        ws,
                         [
                             2,
                             "meter",
                             "MeterValues",
                             {
-                                "connectorId": connector_id,
+                                "connectorId": self.connector_id,
                                 "meterValue": [
                                     {
                                         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S")
@@ -521,41 +532,72 @@ async def simulate_cp(
                                     }
                                 ],
                             },
-                        ]
+                        ],
                     )
-                    state.last_message = "MeterValues"
-                    await _recv()
+                    self.state.last_message = "MeterValues"
+                    await self.recv(ws)
                     last_mv = time.monotonic()
 
-        except websockets.ConnectionClosedError:
-            state.last_status = "Reconnecting"
-            state.phase = "Reconnecting"
-            await asyncio.sleep(1)
-            continue
-        except Exception as exc:  # pragma: no cover - defensive programming
-            state.last_error = str(exc)
-            break
-        finally:
-            if ws is not None:
-                await ws.close()
-                store.add_log(
-                    cp_path,
-                    f"Closed (code={ws.close_code}, reason={getattr(ws, 'close_reason', '')})",
-                    log_type="simulator",
-                )
+        async def close(self, ws) -> None:
+            await ws.close()
+            self.log(
+                f"Closed (code={ws.close_code}, reason={getattr(ws, 'close_reason', '')})"
+            )
 
-        if reset_event and reset_event.is_set():
-            continue
+        async def run(self):
+            loop_count = 0
+            while loop_count < session_count and self.state.running:
+                ws = None
+                reset_event: asyncio.Event | None = None
+                try:
+                    ws = await self.connect()
+                    await self.handle_boot_and_authorize(ws)
 
-        loop_count += 1
-        if session_count == float("inf"):
-            continue
+                    meter_start, step_avg = self.metering_plan()
+                    meter_start = await self.pre_charge(ws, meter_start, step_avg)
 
-    state.last_status = "Stopped"
-    state.running = False
-    state.phase = "Stopped"
-    state.stop_time = time.strftime("%Y-%m-%d %H:%M:%S")
-    _save_state_file(_simulators)
+                    tx_id = await self.start_transaction(ws, meter_start)
+                    stop_event, reset_event, listener = self.setup_command_listener(ws)
+
+                    try:
+                        meter = await self.publish_meter_values(ws, tx_id, meter_start, step_avg, stop_event)
+                    finally:
+                        listener.cancel()
+                        try:
+                            await listener
+                        except asyncio.CancelledError:
+                            pass
+
+                    await self.stop_transaction(ws, tx_id, meter)
+                    await self.idle(ws, meter, step_avg, stop_event)
+
+                except websockets.ConnectionClosedError:
+                    self.state.last_status = "Reconnecting"
+                    self.state.phase = "Reconnecting"
+                    await asyncio.sleep(1)
+                    continue
+                except Exception as exc:  # pragma: no cover - defensive programming
+                    self.state.last_error = str(exc)
+                    break
+                finally:
+                    if ws is not None:
+                        await self.close(ws)
+
+                if reset_event and reset_event.is_set():
+                    continue
+
+                loop_count += 1
+                if session_count == float("inf"):
+                    continue
+
+            self.state.last_status = "Stopped"
+            self.state.running = False
+            self.state.phase = "Stopped"
+            self.state.stop_time = time.strftime("%Y-%m-%d %H:%M:%S")
+            _save_state_file(_simulators)
+
+    simulator = ChargePointSimulator()
+    await simulator.run()
 
 
 def simulate(
