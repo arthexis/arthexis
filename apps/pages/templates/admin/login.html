@@ -50,7 +50,7 @@
         {% endblocktranslate %}
       </p>
       <p class="public-login-link">
-        <a href="{% url 'admin:logout' %}">{% translate "Log out" %}</a>
+        <a href="{% url 'pages:logout' %}?next={{ app_path|urlencode }}">{% translate "Log out" %}</a>
       </p>
     {% endif %}
 

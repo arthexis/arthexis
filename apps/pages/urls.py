@@ -19,6 +19,7 @@ urlpatterns = [
     path("release-checklist", views.release_checklist, name="release-checklist"),
     path("login/rfid/", views.rfid_login_page, name="rfid-login"),
     path("login/", views.login_view, name="login"),
+    path("logout/", views.logout_view, name="logout"),
     path("webhooks/whatsapp/", views.whatsapp_webhook, name="whatsapp-webhook"),
     path("request-invite/", views.request_invite, name="request-invite"),
     path(
