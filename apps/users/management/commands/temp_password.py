@@ -46,6 +46,19 @@ class Command(BaseCommand):
                 "with only the generated temporary password."
             ),
         )
+        parser.add_argument(
+            "--staff",
+            action="store_true",
+            help="Grant staff privileges to the newly created user (requires --create).",
+        )
+        parser.add_argument(
+            "--superuser",
+            action="store_true",
+            help=(
+                "Grant superuser privileges to the newly created user "
+                "(requires --create)."
+            ),
+        )
 
     def handle(self, *args, **options):
         identifier = options["identifier"]
@@ -54,6 +67,11 @@ class Command(BaseCommand):
             raise CommandError("Expiration must be a positive number of seconds.")
         allow_change = bool(options.get("allow_change"))
         create_user = bool(options.get("create"))
+        staff = bool(options.get("staff"))
+        superuser = bool(options.get("superuser"))
+
+        if (staff or superuser) and not create_user:
+            raise CommandError("--staff and --superuser can only be used with --create.")
 
         User = get_user_model()
         manager = getattr(User, "all_objects", User._default_manager)
@@ -62,7 +80,7 @@ class Command(BaseCommand):
         if not users:
             if not create_user:
                 raise CommandError(f"No user found for identifier {identifier!r}.")
-            users = [self._create_user(manager, identifier)]
+            users = [self._create_user(manager, identifier, staff=staff, superuser=superuser)]
         if len(users) > 1:
             usernames = ", ".join(sorted({user.username for user in users}))
             raise CommandError(
@@ -110,13 +128,21 @@ class Command(BaseCommand):
                 ) from exc
             raise
 
-    def _create_user(self, manager, identifier):
+    def _create_user(self, manager, identifier, *, staff: bool = False, superuser: bool = False):
         kwargs = {"username": identifier}
         if "@" in identifier and not identifier.startswith("@"):
             kwargs["email"] = identifier
 
         user = manager.create_user(**kwargs)
         user.set_unusable_password()
-        user.save(update_fields=["password"])
+        fields = ["password"]
+        if staff:
+            user.is_staff = True
+            fields.append("is_staff")
+        if superuser:
+            user.is_superuser = True
+            user.is_staff = True
+            fields.extend(["is_superuser", "is_staff"])
+        user.save(update_fields=fields)
         return user
 
