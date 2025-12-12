@@ -87,7 +87,7 @@ class NodeFeatureAdmin(EntityModelAdmin):
 
     @admin.action(description="Check features for eligibility")
     def check_features_for_eligibility(self, request, queryset):
-        from .feature_checks import feature_checks
+        from ..feature_checks import feature_checks
 
         features = list(queryset)
         total = len(features)
