@@ -16,7 +16,7 @@ class AuthenticatorLoginForm(AuthenticationForm):
 
     error_messages = {
         **AuthenticationForm.error_messages,
-        "password_required": _("Enter your password."),
+        "password_required": _("Enter your password or one-time code."),
     }
 
     def __init__(self, request=None, *args, **kwargs):

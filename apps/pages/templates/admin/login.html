@@ -62,6 +62,7 @@
       <div class="form-row">
         {{ form.password.errors }}
         {{ form.password.label_tag }} {{ form.password }}
+        <p class="help">{% translate "Enter your password or an authenticator code." %}</p>
         <input type="hidden" name="next" value="{{ next }}">
       </div>
       {% url 'admin_password_reset' as password_reset_url %}

@@ -21,6 +21,44 @@ from . import temp_passwords
 from .system import ensure_system_user
 
 
+class PasswordOrOTPBackend(ModelBackend):
+    """Authenticate using a password or a registered TOTP code."""
+
+    def authenticate(self, request, username=None, password=None, **kwargs):
+        if username is None or password is None:
+            return None
+
+        UserModel = get_user_model()
+        manager = getattr(UserModel, "all_objects", UserModel._default_manager)
+        try:
+            user = manager.get_by_natural_key(username)
+        except UserModel.DoesNotExist:
+            return None
+
+        if not self.user_can_authenticate(user):
+            return None
+
+        if self._verify_totp(user, password):
+            return user
+
+        if user.check_password(password):
+            return user
+
+        return None
+
+    def _verify_totp(self, user, token: str) -> bool:
+        digits_only = str(token).strip().replace(" ", "")
+        if not digits_only.isdigit():
+            return False
+
+        try:
+            from apps.totp.models import TOTPDevice
+        except Exception:
+            return False
+
+        return TOTPDevice.verify_any(user, digits_only, confirmed_only=True)
+
+
 class RFIDBackend:
     """Authenticate using a user's RFID."""
 

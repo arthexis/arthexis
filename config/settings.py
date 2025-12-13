@@ -444,6 +444,7 @@ LOCAL_APPS = [
     "apps.teams",
     "apps.nmcli",
     "apps.wikis",
+    "apps.totp",
 ]
 
 INSTALLED_APPS = [
@@ -453,6 +454,7 @@ INSTALLED_APPS = [
     "config.auth_app.AuthConfig",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
+    "django_otp",
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "django_mermaid.apps.MermaidConfig",
@@ -610,6 +612,7 @@ AUTH_USER_MODEL = "users.User"
 
 # Enable RFID authentication backend and restrict default admin login to localhost
 AUTHENTICATION_BACKENDS = [
+    "apps.users.backends.PasswordOrOTPBackend",
     "apps.users.backends.TempPasswordBackend",
     "apps.users.backends.LocalhostAdminBackend",
     "apps.users.backends.RFIDBackend",

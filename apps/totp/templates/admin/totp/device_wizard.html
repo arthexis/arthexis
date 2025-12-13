@@ -1,0 +1,66 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  <style>
+    .totp-wizard { max-width: 640px; }
+    .totp-wizard .qr-wrapper { text-align: center; }
+    .totp-wizard .qr-wrapper img { max-width: 240px; height: auto; }
+  </style>
+{% endblock %}
+
+{% block content_title %}{% trans "Authenticator setup" %}{% endblock %}
+
+{% block content %}
+<div class="totp-wizard">
+  {{ media }}
+  <p class="help">{% trans "Generate a secret, scan the QR code with your authenticator app, then confirm a one-time code." %}</p>
+  <form method="post" novalidate>
+    {% csrf_token %}
+    {% if device %}
+      <input type="hidden" name="device" value="{{ device.pk }}">
+    {% endif %}
+    <fieldset class="module aligned">
+      <h2>{% trans "Device details" %}</h2>
+      {{ setup_form.non_field_errors }}
+      <div class="form-row">{{ setup_form.user.label_tag }} {{ setup_form.user }}</div>
+      {% for error in setup_form.user.errors %}<p class="errornote">{{ error }}</p>{% endfor %}
+      <div class="form-row">{{ setup_form.name.label_tag }} {{ setup_form.name }}</div>
+      {% for error in setup_form.name.errors %}<p class="errornote">{{ error }}</p>{% endfor %}
+    </fieldset>
+    <div class="submit-row">
+      <input type="submit" name="start" class="default" value="{% if device %}{% trans "Regenerate secret" %}{% else %}{% trans "Generate secret" %}{% endif %}">
+      {% if device %}
+        <input type="submit" name="cancel" value="{% trans "Cancel" %}">
+      {% endif %}
+    </div>
+  </form>
+
+  {% if device %}
+  <hr>
+  <div class="qr-wrapper">
+    {% if qr_data_uri %}
+      <img src="{{ qr_data_uri }}" alt="{% trans 'TOTP QR code' %}">
+    {% endif %}
+    {% if manual_key %}
+      <p><strong>{% trans "Manual key" %}:</strong> {{ manual_key }}</p>
+    {% endif %}
+    <p class="help">{% trans "Scan the QR code or enter the key in your authenticator app." %}</p>
+  </div>
+  <form method="post" class="mt-3" novalidate>
+    {% csrf_token %}
+    <input type="hidden" name="device" value="{{ device.pk }}">
+    <fieldset class="module aligned">
+      <h2>{% trans "Confirm code" %}</h2>
+      {{ confirm_form.non_field_errors }}
+      <div class="form-row">{{ confirm_form.token.label_tag }} {{ confirm_form.token }}</div>
+      {% for error in confirm_form.token.errors %}<p class="errornote">{{ error }}</p>{% endfor %}
+    </fieldset>
+    <div class="submit-row">
+      <input type="submit" name="confirm" class="default" value="{% trans "Verify code" %}">
+    </div>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}
