@@ -12,7 +12,7 @@ CHECK_COMMANDS = OrderedDict(
     [
         ("admin", "check_admin"),
         ("lcd", "check_lcd"),
-        ("lcd-diagnostics", "lcd_check"),
+        ("lcd-diagnostics", "check_lcd_status"),
         ("next-upgrade", "check_next_upgrade"),
         ("pypi", "check_pypi"),
         ("nodes", "check_nodes"),

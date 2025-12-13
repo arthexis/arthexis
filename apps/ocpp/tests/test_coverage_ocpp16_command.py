@@ -8,7 +8,7 @@ def test_ocpp16_coverage_matches_fixture(tmp_path):
     output_path = tmp_path / "ocpp16_coverage.json"
     badge_path = tmp_path / "ocpp16_coverage.svg"
 
-    call_command("ocpp16_coverage", json_path=output_path, badge_path=badge_path)
+    call_command("coverage_ocpp16", json_path=output_path, badge_path=badge_path)
 
     assert output_path.exists(), "Expected coverage summary to be written"
 
