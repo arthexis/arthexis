@@ -96,3 +96,53 @@ class TempPasswordCommandTests(TestCase):
         user.refresh_from_db()
         assert user.is_staff
         assert user.is_superuser
+
+    def test_create_arthexis_user_by_username(self):
+        identifier = "arthexis"
+        User = get_user_model()
+        User.all_objects.filter(username=identifier).delete()
+
+        stdout = io.StringIO()
+        call_command(
+            "temp_password",
+            identifier,
+            create=True,
+            staff=True,
+            superuser=True,
+            stdout=stdout,
+        )
+
+        user = User.all_objects.get(username=identifier)
+        assert user.email in {"", None}
+        assert user.is_staff
+        assert user.is_superuser
+
+        entry = temp_passwords.load_temp_password(identifier)
+        assert entry is not None
+        assert not entry.is_expired
+
+        output = stdout.getvalue()
+        assert f"Temporary password for {identifier}:" in output
+        assert "Temporary password created." in output
+
+    def test_update_arthexis_user(self):
+        identifier = "arthexis"
+        User = get_user_model()
+        User.all_objects.filter(username=identifier).delete()
+        user = User.all_objects.create_user(username=identifier, email="admin@example.com")
+
+        call_command(
+            "temp_password",
+            identifier,
+            update=True,
+            staff=True,
+            superuser=True,
+        )
+
+        user.refresh_from_db()
+        assert user.is_staff
+        assert user.is_superuser
+
+        entry = temp_passwords.load_temp_password(identifier)
+        assert entry is not None
+        assert not entry.is_expired
