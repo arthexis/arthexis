@@ -1,10 +1,13 @@
-import pytest
+import asyncio
+import logging
+from http import HTTPStatus
 from types import SimpleNamespace
 from unittest.mock import Mock
 
-from django.utils import timezone
+import pytest
+import websockets
 
-from websocket import WebSocketException
+from django.utils import timezone
 
 from apps.ocpp.forwarder import Forwarder, ForwardingSession
 from apps.ocpp.models import CPForwarder, Charger
@@ -36,43 +39,85 @@ def test_candidate_forwarding_urls_builds_ws_and_wss(forwarder_instance):
     ]
 
 
-def test_connect_forwarding_session_handles_failures(monkeypatch, forwarder_instance):
+def test_connect_forwarding_session_handles_failures(
+    monkeypatch, forwarder_instance, caplog
+):
     charger = SimpleNamespace(pk=1, charger_id="CP-1")
     node = SimpleNamespace(iter_remote_urls=lambda path: [
         "http://unreliable.example.com/",
         "http://reliable.example.com/",
     ])
 
-    connections = []
+    async def orchestrate():
+        async def reject_request(_path, _headers):
+            return HTTPStatus.FORBIDDEN, [], b"nope"
 
-    def fake_connect(url, timeout, subprotocols):
-        connections.append(url)
-        if "unreliable" in url:
-            raise WebSocketException("boom")
-        return SimpleNamespace(connected=True, close=Mock())
+        async def echo_handler(websocket):
+            async for message in websocket:
+                await websocket.send(message)
 
-    monkeypatch.setattr("apps.ocpp.forwarder.create_connection", fake_connect)
-    monkeypatch.setattr(
-        "apps.ocpp.forwarder.logger", SimpleNamespace(warning=Mock(), info=Mock())
-    )
+        async with (
+            websockets.serve(
+                echo_handler,
+                "localhost",
+                0,
+                subprotocols=["ocpp1.6"],
+                process_request=reject_request,
+            ) as abort_server,
+            websockets.serve(
+                echo_handler, "localhost", 0, subprotocols=["ocpp1.6"]
+            ) as live_server,
+        ):
+            failing_url = f"ws://localhost:{abort_server.sockets[0].getsockname()[1]}"
+            live_url = f"ws://localhost:{live_server.sockets[0].getsockname()[1]}"
 
-    session = forwarder_instance.connect_forwarding_session(charger, node, timeout=0.1)
+            monkeypatch.setattr(
+                Forwarder,
+                "_candidate_forwarding_urls",
+                staticmethod(lambda _node, _charger: iter([failing_url, live_url])),
+            )
 
-    assert session is not None
-    assert session.url.startswith("ws://reliable.example.com")
-    assert forwarder_instance.get_session(charger.pk) is session
-    assert len(forwarder_instance._sessions) == 1
-    assert connections[0].startswith("ws://unreliable.example.com")
+            caplog.set_level(logging.WARNING)
 
-    # verify failures leave no sessions behind when nothing connects
-    def always_fail(url, timeout, subprotocols):
-        raise WebSocketException("down")
+            session = await asyncio.to_thread(
+                forwarder_instance.connect_forwarding_session,
+                charger,
+                node,
+                timeout=0.5,
+            )
 
-    monkeypatch.setattr("apps.ocpp.forwarder.create_connection", always_fail)
-    forwarder_instance.clear_sessions()
-    session = forwarder_instance.connect_forwarding_session(charger, node, timeout=0.1)
-    assert session is None
-    assert forwarder_instance.get_session(charger.pk) is None
+            assert session is not None
+            assert session.url == live_url
+            assert forwarder_instance.get_session(charger.pk) is session
+            assert len(forwarder_instance._sessions) == 1
+            assert any(
+                failing_url in record.message and record.levelno == logging.WARNING
+                for record in caplog.records
+            )
+
+            # verify failures leave no sessions behind when nothing connects
+            forwarder_instance.clear_sessions()
+            monkeypatch.setattr(
+                Forwarder,
+                "_candidate_forwarding_urls",
+                staticmethod(lambda _node, _charger: iter([failing_url])),
+            )
+
+            caplog.clear()
+            session = await asyncio.to_thread(
+                forwarder_instance.connect_forwarding_session,
+                charger,
+                node,
+                timeout=0.5,
+            )
+            assert session is None
+            assert forwarder_instance.get_session(charger.pk) is None
+            assert any(
+                failing_url in record.message and record.levelno == logging.WARNING
+                for record in caplog.records
+            )
+
+    asyncio.run(orchestrate())
 
 
 def test_prune_inactive_sessions_closes_missing(monkeypatch, forwarder_instance):
@@ -140,9 +185,6 @@ def test_sync_forwarded_charge_points_respects_existing_sessions(monkeypatch):
     sync_forwarding_targets = Mock()
     monkeypatch.setattr(CPForwarder.objects, "update_running_state", update_running_state)
     monkeypatch.setattr(CPForwarder.objects, "sync_forwarding_targets", sync_forwarding_targets)
-
-    fake_logger = SimpleNamespace(warning=Mock(), info=Mock())
-    monkeypatch.setattr("apps.ocpp.forwarder.logger", fake_logger)
     create_conn = Mock()
     monkeypatch.setattr("apps.ocpp.forwarder.create_connection", create_conn)
 
