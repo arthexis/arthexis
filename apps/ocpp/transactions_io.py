@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Iterable
+from typing import Iterable, Mapping
 
 from django.core.exceptions import ValidationError
 from django.utils import timezone
@@ -109,22 +109,25 @@ def _parse_dt(value: str | None) -> datetime | None:
     return dt
 
 
-def import_transactions(data: dict) -> int:
-    """Import transactions from export data.
+def _normalize_connector(connector_value):
+    if connector_value in ("", None):
+        return None
+    if isinstance(connector_value, str):
+        try:
+            return int(connector_value)
+        except ValueError as exc:
+            raise ValueError(f"Invalid connector id: {connector_value}") from exc
+    return connector_value
 
-    Returns number of imported transactions.
-    """
+
+def _build_charger_map(chargers: Iterable[Mapping]) -> dict[str, Charger]:
     charger_map: dict[str, Charger] = {}
-    for item in data.get("chargers", []):
+    for item in chargers:
         try:
             serial = Charger.validate_serial(item.get("charger_id"))
-        except ValidationError:
+            connector_value = _normalize_connector(item.get("connector_id"))
+        except (ValidationError, ValueError):
             continue
-        connector_value = item.get("connector_id", None)
-        if connector_value in ("", None):
-            connector_value = None
-        elif isinstance(connector_value, str):
-            connector_value = int(connector_value)
         charger, _ = Charger.objects.get_or_create(
             charger_id=serial,
             defaults={
@@ -133,77 +136,117 @@ def import_transactions(data: dict) -> int:
             },
         )
         charger_map[serial] = charger
+    return charger_map
 
-    imported = 0
-    for tx in data.get("transactions", []):
-        serial = Charger.normalize_serial(tx.get("charger"))
-        if not serial or Charger.is_placeholder_serial(serial):
-            continue
-        charger = charger_map.get(serial)
-        if charger is None:
-            try:
-                charger, _ = Charger.objects.get_or_create(charger_id=serial)
-            except ValidationError:
-                continue
-            charger_map[serial] = charger
-        vid_value = tx.get("vid")
-        vin_value = tx.get("vin")
-        vid_text = str(vid_value).strip() if vid_value is not None else ""
-        vin_text = str(vin_value).strip() if vin_value is not None else ""
-        if not vid_text and vin_text:
-            vid_text = vin_text
+
+def _normalize_vehicle_identifiers(vid_value, vin_value) -> tuple[str, str]:
+    vid_text = str(vid_value).strip() if vid_value is not None else ""
+    vin_text = str(vin_value).strip() if vin_value is not None else ""
+    if not vid_text and vin_text:
+        vid_text = vin_text
+    return vid_text, vin_text
+
+
+def _normalize_meter_values(entries: Iterable[Mapping]) -> list[dict]:
+    meter_values: list[dict] = []
+    for mv in entries or []:
         try:
-            start_time = _parse_dt(tx.get("start_time"))
-            stop_time = _parse_dt(tx.get("stop_time"))
-            received_start_time = _parse_dt(tx.get("received_start_time")) or start_time
-            received_stop_time = _parse_dt(tx.get("received_stop_time")) or stop_time
+            connector_id = _normalize_connector(mv.get("connector_id"))
         except ValueError:
             continue
-
-        transaction = Transaction.objects.create(
-            charger=charger,
-            account_id=tx.get("account"),
-            rfid=tx.get("rfid", ""),
-            vid=vid_text,
-            vin=vin_text,
-            ocpp_transaction_id=tx.get("ocpp_transaction_id", ""),
-            meter_start=tx.get("meter_start"),
-            meter_stop=tx.get("meter_stop"),
-            voltage_start=tx.get("voltage_start"),
-            voltage_stop=tx.get("voltage_stop"),
-            current_import_start=tx.get("current_import_start"),
-            current_import_stop=tx.get("current_import_stop"),
-            current_offered_start=tx.get("current_offered_start"),
-            current_offered_stop=tx.get("current_offered_stop"),
-            temperature_start=tx.get("temperature_start"),
-            temperature_stop=tx.get("temperature_stop"),
-            soc_start=tx.get("soc_start"),
-            soc_stop=tx.get("soc_stop"),
-            start_time=start_time,
-            stop_time=stop_time,
-            received_start_time=received_start_time,
-            received_stop_time=received_stop_time,
+        try:
+            timestamp = _parse_dt(mv.get("timestamp"))
+        except ValueError:
+            continue
+        meter_values.append(
+            {
+                "connector_id": connector_id,
+                "timestamp": timestamp,
+                "context": mv.get("context", ""),
+                "energy": mv.get("energy"),
+                "voltage": mv.get("voltage"),
+                "current_import": mv.get("current_import"),
+                "current_offered": mv.get("current_offered"),
+                "temperature": mv.get("temperature"),
+                "soc": mv.get("soc"),
+            }
         )
-        for mv in tx.get("meter_values", []):
-            connector_id = mv.get("connector_id")
-            if isinstance(connector_id, str):
-                connector_id = int(connector_id)
-            try:
-                timestamp = _parse_dt(mv.get("timestamp"))
-            except ValueError:
-                continue
-            MeterValue.objects.create(
-                charger=charger,
-                transaction=transaction,
-                connector_id=connector_id,
-                timestamp=timestamp,
-                context=mv.get("context", ""),
-                energy=mv.get("energy"),
-                voltage=mv.get("voltage"),
-                current_import=mv.get("current_import"),
-                current_offered=mv.get("current_offered"),
-                temperature=mv.get("temperature"),
-                soc=mv.get("soc"),
-            )
+    return meter_values
+
+
+def _normalize_transaction_entry(tx: Mapping, charger_map: dict[str, Charger]) -> dict:
+    serial = Charger.normalize_serial(tx.get("charger"))
+    if not serial or Charger.is_placeholder_serial(serial):
+        raise ValidationError({"charger": "Invalid charger serial"})
+
+    try:
+        charger = charger_map.get(serial) or Charger.objects.get_or_create(charger_id=serial)[0]
+        charger_map.setdefault(serial, charger)
+    except ValidationError as exc:
+        raise ValidationError(exc.messages) from exc
+
+    vid_text, vin_text = _normalize_vehicle_identifiers(tx.get("vid"), tx.get("vin"))
+
+    start_time = _parse_dt(tx.get("start_time"))
+    stop_time = _parse_dt(tx.get("stop_time"))
+    received_start_time = _parse_dt(tx.get("received_start_time")) or start_time
+    received_stop_time = _parse_dt(tx.get("received_stop_time")) or stop_time
+
+    return {
+        "charger": charger,
+        "transaction_fields": {
+            "charger": charger,
+            "account_id": tx.get("account"),
+            "rfid": tx.get("rfid", ""),
+            "vid": vid_text,
+            "vin": vin_text,
+            "ocpp_transaction_id": tx.get("ocpp_transaction_id", ""),
+            "meter_start": tx.get("meter_start"),
+            "meter_stop": tx.get("meter_stop"),
+            "voltage_start": tx.get("voltage_start"),
+            "voltage_stop": tx.get("voltage_stop"),
+            "current_import_start": tx.get("current_import_start"),
+            "current_import_stop": tx.get("current_import_stop"),
+            "current_offered_start": tx.get("current_offered_start"),
+            "current_offered_stop": tx.get("current_offered_stop"),
+            "temperature_start": tx.get("temperature_start"),
+            "temperature_stop": tx.get("temperature_stop"),
+            "soc_start": tx.get("soc_start"),
+            "soc_stop": tx.get("soc_stop"),
+            "start_time": start_time,
+            "stop_time": stop_time,
+            "received_start_time": received_start_time,
+            "received_stop_time": received_stop_time,
+        },
+        "meter_values": _normalize_meter_values(tx.get("meter_values", [])),
+    }
+
+
+def _persist_transactions(transactions: Iterable[dict]) -> int:
+    imported = 0
+    for tx in transactions:
+        transaction = Transaction.objects.create(**tx["transaction_fields"])
+        for mv in tx["meter_values"]:
+            MeterValue.objects.create(transaction=transaction, charger=tx["charger"], **mv)
         imported += 1
     return imported
+
+
+def import_transactions(data: dict) -> int:
+    """Import transactions from export data.
+
+    Returns number of imported transactions.
+    """
+
+    charger_map = _build_charger_map(data.get("chargers", []))
+
+    normalized_transactions: list[dict] = []
+    for tx in data.get("transactions", []):
+        if not isinstance(tx, Mapping):
+            continue
+        try:
+            normalized_transactions.append(_normalize_transaction_entry(tx, charger_map))
+        except (ValidationError, ValueError, TypeError):
+            continue
+
+    return _persist_transactions(normalized_transactions)

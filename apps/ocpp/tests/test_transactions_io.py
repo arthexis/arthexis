@@ -127,6 +127,93 @@ def test_import_transactions_skips_invalid_entries_and_creates_meter_values(base
 
 
 @pytest.mark.django_db
+def test_import_transactions_rejects_invalid_charger_ids(base_time):
+    data = {
+        "transactions": [
+            {"charger": "", "start_time": base_time.isoformat()},
+            {"charger": None, "start_time": base_time.isoformat()},
+        ]
+    }
+
+    imported = import_transactions(data)
+
+    assert imported == 0
+    assert Transaction.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_import_transactions_skips_placeholder_serials(base_time):
+    data = {
+        "transactions": [
+            {"charger": "<charger_id>", "start_time": base_time.isoformat()},
+            {"charger": "<1234>", "start_time": base_time.isoformat()},
+        ]
+    }
+
+    imported = import_transactions(data)
+
+    assert imported == 0
+    assert Transaction.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_import_transactions_skips_malformed_timestamps(base_time):
+    data = {
+        "transactions": [
+            {"charger": "CP-1", "start_time": "bad"},
+            {"charger": "CP-1", "start_time": base_time.isoformat(), "stop_time": "not-a-date"},
+        ]
+    }
+
+    imported = import_transactions(data)
+
+    assert imported == 0
+    assert Transaction.objects.count() == 0
+
+
+@pytest.mark.django_db
+def test_import_transactions_persists_meter_values(base_time):
+    data = {
+        "chargers": [
+            {"charger_id": "CP-20", "connector_id": "3", "require_rfid": True},
+        ],
+        "transactions": [
+            {
+                "charger": "CP-20",
+                "start_time": base_time.isoformat(),
+                "stop_time": (base_time + timedelta(minutes=30)).isoformat(),
+                "meter_values": [
+                    {
+                        "connector_id": "3",
+                        "timestamp": (base_time + timedelta(minutes=5)).isoformat(),
+                        "context": "Sample.Periodic",
+                        "energy": "12.5",
+                        "current_import": "6.2",
+                    },
+                    {"connector_id": "x", "timestamp": "bad"},
+                ],
+            }
+        ],
+    }
+
+    imported = import_transactions(data)
+
+    assert imported == 1
+    charger = Charger.objects.get()
+    assert charger.charger_id == "CP-20"
+    assert charger.connector_id == 3
+    transaction = Transaction.objects.get()
+    assert transaction.charger == charger
+    assert transaction.start_time == base_time
+    assert transaction.stop_time == base_time + timedelta(minutes=30)
+    meter_value = MeterValue.objects.get()
+    assert meter_value.connector_id == 3
+    assert meter_value.timestamp == base_time + timedelta(minutes=5)
+    assert meter_value.energy == Decimal("12.5")
+    assert meter_value.current_import == Decimal("6.2")
+
+
+@pytest.mark.django_db
 
 def test_sync_transactions_payload_updates_and_skips_invalid_entries(base_time, monkeypatch):
     charger = Charger.objects.create(charger_id="SYNC-1", connector_id=1)
