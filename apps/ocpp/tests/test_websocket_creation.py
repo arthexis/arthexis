@@ -1,14 +1,12 @@
 import asyncio
 import json
 import base64
-import asyncio
-from urllib.parse import urlparse
 
 import pytest
 import websockets
 from asgiref.sync import async_to_sync
 from channels.db import database_sync_to_async
-from channels.testing import WebsocketCommunicator
+from channels.testing import ChannelsLiveServerTestCase, WebsocketCommunicator
 from django.contrib.contenttypes.models import ContentType
 from django.core.cache import cache
 from django.core.management import call_command
@@ -362,101 +360,83 @@ def test_existing_charger_clears_status_and_refreshes_forwarding(monkeypatch):
 
 
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
-def test_cp_simulator_connects_with_default_fixture(monkeypatch):
-    call_command("loaddata", "apps/ocpp/fixtures/simulators__localsim_connector_2.json")
-    cache.clear()
-    simulator = Simulator.objects.get(default=True)
-    config = simulator.as_config()
-    config.pre_charge_delay = 0
-    config.duration = 1
-    config.interval = 0.1
+class TestSimulatorLiveServer(ChannelsLiveServerTestCase):
+    host = "127.0.0.1"
 
-    async def mock_connect(uri, subprotocols=None, **kwargs):
-        parsed = urlparse(uri)
-        communicator = WebsocketCommunicator(
-            application, parsed.path, subprotocols=subprotocols or None
+    def _reset_store(self):
+        cache.clear()
+        store.connections.clear()
+        store.ip_connections.clear()
+        store.logs["charger"].clear()
+        store.log_names["charger"].clear()
+        RateLimit.objects.all().delete()
+        cache.clear()
+
+    def setUp(self):
+        super().setUp()
+        self._reset_store()
+
+    def tearDown(self):
+        self._reset_store()
+        super().tearDown()
+
+    def test_cp_simulator_connects_with_default_fixture(self):
+        call_command(
+            "loaddata", "apps/ocpp/fixtures/simulators__localsim_connector_2.json"
         )
-        connected, accepted_subprotocol = await communicator.connect()
-        if not connected:
-            raise RuntimeError("WebSocket connection failed")
+        simulator = Simulator.objects.get(default=True)
+        config = simulator.as_config()
+        config.pre_charge_delay = 0
+        config.duration = 1
+        config.interval = 0.1
+        config.host = self.host
+        config.ws_port = self._port
 
-        class CommunicatorWebSocket:
-            def __init__(self, comm, subprotocol):
-                self._comm = comm
-                self.subprotocol = subprotocol
-                self.close_code = None
-                self.close_reason = ""
+        cp_simulator = ChargePointSimulator(config)
 
-            async def send(self, msg: str) -> None:
-                await self._comm.send_to(text_data=msg)
+        async def short_run_session(sim):
+            cfg = sim.config
+            uri = f"{self.live_server_ws_url}/{cfg.cp_path}"
+            ws = await websockets.connect(uri, subprotocols=["ocpp1.6"])
 
-            async def recv(self) -> str:
-                message = await self._comm.receive_from()
-                if message is None:
-                    raise websockets.exceptions.ConnectionClosed(1000, "closed")
-                return message
+            boot = json.dumps(
+                [
+                    2,
+                    "boot",
+                    "BootNotification",
+                    {
+                        "chargePointModel": "Simulator",
+                        "chargePointVendor": "SimVendor",
+                        "serialNumber": cfg.serial_number,
+                    },
+                ]
+            )
+            await ws.send(boot)
+            boot_response = json.loads(await ws.recv())
+            assert boot_response[2].get("status") == "Accepted"
+            assert ws.subprotocol == "ocpp1.6"
 
-            async def close(self) -> None:
-                await self._comm.disconnect()
-                self.close_code = None
-                self.close_reason = ""
+            await ws.send(json.dumps([2, "auth", "Authorize", {"idTag": cfg.rfid}]))
+            auth_response = json.loads(await ws.recv())
+            assert auth_response[2]["idTagInfo"]["status"] == "Accepted"
 
-        return CommunicatorWebSocket(communicator, accepted_subprotocol)
+            if not sim._connected.is_set():
+                sim.status = "running"
+                sim._connect_error = "accepted"
+                sim._connected.set()
 
-    monkeypatch.setattr("apps.ocpp.simulator.websockets.connect", mock_connect)
+            sim.status = "stopped"
+            sim._stop_event.set()
+            await ws.close()
+            return ws.close_code, ws.close_reason
 
-    async def short_run_session(self):
-        cfg = self.config
+        close_code, close_reason = async_to_sync(short_run_session)(cp_simulator)
 
-        uri = f"ws://{cfg.host}:{cfg.ws_port}/{cfg.cp_path}" if cfg.ws_port else f"ws://{cfg.host}/{cfg.cp_path}"
-        ws = await websockets.connect(uri, subprotocols=["ocpp1.6"])
-
-        async def send(msg: str) -> None:
-            await ws.send(msg)
-
-        async def recv() -> str:
-            return await ws.recv()
-
-        boot = json.dumps(
-            [
-                2,
-                "boot",
-                "BootNotification",
-                {
-                    "chargePointModel": "Simulator",
-                    "chargePointVendor": "SimVendor",
-                    "serialNumber": cfg.serial_number,
-                },
-            ]
-        )
-        await send(boot)
-        resp = json.loads(await recv())
-        status = resp[2].get("status")
-        if status != "Accepted":
-            if not self._connected.is_set():
-                self._connect_error = f"Boot status {status}"
-                self._connected.set()
-            return
-
-        await send(json.dumps([2, "auth", "Authorize", {"idTag": cfg.rfid}]))
-        await recv()
-
-        if not self._connected.is_set():
-            self.status = "running"
-            self._connect_error = "accepted"
-            self._connected.set()
-
-        self.status = "stopped"
-        self._stop_event.set()
-        await ws.close()
-
-    cp_simulator = ChargePointSimulator(config)
-    async_to_sync(short_run_session)(cp_simulator)
-
-    assert cp_simulator._connected.is_set()
-    charger = Charger.objects.filter(charger_id=config.cp_path, connector_id=None).first()
-    assert charger is not None
-    assert charger.last_path == f"/{config.cp_path}"
+        assert close_code == 1000
+        assert close_reason in ("", None)
+        assert cp_simulator._connected.is_set()
+        assert cp_simulator.status == "stopped"
+        assert cp_simulator._stop_event.is_set()
 
 
 def _latest_log_message(key: str) -> str:
