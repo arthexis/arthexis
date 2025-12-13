@@ -54,9 +54,6 @@
           autocomplete="current-password"
           required
         >
-        <div class="form-text">
-          {% trans "Use your account password or a code from your authenticator app." %}
-        </div>
         {% for error in form.password.errors %}
         <div class="invalid-feedback">{{ error }}</div>
         {% endfor %}
