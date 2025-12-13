@@ -611,10 +611,12 @@ PAGES_CHAT_SOCKET_PATH = os.environ.get("PAGES_CHAT_SOCKET_PATH", "/ws/pages/cha
 AUTH_USER_MODEL = "users.User"
 
 # Enable RFID authentication backend and restrict default admin login to localhost
+# Keep LocalhostAdminBackend first so the localhost/IP checks run before password
+# or OTP authentication.
 AUTHENTICATION_BACKENDS = [
+    "apps.users.backends.LocalhostAdminBackend",
     "apps.users.backends.PasswordOrOTPBackend",
     "apps.users.backends.TempPasswordBackend",
-    "apps.users.backends.LocalhostAdminBackend",
     "apps.users.backends.RFIDBackend",
 ]
 
