@@ -58,6 +58,9 @@ class ChargePointSimulator:
         self._in_transaction = False
         self._unsupported_message = False
         self._unsupported_message_reason = ""
+        self._last_ws_subprotocol: Optional[str] = None
+        self._last_close_code: Optional[int] = None
+        self._last_close_reason: str | None = None
 
     def trigger_door_open(self) -> None:
         """Queue a DoorOpen status notification for the simulator."""
@@ -407,6 +410,9 @@ class ChargePointSimulator:
     @requires_network
     async def _run_session(self) -> None:
         cfg = self.config
+        self._last_ws_subprotocol = None
+        self._last_close_code = None
+        self._last_close_reason = None
         if cfg.ws_port:
             uri = f"ws://{cfg.host}:{cfg.ws_port}/{cfg.cp_path}"
         else:
@@ -442,6 +448,7 @@ class ChargePointSimulator:
                 f"Connected (subprotocol={ws.subprotocol or 'none'})",
                 log_type="simulator",
             )
+            self._last_ws_subprotocol = ws.subprotocol
 
             async def send(msg: str) -> None:
                 try:
@@ -518,6 +525,10 @@ class ChargePointSimulator:
                 self.status = "running"
                 self._connect_error = "accepted"
                 self._connected.set()
+            if cfg.duration <= 0:
+                self.status = "stopped"
+                self._stop_event.set()
+                return
             if cfg.pre_charge_delay > 0:
                 idle_start = time.monotonic()
                 while time.monotonic() - idle_start < cfg.pre_charge_delay:
@@ -714,11 +725,15 @@ class ChargePointSimulator:
             self._in_transaction = False
             if ws is not None:
                 await ws.close()
+                self._last_close_code = ws.close_code
+                self._last_close_reason = getattr(ws, "close_reason", None)
                 store.add_log(
                     cfg.cp_path,
                     f"Closed (code={ws.close_code}, reason={getattr(ws, 'close_reason', '')})",
                     log_type="simulator",
                 )
+            if not self._stop_event.is_set():
+                self.status = "stopped"
 
     async def _run(self) -> None:
         try:

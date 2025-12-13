@@ -3,7 +3,6 @@ import json
 import base64
 
 import pytest
-import websockets
 from asgiref.sync import async_to_sync
 from channels.db import database_sync_to_async
 from channels.testing import ChannelsLiveServerTestCase, WebsocketCommunicator
@@ -387,56 +386,21 @@ class TestSimulatorLiveServer(ChannelsLiveServerTestCase):
         simulator = Simulator.objects.get(default=True)
         config = simulator.as_config()
         config.pre_charge_delay = 0
-        config.duration = 1
-        config.interval = 0.1
+        config.duration = 0
+        config.interval = 0.01
         config.host = self.host
         config.ws_port = self._port
 
         cp_simulator = ChargePointSimulator(config)
 
-        async def short_run_session(sim):
-            cfg = sim.config
-            uri = f"{self.live_server_ws_url}/{cfg.cp_path}"
-            ws = await websockets.connect(uri, subprotocols=["ocpp1.6"])
+        async_to_sync(cp_simulator._run_session)()
 
-            boot = json.dumps(
-                [
-                    2,
-                    "boot",
-                    "BootNotification",
-                    {
-                        "chargePointModel": "Simulator",
-                        "chargePointVendor": "SimVendor",
-                        "serialNumber": cfg.serial_number,
-                    },
-                ]
-            )
-            await ws.send(boot)
-            boot_response = json.loads(await ws.recv())
-            assert boot_response[2].get("status") == "Accepted"
-            assert ws.subprotocol == "ocpp1.6"
-
-            await ws.send(json.dumps([2, "auth", "Authorize", {"idTag": cfg.rfid}]))
-            auth_response = json.loads(await ws.recv())
-            assert auth_response[2]["idTagInfo"]["status"] == "Accepted"
-
-            if not sim._connected.is_set():
-                sim.status = "running"
-                sim._connect_error = "accepted"
-                sim._connected.set()
-
-            sim.status = "stopped"
-            sim._stop_event.set()
-            await ws.close()
-            return ws.close_code, ws.close_reason
-
-        close_code, close_reason = async_to_sync(short_run_session)(cp_simulator)
-
-        assert close_code == 1000
-        assert close_reason in ("", None)
+        assert cp_simulator._last_ws_subprotocol == "ocpp1.6"
+        assert cp_simulator._last_close_code == 1000
+        assert cp_simulator._last_close_reason in ("", None)
         assert cp_simulator._connected.is_set()
+        assert cp_simulator._connect_error == "accepted"
         assert cp_simulator.status == "stopped"
-        assert cp_simulator._stop_event.is_set()
 
 
 def _latest_log_message(key: str) -> str:
