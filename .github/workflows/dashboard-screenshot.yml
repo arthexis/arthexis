@@ -59,6 +59,76 @@ jobs:
           python manage.py check_admin --force
           python manage.py collectstatic --noinput
 
+      - name: Seed OCPP demo data
+        run: |
+          source .venv/bin/activate
+          python manage.py shell <<'PY'
+          from decimal import Decimal
+          from django.utils import timezone
+
+          from apps.ocpp.models import Charger, MeterValue, Transaction
+
+          now = timezone.now()
+          charger, _ = Charger.objects.get_or_create(
+              charger_id="SIM-CP-1",
+              defaults={
+                  "display_name": "Simulated Charger",
+                  "connector_id": 1,
+                  "public_display": True,
+                  "last_status": "Charging",
+                  "last_heartbeat": now,
+              },
+          )
+
+          active_tx, _ = Transaction.objects.get_or_create(
+              charger=charger,
+              connector_id=1,
+              stop_time=None,
+              defaults={
+                  "start_time": now - timezone.timedelta(minutes=15),
+                  "received_start_time": now - timezone.timedelta(minutes=15),
+                  "meter_start": 1000,
+                  "ocpp_transaction_id": "SIM-ACTIVE",
+              },
+          )
+
+          completed_tx, _ = Transaction.objects.get_or_create(
+              charger=charger,
+              connector_id=1,
+              ocpp_transaction_id="SIM-COMPLETED",
+              defaults={
+                  "start_time": now - timezone.timedelta(hours=2),
+                  "stop_time": now - timezone.timedelta(hours=1, minutes=30),
+                  "received_start_time": now - timezone.timedelta(hours=2),
+                  "received_stop_time": now - timezone.timedelta(hours=1, minutes=30),
+                  "meter_start": 800,
+                  "meter_stop": 1200,
+              },
+          )
+
+          MeterValue.objects.get_or_create(
+              charger=charger,
+              transaction=completed_tx,
+              connector_id=1,
+              timestamp=completed_tx.stop_time or now,
+              defaults={
+                  "context": "Sample.Periodic",
+                  "energy": Decimal("4.200"),
+              },
+          )
+
+          MeterValue.objects.get_or_create(
+              charger=charger,
+              transaction=active_tx,
+              connector_id=1,
+              timestamp=now,
+              defaults={
+                  "context": "Sample.Periodic",
+                  "energy": Decimal("1.800"),
+              },
+          )
+          PY
+
       - name: Launch application server
         env:
           PORT: 8888
@@ -167,6 +237,89 @@ jobs:
         with:
           name: public-site
           path: artifacts/public-site.png
+
+      - name: Capture OCPP dashboard screenshot
+        env:
+          BASE_URL: http://localhost:8888
+          ADMIN_USERNAME: admin
+          ADMIN_PASSWORD: admin
+        run: |
+          mkdir -p artifacts
+          cat > artifacts/capture-ocpp.js <<'NODE'
+          const { chromium } = require('playwright');
+
+          const baseUrl = process.env.BASE_URL || 'http://localhost:8888';
+          const username = process.env.ADMIN_USERNAME || 'admin';
+          const password = process.env.ADMIN_PASSWORD || 'admin';
+          const loginUrl = `${baseUrl}/login/?next=/ocpp/cpms/dashboard/`;
+          const dashboardUrl = `${baseUrl}/ocpp/cpms/dashboard/`;
+
+          (async () => {
+            const browser = await chromium.launch({ headless: true });
+            const page = await browser.newPage();
+
+            await page.goto(loginUrl, { waitUntil: 'networkidle' });
+            await page.fill('input[name="username"]', username);
+            await page.fill('input[name="password"]', password);
+            await Promise.all([
+              page.waitForNavigation({ waitUntil: 'networkidle' }),
+              page.click('button[type="submit"], input[type="submit"]'),
+            ]);
+
+            await page.goto(dashboardUrl, { waitUntil: 'networkidle' });
+            await page.waitForLoadState('networkidle');
+            await page.waitForTimeout(1000);
+            await page.screenshot({ path: 'artifacts/ocpp-dashboard.png', fullPage: true });
+
+            await browser.close();
+          })().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
+          NODE
+
+          node artifacts/capture-ocpp.js
+
+      - name: Upload OCPP dashboard screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: ocpp-dashboard
+          path: artifacts/ocpp-dashboard.png
+
+      - name: Capture EVCS public screenshot
+        env:
+          BASE_URL: http://localhost:8888
+        run: |
+          mkdir -p artifacts
+          cat > artifacts/capture-evcs.js <<'NODE'
+          const { chromium } = require('playwright');
+
+          const baseUrl = process.env.BASE_URL || 'http://localhost:8888';
+          const publicUrl = `${baseUrl}/ocpp/c/SIM-CP-1/`;
+
+          (async () => {
+            const browser = await chromium.launch({ headless: true });
+            const page = await browser.newPage();
+
+            await page.goto(publicUrl, { waitUntil: 'networkidle' });
+            await page.waitForLoadState('networkidle');
+            await page.waitForTimeout(1000);
+            await page.screenshot({ path: 'artifacts/evcs-public.png', fullPage: true });
+
+            await browser.close();
+          })().catch((error) => {
+            console.error(error);
+            process.exit(1);
+          });
+          NODE
+
+          node artifacts/capture-evcs.js
+
+      - name: Upload EVCS public screenshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: evcs-public
+          path: artifacts/evcs-public.png
 
       - name: Stop application server
         if: always()
