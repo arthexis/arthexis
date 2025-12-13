@@ -64,6 +64,11 @@ def nav_links(request):
     except (OperationalError, ProgrammingError):
         modules = []
 
+    try:
+        modules = list(modules)
+    except (OperationalError, ProgrammingError):
+        modules = []
+
     valid_modules = []
     current_module = None
     user = getattr(request, "user", None)
