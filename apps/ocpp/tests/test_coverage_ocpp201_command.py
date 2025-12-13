@@ -7,7 +7,7 @@ from django.core.management import call_command
 def test_ocpp201_coverage_matches_fixture(tmp_path):
     output_path = tmp_path / "ocpp201_coverage.json"
     badge_path = tmp_path / "ocpp201_coverage.svg"
-    call_command("ocpp201_coverage", json_path=output_path, badge_path=badge_path)
+    call_command("coverage_ocpp201", json_path=output_path, badge_path=badge_path)
 
     assert output_path.exists(), "Expected coverage summary to be written"
 

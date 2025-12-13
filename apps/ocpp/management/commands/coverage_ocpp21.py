@@ -3,7 +3,7 @@ from pathlib import Path
 
 from django.core.management.base import BaseCommand
 
-from apps.ocpp.management.commands.ocpp16_coverage import (
+from apps.ocpp.management.commands.coverage_ocpp16 import (
     _implemented_cp_to_csms,
     _implemented_csms_to_cp,
 )
@@ -12,18 +12,18 @@ from utils.coverage import coverage_color, render_badge
 
 
 def _load_spec() -> dict[str, list[str]]:
-    data = load_protocol_spec_from_file(spec_path("ocpp201"))
+    data = load_protocol_spec_from_file(spec_path("ocpp21"))
     return data["calls"]
 
 
 class Command(BaseCommand):
-    help = "Compute OCPP 2.0.1 call coverage and generate a badge."
+    help = "Compute OCPP 2.1 call coverage and generate a badge."
 
     def add_arguments(self, parser) -> None:
         parser.add_argument(
             "--badge-path",
             default=None,
-            help="Optional path to write the SVG badge. Defaults to project media/ocpp201_coverage.svg.",
+            help="Optional path to write the SVG badge. Defaults to project media/ocpp21_coverage.svg.",
         )
         parser.add_argument(
             "--json-path",
@@ -104,7 +104,7 @@ class Command(BaseCommand):
 
         badge_path = options.get("badge_path")
         if badge_path is None:
-            badge_path = project_root / "media" / "ocpp201_coverage.svg"
+            badge_path = project_root / "media" / "ocpp21_coverage.svg"
             badge_path.parent.mkdir(parents=True, exist_ok=True)
         else:
             badge_path = Path(badge_path)
@@ -113,14 +113,14 @@ class Command(BaseCommand):
             badge_path.parent.mkdir(parents=True, exist_ok=True)
 
         badge_value = f"{round(overall_percentage, 1)}%"
-        badge_label = "ocpp 2.0.1"
+        badge_label = "ocpp 2.1"
         badge_color = coverage_color(overall_percentage)
         badge_svg = render_badge(badge_label, badge_value, badge_color)
         badge_path.write_text(badge_svg + "\n", encoding="utf-8")
 
         if overall_percentage < 100:
             self.stderr.write(
-                "OCPP 2.0.1 coverage is incomplete; consider adding more handlers."
+                "OCPP 2.1 coverage is incomplete; consider adding more handlers."
             )
             self.stderr.write(
                 f"Currently supporting {len(overall_coverage)} of {len(overall_spec)} operations."
