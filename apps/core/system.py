@@ -222,6 +222,58 @@ def _format_timestamp(dt: datetime | None) -> str:
     return date_format(localized, "DATETIME_FORMAT")
 
 
+def _resolve_auto_upgrade_now(schedule) -> datetime:
+    """Return the current time with defensive fallbacks."""
+
+    try:
+        return schedule.maybe_make_aware(schedule.now())
+    except Exception:
+        try:
+            return timezone.localtime()
+        except Exception:
+            return timezone.now()
+
+
+def _normalize_auto_upgrade_time(
+    raw_value: datetime | None, schedule
+) -> datetime | None:
+    """Return *raw_value* normalized to an aware datetime when possible."""
+
+    if raw_value is None:
+        return None
+
+    try:
+        return schedule.maybe_make_aware(raw_value)
+    except Exception:
+        try:
+            if timezone.is_naive(raw_value):
+                return timezone.make_aware(raw_value, timezone.get_current_timezone())
+        except Exception:
+            return raw_value
+        return raw_value
+
+
+def _resolve_auto_upgrade_reference_time(
+    last_run_at: datetime | None, schedule, default: datetime
+) -> datetime:
+    """Return the reference datetime for remaining schedule estimates."""
+
+    reference = _normalize_auto_upgrade_time(last_run_at, schedule)
+    return reference if reference is not None else default
+
+
+def _build_next_run_timestamp(schedule, reference: datetime, now: datetime) -> str:
+    """Return the formatted next-run timestamp for *schedule*."""
+
+    try:
+        remaining = schedule.remaining_estimate(reference)
+    except Exception:
+        return ""
+
+    next_run = now + remaining
+    return _format_timestamp(next_run)
+
+
 def _predict_auto_upgrade_next_run(task) -> str:
     """Return a display-ready next-run timestamp for *task*."""
 
@@ -239,47 +291,18 @@ def _predict_auto_upgrade_next_run(task) -> str:
     if schedule is None:
         return ""
 
-    try:
-        now = schedule.maybe_make_aware(schedule.now())
-    except Exception:
-        try:
-            now = timezone.localtime()
-        except Exception:
-            now = timezone.now()
+    now = _resolve_auto_upgrade_now(schedule)
 
     start_time = getattr(task, "start_time", None)
     if start_time is not None:
-        try:
-            candidate_start = schedule.maybe_make_aware(start_time)
-        except Exception:
-            candidate_start = (
-                timezone.make_aware(start_time, timezone.get_current_timezone())
-                if timezone.is_naive(start_time)
-                else start_time
-            )
+        candidate_start = _normalize_auto_upgrade_time(start_time, schedule)
         if candidate_start and candidate_start > now:
             return _format_timestamp(candidate_start)
 
     last_run_at = getattr(task, "last_run_at", None)
-    if last_run_at is not None:
-        try:
-            reference = schedule.maybe_make_aware(last_run_at)
-        except Exception:
-            reference = (
-                timezone.make_aware(last_run_at, timezone.get_current_timezone())
-                if timezone.is_naive(last_run_at)
-                else last_run_at
-            )
-    else:
-        reference = now
+    reference = _resolve_auto_upgrade_reference_time(last_run_at, schedule, now)
 
-    try:
-        remaining = schedule.remaining_estimate(reference)
-    except Exception:
-        return ""
-
-    next_run = now + remaining
-    return _format_timestamp(next_run)
+    return _build_next_run_timestamp(schedule, reference, now)
 
 
 def _auto_upgrade_next_check() -> str:
