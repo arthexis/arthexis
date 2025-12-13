@@ -52,6 +52,23 @@ class TempPasswordCommandTests(TestCase):
         assert user.is_staff
         assert user.is_superuser
 
+    def test_create_flag_updates_existing_user_permissions(self):
+        identifier = "existing-privileged@example.com"
+        User = get_user_model()
+        user = User.objects.create_user(username=identifier, email=identifier)
+
+        call_command(
+            "temp_password",
+            identifier,
+            create=True,
+            staff=True,
+            superuser=True,
+        )
+
+        user.refresh_from_db()
+        assert user.is_staff
+        assert user.is_superuser
+
     def test_staff_superuser_flags_require_create(self):
         identifier = "existing@example.com"
         User = get_user_model()

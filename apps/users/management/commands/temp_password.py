@@ -91,10 +91,12 @@ class Command(BaseCommand):
         manager = getattr(User, "all_objects", User._default_manager)
 
         users = self._resolve_users(manager, identifier)
+        created = False
         if not users:
             if not create_user:
                 raise CommandError(f"No user found for identifier {identifier!r}.")
             users = [self._create_user(manager, identifier, staff=staff, superuser=superuser)]
+            created = True
         if len(users) > 1:
             usernames = ", ".join(sorted({user.username for user in users}))
             raise CommandError(
@@ -103,7 +105,7 @@ class Command(BaseCommand):
             )
 
         user = users[0]
-        if update_user:
+        if update_user or (create_user and not created and (staff or superuser)):
             self._update_user(user, staff=staff, superuser=superuser)
         password = temp_passwords.generate_password()
         expires_at = timezone.now() + timedelta(seconds=expires_in)
