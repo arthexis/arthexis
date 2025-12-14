@@ -2,13 +2,6 @@
 {% load i18n admin_urls static %}
 
 {% block object-tools-items %}
-    {% if request.user.is_superuser %}
-        <li>
-            <a href="{% url 'admin:nodes_node_register_current' %}" class="addlink">
-                {% trans 'Register local host' %}
-            </a>
-        </li>
-    {% endif %}
     <li>
         <a href="{% url 'admin:nodes_node_register_visitor' %}" class="addlink">
             {% trans 'Register visitor node' %}
