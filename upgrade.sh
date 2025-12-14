@@ -63,8 +63,6 @@ DISABLE_NGINX=0
 if arthexis_nginx_disabled "$BASE_DIR"; then
   DISABLE_NGINX=1
 fi
-TEMP_UPGRADE_HOLDER=0
-TEMP_UPGRADE_HOLDER_UNIT=""
 
 mkdir -p "$LOCK_DIR"
 
@@ -445,14 +443,6 @@ if command -v systemctl >/dev/null 2>&1; then
   fi
 fi
 
-SYSTEMD_RUN_CMD=()
-if command -v systemd-run >/dev/null 2>&1; then
-  SYSTEMD_RUN_CMD=(systemd-run)
-  if command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then
-    SYSTEMD_RUN_CMD=(sudo -n systemd-run)
-  fi
-fi
-
 # Capture sudo/systemd locations for environments where the defaults are missing.
 SUDO_CMD=(sudo)
 if ! command -v sudo >/dev/null 2>&1; then
@@ -460,62 +450,6 @@ if ! command -v sudo >/dev/null 2>&1; then
 fi
 
 SYSTEMD_DIR="${SYSTEMD_DIR:-/etc/systemd/system}"
-
-start_temp_upgrade_holder() {
-  if [[ $TEMP_UPGRADE_HOLDER -ne 1 ]]; then
-    return 0
-  fi
-
-  if [ -z "$SERVICE_NAME" ]; then
-    echo "No managed service recorded; skipping temporary upgrade holder."
-    return 0
-  fi
-
-  if [ "$DISABLE_NGINX" -eq 1 ] || [ -f "$LOCK_DIR/nginx_disabled.lck" ]; then
-    echo "nginx management disabled; skipping temporary upgrade holder"
-    return 0
-  fi
-
-  if [ ${#SYSTEMD_RUN_CMD[@]} -eq 0 ]; then
-    echo "systemd-run unavailable; skipping temporary upgrade holder"
-    return 0
-  fi
-
-  if [ ! -x "$BASE_DIR/scripts/upgrade_holder.py" ]; then
-    echo "upgrade_holder script missing or not executable; skipping temporary holder"
-    return 0
-  fi
-
-  local port
-  port="$(arthexis_detect_backend_port "$BASE_DIR")"
-  local unit
-  unit="upgrade-holder-${SERVICE_NAME}-$(date +%s)"
-  local message
-  message="${UPGRADE_HOLDER_MESSAGE:-Arthexis is upgrading. This page will refresh automatically when the service is ready.}"
-  local refresh_seconds
-  refresh_seconds="${UPGRADE_HOLDER_REFRESH_SECONDS:-5}"
-
-  echo "Starting upgrade holder ${unit} on port ${port}..."
-
-  if "${SYSTEMD_RUN_CMD[@]}" --unit "$unit" --description "Arthexis upgrade holder" \
-    --property "WorkingDirectory=$BASE_DIR" \
-    "$BASE_DIR/scripts/upgrade_holder.py" --port "$port" --message "$message" \
-    --refresh-seconds "$refresh_seconds"; then
-    TEMP_UPGRADE_HOLDER_UNIT="${unit}.service"
-  else
-    echo "Failed to launch upgrade holder unit ${unit}" >&2
-  fi
-}
-
-stop_temp_upgrade_holder() {
-  if [ -z "$TEMP_UPGRADE_HOLDER_UNIT" ] || [ ${#SYSTEMCTL_CMD[@]} -eq 0 ]; then
-    return 0
-  fi
-
-  echo "Stopping upgrade holder ${TEMP_UPGRADE_HOLDER_UNIT}..."
-  "${SYSTEMCTL_CMD[@]}" stop "$TEMP_UPGRADE_HOLDER_UNIT" || true
-  TEMP_UPGRADE_HOLDER_UNIT=""
-}
 
 lcd_systemd_unit_present() {
   local service_name="$1"
@@ -793,10 +727,6 @@ while [[ $# -gt 0 ]]; do
       DETACHED=1
       shift
       ;;
-    --temp)
-      TEMP_UPGRADE_HOLDER=1
-      shift
-      ;;
     --no-nginx)
       DISABLE_NGINX=1
       FORWARDED_ARGS+=("$1")
@@ -864,7 +794,6 @@ mkdir -p "$LOCK_DIR"
 # Mark upgrade progress so status.sh can surface active runs.
 printf "%s\n" "$(date -Iseconds)" > "$UPGRADE_IN_PROGRESS_LOCK"
 cleanup_upgrade_progress_lock() {
-  stop_temp_upgrade_holder
   rm -f "$UPGRADE_IN_PROGRESS_LOCK"
 }
 trap cleanup_upgrade_progress_lock EXIT INT TERM
@@ -1442,8 +1371,6 @@ fi
 
 stop_running_instance 0
 
-start_temp_upgrade_holder
-
 # Pull latest changes
 if [[ $LOCAL_ONLY -eq 1 ]]; then
   echo "Skipping git pull for local refresh."
@@ -1583,8 +1510,6 @@ if [ -n "$SERVICE_NAME" ] && lcd_systemd_unit_present "$SERVICE_NAME"; then
 elif [ -n "$SERVICE_NAME" ] && [ "$NODE_ROLE_NAME" = "Control" ] && [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
   arthexis_install_lcd_service_unit "$BASE_DIR" "$LOCK_DIR" "$SERVICE_NAME"
 fi
-
-stop_temp_upgrade_holder
 
 SHOULD_RESTART_AFTER_UPGRADE=1
 if [ -n "$SERVICE_NAME" ] && [[ $SERVICE_WAS_ACTIVE -eq 0 ]]; then
