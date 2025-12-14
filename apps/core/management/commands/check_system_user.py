@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import io
-from typing import Iterable
 
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.users.system import ensure_system_user
+from apps.users.system import collect_system_user_issues, ensure_system_user
 
 
 class Command(BaseCommand):
@@ -40,7 +39,7 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(f"Created system account {username!r}."))
             return
 
-        issues = list(self._collect_issues(user))
+        issues = list(collect_system_user_issues(user))
         if issues and not force:
             buffer = io.StringIO()
             buffer.write(
@@ -65,18 +64,4 @@ class Command(BaseCommand):
             return
 
         self.stdout.write(self.style.SUCCESS(f"System account {username!r} is healthy."))
-
-    def _collect_issues(self, user) -> Iterable[str]:
-        if getattr(user, "is_deleted", False):
-            yield "account is marked as deleted"
-        if not getattr(user, "is_active", True):
-            yield "account is inactive"
-        if not getattr(user, "is_staff", True):
-            yield "account is not marked as staff"
-        if not getattr(user, "is_superuser", True):
-            yield "account is not a superuser"
-        if getattr(user, "operate_as_id", None):
-            yield "account is delegated to another user"
-        if user.has_usable_password():
-            yield "account has a usable password"
 
