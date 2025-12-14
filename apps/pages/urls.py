@@ -1,4 +1,5 @@
 from django.urls import path
+from django.views.generic import RedirectView
 from . import views
 
 
@@ -16,7 +17,11 @@ urlpatterns = [
         views.client_report_download,
         name="client-report-download",
     ),
-    path("release-checklist", views.release_checklist, name="release-checklist"),
+    path("release-checklist/", views.release_checklist, name="release-checklist"),
+    path(
+        "release-checklist",
+        RedirectView.as_view(pattern_name="pages:release-checklist", permanent=True),
+    ),
     path("login/rfid/", views.rfid_login_page, name="rfid-login"),
     path("login/", views.login_view, name="login"),
     path("logout/", views.logout_view, name="logout"),
