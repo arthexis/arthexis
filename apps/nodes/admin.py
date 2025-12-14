@@ -1203,10 +1203,9 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         yield from temp.iter_remote_urls(path)
 
     def _resolve_visitor_base(self, request):
-        default = "http://localhost:8888"
         raw = (request.GET.get("visitor") or "").strip()
         if not raw:
-            return default
+            return None
 
         candidate = raw
         if "://" not in candidate:
@@ -1215,7 +1214,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         parsed = urlsplit(candidate)
         hostname = parsed.hostname or ""
         if not hostname:
-            return default
+            return None
 
         scheme = (parsed.scheme or "http").lower()
         if scheme not in {"http", "https"}:
@@ -1241,7 +1240,18 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             )
 
         token = uuid.uuid4().hex
-        visitor_base = self._resolve_visitor_base(request).rstrip("/")
+        visitor_base = self._resolve_visitor_base(request)
+        visitor_info_url = ""
+        visitor_register_url = ""
+        visitor_error = None
+        if visitor_base:
+            visitor_base = visitor_base.rstrip("/")
+            visitor_info_url = f"{visitor_base}/nodes/info/"
+            visitor_register_url = f"{visitor_base}/nodes/register/"
+        else:
+            visitor_error = _(
+                "Visitor address missing or invalid. Append a ?visitor=host[:port] query string to continue."
+            )
 
         context = {
             **self.admin_site.each_context(request),
@@ -1250,8 +1260,9 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             "token": token,
             "info_url": reverse("node-info"),
             "register_url": reverse("register-node"),
-            "visitor_info_url": f"{visitor_base}/nodes/info/",
-            "visitor_register_url": f"{visitor_base}/nodes/register/",
+            "visitor_info_url": visitor_info_url,
+            "visitor_register_url": visitor_register_url,
+            "visitor_error": visitor_error,
             "change_url_template": reverse("admin:nodes_node_change", args=[0]),
         }
         return render(request, "admin/nodes/node/register_visitor.html", context)

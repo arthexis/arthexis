@@ -142,6 +142,7 @@
         visitorInfoError: "{{ _('Unable to read visitor node information.')|escapejs }}",
         hostInfoError: "{{ _('Unable to read host node information.')|escapejs }}",
         fetchAdvice: "{{ _('Make sure the visiting node is reachable. Run "./manage.py check_registration_ready" on the visiting node to verify readiness.')|escapejs }}",
+        visitorMissing: "{{ visitor_error|default:_('Visitor address missing. Reload with ?visitor=host[:port].')|escapejs }}",
     };
 
     function updateIndicator(indicator, state) {
@@ -185,6 +186,13 @@
             element.setAttribute("aria-busy", "false");
         }
         updateIndicator(element.querySelector(".status-indicator"), isError ? "error" : "success");
+    }
+
+    if (!visitorInfoUrl || !visitorRegisterUrl) {
+        setStatus(summary, messages.visitorMissing, true);
+        setStatus(hostResult, messages.aborted, true);
+        setStatus(visitorResult, messages.visitorMissing, true);
+        return;
     }
 
     async function loadJson(url, options, timeoutMs = requestTimeoutMs) {
