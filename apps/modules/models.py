@@ -96,10 +96,19 @@ class Module(Entity):
             return self.application.name
         return (self.path or "").strip("/") or "Module"
 
+    @staticmethod
+    def normalize_path(path: str | None) -> str | None:
+        if path is None:
+            return None
+        stripped = str(path).strip("/")
+        return "/" if stripped == "" else f"/{stripped}/"
+
     def save(self, *args, **kwargs):
-        if not self.path:
+        base_path = self.path
+        if not base_path:
             base = self.menu or getattr(self.application, "name", "module")
-            self.path = f"/{slugify(base)}/"
+            base_path = slugify(base)
+        self.path = self.normalize_path(base_path)
         super().save(*args, **kwargs)
 
 
