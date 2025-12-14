@@ -20,6 +20,7 @@ class OdooDeploymentAdmin(DjangoObjectActions, EntityModelAdmin):
     list_display = (
         "name",
         "config_path",
+        "base_path",
         "db_name",
         "db_host",
         "db_port",
@@ -36,7 +37,7 @@ class OdooDeploymentAdmin(DjangoObjectActions, EntityModelAdmin):
     readonly_fields = ("last_discovered",)
 
     fieldsets = (
-        (None, {"fields": ("name", "config_path", "last_discovered")}),
+        (None, {"fields": ("name", "config_path", "base_path", "last_discovered")}),
         (
             _("Database"),
             {

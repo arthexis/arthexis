@@ -35,7 +35,7 @@ def sample_config(tmp_path):
 
 @pytest.mark.django_db
 def test_discover_odoo_configs_reads_options(sample_config):
-    discovered, errors = discover_odoo_configs([sample_config])
+    discovered, errors = discover_odoo_configs([sample_config], scan_filesystem=False)
 
     assert errors == []
     assert len(discovered) == 1
@@ -44,11 +44,12 @@ def test_discover_odoo_configs_reads_options(sample_config):
     assert options["db_host"] == "localhost"
     assert options["db_name"] == "odoo"
     assert options["admin_passwd"] == "supersecret"
+    assert discovered[0].base_path == sample_config.parent
 
 
 @pytest.mark.django_db
 def test_sync_odoo_deployments_creates_and_updates(sample_config):
-    initial = sync_odoo_deployments([sample_config])
+    initial = sync_odoo_deployments([sample_config], scan_filesystem=False)
 
     assert initial["created"] == 1
     assert initial["updated"] == 0
@@ -56,6 +57,7 @@ def test_sync_odoo_deployments_creates_and_updates(sample_config):
     assert deployment.db_name == "odoo"
     assert deployment.db_port == 5432
     assert deployment.http_port == 8069
+    assert deployment.base_path == str(sample_config.parent)
 
     sample_config.write_text(
         textwrap.dedent(
@@ -74,7 +76,7 @@ def test_sync_odoo_deployments_creates_and_updates(sample_config):
         ).strip()
     )
 
-    updated = sync_odoo_deployments([sample_config])
+    updated = sync_odoo_deployments([sample_config], scan_filesystem=False)
 
     assert updated["created"] == 0
     assert updated["updated"] == 1

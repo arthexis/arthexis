@@ -16,6 +16,7 @@ CONFIG_ENV_VAR = "ODOO_RC"
 @dataclass
 class DiscoveredOdooConfig:
     path: Path
+    base_path: Path
     options: dict[str, object]
 
 
@@ -23,30 +24,83 @@ class OdooConfigError(RuntimeError):
     """Raised when an odoo configuration file cannot be read."""
 
 
-def _candidate_paths(additional_candidates: Iterable[Path | str] | None = None) -> list[Path]:
+def _walk_for_configs(root: Path) -> Iterable[Path]:
+    """Yield every ``odoo.conf`` under ``root`` while ignoring permission issues."""
+
+    if not root.exists():
+        return []
+
+    if root.is_file():
+        return [root] if root.name == "odoo.conf" else []
+
+    found: list[Path] = []
+
+    root = root.resolve()
+    skip_roots = {
+        Path("/proc"),
+        Path("/sys"),
+        Path("/dev"),
+    }
+
+    for current_root, dirs, files in os.walk(
+        root, topdown=True, followlinks=False, onerror=lambda _: None
+    ):
+        current_root_path = Path(current_root)
+        if current_root_path in skip_roots:
+            dirs[:] = []
+            continue
+        dirs[:] = [
+            directory
+            for directory in dirs
+            if (current_root_path / directory).resolve() not in skip_roots
+        ]
+        for file_name in files:
+            if file_name == "odoo.conf":
+                found.append(Path(current_root) / file_name)
+
+    return found
+
+
+def _candidate_paths(
+    additional_candidates: Iterable[Path | str] | None = None, *, scan_filesystem: bool = True
+) -> list[Path]:
     env_path = os.environ.get(CONFIG_ENV_VAR) or ""
     home = Path.home()
 
-    defaults: list[Path | str] = [
-        env_path,
-        "/etc/odoo/odoo.conf",
-        "/etc/odoo.conf",
-        home / ".odoorc",
-        home / ".config/odoo/odoo.conf",
-    ]
+    defaults: list[Path | str] = [env_path, home / ".odoorc", home / ".config/odoo/odoo.conf"]
 
     candidates: list[Path] = []
     seen: set[Path] = set()
 
-    for candidate in [*defaults, *(additional_candidates or [])]:
-        if not candidate:
-            continue
-        path = Path(candidate).expanduser()
-        if path in seen:
-            continue
-        seen.add(path)
-        if path.is_file():
-            candidates.append(path)
+    def add_path(path: Path):
+        normalized = path.expanduser()
+        if normalized in seen:
+            return
+        seen.add(normalized)
+        if normalized.is_file():
+            candidates.append(normalized)
+
+    if scan_filesystem:
+        for discovered in _walk_for_configs(Path("/")):
+            add_path(discovered)
+
+    for candidate in defaults:
+        if candidate:
+            candidate_path = Path(candidate)
+            if candidate_path.is_dir():
+                for discovered in _walk_for_configs(candidate_path):
+                    add_path(discovered)
+            else:
+                add_path(candidate_path)
+
+    for candidate in additional_candidates or []:
+        candidate_path = Path(candidate)
+        if candidate_path.is_dir():
+            for discovered in _walk_for_configs(candidate_path):
+                add_path(discovered)
+        else:
+            add_path(candidate_path)
+
     return candidates
 
 
@@ -90,19 +144,23 @@ def _read_config(path: Path) -> dict[str, object]:
 
 def discover_odoo_configs(
     additional_candidates: Iterable[Path | str] | None = None,
+    *,
+    scan_filesystem: bool = True,
 ) -> tuple[list[DiscoveredOdooConfig], list[str]]:
     """Return discovered odoo configurations and any warnings."""
 
     discovered: list[DiscoveredOdooConfig] = []
     errors: list[str] = []
 
-    for path in _candidate_paths(additional_candidates):
+    for path in _candidate_paths(additional_candidates, scan_filesystem=scan_filesystem):
         try:
             options = _read_config(path)
         except OdooConfigError as exc:
             errors.append(str(exc))
             continue
-        discovered.append(DiscoveredOdooConfig(path=path, options=options))
+        discovered.append(
+            DiscoveredOdooConfig(path=path, base_path=path.parent, options=options)
+        )
 
     return discovered, errors
 
@@ -117,6 +175,7 @@ def _deployment_defaults(entry: DiscoveredOdooConfig) -> dict[str, object]:
     defaults: dict[str, object] = {
         "name": _clean_text(options.get("instance_name")) or entry.path.stem,
         "config_path": str(entry.path),
+        "base_path": str(entry.base_path),
         "addons_path": _clean_text(options.get("addons_path")),
         "data_dir": _clean_text(options.get("data_dir")),
         "db_host": _clean_text(options.get("db_host")),
@@ -137,10 +196,14 @@ def _deployment_defaults(entry: DiscoveredOdooConfig) -> dict[str, object]:
 
 def sync_odoo_deployments(
     additional_candidates: Iterable[Path | str] | None = None,
+    *,
+    scan_filesystem: bool = True,
 ) -> dict[str, object]:
     """Discover configurations and upsert :class:`OdooDeployment` entries."""
 
-    discovered, errors = discover_odoo_configs(additional_candidates)
+    discovered, errors = discover_odoo_configs(
+        additional_candidates, scan_filesystem=scan_filesystem
+    )
 
     created = 0
     updated = 0
