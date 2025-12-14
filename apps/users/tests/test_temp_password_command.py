@@ -84,6 +84,17 @@ class TempPasswordCommandTests(TestCase):
         ):
             call_command("temp_password", identifier, staff=True)
 
+    def test_staff_and_superuser_flags_require_create_or_update(self):
+        identifier = "existing-staff@example.com"
+        User = get_user_model()
+        User.objects.create_user(username=identifier, email=identifier)
+
+        with self.assertRaisesMessage(
+            CommandError,
+            "--staff and --superuser can only be used with --create or --update.",
+        ):
+            call_command("temp_password", identifier, staff=True, superuser=True)
+
     def test_update_user_permissions(self):
         identifier = "existing-staff@example.com"
         User = get_user_model()
@@ -100,6 +111,17 @@ class TempPasswordCommandTests(TestCase):
         user.refresh_from_db()
         assert user.is_staff
         assert user.is_superuser
+
+    def test_existing_user_not_elevated_without_update(self):
+        identifier = "existing-unchanged@example.com"
+        User = get_user_model()
+        user = User.objects.create_user(username=identifier, email=identifier)
+
+        call_command("temp_password", identifier)
+
+        user.refresh_from_db()
+        assert not user.is_staff
+        assert not user.is_superuser
 
     def test_create_arthexis_user_by_username(self):
         identifier = "arthexis"
@@ -170,3 +192,45 @@ class TempPasswordCommandTests(TestCase):
         assert authed is not None
         authed.refresh_from_db()
         assert authed.is_active
+
+    def test_expires_in_must_be_positive(self):
+        identifier = "expires@example.com"
+        User = get_user_model()
+        User.objects.create_user(username=identifier, email=identifier)
+
+        with self.subTest("zero"):
+            with self.assertRaisesMessage(
+                CommandError, "Expiration must be a positive number of seconds."
+            ):
+                call_command("temp_password", identifier, update=True, expires_in=0)
+
+        with self.subTest("negative"):
+            with self.assertRaisesMessage(
+                CommandError, "Expiration must be a positive number of seconds."
+            ):
+                call_command("temp_password", identifier, update=True, expires_in=-1)
+
+    def test_multiple_users_with_same_email_reported(self):
+        User = get_user_model()
+        email = "shared@example.com"
+        User.objects.create_user(username="user-a", email=email)
+        User.objects.create_user(username="user-b", email=email)
+
+        with self.assertRaisesMessage(
+            CommandError,
+            "Multiple users share this email address. Provide the username instead. Matches: user-a, user-b",
+        ):
+            call_command("temp_password", email)
+
+    def test_expiration_cleared_when_updating_permissions(self):
+        identifier = "reactivate@example.com"
+        User = get_user_model()
+        user = User.objects.create_user(username=identifier, email=identifier)
+        user.temporary_expires_at = timezone.now() - timedelta(minutes=5)
+        user.save(update_fields=["temporary_expires_at"])
+
+        call_command("temp_password", identifier, update=True, staff=True)
+
+        user.refresh_from_db()
+        assert user.temporary_expires_at is None
+        assert user.is_staff
