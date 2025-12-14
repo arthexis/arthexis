@@ -316,12 +316,20 @@ class TempPasswordBackend(ModelBackend):
         if not username or not password:
             return None
 
+        normalized_username = str(username).strip()
+
         UserModel = get_user_model()
         manager = getattr(UserModel, "all_objects", UserModel._default_manager)
         try:
-            user = manager.get_by_natural_key(username)
+            user = manager.get_by_natural_key(normalized_username)
         except UserModel.DoesNotExist:
-            return None
+            user = (
+                manager.filter(email__iexact=normalized_username)
+                .order_by("pk")
+                .first()
+            )
+            if user is None:
+                return None
 
         is_expired = getattr(user, "is_temporarily_expired", None)
         if is_expired and (is_expired() if callable(is_expired) else is_expired):
