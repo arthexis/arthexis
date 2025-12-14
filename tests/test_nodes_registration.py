@@ -152,3 +152,30 @@ def test_register_visitor_telemetry_logs(client, caplog):
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
     assert "telemetry stage=integration-test" in caplog.text
+
+
+@pytest.mark.django_db
+def test_register_visitor_telemetry_adds_route_ip(client, caplog, monkeypatch):
+    url = reverse("register-telemetry")
+    payload = {
+        "stage": "integration-test",
+        "message": "failed to fetch",
+        "target": "https://example.com/nodes/info/",
+        "token": "abc123",
+    }
+
+    monkeypatch.setattr(
+        "apps.nodes.views._get_route_address", lambda host, port: "10.0.0.5"
+    )
+
+    with caplog.at_level(logging.INFO, logger="register_visitor_node"):
+        response = client.post(
+            url,
+            data=json.dumps(payload),
+            content_type="application/json",
+            HTTP_USER_AGENT="pytest-agent/1.0",
+        )
+
+    assert response.status_code == 200
+    assert "host_ip=10.0.0.5" in caplog.text
+    assert '"target_host": "example.com"' in caplog.text

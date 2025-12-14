@@ -5,6 +5,7 @@ import logging
 import re
 import socket
 import uuid
+from urllib.parse import urlsplit
 from dataclasses import dataclass
 from datetime import timedelta
 from collections.abc import Mapping
@@ -1044,6 +1045,22 @@ def register_visitor_telemetry(request):
     target = str(payload.get("target") or "").strip()
     token = str(payload.get("token") or "").strip()
 
+    target_host = ""
+    target_port: int | None = None
+    try:
+        parsed_target = urlsplit(target)
+        target_host = parsed_target.hostname or ""
+        target_port = parsed_target.port
+        if target_host and not target_port:
+            target_port = 443 if parsed_target.scheme == "https" else 80
+    except Exception:
+        target_host = ""
+        target_port = None
+
+    route_ip = ""
+    if target_host:
+        route_ip = _get_route_address(target_host, target_port or 0)
+
     extra_fields = {
         key: value
         for key, value in payload.items()
@@ -1056,13 +1073,20 @@ def register_visitor_telemetry(request):
         }
     }
 
+    if target_host and "target_host" not in extra_fields:
+        extra_fields["target_host"] = target_host
+    if target_port and "target_port" not in extra_fields:
+        extra_fields["target_port"] = target_port
+    if route_ip and "route_ip" not in extra_fields:
+        extra_fields["route_ip"] = route_ip
+
     registration_logger.info(
         "Visitor registration telemetry stage=%s target=%s token=%s client_ip=%s host_ip=%s user_agent=%s message=%s extra=%s",
         stage,
         target,
         token,
         _get_client_ip(request) or "",
-        _get_host_ip(request) or "",
+        route_ip or _get_host_ip(request) or "",
         request.headers.get("User-Agent", ""),
         message,
         json.dumps(extra_fields, default=str),
