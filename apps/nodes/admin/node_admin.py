@@ -1,5 +1,6 @@
 from collections import OrderedDict
 from collections.abc import Mapping
+import ipaddress
 from datetime import timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -1017,8 +1018,44 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         temp.ipv6_address = getattr(node, "ipv6_address", "")
         yield from temp.iter_remote_urls(path)
 
+    def _detect_visitor_host(self, request) -> tuple[str | None, int | None]:
+        forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR", "")
+        candidates = [value.strip() for value in forwarded_for.split(",") if value.strip()]
+        remote_addr = (request.META.get("REMOTE_ADDR") or "").strip()
+        if remote_addr:
+            candidates.append(remote_addr)
+
+        for candidate in candidates:
+            host = candidate
+            port: int | None = None
+
+            if ":" in candidate and candidate.count(":") == 1:
+                host_part, port_part = candidate.rsplit(":", 1)
+                if port_part.isdigit():
+                    host = host_part
+                    try:
+                        port = int(port_part)
+                    except (TypeError, ValueError):
+                        port = None
+
+            try:
+                ip_obj = ipaddress.ip_address(host.strip("[]"))
+                host = str(ip_obj)
+                if ip_obj.version == 6 and not host.startswith("["):
+                    host = f"[{host}]"
+            except ValueError:
+                host = host.strip()
+
+            if host:
+                return host, port
+
+        return None, None
+
     def _resolve_visitor_base(self, request):
+        raw_port = None
         raw = (request.GET.get("visitor") or "").strip()
+        if not raw:
+            raw, raw_port = self._detect_visitor_host(request)
         if not raw:
             return None
 
@@ -1035,7 +1072,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         if scheme not in {"http", "https"}:
             scheme = "http"
 
-        port = parsed.port
+        port = parsed.port or raw_port or Node.get_preferred_port()
         if ":" in hostname and not hostname.startswith("["):
             host_part = f"[{hostname}]"
         else:
@@ -1070,9 +1107,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             visitor_info_url = f"{visitor_base}/nodes/info/"
             visitor_register_url = f"{visitor_base}/nodes/register/"
         else:
-            visitor_error = _(
-                "Visitor address missing or invalid. Append a ?visitor=host[:port] query string to continue."
-            )
+            visitor_error = _("Visitor address missing or invalid. Unable to detect visitor host.")
         registration_logger.info(
             "Visitor registration: admin flow initialized visitor_base=%s token=%s",
             visitor_base or "",

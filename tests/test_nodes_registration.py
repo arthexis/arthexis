@@ -77,7 +77,7 @@ def test_register_visitor_view_uses_clean_visitor_base(admin_client, monkeypatch
 
 
 @pytest.mark.django_db
-def test_register_visitor_view_requires_target(admin_client, monkeypatch):
+def test_register_visitor_view_detects_remote_addr(admin_client, monkeypatch):
     node = Node.objects.create(
         hostname="local",
         address="127.0.0.1",
@@ -88,10 +88,38 @@ def test_register_visitor_view_requires_target(admin_client, monkeypatch):
 
     monkeypatch.setattr(Node, "register_current", classmethod(lambda cls: (node, False)))
 
-    response = admin_client.get(reverse("admin:nodes_node_register_visitor"))
+    response = admin_client.get(
+        reverse("admin:nodes_node_register_visitor"),
+        REMOTE_ADDR="192.0.2.10",
+    )
 
     assert response.status_code == 200
     context = response.context[-1]
-    assert context["visitor_error"]
-    assert context["visitor_info_url"] == ""
-    assert context["visitor_register_url"] == ""
+    assert context["visitor_error"] is None
+    assert context["visitor_info_url"] == "http://192.0.2.10:8888/nodes/info/"
+    assert context["visitor_register_url"] == "http://192.0.2.10:8888/nodes/register/"
+
+
+@pytest.mark.django_db
+def test_register_visitor_view_prefers_forwarded_for(admin_client, monkeypatch):
+    node = Node.objects.create(
+        hostname="local",
+        address="127.0.0.1",
+        mac_address="00:11:22:33:44:55",
+        port=8888,
+        public_endpoint="local-endpoint",
+    )
+
+    monkeypatch.setattr(Node, "register_current", classmethod(lambda cls: (node, False)))
+
+    response = admin_client.get(
+        reverse("admin:nodes_node_register_visitor"),
+        REMOTE_ADDR="198.51.100.5",
+        HTTP_X_FORWARDED_FOR="203.0.113.1, 203.0.113.2",
+    )
+
+    assert response.status_code == 200
+    context = response.context[-1]
+    assert context["visitor_error"] is None
+    assert context["visitor_info_url"] == "http://203.0.113.1:8888/nodes/info/"
+    assert context["visitor_register_url"] == "http://203.0.113.1:8888/nodes/register/"
