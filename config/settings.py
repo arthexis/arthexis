@@ -113,6 +113,7 @@ ALLOWED_HOSTS = [
     "arthexis.com",
     "www.arthexis.com",
     "m.arthexis.com",
+    ".arthexis.com",
 ]
 
 
