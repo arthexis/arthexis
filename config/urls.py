@@ -36,17 +36,23 @@ admin.autodiscover()
 admin.site.site_header = _("Constellation")
 admin.site.site_title = _("Constellation")
 
-# Apps that require a custom prefix for their URLs
-URL_PREFIX_OVERRIDES = {"core": "api/rfid", "cards": "rfid"}
-
 
 def autodiscovered_urlpatterns():
     """Collect URL patterns from project apps automatically.
 
     Scans all installed apps located inside the project directory. If an app
-    exposes a ``urls`` module, it is included under ``/<app_label>/`` unless a
-    custom prefix is defined in :data:`URL_PREFIX_OVERRIDES`.
+    exposes a ``urls`` module, it is included under ``/<app_label>/``. Any
+    optional ``api.urls`` module is included under ``/<app_label>/api/`` to keep
+    APIs scoped to their own application namespace.
     """
+
+    def include_if_exists(app_config, module_suffix, prefix):
+        module_name = f"{app_config.name}.{module_suffix}"
+        try:
+            import_module(module_name)
+        except ModuleNotFoundError:
+            return None
+        return path(prefix, include(module_name))
 
     patterns = []
     base_dir = Path(settings.BASE_DIR).resolve()
@@ -62,14 +68,13 @@ def autodiscovered_urlpatterns():
             # Root pages URLs are handled explicitly below
             continue
 
-        module_name = f"{app_config.name}.urls"
-        try:
-            import_module(module_name)
-        except ModuleNotFoundError:
-            continue
+        urls_pattern = include_if_exists(app_config, "urls", f"{app_config.label}/")
+        if urls_pattern:
+            patterns.append(urls_pattern)
 
-        prefix = URL_PREFIX_OVERRIDES.get(app_config.label, app_config.label)
-        patterns.append(path(f"{prefix}/", include(module_name)))
+        api_pattern = include_if_exists(app_config, "api.urls", f"{app_config.label}/api/")
+        if api_pattern:
+            patterns.append(api_pattern)
 
     return patterns
 
