@@ -52,3 +52,14 @@ class ErrorFileHandler(ActiveAppFileHandler):
         if "test" in sys.argv:
             return log_dir / "tests-error.log"
         return log_dir / "error.log"
+
+
+class CeleryFileHandler(ActiveAppFileHandler):
+    """File handler dedicated to capturing Celery output."""
+
+    def _current_file(self) -> Path:
+        log_dir = Path(settings.LOG_DIR)
+        log_dir.mkdir(parents=True, exist_ok=True)
+        if "test" in sys.argv:
+            return log_dir / "tests-celery.log"
+        return log_dir / "celery.log"

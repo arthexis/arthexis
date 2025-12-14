@@ -67,7 +67,7 @@ def build_logging_settings(
                 "level": "ERROR",
             },
             "celery_file": {
-                "class": "apps.loggers.handlers.ActiveAppFileHandler",
+                "class": "apps.loggers.handlers.CeleryFileHandler",
                 "filename": str(log_dir / "celery.log"),
                 "when": "midnight",
                 "backupCount": 30,
@@ -97,7 +97,7 @@ def build_logging_settings(
 
     logging_config["loggers"] = {
         logger_name: {
-            "handlers": ["celery_file"],
+            "handlers": ["celery_file", "error_file"],
             "level": "INFO",
             "propagate": False,
         }

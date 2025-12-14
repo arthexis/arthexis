@@ -19,5 +19,5 @@ def test_celery_logs_are_routed_to_dedicated_file(tmp_path: Path) -> None:
 
     celery_logger = logging_config["loggers"].get("celery")
     assert celery_logger is not None
-    assert celery_logger["handlers"] == ["celery_file"]
+    assert celery_logger["handlers"] == ["celery_file", "error_file"]
     assert celery_logger["propagate"] is False
