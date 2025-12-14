@@ -133,10 +133,13 @@
     const visitorResult = document.getElementById("visitor-result");
     const summary = document.getElementById("result");
     const requestTimeoutMs = 45000;
+    let visitorConfirmationSkipped = false;
     const messages = {
         hostRegistered: "{{ _('Visitor node registered with this server.')|escapejs }}",
         visitorRegistered: "{{ _('Host node registered with visitor.')|escapejs }}",
         success: "{{ _('Both nodes registered successfully.')|escapejs }}",
+        visitorUnreachable: "{{ _('Visitor registered locally. Unable to notify visitor (node may be behind NAT).')|escapejs }}",
+        visitorUnreachableSummary: "{{ _('Visitor registered locally; remote confirmation skipped.')|escapejs }}",
         partial: "{{ _('One or more registrations failed.')|escapejs }}",
         aborted: "{{ _('Registration aborted.')|escapejs }}",
         visitorInfoError: "{{ _('Unable to read visitor node information.')|escapejs }}",
@@ -419,11 +422,28 @@
                 }
                 setStatus(visitorResult, detail || messages.visitorRegistered, false);
             } catch (error) {
-                setStatus(visitorResult, formatError(error), true);
+                const formatted = formatError(error);
+                const isNetworkIssue =
+                    error instanceof TypeError ||
+                    formatted === "Failed to fetch" ||
+                    formatted.toLowerCase().includes("timed out") ||
+                    formatted.toLowerCase().includes("network") ||
+                    formatted.includes(messages.fetchAdvice);
+
+                if (isNetworkIssue) {
+                    visitorConfirmationSkipped = true;
+                    setStatus(visitorResult, messages.visitorUnreachable, false);
+                } else {
+                    setStatus(visitorResult, formatted, true);
+                }
             }
 
-            if (!hostResult.classList.contains("errornote") && !visitorResult.classList.contains("errornote")) {
-                setStatus(summary, messages.success, false);
+            const hostFailed = hostResult.classList.contains("errornote");
+            const visitorFailed = visitorResult.classList.contains("errornote");
+
+            if (!hostFailed && !visitorFailed) {
+                const summaryMessage = visitorConfirmationSkipped ? messages.visitorUnreachableSummary : messages.success;
+                setStatus(summary, summaryMessage, false);
             } else {
                 setStatus(summary, messages.partial, true);
             }
