@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import ModuleType
+import sys
 
 from django.apps import AppConfig, apps
 from django.conf import settings
@@ -13,13 +14,14 @@ def _pattern_routes():
     return {pattern.pattern._route for pattern in autodiscovered_urlpatterns()}
 
 
-def test_autodiscovery_includes_known_apps_with_overrides():
+def test_autodiscovery_includes_known_apps_with_app_namespaces():
     routes = _pattern_routes()
 
-    assert "api/rfid/" in routes  # apps.core override
-    assert "rfid/" in routes  # apps.cards override
-    assert "tasks/" in routes  # standard prefix without override
-    assert "core/" not in routes
+    assert "core/" in routes
+    assert "cards/" in routes
+    assert "tasks/" in routes  # standard prefix
+    assert "api/rfid/" not in routes
+    assert "rfid/" not in routes
 
 
 def test_pages_and_docs_are_excluded_from_autodiscovery():
@@ -46,7 +48,26 @@ def test_third_party_apps_outside_base_dir_are_skipped(monkeypatch):
     routes = _pattern_routes()
 
     assert "external/" not in routes
-    assert "api/rfid/" in routes
+    assert "core/" in routes
+
+
+def test_api_modules_are_namespaced_under_their_app(monkeypatch):
+    app_config = apps.get_app_config("core")
+
+    api_pkg_name = f"{app_config.name}.api"
+    api_urls_name = f"{api_pkg_name}.urls"
+
+    api_package = ModuleType(api_pkg_name)
+    api_package.__path__ = []
+    api_urls_module = ModuleType(api_urls_name)
+    api_urls_module.urlpatterns = []
+
+    monkeypatch.setitem(sys.modules, api_pkg_name, api_package)
+    monkeypatch.setitem(sys.modules, api_urls_name, api_urls_module)
+
+    routes = _pattern_routes()
+
+    assert f"{app_config.label}/api/" in routes
 
 
 def test_apps_without_urls_do_not_raise(monkeypatch):
