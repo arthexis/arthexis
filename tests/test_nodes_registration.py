@@ -1,3 +1,5 @@
+import json
+import logging
 from unittest.mock import Mock
 
 import pytest
@@ -69,6 +71,7 @@ def test_register_visitor_view_uses_clean_visitor_base(admin_client, monkeypatch
     assert context["token"]
     assert context["info_url"] == reverse("node-info")
     assert context["register_url"] == reverse("register-node")
+    assert context["telemetry_url"] == reverse("register-telemetry")
     assert context["visitor_info_url"] == "http://visitor.example.com:9999/nodes/info/"
     assert (
         context["visitor_register_url"]
@@ -98,6 +101,7 @@ def test_register_visitor_view_detects_remote_addr(admin_client, monkeypatch):
     assert context["visitor_error"] is None
     assert context["visitor_info_url"] == "http://192.0.2.10:8888/nodes/info/"
     assert context["visitor_register_url"] == "http://192.0.2.10:8888/nodes/register/"
+    assert context["telemetry_url"] == reverse("register-telemetry")
 
 
 @pytest.mark.django_db
@@ -123,3 +127,28 @@ def test_register_visitor_view_prefers_forwarded_for(admin_client, monkeypatch):
     assert context["visitor_error"] is None
     assert context["visitor_info_url"] == "http://203.0.113.1:8888/nodes/info/"
     assert context["visitor_register_url"] == "http://203.0.113.1:8888/nodes/register/"
+    assert context["telemetry_url"] == reverse("register-telemetry")
+
+
+@pytest.mark.django_db
+def test_register_visitor_telemetry_logs(client, caplog):
+    url = reverse("register-telemetry")
+    payload = {
+        "stage": "integration-test",
+        "message": "failed to fetch",
+        "target": "http://example.com/nodes/info/",
+        "token": "abc123",
+        "extra": {"networkIssue": True},
+    }
+
+    with caplog.at_level(logging.INFO, logger="register_visitor_node"):
+        response = client.post(
+            url,
+            data=json.dumps(payload),
+            content_type="application/json",
+            HTTP_USER_AGENT="pytest-agent/1.0",
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+    assert "telemetry stage=integration-test" in caplog.text

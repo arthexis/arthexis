@@ -127,6 +127,7 @@
     const token = "{{ token|escapejs }}";
     const hostInfoUrl = "{{ info_url|escapejs }}?token=" + token;
     const hostRegisterUrl = "{{ register_url|escapejs }}";
+    const telemetryUrl = "{{ telemetry_url|escapejs }}";
     const visitorInfoUrl = "{{ visitor_info_url|escapejs }}";
     const visitorRegisterUrl = "{{ visitor_register_url|escapejs }}";
     const hostResult = document.getElementById("host-result");
@@ -288,6 +289,36 @@
         return variants;
     }
 
+    function sendTelemetry(stage, target, message, extra = {}) {
+        if (!telemetryUrl) {
+            return;
+        }
+        const payload = {
+            token,
+            stage: stage || "unspecified",
+            target: target || "",
+            message: message || "",
+            ...extra,
+        };
+        try {
+            const body = JSON.stringify(payload);
+            if (navigator.sendBeacon) {
+                const blob = new Blob([body], {type: "application/json"});
+                navigator.sendBeacon(telemetryUrl, blob);
+                return;
+            }
+            fetch(telemetryUrl, {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                credentials: "same-origin",
+                keepalive: true,
+                body,
+            });
+        } catch (err) {
+            console.error("Unable to log registration telemetry", err);
+        }
+    }
+
     async function requestWithFallback(urls, options) {
         const targets = Array.isArray(urls) ? urls : [urls];
         let lastError = null;
@@ -372,8 +403,21 @@
     (async function() {
         try {
             const visitorInfoTargets = buildUrlVariants(visitorInfoUrl + "?token=" + token);
-            const visitorInfoPromise = requestWithFallback(visitorInfoTargets);
-            const hostInfoPromise = loadJson(hostInfoUrl);
+            const visitorInfoPromise = requestWithFallback(visitorInfoTargets).catch(
+                (error) => {
+                    sendTelemetry(
+                        "visitor-info",
+                        visitorInfoUrl,
+                        formatError(error),
+                        {targets: visitorInfoTargets},
+                    );
+                    throw error;
+                },
+            );
+            const hostInfoPromise = loadJson(hostInfoUrl).catch((error) => {
+                sendTelemetry("host-info", hostInfoUrl, formatError(error));
+                throw error;
+            });
             const [visitorInfo, hostInfo] = await Promise.all([
                 visitorInfoPromise,
                 hostInfoPromise,
@@ -402,7 +446,11 @@
                 }
                 setStatus(hostResult, detail || messages.hostRegistered, false);
             } catch (error) {
-                setStatus(hostResult, formatError(error), true);
+                const formatted = formatError(error);
+                setStatus(hostResult, formatted, true);
+                sendTelemetry("host-register", hostRegisterUrl, formatted, {
+                    payload: hostPayload,
+                });
             }
 
             const visitorPayload = buildPayload(hostInfo, "Upstream");
@@ -436,6 +484,10 @@
                 } else {
                     setStatus(visitorResult, formatted, true);
                 }
+                sendTelemetry("visitor-register", visitorRegisterUrl, formatted, {
+                    targets: visitorRegisterTargets,
+                    networkIssue: Boolean(isNetworkIssue),
+                });
             }
 
             const hostFailed = hostResult.classList.contains("errornote");
@@ -444,8 +496,18 @@
             if (!hostFailed && !visitorFailed) {
                 const summaryMessage = visitorConfirmationSkipped ? messages.visitorUnreachableSummary : messages.success;
                 setStatus(summary, summaryMessage, false);
+                sendTelemetry("summary", window.location.href, summaryMessage, {
+                    hostStatus: hostResult?.dataset?.status || "",
+                    visitorStatus: visitorResult?.dataset?.status || "",
+                    visitorConfirmationSkipped,
+                });
             } else {
                 setStatus(summary, messages.partial, true);
+                sendTelemetry("summary", window.location.href, messages.partial, {
+                    hostStatus: hostResult?.dataset?.status || "",
+                    visitorStatus: visitorResult?.dataset?.status || "",
+                    visitorConfirmationSkipped,
+                });
             }
         } catch (error) {
             const message = formatError(error);
@@ -456,6 +518,10 @@
             if (!visitorResult.classList.contains("errornote")) {
                 setStatus(visitorResult, messages.aborted, true);
             }
+            sendTelemetry("fatal", window.location.href, message, {
+                hostStatus: hostResult?.dataset?.status || "",
+                visitorStatus: visitorResult?.dataset?.status || "",
+            });
         }
     })();
 })();

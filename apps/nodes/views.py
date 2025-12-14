@@ -1027,6 +1027,50 @@ def register_node(request):
     return _add_cors_headers(request, response)
 
 
+@csrf_exempt
+def register_visitor_telemetry(request):
+    """Record client-side registration events for troubleshooting."""
+
+    if request.method != "POST":
+        return JsonResponse({"detail": "POST required"}, status=405)
+
+    try:
+        payload = json.loads(request.body.decode() or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"detail": "invalid json"}, status=400)
+
+    stage = str(payload.get("stage") or "unspecified").strip()
+    message = str(payload.get("message") or "").strip()
+    target = str(payload.get("target") or "").strip()
+    token = str(payload.get("token") or "").strip()
+
+    extra_fields = {
+        key: value
+        for key, value in payload.items()
+        if key
+        not in {
+            "stage",
+            "message",
+            "target",
+            "token",
+        }
+    }
+
+    registration_logger.info(
+        "Visitor registration telemetry stage=%s target=%s token=%s client_ip=%s host_ip=%s user_agent=%s message=%s extra=%s",
+        stage,
+        target,
+        token,
+        _get_client_ip(request) or "",
+        _get_host_ip(request) or "",
+        request.headers.get("User-Agent", ""),
+        message,
+        json.dumps(extra_fields, default=str),
+    )
+
+    return JsonResponse({"status": "ok"})
+
+
 @api_login_required
 def capture(request):
     """Capture a screenshot of the site's root URL and record it."""
