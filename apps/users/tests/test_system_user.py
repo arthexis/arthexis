@@ -1,4 +1,5 @@
 import pytest
+
 from django.contrib.auth import get_user_model
 from django.test import RequestFactory
 
@@ -56,3 +57,20 @@ def test_system_user_only_authenticates_with_temp_password():
     assert (
         backend.authenticate(request, username=user.username, password="incorrect") is None
     )
+
+
+@pytest.mark.django_db
+def test_temp_password_allows_email_lookup():
+    User = get_user_model()
+    user = User.objects.create_user(username="email-login", email="email-login@example.com")
+    user.set_unusable_password()
+    user.save()
+    password = temp_passwords.generate_password()
+    temp_passwords.store_temp_password(user.username, password)
+
+    backend = TempPasswordBackend()
+    request = RequestFactory().post("/")
+
+    authenticated = backend.authenticate(request, username=user.email, password=password)
+    assert authenticated is not None
+    assert authenticated.pk == user.pk
