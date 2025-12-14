@@ -73,6 +73,28 @@ def test_register_node_logs_validation_failure(admin_user, caplog):
 
 
 @pytest.mark.django_db
+def test_register_node_sets_cors_headers_without_origin(admin_user):
+    payload = {
+        "hostname": "visitor-host",
+        "mac_address": "aa:bb:cc:dd:ee:11",
+        "address": "192.0.2.20",
+        "port": 8888,
+    }
+
+    factory = RequestFactory()
+    request = _build_request(factory, payload)
+    request.user = admin_user
+    request._cached_user = admin_user
+
+    response = register_node(request)
+
+    assert response.status_code == 200
+    assert response["Access-Control-Allow-Origin"] == "*"
+    assert response["Access-Control-Allow-Headers"] == "Content-Type"
+    assert response["Access-Control-Allow-Methods"] == "POST, OPTIONS"
+
+
+@pytest.mark.django_db
 def test_register_current_logs_to_local_logger(settings, caplog):
     settings.LOG_DIR = settings.BASE_DIR / "logs"
     NodeRole.objects.get_or_create(name="Terminal")
