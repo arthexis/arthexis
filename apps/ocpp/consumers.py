@@ -57,6 +57,7 @@ from .evcs_discovery import (
     prioritise_ports,
     scan_open_ports,
 )
+from .utils import _parse_ocpp_timestamp
 
 FORWARDED_PAIR_RE = re.compile(r"for=(?:\"?)(?P<value>[^;,\"\s]+)(?:\"?)", re.IGNORECASE)
 
@@ -153,22 +154,6 @@ def _resolve_client_ip(scope: dict) -> str | None:
             continue
         return ip_text
     return fallback
-
-
-def _parse_ocpp_timestamp(value) -> datetime | None:
-    """Return an aware :class:`~datetime.datetime` for OCPP timestamps."""
-
-    if not value:
-        return None
-    if isinstance(value, datetime):
-        timestamp = value
-    else:
-        timestamp = parse_datetime(str(value))
-    if not timestamp:
-        return None
-    if timezone.is_naive(timestamp):
-        timestamp = timezone.make_aware(timestamp, timezone.get_current_timezone())
-    return timestamp
 
 
 def _extract_vehicle_identifier(payload: dict) -> tuple[str, str]:

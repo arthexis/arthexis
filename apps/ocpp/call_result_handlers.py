@@ -2,12 +2,11 @@ from __future__ import annotations
 
 import base64
 import json
-from datetime import datetime
 from typing import Awaitable, Callable, Protocol
 
 from channels.db import database_sync_to_async
 from django.utils import timezone
-from django.utils.dateparse import parse_datetime
+from .utils import _parse_ocpp_timestamp
 
 from . import store
 from .models import (
@@ -20,24 +19,6 @@ from .models import (
     DataTransferMessage,
     PowerProjection,
 )
-
-
-def _parse_ocpp_timestamp(value) -> datetime | None:
-    """Return an aware :class:`~datetime.datetime` for OCPP timestamps."""
-
-    if not value:
-        return None
-    if isinstance(value, datetime):
-        timestamp = value
-    else:
-        timestamp = parse_datetime(str(value))
-    if not timestamp:
-        return None
-    if timezone.is_naive(timestamp):
-        timestamp = timezone.make_aware(timestamp, timezone.get_current_timezone())
-    return timestamp
-
-
 class CallResultContext(Protocol):
     charger_id: str | None
     store_key: str
