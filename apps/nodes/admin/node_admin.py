@@ -42,6 +42,8 @@ from cryptography.hazmat.primitives.asymmetric import padding
 from requests import RequestException
 import requests
 
+from apps.nodes.logging import get_register_visitor_logger
+
 from apps.cards.models import RFID
 from apps.cards.sync import apply_rfid_payload, serialize_rfid
 from apps.camera import capture_rpi_snapshot
@@ -85,6 +87,9 @@ from ..utils import (
 )
 from .forms import DownloadFirmwareForm, NodeAdminForm, SendNetMessageForm
 from .inlines import NodeFeatureAssignmentInline
+
+
+registration_logger = get_register_visitor_logger()
 
 
 @admin.register(Node)
@@ -1045,6 +1050,12 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         """Exchange registration data with the visiting node."""
 
         node, created = Node.register_current()
+        registration_logger.info(
+            "Visitor registration: ensuring local node registration user=%s created=%s node=%s",
+            getattr(request.user, "username", None) or str(request.user),
+            created,
+            node,
+        )
         if created:
             self.message_user(
                 request, f"Current host registered as {node}", messages.SUCCESS
@@ -1052,6 +1063,11 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
 
         token = uuid.uuid4().hex
         visitor_base = self._resolve_visitor_base(request).rstrip("/")
+        registration_logger.info(
+            "Visitor registration: admin flow initialized visitor_base=%s token=%s",
+            visitor_base,
+            token,
+        )
 
         context = {
             **self.admin_site.each_context(request),
@@ -1062,7 +1078,6 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             "register_url": reverse("register-node"),
             "visitor_info_url": f"{visitor_base}/nodes/info/",
             "visitor_register_url": f"{visitor_base}/nodes/register/",
-            "change_url_template": reverse("admin:nodes_node_change", args=[0]),
         }
         return render(request, "admin/nodes/node/register_visitor.html", context)
 

@@ -40,6 +40,8 @@ from apps.ocpp.network import (
 from apps.ocpp.transactions_io import export_transactions
 from asgiref.sync import async_to_sync
 
+from apps.nodes.logging import get_register_visitor_logger
+
 
 from .models import (
     Node,
@@ -52,6 +54,7 @@ from .utils import capture_screenshot, save_screenshot
 
 
 logger = logging.getLogger(__name__)
+registration_logger = get_register_visitor_logger()
 
 
 
@@ -332,6 +335,12 @@ def node_info(request):
         node, _ = Node.register_current()
 
     token = request.GET.get("token", "")
+    registration_logger.info(
+        "Visitor registration: node_info requested token=%s client_ip=%s host_ip=%s",
+        "present" if token else "absent",
+        _get_client_ip(request) or "",
+        _get_host_ip(request) or "",
+    )
     host_domain = _get_host_domain(request)
     advertised_address = _get_advertised_address(request, node)
     preferred_port = node.get_preferred_port()
@@ -392,11 +401,26 @@ def node_info(request):
                 hashes.SHA256(),
             )
             data["token_signature"] = base64.b64encode(signature).decode()
-        except Exception:
-            pass
+            registration_logger.info(
+                "Visitor registration: token signed for node %s",
+                node.public_endpoint,
+            )
+        except Exception as exc:
+            registration_logger.warning(
+                "Visitor registration: unable to sign token for %s: %s",
+                node.public_endpoint,
+                exc,
+            )
 
     response = JsonResponse(data)
     response["Access-Control-Allow-Origin"] = "*"
+    registration_logger.info(
+        "Visitor registration: node_info response hostname=%s address=%s port=%s role=%s",
+        data.get("hostname") or "",
+        data.get("address") or "",
+        data.get("port") or "",
+        data.get("role") or "",
+    )
     return response
 
 
@@ -700,7 +724,7 @@ def _log_registration_event(
 
     client_ip = _get_client_ip(request) or ""
     host_ip = _get_host_ip(request) or ""
-    logger.log(
+    registration_logger.log(
         level,
         "Node registration %s: hostname=%s mac=%s relation=%s client_ip=%s host_ip=%s detail=%s",
         status,
@@ -821,6 +845,14 @@ def _update_existing_node(
 def register_node(request):
     """Register or update a node from POSTed JSON data."""
 
+    registration_logger.info(
+        "Visitor registration: register_node called method=%s path=%s client_ip=%s host_ip=%s",
+        request.method,
+        request.path,
+        _get_client_ip(request) or "",
+        _get_host_ip(request) or "",
+    )
+
     if request.method == "OPTIONS":
         response = JsonResponse({"detail": "ok"})
         logger.info(
@@ -844,6 +876,14 @@ def register_node(request):
     _ensure_authenticated_user(request)
     payload = NodeRegistrationPayload.from_data(data)
 
+    registration_logger.info(
+        "Visitor registration: payload parsed hostname=%s mac=%s relation=%s trusted_requested=%s",
+        payload.hostname or "",
+        payload.mac_address or "",
+        payload.relation_value or "",
+        bool(payload.trusted_requested),
+    )
+
     _log_registration_event("attempt", payload, request)
 
     validation_response = _validate_payload(payload)
@@ -858,6 +898,10 @@ def register_node(request):
         return _add_cors_headers(request, validation_response)
 
     verified, signature_error = _verify_signature(payload)
+    registration_logger.info(
+        "Visitor registration: signature verification %s",
+        "passed" if verified and not signature_error else "failed",
+    )
     if signature_error:
         _log_registration_event(
             "failed",
@@ -912,6 +956,12 @@ def register_node(request):
     node, created = Node.objects.get_or_create(
         mac_address=mac_address,
         defaults=defaults,
+    )
+    registration_logger.info(
+        "Visitor registration: node lookup mac=%s created=%s node_id=%s",
+        mac_address,
+        created,
+        node.id,
     )
     if not created:
         response = _update_existing_node(
