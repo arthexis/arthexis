@@ -138,6 +138,52 @@ def record_microphone_sample(
     return filename
 
 
+def _save_content_sample(
+    *,
+    path: Path,
+    kind: str,
+    node=None,
+    method: str = "",
+    transaction_uuid=None,
+    user=None,
+    link_duplicates: bool = False,
+    content: str | None = None,
+    duplicate_log_context: str,
+):
+    """Persist a :class:`ContentSample` if an identical hash is not present."""
+
+    original = path
+    if not path.is_absolute():
+        path = settings.LOG_DIR / path
+    with path.open("rb") as fh:
+        digest = hashlib.sha256(fh.read()).hexdigest()
+    existing = ContentSample.objects.filter(hash=digest).first()
+    if existing:
+        if link_duplicates:
+            logger.info("Duplicate %s; reusing existing sample", duplicate_log_context)
+            return existing
+        logger.info("Duplicate %s; record not created", duplicate_log_context)
+        return None
+    stored_path = (original if not original.is_absolute() else path).as_posix()
+    data = {
+        "node": node,
+        "path": stored_path,
+        "method": method,
+        "hash": digest,
+        "kind": kind,
+    }
+    if transaction_uuid is not None:
+        data["transaction_uuid"] = transaction_uuid
+    if content is not None:
+        data["content"] = content
+    if user is not None:
+        data["user"] = user
+    with suppress_default_classifiers():
+        sample = ContentSample.objects.create(**data)
+    run_default_classifiers(sample)
+    return sample
+
+
 def save_screenshot(
     path: Path,
     node=None,
@@ -155,36 +201,17 @@ def save_screenshot(
     returned instead of ``None``.
     """
 
-    original = path
-    if not path.is_absolute():
-        path = settings.LOG_DIR / path
-    with path.open("rb") as fh:
-        digest = hashlib.sha256(fh.read()).hexdigest()
-    existing = ContentSample.objects.filter(hash=digest).first()
-    if existing:
-        if link_duplicates:
-            logger.info("Duplicate screenshot content; reusing existing sample")
-            return existing
-        logger.info("Duplicate screenshot content; record not created")
-        return None
-    stored_path = (original if not original.is_absolute() else path).as_posix()
-    data = {
-        "node": node,
-        "path": stored_path,
-        "method": method,
-        "hash": digest,
-        "kind": ContentSample.IMAGE,
-    }
-    if transaction_uuid is not None:
-        data["transaction_uuid"] = transaction_uuid
-    if content is not None:
-        data["content"] = content
-    if user is not None:
-        data["user"] = user
-    with suppress_default_classifiers():
-        sample = ContentSample.objects.create(**data)
-    run_default_classifiers(sample)
-    return sample
+    return _save_content_sample(
+        path=path,
+        kind=ContentSample.IMAGE,
+        node=node,
+        method=method,
+        transaction_uuid=transaction_uuid,
+        user=user,
+        link_duplicates=link_duplicates,
+        content=content,
+        duplicate_log_context="screenshot content",
+    )
 
 
 def save_audio_sample(
@@ -198,31 +225,13 @@ def save_audio_sample(
 ):
     """Save audio file info if not already recorded."""
 
-    original = path
-    if not path.is_absolute():
-        path = settings.LOG_DIR / path
-    with path.open("rb") as fh:
-        digest = hashlib.sha256(fh.read()).hexdigest()
-    existing = ContentSample.objects.filter(hash=digest).first()
-    if existing:
-        if link_duplicates:
-            logger.info("Duplicate audio sample; reusing existing sample")
-            return existing
-        logger.info("Duplicate audio sample; record not created")
-        return None
-    stored_path = (original if not original.is_absolute() else path).as_posix()
-    data = {
-        "node": node,
-        "path": stored_path,
-        "method": method,
-        "hash": digest,
-        "kind": ContentSample.AUDIO,
-    }
-    if transaction_uuid is not None:
-        data["transaction_uuid"] = transaction_uuid
-    if user is not None:
-        data["user"] = user
-    with suppress_default_classifiers():
-        sample = ContentSample.objects.create(**data)
-    run_default_classifiers(sample)
-    return sample
+    return _save_content_sample(
+        path=path,
+        kind=ContentSample.AUDIO,
+        node=node,
+        method=method,
+        transaction_uuid=transaction_uuid,
+        user=user,
+        link_duplicates=link_duplicates,
+        duplicate_log_context="audio sample",
+    )
