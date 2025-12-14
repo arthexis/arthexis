@@ -13,6 +13,8 @@ from typing import Iterable, Mapping, TYPE_CHECKING, Any
 
 import requests
 from django.db import models
+from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from django.utils.translation import gettext_lazy as _
 
 from apps.core.entity import Entity, EntityManager
@@ -440,4 +442,232 @@ class GitHubIssue:
             response.status_code,
         )
         return response
+
+
+class RepositoryIssue(Entity):
+    """A stored reference to a GitHub issue for a repository."""
+
+    repository = models.ForeignKey(
+        GitHubRepository,
+        related_name="issues",
+        on_delete=models.CASCADE,
+    )
+    number = models.PositiveIntegerField()
+    title = models.CharField(max_length=500)
+    state = models.CharField(max_length=50)
+    html_url = models.URLField(blank=True)
+    api_url = models.URLField(blank=True)
+    author = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField()
+    updated_at = models.DateTimeField()
+
+    class Meta:
+        ordering = ("-updated_at", "-created_at")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["repository", "number"],
+                name="unique_issue_per_repository",
+            )
+        ]
+        verbose_name = _("Repository Issue")
+        verbose_name_plural = _("Repository Issues")
+
+    def __str__(self):  # pragma: no cover - simple representation
+        return f"#{self.number} {self.title}".strip()
+
+    @staticmethod
+    def _parse_timestamp(value: str | None) -> datetime:
+        parsed = parse_datetime(value) if value else None
+        if parsed is None:
+            parsed = timezone.now()
+        if timezone.is_naive(parsed):
+            parsed = timezone.make_aware(parsed, timezone.utc)
+        return parsed
+
+    @staticmethod
+    def _ensure_repository(repository: GitHubRepository) -> GitHubRepository:
+        if repository.pk:
+            return repository
+
+        defaults = {
+            "description": getattr(repository, "description", ""),
+            "is_private": getattr(repository, "is_private", False),
+            "html_url": getattr(repository, "html_url", ""),
+            "api_url": getattr(repository, "api_url", ""),
+            "ssh_url": getattr(repository, "ssh_url", ""),
+            "default_branch": getattr(repository, "default_branch", ""),
+        }
+        repo_obj, _ = GitHubRepository.objects.get_or_create(
+            owner=repository.owner, name=repository.name, defaults=defaults
+        )
+        return repo_obj
+
+    @classmethod
+    def _fetch_github_items(
+        cls,
+        *,
+        token: str,
+        endpoint: str,
+        params: Mapping[str, object],
+    ) -> Iterable[Mapping[str, object]]:
+        headers = GitHubRepository._build_headers(token)
+        url = endpoint
+        query_params: Mapping[str, object] | None = params
+
+        while url:
+            response = None
+            try:
+                response = requests.get(
+                    url,
+                    headers=headers,
+                    params=query_params,
+                    timeout=GitHubRepository.REQUEST_TIMEOUT,
+                )
+                query_params = None
+
+                if not (200 <= response.status_code < 300):
+                    message = GitHubRepository._extract_error_message(response)
+                    raise GitHubRepositoryError(message)
+
+                data = response.json() if callable(getattr(response, "json", None)) else []
+                if isinstance(data, list):
+                    for entry in data:
+                        if isinstance(entry, Mapping):
+                            yield entry
+
+                links = getattr(response, "links", {}) or {}
+                url = links.get("next", {}).get("url")
+            finally:
+                if response is not None:
+                    close = getattr(response, "close", None)
+                    if callable(close):
+                        with contextlib.suppress(Exception):
+                            close()
+
+    @classmethod
+    def fetch_open_issues(
+        cls, repository: GitHubRepository | None = None, token: str | None = None
+    ) -> tuple[int, int]:
+        repository = repository or GitHubRepository.resolve_active_repository()
+        token = token or GitHubIssue._get_github_token()
+        repo_obj = cls._ensure_repository(repository)
+
+        endpoint = f"{GitHubRepository.API_ROOT}/repos/{repo_obj.owner}/{repo_obj.name}/issues"
+        params = {"state": "open", "per_page": 100}
+
+        created = 0
+        updated = 0
+
+        for item in cls._fetch_github_items(
+            token=token, endpoint=endpoint, params=params
+        ):
+            if "pull_request" in item:
+                continue
+
+            number = item.get("number")
+            if not isinstance(number, int):
+                continue
+
+            defaults = {
+                "title": item.get("title") or "",
+                "state": item.get("state") or "",
+                "html_url": item.get("html_url") or "",
+                "api_url": item.get("url") or "",
+                "author": (item.get("user") or {}).get("login") or "",
+                "created_at": cls._parse_timestamp(item.get("created_at")),
+                "updated_at": cls._parse_timestamp(item.get("updated_at")),
+            }
+
+            _, was_created = cls.objects.update_or_create(
+                repository=repo_obj, number=number, defaults=defaults
+            )
+            if was_created:
+                created += 1
+            else:
+                updated += 1
+
+        return created, updated
+
+
+class RepositoryPullRequest(Entity):
+    """A stored reference to a GitHub pull request for a repository."""
+
+    repository = models.ForeignKey(
+        GitHubRepository,
+        related_name="pull_requests",
+        on_delete=models.CASCADE,
+    )
+    number = models.PositiveIntegerField()
+    title = models.CharField(max_length=500)
+    state = models.CharField(max_length=50)
+    html_url = models.URLField(blank=True)
+    api_url = models.URLField(blank=True)
+    author = models.CharField(max_length=255, blank=True)
+    created_at = models.DateTimeField()
+    updated_at = models.DateTimeField()
+    merged_at = models.DateTimeField(null=True, blank=True)
+    source_branch = models.CharField(max_length=255, blank=True)
+    target_branch = models.CharField(max_length=255, blank=True)
+    is_draft = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ("-updated_at", "-created_at")
+        constraints = [
+            models.UniqueConstraint(
+                fields=["repository", "number"],
+                name="unique_pull_request_per_repository",
+            )
+        ]
+        verbose_name = _("Repository Pull Request")
+        verbose_name_plural = _("Repository Pull Requests")
+
+    def __str__(self):  # pragma: no cover - simple representation
+        return f"PR #{self.number} {self.title}".strip()
+
+    @classmethod
+    def fetch_open_pull_requests(
+        cls, repository: GitHubRepository | None = None, token: str | None = None
+    ) -> tuple[int, int]:
+        repository = repository or GitHubRepository.resolve_active_repository()
+        token = token or GitHubIssue._get_github_token()
+        repo_obj = RepositoryIssue._ensure_repository(repository)
+
+        endpoint = f"{GitHubRepository.API_ROOT}/repos/{repo_obj.owner}/{repo_obj.name}/pulls"
+        params = {"state": "open", "per_page": 100}
+
+        created = 0
+        updated = 0
+
+        for item in RepositoryIssue._fetch_github_items(
+            token=token, endpoint=endpoint, params=params
+        ):
+            number = item.get("number")
+            if not isinstance(number, int):
+                continue
+
+            defaults = {
+                "title": item.get("title") or "",
+                "state": item.get("state") or "",
+                "html_url": item.get("html_url") or "",
+                "api_url": item.get("url") or "",
+                "author": (item.get("user") or {}).get("login") or "",
+                "created_at": RepositoryIssue._parse_timestamp(item.get("created_at")),
+                "updated_at": RepositoryIssue._parse_timestamp(item.get("updated_at")),
+                "merged_at": RepositoryIssue._parse_timestamp(item.get("merged_at"))
+                if item.get("merged_at")
+                else None,
+                "source_branch": (item.get("head") or {}).get("ref") or "",
+                "target_branch": (item.get("base") or {}).get("ref") or "",
+                "is_draft": bool(item.get("draft")),
+            }
+
+            _, was_created = cls.objects.update_or_create(
+                repository=repo_obj, number=number, defaults=defaults
+            )
+            if was_created:
+                created += 1
+            else:
+                updated += 1
+
+        return created, updated
 
