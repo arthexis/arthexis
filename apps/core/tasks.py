@@ -31,6 +31,7 @@ from apps.release import release_workflow
 from django.conf import settings
 from django.db import DatabaseError, models
 from django.utils import timezone
+from utils.revision import get_revision
 
 
 AUTO_UPGRADE_HEALTH_DELAY_SECONDS = 300
@@ -2004,18 +2005,15 @@ def _schedule_health_check(next_attempt: int) -> None:
 def _current_revision(base_dir: Path) -> str:
     """Return the current git revision when available."""
 
+    del base_dir  # Base directory handled by shared revision helper.
+
     try:
-        output = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=base_dir)
-    except Exception:  # pragma: no cover - best effort capture
+        return get_revision()
+    except Exception:  # pragma: no cover - defensive fallback
+        logger.warning(
+            "Failed to resolve git revision for auto-upgrade logging", exc_info=True
+        )
         return ""
-
-    if isinstance(output, bytes):
-        try:
-            return output.decode().strip()
-        except Exception:  # pragma: no cover - defensive decoding
-            return output.decode(errors="ignore").strip()
-
-    return str(output).strip()
 
 
 def _handle_failed_health_check(base_dir: Path, detail: str) -> None:

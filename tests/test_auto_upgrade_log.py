@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from apps.core import system
+from apps.core import system, tasks
 from apps.core.tasks import _project_base_dir
 
 
@@ -79,3 +79,33 @@ def test_trigger_upgrade_check_runs_inline_with_memory_broker(monkeypatch, setti
 
     assert not queued
     assert calls == [None]
+
+
+def test_health_check_failure_without_revision(monkeypatch, tmp_path):
+    monkeypatch.setattr(tasks, "get_revision", lambda: "")
+
+    tasks._handle_failed_health_check(tmp_path, detail="probe failed")
+
+    log_file = tmp_path / "logs" / "auto-upgrade.log"
+    log_entries = log_file.read_text(encoding="utf-8").splitlines()
+
+    assert any(
+        "Health check failed; manual intervention required" in line
+        for line in log_entries
+    )
+    skip_lock = tmp_path / ".locks" / tasks.AUTO_UPGRADE_SKIP_LOCK_NAME
+    assert not skip_lock.exists()
+
+
+def test_health_check_failure_records_revision(monkeypatch, tmp_path):
+    revision = "abc123"
+    monkeypatch.setattr(tasks, "get_revision", lambda: revision)
+
+    tasks._handle_failed_health_check(tmp_path, detail="probe failed")
+
+    skip_lock = tmp_path / ".locks" / tasks.AUTO_UPGRADE_SKIP_LOCK_NAME
+    assert skip_lock.read_text(encoding="utf-8").strip() == revision
+
+    log_file = tmp_path / "logs" / "auto-upgrade.log"
+    log_entries = log_file.read_text(encoding="utf-8").splitlines()
+    assert any(f"Recorded blocked revision {revision}" in line for line in log_entries)
