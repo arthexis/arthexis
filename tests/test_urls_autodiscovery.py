@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import ModuleType
 
 from django.apps import AppConfig, apps
 from django.conf import settings
@@ -34,7 +35,11 @@ def test_third_party_apps_outside_base_dir_are_skipped(monkeypatch):
         label = "external"
         path = str(Path(settings.BASE_DIR).parent / "external_app")
 
-    external_config = ExternalConfig("external_app", ExternalConfig.path)
+    external_module = ModuleType("external_app")
+    external_module.__file__ = str(Path(ExternalConfig.path) / "__init__.py")
+    external_module.__path__ = [ExternalConfig.path]
+
+    external_config = ExternalConfig("external_app", external_module)
     real_configs = list(apps.get_app_configs())
     monkeypatch.setattr(apps, "get_app_configs", lambda: [external_config, *real_configs])
 
