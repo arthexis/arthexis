@@ -34,6 +34,12 @@ class OdooDeployment(Entity):
         unique=True,
         help_text=_("Absolute path to the odoo configuration file."),
     )
+    base_path = models.CharField(
+        max_length=500,
+        blank=True,
+        default="",
+        help_text=_("Directory that contains the odoo configuration file."),
+    )
     addons_path = models.TextField(blank=True)
     data_dir = models.CharField(max_length=500, blank=True)
     db_host = models.CharField(max_length=255, blank=True)
