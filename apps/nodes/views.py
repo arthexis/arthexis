@@ -1,6 +1,7 @@
 import base64
 import ipaddress
 import json
+import logging
 import re
 import socket
 import uuid
@@ -49,6 +50,8 @@ from .models import (
 )
 from .utils import capture_screenshot, save_screenshot
 
+
+logger = logging.getLogger(__name__)
 
 
 
@@ -411,6 +414,19 @@ def _add_cors_headers(request, response):
     return response
 
 
+def _extract_response_detail(response) -> str:
+    try:
+        payload = json.loads(response.content.decode())
+    except Exception:
+        payload = None
+    if isinstance(payload, Mapping) and payload.get("detail"):
+        return str(payload["detail"])
+    try:
+        return response.content.decode(errors="ignore")
+    except Exception:
+        return ""
+
+
 def _coerce_bool(value) -> bool:
     if isinstance(value, str):
         return value.lower() in {"1", "true", "yes", "on"}
@@ -672,6 +688,31 @@ def _refresh_last_seen(node: Node, update_fields: list[str]):
         update_fields.append("last_seen")
 
 
+def _log_registration_event(
+    status: str,
+    payload: NodeRegistrationPayload,
+    request,
+    *,
+    detail: str | None = None,
+    level: int = logging.INFO,
+):
+    """Record a registration attempt and its outcome."""
+
+    client_ip = _get_client_ip(request) or ""
+    host_ip = _get_host_ip(request) or ""
+    logger.log(
+        level,
+        "Node registration %s: hostname=%s mac=%s relation=%s client_ip=%s host_ip=%s detail=%s",
+        status,
+        payload.hostname or "<unknown>",
+        payload.mac_address or "<unknown>",
+        payload.relation_value or "unspecified",
+        client_ip,
+        host_ip,
+        detail or "",
+    )
+
+
 def _deactivate_user_if_requested(request, deactivate_user: bool):
     if not deactivate_user:
         return
@@ -782,26 +823,60 @@ def register_node(request):
 
     if request.method == "OPTIONS":
         response = JsonResponse({"detail": "ok"})
+        logger.info(
+            "Node registration preflight: client_ip=%s host_ip=%s",
+            _get_client_ip(request) or "",
+            _get_host_ip(request) or "",
+        )
         return _add_cors_headers(request, response)
 
     if request.method != "POST":
         response = JsonResponse({"detail": "POST required"}, status=400)
+        logger.warning(
+            "Node registration invalid method %s: client_ip=%s host_ip=%s",
+            request.method,
+            _get_client_ip(request) or "",
+            _get_host_ip(request) or "",
+        )
         return _add_cors_headers(request, response)
 
     data = _extract_request_data(request)
     _ensure_authenticated_user(request)
     payload = NodeRegistrationPayload.from_data(data)
 
+    _log_registration_event("attempt", payload, request)
+
     validation_response = _validate_payload(payload)
     if validation_response:
+        _log_registration_event(
+            "failed",
+            payload,
+            request,
+            detail=_extract_response_detail(validation_response),
+            level=logging.WARNING,
+        )
         return _add_cors_headers(request, validation_response)
 
     verified, signature_error = _verify_signature(payload)
     if signature_error:
+        _log_registration_event(
+            "failed",
+            payload,
+            request,
+            detail=_extract_response_detail(signature_error),
+            level=logging.WARNING,
+        )
         return _add_cors_headers(request, signature_error)
 
     auth_error = _enforce_authentication(request, verified=verified)
     if auth_error:
+        _log_registration_event(
+            "denied",
+            payload,
+            request,
+            detail=_extract_response_detail(auth_error),
+            level=logging.WARNING,
+        )
         return _add_cors_headers(request, auth_error)
 
     mac_address, address_value, ipv6_value, ipv4_value = _normalize_addresses(
@@ -858,6 +933,12 @@ def register_node(request):
             request=request,
             deactivate_user=payload.deactivate_user,
         )
+        _log_registration_event(
+            "succeeded",
+            payload,
+            request,
+            detail=f"updated node {node.id}",
+        )
         return _add_cors_headers(request, response)
 
     _update_features(
@@ -881,6 +962,12 @@ def register_node(request):
     _announce_visitor_join(node, payload.relation_value)
 
     response = JsonResponse({"id": node.id, "uuid": str(node.uuid)})
+    _log_registration_event(
+        "succeeded",
+        payload,
+        request,
+        detail=f"created node {node.id}",
+    )
     _deactivate_user_if_requested(request, payload.deactivate_user)
     return _add_cors_headers(request, response)
 

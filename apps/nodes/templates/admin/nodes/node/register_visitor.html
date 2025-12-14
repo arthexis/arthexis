@@ -144,6 +144,7 @@
     const configureContainer = document.getElementById("visitor-configure");
     const configureLink = document.getElementById("visitor-configure-link");
     let visitorNodeId = null;
+    const requestTimeoutMs = 10000;
     const messages = {
         hostRegistered: "{{ _('Visitor node registered with this server.')|escapejs }}",
         visitorRegistered: "{{ _('Host node registered with visitor.')|escapejs }}",
@@ -198,20 +199,39 @@
         updateIndicator(element.querySelector(".status-indicator"), isError ? "error" : "success");
     }
 
-    async function loadJson(url, options) {
-        const response = await fetch(url, options);
-        const text = await response.text();
-        let payload;
+    async function loadJson(url, options, timeoutMs = requestTimeoutMs) {
+        const controller = typeof AbortController === "function" ? new AbortController() : null;
+        const mergedOptions = {
+            ...options,
+            ...(controller ? {signal: controller.signal} : {}),
+        };
+        const timer = controller && timeoutMs > 0
+            ? setTimeout(() => controller.abort(), timeoutMs)
+            : null;
         try {
-            payload = JSON.parse(text);
-        } catch (err) {
-            payload = text;
+            const response = await fetch(url, mergedOptions);
+            const text = await response.text();
+            let payload;
+            try {
+                payload = JSON.parse(text);
+            } catch (err) {
+                payload = text;
+            }
+            if (!response.ok) {
+                const detail = payload && payload.detail ? payload.detail : text || response.statusText;
+                throw new Error(detail);
+            }
+            return payload;
+        } catch (error) {
+            if (error && error.name === "AbortError") {
+                throw new Error("Request timed out");
+            }
+            throw error;
+        } finally {
+            if (timer) {
+                clearTimeout(timer);
+            }
         }
-        if (!response.ok) {
-            const detail = payload && payload.detail ? payload.detail : text || response.statusText;
-            throw new Error(detail);
-        }
-        return payload;
     }
 
     function buildChangeUrl(identifier) {
