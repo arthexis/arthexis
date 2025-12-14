@@ -10,11 +10,27 @@ def normalize(path):
 
 def forwards(apps, schema_editor):
     Module = apps.get_model("modules", "Module")
-    for module in Module.objects.all():
+    taken_paths = set(Module.objects.values_list("path", flat=True))
+
+    for module in Module.objects.order_by("id"):
         normalized = normalize(module.path)
-        if normalized != module.path:
-            module.path = normalized
-            module.save(update_fields=["path"])
+        if normalized == module.path:
+            continue
+
+        # Avoid collisions when multiple rows normalize to the same path.
+        taken_paths.discard(module.path)
+        target = normalized
+        if target in taken_paths:
+            base = normalized.strip("/")
+            counter = 0
+            while target in taken_paths:
+                suffix = f"{base}-{module.pk}" if counter == 0 else f"{base}-{module.pk}-{counter}"
+                target = normalize(suffix)
+                counter += 1
+
+        module.path = target
+        module.save(update_fields=["path"])
+        taken_paths.add(target)
 
 
 class Migration(migrations.Migration):
