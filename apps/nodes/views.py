@@ -435,6 +435,11 @@ def _add_cors_headers(request, response):
         response["Access-Control-Allow-Headers"] = allow_headers
         response["Access-Control-Allow-Methods"] = "POST, OPTIONS"
         patch_vary_headers(response, ["Origin"])
+        return response
+
+    response["Access-Control-Allow-Origin"] = "*"
+    response["Access-Control-Allow-Headers"] = "Content-Type"
+    response["Access-Control-Allow-Methods"] = "POST, OPTIONS"
     return response
 
 
