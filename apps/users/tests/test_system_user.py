@@ -5,7 +5,7 @@ from django.test import RequestFactory
 
 from apps.users import temp_passwords
 from apps.users.backends import TempPasswordBackend
-from apps.users.system import ensure_system_user
+from apps.users.system import collect_system_user_issues, ensure_system_user
 
 
 @pytest.mark.django_db
@@ -35,6 +35,31 @@ def test_ensure_system_user_creates_and_repairs_account():
     assert repaired_user.is_active and repaired_user.is_staff and repaired_user.is_superuser
     assert repaired_user.operate_as_id is None
     assert not repaired_user.has_usable_password()
+
+
+@pytest.mark.django_db
+def test_collect_system_user_issues_reports_expected_problems():
+    User = get_user_model()
+    user = ensure_system_user()
+
+    user.is_deleted = True
+    user.is_active = False
+    user.is_staff = False
+    user.is_superuser = False
+    user.operate_as = User.objects.create(username="delegate", is_staff=True)
+    user.set_password("secret")
+    user.save()
+
+    issues = set(collect_system_user_issues(user))
+
+    assert issues == {
+        "account is delegated to another user",
+        "account is inactive",
+        "account is marked as deleted",
+        "account is not a superuser",
+        "account is not marked as staff",
+        "account has a usable password",
+    }
 
 
 @pytest.mark.django_db
