@@ -3312,7 +3312,7 @@ msgstr ""
 #: nodes/templates/admin/nodes/node/register_visitor.html:143
 msgid ""
 "Make sure the visiting node is reachable. Run \"./manage.py "
-"check_registration_ready\" on the visiting node to verify readiness."
+"registration_ready\" on the visiting node to verify readiness."
 msgstr ""
 
 #: nodes/templates/admin/nodes/node/rfid_sync_results.html:36

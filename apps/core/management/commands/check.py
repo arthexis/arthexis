@@ -16,7 +16,7 @@ CHECK_COMMANDS = OrderedDict(
         ("next-upgrade", "check_next_upgrade"),
         ("pypi", "check_pypi"),
         ("nodes", "check_nodes"),
-        ("registration-ready", "check_registration_ready"),
+        ("registration-ready", "registration_ready"),
         ("rfid", "check_rfid"),
         ("rfid-scan", "rfid_check"),
         ("time", "check_time"),

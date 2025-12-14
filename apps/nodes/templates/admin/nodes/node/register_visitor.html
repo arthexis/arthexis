@@ -141,7 +141,7 @@
         aborted: "{{ _('Registration aborted.')|escapejs }}",
         visitorInfoError: "{{ _('Unable to read visitor node information.')|escapejs }}",
         hostInfoError: "{{ _('Unable to read host node information.')|escapejs }}",
-        fetchAdvice: "{{ _('Make sure the visiting node is reachable. Run "./manage.py check_registration_ready" on the visiting node to verify readiness.')|escapejs }}",
+        fetchAdvice: "{{ _('Make sure the visiting node is reachable. Run "./manage.py registration_ready" on the visiting node to verify readiness.')|escapejs }}",
         visitorMissing: "{{ visitor_error|default:_('Visitor address missing. Reload with ?visitor=host[:port].')|escapejs }}",
     };
 
