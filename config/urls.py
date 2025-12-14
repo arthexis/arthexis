@@ -86,10 +86,6 @@ urlpatterns = [
         name="django-admindocs-commands",
     ),
     path(
-        "admin/doc/commands/",
-        RedirectView.as_view(pattern_name="django-admindocs-commands"),
-    ),
-    path(
         "admin/doc/model-graphs/",
         ModelGraphIndexView.as_view(),
         name="django-admindocs-model-graphs",
