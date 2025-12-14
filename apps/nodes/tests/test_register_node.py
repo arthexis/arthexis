@@ -5,7 +5,7 @@ import pytest
 from django.contrib.auth import get_user_model
 from django.test import RequestFactory
 
-from apps.nodes.models import NodeRole
+from apps.nodes.models import Node, NodeRole
 from apps.nodes.views import register_node
 
 
@@ -70,3 +70,24 @@ def test_register_node_logs_validation_failure(admin_user, caplog):
     messages = [record.getMessage() for record in caplog.records]
     assert any("Node registration attempt" in message for message in messages)
     assert any("Node registration failed" in message for message in messages)
+
+
+@pytest.mark.django_db
+def test_register_current_logs_to_local_logger(settings, caplog):
+    settings.LOG_DIR = settings.BASE_DIR / "logs"
+    NodeRole.objects.get_or_create(name="Terminal")
+
+    caplog.set_level(logging.INFO, logger="register_local_node")
+
+    node, created = Node.register_current(notify_peers=False)
+
+    assert node is not None
+    assert caplog.records
+    messages = [record.getMessage() for record in caplog.records]
+    assert any("Local node registration started" in message for message in messages)
+    assert any(
+        "Local node registration created" in message
+        or "Local node registration updated" in message
+        or "Local node registration refreshed" in message
+        for message in messages
+    )

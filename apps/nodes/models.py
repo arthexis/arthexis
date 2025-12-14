@@ -37,6 +37,7 @@ from utils import revision
 from apps.core.notifications import notify_async
 from apps.celery.utils import normalize_periodic_task_name, periodic_task_name_variants
 from django.core.validators import validate_ipv46_address, validate_ipv6_address
+from apps.nodes.logging import get_register_local_node_logger
 
 if TYPE_CHECKING:  # pragma: no cover - used for type checking
     from apps.dns.models import GoDaddyDNSRecord
@@ -53,6 +54,7 @@ import logging
 
 
 logger = logging.getLogger(__name__)
+local_registration_logger = get_register_local_node_logger()
 
 
 ROLE_RENAMES: dict[str, str] = {"Constellation": "Watchtower"}
@@ -1012,6 +1014,9 @@ class Node(Entity):
         rev_value = revision.get_revision()
         installed_revision = rev_value if rev_value else ""
         mac = cls.get_current_mac()
+        local_registration_logger.info(
+            "Local node registration started hostname=%s mac=%s", hostname, mac
+        )
         endpoint_override = os.environ.get("NODE_PUBLIC_ENDPOINT", "").strip()
         slug_source = endpoint_override or hostname
         slug = slugify(slug_source)
@@ -1055,8 +1060,20 @@ class Node(Entity):
                 update_fields.append("role")
             if update_fields:
                 node.save(update_fields=update_fields)
+                local_registration_logger.info(
+                    "Local node registration updated node_id=%s endpoint=%s address=%s",
+                    node.id,
+                    node.public_endpoint,
+                    node.address,
+                )
             else:
                 node.refresh_features()
+                local_registration_logger.info(
+                    "Local node registration refreshed node_id=%s endpoint=%s address=%s",
+                    node.id,
+                    node.public_endpoint,
+                    node.address,
+                )
             created = False
         else:
             node = cls.objects.create(**defaults)
@@ -1064,6 +1081,12 @@ class Node(Entity):
             if desired_role:
                 node.role = desired_role
                 node.save(update_fields=["role"])
+            local_registration_logger.info(
+                "Local node registration created node_id=%s endpoint=%s address=%s",
+                node.id,
+                node.public_endpoint,
+                node.address,
+            )
         if created and node.role is None:
             terminal = NodeRole.objects.filter(name="Terminal").first()
             if terminal:
