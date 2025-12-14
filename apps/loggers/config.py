@@ -64,7 +64,7 @@ def build_logging_settings(
                 "backupCount": 30,
                 "encoding": "utf-8",
                 "formatter": "standard",
-                "level": "ERROR",
+                "level": "WARNING",
             },
             "celery_file": {
                 "class": "apps.loggers.handlers.CeleryFileHandler",
