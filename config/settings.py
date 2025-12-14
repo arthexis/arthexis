@@ -795,6 +795,11 @@ CELERY_RESULT_BACKEND = os.environ.get("CELERY_RESULT_BACKEND", "cache+memory://
 CELERY_BEAT_SCHEDULER = "celery.beat:Scheduler"
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_ENABLE_UTC = True
+CELERY_WORKER_HIJACK_ROOT_LOGGER = False
+# Align Celery's log formatting with Django's logging configuration so worker
+# output follows the same conventions without polluting the error log.
+CELERY_WORKER_LOG_FORMAT = LOGGING["formatters"]["standard"]["format"]
+CELERY_WORKER_TASK_LOG_FORMAT = LOGGING["formatters"]["standard"]["format"]
 # Allow Celery workers extra time to finish acknowledged jobs before SIGTERM.
 CELERY_WORKER_SOFT_SHUTDOWN_TIMEOUT = resolve_celery_shutdown_timeout()
 # Legacy alias retained for fixture references and admin guidance.

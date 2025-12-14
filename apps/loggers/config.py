@@ -66,6 +66,15 @@ def build_logging_settings(
                 "formatter": "standard",
                 "level": "ERROR",
             },
+            "celery_file": {
+                "class": "apps.loggers.handlers.ActiveAppFileHandler",
+                "filename": str(log_dir / "celery.log"),
+                "when": "midnight",
+                "backupCount": 30,
+                "encoding": "utf-8",
+                "formatter": "standard",
+                "level": "INFO",
+            },
             "console": {
                 "class": "logging.StreamHandler",
                 "level": "ERROR",
@@ -76,6 +85,23 @@ def build_logging_settings(
             "handlers": ["file", "error_file", "console"],
             "level": "DEBUG",
         },
+    }
+
+    celery_logger_names = (
+        "celery",
+        "celery.app.trace",
+        "celery.beat",
+        "celery.worker",
+        "celery.worker.consumer",
+    )
+
+    logging_config["loggers"] = {
+        logger_name: {
+            "handlers": ["celery_file"],
+            "level": "INFO",
+            "propagate": False,
+        }
+        for logger_name in celery_logger_names
     }
 
     configure_library_loggers(debug_enabled, logging_config)
