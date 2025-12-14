@@ -1,10 +1,14 @@
 import io
+from datetime import timedelta
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import TestCase
+from django.utils import timezone
 
+from apps.users.backends import TempPasswordBackend
 from apps.users import temp_passwords
 
 
@@ -146,3 +150,23 @@ class TempPasswordCommandTests(TestCase):
         entry = temp_passwords.load_temp_password(identifier)
         assert entry is not None
         assert not entry.is_expired
+
+    def test_new_temp_password_clears_expired_temporary_lock(self):
+        identifier = "expired@example.com"
+        User = get_user_model()
+        user = User.all_objects.create_user(username=identifier, email=identifier)
+        user.temporary_expires_at = timezone.now() - timedelta(hours=1)
+        user.is_active = False
+        user.save(update_fields=["temporary_expires_at", "is_active"])
+
+        with patch("apps.users.temp_passwords.generate_password", return_value="TempPass123"):
+            call_command("temp_password", identifier, update=True)
+
+        user.refresh_from_db()
+        assert user.temporary_expires_at is None
+
+        backend = TempPasswordBackend()
+        authed = backend.authenticate(None, username=identifier, password="TempPass123")
+        assert authed is not None
+        authed.refresh_from_db()
+        assert authed.is_active
