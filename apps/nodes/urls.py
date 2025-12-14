@@ -6,6 +6,11 @@ urlpatterns = [
     path("info/", views.node_info, name="node-info"),
     path("list/", views.node_list, name="node-list"),
     path("register/", views.register_node, name="register-node"),
+    path(
+        "register/telemetry/",
+        views.register_visitor_telemetry,
+        name="register-telemetry",
+    ),
     path("screenshot/", views.capture, name="node-screenshot"),
     path("net-message/", views.net_message, name="net-message"),
     path("net-message/pull/", views.net_message_pull, name="net-message-pull"),
