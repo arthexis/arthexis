@@ -37,3 +37,61 @@ def test_node_changelist_excludes_register_local_tool(admin_client):
 
     assert response.status_code == 200
     assert "Register local host" not in response.content.decode()
+
+
+@pytest.mark.django_db
+def test_register_visitor_view_uses_clean_visitor_base(admin_client, monkeypatch):
+    node = Node.objects.create(
+        hostname="local",
+        address="127.0.0.1",
+        mac_address="00:11:22:33:44:55",
+        port=8888,
+        public_endpoint="local-endpoint",
+    )
+
+    call_count: dict[str, int] = {"count": 0}
+
+    def fake_register_current(cls):
+        call_count["count"] += 1
+        return node, False
+
+    monkeypatch.setattr(Node, "register_current", classmethod(fake_register_current))
+
+    response = admin_client.get(
+        reverse("admin:nodes_node_register_visitor"),
+        {"visitor": "visitor.example.com:9999/extra/path"},
+    )
+
+    assert response.status_code == 200
+    assert call_count["count"] == 1
+
+    context = response.context[-1]
+    assert context["token"]
+    assert context["info_url"] == reverse("node-info")
+    assert context["register_url"] == reverse("register-node")
+    assert context["visitor_info_url"] == "http://visitor.example.com:9999/nodes/info/"
+    assert (
+        context["visitor_register_url"]
+        == "http://visitor.example.com:9999/nodes/register/"
+    )
+
+
+@pytest.mark.django_db
+def test_register_visitor_view_requires_target(admin_client, monkeypatch):
+    node = Node.objects.create(
+        hostname="local",
+        address="127.0.0.1",
+        mac_address="00:11:22:33:44:55",
+        port=8888,
+        public_endpoint="local-endpoint",
+    )
+
+    monkeypatch.setattr(Node, "register_current", classmethod(lambda cls: (node, False)))
+
+    response = admin_client.get(reverse("admin:nodes_node_register_visitor"))
+
+    assert response.status_code == 200
+    context = response.context[-1]
+    assert context["visitor_error"]
+    assert context["visitor_info_url"] == ""
+    assert context["visitor_register_url"] == ""
