@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime
-
 from django.core.management.base import BaseCommand, CommandError
-from django.utils import timezone
 
 from apps.core import changelog
+from apps.core.system import _format_timestamp
 
 
 class Command(BaseCommand):
@@ -55,7 +53,7 @@ class Command(BaseCommand):
             return
 
         for commit in commits:
-            timestamp = self._format_timestamp(commit.authored_at)
+            timestamp = _format_timestamp(commit.authored_at)
             description = f"[{commit.short_sha}] {commit.summary}"
             if commit.author:
                 description = f"{description} — {commit.author}"
@@ -63,9 +61,3 @@ class Command(BaseCommand):
                 description = f"{description} ({commit.commit_url})"
             description = f"{description} [{timestamp}]"
             self.stdout.write(description)
-
-    @staticmethod
-    def _format_timestamp(value: datetime) -> str:
-        if timezone.is_naive(value):  # pragma: no cover - depends on USE_TZ
-            return value.strftime("%Y-%m-%d %H:%M:%S")
-        return timezone.localtime(value).strftime("%Y-%m-%d %H:%M:%S %Z")
