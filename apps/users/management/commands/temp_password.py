@@ -109,6 +109,7 @@ class Command(BaseCommand):
             self._update_user(user, staff=staff, superuser=superuser)
         password = temp_passwords.generate_password()
         expires_at = timezone.now() + timedelta(seconds=expires_in)
+        self._reactivate_user(user)
         entry = temp_passwords.store_temp_password(
             user.username,
             password,
@@ -178,4 +179,14 @@ class Command(BaseCommand):
                 fields.append("is_staff")
         if fields:
             user.save(update_fields=fields)
+
+    def _reactivate_user(self, user) -> None:
+        """Clear expired temporary credentials so fresh passwords work."""
+
+        expiration = getattr(user, "temporary_expires_at", None)
+        if expiration is None or expiration > timezone.now():
+            return
+
+        user.temporary_expires_at = None
+        user.save(update_fields=["temporary_expires_at"])
 
