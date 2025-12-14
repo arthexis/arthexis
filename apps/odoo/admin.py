@@ -1,4 +1,5 @@
 from django.contrib import admin, messages
+from django.core.exceptions import PermissionDenied
 from django.http import HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
@@ -98,6 +99,11 @@ class OdooDeploymentAdmin(DjangoObjectActions, EntityModelAdmin):
         }
 
         if request.method == "POST":
+            if not (
+                self.has_view_or_change_permission(request)
+                or self.has_add_permission(request)
+            ):
+                raise PermissionDenied
             result = sync_odoo_deployments()
             context["result"] = result
             if result["created"] or result["updated"]:
