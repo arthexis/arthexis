@@ -121,14 +121,6 @@
           <span class="status-text">{% trans "Registering this server on the visiting node…" %}</span>
       </li>
   </ul>
-  <p id="visitor-configure" class="status-banner" data-status="success" hidden>
-      <span class="status-indicator is-success" aria-hidden="true">
-          ✓
-      </span>
-      <span class="status-text">
-          <a id="visitor-configure-link" class="button" href="#">{% trans "Configure local visitor node" %}</a>
-      </span>
-  </p>
 </div>
 <script>
 (function() {
@@ -137,13 +129,9 @@
     const hostRegisterUrl = "{{ register_url|escapejs }}";
     const visitorInfoUrl = "{{ visitor_info_url|escapejs }}";
     const visitorRegisterUrl = "{{ visitor_register_url|escapejs }}";
-    const changeUrlTemplate = "{{ change_url_template|escapejs }}";
     const hostResult = document.getElementById("host-result");
     const visitorResult = document.getElementById("visitor-result");
     const summary = document.getElementById("result");
-    const configureContainer = document.getElementById("visitor-configure");
-    const configureLink = document.getElementById("visitor-configure-link");
-    let visitorNodeId = null;
     const requestTimeoutMs = 10000;
     const messages = {
         hostRegistered: "{{ _('Visitor node registered with this server.')|escapejs }}",
@@ -232,18 +220,6 @@
                 clearTimeout(timer);
             }
         }
-    }
-
-    function buildChangeUrl(identifier) {
-        if (!identifier || !changeUrlTemplate) {
-            return "";
-        }
-        const parsedId = String(identifier);
-        const pattern = /0(?=\\/change\\/)/;
-        if (pattern.test(changeUrlTemplate)) {
-            return changeUrlTemplate.replace(pattern, parsedId);
-        }
-        return changeUrlTemplate;
     }
 
     function buildUrlVariants(url) {
@@ -409,12 +385,10 @@
                     body: JSON.stringify(hostPayload),
                 });
                 const detail = result && typeof result === "object" ? result.detail : "";
-                const identifier = result && typeof result === "object" ? result.id : null;
-                if (!identifier) {
+                if (!result || typeof result !== "object" || !result.id) {
                     const errorMessage = detail || messages.partial;
                     throw new Error(errorMessage);
                 }
-                visitorNodeId = identifier;
                 setStatus(hostResult, detail || messages.hostRegistered, false);
             } catch (error) {
                 setStatus(hostResult, formatError(error), true);
@@ -442,11 +416,6 @@
 
             if (!hostResult.classList.contains("errornote") && !visitorResult.classList.contains("errornote")) {
                 setStatus(summary, messages.success, false);
-                const changeUrl = buildChangeUrl(visitorNodeId);
-                if (changeUrl && configureContainer && configureLink) {
-                    configureLink.href = changeUrl;
-                    configureContainer.hidden = false;
-                }
             } else {
                 setStatus(summary, messages.partial, true);
             }
