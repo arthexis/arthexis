@@ -1051,13 +1051,13 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
 
         return None, None
 
-    def _resolve_visitor_base(self, request):
+    def _resolve_visitor_base(self, request, default_port: int = 8000):
         raw_port = None
         raw = (request.GET.get("visitor") or "").strip()
         if not raw:
             raw, raw_port = self._detect_visitor_host(request)
         if not raw:
-            return None
+            return None, "", default_port, "http"
 
         candidate = raw
         if "://" not in candidate:
@@ -1066,15 +1066,11 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         parsed = urlsplit(candidate)
         hostname = parsed.hostname or ""
         if not hostname:
-            return None
+            return None, "", default_port, "http"
 
         scheme = (parsed.scheme or "http").lower()
         if scheme not in {"http", "https"}:
             scheme = "http"
-
-        default_port = Node.get_preferred_port()
-        if parsed.hostname in {"127.0.0.1", "localhost", "::1"} and default_port == 8888:
-            default_port = 8000
 
         port = parsed.port or raw_port or default_port
         if ":" in hostname and not hostname.startswith("["):
@@ -1084,7 +1080,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         if port:
             host_part = f"{host_part}:{port}"
 
-        return urlunsplit((scheme, host_part, "", "", ""))
+        return urlunsplit((scheme, host_part, "", "", "")), hostname, port, scheme
 
     def register_visitor_view(self, request):
         """Exchange registration data with the visiting node."""
@@ -1102,7 +1098,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             )
 
         token = uuid.uuid4().hex
-        visitor_base = self._resolve_visitor_base(request)
+        visitor_base, visitor_host, visitor_port, visitor_scheme = self._resolve_visitor_base(request)
         visitor_info_url = ""
         visitor_register_url = ""
         visitor_error = None
@@ -1111,7 +1107,9 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             visitor_info_url = f"{visitor_base}/nodes/info/"
             visitor_register_url = f"{visitor_base}/nodes/register/"
         else:
-            visitor_error = _("Visitor address missing or invalid. Unable to detect visitor host.")
+            visitor_error = _(
+                "Visitor address missing or invalid. Append a ?visitor=host[:port] query string to continue."
+            )
         registration_logger.info(
             "Visitor registration: admin flow initialized visitor_base=%s token=%s",
             visitor_base or "",
@@ -1130,6 +1128,15 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             "visitor_info_url": visitor_info_url,
             "visitor_register_url": visitor_register_url,
             "visitor_error": visitor_error,
+            "visitor_host": visitor_host,
+            "visitor_port": visitor_port,
+            "visitor_scheme": visitor_scheme,
+            "local_node": {
+                "hostname": node.hostname,
+                "address": node.address,
+                "port": node.port,
+            },
+            "change_url_template": reverse("admin:nodes_node_change", args=[0]),
         }
         return render(request, "admin/nodes/node/register_visitor.html", context)
 

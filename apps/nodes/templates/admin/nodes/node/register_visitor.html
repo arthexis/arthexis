@@ -15,6 +15,60 @@
 {% block content %}
 <div id="content-main">
   <style>
+    #content-main .registration-grid {
+      display: grid;
+      gap: 1rem;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      margin: 1rem 0 1.5rem;
+    }
+
+    #content-main .registration-card {
+      padding: 1rem;
+      border: 1px solid #ddd;
+      border-radius: 0.5rem;
+      background: #fff;
+    }
+
+    #content-main .registration-card h2 {
+      margin-top: 0;
+      margin-bottom: 0.75rem;
+      font-size: 1.05rem;
+    }
+
+    #content-main .field-row {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      margin-bottom: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    #content-main .field-row label {
+      min-width: 4rem;
+      font-weight: 600;
+    }
+
+    #content-main .field-row input[type="text"],
+    #content-main .field-row input[type="number"] {
+      flex: 1 1 8rem;
+      max-width: 14rem;
+      padding: 0.35rem 0.5rem;
+    }
+
+    #content-main .field-help {
+      color: #555;
+      margin: 0.25rem 0 0;
+      font-size: 0.9rem;
+    }
+
+    #content-main .start-actions {
+      margin: 1.25rem 0 1rem;
+    }
+
+    #content-main #registration-log[hidden] {
+      display: none;
+    }
+
     #content-main .status-list {
       list-style: none;
       margin: 1.5rem 0;
@@ -84,7 +138,7 @@
     }
 
     #content-main .status-banner {
-      margin: 1.5rem 0;
+      margin: 1.5rem 0 1rem;
       padding: 0.75rem 1rem;
       border-radius: 0.5rem;
       background: rgba(11, 105, 193, 0.12);
@@ -116,21 +170,55 @@
       }
     }
   </style>
-  <p>{% trans "Attempting to exchange node information between this host and the visiting instance." %}</p>
-  <div id="result" class="status-banner" role="status" aria-live="polite" aria-busy="true" data-status="pending">
-      <span class="status-indicator is-pending" aria-hidden="true"></span>
-      <span class="status-text">{% trans "Registration in progress…" %}</span>
+  <p>{% trans "Confirm details before starting registration." %}</p>
+  <div class="registration-grid">
+    <div class="registration-card" aria-label="{% trans 'Local node information' %}">
+      <h2>{% trans "Local confirmation node" %}</h2>
+      <div class="field-row">
+        <label>{% trans "Host" %}</label>
+        <span>{{ local_node.hostname|default:"—" }}</span>
+      </div>
+      <div class="field-row">
+        <label>{% trans "Address" %}</label>
+        <span>{{ local_node.address|default:"—" }}</span>
+      </div>
+      <div class="field-row">
+        <label>{% trans "Port" %}</label>
+        <span>{{ local_node.port|default:"—" }}</span>
+      </div>
+    </div>
+    <div class="registration-card" aria-label="{% trans 'Visitor node target' %}">
+      <h2>{% trans "Visitor node" %}</h2>
+      <div class="field-row">
+        <label for="visitor-host">{% trans "Host" %}</label>
+        <input id="visitor-host" type="text" value="{{ visitor_host|default:visitor_info_url|default:''|cut:'/nodes/info/' }}" placeholder="{% trans 'visitor.example.com' %}">
+      </div>
+      <div class="field-row">
+        <label for="visitor-port">{% trans "Port" %}</label>
+        <input id="visitor-port" type="number" min="1" max="65535" value="{{ visitor_port|default:8000 }}">
+      </div>
+      <p class="field-help">{% trans "The visitor port defaults to 8000 but can be adjusted before starting registration." %}</p>
+    </div>
   </div>
-  <ul class="status-list">
-      <li id="host-result" class="status-item" data-status="pending">
-          <span class="status-indicator is-pending" aria-hidden="true"></span>
-          <span class="status-text">{% trans "Registering the visiting node on this server…" %}</span>
-      </li>
-      <li id="visitor-result" class="status-item" data-status="pending">
-          <span class="status-indicator is-pending" aria-hidden="true"></span>
-          <span class="status-text">{% trans "Registering this server on the visiting node…" %}</span>
-      </li>
-  </ul>
+  <div class="start-actions">
+    <button id="start-registration" class="button button-default" type="button">{% trans "Start registration" %}</button>
+  </div>
+  <div id="registration-log" hidden>
+    <div id="result" class="status-banner" role="status" aria-live="polite" aria-busy="false" data-status="pending">
+        <span class="status-indicator" aria-hidden="true"></span>
+        <span class="status-text">{% trans "Waiting to start registration." %}</span>
+    </div>
+    <ul class="status-list">
+        <li id="host-result" class="status-item" data-status="idle">
+            <span class="status-indicator" aria-hidden="true"></span>
+            <span class="status-text">{% trans "Ready to register the visiting node on this server." %}</span>
+        </li>
+        <li id="visitor-result" class="status-item" data-status="idle">
+            <span class="status-indicator" aria-hidden="true"></span>
+            <span class="status-text">{% trans "Ready to register this server on the visiting node." %}</span>
+        </li>
+    </ul>
+  </div>
 </div>
 <script>
 (function() {
@@ -138,12 +226,15 @@
     const hostInfoUrl = "{{ info_url|escapejs }}?token=" + token;
     const hostRegisterUrl = "{{ register_url|escapejs }}";
     const telemetryUrl = "{{ telemetry_url|escapejs }}";
-    const visitorInfoUrl = "{{ visitor_info_url|escapejs }}";
-    const visitorRegisterUrl = "{{ visitor_register_url|escapejs }}";
     const visitorProxyUrl = "{{ visitor_proxy_url|escapejs }}";
+    const changeUrlTemplate = "{{ change_url_template|escapejs }}";
     const hostResult = document.getElementById("host-result");
     const visitorResult = document.getElementById("visitor-result");
     const summary = document.getElementById("result");
+    const startButton = document.getElementById("start-registration");
+    const logSection = document.getElementById("registration-log");
+    const visitorHostInput = document.getElementById("visitor-host");
+    const visitorPortInput = document.getElementById("visitor-port");
     const requestTimeoutMs = 45000;
     let visitorConfirmationSkipped = false;
     const messages = {
@@ -159,6 +250,7 @@
         hostInfoError: "{{ _('Unable to read host node information.')|escapejs }}",
         fetchAdvice: "{{ _('Browser could not reach the visiting node. Check the address/port from this browser, ensure TLS certificates are trusted, and confirm connectivity. If server logs show the registration succeeded, no further action is required.')|escapejs }}",
         visitorMissing: "{{ visitor_error|default:_('Visitor address missing. Reload with ?visitor=host[:port].')|escapejs }}",
+        idle: "{{ _('Waiting to start registration.')|escapejs }}",
     };
 
     function updateIndicator(indicator, state) {
@@ -210,11 +302,22 @@
         updateIndicator(element.querySelector(".status-indicator"), level);
     }
 
-    if (!visitorInfoUrl || !visitorRegisterUrl) {
-        setStatus(summary, messages.visitorMissing, "error");
-        setStatus(hostResult, messages.aborted, "error");
-        setStatus(visitorResult, messages.visitorMissing, "error");
-        return;
+    function setPending(element, message) {
+        if (!element) {
+            return;
+        }
+        if (element.dataset) {
+            element.dataset.status = "pending";
+        }
+        const textTarget = element.querySelector(".status-text");
+        if (textTarget) {
+            textTarget.textContent = message;
+        }
+        if (element.hasAttribute("aria-busy")) {
+            element.setAttribute("aria-busy", "true");
+        }
+        updateIndicator(element.querySelector(".status-indicator"), "pending");
+        element.classList.remove("errornote");
     }
 
     function getCookie(name) {
@@ -430,7 +533,7 @@
         }
     }
 
-    async function runProxyFlow() {
+    async function runProxyFlow(visitorInfoUrl, visitorRegisterUrl) {
         try {
             const response = await loadJson(visitorProxyUrl, {
                 method: "POST",
@@ -469,14 +572,47 @@
         }
     }
 
-    (async function() {
+    function resetForRun() {
+        logSection.hidden = false;
+        setPending(summary, messages.idle);
+        setPending(hostResult, "{{ _('Registering the visiting node on this server…')|escapejs }}");
+        setPending(visitorResult, "{{ _('Registering this server on the visiting node…')|escapejs }}");
+    }
+
+    function buildVisitorBase() {
+        const hostValue = (visitorHostInput?.value || "").trim();
+        const portValue = Number(visitorPortInput?.value || "") || 8000;
+        if (!hostValue) {
+            setStatus(summary, messages.visitorMissing, "error");
+            setStatus(hostResult, messages.aborted, "error");
+            setStatus(visitorResult, messages.visitorMissing, "error");
+            logSection.hidden = false;
+            return "";
+        }
+        let candidate = hostValue;
+        if (!candidate.includes("://")) {
+            candidate = `//${candidate}`;
+        }
+        try {
+            const parsed = new URL(candidate, window.location.href);
+            parsed.port = portValue ? String(portValue) : parsed.port;
+            const portSuffix = parsed.port ? `:${parsed.port}` : "";
+            return `${parsed.protocol}//${parsed.hostname}${portSuffix}`;
+        } catch (error) {
+            setStatus(summary, messages.visitorMissing, "error");
+            logSection.hidden = false;
+            return "";
+        }
+    }
+
+    async function executeRegistration(visitorInfoUrl, visitorRegisterUrl) {
         try {
             const isSecurePage = window.isSecureContext && window.location.protocol === "https:";
             const insecureVisitor =
                 visitorInfoUrl.startsWith("http:") || visitorRegisterUrl.startsWith("http:");
 
             if (isSecurePage && insecureVisitor && visitorProxyUrl) {
-                await runProxyFlow();
+                await runProxyFlow(visitorInfoUrl, visitorRegisterUrl);
                 return;
             }
 
@@ -602,7 +738,40 @@
                 visitorStatus: visitorResult?.dataset?.status || "",
             });
         }
-    })();
+    }
+
+    function attachDetailLinks() {
+        const nodes = [hostResult, visitorResult];
+        nodes.forEach((node) => {
+            const changeId = node?.dataset?.id;
+            const textTarget = node?.querySelector?.(".status-text");
+            if (changeId && textTarget && changeUrlTemplate) {
+                const anchor = document.createElement("a");
+                anchor.href = changeUrlTemplate.replace("0", changeId);
+                anchor.textContent = textTarget.textContent || "";
+                textTarget.textContent = "";
+                textTarget.appendChild(anchor);
+            }
+        });
+    }
+
+    startButton?.addEventListener("click", async (event) => {
+        event.preventDefault();
+        const base = buildVisitorBase();
+        if (!base) {
+            return;
+        }
+        resetForRun();
+        startButton.disabled = true;
+        const visitorInfoUrl = `${base}/nodes/info/`;
+        const visitorRegisterUrl = `${base}/nodes/register/`;
+        try {
+            await executeRegistration(visitorInfoUrl, visitorRegisterUrl);
+            attachDetailLinks();
+        } finally {
+            startButton.disabled = false;
+        }
+    });
 })();
 </script>
 {% endblock %}
