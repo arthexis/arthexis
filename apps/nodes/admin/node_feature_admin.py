@@ -20,12 +20,7 @@ from ..reports import (
     iter_report_periods,
     resolve_period,
 )
-from ..utils import (
-    capture_screenshot,
-    record_microphone_sample,
-    save_audio_sample,
-    save_screenshot,
-)
+from ..utils import capture_screenshot, save_screenshot
 from .forms import NodeFeatureAdminForm
 
 @admin.register(NodeFeature)
@@ -197,11 +192,6 @@ class NodeFeatureAdmin(EntityModelAdmin):
                 name="nodes_nodefeature_celery_report",
             ),
             path(
-                "test-microphone/",
-                self.admin_site.admin_view(self.test_microphone),
-                name="nodes_nodefeature_test_microphone",
-            ),
-            path(
                 "take-screenshot/",
                 self.admin_site.admin_view(self.take_screenshot),
                 name="nodes_nodefeature_take_screenshot",
@@ -286,51 +276,6 @@ class NodeFeatureAdmin(EntityModelAdmin):
             )
             return None
         return feature
-
-    def test_microphone(self, request):
-        feature = self._ensure_feature_enabled(
-            request, "audio-capture", "Test Microphone"
-        )
-        if not feature:
-            return redirect("..")
-
-        if not Node._has_audio_capture_device():
-            self.message_user(
-                request,
-                "Audio Capture feature is enabled but no recording device was detected.",
-                level=messages.ERROR,
-            )
-            return redirect("..")
-
-        try:
-            path = record_microphone_sample(duration_seconds=6)
-        except Exception as exc:  # pragma: no cover - depends on system audio
-            self.message_user(request, str(exc), level=messages.ERROR)
-            return redirect("..")
-
-        node = Node.get_local()
-        sample = save_audio_sample(path, node=node, method="DEFAULT_ACTION")
-        if not sample:
-            self.message_user(
-                request, "Duplicate audio sample; not saved", level=messages.INFO
-            )
-            return redirect("..")
-
-        self.message_user(
-            request, f"Audio sample saved to {sample.path}", level=messages.SUCCESS
-        )
-        try:
-            change_url = reverse(
-                "admin:nodes_contentsample_change", args=[sample.pk]
-            )
-        except NoReverseMatch:  # pragma: no cover - admin URL always registered
-            self.message_user(
-                request,
-                "Audio sample saved but the admin page could not be resolved.",
-                level=messages.WARNING,
-            )
-            return redirect("..")
-        return redirect(change_url)
 
     def take_screenshot(self, request):
         feature = self._ensure_feature_enabled(

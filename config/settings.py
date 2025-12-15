@@ -419,6 +419,7 @@ LOCAL_APPS = [
     "apps.locals",
     "apps.locale",
     "apps.content",
+    "apps.audio",
     "apps.media",
     "apps.odoo",
     "apps.sigils",

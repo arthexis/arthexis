@@ -80,12 +80,7 @@ from ..reports import (
     iter_report_periods,
     resolve_period,
 )
-from ..utils import (
-    capture_screenshot,
-    record_microphone_sample,
-    save_audio_sample,
-    save_screenshot,
-)
+from ..utils import capture_screenshot, save_screenshot
 from .forms import DownloadFirmwareForm, NodeAdminForm, SendNetMessageForm
 from .inlines import NodeFeatureAssignmentInline
 
