@@ -258,6 +258,40 @@ def _normalize_port(value: str | int | None) -> int | None:
     return port
 
 
+def _iter_port_fallback_urls(base_url: str):
+    """Yield the provided URL and any additional port-based fallbacks."""
+
+    yield base_url
+
+    try:
+        parsed = urlsplit(base_url)
+    except Exception:
+        return
+
+    if not parsed.hostname:
+        return
+
+    if parsed.port != 8888:
+        return
+
+    netloc = parsed.hostname
+    if ":" in netloc and not netloc.startswith("["):
+        netloc = f"[{netloc}]"
+
+    for candidate_port in (8000,):
+        if candidate_port == parsed.port:
+            continue
+        yield urlunsplit(
+            (
+                parsed.scheme or "http",
+                f"{netloc}:{candidate_port}",
+                parsed.path,
+                parsed.query,
+                parsed.fragment,
+            )
+        )
+
+
 def _get_host_port(request) -> int | None:
     """Return the port implied by the current request if available."""
 
@@ -1125,15 +1159,25 @@ def register_visitor_proxy(request):
     session = requests.Session()
     timeout_seconds = 45
 
-    try:
-        visitor_info_response = session.get(visitor_info_url, timeout=timeout_seconds)
-        visitor_info_response.raise_for_status()
-        visitor_info = visitor_info_response.json()
-    except Exception as exc:
+    visitor_info = None
+    last_error: Exception | None = None
+    for candidate_info_url in _iter_port_fallback_urls(visitor_info_url):
+        try:
+            visitor_info_response = session.get(
+                candidate_info_url, timeout=timeout_seconds
+            )
+            visitor_info_response.raise_for_status()
+            visitor_info = visitor_info_response.json()
+            visitor_info_url = candidate_info_url
+            break
+        except Exception as exc:
+            last_error = exc
+
+    if visitor_info is None:
         registration_logger.warning(
             "Visitor registration proxy: unable to fetch visitor info from %s: %s",
             visitor_info_url,
-            exc,
+            last_error,
         )
         return JsonResponse({"detail": "visitor info unavailable"}, status=502)
 
@@ -1161,19 +1205,27 @@ def register_visitor_proxy(request):
     visitor_payload = _build_registration_payload(host_info, "Upstream")
     _apply_token_signature(visitor_payload, host_info, token)
 
-    try:
-        visitor_register_response = session.post(
-            visitor_register_url,
-            json=visitor_payload,
-            timeout=timeout_seconds,
-        )
-        visitor_register_response.raise_for_status()
-        visitor_register_body = visitor_register_response.json()
-    except Exception as exc:
+    visitor_register_body = None
+    last_error = None
+    for candidate_register_url in _iter_port_fallback_urls(visitor_register_url):
+        try:
+            visitor_register_response = session.post(
+                candidate_register_url,
+                json=visitor_payload,
+                timeout=timeout_seconds,
+            )
+            visitor_register_response.raise_for_status()
+            visitor_register_body = visitor_register_response.json()
+            visitor_register_url = candidate_register_url
+            break
+        except Exception as exc:
+            last_error = exc
+
+    if visitor_register_body is None:
         registration_logger.warning(
             "Visitor registration proxy: unable to notify visitor at %s: %s",
             visitor_register_url,
-            exc,
+            last_error,
         )
         return JsonResponse({"detail": "visitor confirmation failed"}, status=502)
 

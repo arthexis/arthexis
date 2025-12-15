@@ -202,6 +202,86 @@ def test_register_visitor_proxy_success(admin_client, monkeypatch):
 
 
 @pytest.mark.django_db
+def test_register_visitor_proxy_fallbacks_to_8000(admin_client, monkeypatch):
+    node = Node.objects.create(
+        hostname="local",
+        address="198.51.100.1",
+        mac_address="00:11:22:33:44:55",
+        port=8888,
+        public_endpoint="local-endpoint",
+        public_key="local-key",
+    )
+
+    monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: node))
+
+    class FakeResponse:
+        def __init__(self, payload, status_code=200):
+            self._payload = payload
+            self.status_code = status_code
+
+        def raise_for_status(self):
+            if self.status_code >= 400:
+                raise requests.HTTPError()
+
+        def json(self):
+            return self._payload
+
+    class FakeSession:
+        def __init__(self):
+            self.requests = []
+
+        def get(self, url, timeout=None):
+            self.requests.append(("get", url))
+            if url.startswith("http://visitor.test:8888"):
+                raise requests.ConnectTimeout()
+            return FakeResponse(
+                {
+                    "hostname": "visitor-host",
+                    "mac_address": "aa:bb:cc:dd:ee:ff",
+                    "address": "203.0.113.10",
+                    "port": 8000,
+                    "public_key": "visitor-key",
+                    "features": [],
+                }
+            )
+
+        def post(self, url, json=None, timeout=None):
+            self.requests.append(("post", url, json))
+            if url.startswith("http://visitor.test:8888"):
+                raise requests.ConnectTimeout()
+            return FakeResponse({"id": 3, "detail": "ok"})
+
+    sessions: list[FakeSession] = []
+
+    def fake_session_factory():
+        session = FakeSession()
+        sessions.append(session)
+        return session
+
+    monkeypatch.setattr(requests, "Session", fake_session_factory)
+
+    response = admin_client.post(
+        reverse("register-visitor-proxy"),
+        data=json.dumps(
+            {
+                "visitor_info_url": "http://visitor.test:8888/nodes/info/",
+                "visitor_register_url": "http://visitor.test:8888/nodes/register/",
+                "token": "",
+            }
+        ),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 200
+    assert sessions
+    session = sessions[-1]
+    assert session.requests[0][1].startswith("http://visitor.test:8888")
+    assert session.requests[1][1].startswith("http://visitor.test:8000")
+    assert session.requests[2][1].startswith("http://visitor.test:8888")
+    assert session.requests[3][1].startswith("http://visitor.test:8000")
+
+
+@pytest.mark.django_db
 def test_register_visitor_view_defaults_loopback_port(admin_client, monkeypatch):
     node = Node.objects.create(
         hostname="local",
