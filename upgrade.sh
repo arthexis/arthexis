@@ -673,6 +673,7 @@ NO_WARN=0
 LOCAL_ONLY=0
 DETACHED=0
 CHECK_ONLY=0
+PRE_CHECK=0
 REQUESTED_BRANCH=""
 FORWARDED_ARGS=()
 # Parse CLI options controlling the upgrade strategy.
@@ -715,6 +716,16 @@ while [[ $# -gt 0 ]]; do
       ;;
     --no-warn)
       NO_WARN=1
+      FORWARDED_ARGS+=("$1")
+      shift
+      ;;
+    --pre-check)
+      PRE_CHECK=1
+      FORWARDED_ARGS+=("$1")
+      shift
+      ;;
+    --no-check)
+      PRE_CHECK=0
       FORWARDED_ARGS+=("$1")
       shift
       ;;
@@ -1278,6 +1289,17 @@ else
   fi
 fi
 
+UPGRADE_NEEDED=0
+if [[ "$LOCAL_VERSION" != "$REMOTE_VERSION" ]]; then
+  UPGRADE_NEEDED=1
+elif [[ -n "$REMOTE_REVISION" && -n "$LOCAL_REVISION" && "$LOCAL_REVISION" != "$REMOTE_REVISION" ]]; then
+  UPGRADE_NEEDED=1
+elif [[ $RERUN_AFTER_SELF_UPDATE -eq 1 ]]; then
+  UPGRADE_NEEDED=1
+elif [[ $LOCAL_ONLY -eq 1 ]]; then
+  UPGRADE_NEEDED=1
+fi
+
 UPGRADE_PLANNED=1
 if [[ "$LOCAL_VERSION" == "$REMOTE_VERSION" ]]; then
   if [[ $LOCAL_ONLY -eq 1 ]]; then
@@ -1296,6 +1318,11 @@ if [[ "$LOCAL_VERSION" == "$REMOTE_VERSION" ]]; then
     echo "Already on version $LOCAL_VERSION; skipping upgrade."
     exit 0
   fi
+fi
+
+if [[ $PRE_CHECK -eq 1 ]] && [[ $UPGRADE_NEEDED -eq 0 ]]; then
+  echo "No upgrade required; skipping suite restart because --pre-check was provided."
+  exit 0
 fi
 
 auto_realign_branch_for_role "$NODE_ROLE_NAME" "$BRANCH"
