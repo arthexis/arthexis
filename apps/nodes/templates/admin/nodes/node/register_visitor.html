@@ -15,6 +15,30 @@
 {% block content %}
 <div id="content-main">
   <style>
+    #content-main {
+      color-scheme: light;
+      --registration-card-bg: #fff;
+      --registration-card-border: #ddd;
+      --registration-card-color: inherit;
+      --registration-field-help: #555;
+      --registration-input-bg: #fff;
+      --registration-input-border: #ced4da;
+      --registration-placeholder: #6c757d;
+      --registration-status-info: rgba(11, 105, 193, 0.12);
+      --registration-status-success: rgba(25, 135, 84, 0.15);
+      --registration-status-error: rgba(220, 53, 69, 0.15);
+      --registration-status-warning: rgba(255, 193, 7, 0.15);
+      --registration-indicator-success-border: rgba(25, 135, 84, 0.45);
+      --registration-indicator-success-bg: rgba(25, 135, 84, 0.15);
+      --registration-indicator-success-color: #198754;
+      --registration-indicator-error-border: rgba(220, 53, 69, 0.45);
+      --registration-indicator-error-bg: rgba(220, 53, 69, 0.2);
+      --registration-indicator-error-color: #dc3545;
+      --registration-indicator-warning-border: rgba(255, 193, 7, 0.55);
+      --registration-indicator-warning-bg: rgba(255, 193, 7, 0.15);
+      --registration-indicator-warning-color: #d59a00;
+    }
+
     #content-main .registration-grid {
       display: grid;
       gap: 1rem;
@@ -24,9 +48,10 @@
 
     #content-main .registration-card {
       padding: 1rem;
-      border: 1px solid #ddd;
+      border: 1px solid var(--registration-card-border);
       border-radius: 0.5rem;
-      background: #fff;
+      background: var(--registration-card-bg);
+      color: var(--registration-card-color);
     }
 
     #content-main .registration-card h2 {
@@ -53,10 +78,17 @@
       flex: 1 1 8rem;
       max-width: 14rem;
       padding: 0.35rem 0.5rem;
+      background: var(--registration-input-bg);
+      border-color: var(--registration-input-border);
+      color: var(--registration-card-color);
+    }
+
+    #content-main .field-row input::placeholder {
+      color: var(--registration-placeholder);
     }
 
     #content-main .field-help {
-      color: #555;
+      color: var(--registration-field-help);
       margin: 0.25rem 0 0;
       font-size: 0.9rem;
     }
@@ -116,21 +148,21 @@
     }
 
     #content-main .status-indicator.is-success {
-      border-color: rgba(25, 135, 84, 0.45);
-      background-color: rgba(25, 135, 84, 0.15);
-      color: #198754;
+      border-color: var(--registration-indicator-success-border);
+      background-color: var(--registration-indicator-success-bg);
+      color: var(--registration-indicator-success-color);
     }
 
     #content-main .status-indicator.is-error {
-      border-color: rgba(220, 53, 69, 0.45);
-      background-color: rgba(220, 53, 69, 0.2);
-      color: #dc3545;
+      border-color: var(--registration-indicator-error-border);
+      background-color: var(--registration-indicator-error-bg);
+      color: var(--registration-indicator-error-color);
     }
 
     #content-main .status-indicator.is-warning {
-      border-color: rgba(255, 193, 7, 0.55);
-      background-color: rgba(255, 193, 7, 0.15);
-      color: #d59a00;
+      border-color: var(--registration-indicator-warning-border);
+      background-color: var(--registration-indicator-warning-bg);
+      color: var(--registration-indicator-warning-color);
     }
 
     #content-main .status-text {
@@ -141,20 +173,20 @@
       margin: 1.5rem 0 1rem;
       padding: 0.75rem 1rem;
       border-radius: 0.5rem;
-      background: rgba(11, 105, 193, 0.12);
+      background: var(--registration-status-info);
       color: inherit;
     }
 
     #content-main .status-banner[data-status="success"] {
-      background: rgba(25, 135, 84, 0.15);
+      background: var(--registration-status-success);
     }
 
     #content-main .status-banner[data-status="error"] {
-      background: rgba(220, 53, 69, 0.15);
+      background: var(--registration-status-error);
     }
 
     #content-main .status-banner[data-status="warning"] {
-      background: rgba(255, 193, 7, 0.15);
+      background: var(--registration-status-warning);
     }
 
     @keyframes registration-spin {
@@ -167,6 +199,41 @@
       #content-main .status-indicator.is-pending {
         animation: none;
         border-top-color: currentColor;
+      }
+    }
+
+    @media (prefers-color-scheme: dark) {
+      #content-main {
+        color-scheme: light dark;
+        --registration-card-bg: #0f172a;
+        --registration-card-border: rgba(226, 232, 240, 0.25);
+        --registration-card-color: #e2e8f0;
+        --registration-field-help: #cbd5e1;
+        --registration-input-bg: #0b1222;
+        --registration-input-border: rgba(226, 232, 240, 0.35);
+        --registration-placeholder: #94a3b8;
+        --registration-status-info: rgba(93, 156, 236, 0.2);
+        --registration-status-success: rgba(34, 197, 94, 0.18);
+        --registration-status-error: rgba(248, 113, 113, 0.2);
+        --registration-status-warning: rgba(251, 191, 36, 0.18);
+        --registration-indicator-success-border: rgba(74, 222, 128, 0.8);
+        --registration-indicator-success-bg: rgba(34, 197, 94, 0.2);
+        --registration-indicator-success-color: #34d399;
+        --registration-indicator-error-border: rgba(248, 113, 113, 0.85);
+        --registration-indicator-error-bg: rgba(239, 68, 68, 0.25);
+        --registration-indicator-error-color: #f87171;
+        --registration-indicator-warning-border: rgba(251, 191, 36, 0.85);
+        --registration-indicator-warning-bg: rgba(251, 191, 36, 0.2);
+        --registration-indicator-warning-color: #fbbf24;
+      }
+
+      #content-main .registration-card {
+        box-shadow: 0 12px 30px rgba(15, 23, 42, 0.3);
+      }
+
+      #content-main .field-row input[type="text"],
+      #content-main .field-row input[type="number"] {
+        border-color: var(--registration-input-border);
       }
     }
   </style>
