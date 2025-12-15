@@ -649,6 +649,55 @@ class Node(Entity):
             return 8888
         return port
 
+    @classmethod
+    def _detect_managed_site(cls) -> tuple[str, bool]:
+        """Return the primary managed site domain and HTTPS preference."""
+
+        try:
+            Site = apps.get_model("sites", "Site")
+        except Exception:
+            return "", False
+
+        try:
+            site = (
+                Site.objects.filter(managed=True)
+                .only("domain", "require_https")
+                .order_by("id")
+                .first()
+                or Site.objects.only("domain", "require_https").order_by("id").first()
+            )
+        except DatabaseError:
+            return "", False
+
+        if not site:
+            return "", False
+
+        domain = (getattr(site, "domain", "") or "").strip()
+        if not domain or domain.lower() == "localhost":
+            return "", False
+
+        try:
+            ipaddress.ip_address(domain)
+        except ValueError:
+            return domain, bool(getattr(site, "require_https", False))
+        return "", False
+
+    @staticmethod
+    def _detect_nginx_mode() -> str:
+        mode_file = Path(settings.BASE_DIR) / ".locks" / "nginx_mode.lck"
+        try:
+            value = mode_file.read_text(encoding="utf-8").strip().lower()
+        except OSError:
+            return ""
+        return value if value in {"internal", "public"} else ""
+
+    @classmethod
+    def _preferred_site_port(cls, require_https: bool) -> int:
+        mode = cls._detect_nginx_mode()
+        if mode == "public" or require_https:
+            return 443
+        return 80
+
     def get_ipv4_addresses(self) -> list[str]:
         stored = self.ipv4_address or ""
         cleaned = self.sanitize_ipv4_addresses(stored)
@@ -1012,8 +1061,17 @@ class Node(Entity):
         serialized_ipv4 = ",".join(ordered_ipv4) if ordered_ipv4 else ""
         ipv6_address = cls._select_preferred_ip(ipv6_candidates) or ""
 
+        site_domain, site_requires_https = cls._detect_managed_site()
+
         preferred_contact = ipv4_address or ipv6_address or direct_address or "127.0.0.1"
+        if site_domain:
+            hostname = site_domain
+            network_hostname = site_domain
+            preferred_contact = site_domain
+
         port = cls.get_preferred_port()
+        if site_domain:
+            port = cls._preferred_site_port(site_requires_https)
         base_path = str(cls.default_base_path())
         ver_path = Path(settings.BASE_DIR) / "VERSION"
         installed_version = ver_path.read_text().strip() if ver_path.exists() else ""

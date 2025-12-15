@@ -1,8 +1,11 @@
 import json
 import logging
+from pathlib import Path
 
 import pytest
+from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.contrib.sites.models import Site
 from django.test import RequestFactory
 
 from apps.nodes.models import Node, NodeRole
@@ -137,3 +140,37 @@ def test_register_current_logs_to_local_logger(settings, caplog):
         or "Local node registration refreshed" in message
         for message in messages
     )
+
+
+@pytest.mark.django_db
+def test_register_current_uses_managed_site_domain(settings, caplog):
+    caplog.set_level(logging.INFO, logger="register_local_node")
+    Node.objects.all().delete()
+    Node._local_cache.clear()
+    NodeRole.objects.get_or_create(name="Terminal")
+
+    lock_dir = Path(settings.BASE_DIR) / ".locks"
+    lock_dir.mkdir(exist_ok=True)
+    mode_file = lock_dir / "nginx_mode.lck"
+    try:
+        mode_file.write_text("public", encoding="utf-8")
+
+        site = Site.objects.get_current()
+        site.domain = "arthexis.com"
+        site.name = "Arthexis"
+        site.managed = True
+        site.require_https = True
+        site.save()
+
+        node, created = Node.register_current(notify_peers=False)
+
+        assert created
+        assert node.hostname == "arthexis.com"
+        assert node.network_hostname == "arthexis.com"
+        assert node.address == "arthexis.com"
+        assert node.port == 443
+    finally:
+        try:
+            mode_file.unlink()
+        except FileNotFoundError:
+            pass
