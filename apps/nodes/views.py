@@ -386,13 +386,20 @@ def node_info(request):
     advertised_address = _get_advertised_address(request, node)
     preferred_port = node.get_preferred_port()
     advertised_port = node.port or preferred_port
-    if host_domain:
+    base_domain = node.get_base_domain()
+    base_site_requires_https = bool(getattr(node.base_site, "require_https", False))
+    if base_domain and base_site_requires_https:
+        advertised_port = node._preferred_site_port(True)
+    if host_domain and not base_domain:
         host_port = _get_host_port(request)
         if host_port in {preferred_port, node.port, 80, 443}:
             advertised_port = host_port
         else:
             advertised_port = preferred_port
-    if host_domain:
+    if base_domain:
+        hostname = base_domain
+        address = base_domain
+    elif host_domain:
         hostname = host_domain
         local_aliases = {
             value
@@ -409,7 +416,7 @@ def node_info(request):
         else:
             address = host_domain
     else:
-        hostname = node.hostname
+        hostname = node.get_preferred_hostname()
         address = advertised_address or node.address or node.network_hostname or ""
     data = {
         "hostname": hostname,

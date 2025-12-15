@@ -9,7 +9,7 @@ from django.contrib.sites.models import Site
 from django.test import RequestFactory
 
 from apps.nodes.models import Node, NodeRole
-from apps.nodes.views import register_node
+from apps.nodes.views import node_info, register_node
 
 
 @pytest.fixture
@@ -168,9 +168,34 @@ def test_register_current_uses_managed_site_domain(settings, caplog):
         assert node.hostname == "arthexis.com"
         assert node.network_hostname == "arthexis.com"
         assert node.address == "arthexis.com"
+        assert node.base_site_id == site.id
         assert node.port == 443
     finally:
         try:
             mode_file.unlink()
         except FileNotFoundError:
             pass
+
+
+@pytest.mark.django_db
+def test_node_info_prefers_base_site_domain(monkeypatch):
+    site = Site.objects.create(domain="base.example.test", name="Base Example")
+    node = Node.objects.create(
+        hostname="original.local",
+        mac_address="01:23:45:67:89:ab",
+        port=8888,
+        public_endpoint="base-example",
+        base_site=site,
+    )
+
+    monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: node))
+
+    factory = RequestFactory()
+    request = factory.get("/nodes/info/")
+
+    response = node_info(request)
+    data = json.loads(response.content.decode())
+
+    assert data["hostname"] == "base.example.test"
+    assert data["address"] == "base.example.test"
+    assert data["contact_hosts"][0] == "base.example.test"
