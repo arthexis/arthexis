@@ -232,7 +232,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
                 _("Visit"),
             )
 
-        host_values = obj.get_remote_host_candidates()
+        host_values = obj.get_remote_host_candidates(resolve_dns=False)
 
         remote_url = ""
         for host in host_values:

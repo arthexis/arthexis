@@ -688,8 +688,13 @@ class Node(Entity):
 
         return ipv4, ipv6
 
-    def get_remote_host_candidates(self) -> list[str]:
-        """Return host strings that may reach this node."""
+    def get_remote_host_candidates(self, *, resolve_dns: bool = True) -> list[str]:
+        """Return host strings that may reach this node.
+
+        ``resolve_dns`` controls whether hostnames are expanded to IP addresses.
+        DNS lookups can be slow in contexts like admin changelists, so callers
+        can disable resolution when they only need stored values.
+        """
 
         values: list[str] = []
         for attr in (
@@ -710,23 +715,24 @@ class Node(Entity):
             if value and value not in values:
                 values.append(value)
 
-        resolved_ipv6: list[str] = []
-        resolved_ipv4: list[str] = []
-        for host in list(values):
-            if host.startswith("http://") or host.startswith("https://"):
-                continue
-            try:
-                ipaddress.ip_address(host)
-            except ValueError:
-                ipv4, ipv6 = self._resolve_ip_addresses(host)
-                for candidate in ipv6:
-                    if candidate not in values and candidate not in resolved_ipv6:
-                        resolved_ipv6.append(candidate)
-                for candidate in ipv4:
-                    if candidate not in values and candidate not in resolved_ipv4:
-                        resolved_ipv4.append(candidate)
-        values.extend(resolved_ipv6)
-        values.extend(resolved_ipv4)
+        if resolve_dns:
+            resolved_ipv6: list[str] = []
+            resolved_ipv4: list[str] = []
+            for host in list(values):
+                if host.startswith("http://") or host.startswith("https://"):
+                    continue
+                try:
+                    ipaddress.ip_address(host)
+                except ValueError:
+                    ipv4, ipv6 = self._resolve_ip_addresses(host)
+                    for candidate in ipv6:
+                        if candidate not in values and candidate not in resolved_ipv6:
+                            resolved_ipv6.append(candidate)
+                    for candidate in ipv4:
+                        if candidate not in values and candidate not in resolved_ipv4:
+                            resolved_ipv4.append(candidate)
+            values.extend(resolved_ipv6)
+            values.extend(resolved_ipv4)
         return values
 
     def get_primary_contact(self) -> str:
