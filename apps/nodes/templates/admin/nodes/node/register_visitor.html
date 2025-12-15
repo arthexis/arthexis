@@ -73,6 +73,12 @@
       color: #dc3545;
     }
 
+    #content-main .status-indicator.is-warning {
+      border-color: rgba(255, 193, 7, 0.55);
+      background-color: rgba(255, 193, 7, 0.15);
+      color: #d59a00;
+    }
+
     #content-main .status-text {
       flex: 1 1 auto;
     }
@@ -91,6 +97,10 @@
 
     #content-main .status-banner[data-status="error"] {
       background: rgba(220, 53, 69, 0.15);
+    }
+
+    #content-main .status-banner[data-status="warning"] {
+      background: rgba(255, 193, 7, 0.15);
     }
 
     @keyframes registration-spin {
@@ -143,6 +153,7 @@
         visitorUnreachableSummary: "{{ _('Visitor registered locally; remote confirmation skipped.')|escapejs }}",
         partial: "{{ _('One or more registrations failed.')|escapejs }}",
         aborted: "{{ _('Registration aborted.')|escapejs }}",
+        partialWarning: "{{ _('Registration may have completed, but browser confirmation failed. Please verify connectivity or check logs.')|escapejs }}",
         visitorInfoError: "{{ _('Unable to read visitor node information.')|escapejs }}",
         hostInfoError: "{{ _('Unable to read host node information.')|escapejs }}",
         fetchAdvice: "{{ _('Browser could not reach the visiting node. Check the address/port from this browser, ensure TLS certificates are trusted, and confirm connectivity. If server logs show the registration succeeded, no further action is required.')|escapejs }}",
@@ -153,7 +164,7 @@
         if (!indicator) {
             return;
         }
-        indicator.classList.remove("is-pending", "is-success", "is-error");
+        indicator.classList.remove("is-pending", "is-success", "is-error", "is-warning");
         indicator.textContent = "";
         if (state === "pending") {
             indicator.classList.add("is-pending");
@@ -164,11 +175,16 @@
             indicator.textContent = "!";
             return;
         }
+        if (state === "warning") {
+            indicator.classList.add("is-warning");
+            indicator.textContent = "!";
+            return;
+        }
         indicator.classList.add("is-success");
         indicator.textContent = "\u2713";
     }
 
-    function setStatus(element, message, isError) {
+    function setStatus(element, message, status = "success") {
         if (!element) {
             return;
         }
@@ -178,24 +194,25 @@
         } else {
             element.textContent = message;
         }
-        if (isError) {
+        const level = status === true ? "error" : status === false ? "success" : status;
+        if (level === "error") {
             element.classList.add("errornote");
         } else {
             element.classList.remove("errornote");
         }
         if (element.dataset) {
-            element.dataset.status = isError ? "error" : "success";
+            element.dataset.status = level;
         }
         if (element.hasAttribute("aria-busy")) {
             element.setAttribute("aria-busy", "false");
         }
-        updateIndicator(element.querySelector(".status-indicator"), isError ? "error" : "success");
+        updateIndicator(element.querySelector(".status-indicator"), level);
     }
 
     if (!visitorInfoUrl || !visitorRegisterUrl) {
-        setStatus(summary, messages.visitorMissing, true);
-        setStatus(hostResult, messages.aborted, true);
-        setStatus(visitorResult, messages.visitorMissing, true);
+        setStatus(summary, messages.visitorMissing, "error");
+        setStatus(hostResult, messages.aborted, "error");
+        setStatus(visitorResult, messages.visitorMissing, "error");
         return;
     }
 
@@ -444,10 +461,10 @@
                     const errorMessage = detail || messages.partial;
                     throw new Error(errorMessage);
                 }
-                setStatus(hostResult, detail || messages.hostRegistered, false);
+                setStatus(hostResult, detail || messages.hostRegistered, "success");
             } catch (error) {
                 const formatted = formatError(error);
-                setStatus(hostResult, formatted, true);
+                setStatus(hostResult, formatted, formatted.includes(messages.fetchAdvice) ? "warning" : "error");
                 sendTelemetry("host-register", hostRegisterUrl, formatted, {
                     payload: hostPayload,
                 });
@@ -468,7 +485,7 @@
                     const errorMessage = detail || messages.partial;
                     throw new Error(errorMessage);
                 }
-                setStatus(visitorResult, detail || messages.visitorRegistered, false);
+                setStatus(visitorResult, detail || messages.visitorRegistered, "success");
             } catch (error) {
                 const formatted = formatError(error);
                 const isNetworkIssue =
@@ -480,9 +497,9 @@
 
                 if (isNetworkIssue) {
                     visitorConfirmationSkipped = true;
-                    setStatus(visitorResult, messages.visitorUnreachable, false);
+                    setStatus(visitorResult, messages.visitorUnreachable, "warning");
                 } else {
-                    setStatus(visitorResult, formatted, true);
+                    setStatus(visitorResult, formatted, formatted.includes(messages.fetchAdvice) ? "warning" : "error");
                 }
                 sendTelemetry("visitor-register", visitorRegisterUrl, formatted, {
                     targets: visitorRegisterTargets,
@@ -495,14 +512,14 @@
 
             if (!hostFailed && !visitorFailed) {
                 const summaryMessage = visitorConfirmationSkipped ? messages.visitorUnreachableSummary : messages.success;
-                setStatus(summary, summaryMessage, false);
+                setStatus(summary, summaryMessage, visitorConfirmationSkipped ? "warning" : "success");
                 sendTelemetry("summary", window.location.href, summaryMessage, {
                     hostStatus: hostResult?.dataset?.status || "",
                     visitorStatus: visitorResult?.dataset?.status || "",
                     visitorConfirmationSkipped,
                 });
             } else {
-                setStatus(summary, messages.partial, true);
+                setStatus(summary, messages.partial, "error");
                 sendTelemetry("summary", window.location.href, messages.partial, {
                     hostStatus: hostResult?.dataset?.status || "",
                     visitorStatus: visitorResult?.dataset?.status || "",
@@ -511,12 +528,13 @@
             }
         } catch (error) {
             const message = formatError(error);
-            setStatus(summary, message, true);
+            const isFetchFailure = message.includes(messages.fetchAdvice);
+            setStatus(summary, isFetchFailure ? messages.partialWarning : message, isFetchFailure ? "warning" : "error");
             if (!hostResult.classList.contains("errornote")) {
-                setStatus(hostResult, messages.aborted, true);
+                setStatus(hostResult, isFetchFailure ? messages.partialWarning : messages.aborted, isFetchFailure ? "warning" : "error");
             }
             if (!visitorResult.classList.contains("errornote")) {
-                setStatus(visitorResult, messages.aborted, true);
+                setStatus(visitorResult, isFetchFailure ? messages.visitorUnreachable : messages.aborted, isFetchFailure ? "warning" : "error");
             }
             sendTelemetry("fatal", window.location.href, message, {
                 hostStatus: hostResult?.dataset?.status || "",
