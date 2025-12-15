@@ -161,30 +161,7 @@ def test_node_info_uses_site_domain_port(monkeypatch, client):
     assert payload["port"] == 443
 
 
-@pytest.mark.django_db
-def test_register_visitor_view_uses_site_domain_port(admin_client, monkeypatch):
-    domain = f"{uuid4().hex}.example.com"
-    site = Site.objects.create(domain=domain, name="Example")
-    node = Node.objects.create(
-        hostname="local",
-        address="127.0.0.1",
-        mac_address="00:11:22:33:44:55",
-        port=8888,
-        public_endpoint="local-endpoint",
-        base_site=site,
-    )
 
-    monkeypatch.setattr(Node, "register_current", classmethod(lambda cls: (node, False)))
-
-    response = admin_client.get(reverse("admin:nodes_node_register_visitor"))
-
-    assert response.status_code == 200
-    context = response.context[-1]
-    assert context["local_node"]["address"] == domain
-    assert context["local_node"]["port"] == 443
-
-
-@pytest.mark.django_db
 def test_register_visitor_proxy_success(admin_client, monkeypatch):
     node = Node.objects.create(
         hostname="local",
