@@ -35,6 +35,7 @@ import shutil
 from pathlib import Path
 from urllib.parse import urlparse, urlunsplit
 from utils import revision
+from apps.audio.utils import has_audio_capture_device
 from apps.core.notifications import notify_async
 from apps.celery.utils import normalize_periodic_task_name, periodic_task_name_variants
 from django.core.validators import validate_ipv46_address, validate_ipv6_address
@@ -189,7 +190,11 @@ class NodeFeature(Entity):
         "audio-capture": (
             NodeFeatureDefaultAction(
                 label="Test Microphone",
-                url_name="admin:nodes_nodefeature_test_microphone",
+                url_name="admin:audio_recordingdevice_test_microphone",
+            ),
+            NodeFeatureDefaultAction(
+                label="Find Recording Devices",
+                url_name="admin:audio_recordingdevice_find_devices",
             ),
         ),
         "screenshot-poll": (
@@ -523,7 +528,6 @@ class Node(Entity):
     }
     CONNECTIVITY_MONITOR_ROLES = {"Control", "Satellite"}
     AP_ROUTER_SSID = "gelectriic-ap"
-    AUDIO_CAPTURE_PCM_PATH = Path("/proc/asound/pcm")
     NMCLI_TIMEOUT = 5
     AUTO_MANAGED_FEATURES = set(FEATURE_LOCK_MAP.keys()) | {
         "lcd-screen",
@@ -1474,24 +1478,7 @@ class Node(Entity):
     def _has_audio_capture_device(cls) -> bool:
         """Return ``True`` when an audio capture device is available."""
 
-        pcm_path = cls.AUDIO_CAPTURE_PCM_PATH
-        try:
-            contents = pcm_path.read_text(errors="ignore")
-        except OSError:
-            return False
-        for line in contents.splitlines():
-            candidate = line.strip()
-            if not candidate:
-                continue
-            lower_candidate = candidate.lower()
-            if "capture" not in lower_candidate:
-                continue
-            match = re.search(r"capture\s+(\d+)", lower_candidate)
-            if not match:
-                continue
-            if int(match.group(1)) > 0:
-                return True
-        return False
+        return has_audio_capture_device()
 
     @classmethod
     def _hosts_gelectriic_ap(cls) -> bool:

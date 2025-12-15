@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, Iterable, Optional
 
 from django.contrib import messages
+from apps.audio.utils import has_audio_capture_device
 
 if False:  # pragma: no cover - typing imports only
     from .models import Node, NodeFeature
@@ -102,7 +103,7 @@ def _check_audio_capture(feature: "NodeFeature", node: Optional["Node"]):
             f"No local node is registered; cannot verify {feature.display}.",
             messages.WARNING,
         )
-    if not Node._has_audio_capture_device():
+    if not has_audio_capture_device():
         return FeatureCheckResult(
             False,
             f"No audio recording device detected on {target.hostname} for {feature.display}.",
