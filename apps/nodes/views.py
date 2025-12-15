@@ -1007,6 +1007,14 @@ def register_node(request):
         "Visitor registration: signature verification %s",
         "passed" if verified and not signature_error else "failed",
     )
+
+    if signature_error and request.user.is_authenticated:
+        registration_logger.warning(
+            "Visitor registration: signature invalid but authenticated user present; proceeding as unsigned"
+        )
+        verified = False
+        signature_error = None
+
     if signature_error:
         _log_registration_event(
             "failed",
