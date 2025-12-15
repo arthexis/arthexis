@@ -182,12 +182,18 @@ class SiteAdmin(DjangoSiteAdmin):
         )
 
     def get_queryset(self, request):
+        ensure_site_fields()
         queryset = super().get_queryset(request)
         try:
             Site._meta.get_field("default_landing")
         except FieldDoesNotExist:
             return queryset
-        return queryset.select_related("default_landing")
+        # The optional ``default_landing`` field is injected at runtime. Avoid
+        # applying ``select_related`` because the relation may not always be fully
+        # configured on proxy models, which can raise ``FieldError`` during query
+        # evaluation. Returning the base queryset keeps the change list working even
+        # when the field is unavailable.
+        return queryset
 
     def _reload_site_fixtures(self, request):
         fixtures_dir = Path(settings.BASE_DIR) / "apps" / "links" / "fixtures"
