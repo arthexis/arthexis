@@ -464,7 +464,7 @@
                 setStatus(hostResult, detail || messages.hostRegistered, "success");
             } catch (error) {
                 const formatted = formatError(error);
-                setStatus(hostResult, formatted, formatted.includes(messages.fetchAdvice) ? "warning" : "error");
+                setStatus(hostResult, formatted, "error");
                 sendTelemetry("host-register", hostRegisterUrl, formatted, {
                     payload: hostPayload,
                 });
