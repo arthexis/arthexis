@@ -1,5 +1,6 @@
 import json
 import logging
+from uuid import uuid4
 from unittest.mock import Mock
 
 import requests
@@ -8,6 +9,7 @@ import pytest
 from django.urls import reverse
 
 from apps.nodes.models import Node
+from django.contrib.sites.models import Site
 
 
 @pytest.mark.django_db
@@ -135,6 +137,28 @@ def test_register_visitor_view_prefers_forwarded_for(admin_client, monkeypatch):
     assert context["visitor_register_url"] == "http://203.0.113.1:8000/nodes/register/"
     assert context["telemetry_url"] == reverse("register-telemetry")
     assert context["visitor_proxy_url"] == reverse("register-visitor-proxy")
+
+
+@pytest.mark.django_db
+def test_node_info_uses_site_domain_port(monkeypatch, client):
+    domain = f"{uuid4().hex}.example.com"
+    site = Site.objects.create(domain=domain, name="Example", require_https=False)
+    node = Node.objects.create(
+        hostname="local",
+        address="127.0.0.1",
+        mac_address="00:11:22:33:44:55",
+        port=8888,
+        public_endpoint="local-endpoint",
+        base_site=site,
+    )
+
+    monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: node))
+
+    response = client.get(reverse("node-info"))
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["port"] == 443
 
 
 @pytest.mark.django_db
