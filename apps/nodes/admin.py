@@ -1202,10 +1202,14 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         temp.ipv6_address = getattr(node, "ipv6_address", "")
         yield from temp.iter_remote_urls(path)
 
-    def _resolve_visitor_base(self, request):
+    def _resolve_visitor_base(self, request, default_port: int = 8000):
         raw = (request.GET.get("visitor") or "").strip()
         if not raw:
-            return None
+            forwarded_for = (request.META.get("HTTP_X_FORWARDED_FOR") or "").split(",")
+            forwarded_host = forwarded_for[0].strip() if forwarded_for and forwarded_for[0] else ""
+            raw = forwarded_host or (request.META.get("REMOTE_ADDR") or "").strip()
+        if not raw:
+            return None, "", default_port, "http"
 
         candidate = raw
         if "://" not in candidate:
@@ -1214,13 +1218,13 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         parsed = urlsplit(candidate)
         hostname = parsed.hostname or ""
         if not hostname:
-            return None
+            return None, "", default_port, "http"
 
         scheme = (parsed.scheme or "http").lower()
         if scheme not in {"http", "https"}:
             scheme = "http"
 
-        port = parsed.port
+        port = parsed.port or default_port
         if ":" in hostname and not hostname.startswith("["):
             host_part = f"[{hostname}]"
         else:
@@ -1228,7 +1232,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         if port:
             host_part = f"{host_part}:{port}"
 
-        return urlunsplit((scheme, host_part, "", "", ""))
+        return urlunsplit((scheme, host_part, "", "", "")), hostname, port, scheme
 
     def register_visitor_view(self, request):
         """Exchange registration data with the visiting node."""
@@ -1240,7 +1244,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             )
 
         token = uuid.uuid4().hex
-        visitor_base = self._resolve_visitor_base(request)
+        visitor_base, visitor_host, visitor_port, visitor_scheme = self._resolve_visitor_base(request)
         visitor_info_url = ""
         visitor_register_url = ""
         visitor_error = None
@@ -1261,9 +1265,18 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             "info_url": reverse("node-info"),
             "register_url": reverse("register-node"),
             "telemetry_url": reverse("register-telemetry"),
+            "visitor_proxy_url": reverse("register-visitor-proxy"),
             "visitor_info_url": visitor_info_url,
             "visitor_register_url": visitor_register_url,
             "visitor_error": visitor_error,
+            "visitor_host": visitor_host,
+            "visitor_port": visitor_port,
+            "visitor_scheme": visitor_scheme,
+            "local_node": {
+                "hostname": node.hostname,
+                "address": node.address,
+                "port": node.port,
+            },
             "change_url_template": reverse("admin:nodes_node_change", args=[0]),
         }
         return render(request, "admin/nodes/node/register_visitor.html", context)
