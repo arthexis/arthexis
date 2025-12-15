@@ -2,6 +2,7 @@ name: Screenshot
 
 env:
   PYTHONDONTWRITEBYTECODE: '1'
+  PLAYWRIGHT_VERSION: '1.45.2'
 
 on:
   workflow_dispatch:
@@ -157,9 +158,25 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Cache npm
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: npm-${{ runner.os }}-playwright-${{ env.PLAYWRIGHT_VERSION }}
+          restore-keys: |
+            npm-${{ runner.os }}-
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ env.PLAYWRIGHT_VERSION }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
+
       - name: Install Playwright Chromium
         run: |
-          npm install --no-save playwright@1.45.2
+          npm install --no-save playwright@"${PLAYWRIGHT_VERSION}"
           npx playwright install --with-deps chromium
 
       - name: Capture dashboard screenshot
