@@ -420,6 +420,7 @@ LOCAL_APPS = [
     "apps.locale",
     "apps.content",
     "apps.media",
+    "apps.mermaid",
     "apps.odoo",
     "apps.sigils",
     "apps.selenium",
