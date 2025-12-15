@@ -87,7 +87,7 @@ from ..utils import (
     save_screenshot,
 )
 from .forms import DownloadFirmwareForm, NodeAdminForm, SendNetMessageForm
-from .inlines import NodeFeatureAssignmentInline
+from .inlines import NodeFeatureAssignmentInline, SSHAccountInline
 
 
 registration_logger = get_register_visitor_logger()
@@ -193,7 +193,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         return user, password, expires_at
 
     change_actions = ["update_node_action"]
-    inlines = [NodeFeatureAssignmentInline]
+    inlines = [NodeFeatureAssignmentInline, SSHAccountInline]
 
     @admin.display(description=_("Relation"), ordering="current_relation")
     def relation(self, obj):
