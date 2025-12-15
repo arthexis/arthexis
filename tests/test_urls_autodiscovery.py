@@ -6,12 +6,23 @@ import sys
 
 from django.apps import AppConfig, apps
 from django.conf import settings
+from django.urls import path
 
 from config.urls import autodiscovered_urlpatterns
 
 
 def _pattern_routes():
-    return {pattern.pattern._route for pattern in autodiscovered_urlpatterns()}
+    routes = set()
+
+    for pattern in autodiscovered_urlpatterns():
+        base_route = pattern.pattern._route
+        routes.add(base_route)
+
+        if getattr(pattern, "url_patterns", None):
+            for nested_pattern in pattern.url_patterns:
+                routes.add(f"{base_route}{nested_pattern.pattern._route}")
+
+    return routes
 
 
 def test_autodiscovery_includes_known_apps_with_app_namespaces():
@@ -77,3 +88,32 @@ def test_apps_without_urls_do_not_raise(monkeypatch):
     routes = _pattern_routes()
 
     assert routes == set()
+
+
+def test_autodiscovery_prefixes_api_routes_with_app_label(monkeypatch):
+    class AlphaConfig(AppConfig):
+        name = "alpha"
+        label = "alpha"
+        path = str(Path(settings.BASE_DIR) / "alpha")
+
+    alpha_module = ModuleType("alpha")
+    alpha_module.__file__ = str(Path(AlphaConfig.path) / "__init__.py")
+    alpha_module.__path__ = [AlphaConfig.path]
+
+    api_package = ModuleType("alpha.api")
+    api_package.__path__ = []
+    api_urls = ModuleType("alpha.api.urls")
+    api_urls.urlpatterns = [path("beta/", lambda request: None)]
+
+    alpha_config = AlphaConfig("alpha", alpha_module)
+    real_configs = list(apps.get_app_configs())
+    monkeypatch.setattr(apps, "get_app_configs", lambda: [alpha_config, *real_configs])
+
+    monkeypatch.setitem(sys.modules, "alpha", alpha_module)
+    monkeypatch.setitem(sys.modules, "alpha.api", api_package)
+    monkeypatch.setitem(sys.modules, "alpha.api.urls", api_urls)
+
+    routes = _pattern_routes()
+
+    assert "alpha/api/beta/" in routes
+    assert "beta/api/" not in routes
