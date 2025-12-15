@@ -72,7 +72,7 @@ def _default_config_locations() -> list[Path]:
 
     home = Path.home()
 
-    candidates: list[Path] = [home / ".odoorc", home / ".config/odoo/odoo.conf"]
+    candidates: list[Path] = [home / ".odoorc", home / ".config/odoo/odoo.conf", home]
 
     try:
         user_home = Path("/home") / pwd.getpwuid(os.getuid()).pw_name
@@ -80,7 +80,13 @@ def _default_config_locations() -> list[Path]:
         user_home = None
 
     if user_home and user_home != home:
-        candidates.extend([user_home / ".odoorc", user_home / ".config/odoo/odoo.conf"])
+        candidates.extend(
+            [user_home / ".odoorc", user_home / ".config/odoo/odoo.conf", user_home]
+        )
+
+    home_root = Path("/home")
+    if home_root.exists():
+        candidates.append(home_root)
 
     return candidates
 
