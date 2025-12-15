@@ -12,6 +12,7 @@ from django.db.models import Q
 from django.db.utils import DatabaseError, IntegrityError
 from django.db.models.signals import post_delete
 from django.dispatch import Signal, receiver
+from django.core.exceptions import ValidationError
 from apps.base.models import Entity
 from apps.users.models import Profile
 from apps.release.models import PackageRelease
@@ -94,6 +95,11 @@ SERVICE_TEMPLATE_DIR = Path(__file__).resolve().parent / "service_templates"
 
 def _systemd_directory() -> Path:
     return Path(os.environ.get("SYSTEMD_DIR", "/etc/systemd/system"))
+
+
+def ssh_key_upload_path(instance: "SSHAccount", filename: str) -> str:
+    node_identifier = instance.node_id or "unassigned"
+    return f"ssh_accounts/{node_identifier}/{Path(filename).name}"
 
 
 class NodeRoleManager(models.Manager):
@@ -1967,6 +1973,50 @@ def _announce_peer_startup(
     hostname = (node.hostname or "Node").strip() or "Node"
     subject = f"UP {hostname}"
     notify_async(subject, body)
+
+
+class SSHAccount(Entity):
+    """SSH credentials that can be linked to a :class:`Node`."""
+
+    node = models.ForeignKey(
+        Node, on_delete=models.CASCADE, related_name="ssh_accounts"
+    )
+    username = models.CharField(max_length=150)
+    password = SigilShortAutoField(
+        max_length=255,
+        blank=True,
+        help_text="Password for password-based authentication.",
+    )
+    private_key = models.FileField(
+        upload_to=ssh_key_upload_path,
+        blank=True,
+        help_text="Optional private key for key-based authentication.",
+    )
+    public_key = models.FileField(
+        upload_to=ssh_key_upload_path,
+        blank=True,
+        help_text="Optional public key for key-based authentication.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "SSH Account"
+        verbose_name_plural = "SSH Accounts"
+        unique_together = ("node", "username")
+        ordering = ("username", "pk")
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return f"{self.username}@{self.node}" if self.node_id else self.username
+
+    def clean(self):
+        super().clean()
+        has_password = bool((self.password or "").strip())
+        has_key = bool(self.private_key or self.public_key)
+        if not has_password and not has_key:
+            raise ValidationError(
+                _("Provide a password or upload an SSH key for authentication."),
+            )
 
 
 class NodeFeatureAssignment(Entity):
