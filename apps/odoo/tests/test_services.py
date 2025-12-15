@@ -102,3 +102,20 @@ def test_discover_odoo_configs_uses_user_home(monkeypatch, tmp_path):
     assert errors == []
     assert [entry.path for entry in discovered] == [user_config]
     assert discovered[0].base_path == user_config.parent
+
+
+def test_discover_odoo_configs_searches_home_tree(monkeypatch, tmp_path):
+    home_root = tmp_path / "home"
+    nested_config = home_root / "ubuntu" / "www.gelectriic.com" / "odoo.conf"
+    nested_config.parent.mkdir(parents=True)
+    nested_config.write_text("[options]\ninstance_name=deep")
+
+    monkeypatch.setattr(
+        "apps.odoo.services._default_config_locations", lambda: [home_root]
+    )
+
+    discovered, errors = discover_odoo_configs(scan_filesystem=False)
+
+    assert errors == []
+    assert [entry.path for entry in discovered] == [nested_config]
+    assert discovered[0].base_path == nested_config.parent
