@@ -1129,8 +1129,10 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             "visitor_scheme": visitor_scheme,
             "local_node": {
                 "hostname": node.get_preferred_hostname(),
-                "address": node.get_base_domain() or node.address,
-                "port": node.port,
+                "address": node.get_base_domain() or node.address or node.network_hostname,
+                "port": node._preferred_site_port(True)
+                if node.get_base_domain()
+                else node.port or node.get_preferred_port(),
             },
             "change_url_template": reverse("admin:nodes_node_change", args=[0]),
         }

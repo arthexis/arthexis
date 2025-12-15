@@ -388,7 +388,7 @@ def node_info(request):
     advertised_port = node.port or preferred_port
     base_domain = node.get_base_domain()
     base_site_requires_https = bool(getattr(node.base_site, "require_https", False))
-    if base_domain and base_site_requires_https:
+    if base_domain:
         advertised_port = node._preferred_site_port(True)
     if host_domain and not base_domain:
         host_port = _get_host_port(request)
