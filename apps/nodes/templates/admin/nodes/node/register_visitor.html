@@ -294,6 +294,7 @@
     const hostRegisterUrl = "{{ register_url|escapejs }}";
     const telemetryUrl = "{{ telemetry_url|escapejs }}";
     const visitorProxyUrl = "{{ visitor_proxy_url|escapejs }}";
+    const visitorScheme = "{{ visitor_scheme|default:'http'|escapejs }}";
     const changeUrlTemplate = "{{ change_url_template|escapejs }}";
     const hostResult = document.getElementById("host-result");
     const visitorResult = document.getElementById("visitor-result");
@@ -658,7 +659,8 @@
         }
         let candidate = hostValue;
         if (!candidate.includes("://")) {
-            candidate = `//${candidate}`;
+            const normalizedScheme = (visitorScheme || "http").replace(/:$/u, "");
+            candidate = `${normalizedScheme}://${candidate}`;
         }
         try {
             const parsed = new URL(candidate, window.location.href);
