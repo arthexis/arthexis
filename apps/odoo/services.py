@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import configparser
 import os
+import pwd
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
@@ -61,13 +62,35 @@ def _walk_for_configs(root: Path) -> Iterable[Path]:
     return found
 
 
+def _default_config_locations() -> list[Path]:
+    """Return standard config locations for the current OS user.
+
+    This includes the process home directory (``Path.home()``) and the corresponding
+    ``/home/<user>`` paths for the logged-in user (when different), mirroring where
+    Odoo typically stores configuration files.
+    """
+
+    home = Path.home()
+
+    candidates: list[Path] = [home / ".odoorc", home / ".config/odoo/odoo.conf"]
+
+    try:
+        user_home = Path("/home") / pwd.getpwuid(os.getuid()).pw_name
+    except Exception:  # pragma: no cover - fallback for platforms without ``pwd``
+        user_home = None
+
+    if user_home and user_home != home:
+        candidates.extend([user_home / ".odoorc", user_home / ".config/odoo/odoo.conf"])
+
+    return candidates
+
+
 def _candidate_paths(
     additional_candidates: Iterable[Path | str] | None = None, *, scan_filesystem: bool = True
 ) -> list[Path]:
     env_path = os.environ.get(CONFIG_ENV_VAR) or ""
-    home = Path.home()
 
-    defaults: list[Path | str] = [env_path, home / ".odoorc", home / ".config/odoo/odoo.conf"]
+    defaults: list[Path | str] = [env_path, *_default_config_locations()]
 
     candidates: list[Path] = []
     seen: set[Path] = set()

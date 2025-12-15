@@ -85,3 +85,20 @@ def test_sync_odoo_deployments_creates_and_updates(sample_config):
     assert deployment.db_name == "updated"
     assert deployment.db_port == 5433
     assert deployment.http_port == 8070
+
+
+def test_discover_odoo_configs_uses_user_home(monkeypatch, tmp_path):
+    user_home = tmp_path / "home" / "demo"
+    user_config = user_home / ".config" / "odoo" / "odoo.conf"
+    user_config.parent.mkdir(parents=True)
+    user_config.write_text("[options]\ninstance_name=demo")
+
+    monkeypatch.setattr(
+        "apps.odoo.services._default_config_locations", lambda: [user_config]
+    )
+
+    discovered, errors = discover_odoo_configs(scan_filesystem=False)
+
+    assert errors == []
+    assert [entry.path for entry in discovered] == [user_config]
+    assert discovered[0].base_path == user_config.parent
