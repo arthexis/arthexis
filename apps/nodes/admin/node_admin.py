@@ -1681,6 +1681,11 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             request, object_id, form_url, extra_context=extra_context
         )
 
+    def get_queryset(self, request):
+        """Include soft-deleted nodes to avoid admin change 404s."""
+
+        return self.model.all_objects.all()
+
     def _format_update_detail(self, label: str, result: Mapping[str, object]) -> str:
         ok = bool(result.get("ok"))
         status = _("succeeded") if ok else _("failed")
