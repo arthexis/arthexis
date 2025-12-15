@@ -7,6 +7,11 @@ urlpatterns = [
     path("list/", views.node_list, name="node-list"),
     path("register/", views.register_node, name="register-node"),
     path(
+        "register/proxy/",
+        views.register_visitor_proxy,
+        name="register-visitor-proxy",
+    ),
+    path(
         "register/telemetry/",
         views.register_visitor_telemetry,
         name="register-telemetry",

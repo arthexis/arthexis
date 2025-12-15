@@ -2,6 +2,8 @@ import json
 import logging
 from unittest.mock import Mock
 
+import requests
+
 import pytest
 from django.urls import reverse
 
@@ -72,6 +74,7 @@ def test_register_visitor_view_uses_clean_visitor_base(admin_client, monkeypatch
     assert context["info_url"] == reverse("node-info")
     assert context["register_url"] == reverse("register-node")
     assert context["telemetry_url"] == reverse("register-telemetry")
+    assert context["visitor_proxy_url"] == reverse("register-visitor-proxy")
     assert context["visitor_info_url"] == "http://visitor.example.com:9999/nodes/info/"
     assert (
         context["visitor_register_url"]
@@ -102,6 +105,7 @@ def test_register_visitor_view_detects_remote_addr(admin_client, monkeypatch):
     assert context["visitor_info_url"] == "http://192.0.2.10:8888/nodes/info/"
     assert context["visitor_register_url"] == "http://192.0.2.10:8888/nodes/register/"
     assert context["telemetry_url"] == reverse("register-telemetry")
+    assert context["visitor_proxy_url"] == reverse("register-visitor-proxy")
 
 
 @pytest.mark.django_db
@@ -128,6 +132,73 @@ def test_register_visitor_view_prefers_forwarded_for(admin_client, monkeypatch):
     assert context["visitor_info_url"] == "http://203.0.113.1:8888/nodes/info/"
     assert context["visitor_register_url"] == "http://203.0.113.1:8888/nodes/register/"
     assert context["telemetry_url"] == reverse("register-telemetry")
+    assert context["visitor_proxy_url"] == reverse("register-visitor-proxy")
+
+
+@pytest.mark.django_db
+def test_register_visitor_proxy_success(admin_client, monkeypatch):
+    node = Node.objects.create(
+        hostname="local",
+        address="198.51.100.1",
+        mac_address="00:11:22:33:44:55",
+        port=8888,
+        public_endpoint="local-endpoint",
+        public_key="local-key",
+    )
+
+    monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: node))
+
+    class FakeResponse:
+        def __init__(self, payload, status_code=200):
+            self._payload = payload
+            self.status_code = status_code
+
+        def raise_for_status(self):
+            if self.status_code >= 400:
+                raise requests.HTTPError()
+
+        def json(self):
+            return self._payload
+
+    class FakeSession:
+        def __init__(self):
+            self.requests = []
+
+        def get(self, url, timeout=None):
+            self.requests.append(("get", url))
+            return FakeResponse(
+                {
+                    "hostname": "visitor-host",
+                    "mac_address": "aa:bb:cc:dd:ee:ff",
+                    "address": "203.0.113.10",
+                    "port": 8000,
+                    "public_key": "visitor-key",
+                    "features": [],
+                }
+            )
+
+        def post(self, url, json=None, timeout=None):
+            self.requests.append(("post", url, json))
+            return FakeResponse({"id": 2, "detail": "ok"})
+
+    monkeypatch.setattr(requests, "Session", lambda: FakeSession())
+
+    response = admin_client.post(
+        reverse("register-visitor-proxy"),
+        data=json.dumps(
+            {
+                "visitor_info_url": "http://visitor.test/nodes/info/",
+                "visitor_register_url": "http://visitor.test/nodes/register/",
+                "token": "",
+            }
+        ),
+        content_type="application/json",
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["host"]["id"]
+    assert body["visitor"]["id"] == 2
 
 
 @pytest.mark.django_db

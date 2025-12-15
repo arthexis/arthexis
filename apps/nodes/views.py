@@ -5,12 +5,14 @@ import logging
 import re
 import socket
 import uuid
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 from dataclasses import dataclass
 from datetime import timedelta
 from collections.abc import Mapping
+from typing import Any
 from django.apps import apps
 from django.conf import settings
+from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import authenticate, get_user_model
 from django.core import serializers
 from django.core.cache import cache
@@ -21,6 +23,10 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.utils.cache import patch_vary_headers
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
+from django.test.client import RequestFactory
+
+import requests
 
 from utils.api import api_login_required
 
@@ -695,6 +701,65 @@ def _normalize_addresses(payload: NodeRegistrationPayload):
     return mac_address, address_value, ipv6_value, ipv4_value
 
 
+def _build_registration_payload(info: Mapping[str, Any] | None, relation: str | None):
+    payload = {
+        "hostname": info.get("hostname") if info else "",
+        "address": info.get("address") if info else "",
+        "port": info.get("port") if info else None,
+        "mac_address": info.get("mac_address") if info else "",
+        "public_key": info.get("public_key") if info else "",
+        "features": info.get("features") if info else [],
+        "trusted": True,
+    }
+
+    if info and not payload["address"]:
+        payload["address"] = info.get("network_hostname") or ""
+
+    relation_value = relation or (info.get("current_relation") if info else None)
+    if relation_value:
+        payload["current_relation"] = relation_value
+
+    role_value = ""
+    if info:
+        for candidate in (info.get("role"), info.get("role_name")):
+            if isinstance(candidate, str) and candidate.strip():
+                role_value = candidate.strip()
+                break
+    if role_value:
+        payload["role"] = role_value
+
+    return payload
+
+
+def _apply_token_signature(payload: dict, info: Mapping[str, Any] | None, token: str):
+    if not (info and token):
+        return
+    signature = info.get("token_signature")
+    if signature:
+        payload["token"] = token
+        payload["signature"] = signature
+
+
+def _append_token(url: str, token: str) -> str:
+    if not (url and token):
+        return url
+    try:
+        parsed = urlsplit(url)
+        query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+        query["token"] = token
+        return urlunsplit(
+            (
+                parsed.scheme,
+                parsed.netloc,
+                parsed.path,
+                urlencode(query, doseq=True),
+                parsed.fragment,
+            )
+        )
+    except Exception:
+        return url
+
+
 def _resolve_role(role_name: str, *, can_assign: bool):
     if not (role_name and can_assign):
         return None
@@ -1026,6 +1091,104 @@ def register_node(request):
     )
     _deactivate_user_if_requested(request, payload.deactivate_user)
     return _add_cors_headers(request, response)
+
+
+@staff_member_required
+@require_POST
+def register_visitor_proxy(request):
+    """Server-side visitor registration to avoid browser mixed-content issues."""
+
+    try:
+        data = json.loads(request.body.decode() or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"detail": "invalid json"}, status=400)
+
+    visitor_info_url = str(data.get("visitor_info_url") or "").strip()
+    visitor_register_url = str(data.get("visitor_register_url") or "").strip()
+    token = str(data.get("token") or "").strip()
+
+    if not visitor_info_url or not visitor_register_url:
+        return JsonResponse({"detail": "visitor info/register URLs required"}, status=400)
+
+    visitor_info_url = _append_token(visitor_info_url, token)
+
+    factory = RequestFactory()
+    host_info_request = factory.get("/nodes/info/", {"token": token} if token else {})
+    host_info_request.user = request.user
+    host_info_request._cached_user = request.user
+    host_info_response = node_info(host_info_request)
+    try:
+        host_info = json.loads(host_info_response.content.decode() or "{}")
+    except json.JSONDecodeError:
+        host_info = {}
+
+    session = requests.Session()
+    timeout_seconds = 45
+
+    try:
+        visitor_info_response = session.get(visitor_info_url, timeout=timeout_seconds)
+        visitor_info_response.raise_for_status()
+        visitor_info = visitor_info_response.json()
+    except Exception as exc:
+        registration_logger.warning(
+            "Visitor registration proxy: unable to fetch visitor info from %s: %s",
+            visitor_info_url,
+            exc,
+        )
+        return JsonResponse({"detail": "visitor info unavailable"}, status=502)
+
+    host_payload = _build_registration_payload(visitor_info, "Downstream")
+    _apply_token_signature(host_payload, visitor_info, token)
+
+    host_register_request = factory.post(
+        "/nodes/register/",
+        data=json.dumps(host_payload),
+        content_type="application/json",
+    )
+    host_register_request.user = request.user
+    host_register_request._cached_user = request.user
+    host_register_response = register_node(host_register_request)
+
+    try:
+        host_register_body = json.loads(host_register_response.content.decode() or "{}")
+    except json.JSONDecodeError:
+        host_register_body = {}
+
+    if host_register_response.status_code != 200 or not host_register_body.get("id"):
+        detail = host_register_body.get("detail") or "host registration failed"
+        return JsonResponse({"detail": detail}, status=host_register_response.status_code or 400)
+
+    visitor_payload = _build_registration_payload(host_info, "Upstream")
+    _apply_token_signature(visitor_payload, host_info, token)
+
+    try:
+        visitor_register_response = session.post(
+            visitor_register_url,
+            json=visitor_payload,
+            timeout=timeout_seconds,
+        )
+        visitor_register_response.raise_for_status()
+        visitor_register_body = visitor_register_response.json()
+    except Exception as exc:
+        registration_logger.warning(
+            "Visitor registration proxy: unable to notify visitor at %s: %s",
+            visitor_register_url,
+            exc,
+        )
+        return JsonResponse({"detail": "visitor confirmation failed"}, status=502)
+
+    return JsonResponse(
+        {
+            "host": {
+                "detail": host_register_body.get("detail", ""),
+                "id": host_register_body.get("id"),
+            },
+            "visitor": {
+                "detail": visitor_register_body.get("detail", ""),
+                "id": visitor_register_body.get("id"),
+            },
+        }
+    )
 
 
 @csrf_exempt
