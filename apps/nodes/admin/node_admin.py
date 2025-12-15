@@ -49,6 +49,7 @@ from apps.cards.models import RFID
 from apps.cards.sync import apply_rfid_payload, serialize_rfid
 from apps.camera import capture_rpi_snapshot
 from apps.core.admin import EmailOutboxAdminForm, SaveBeforeChangeAction
+from apps.base.models import Entity
 from apps.emails.models import EmailOutbox
 from apps.locals.user_data import EntityModelAdmin
 from apps.ocpp import store
@@ -158,6 +159,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
     actions = [
         "update_selected_nodes",
         "register_visitor",
+        "force_delete_seed_nodes",
         "run_task",
         "take_screenshots",
         "download_evcs_firmware",
@@ -313,6 +315,56 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
     @admin.action(description="Register Visitor")
     def register_visitor(self, request, queryset=None):
         return self.register_visitor_view(request)
+
+    @admin.action(description=_("Permanently delete selected seed nodes"))
+    def force_delete_seed_nodes(self, request, queryset):
+        if not request.user.is_superuser:
+            self.message_user(
+                request,
+                _("Only superusers can permanently delete seed nodes."),
+                level=messages.ERROR,
+            )
+            return
+
+        selected_nodes = list(queryset)
+        if not selected_nodes:
+            self.message_user(request, _("No nodes selected."), messages.INFO)
+            return
+
+        seed_nodes = [node for node in selected_nodes if node.is_seed_data]
+        if not seed_nodes:
+            self.message_user(
+                request,
+                _("No seed nodes were selected; nothing was permanently deleted."),
+                messages.INFO,
+            )
+            return
+
+        seed_count = len(seed_nodes)
+        self.message_user(
+            request,
+            ngettext(
+                "Force deleting %(count)d seed node. This cannot be undone.",
+                "Force deleting %(count)d seed nodes. This cannot be undone.",
+                seed_count,
+            )
+            % {"count": seed_count},
+            level=messages.WARNING,
+        )
+
+        for node in seed_nodes:
+            super(Entity, node).delete()
+
+        self.message_user(
+            request,
+            ngettext(
+                "Permanently removed %(count)d seed node.",
+                "Permanently removed %(count)d seed nodes.",
+                seed_count,
+            )
+            % {"count": seed_count},
+            messages.SUCCESS,
+        )
 
     @admin.action(description=_("Update selected nodes"))
     def update_selected_nodes(self, request, queryset):
