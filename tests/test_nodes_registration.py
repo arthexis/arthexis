@@ -161,7 +161,7 @@ def test_node_info_uses_site_domain_port(monkeypatch, client):
     assert payload["port"] == 443
 
 
-@pytest.mark.django_db
+
 def test_register_visitor_proxy_success(admin_client, monkeypatch):
     node = Node.objects.create(
         hostname="local",
