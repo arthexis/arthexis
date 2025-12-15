@@ -273,7 +273,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
                 )
             },
         ),
-        (_("Role"), {"fields": ("role", "profile")}),
+        (_("Role"), {"fields": ("role",)}),
         (
             _("Public endpoint"),
             {
