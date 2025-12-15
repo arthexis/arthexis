@@ -1122,6 +1122,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             "info_url": reverse("node-info"),
             "register_url": reverse("register-node"),
             "telemetry_url": reverse("register-telemetry"),
+            "visitor_proxy_url": reverse("register-visitor-proxy"),
             "visitor_info_url": visitor_info_url,
             "visitor_register_url": visitor_register_url,
             "visitor_error": visitor_error,

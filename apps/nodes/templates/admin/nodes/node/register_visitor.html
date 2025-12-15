@@ -140,6 +140,7 @@
     const telemetryUrl = "{{ telemetry_url|escapejs }}";
     const visitorInfoUrl = "{{ visitor_info_url|escapejs }}";
     const visitorRegisterUrl = "{{ visitor_register_url|escapejs }}";
+    const visitorProxyUrl = "{{ visitor_proxy_url|escapejs }}";
     const hostResult = document.getElementById("host-result");
     const visitorResult = document.getElementById("visitor-result");
     const summary = document.getElementById("result");
@@ -214,6 +215,18 @@
         setStatus(hostResult, messages.aborted, "error");
         setStatus(visitorResult, messages.visitorMissing, "error");
         return;
+    }
+
+    function getCookie(name) {
+        const cookieString = document.cookie || "";
+        const cookies = cookieString.split(";");
+        for (const cookie of cookies) {
+            const [key, value] = cookie.trim().split("=");
+            if (key === name) {
+                return decodeURIComponent(value || "");
+            }
+        }
+        return "";
     }
 
     async function loadJson(url, options, timeoutMs = requestTimeoutMs) {
@@ -417,8 +430,56 @@
         }
     }
 
+    async function runProxyFlow() {
+        try {
+            const response = await loadJson(visitorProxyUrl, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": getCookie("csrftoken"),
+                },
+                credentials: "same-origin",
+                body: JSON.stringify({
+                    token,
+                    visitor_info_url: visitorInfoUrl,
+                    visitor_register_url: visitorRegisterUrl,
+                }),
+            });
+
+            const host = response && typeof response === "object" ? response.host : null;
+            const visitor = response && typeof response === "object" ? response.visitor : null;
+
+            if (!host || !host.id) {
+                throw new Error((host && host.detail) || messages.partial);
+            }
+            setStatus(hostResult, host.detail || messages.hostRegistered, "success");
+
+            if (!visitor || !visitor.id) {
+                throw new Error((visitor && visitor.detail) || messages.partial);
+            }
+            setStatus(visitorResult, visitor.detail || messages.visitorRegistered, "success");
+            setStatus(summary, messages.success, "success");
+            sendTelemetry("proxy-success", visitorProxyUrl, "ok");
+        } catch (error) {
+            const formatted = formatError(error);
+            setStatus(summary, formatted, formatted.includes(messages.fetchAdvice) ? "warning" : "error");
+            setStatus(hostResult, messages.aborted, "error");
+            setStatus(visitorResult, formatted, "error");
+            sendTelemetry("proxy", visitorProxyUrl, formatted);
+        }
+    }
+
     (async function() {
         try {
+            const isSecurePage = window.isSecureContext && window.location.protocol === "https:";
+            const insecureVisitor =
+                visitorInfoUrl.startsWith("http:") || visitorRegisterUrl.startsWith("http:");
+
+            if (isSecurePage && insecureVisitor && visitorProxyUrl) {
+                await runProxyFlow();
+                return;
+            }
+
             const visitorInfoTargets = buildUrlVariants(visitorInfoUrl + "?token=" + token);
             const visitorInfoPromise = requestWithFallback(visitorInfoTargets).catch(
                 (error) => {
