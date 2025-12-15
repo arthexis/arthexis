@@ -18,6 +18,7 @@ from apps.users.models import Profile
 from apps.release.models import PackageRelease
 from apps.sigils.fields import SigilShortAutoField
 from django.utils.translation import gettext_lazy as _
+from django.contrib.sites.models import Site
 import re
 import json
 import base64
@@ -472,6 +473,15 @@ class Node(Entity):
         SELF = "SELF", "Self"
 
     hostname = models.CharField(max_length=100)
+    base_site = models.ForeignKey(
+        Site,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="nodes",
+        verbose_name=_("Base site"),
+        help_text=_("Site that provides the preferred domain for this node."),
+    )
     network_hostname = models.CharField(max_length=253, blank=True)
     ipv4_address = models.TextField(blank=True)
     ipv6_address = models.CharField(
@@ -548,6 +558,25 @@ class Node(Entity):
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return f"{self.hostname}:{self.port}"
+
+    def get_base_domain(self) -> str:
+        """Return the preferred domain provided by the linked site if available."""
+
+        if not self.base_site_id:
+            return ""
+        try:
+            domain = (getattr(self.base_site, "domain", "") or "").strip()
+        except Site.DoesNotExist:
+            return ""
+        return domain
+
+    def get_preferred_hostname(self) -> str:
+        """Return the hostname prioritized for external communication."""
+
+        base_domain = self.get_base_domain()
+        if base_domain:
+            return base_domain
+        return self.hostname
 
     @classmethod
     def default_base_path(cls) -> Path:
@@ -660,13 +689,13 @@ class Node(Entity):
         return port
 
     @classmethod
-    def _detect_managed_site(cls) -> tuple[str, bool]:
-        """Return the primary managed site domain and HTTPS preference."""
+    def _detect_managed_site(cls) -> tuple[Site | None, str, bool]:
+        """Return the primary managed site, domain, and HTTPS preference."""
 
         try:
             Site = apps.get_model("sites", "Site")
         except Exception:
-            return "", False
+            return None, "", False
 
         try:
             site = (
@@ -677,20 +706,20 @@ class Node(Entity):
                 or Site.objects.only("domain", "require_https").order_by("id").first()
             )
         except DatabaseError:
-            return "", False
+            return None, "", False
 
         if not site:
-            return "", False
+            return None, "", False
 
         domain = (getattr(site, "domain", "") or "").strip()
         if not domain or domain.lower() == "localhost":
-            return "", False
+            return None, "", False
 
         try:
             ipaddress.ip_address(domain)
         except ValueError:
-            return domain, bool(getattr(site, "require_https", False))
-        return "", False
+            return site, domain, bool(getattr(site, "require_https", False))
+        return None, "", False
 
     @staticmethod
     def _detect_nginx_mode() -> str:
@@ -756,6 +785,9 @@ class Node(Entity):
         """
 
         values: list[str] = []
+        base_domain = self.get_base_domain()
+        if base_domain:
+            values.append(base_domain)
         for attr in (
             "network_hostname",
             "hostname",
@@ -1071,7 +1103,7 @@ class Node(Entity):
         serialized_ipv4 = ",".join(ordered_ipv4) if ordered_ipv4 else ""
         ipv6_address = cls._select_preferred_ip(ipv6_candidates) or ""
 
-        site_domain, site_requires_https = cls._detect_managed_site()
+        managed_site, site_domain, site_requires_https = cls._detect_managed_site()
 
         preferred_contact = ipv4_address or ipv6_address or direct_address or "127.0.0.1"
         if site_domain:
@@ -1114,6 +1146,8 @@ class Node(Entity):
             "mac_address": mac,
             "current_relation": cls.Relation.SELF,
         }
+        if managed_site:
+            defaults["base_site"] = managed_site
         role_lock = Path(settings.BASE_DIR) / ".locks" / "role.lck"
         role_name = role_lock.read_text().strip() if role_lock.exists() else "Terminal"
         role_name = ROLE_RENAMES.get(role_name, role_name)

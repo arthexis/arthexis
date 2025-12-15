@@ -117,6 +117,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             {
                 "fields": (
                     "hostname",
+                    "base_site",
                     "network_hostname",
                     "ipv4_address",
                     "ipv6_address",
@@ -1127,8 +1128,8 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             "visitor_port": visitor_port,
             "visitor_scheme": visitor_scheme,
             "local_node": {
-                "hostname": node.hostname,
-                "address": node.address,
+                "hostname": node.get_preferred_hostname(),
+                "address": node.get_base_domain() or node.address,
                 "port": node.port,
             },
             "change_url_template": reverse("admin:nodes_node_change", args=[0]),
