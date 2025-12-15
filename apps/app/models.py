@@ -122,7 +122,9 @@ def _get_models_for_application(app_config) -> Iterable[type[models.Model]]:
     return app_config.get_models() if app_config else []
 
 
-def _refresh_application_models(using: str) -> None:
+def _refresh_application_models(
+    using: str, applications: Iterable[Application] | None = None
+) -> None:
     connection = connections[using]
     existing_tables = set(connection.introspection.table_names())
     required_tables = {
@@ -133,7 +135,15 @@ def _refresh_application_models(using: str) -> None:
     if not required_tables.issubset(existing_tables):
         return
 
-    for application in Application.objects.using(using).all():
+    application_qs = (
+        Application.objects.using(using).filter(
+            pk__in=[app.pk for app in applications if app.pk]
+        )
+        if applications is not None
+        else Application.objects.using(using).all()
+    )
+
+    for application in application_qs:
         existing_wiki_urls = {
             model.label: model.wiki_url
             for model in ApplicationModel.objects.using(using)
@@ -169,6 +179,10 @@ def _refresh_application_models(using: str) -> None:
             ApplicationModel.objects.using(using).bulk_create(application_models)
 
 
-def refresh_application_models(using: str | None = None, **kwargs) -> None:
+def refresh_application_models(
+    using: str | None = None,
+    applications: Iterable[Application] | None = None,
+    **kwargs,
+) -> None:
     database = using or kwargs.get("using") or "default"
-    _refresh_application_models(database)
+    _refresh_application_models(database, applications=applications)

@@ -40,7 +40,11 @@ from apps.meta.models import WhatsAppChatBridge
 from apps.odoo.models import OdooChatBridge
 from apps.release.models import ReleaseManager
 from apps.locals.user_data import EntityModelAdmin
-from apps.app.models import Application, ApplicationModel
+from apps.app.models import (
+    Application,
+    ApplicationModel,
+    refresh_application_models,
+)
 from apps.nodes.forms import NodeRoleMultipleChoiceField
 
 
@@ -417,6 +421,7 @@ class ApplicationAdmin(EntityModelAdmin):
         "is_seed_data",
         "is_user_data",
     )
+    actions = ("discover_app_models",)
 
     @admin.display(description="Verbose name")
     def app_verbose_name(self, obj):
@@ -425,6 +430,20 @@ class ApplicationAdmin(EntityModelAdmin):
     @admin.display(boolean=True)
     def installed(self, obj):
         return obj.installed
+
+    @admin.action(description=_("Discover App Models"))
+    def discover_app_models(self, request, queryset):
+        refresh_application_models(using=queryset.db, applications=queryset)
+        self.message_user(
+            request,
+            ngettext(
+                "Discovered models for %(count)d application.",
+                "Discovered models for %(count)d applications.",
+                queryset.count(),
+            )
+            % {"count": queryset.count()},
+            level=messages.SUCCESS,
+        )
 
 
 @admin.register(Landing)
