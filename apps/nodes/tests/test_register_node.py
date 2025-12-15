@@ -95,6 +95,30 @@ def test_register_node_sets_cors_headers_without_origin(admin_user):
 
 
 @pytest.mark.django_db
+def test_register_node_allows_authenticated_user_with_invalid_signature(admin_user):
+    payload = {
+        "hostname": "visitor-host",
+        "mac_address": "aa:bb:cc:dd:ee:22",
+        "address": "192.0.2.30",
+        "port": 8888,
+        "public_key": "invalid-key",
+        "token": "signed-token",
+        "signature": "bad-signature",
+    }
+
+    factory = RequestFactory()
+    request = _build_request(factory, payload)
+    request.user = admin_user
+    request._cached_user = admin_user
+
+    response = register_node(request)
+
+    assert response.status_code == 200
+    node = Node.objects.get(mac_address=payload["mac_address"])
+    assert node.hostname == payload["hostname"]
+
+
+@pytest.mark.django_db
 def test_register_current_logs_to_local_logger(settings, caplog):
     settings.LOG_DIR = settings.BASE_DIR / "logs"
     NodeRole.objects.get_or_create(name="Terminal")
