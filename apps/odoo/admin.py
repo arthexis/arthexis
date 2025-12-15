@@ -105,7 +105,7 @@ class OdooDeploymentAdmin(DjangoObjectActions, EntityModelAdmin):
                 or self.has_add_permission(request)
             ):
                 raise PermissionDenied
-            result = sync_odoo_deployments()
+            result = sync_odoo_deployments(scan_filesystem=False)
             context["result"] = result
             if result["created"] or result["updated"]:
                 message = _(
