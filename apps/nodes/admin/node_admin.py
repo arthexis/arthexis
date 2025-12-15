@@ -1072,7 +1072,11 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         if scheme not in {"http", "https"}:
             scheme = "http"
 
-        port = parsed.port or raw_port or Node.get_preferred_port()
+        default_port = Node.get_preferred_port()
+        if parsed.hostname in {"127.0.0.1", "localhost", "::1"} and default_port == 8888:
+            default_port = 8000
+
+        port = parsed.port or raw_port or default_port
         if ":" in hostname and not hostname.startswith("["):
             host_part = f"[{hostname}]"
         else:
