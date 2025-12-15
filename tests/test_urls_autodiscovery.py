@@ -77,3 +77,26 @@ def test_apps_without_urls_do_not_raise(monkeypatch):
     routes = _pattern_routes()
 
     assert routes == set()
+
+
+def test_api_routes_are_only_namespaced_by_app():
+    routes = _pattern_routes()
+
+    assert all(not route.startswith("api/") for route in routes)
+
+    base_dir = Path(settings.BASE_DIR).resolve()
+    app_api_prefixes = set()
+    for app_config in apps.get_app_configs():
+        app_path = Path(app_config.path).resolve()
+        try:
+            app_path.relative_to(base_dir)
+        except ValueError:
+            continue
+
+        if app_config.label in {"pages", "docs"}:
+            continue
+
+        app_api_prefixes.add(f"{app_config.label}/api/")
+
+    api_routes = [route for route in routes if "/api/" in route]
+    assert all(any(route.startswith(prefix) for prefix in app_api_prefixes) for route in api_routes)
