@@ -162,9 +162,11 @@ if [ -f "$LOCK_DIR/nginx_disabled.lck" ]; then
 elif [ -f "$LOCK_DIR/nginx_mode.lck" ]; then
   MODE="$(cat "$LOCK_DIR/nginx_mode.lck")"
 fi
-PORT="$(arthexis_detect_backend_port "$BASE_DIR")"
+CONFIGURED_PORT="$(arthexis_detect_backend_port "$BASE_DIR")"
+PORT="$CONFIGURED_PORT"
 
 echo "Nginx mode: $MODE"
+echo "Configured port: $CONFIGURED_PORT"
 
 ROLE="${NODE_ROLE:-Terminal}"
 if [ -z "$NODE_ROLE" ] && [ -f "$LOCK_DIR/role.lck" ]; then

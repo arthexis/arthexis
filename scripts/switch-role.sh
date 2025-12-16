@@ -544,6 +544,8 @@ if [ "$CHECK" = true ]; then
         echo "Role: unknown"
     fi
 
+    echo "Configured port: $PORT"
+
     if [ -f "$LOCK_DIR/auto_upgrade.lck" ]; then
         case "$(cat "$LOCK_DIR/auto_upgrade.lck")" in
             latest)
