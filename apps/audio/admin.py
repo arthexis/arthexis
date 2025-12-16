@@ -7,7 +7,7 @@ from django.utils.translation import gettext_lazy as _
 from django_object_actions import DjangoObjectActions
 
 from apps.locals.user_data import EntityModelAdmin
-from apps.nodes.models import Node, NodeFeature
+from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
 
 from .models import RecordingDevice
 from .utils import has_audio_capture_device, record_microphone_sample, save_audio_sample
@@ -42,7 +42,14 @@ class RecordingDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
     find_recording_devices.short_description = _("Find Recording Devices")
     find_recording_devices.changelist = True
 
-    def _ensure_audio_feature_enabled(self, request, action_label: str):
+    def _ensure_audio_feature_enabled(
+        self,
+        request,
+        action_label: str,
+        *,
+        node: Node | None = None,
+        auto_enable: bool = False,
+    ):
         try:
             feature = NodeFeature.objects.get(slug="audio-capture")
         except NodeFeature.DoesNotExist:
@@ -54,13 +61,25 @@ class RecordingDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
             )
             return None
         if not feature.is_enabled:
-            self.message_user(
-                request,
-                _("%(feature)s feature is not enabled on this node.")
-                % {"feature": feature.display},
-                level=messages.WARNING,
-            )
-            return None
+            if auto_enable and node:
+                NodeFeatureAssignment.objects.update_or_create(
+                    node=node, feature=feature
+                )
+                node.sync_feature_tasks()
+                self.message_user(
+                    request,
+                    _("%(feature)s feature was automatically enabled.")
+                    % {"feature": feature.display},
+                    level=messages.SUCCESS,
+                )
+            else:
+                self.message_user(
+                    request,
+                    _("%(feature)s feature is not enabled on this node.")
+                    % {"feature": feature.display},
+                    level=messages.WARNING,
+                )
+                return None
         return feature
 
     def _get_local_node(self, request):
@@ -74,14 +93,17 @@ class RecordingDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
         return node
 
     def find_recording_devices_view(self, request):
-        feature = self._ensure_audio_feature_enabled(
-            request, _("Find Recording Devices")
-        )
-        if not feature:
-            return redirect("..")
-
         node = self._get_local_node(request)
         if node is None:
+            return redirect("..")
+
+        feature = self._ensure_audio_feature_enabled(
+            request,
+            _("Find Recording Devices"),
+            node=node,
+            auto_enable=True,
+        )
+        if not feature:
             return redirect("..")
 
         if not has_audio_capture_device():
