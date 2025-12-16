@@ -151,14 +151,14 @@ ensure_virtualenv() {
 }
 
 configure_nginx_site() {
-  local setup_script="$BASE_DIR/scripts/nginx-setup.sh"
+  local manage_cmd="$BASE_DIR/command.sh"
 
   if [ "$DISABLE_NGINX" -eq 1 ]; then
     echo "Skipping nginx configuration because nginx management is disabled."
     return 0
   fi
 
-  if [ ! -x "$setup_script" ]; then
+  if [ ! -x "$manage_cmd" ]; then
     return 0
   fi
 
@@ -167,8 +167,8 @@ configure_nginx_site() {
     return 0
   fi
 
-  if ! "$setup_script"; then
-    echo "Warning: failed to configure nginx via $setup_script" >&2
+  if ! "$manage_cmd" nginx_configure; then
+    echo "Warning: failed to configure nginx via management command" >&2
   fi
 }
 

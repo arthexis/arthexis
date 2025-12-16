@@ -442,6 +442,7 @@ LOCAL_APPS = [
     "apps.modules",
     "apps.widgets",
     "apps.pages",
+    "apps.nginx",
     "apps.cards",
     "apps.tasks",
     "apps.tests",

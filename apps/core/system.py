@@ -48,7 +48,7 @@ from apps.release.release import (
     _remote_with_credentials,
 )
 from apps.core.tasks import check_github_updates, _read_auto_upgrade_failure_count
-from scripts.helpers.render_nginx_default import generate_config
+from apps.nginx.renderers import generate_primary_config
 from utils import revision
 from apps.core import changelog
 
@@ -1521,7 +1521,9 @@ def _build_nginx_report(
     expected_content = ""
     expected_error = ""
     try:
-        expected_content = _normalize_nginx_content(generate_config(mode, port))
+        expected_content = _normalize_nginx_content(
+            generate_primary_config(mode, port)
+        )
     except Exception as exc:  # pragma: no cover - defensive guard
         logger.exception("Unable to generate expected nginx configuration")
         expected_error = str(exc)
