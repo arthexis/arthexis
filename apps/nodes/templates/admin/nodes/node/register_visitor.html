@@ -420,7 +420,11 @@
             }
             if (!response.ok) {
                 const detail = payload && payload.detail ? payload.detail : text || response.statusText;
-                throw new Error(detail);
+                const error = new Error(detail);
+                error.status = response.status;
+                error.statusText = response.statusText;
+                error.responseText = text;
+                throw error;
             }
             return payload;
         } catch (error) {
@@ -528,7 +532,14 @@
                 return await loadJson(target, options);
             } catch (error) {
                 const message = error && error.message ? error.message : "";
-                if (error instanceof TypeError || message === "Failed to fetch") {
+                const status = typeof error?.status === "number" ? error.status : null;
+                const isHttpError = status && status >= 400;
+
+                if (
+                    error instanceof TypeError ||
+                    message === "Failed to fetch" ||
+                    isHttpError
+                ) {
                     lastError = error;
                     continue;
                 }
@@ -583,6 +594,9 @@
             features: info.features || [],
         };
         payload.trusted = true;
+        if (typeof info.base_site_domain === "string" && info.base_site_domain.trim()) {
+            payload.base_site_domain = info.base_site_domain.trim();
+        }
         const relationValue = relation || info.current_relation;
         if (relationValue) {
             payload.current_relation = relationValue;
