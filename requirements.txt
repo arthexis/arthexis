@@ -62,7 +62,7 @@ pyxel==2.5.10
 prompt_toolkit==3.0.52
 psutil==7.1.3
 psycopg==3.3.2
-psycopg-binary==3.2.13
+psycopg-binary==3.3.2
 pyasn1==0.6.1
 pyasn1_modules==0.4.2
 pycparser==2.23
