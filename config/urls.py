@@ -16,6 +16,7 @@ from django.contrib.staticfiles.urls import staticfiles_urlpatterns
 from django.contrib import admin
 from django.urls import include, path
 from apps.nodes import admin as nodes_admin  # noqa: F401 - ensure custom admin URLs are registered
+from apps.odoo import admin as odoo_admin  # noqa: F401
 from apps.tasks import admin as tasks_admin  # noqa: F401
 from apps.teams import admin as teams_admin  # noqa: F401
 from django.views.decorators.csrf import csrf_exempt
