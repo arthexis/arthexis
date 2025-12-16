@@ -1,6 +1,3 @@
-#!/usr/bin/env python3
-"""Reusable helpers for generating nginx configuration blocks."""
-
 from __future__ import annotations
 
 import re
@@ -18,12 +15,14 @@ MAINTENANCE_ROOT = Path("/usr/share/arthexis-fallback")
 
 def slugify(domain: str) -> str:
     """Return a filesystem-friendly slug for *domain*."""
+
     slug = re.sub(r"[^a-z0-9]+", "-", domain.lower()).strip("-")
     return slug or "site"
 
 
 def maintenance_block() -> str:
     """Return the shared maintenance configuration block."""
+
     return textwrap.dedent(
         f"""
         error_page 404 /maintenance/404.html;
@@ -54,6 +53,7 @@ def maintenance_block() -> str:
 
 def proxy_block(port: int, *, trailing_slash: bool = True) -> str:
     """Return the proxy pass configuration block for *port*."""
+
     upstream = f"http://127.0.0.1:{port}"
     if trailing_slash:
         upstream += "/"
@@ -107,6 +107,7 @@ def http_proxy_server(
     trailing_slash: bool = True,
 ) -> str:
     """Return an HTTP proxy server block for *server_names*."""
+
     if listens is None:
         listens = ("80",)
 
@@ -124,6 +125,7 @@ def http_proxy_server(
 
 def http_redirect_server(server_names: str, listens: Iterable[str] | None = None) -> str:
     """Return an HTTP redirect server block for *server_names*."""
+
     if listens is None:
         listens = ("80",)
 
@@ -142,6 +144,7 @@ def default_reject_server(
     https: bool = False,
 ) -> str:
     """Return a default server block that drops requests for unknown hosts."""
+
     if listens is None:
         listens = ("80",)
 
@@ -174,6 +177,7 @@ def https_proxy_server(
     trailing_slash: bool = True,
 ) -> str:
     """Return an HTTPS proxy server block for *server_names*."""
+
     if listens is None:
         listens = ("443 ssl",)
 
@@ -199,15 +203,15 @@ def https_proxy_server(
 
 
 def write_if_changed(path: Path, content: str) -> bool:
-    """Write *content* to *path* when it differs, returning ``True`` if updated."""
-    try:
-        existing = path.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        existing = None
+    """Write *content* to *path* if it differs from the existing file."""
 
-    normalized = content.rstrip("\n")
-    if existing is not None and existing.rstrip("\n") == normalized:
-        return False
+    if path.exists():
+        try:
+            existing = path.read_text(encoding="utf-8")
+        except OSError:
+            existing = None
+        if existing == content:
+            return False
 
-    path.write_text(normalized + "\n", encoding="utf-8")
+    path.write_text(content, encoding="utf-8")
     return True

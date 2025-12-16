@@ -109,7 +109,7 @@ I nodi Terminal possono avviarsi direttamente con gli script sottostanti senza i
    - Linux: esegui [`./start.sh`](start.sh) e arresta con [`./stop.sh`](stop.sh).
    - Windows: esegui [`start.bat`](start.bat) e interrompi con `Ctrl+C`.
 
-Gli helper di ciclo di vita per servizi e aggiornamenti ora si trovano in [`scripts/`](scripts): `scripts/service-start.sh`, `scripts/switch-role.sh`, `scripts/nginx-setup.sh` e `scripts/delegated-upgrade.sh`. Gli helper di manutenzione legacy (`db-setup.sh`, `db-migrate.sh`, `renew-certs.sh`, `restore-fs.sh`, `change-hostname.sh`, `email-setup.sh`, `network-setup.sh` e `ws.sh`) sono stati rimossi.
+Gli helper di ciclo di vita per servizi e aggiornamenti ora si trovano in [`scripts/`](scripts): `scripts/service-start.sh`, `scripts/switch-role.sh`, `./command.sh nginx_configure` e `scripts/delegated-upgrade.sh`. Gli helper di manutenzione legacy (`db-setup.sh`, `db-migrate.sh`, `renew-certs.sh`, `restore-fs.sh`, `change-hostname.sh`, `email-setup.sh`, `network-setup.sh` e `ws.sh`) sono stati rimossi.
 
 ### 3. Installare e aggiornare
 - **Linux:**

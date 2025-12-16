@@ -225,15 +225,15 @@ EOF
 }
 
 configure_nginx_site() {
-    local setup_script="$SCRIPT_DIR/scripts/nginx-setup.sh"
+    local manage_cmd="$SCRIPT_DIR/command.sh"
 
     if [ "$DISABLE_NGINX" = true ]; then
         echo "Skipping nginx configuration because --no-nginx was requested."
         return 0
     fi
 
-    if [ ! -x "$setup_script" ]; then
-        echo "nginx setup script missing at $setup_script; skipping nginx configuration." >&2
+    if [ ! -x "$manage_cmd" ]; then
+        echo "Django command wrapper missing at $manage_cmd; skipping nginx configuration." >&2
         return 0
     fi
 
@@ -242,10 +242,10 @@ configure_nginx_site() {
         return 0
     fi
 
-    if "$setup_script" --mode "$NGINX_MODE" --port "$PORT" --role "$NODE_ROLE"; then
-        echo "nginx configuration applied using $setup_script."
+    if "$manage_cmd" nginx_configure --mode "$NGINX_MODE" --port "$PORT" --role "$NODE_ROLE"; then
+        echo "nginx configuration applied using Django management command."
     else
-        echo "Warning: failed to configure nginx via $setup_script" >&2
+        echo "Warning: failed to configure nginx via management command" >&2
     fi
 }
 
