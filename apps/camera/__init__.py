@@ -1,9 +1,12 @@
-from .rpi import (
+"""Backward compatibility shims for the legacy camera module."""
+
+from apps.video import (
     CAMERA_DIR,
     RPI_CAMERA_BINARIES,
     RPI_CAMERA_DEVICE,
     capture_rpi_snapshot,
     has_rpi_camera_stack,
+    record_rpi_video,
 )
 
 __all__ = [
@@ -12,4 +15,5 @@ __all__ = [
     "RPI_CAMERA_DEVICE",
     "capture_rpi_snapshot",
     "has_rpi_camera_stack",
+    "record_rpi_video",
 ]

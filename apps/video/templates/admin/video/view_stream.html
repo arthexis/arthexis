@@ -1,0 +1,115 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+<div id="content-main" class="camera-stream">
+  <div class="module">
+    <h2>{% trans "Raspberry Pi Camera stream" %}</h2>
+    <p class="help">
+      {% blocktrans %}
+        The live feed below opens in an embedded frame. If the stream does not appear,
+        ensure the Raspberry Pi camera service is running and reachable.
+      {% endblocktrans %}
+    </p>
+    <div class="camera-stream__frame">
+      {% if stream_embed == "mjpeg" %}
+        <img
+          src="{{ stream_url }}"
+          alt="{% trans "Live camera stream" %}"
+          loading="lazy"
+        />
+      {% elif stream_embed == "iframe" %}
+        <iframe
+          src="{{ stream_url }}"
+          title="{% trans "Camera stream" %}"
+          allow="autoplay; fullscreen"
+          allowfullscreen
+          referrerpolicy="no-referrer"
+        ></iframe>
+      {% else %}
+        <div class="camera-stream__unsupported" role="alert">
+          <p>
+            {% blocktrans %}
+              This stream uses a protocol that cannot be embedded in the browser. Use the
+              button below to open it in an external viewer.
+            {% endblocktrans %}
+          </p>
+        </div>
+      {% endif %}
+    </div>
+    <p class="camera-stream__actions">
+      <a class="button" href="{{ stream_url }}" target="_blank" rel="noopener">
+        {% trans "Open stream in new window" %}
+      </a>
+    </p>
+  </div>
+</div>
+{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+  .camera-stream__frame {
+    position: relative;
+    padding-bottom: 56.25%;
+    height: 0;
+    overflow: hidden;
+    background: #000;
+  }
+
+  .camera-stream__frame iframe,
+  .camera-stream__frame video {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
+  }
+
+  .camera-stream__frame img {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    object-fit: contain;
+    display: block;
+    background: #000;
+  }
+
+  .camera-stream__frame .camera-stream__unsupported {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    text-align: center;
+    padding: 1.5rem;
+  }
+
+  .camera-stream__actions {
+    margin-top: 1rem;
+  }
+
+  .camera-stream__actions .button {
+    display: inline-block;
+    padding: 0.5em 1em;
+    background: #0c4b33;
+    color: #fff;
+    border-radius: 4px;
+    text-decoration: none;
+  }
+
+  .camera-stream__actions .button:hover,
+  .camera-stream__actions .button:focus {
+    background: #0f5c3f;
+  }
+</style>
+{% endblock %}

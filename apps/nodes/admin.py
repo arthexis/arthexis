@@ -54,7 +54,6 @@ from .reports import (
     iter_report_periods,
     resolve_period,
 )
-from apps.camera import capture_rpi_snapshot
 from apps.users import temp_passwords
 from apps.core.admin import EmailOutboxAdminForm, SaveBeforeChangeAction
 from apps.ocpp.models import CPForwarder
@@ -2197,16 +2196,6 @@ class NodeFeatureAdmin(EntityModelAdmin):
                 self.admin_site.admin_view(self.take_screenshot),
                 name="nodes_nodefeature_take_screenshot",
             ),
-            path(
-                "take-snapshot/",
-                self.admin_site.admin_view(self.take_snapshot),
-                name="nodes_nodefeature_take_snapshot",
-            ),
-            path(
-                "view-stream/",
-                self.admin_site.admin_view(self.view_stream),
-                name="nodes_nodefeature_view_stream",
-            ),
         ]
         return custom + urls
 
@@ -2312,79 +2301,6 @@ class NodeFeatureAdmin(EntityModelAdmin):
             )
             return redirect("..")
         return redirect(change_url)
-
-    def take_snapshot(self, request):
-        feature = self._ensure_feature_enabled(
-            request, "rpi-camera", "Take a Snapshot"
-        )
-        if not feature:
-            return redirect("..")
-        try:
-            path = capture_rpi_snapshot()
-        except Exception as exc:  # pragma: no cover - depends on camera stack
-            self.message_user(request, str(exc), level=messages.ERROR)
-            return redirect("..")
-        node = Node.get_local()
-        sample = save_screenshot(path, node=node, method="RPI_CAMERA")
-        if not sample:
-            self.message_user(
-                request, "Duplicate snapshot; not saved", level=messages.INFO
-            )
-            return redirect("..")
-        self.message_user(
-            request, f"Snapshot saved to {sample.path}", level=messages.SUCCESS
-        )
-        try:
-            change_url = reverse(
-                "admin:nodes_contentsample_change", args=[sample.pk]
-            )
-        except NoReverseMatch:  # pragma: no cover - admin URL always registered
-            self.message_user(
-                request,
-                "Snapshot saved but the admin page could not be resolved.",
-                level=messages.WARNING,
-            )
-            return redirect("..")
-        return redirect(change_url)
-
-    def view_stream(self, request):
-        feature = self._ensure_feature_enabled(request, "rpi-camera", "View stream")
-        if not feature:
-            return redirect("..")
-
-        configured_stream = getattr(settings, "RPI_CAMERA_STREAM_URL", "").strip()
-        if configured_stream:
-            stream_url = configured_stream
-        else:
-            base_uri = request.build_absolute_uri("/")
-            parsed = urlsplit(base_uri)
-            hostname = parsed.hostname or "127.0.0.1"
-            port = getattr(settings, "RPI_CAMERA_STREAM_PORT", 8554)
-            scheme = getattr(settings, "RPI_CAMERA_STREAM_SCHEME", "http")
-            netloc = f"{hostname}:{port}" if port else hostname
-            stream_url = urlunsplit((scheme, netloc, "/", "", ""))
-        parsed_stream = urlsplit(stream_url)
-        path = (parsed_stream.path or "").lower()
-        query = (parsed_stream.query or "").lower()
-
-        if parsed_stream.scheme in {"rtsp", "rtsps"}:
-            embed_mode = "unsupported"
-        elif any(path.endswith(ext) for ext in (".mjpg", ".mjpeg", ".jpeg", ".jpg", ".png")) or "action=stream" in query:
-            embed_mode = "mjpeg"
-        else:
-            embed_mode = "iframe"
-
-        context = {
-            **self.admin_site.each_context(request),
-            "title": _("Raspberry Pi Camera Stream"),
-            "stream_url": stream_url,
-            "stream_embed": embed_mode,
-        }
-        return TemplateResponse(
-            request,
-            "admin/nodes/nodefeature/view_stream.html",
-            context,
-        )
 
 
 @admin.register(NetMessage)

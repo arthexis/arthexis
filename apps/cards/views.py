@@ -17,7 +17,7 @@ from .scanner import scan_sources, enable_deep_read_mode
 from .reader import validate_rfid_value
 from apps.cards.models import RFID
 from .utils import build_mode_toggle
-from apps.camera.rfid import scan_camera_qr
+from apps.video.rfid import scan_camera_qr
 
 
 def _request_wants_json(request):
