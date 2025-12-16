@@ -109,7 +109,7 @@ Los nodos Terminal pueden iniciarse directamente con los siguientes scripts sin 
    - Linux: ejecuta [`./start.sh`](start.sh) y detén con [`./stop.sh`](stop.sh).
    - Windows: ejecuta [`start.bat`](start.bat) y detén con `Ctrl+C`.
 
-Los scripts de ciclo de vida para servicios y actualizaciones ahora viven en [`scripts/`](scripts): `scripts/service-start.sh`, `scripts/switch-role.sh`, `scripts/nginx-setup.sh` y `scripts/delegated-upgrade.sh`. Se retiraron los ayudantes de mantenimiento heredados (`db-setup.sh`, `db-migrate.sh`, `renew-certs.sh`, `restore-fs.sh`, `change-hostname.sh`, `email-setup.sh`, `network-setup.sh` y `ws.sh`).
+El script de configuración de roles ahora se encuentra en la raíz como [`./configure.sh`](configure.sh). Los scripts de ciclo de vida para servicios y actualizaciones viven en [`scripts/`](scripts): `scripts/service-start.sh`, `scripts/nginx-setup.sh` y `scripts/delegated-upgrade.sh`. Se retiraron los ayudantes de mantenimiento heredados (`db-setup.sh`, `db-migrate.sh`, `renew-certs.sh`, `restore-fs.sh`, `change-hostname.sh`, `email-setup.sh`, `network-setup.sh` y `ws.sh`).
 
 ### 3. Instalar y actualizar
 - **Linux:**
