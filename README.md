@@ -89,7 +89,7 @@ Arthexis Constellation ships in four node roles tailored to different deployment
 - **[Windows](https://en.wikipedia.org/wiki/Microsoft_Windows)**: open [PowerShell](https://learn.microsoft.com/powershell/) or [Git Bash](https://gitforwindows.org/) and run the same command.
 
 ### 2. Start and stop
-Terminal nodes can start directly with the scripts below without installing; Control, Satellite, and Watchtower roles require installation first. Both approaches listen on [`http://localhost:8000/`](http://localhost:8000/) by default.
+Terminal nodes can start directly with the scripts below without installing; Control, Satellite, and Watchtower roles require installation first. Both approaches listen on [`http://localhost:8888/`](http://localhost:8888/) by default.
 
 - **[VS Code](https://code.visualstudio.com/)**
    - Open the folder and go to the **Run and Debug** panel (`Ctrl+Shift+D`).
@@ -102,7 +102,7 @@ Terminal nodes can start directly with the scripts below without installing; Con
 
 ### 3. Install and upgrade
 - **Linux:**
-   - Run `make install ROLE=terminal` to bootstrap a default Terminal node (pass `ROLE=control`, `satellite`, or `watchtower` as needed). Override the port with `PORT=8000`, auto-start with `START_ON_INSTALL=true`, and control Celery with `CELERY=true|false`; other flags can be forwarded via `EXTRA_INSTALL_ARGS`.
+   - Run `make install ROLE=terminal` to bootstrap a default Terminal node (pass `ROLE=control`, `satellite`, or `watchtower` as needed). Override the port with `PORT=8888` (the default fallback), auto-start with `START_ON_INSTALL=true`, and control Celery with `CELERY=true|false`; other flags can be forwarded via `EXTRA_INSTALL_ARGS`.
    - Use `make upgrade` with `CHANNEL=stable|latest|fixed` to wrap [`upgrade.sh`](upgrade.sh).
    - Call the underlying scripts directly (`./install.sh`, `./upgrade.sh`) when you need flags not covered by the Makefile. Use `./install.sh --help` to see every available option.
    - Consult the [Install & Lifecycle Scripts Manual](docs/development/install-lifecycle-scripts-manual.md) for complete flag descriptions and operational notes.
@@ -121,8 +121,8 @@ Upgrade channels (opt-in during install/upgrade or with `scripts/delegated-upgra
 | Latest | 60 minutes | Follows the newest mainline revisions with hourly checks. | `--latest` |
 
 ### 4. Administration
-- Access the [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) at [`http://localhost:8000/admin/`](http://localhost:8000/admin/) to review and manage live data. Use `--port` with the start scripts or installer when you need to expose a different port.
-- Browse the [admindocs](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/) at [`http://localhost:8000/admindocs/`](http://localhost:8000/admindocs/) for API documentation that is generated from your models.
+- Access the [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) at [`http://localhost:8888/admin/`](http://localhost:8888/admin/) to review and manage live data. Use `--port` with the start scripts or installer when you need to expose a different port.
+- Browse the [admindocs](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/) at [`http://localhost:8888/admindocs/`](http://localhost:8888/admindocs/) for API documentation that is generated from your models.
 - Follow the [Install & Administration Guide](apps/docs/cookbooks/install-start-stop-upgrade-uninstall.md) for deployment, lifecycle tasks, and operational runbooks.
 - Onboard and service chargers with the [EVCS Connectivity & Maintenance Cookbook](apps/docs/cookbooks/evcs-connectivity-maintenance.md).
 - Configure payment gateways with the [Payment Processors Cookbook](apps/docs/cookbooks/payment-processors.md).
