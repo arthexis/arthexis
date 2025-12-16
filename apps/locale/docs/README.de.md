@@ -109,7 +109,7 @@ Terminal-Knoten können direkt mit den untenstehenden Skripten ohne Installation
    - Linux: [`./start.sh`](start.sh) ausführen und mit [`./stop.sh`](stop.sh) anhalten.
    - Windows: [`start.bat`](start.bat) ausführen und mit `Ctrl+C` beenden.
 
-Lebenszyklus-Helferskripte für Dienste und Upgrades befinden sich jetzt im Ordner [`scripts/`](scripts): `scripts/service-start.sh`, `scripts/switch-role.sh`, `./command.sh nginx_configure` und `scripts/delegated-upgrade.sh`. Veraltete Wartungsskripte (`db-setup.sh`, `db-migrate.sh`, `renew-certs.sh`, `restore-fs.sh`, `change-hostname.sh`, `email-setup.sh`, `network-setup.sh` und `ws.sh`) wurden entfernt.
+Das Konfigurationsskript für Rollen liegt jetzt auf Top-Level als [`./configure.sh`](configure.sh). Weitere Lebenszyklus-Helferskripte für Dienste und Upgrades befinden sich im Ordner [`scripts/`](scripts): `scripts/service-start.sh`, `scripts/nginx-setup.sh` und `scripts/delegated-upgrade.sh`. Veraltete Wartungsskripte (`db-setup.sh`, `db-migrate.sh`, `renew-certs.sh`, `restore-fs.sh`, `change-hostname.sh`, `email-setup.sh`, `network-setup.sh` und `ws.sh`) wurden entfernt.
 
 ### 3. Installieren und Aktualisieren
 - **Linux:**
