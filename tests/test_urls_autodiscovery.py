@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
 from types import ModuleType
 import sys
@@ -12,6 +13,23 @@ from config.urls import autodiscovered_urlpatterns
 
 def _pattern_routes():
     return {pattern.pattern._route for pattern in autodiscovered_urlpatterns()}
+
+
+def _project_app_admin_modules():
+    base_dir = Path(settings.BASE_DIR).resolve()
+    modules = []
+    for app_config in apps.get_app_configs():
+        app_path = Path(app_config.path).resolve()
+        try:
+            app_path.relative_to(base_dir)
+        except ValueError:
+            continue
+
+        module_name = f"{app_config.name}.admin"
+        if importlib.util.find_spec(module_name):
+            modules.append(module_name)
+
+    return modules
 
 
 def test_autodiscovery_includes_known_apps_with_app_namespaces():
@@ -100,3 +118,17 @@ def test_api_routes_are_only_namespaced_by_app():
 
     api_routes = [route for route in routes if "/api/" in route]
     assert all(any(route.startswith(prefix) for prefix in app_api_prefixes) for route in api_routes)
+
+
+def test_admin_modules_are_loaded_during_url_configuration(monkeypatch):
+    import config.urls as urls
+
+    admin_modules = _project_app_admin_modules()
+
+    # Reload URL configuration with a fresh sys.modules to assert admin modules are imported.
+    modules_copy = sys.modules.copy()
+    monkeypatch.setattr(sys, "modules", modules_copy)
+
+    importlib.reload(urls)
+
+    assert all(module_name in sys.modules for module_name in admin_modules)
