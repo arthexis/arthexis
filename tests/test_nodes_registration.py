@@ -106,8 +106,8 @@ def test_register_visitor_view_detects_remote_addr(admin_client, monkeypatch):
     assert response.status_code == 200
     context = response.context[-1]
     assert context["visitor_error"] is None
-    assert context["visitor_info_url"] == "http://192.0.2.10:8000/nodes/info/"
-    assert context["visitor_register_url"] == "http://192.0.2.10:8000/nodes/register/"
+    assert context["visitor_info_url"] == "http://192.0.2.10:8888/nodes/info/"
+    assert context["visitor_register_url"] == "http://192.0.2.10:8888/nodes/register/"
     assert context["telemetry_url"] == reverse("register-telemetry")
     assert context["visitor_proxy_url"] == reverse("register-visitor-proxy")
 
@@ -133,8 +133,8 @@ def test_register_visitor_view_prefers_forwarded_for(admin_client, monkeypatch):
     assert response.status_code == 200
     context = response.context[-1]
     assert context["visitor_error"] is None
-    assert context["visitor_info_url"] == "http://203.0.113.1:8000/nodes/info/"
-    assert context["visitor_register_url"] == "http://203.0.113.1:8000/nodes/register/"
+    assert context["visitor_info_url"] == "http://203.0.113.1:8888/nodes/info/"
+    assert context["visitor_register_url"] == "http://203.0.113.1:8888/nodes/register/"
     assert context["telemetry_url"] == reverse("register-telemetry")
     assert context["visitor_proxy_url"] == reverse("register-visitor-proxy")
 
@@ -327,8 +327,8 @@ def test_register_visitor_view_defaults_loopback_port(admin_client, monkeypatch)
     assert response.status_code == 200
     context = response.context[-1]
     assert context["visitor_error"] is None
-    assert context["visitor_info_url"] == "http://127.0.0.1:8000/nodes/info/"
-    assert context["visitor_register_url"] == "http://127.0.0.1:8000/nodes/register/"
+    assert context["visitor_info_url"] == "http://127.0.0.1:8888/nodes/info/"
+    assert context["visitor_register_url"] == "http://127.0.0.1:8888/nodes/register/"
     assert context["telemetry_url"] == reverse("register-telemetry")
 
 

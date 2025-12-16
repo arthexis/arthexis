@@ -1196,7 +1196,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         temp.ipv6_address = getattr(node, "ipv6_address", "")
         yield from temp.iter_remote_urls(path)
 
-    def _resolve_visitor_base(self, request, default_port: int = 8000):
+    def _resolve_visitor_base(self, request, default_port: int = 8888):
         raw_port = None
         raw = (request.GET.get("visitor") or "").strip()
         if not raw:

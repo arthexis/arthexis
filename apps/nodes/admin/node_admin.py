@@ -1047,7 +1047,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
 
         return None, None
 
-    def _resolve_visitor_base(self, request, default_port: int = 8000):
+    def _resolve_visitor_base(self, request, default_port: int = 8888):
         raw_port = None
         raw = (request.GET.get("visitor") or "").strip()
         if not raw:
