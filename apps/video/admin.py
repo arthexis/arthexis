@@ -64,7 +64,14 @@ class VideoDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
     view_stream.short_description = _("View stream")
     view_stream.changelist = True
 
-    def _ensure_video_feature_enabled(self, request, action_label: str, *, auto_enable=False):
+    def _ensure_video_feature_enabled(
+        self,
+        request,
+        action_label: str,
+        *,
+        auto_enable: bool = False,
+        require_stack: bool = True,
+    ):
         try:
             feature = NodeFeature.objects.get(slug="rpi-camera")
         except NodeFeature.DoesNotExist:
@@ -79,7 +86,16 @@ class VideoDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
             return feature
 
         node = Node.get_local()
-        if auto_enable and node and has_rpi_camera_stack():
+        if auto_enable and node:
+            if require_stack and not has_rpi_camera_stack():
+                self.message_user(
+                    request,
+                    _("%(feature)s feature is not enabled on this node.")
+                    % {"feature": feature.display},
+                    level=messages.WARNING,
+                )
+                return None
+
             NodeFeatureAssignment.objects.update_or_create(node=node, feature=feature)
             return feature
 
@@ -103,7 +119,7 @@ class VideoDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
 
     def find_video_devices_view(self, request):
         feature = self._ensure_video_feature_enabled(
-            request, _("Find Video Devices"), auto_enable=True
+            request, _("Find Video Devices"), auto_enable=True, require_stack=False
         )
         if not feature:
             return redirect("..")
