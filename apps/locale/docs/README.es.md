@@ -98,7 +98,7 @@ Constelación Arthexis se distribuye en cuatro roles de nodo que adaptan la plat
 - **[Windows](https://es.wikipedia.org/wiki/Microsoft_Windows)**: abre [PowerShell](https://learn.microsoft.com/es-es/powershell/) o [Git Bash](https://gitforwindows.org/) y ejecuta el mismo comando.
 
 ### 2. Iniciar y detener
-Los nodos Terminal pueden iniciarse directamente con los siguientes scripts sin instalar; los roles Control, Satélite y Watchtower deben instalarse primero. Ambos métodos escuchan en [`http://localhost:8888/`](http://localhost:8888/) de forma predeterminada.
+Los nodos Terminal pueden iniciarse directamente con los siguientes scripts sin instalar; los roles Control, Satélite y Watchtower deben instalarse primero. Ambos métodos escuchan en [`http://localhost:8000/`](http://localhost:8000/) de forma predeterminada.
 
 - **[VS Code](https://code.visualstudio.com/)**
    - Abre la carpeta y ve al panel **Run and Debug** (`Ctrl+Shift+D`).
@@ -124,8 +124,8 @@ Los scripts de ciclo de vida para servicios y actualizaciones ahora viven en [`s
    - No es necesario instalar para iniciar en modo Terminal (el predeterminado).
 
 ### 4. Administración
-- Accede al [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) en [`http://localhost:8888/admin/`](http://localhost:8888/admin/) para revisar y gestionar datos en vivo. Usa `--port` con los scripts de inicio o el instalador si necesitas exponer otro puerto.
-- Consulta la [documentación de administración](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/) en [`http://localhost:8888/admindocs/`](http://localhost:8888/admindocs/) para leer la API generada automáticamente a partir de tus modelos.
+- Accede al [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) en [`http://localhost:8000/admin/`](http://localhost:8000/admin/) para revisar y gestionar datos en vivo. Usa `--port` con los scripts de inicio o el instalador si necesitas exponer otro puerto.
+- Consulta la [documentación de administración](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/) en [`http://localhost:8000/admindocs/`](http://localhost:8000/admindocs/) para leer la API generada automáticamente a partir de tus modelos.
 - Canales de actualización: las instalaciones nuevas usan `--fixed` por defecto para mantener desactivada la actualización automática. Activa las actualizaciones en el canal estable con `--stable` (revisiones cada 24 horas alineadas con las versiones), sigue la rama principal rápidamente con `--unstable` (revisiones cada 15 minutos) o usa el canal latest con `--latest` (revisiones cada hora).
 - Sigue la [Guía de instalación y administración](apps/docs/cookbooks/install-start-stop-upgrade-uninstall.md) para tareas de despliegue, ciclo de vida y runbooks operativos.
 - Integra y da mantenimiento a los cargadores con el [Cookbook de conectividad y mantenimiento EVCS](apps/docs/cookbooks/evcs-connectivity-maintenance.md).
