@@ -1051,9 +1051,8 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         raw_port = None
         raw = (request.GET.get("visitor") or "").strip()
         if not raw:
-            raw, raw_port = self._detect_visitor_host(request)
-        if not raw:
-            return None, "", default_port, "http"
+            raw = "127.0.0.1"
+            raw_port = default_port
 
         candidate = raw
         if "://" not in candidate:

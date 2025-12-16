@@ -1198,13 +1198,11 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         yield from temp.iter_remote_urls(path)
 
     def _resolve_visitor_base(self, request, default_port: int = 8000):
+        raw_port = None
         raw = (request.GET.get("visitor") or "").strip()
         if not raw:
-            forwarded_for = (request.META.get("HTTP_X_FORWARDED_FOR") or "").split(",")
-            forwarded_host = forwarded_for[0].strip() if forwarded_for and forwarded_for[0] else ""
-            raw = forwarded_host or (request.META.get("REMOTE_ADDR") or "").strip()
-        if not raw:
-            return None, "", default_port, "http"
+            raw = "127.0.0.1"
+            raw_port = default_port
 
         candidate = raw
         if "://" not in candidate:
@@ -1219,7 +1217,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         if scheme not in {"http", "https"}:
             scheme = "http"
 
-        port = parsed.port or default_port
+        port = parsed.port or raw_port or default_port
         if ":" in hostname and not hostname.startswith("["):
             host_part = f"[{hostname}]"
         else:
