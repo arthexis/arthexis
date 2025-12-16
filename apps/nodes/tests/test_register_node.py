@@ -122,6 +122,59 @@ def test_register_node_allows_authenticated_user_with_invalid_signature(admin_us
 
 
 @pytest.mark.django_db
+def test_register_node_links_base_site_when_domain_matches(admin_user):
+    site = Site.objects.create(domain="linked.example.com", name="Linked")
+    payload = {
+        "hostname": "visitor-host",
+        "mac_address": "aa:bb:cc:dd:ee:33",
+        "address": "192.0.2.40",
+        "port": 8888,
+        "base_site_domain": site.domain,
+    }
+
+    factory = RequestFactory()
+    request = _build_request(factory, payload)
+    request.user = admin_user
+    request._cached_user = admin_user
+
+    response = register_node(request)
+
+    assert response.status_code == 200
+    node = Node.objects.get(mac_address=payload["mac_address"])
+    assert node.base_site_id == site.id
+
+
+@pytest.mark.django_db
+def test_register_node_updates_base_site_for_existing_node(admin_user):
+    site = Site.objects.create(domain="update.example.com", name="Update")
+    node = Node.objects.create(
+        hostname="existing",
+        mac_address="aa:bb:cc:dd:ee:44",
+        address="198.51.100.40",
+        port=8888,
+        public_endpoint="existing-endpoint",
+    )
+    payload = {
+        "hostname": node.hostname,
+        "mac_address": node.mac_address,
+        "address": node.address,
+        "port": node.port,
+        "base_site_domain": site.domain,
+    }
+
+    factory = RequestFactory()
+    request = _build_request(factory, payload)
+    request.user = admin_user
+    request._cached_user = admin_user
+
+    response = register_node(request)
+
+    assert response.status_code == 200
+    node.refresh_from_db()
+    assert node.base_site_id == site.id
+
+
+@pytest.mark.django_db
 def test_register_current_logs_to_local_logger(settings, caplog):
     settings.LOG_DIR = settings.BASE_DIR / "logs"
     NodeRole.objects.get_or_create(name="Terminal")
@@ -199,3 +252,4 @@ def test_node_info_prefers_base_site_domain(monkeypatch):
     assert data["hostname"] == "base.example.test"
     assert data["address"] == "base.example.test"
     assert data["contact_hosts"][0] == "base.example.test"
+    assert data["base_site_domain"] == site.domain

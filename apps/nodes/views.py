@@ -15,6 +15,7 @@ from django.conf import settings
 from django.contrib.admin.views.decorators import staff_member_required
 from django.contrib.auth import authenticate, get_user_model
 from django.core import serializers
+from django.contrib.sites.models import Site
 from django.core.cache import cache
 from django.http import JsonResponse
 from django.http.request import split_domain_port
@@ -432,6 +433,7 @@ def node_info(request):
         "contact_hosts": node.get_remote_host_candidates(),
         "installed_version": node.installed_version,
         "installed_revision": node.installed_revision,
+        "base_site_domain": base_domain,
     }
 
     if token:
@@ -575,6 +577,7 @@ class NodeRegistrationPayload:
     trusted_requested: object
     role_name: str
     deactivate_user: bool
+    base_site_domain: str
 
     @classmethod
     def from_data(cls, data):
@@ -601,6 +604,7 @@ class NodeRegistrationPayload:
         trusted_requested = data.get("trusted")
         role_name = str(data.get("role") or data.get("role_name") or "").strip()
         deactivate_user = _coerce_bool(data.get("deactivate_user"))
+        base_site_domain = str(data.get("base_site_domain") or "").strip()
 
         return cls(
             hostname=hostname,
@@ -620,6 +624,7 @@ class NodeRegistrationPayload:
             trusted_requested=trusted_requested,
             role_name=role_name,
             deactivate_user=deactivate_user,
+            base_site_domain=base_site_domain,
         )
 
 
@@ -756,6 +761,10 @@ def _build_registration_payload(info: Mapping[str, Any] | None, relation: str | 
     if info and not payload["address"]:
         payload["address"] = info.get("network_hostname") or ""
 
+    base_site_domain = info.get("base_site_domain") if info else ""
+    if isinstance(base_site_domain, str) and base_site_domain.strip():
+        payload["base_site_domain"] = base_site_domain.strip()
+
     relation_value = relation or (info.get("current_relation") if info else None)
     if relation_value:
         payload["current_relation"] = relation_value
@@ -873,6 +882,7 @@ def _update_existing_node(
     relation_value: Node.Relation | None,
     desired_role: NodeRole | None,
     trusted_allowed: bool,
+    base_site: Site | None,
     features,
     request,
     deactivate_user: bool,
@@ -915,6 +925,9 @@ def _update_existing_node(
     if trusted_allowed and not node.trusted:
         node.trusted = True
         update_fields.append("trusted")
+    if base_site and node.base_site_id != base_site.id:
+        node.base_site = base_site
+        update_fields.append("base_site")
 
     _refresh_last_seen(node, update_fields)
 
@@ -1051,6 +1064,9 @@ def register_node(request):
     )
     can_assign_role = verified or request.user.is_authenticated
     desired_role = _resolve_role(payload.role_name, can_assign=can_assign_role)
+    base_site = None
+    if payload.base_site_domain:
+        base_site = Site.objects.filter(domain__iexact=payload.base_site_domain).first()
 
     defaults = {
         "hostname": payload.hostname,
@@ -1066,6 +1082,8 @@ def register_node(request):
         defaults["role"] = desired_role
     if verified:
         defaults["public_key"] = payload.public_key
+    if base_site:
+        defaults["base_site"] = base_site
     if payload.installed_version is not None:
         defaults["installed_version"] = str(payload.installed_version)[:20]
     if payload.installed_revision is not None:
@@ -1099,6 +1117,7 @@ def register_node(request):
             relation_value=payload.relation_value,
             desired_role=desired_role,
             trusted_allowed=trusted_allowed,
+            base_site=base_site,
             features=payload.features,
             request=request,
             deactivate_user=payload.deactivate_user,
