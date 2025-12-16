@@ -87,7 +87,7 @@ def test_register_visitor_view_uses_clean_visitor_base(admin_client, monkeypatch
 
 
 @pytest.mark.django_db
-def test_register_visitor_view_detects_remote_addr(admin_client, monkeypatch):
+def test_register_visitor_view_ignores_request_addr(admin_client, monkeypatch):
     node = Node.objects.create(
         hostname="local",
         address="127.0.0.1",
@@ -113,7 +113,7 @@ def test_register_visitor_view_detects_remote_addr(admin_client, monkeypatch):
 
 
 @pytest.mark.django_db
-def test_register_visitor_view_prefers_forwarded_for(admin_client, monkeypatch):
+def test_register_visitor_view_ignores_forwarded_for(admin_client, monkeypatch):
     node = Node.objects.create(
         hostname="local",
         address="127.0.0.1",
