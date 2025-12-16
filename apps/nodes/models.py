@@ -45,7 +45,7 @@ from apps.nodes.logging import get_register_local_node_logger
 if TYPE_CHECKING:  # pragma: no cover - used for type checking
     from apps.dns.models import GoDaddyDNSRecord
 from cryptography.hazmat.primitives.asymmetric import rsa
-from apps.camera import has_rpi_camera_stack
+from apps.video import has_rpi_camera_stack
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.hazmat.primitives.asymmetric import padding
 from django.contrib.auth import get_user_model
@@ -206,12 +206,16 @@ class NodeFeature(Entity):
         ),
         "rpi-camera": (
             NodeFeatureDefaultAction(
+                label="Find Video Devices",
+                url_name="admin:video_videodevice_find_devices",
+            ),
+            NodeFeatureDefaultAction(
                 label="Take a Snapshot",
-                url_name="admin:nodes_nodefeature_take_snapshot",
+                url_name="admin:video_videodevice_take_snapshot",
             ),
             NodeFeatureDefaultAction(
                 label="View stream",
-                url_name="admin:nodes_nodefeature_view_stream",
+                url_name="admin:video_videodevice_view_stream",
             ),
         ),
     }

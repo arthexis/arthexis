@@ -420,6 +420,7 @@ LOCAL_APPS = [
     "apps.locale",
     "apps.content",
     "apps.audio",
+    "apps.video",
     "apps.media",
     "apps.mermaid",
     "apps.odoo",
