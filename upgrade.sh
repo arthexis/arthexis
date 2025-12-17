@@ -257,6 +257,19 @@ reset_safe_git_changes() {
       fi
 
       return 0
+    elif [[ ${FORCE_UPGRADE:-0} -eq 1 ]]; then
+      echo "Force requested; discarding local working tree changes before upgrading..."
+      if ! git reset --hard HEAD >/dev/null 2>&1; then
+        echo "Failed to discard local changes automatically; please commit or stash before upgrading." >&2
+        exit 1
+      fi
+
+      if ! git clean -fd -e data/ >/dev/null 2>&1; then
+        echo "Failed to remove untracked files automatically; please commit or stash before upgrading." >&2
+        exit 1
+      fi
+
+      return 0
     fi
 
     echo "Uncommitted changes detected before upgrading. Dirty paths:" >&2
