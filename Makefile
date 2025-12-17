@@ -1,4 +1,4 @@
-.PHONY: help install start stop upgrade uninstall test
+.PHONY: help install start stop upgrade uninstall test lint docs
 
 ROLE ?= terminal
 PORT ?= 8888
@@ -25,6 +25,8 @@ help:
 	@printf "  make upgrade [CHANNEL=stable|latest|fixed]\\n"
 	@printf "  make uninstall\\n"
 	@printf "  make test [TEST_ARGS=...]\\n"
+	@printf "  make lint\\n"
+	@printf "  make docs\\n"
 
 install:
 	./install.sh $(role_flag) $(port_arg) $(start_flag) $(celery_flag) $(channel_flag) $(EXTRA_INSTALL_ARGS)
@@ -43,3 +45,9 @@ uninstall:
 
 test:
 	pytest $(TEST_ARGS)
+
+lint:
+	black --check .
+
+docs:
+	mkdocs build --strict
