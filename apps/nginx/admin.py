@@ -1,5 +1,7 @@
+import ipaddress
 from pathlib import Path
 
+from django.conf import settings
 from django.contrib import admin, messages
 from django.core.exceptions import PermissionDenied
 from django.http import HttpRequest, HttpResponseRedirect
@@ -8,8 +10,9 @@ from django.urls import path, reverse
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
-from apps.certs.models import CertificateBase
+from apps.certs.models import CertificateBase, SelfSignedCertificate
 from apps.nginx import services
+from apps.nginx.config_utils import slugify
 from apps.nginx.models import SiteConfiguration
 from apps.nginx.renderers import generate_primary_config, generate_site_entries_content
 
@@ -256,8 +259,12 @@ class SiteConfigurationAdmin(admin.ModelAdmin):
 
             certificate: CertificateBase | None = config.certificate
             if certificate is None:
-                self._warn_missing_certificate(request, config, ids_param)
-                continue
+                certificate = self._create_certificate_for_config(config)
+                self.message_user(
+                    request,
+                    _("%s: Created a self-signed certificate for %s.") % (config, certificate.domain),
+                    messages.INFO,
+                )
 
             try:
                 message = certificate.provision()
@@ -277,3 +284,56 @@ class SiteConfigurationAdmin(admin.ModelAdmin):
     def _find_missing_certificates(self, queryset):
         missing = [config for config in queryset if config.protocol == "https" and config.certificate is None]
         return missing
+
+    def _create_certificate_for_config(self, config: SiteConfiguration) -> CertificateBase:
+        domain = self._get_default_certificate_domain()
+        slug = slugify(domain)
+        base_path = Path(settings.BASE_DIR) / "scripts" / "generated" / "certificates" / slug
+        defaults = {
+            "domain": domain,
+            "certificate_path": str(base_path / "fullchain.pem"),
+            "certificate_key_path": str(base_path / "privkey.pem"),
+        }
+
+        certificate, created = SelfSignedCertificate.objects.get_or_create(
+            name=f"{config.name or 'nginx-site'}-{slug}",
+            defaults=defaults,
+        )
+
+        updated_fields: list[str] = []
+        if not created:
+            for field, value in defaults.items():
+                if getattr(certificate, field) != value:
+                    setattr(certificate, field, value)
+                    updated_fields.append(field)
+            if updated_fields:
+                certificate.save(update_fields=updated_fields)
+
+        if config.certificate_id != certificate.id:
+            config.certificate = certificate
+            config.save(update_fields=["certificate"])
+
+        return certificate
+
+    def _get_default_certificate_domain(self) -> str:
+        hosts = getattr(settings, "ALLOWED_HOSTS", []) or []
+        candidates: list[str] = []
+        for host in hosts:
+            normalized = str(host or "").strip()
+            if not normalized or normalized.startswith("."):
+                continue
+            try:
+                ipaddress.ip_address(normalized)
+            except ValueError:
+                candidates.append(normalized)
+            else:
+                continue
+
+        for candidate in candidates:
+            if "." in candidate:
+                return candidate
+
+        if candidates:
+            return candidates[0]
+
+        return "localhost"

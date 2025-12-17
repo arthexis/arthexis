@@ -119,3 +119,31 @@ def test_generate_certificates_view_provisions_linked_certificate(monkeypatch, a
     assert calls["sudo"] == "sudo"
     messages = [str(message) for message in response.context["messages"]]
     assert any("generated" in message for message in messages)
+
+
+@pytest.mark.django_db
+def test_generate_certificates_view_creates_certificate_when_missing(monkeypatch, admin_client, settings):
+    settings.ALLOWED_HOSTS = ["auto.example.com", "localhost", "testserver"]
+
+    generated: dict[str, bool] = {}
+
+    def fake_generate(self, *, sudo: str = "sudo"):
+        generated["called"] = True
+        return "auto-generated"
+
+    monkeypatch.setattr(SelfSignedCertificate, "generate", fake_generate)
+
+    config = SiteConfiguration.objects.create(name="missing-cert", protocol="https")
+
+    url = reverse("admin:nginx_siteconfiguration_generate_certificates") + f"?ids={config.pk}"
+    response = admin_client.post(url, {"ids": str(config.pk)}, follow=True)
+
+    config.refresh_from_db()
+    certificate = config.certificate
+    assert certificate is not None
+    assert isinstance(certificate._specific_certificate, SelfSignedCertificate)
+    assert certificate.domain == "auto.example.com"
+    assert generated["called"] is True
+
+    messages = [str(message) for message in response.context["messages"]]
+    assert any("auto-generated" in message for message in messages)
