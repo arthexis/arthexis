@@ -1,4 +1,4 @@
-.PHONY: help install start stop upgrade uninstall test lint docs
+.PHONY: help install start stop upgrade uninstall test dev lint docs
 
 ROLE ?= terminal
 PORT ?= 8888
@@ -27,6 +27,7 @@ help:
 	@printf "  make test [TEST_ARGS=...]\\n"
 	@printf "  make lint\\n"
 	@printf "  make docs\\n"
+  @printf "  make dev [ROLE=terminal|control|satellite|watchtower] [PORT=8888] [RELOAD=true] [CELERY=true|false] [CHANNEL=stable|latest|fixed] [TEST_ARGS=...] [EXTRA_INSTALL_ARGS=...] [EXTRA_START_ARGS=...]\\n"
 
 install:
 	./install.sh $(role_flag) $(port_arg) $(start_flag) $(celery_flag) $(channel_flag) $(EXTRA_INSTALL_ARGS)
@@ -51,3 +52,8 @@ lint:
 
 docs:
 	mkdocs build --strict
+
+dev:
+  $(MAKE) install
+  $(MAKE) start
+  pytest $(if $(TEST_ARGS),$(TEST_ARGS),-k smoke)
