@@ -51,6 +51,7 @@ class Package:
     version_path: Optional[Path | str] = None
     dependencies_path: Optional[Path | str] = None
     test_command: Optional[str] = None
+    repositories: Sequence["RepositoryTarget"] = ()
 
 
 @dataclass
@@ -108,6 +109,7 @@ DEFAULT_PACKAGE = Package(
     email="tecnologia@gelectriic.com",
     python_requires=">=3.10",
     license="GPL-3.0-only",
+    repositories=(RepositoryTarget(name="PyPI", verify_availability=True),),
 )
 
 
@@ -766,8 +768,10 @@ def publish(
 
     repository_targets: list[RepositoryTarget]
     if repositories is None:
-        primary = RepositoryTarget(name="PyPI", verify_availability=True)
-        repository_targets = [primary]
+        repository_targets = list(getattr(package, "repositories", ()) or ())
+        if not repository_targets:
+            primary = RepositoryTarget(name="PyPI", verify_availability=True)
+            repository_targets = [primary]
     else:
         repository_targets = list(repositories)
         if not repository_targets:
@@ -885,7 +889,9 @@ def check_pypi_readiness(
         package = DEFAULT_PACKAGE
 
     if repositories is None:
-        repositories = [RepositoryTarget(name="PyPI", verify_availability=True)]
+        repositories = list(getattr(package, "repositories", ()) or ())
+        if not repositories:
+            repositories = [RepositoryTarget(name="PyPI", verify_availability=True)]
     else:
         repositories = list(repositories)
 

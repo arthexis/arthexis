@@ -6,6 +6,7 @@ from django_object_actions import DjangoObjectActions
 
 from apps.repos.models import (
     GitHubRepository,
+    PackageRepository,
     RepositoryIssue,
     RepositoryPullRequest,
 )
@@ -127,4 +128,11 @@ class RepositoryPullRequestAdmin(FetchFromGitHubMixin, admin.ModelAdmin):
 class GitHubRepositoryAdmin(admin.ModelAdmin):
     list_display = ("owner", "name", "is_private")
     search_fields = ("owner", "name")
+
+
+@admin.register(PackageRepository)
+class PackageRepositoryAdmin(admin.ModelAdmin):
+    list_display = ("name", "repository_url", "verify_availability")
+    search_fields = ("name", "repository_url")
+    filter_horizontal = ("packages",)
 

@@ -214,6 +214,9 @@ class Package(Entity):
 
     def to_package(self) -> ReleasePackage:
         """Return a :class:`ReleasePackage` instance from package data."""
+        repositories = [
+            repo.to_target() for repo in self.package_repositories.all().order_by("pk")
+        ]
         return ReleasePackage(
             name=self.name,
             description=self.description,
@@ -226,6 +229,7 @@ class Package(Entity):
             version_path=self.version_path or None,
             dependencies_path=self.dependencies_path or None,
             test_command=self.test_command or None,
+            repositories=repositories,
         )
 
 
@@ -466,8 +470,36 @@ class PackageRelease(Entity):
         manager = self.release_manager or self.package.release_manager
         targets: list[RepositoryTarget] = []
 
+        package_targets = [
+            repo.to_target()
+            for repo in self.package.package_repositories.all().order_by("pk")
+        ]
+
         env_primary = os.environ.get("PYPI_REPOSITORY_URL", "")
         primary_url = env_primary.strip()
+
+        if package_targets:
+            primary_creds = self.to_credentials(user=user)
+            for index, target in enumerate(package_targets):
+                repository_url = target.repository_url
+                if index == 0 and primary_url:
+                    repository_url = primary_url
+
+                credentials = target.credentials
+                if credentials is None and primary_creds and primary_creds.has_auth():
+                    credentials = primary_creds
+
+                targets.append(
+                    RepositoryTarget(
+                        name=target.name,
+                        repository_url=repository_url,
+                        credentials=credentials,
+                        verify_availability=target.verify_availability,
+                        extra_args=target.extra_args,
+                    )
+                )
+
+            return targets
 
         primary_creds = self.to_credentials(user=user)
         targets.append(
