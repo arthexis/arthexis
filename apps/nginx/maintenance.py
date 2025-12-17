@@ -140,7 +140,12 @@ def update_config(path: Path) -> int:
     if not path.exists():
         return 0
 
-    original = path.read_text()
+    try:
+        original = path.read_text()
+    except OSError:
+        # If the nginx configuration cannot be read (e.g. due to permissions),
+        # treat as unchanged so the management command does not fail.
+        return 0
     updated = original
     changed = False
 
@@ -152,7 +157,10 @@ def update_config(path: Path) -> int:
             changed = True
 
     if changed and updated != original:
-        path.write_text(updated)
+        try:
+            path.write_text(updated)
+        except OSError:
+            return 0
         return 2
 
     return 0
