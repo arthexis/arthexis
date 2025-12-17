@@ -1,6 +1,7 @@
 import pytest
 from django.urls import reverse
 
+from apps.certs.models import SelfSignedCertificate
 from apps.nginx import services
 from apps.nginx.models import SiteConfiguration
 from apps.nginx.renderers import generate_primary_config
@@ -70,3 +71,51 @@ def test_preview_view_applies_configurations(monkeypatch, admin_client):
     assert response.status_code == 302
     assert response["Location"].endswith(f"?ids={config.pk}")
     assert calls["kwargs"] == {"reload": True, "remove": False, "pk": config.pk}
+
+
+@pytest.mark.django_db
+def test_preview_view_blocks_https_without_certificate(monkeypatch, admin_client):
+    config = SiteConfiguration.objects.create(name="https-preview", protocol="https")
+
+    called = {}
+
+    def fake_apply(self, *, reload: bool = True, remove: bool = False):
+        called["applied"] = True
+        return services.ApplyResult(changed=True, validated=True, reloaded=True, message="ok")
+
+    monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
+
+    url = reverse("admin:nginx_siteconfiguration_preview") + f"?ids={config.pk}"
+    response = admin_client.post(url, {"ids": str(config.pk)}, follow=True)
+
+    assert called == {}
+    rendered = response.content.decode()
+    assert "Generate Certificates" in rendered
+    assert "requires a linked certificate" in rendered
+
+
+@pytest.mark.django_db
+def test_generate_certificates_view_provisions_linked_certificate(monkeypatch, admin_client):
+    certificate = SelfSignedCertificate.objects.create(
+        name="linked-cert",
+        domain="example.com",
+        certificate_path="/tmp/example/fullchain.pem",
+        certificate_key_path="/tmp/example/privkey.pem",
+    )
+    config = SiteConfiguration.objects.create(name="with-cert", protocol="https", certificate=certificate)
+
+    calls: dict[str, str] = {}
+
+    def fake_generate(self, *, sudo: str = "sudo"):
+        calls["sudo"] = sudo
+        return "generated"
+
+    monkeypatch.setattr(SelfSignedCertificate, "generate", fake_generate)
+
+    url = reverse("admin:nginx_siteconfiguration_generate_certificates") + f"?ids={config.pk}"
+    response = admin_client.post(url, {"ids": str(config.pk)}, follow=True)
+
+    assert response.status_code == 200
+    assert calls["sudo"] == "sudo"
+    messages = [str(message) for message in response.context["messages"]]
+    assert any("generated" in message for message in messages)
