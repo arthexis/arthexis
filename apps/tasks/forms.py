@@ -5,7 +5,7 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.maps.models import Location
-from apps.tasks.models import ManualTask, TaskCategory
+from apps.tasks.models import ManualTaskRequest, TaskCategory
 
 
 class TaskCategoryAdminForm(forms.ModelForm):
@@ -27,7 +27,7 @@ class MaintenanceRequestForm(forms.ModelForm):
     )
 
     class Meta:
-        model = ManualTask
+        model = ManualTaskRequest
         fields = [
             "category",
             "description",
@@ -35,6 +35,9 @@ class MaintenanceRequestForm(forms.ModelForm):
             "location",
             "scheduled_start",
             "scheduled_end",
+            "is_periodic",
+            "period",
+            "period_deadline",
             "enable_notifications",
         ]
         widgets = {
@@ -46,6 +49,13 @@ class MaintenanceRequestForm(forms.ModelForm):
             "location": forms.Select(attrs={"class": "form-select"}),
             "enable_notifications": forms.CheckboxInput(
                 attrs={"class": "form-check-input"}
+            ),
+            "is_periodic": forms.CheckboxInput(
+                attrs={"class": "form-check-input"}
+            ),
+            "period": forms.TextInput(attrs={"class": "form-control"}),
+            "period_deadline": forms.TextInput(
+                attrs={"class": "form-control"}
             ),
         }
 

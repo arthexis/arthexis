@@ -9,7 +9,6 @@ from pathlib import Path
 
 from django.conf import settings
 
-from apps.nginx.maintenance import refresh_maintenance
 from apps.nginx.renderers import apply_site_entries, generate_primary_config
 
 
@@ -133,7 +132,6 @@ def apply_nginx_configuration(
             "Install nginx with 'sudo apt-get update && sudo apt-get install nginx'."
         )
 
-    base_dir = Path(settings.BASE_DIR)
     record_lock_state(mode, port, role)
 
     subprocess.run([sudo, "mkdir", "-p", "/etc/nginx/sites-enabled"], check=False)
@@ -165,8 +163,6 @@ def apply_nginx_configuration(
         except ValueError as exc:
             raise ValidationError(str(exc)) from exc
 
-    maintenance_updated = refresh_maintenance(base_dir, [primary_dest], sudo=sudo)
-
     validated = False
     reloaded = False
 
@@ -176,7 +172,7 @@ def apply_nginx_configuration(
         if validated:
             reloaded = reload_or_start_nginx(sudo)
 
-    changed = True or site_changed or maintenance_updated
+    changed = True
     message = "Applied nginx configuration."
 
     return ApplyResult(

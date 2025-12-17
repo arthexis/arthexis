@@ -10,7 +10,7 @@
       "token": "",
       "username": "",
       "password": "",
-      "packages": ["arthexis"]
+      "packages": [["arthexis"]]
     }
   }
 ]

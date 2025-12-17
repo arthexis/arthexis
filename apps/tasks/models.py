@@ -15,10 +15,10 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.celery.utils import is_celery_enabled
 from apps.core.entity import Entity, EntityAllManager, EntityManager
-from apps.groups.models import SecurityGroup as CoreSecurityGroup
-from apps.users.models import User as CoreUser
 from apps.emails import mailer
+from apps.groups.models import SecurityGroup as CoreSecurityGroup
 from apps.odoo.models import OdooProduct as CoreOdooProduct
+from apps.users.models import User as CoreUser
 
 
 logger = logging.getLogger(__name__)
@@ -135,8 +135,28 @@ class TaskCategory(Entity):
     availability_label.short_description = _("Availability")  # type: ignore[attr-defined]
 
 
-class ManualTask(Entity):
-    """Manual work scheduled for nodes or locations."""
+class ManualSkill(Entity):
+    """Skills that can optionally constrain manual task execution."""
+
+    name = models.CharField(_("Name"), max_length=200)
+    description = models.TextField(
+        _("Description"),
+        blank=True,
+        help_text=_("Optional details supporting Markdown formatting."),
+    )
+
+    class Meta:
+        verbose_name = _("Manual Skill")
+        verbose_name_plural = _("Manual Skills")
+        ordering = ("name",)
+        db_table = "core_manualskill"
+
+    def __str__(self):  # pragma: no cover - simple representation
+        return self.name
+
+
+class ManualTaskRequest(Entity):
+    """Request to perform manual work for nodes or locations."""
 
     description = models.TextField(
         _("Requestor Comments"),
@@ -147,25 +167,41 @@ class ManualTask(Entity):
         on_delete=models.SET_NULL,
         blank=True,
         null=True,
-        related_name="manual_tasks",
+        related_name="manual_task_requests",
         verbose_name=_("Category"),
         help_text=_("Select the standardized category for this work."),
+    )
+    required_skills = models.ManyToManyField(
+        "tasks.ManualSkill",
+        blank=True,
+        related_name="manual_task_requests",
+        verbose_name=_("Required skills"),
+        help_text=_("Optional skills that should cover this request."),
+    )
+    requestor = models.ForeignKey(
+        "users.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="requested_manual_tasks",
+        verbose_name=_("Requestor"),
+        help_text=_("User creating the manual task request."),
     )
     assigned_user = models.ForeignKey(
         "users.User",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="assigned_manual_tasks",
+        related_name="assigned_manual_task_requests",
         verbose_name=_("Assigned user"),
-        help_text=_("Optional user responsible for the task."),
+        help_text=_("Optional user responsible for coordinating the task."),
     )
     assigned_group = models.ForeignKey(
         "groups.SecurityGroup",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="assigned_manual_tasks",
+        related_name="assigned_manual_task_requests",
         verbose_name=_("Potential assignees"),
         help_text=_("Security group containing users who can fulfill the task."),
     )
@@ -174,14 +210,14 @@ class ManualTask(Entity):
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="managed_manual_tasks",
+        related_name="managed_manual_task_requests",
         verbose_name=_("Manager"),
         help_text=_("User overseeing the task."),
     )
     odoo_products = models.ManyToManyField(
         CoreOdooProduct,
         blank=True,
-        related_name="manual_tasks",
+        related_name="manual_task_requests",
         verbose_name=_("Odoo products"),
         help_text=_("Products associated with the requested work."),
     )
@@ -196,7 +232,7 @@ class ManualTask(Entity):
         on_delete=models.SET_NULL,
         blank=True,
         null=True,
-        related_name="manual_tasks",
+        related_name="manual_task_requests",
         verbose_name=_("Node"),
         help_text=_("Node where this manual task should be completed."),
     )
@@ -205,7 +241,7 @@ class ManualTask(Entity):
         on_delete=models.SET_NULL,
         blank=True,
         null=True,
-        related_name="manual_tasks",
+        related_name="manual_task_requests",
         verbose_name=_("Location"),
         help_text=_("Location associated with this manual task."),
     )
@@ -214,6 +250,25 @@ class ManualTask(Entity):
     )
     scheduled_end = models.DateTimeField(
         _("Scheduled end"), help_text=_("Planned completion time for this work."),
+    )
+    is_periodic = models.BooleanField(
+        _("Is periodic"),
+        default=False,
+        help_text=_("Whether this request should repeat on a schedule."),
+    )
+    period = models.DurationField(
+        _("Period"),
+        null=True,
+        blank=True,
+        help_text=_("Length of each execution window when periodic."),
+    )
+    period_deadline = models.DurationField(
+        _("Period deadline"),
+        null=True,
+        blank=True,
+        help_text=_(
+            "Optional cutoff within each period when the schedule resets for the next cycle."
+        ),
     )
     enable_notifications = models.BooleanField(
         _("Enable notifications"),
@@ -224,17 +279,17 @@ class ManualTask(Entity):
     )
 
     class Meta:
-        verbose_name = _("Manual Task")
-        verbose_name_plural = _("Manual Tasks")
+        verbose_name = _("Manual Task Request")
+        verbose_name_plural = _("Manual Task Requests")
         ordering = ("scheduled_start", "category__name")
-        db_table = "core_manualtask"
+        db_table = "core_manualtaskrequest"
         constraints = [
             models.CheckConstraint(
-                name="manualtask_requires_target",
+                name="manualtaskrequest_requires_target",
                 condition=Q(node__isnull=False) | Q(location__isnull=False),
             ),
             models.CheckConstraint(
-                name="manualtask_schedule_order",
+                name="manualtaskrequest_schedule_order",
                 condition=Q(scheduled_end__gte=F("scheduled_start")),
             ),
         ]
@@ -251,6 +306,26 @@ class ManualTask(Entity):
                 errors.setdefault("scheduled_end", []).append(
                     _("Scheduled end must be on or after the scheduled start."),
                 )
+        if self.is_periodic:
+            if not self.period:
+                errors.setdefault("period", []).append(
+                    _("Provide a period length for periodic requests."),
+                )
+            elif self.period <= timedelta(0):
+                errors.setdefault("period", []).append(
+                    _("Period must be greater than zero."),
+                )
+            if self.period_deadline and self.period:
+                if self.period_deadline > self.period:
+                    errors.setdefault("period_deadline", []).append(
+                        _("Deadline must fall within the configured period."),
+                    )
+        else:
+            # Ensure one-off requests don't carry leftover periodic metadata
+            if self.period:
+                self.period = None
+            if self.period_deadline:
+                self.period_deadline = None
         if errors:
             raise ValidationError(errors)
 
@@ -422,8 +497,8 @@ class ManualTask(Entity):
                 yield user
 
     def resolve_reservation_credentials(self):
-        from apps.energy.models import CustomerAccount
         from apps.cards.models import RFID
+        from apps.energy.models import CustomerAccount
 
         account: CustomerAccount | None = None
         rfid: RFID | None = None
@@ -500,10 +575,51 @@ class ManualTask(Entity):
                 should_schedule = True
             else:
                 for field in track_fields:
-                    old_value = previous.get(field)
+                    old_value = previous.get(field) if previous else None
                     new_value = getattr(self, field)
                     if old_value != new_value:
                         should_schedule = True
                         break
         if should_schedule:
             self.schedule_notifications()
+
+
+class ManualTaskReport(Entity):
+    """Execution report submitted after completing a manual task request."""
+
+    request = models.ForeignKey(
+        "tasks.ManualTaskRequest",
+        on_delete=models.CASCADE,
+        related_name="reports",
+        verbose_name=_("Task request"),
+    )
+    executor = models.ForeignKey(
+        "users.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="executed_manual_task_reports",
+        verbose_name=_("Executor"),
+        help_text=_("User who performed the work. Can differ from the assignee."),
+    )
+    performed_at = models.DateTimeField(
+        _("Performed at"), default=timezone.now, help_text=_("When the work occurred."),
+    )
+    duration = models.DurationField(
+        _("Actual duration"),
+        null=True,
+        blank=True,
+        help_text=_("Actual time spent completing the task."),
+    )
+    details = models.TextField(
+        _("Details"), help_text=_("Executor notes and outcomes for this task."),
+    )
+
+    class Meta:
+        verbose_name = _("Manual Task Report")
+        verbose_name_plural = _("Manual Task Reports")
+        ordering = ("-performed_at",)
+        db_table = "core_manualtaskreport"
+
+    def __str__(self):  # pragma: no cover - simple representation
+        return _("Report for %(task)s") % {"task": self.request}

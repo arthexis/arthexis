@@ -18,10 +18,12 @@ def maintenance_request(request):
 
     if request.method == "POST" and form.is_valid():
         task = form.save(commit=False)
+        task.requestor = request.user if request.user.is_authenticated else None
         task.assigned_user = request.user if request.user.is_authenticated else None
         task.node = task.node or Node.get_local()
         task.is_user_data = True
         task.save()
+        form.save_m2m()
         messages.success(
             request,
             _("Maintenance request scheduled for %(location)s.")

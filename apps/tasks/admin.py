@@ -4,7 +4,7 @@ from django.utils.translation import gettext_lazy as _, ngettext
 
 from apps.locals.user_data import EntityModelAdmin
 from apps.tasks.forms import TaskCategoryAdminForm
-from apps.tasks.models import ManualTask, TaskCategory
+from apps.tasks.models import ManualSkill, ManualTaskReport, ManualTaskRequest, TaskCategory
 
 
 @admin.register(TaskCategory)
@@ -48,10 +48,11 @@ class TaskCategoryAdmin(EntityModelAdmin):
     )
 
 
-@admin.register(ManualTask)
-class ManualTaskAdmin(EntityModelAdmin):
+@admin.register(ManualTaskRequest)
+class ManualTaskRequestAdmin(EntityModelAdmin):
     list_display = (
         "category",
+        "requestor",
         "assigned_user",
         "assigned_group",
         "manager",
@@ -59,9 +60,16 @@ class ManualTaskAdmin(EntityModelAdmin):
         "location",
         "scheduled_start",
         "scheduled_end",
+        "is_periodic",
         "enable_notifications",
     )
-    list_filter = ("node", "location", "enable_notifications", "category")
+    list_filter = (
+        "node",
+        "location",
+        "enable_notifications",
+        "category",
+        "is_periodic",
+    )
     search_fields = (
         "description",
         "node__hostname",
@@ -71,6 +79,7 @@ class ManualTaskAdmin(EntityModelAdmin):
         "assigned_group__name",
         "manager__username",
         "category__name",
+        "requestor__username",
     )
     raw_id_fields = (
         "node",
@@ -78,8 +87,9 @@ class ManualTaskAdmin(EntityModelAdmin):
         "assigned_user",
         "assigned_group",
         "manager",
+        "requestor",
     )
-    filter_horizontal = ("odoo_products",)
+    filter_horizontal = ("odoo_products", "required_skills")
     date_hierarchy = "scheduled_start"
     actions = ("make_cp_reservations",)
     fieldsets = (
@@ -88,12 +98,17 @@ class ManualTaskAdmin(EntityModelAdmin):
             {
                 "fields": (
                     "category",
+                    "required_skills",
                     "description",
                     "odoo_products",
                     "duration",
+                    "requestor",
                     "assigned_user",
                     "assigned_group",
                     "manager",
+                    "is_periodic",
+                    "period",
+                    "period_deadline",
                     "enable_notifications",
                 )
             },
@@ -159,3 +174,22 @@ class ManualTaskAdmin(EntityModelAdmin):
         else:
             messages_list.append(str(error))
         return messages_list
+
+
+@admin.register(ManualTaskReport)
+class ManualTaskReportAdmin(EntityModelAdmin):
+    list_display = ("request", "executor", "performed_at", "duration")
+    list_filter = ("performed_at", "executor")
+    search_fields = (
+        "details",
+        "request__description",
+        "request__category__name",
+        "executor__username",
+    )
+    raw_id_fields = ("request", "executor")
+
+
+@admin.register(ManualSkill)
+class ManualSkillAdmin(EntityModelAdmin):
+    list_display = ("name",)
+    search_fields = ("name", "description")
