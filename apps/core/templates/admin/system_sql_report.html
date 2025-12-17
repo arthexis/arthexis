@@ -1,0 +1,212 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:system' %}">{% trans 'System' %}</a>
+  &rsaquo; {% trans "SQL Report" %}
+</div>
+{% endblock %}
+
+{% block extrastyle %}
+  {{ block.super }}
+  <style>
+    .sql-report-grid {
+      display: grid;
+      grid-template-columns: minmax(240px, 1fr) 2fr;
+      gap: 1.25rem;
+      align-items: start;
+    }
+
+    @media (max-width: 960px) {
+      .sql-report-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .sql-report-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .sql-report-list__item {
+      border: 1px solid var(--border-color, #d0d0d0);
+      border-radius: 0.5rem;
+      padding: 0.75rem 1rem;
+      background: var(--body-bg, #fff);
+    }
+
+    .sql-report-list__item.is-active {
+      border-color: var(--link-hover-color, #0b5ed7);
+      box-shadow: 0 0 0 1px var(--link-hover-color, #0b5ed7);
+    }
+
+    .sql-report-list__meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-top: 0.35rem;
+      font-size: 0.9rem;
+      color: #555;
+    }
+
+    .sql-report-runner .submit-row {
+      margin-top: 1rem;
+    }
+
+    .sql-report-benchmark {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .sql-report-sql summary {
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    .sql-report-sql pre {
+      white-space: pre-wrap;
+      background: #f7f7f7;
+      padding: 0.75rem;
+      border: 1px solid var(--border-color, #d0d0d0);
+      border-radius: 0.35rem;
+    }
+
+    .sql-report-results table {
+      margin-top: 0.5rem;
+      width: 100%;
+      overflow-x: auto;
+    }
+
+    .sql-report-results .table-wrapper {
+      overflow-x: auto;
+    }
+  </style>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <div class="module">
+    <h2>{% trans "SQL Report" %}</h2>
+    <p class="help">
+      {% trans "Run SQL queries with sigils resolved, view benchmarks, and save them for future runs." %}
+    </p>
+    <div class="sql-report-grid">
+      <div class="sql-report-saved">
+        <h3>{% trans "Saved reports" %}</h3>
+        {% if sql_reports %}
+          <ul class="sql-report-list">
+            {% for report in sql_reports %}
+              <li class="sql-report-list__item {% if selected_report and selected_report.pk == report.pk %}is-active{% endif %}">
+                <div class="sql-report-list__title">
+                  <a href="{% url 'admin:system-sql-report' %}?report={{ report.pk }}">{{ report.name }}</a>
+                </div>
+                <div class="sql-report-list__meta">
+                  <span>{% blocktrans with alias=report.database_alias %}DB: {{ alias }}{% endblocktrans %}</span>
+                  {% if report.last_run_at %}
+                    <span>{% blocktrans with timestamp=report.last_run_at|date:'DATETIME_FORMAT' %}Last run {{ timestamp }}{% endblocktrans %}</span>
+                  {% else %}
+                    <span>{% trans "Not run yet" %}</span>
+                  {% endif %}
+                </div>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="help">{% trans "No SQL reports have been saved yet." %}</p>
+        {% endif %}
+      </div>
+      <div class="sql-report-runner">
+        <form method="post" novalidate>
+          {% csrf_token %}
+          {{ sql_report_form.report_id }}
+          {% if sql_report_form.non_field_errors %}
+            <div class="errornote">{{ sql_report_form.non_field_errors }}</div>
+          {% endif %}
+          <fieldset class="module aligned">
+            <div class="form-row">
+              {{ sql_report_form.name.errors }}
+              {{ sql_report_form.name.label_tag }} {{ sql_report_form.name }}
+            </div>
+            <div class="form-row">
+              {{ sql_report_form.database_alias.errors }}
+              {{ sql_report_form.database_alias.label_tag }} {{ sql_report_form.database_alias }}
+            </div>
+            <div class="form-row">
+              {{ sql_report_form.query.errors }}
+              {{ sql_report_form.query.label_tag }} {{ sql_report_form.query }}
+              {% if sql_report_form.query.help_text %}
+                <p class="help">{{ sql_report_form.query.help_text }}</p>
+              {% endif %}
+            </div>
+          </fieldset>
+          <div class="submit-row">
+            <button type="submit" class="default">{% trans "Save & Run SQL" %}</button>
+          </div>
+        </form>
+
+        {% if query_result %}
+          <div class="sql-report-results">
+            <h3>{% trans "Query results" %}</h3>
+            <div class="sql-report-benchmark">
+              <div><strong>{% trans "Database" %}:</strong> {{ query_result.database_alias }}</div>
+              <div><strong>{% trans "Executed" %}:</strong> {{ query_result.executed_at|date:'DATETIME_FORMAT' }}</div>
+              <div>
+                <strong>{% trans "Duration" %}:</strong>
+                {% if query_result.duration_ms %}
+                  {{ query_result.duration_ms|floatformat:2 }} ms
+                {% else %}
+                  {% trans "Unknown" %}
+                {% endif %}
+              </div>
+              <div><strong>{% trans "Rows" %}:</strong> {{ query_result.row_count }}</div>
+            </div>
+            <details class="sql-report-sql" open>
+              <summary>{% trans "Resolved SQL" %}</summary>
+              <pre>{{ query_result.resolved_sql }}</pre>
+            </details>
+
+            {% if query_result.error %}
+              <p class="errornote">{{ query_result.error }}</p>
+            {% elif query_result.columns %}
+              <div class="table-wrapper">
+                <table class="table table-striped">
+                  <thead>
+                    <tr>
+                      {% for column in query_result.columns %}
+                        <th scope="col">{{ column }}</th>
+                      {% endfor %}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for row in query_result.rows %}
+                      <tr>
+                        {% for value in row %}
+                          <td>{{ value }}</td>
+                        {% endfor %}
+                      </tr>
+                    {% empty %}
+                      <tr>
+                        <td colspan="{{ query_result.columns|length }}">{% trans "No rows returned" %}</td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            {% else %}
+              <p class="help">{% trans "Query executed without returning rows." %}</p>
+            {% endif %}
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
