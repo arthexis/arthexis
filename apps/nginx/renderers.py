@@ -34,8 +34,10 @@ def generate_primary_config(
     mode: str,
     port: int,
     *,
+    certificate=None,
     http_server_names: str | None = None,
     https_server_names: str | None = None,
+    https_enabled: bool = False,
     include_ipv6: bool = False,
 ) -> str:
     mode = mode.lower()
@@ -46,23 +48,47 @@ def generate_primary_config(
     if include_ipv6:
         http_listens.extend(HTTP_IPV6_LISTENS)
 
-    https_listens = list(HTTPS_IPV4_LISTENS)
-    if include_ipv6:
-        https_listens.extend(HTTPS_IPV6_LISTENS)
+    https_listens: list[str] = []
+    if https_enabled:
+        https_listens = list(HTTPS_IPV4_LISTENS)
+        if include_ipv6:
+            https_listens.extend(HTTPS_IPV6_LISTENS)
+
+    certificate_path = getattr(certificate, "certificate_path", None)
+    certificate_key_path = getattr(certificate, "certificate_key_path", None)
 
     if mode == "public":
         http_names = http_server_names or "arthexis.com *.arthexis.com"
         https_names = https_server_names or "arthexis.com *.arthexis.com"
-        http_block = http_redirect_server(http_names, listens=http_listens)
-        https_block = https_proxy_server(
-            https_names,
-            port,
-            listens=https_listens,
-            trailing_slash=False,
-        )
+        if https_enabled:
+            http_block = http_redirect_server(http_names, listens=http_listens)
+        else:
+            http_block = http_proxy_server(
+                http_names,
+                port,
+                http_listens,
+                trailing_slash=False,
+            )
         http_default = default_reject_server(http_listens)
-        https_default = default_reject_server(https_listens, https=True)
-        return f"{http_block}\n\n{http_default}\n\n{https_block}\n\n{https_default}\n"
+
+        blocks = [http_block, http_default]
+        if https_enabled:
+            https_block = https_proxy_server(
+                https_names,
+                port,
+                listens=https_listens,
+                certificate_path=certificate_path,
+                certificate_key_path=certificate_key_path,
+                trailing_slash=False,
+            )
+            https_default = default_reject_server(
+                https_listens,
+                https=True,
+                certificate_path=certificate_path,
+                certificate_key_path=certificate_key_path,
+            )
+            blocks.extend([https_block, https_default])
+        return "\n\n".join(blocks) + "\n"
 
     http_names = http_server_names or "_"
     http_block = http_proxy_server(
@@ -71,10 +97,24 @@ def generate_primary_config(
         http_listens,
         trailing_slash=False,
     )
-    return f"{http_block}\n"
+    blocks = [http_block]
+
+    if https_enabled:
+        https_block = https_proxy_server(
+            https_server_names or http_names,
+            port,
+            listens=https_listens,
+            certificate_path=certificate_path,
+            certificate_key_path=certificate_key_path,
+            trailing_slash=False,
+        )
+        blocks.append(https_block)
+    return "\n\n".join(blocks) + "\n"
 
 
-def generate_site_entries_content(config_path: Path, mode: str, port: int) -> str:
+def generate_site_entries_content(
+    config_path: Path, mode: str, port: int, *, https_enabled: bool = False
+) -> str:
     try:
         raw = config_path.read_text(encoding="utf-8")
         sites = json.loads(raw)
@@ -100,16 +140,16 @@ def generate_site_entries_content(config_path: Path, mode: str, port: int) -> st
 
         blocks: list[str] = [f"# Managed site for {domain}"]
 
-        if require_https and mode == "public":
+        if require_https and mode == "public" and https_enabled:
             blocks.append(http_redirect_server(domain))
         else:
             blocks.append(http_proxy_server(domain, port))
 
-        if mode == "public":
+        if mode == "public" and https_enabled:
             blocks.append(https_proxy_server(domain, port))
         elif require_https:
             blocks.append(
-                "# HTTPS requested but unavailable in internal mode; update nginx_mode.lck to 'public'."
+                "# HTTPS requested but unavailable in this configuration."
             )
 
         site_blocks.append("\n\n".join(blocks))
@@ -127,7 +167,10 @@ def apply_site_entries(
     port: int,
     dest_path: Path,
     *,
+    https_enabled: bool = False,
     sudo: str | None = None,
 ) -> bool:
-    content = generate_site_entries_content(config_path, mode, port)
+    content = generate_site_entries_content(
+        config_path, mode, port, https_enabled=https_enabled
+    )
     return write_if_changed(dest_path, content, sudo=sudo)

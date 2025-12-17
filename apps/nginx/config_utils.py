@@ -144,6 +144,8 @@ def default_reject_server(
     listens: Iterable[str] | None = None,
     *,
     https: bool = False,
+    certificate_path: str | Path | None = None,
+    certificate_key_path: str | Path | None = None,
 ) -> str:
     """Return a default server block that drops requests for unknown hosts."""
 
@@ -157,11 +159,13 @@ def default_reject_server(
     lines.append("    server_name _;")
 
     if https:
+        cert_path = str(certificate_path or CERTIFICATE_PATH)
+        key_path = str(certificate_key_path or CERTIFICATE_KEY_PATH)
         lines.extend(
             [
                 "",
-                f"    ssl_certificate {CERTIFICATE_PATH};",
-                f"    ssl_certificate_key {CERTIFICATE_KEY_PATH};",
+                f"    ssl_certificate {cert_path};",
+                f"    ssl_certificate_key {key_path};",
                 f"    include {SSL_OPTIONS_PATH};",
                 f"    ssl_dhparam {SSL_DHPARAM_PATH};",
             ]
@@ -176,6 +180,8 @@ def https_proxy_server(
     port: int,
     listens: Iterable[str] | None = None,
     *,
+    certificate_path: str | Path | None = None,
+    certificate_key_path: str | Path | None = None,
     trailing_slash: bool = True,
 ) -> str:
     """Return an HTTPS proxy server block for *server_names*."""
@@ -190,10 +196,12 @@ def https_proxy_server(
     lines.append("")
     lines.append(textwrap.indent(maintenance_block(), "    "))
     lines.append("")
+    cert_path = str(certificate_path or CERTIFICATE_PATH)
+    key_path = str(certificate_key_path or CERTIFICATE_KEY_PATH)
     lines.extend(
         [
-            f"    ssl_certificate {CERTIFICATE_PATH};",
-            f"    ssl_certificate_key {CERTIFICATE_KEY_PATH};",
+            f"    ssl_certificate {cert_path};",
+            f"    ssl_certificate_key {key_path};",
             f"    include {SSL_OPTIONS_PATH};",
             f"    ssl_dhparam {SSL_DHPARAM_PATH};",
             "",

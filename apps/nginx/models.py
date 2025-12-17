@@ -37,14 +37,31 @@ class SiteConfiguration(models.Model):
         ("internal", "Internal"),
         ("public", "Public"),
     )
+    PROTOCOL_CHOICES = (
+        ("http", "HTTP"),
+        ("https", "HTTPS"),
+    )
 
     name = models.CharField(max_length=64, unique=True, default="default")
     enabled = models.BooleanField(default=True)
     mode = models.CharField(max_length=16, choices=MODE_CHOICES, default="internal")
+    protocol = models.CharField(
+        max_length=5,
+        choices=PROTOCOL_CHOICES,
+        default="http",
+        help_text=_("Include HTTPS listeners when set to HTTPS."),
+    )
     role = models.CharField(max_length=64, default="Terminal")
     port = models.PositiveIntegerField(
         default=8888,
         validators=[validators.MinValueValidator(1), validators.MaxValueValidator(65535)],
+    )
+    certificate = models.ForeignKey(
+        "certs.CertificateBase",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="nginx_configurations",
     )
     include_ipv6 = models.BooleanField(default=False)
     expected_path = models.CharField(
@@ -95,6 +112,8 @@ class SiteConfiguration(models.Model):
                 mode=self.mode,
                 port=self.port,
                 role=self.role,
+                certificate=self.certificate,
+                https_enabled=self.protocol == "https",
                 include_ipv6=self.include_ipv6,
                 destination=self.expected_destination,
                 site_config_path=self.staged_site_config,

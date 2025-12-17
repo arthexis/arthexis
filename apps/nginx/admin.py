@@ -18,14 +18,16 @@ class SiteConfigurationAdmin(admin.ModelAdmin):
         "name",
         "enabled",
         "mode",
+        "protocol",
         "role",
         "port",
+        "certificate",
         "include_ipv6",
         "last_applied_at",
         "last_validated_at",
     )
-    list_filter = ("enabled", "mode", "include_ipv6")
-    search_fields = ("name", "role")
+    list_filter = ("enabled", "mode", "protocol", "include_ipv6")
+    search_fields = ("name", "role", "certificate__name")
     readonly_fields = ("last_applied_at", "last_validated_at", "last_message")
     actions = [
         "apply_configurations",
@@ -109,7 +111,11 @@ class SiteConfigurationAdmin(admin.ModelAdmin):
         files: list[dict] = []
 
         primary_content = generate_primary_config(
-            config.mode, config.port, include_ipv6=config.include_ipv6
+            config.mode,
+            config.port,
+            certificate=config.certificate,
+            https_enabled=config.protocol == "https",
+            include_ipv6=config.include_ipv6,
         )
         files.append(
             self._build_file_preview(
@@ -121,7 +127,10 @@ class SiteConfigurationAdmin(admin.ModelAdmin):
 
         try:
             site_content = generate_site_entries_content(
-                config.staged_site_config, config.mode, config.port
+                config.staged_site_config,
+                config.mode,
+                config.port,
+                https_enabled=config.protocol == "https",
             )
         except ValueError as exc:
             files.append(
