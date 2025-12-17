@@ -63,3 +63,14 @@ class CeleryFileHandler(ActiveAppFileHandler):
         if "test" in sys.argv:
             return log_dir / "tests-celery.log"
         return log_dir / "celery.log"
+
+
+class PageMissesFileHandler(ActiveAppFileHandler):
+    """File handler dedicated to capturing page misses."""
+
+    def _current_file(self) -> Path:
+        log_dir = Path(settings.LOG_DIR)
+        log_dir.mkdir(parents=True, exist_ok=True)
+        if "test" in sys.argv:
+            return log_dir / "tests-page_misses.log"
+        return log_dir / "page_misses.log"
