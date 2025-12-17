@@ -5,6 +5,7 @@ from typing import Any, Callable, Dict, Iterable, Optional
 
 from django.contrib import messages
 from apps.audio.utils import has_audio_capture_device
+from apps.clocks.utils import has_clock_device
 
 if False:  # pragma: no cover - typing imports only
     from .models import Node, NodeFeature
@@ -118,6 +119,36 @@ def _check_audio_capture(feature: "NodeFeature", node: Optional["Node"]):
     return FeatureCheckResult(
         True,
         f"{feature.display} is enabled on {target.hostname} and a recording device is available.",
+        messages.SUCCESS,
+    )
+
+
+@feature_checks.register("gpio-rtc")
+def _check_gpio_rtc(feature: "NodeFeature", node: Optional["Node"]):
+    from .models import Node
+
+    target: Optional["Node"] = node or Node.get_local()
+    if target is None:
+        return FeatureCheckResult(
+            False,
+            f"No local node is registered; cannot verify {feature.display}.",
+            messages.WARNING,
+        )
+    if not has_clock_device():
+        return FeatureCheckResult(
+            False,
+            f"No I2C clock device detected on {target.hostname} for {feature.display}.",
+            messages.WARNING,
+        )
+    if not target.has_feature("gpio-rtc"):
+        return FeatureCheckResult(
+            False,
+            f"{feature.display} is not enabled on {target.hostname}.",
+            messages.WARNING,
+        )
+    return FeatureCheckResult(
+        True,
+        f"{feature.display} is enabled on {target.hostname} and an RTC is available.",
         messages.SUCCESS,
     )
 

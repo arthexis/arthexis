@@ -419,6 +419,7 @@ LOCAL_APPS = [
     "apps.locals",
     "apps.locale",
     "apps.content",
+    "apps.clocks",
     "apps.audio",
     "apps.video",
     "apps.media",
