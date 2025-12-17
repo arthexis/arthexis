@@ -21,3 +21,21 @@ def test_celery_logs_are_routed_to_dedicated_file(tmp_path: Path) -> None:
     assert celery_logger is not None
     assert celery_logger["handlers"] == ["celery_file", "error_file"]
     assert celery_logger["propagate"] is False
+
+
+def test_page_misses_use_dedicated_file(tmp_path: Path) -> None:
+    """Page miss logs should be routed to their own handler."""
+
+    log_dir, _log_file_name, logging_config = build_logging_settings(
+        tmp_path, debug_enabled=False
+    )
+
+    handler = logging_config["handlers"].get("page_misses_file")
+    assert handler is not None
+    assert handler["filename"] == str(log_dir / "page_misses.log")
+    assert handler["level"] == "INFO"
+
+    logger = logging_config["loggers"].get("page_misses")
+    assert logger is not None
+    assert logger["handlers"] == ["page_misses_file"]
+    assert logger["propagate"] is False

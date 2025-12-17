@@ -524,6 +524,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "apps.sigils.middleware.SigilContextMiddleware",
     "apps.pages.middleware.ViewHistoryMiddleware",
+    "config.middleware.PageMissLoggingMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
