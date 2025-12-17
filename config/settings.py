@@ -525,6 +525,7 @@ MIDDLEWARE = [
     "apps.pages.middleware.ViewHistoryMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "config.middleware.PageMissLoggingMiddleware",
 ]
 
 if DEBUG:

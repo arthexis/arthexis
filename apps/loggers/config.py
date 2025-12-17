@@ -75,6 +75,15 @@ def build_logging_settings(
                 "formatter": "standard",
                 "level": "INFO",
             },
+            "page_misses_file": {
+                "class": "logging.handlers.TimedRotatingFileHandler",
+                "filename": str(log_dir / "page_misses.log"),
+                "when": "midnight",
+                "backupCount": 30,
+                "encoding": "utf-8",
+                "formatter": "standard",
+                "level": "INFO",
+            },
             "console": {
                 "class": "logging.StreamHandler",
                 "level": "ERROR",
@@ -103,6 +112,16 @@ def build_logging_settings(
         }
         for logger_name in celery_logger_names
     }
+
+    logging_config["loggers"].update(
+        {
+            "page_misses": {
+                "handlers": ["page_misses_file"],
+                "level": "INFO",
+                "propagate": False,
+            }
+        }
+    )
 
     configure_library_loggers(debug_enabled, logging_config)
     return log_dir, log_file_name, logging_config

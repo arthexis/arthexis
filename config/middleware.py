@@ -1,4 +1,5 @@
 import socket
+import logging
 from django.core.exceptions import DisallowedHost
 from django.http import HttpResponsePermanentRedirect
 
@@ -71,3 +72,37 @@ class SiteHttpsRedirectMiddleware:
             return HttpResponsePermanentRedirect(redirect_url)
 
         return self.get_response(request)
+
+
+class PageMissLoggingMiddleware:
+    """Log requests that result in 404 or 500 responses."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+        self.logger = logging.getLogger("page_misses")
+
+    def __call__(self, request):
+        try:
+            response = self.get_response(request)
+        except Exception:
+            self.logger.warning(self._build_message(request, 500), exc_info=True)
+            raise
+
+        self._log_if_page_miss(request, response)
+        return response
+
+    def _log_if_page_miss(self, request, response) -> None:
+        status_code = getattr(response, "status_code", 0)
+        if status_code not in (404, 500):
+            return
+
+        self.logger.warning(self._build_message(request, status_code))
+
+    def _build_message(self, request, status_code: int) -> str:
+        method = getattr(request, "method", "").upper() or "UNKNOWN"
+        path_getter = getattr(request, "get_full_path", None)
+        if callable(path_getter):
+            path = path_getter()
+        else:
+            path = getattr(request, "path", "")
+        return f"{method} {path} -> {status_code}"
