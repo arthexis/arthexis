@@ -13,6 +13,10 @@ from apps.nginx.maintenance import refresh_maintenance
 from apps.nginx.renderers import apply_site_entries, generate_primary_config
 
 
+LOCK_DIR_NAME = ".locks"
+NGINX_DISABLED_LOCK = "nginx_disabled.lck"
+
+
 @dataclass
 class ApplyResult:
     changed: bool
@@ -43,6 +47,26 @@ def ensure_nginx_in_path() -> bool:
             return True
 
     return False
+
+
+def _lock_dir(base_dir: Path | None = None) -> Path:
+    base_path = Path(base_dir) if base_dir else Path(settings.BASE_DIR)
+    return base_path / LOCK_DIR_NAME
+
+
+def nginx_disabled(base_dir: Path | None = None) -> bool:
+    return (_lock_dir(base_dir) / NGINX_DISABLED_LOCK).exists()
+
+
+def disable_nginx_management(base_dir: Path | None = None) -> None:
+    lock_dir = _lock_dir(base_dir)
+    lock_dir.mkdir(parents=True, exist_ok=True)
+    (lock_dir / NGINX_DISABLED_LOCK).touch()
+
+
+def enable_nginx_management(base_dir: Path | None = None) -> None:
+    lock_dir = _lock_dir(base_dir)
+    (lock_dir / NGINX_DISABLED_LOCK).unlink(missing_ok=True)
 
 
 def can_manage_nginx() -> bool:

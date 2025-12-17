@@ -20,6 +20,7 @@ SERVICE=""
 NODE_ROLE=""
 NGINX_MODE="internal"
 DISABLE_NGINX=false
+EXPLICIT_NGINX_DISABLE=false
 PORT=""
 ENABLE_CELERY=false
 ENABLE_LCD_SCREEN=false
@@ -38,9 +39,11 @@ INSTALL_WATCHDOG=false
 
 LOCK_DIR="$BASE_DIR/.locks"
 
+PREVIOUS_NGINX_DISABLED=false
 if arthexis_nginx_disabled "$BASE_DIR"; then
     DISABLE_NGINX=true
     NGINX_MODE="none"
+    PREVIOUS_NGINX_DISABLED=true
 fi
 
 usage() {
@@ -263,13 +266,23 @@ detect_service_port() {
 
 
 require_nginx() {
-    if [ "$DISABLE_NGINX" = true ] || arthexis_nginx_disabled "$BASE_DIR"; then
-        echo "Skipping nginx requirement for the $1 role because nginx management is disabled."
-        return 0
+    local role="$1"
+
+    if [ "$DISABLE_NGINX" = true ]; then
+        if [ "$EXPLICIT_NGINX_DISABLE" = true ]; then
+            echo "Cannot configure the $role role because nginx management was explicitly disabled." >&2
+            echo "Re-run without --no-nginx to enable nginx management."
+            exit 1
+        fi
+
+        echo "Re-enabling nginx management for the $role role."
+        DISABLE_NGINX=false
+        NGINX_MODE="internal"
+        arthexis_enable_nginx "$BASE_DIR"
     fi
 
     if ! command -v nginx >/dev/null 2>&1; then
-        echo "Nginx is required for the $1 role but is not installed." >&2
+        echo "Nginx is required for the $role role but is not installed." >&2
         exit 1
     fi
 }
@@ -437,6 +450,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --no-nginx)
             DISABLE_NGINX=true
+            EXPLICIT_NGINX_DISABLE=true
             NGINX_MODE="none"
             shift
             ;;
