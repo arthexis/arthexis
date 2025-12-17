@@ -319,6 +319,7 @@
         fetchAdvice: "{{ _('Browser could not reach the visiting node. Check the address/port from this browser, ensure TLS certificates are trusted, and confirm connectivity. If server logs show the registration succeeded, no further action is required.')|escapejs }}",
         visitorMissing: "{{ visitor_error|default:_('Visitor address missing. Reload with ?visitor=host[:port].')|escapejs }}",
         idle: "{{ _('Waiting to start registration.')|escapejs }}",
+        mixedContent: "{{ _('Cannot contact the visitor over HTTP from this HTTPS page. Open the admin over HTTP or enable HTTPS on the visitor node.')|escapejs }}",
     };
 
     function updateIndicator(indicator, state) {
@@ -694,8 +695,11 @@
             const insecureVisitor =
                 visitorInfoUrl.startsWith("http:") || visitorRegisterUrl.startsWith("http:");
 
-            if (isSecurePage && insecureVisitor && visitorProxyUrl) {
-                await runProxyFlow(visitorInfoUrl, visitorRegisterUrl);
+            if (isSecurePage && insecureVisitor) {
+                setStatus(summary, messages.mixedContent, "error");
+                setStatus(hostResult, messages.aborted, "error");
+                setStatus(visitorResult, messages.mixedContent, "error");
+                sendTelemetry("mixed-content", visitorRegisterUrl, messages.mixedContent);
                 return;
             }
 
