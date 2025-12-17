@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import configparser
+import importlib.util
 import os
-import pwd
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
@@ -12,6 +12,13 @@ from django.utils import timezone
 from .models import OdooDeployment
 
 CONFIG_ENV_VAR = "ODOO_RC"
+
+
+pwd_spec = importlib.util.find_spec("pwd")
+if pwd_spec:
+    import pwd  # type: ignore
+else:  # pragma: no cover - Windows and other platforms without ``pwd``
+    pwd = None  # type: ignore
 
 
 @dataclass
@@ -74,10 +81,12 @@ def _default_config_locations() -> list[Path]:
 
     candidates: list[Path] = [home / ".odoorc", home / ".config/odoo/odoo.conf", home]
 
-    try:
-        user_home = Path("/home") / pwd.getpwuid(os.getuid()).pw_name
-    except Exception:  # pragma: no cover - fallback for platforms without ``pwd``
-        user_home = None
+    user_home = None
+    if pwd is not None:
+        try:
+            user_home = Path("/home") / pwd.getpwuid(os.getuid()).pw_name
+        except Exception:  # pragma: no cover - fallback for platforms without ``pwd``
+            user_home = None
 
     if user_home and user_home != home:
         candidates.extend(
