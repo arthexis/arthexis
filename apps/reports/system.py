@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import timedelta
 from time import perf_counter
 from typing import Any
@@ -133,6 +134,8 @@ def _system_sql_report_view(request: HttpRequest):
         selected_report = SQLReport.objects.filter(pk=report_id).first()
 
     if request.method == "POST":
+        validate_only = "validate_sigils" in request.POST
+
         form = SQLReportForm(
             request.POST,
             instance=selected_report,
@@ -140,28 +143,53 @@ def _system_sql_report_view(request: HttpRequest):
         )
 
         if form.is_valid():
-            sql_report = form.save()
-
-            resolved_sql = resolve_sigils(sql_report.query)
-            query_result = _execute_sql_report_query(resolved_sql, sql_report.database_alias)
-            selected_report = sql_report
-
-            if query_result.get("error"):
-                messages.error(
-                    request,
-                    _("Unable to run the SQL report: %(error)s")
-                    % {"error": query_result["error"]},
-                )
+            if validate_only:
+                sql_text = form.cleaned_data.get("query") or ""
+                tokens = re.findall(r"\[([^\[\]]+)\]", sql_text)
+                if not tokens:
+                    messages.warning(request, _("No sigils found in the query."))
+                else:
+                    unresolved = [
+                        token
+                        for token in tokens
+                        if resolve_sigils(f"[{token}]") == f"[{token}]"
+                    ]
+                    if unresolved:
+                        messages.error(
+                            request,
+                            _("Unable to resolve sigils: %(sigils)s")
+                            % {"sigils": ", ".join(unresolved)},
+                        )
+                    else:
+                        messages.success(
+                            request,
+                            _("All sigils resolved successfully."),
+                        )
+                if selected_report and selected_report.pk:
+                    selected_report.refresh_from_db()
             else:
-                SQLReport.objects.filter(pk=sql_report.pk).update(
-                    last_run_at=query_result["executed_at"],
-                    last_run_duration=timedelta(
-                        milliseconds=query_result.get("duration_ms") or 0
-                    ),
-                    updated_at=timezone.now(),
-                )
-                sql_report.refresh_from_db(fields=["last_run_at", "last_run_duration"])
-                messages.success(request, _("Query executed successfully."))
+                sql_report = form.save()
+
+                resolved_sql = resolve_sigils(sql_report.query)
+                query_result = _execute_sql_report_query(resolved_sql, sql_report.database_alias)
+                selected_report = sql_report
+
+                if query_result.get("error"):
+                    messages.error(
+                        request,
+                        _("Unable to run the SQL report: %(error)s")
+                        % {"error": query_result["error"]},
+                    )
+                else:
+                    SQLReport.objects.filter(pk=sql_report.pk).update(
+                        last_run_at=query_result["executed_at"],
+                        last_run_duration=timedelta(
+                            milliseconds=query_result.get("duration_ms") or 0
+                        ),
+                        updated_at=timezone.now(),
+                    )
+                    sql_report.refresh_from_db(fields=["last_run_at", "last_run_duration"])
+                    messages.success(request, _("Query executed successfully."))
         else:
             query_result = None
     else:
