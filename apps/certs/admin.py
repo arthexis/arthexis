@@ -4,8 +4,20 @@ from django.utils.translation import gettext_lazy as _
 from apps.certs.models import CertbotCertificate, SelfSignedCertificate
 
 
+class CertificateProvisioningMixin:
+    @admin.action(description=_("Generate Certificates"))
+    def generate_certificates(self, request, queryset):
+        for certificate in queryset:
+            try:
+                message = certificate.provision()
+            except Exception as exc:  # pragma: no cover - admin plumbing
+                self.message_user(request, f"{certificate}: {exc}", messages.ERROR)
+            else:
+                self.message_user(request, f"{certificate}: {message}", messages.SUCCESS)
+
+
 @admin.register(CertbotCertificate)
-class CertbotCertificateAdmin(admin.ModelAdmin):
+class CertbotCertificateAdmin(CertificateProvisioningMixin, admin.ModelAdmin):
     list_display = (
         "name",
         "domain",
@@ -15,7 +27,7 @@ class CertbotCertificateAdmin(admin.ModelAdmin):
     )
     search_fields = ("name", "domain", "email")
     readonly_fields = ("last_requested_at", "last_message")
-    actions = ["request_certbot"]
+    actions = ["generate_certificates", "request_certbot"]
 
     @admin.action(description=_("Request or renew with certbot"))
     def request_certbot(self, request, queryset):
@@ -29,7 +41,7 @@ class CertbotCertificateAdmin(admin.ModelAdmin):
 
 
 @admin.register(SelfSignedCertificate)
-class SelfSignedCertificateAdmin(admin.ModelAdmin):
+class SelfSignedCertificateAdmin(CertificateProvisioningMixin, admin.ModelAdmin):
     list_display = (
         "name",
         "domain",
@@ -39,7 +51,7 @@ class SelfSignedCertificateAdmin(admin.ModelAdmin):
     )
     search_fields = ("name", "domain")
     readonly_fields = ("last_generated_at", "last_message")
-    actions = ["generate_self_signed"]
+    actions = ["generate_certificates", "generate_self_signed"]
 
     @admin.action(description=_("Generate self-signed certificate"))
     def generate_self_signed(self, request, queryset):

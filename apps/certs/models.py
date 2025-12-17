@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import models
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
@@ -41,6 +42,29 @@ class CertificateBase(Certificate):
         verbose_name = _("Certificate")
         verbose_name_plural = _("Certificates")
         ordering = ("name",)
+
+    def provision(self, *, sudo: str = "sudo") -> str:
+        """Generate or request this certificate based on its type."""
+
+        certificate = self._specific_certificate
+
+        if isinstance(certificate, CertbotCertificate):
+            return certificate.request(sudo=sudo)
+        if isinstance(certificate, SelfSignedCertificate):
+            return certificate.generate(sudo=sudo)
+
+        raise TypeError(f"Unsupported certificate type: {type(self).__name__}")
+
+    @property
+    def _specific_certificate(self) -> "CertificateBase":
+        if isinstance(self, (CertbotCertificate, SelfSignedCertificate)):
+            return self
+        for attr in ("certbotcertificate", "selfsignedcertificate"):
+            try:
+                return getattr(self, attr)
+            except (AttributeError, ObjectDoesNotExist):
+                continue
+        return self
 
 
 class CertbotCertificate(CertificateBase):

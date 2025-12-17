@@ -12,12 +12,31 @@
   <h1>{% trans "Preview nginx configurations" %}</h1>
 
   {% if config_previews %}
+    {% if missing_certificates %}
+      <ul class="messagelist">
+        <li class="warning">
+          {% blocktrans count missing=missing_certificates|length %}
+            {{ missing }} configuration requires a certificate before HTTPS can be applied.
+          {% plural %}
+            {{ missing }} configurations require certificates before HTTPS can be applied.
+          {% endblocktrans %}
+        </li>
+      </ul>
+    {% endif %}
+
     {% if can_apply %}
       <form method="post" class="submit-row">
         {% csrf_token %}
         <input type="hidden" name="ids" value="{{ ids_param }}" />
         <input type="submit" value="{% trans 'Apply configurations' %}" class="default" />
         <p class="help">{% trans 'Apply the selected configurations and reload nginx.' %}</p>
+      </form>
+
+      <form method="post" class="submit-row" action="{{ generate_certificates_url }}">
+        {% csrf_token %}
+        <input type="hidden" name="ids" value="{{ ids_param }}" />
+        <input type="submit" value="{% trans 'Generate certificates' %}" />
+        <p class="help">{% trans 'Provision certificates for the selected configurations before applying HTTPS.' %}</p>
       </form>
     {% endif %}
 
