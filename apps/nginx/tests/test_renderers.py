@@ -1,6 +1,10 @@
 from pathlib import Path
 
-from apps.nginx.renderers import apply_site_entries, generate_primary_config
+from apps.nginx.renderers import (
+    apply_site_entries,
+    generate_primary_config,
+    generate_site_entries_content,
+)
 
 
 def test_generate_primary_config_internal_mode():
@@ -39,3 +43,20 @@ def test_apply_site_entries(tmp_path: Path):
     assert "Managed site for example.com" in content
     assert "return 301 https://$host$request_uri;" in content
     assert "demo.arthexis.com" in content
+
+
+def test_generate_site_entries_content_matches_written_file(tmp_path: Path):
+    staging = tmp_path / "sites.json"
+    staging.write_text(
+        """
+        [{"domain": "preview.example.com", "require_https": false}]
+        """,
+        encoding="utf-8",
+    )
+
+    dest = tmp_path / "sites.conf"
+
+    preview_content = generate_site_entries_content(staging, "internal", 8080)
+    apply_site_entries(staging, "internal", 8080, dest)
+
+    assert dest.read_text(encoding="utf-8") == preview_content
