@@ -193,8 +193,15 @@ ensure_nginx_in_path() {
 
 require_nginx() {
     if [ "$DISABLE_NGINX" = true ]; then
-        echo "Skipping nginx requirement for $1 because --no-nginx was requested."
-        return 0
+        if arthexis_can_manage_nginx; then
+            echo "Enabling nginx management for the $1 role."
+            DISABLE_NGINX=false
+            NGINX_MODE="internal"
+            arthexis_enable_nginx "$SCRIPT_DIR"
+        else
+            echo "Skipping nginx requirement for $1 because --no-nginx was requested."
+            return 0
+        fi
     fi
 
     if ! ensure_nginx_in_path; then

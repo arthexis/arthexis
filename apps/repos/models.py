@@ -35,6 +35,11 @@ class GitHubRepositoryManager(EntityManager):
         return self.get(owner=owner, name=name)
 
 
+class PackageRepositoryManager(EntityManager):
+    def get_by_natural_key(self, name: str):
+        return self.get(name=name)
+
+
 class GitHubRepository(Entity):
     """Source code repository reference specific to GitHub."""
 
@@ -292,6 +297,59 @@ class GitHubRepository(Entity):
                 fields=["owner", "name"], name="unique_github_repository_owner_name"
             )
         ]
+
+
+class PackageRepository(Entity):
+    """Represents a package upload target such as PyPI."""
+
+    objects = PackageRepositoryManager()
+
+    name = models.CharField(max_length=255, unique=True)
+    repository_url = models.URLField(blank=True, default="")
+    verify_availability = models.BooleanField(default=False)
+    extra_args = models.JSONField(default=list, blank=True)
+    token = models.CharField(max_length=255, blank=True, default="")
+    username = models.CharField(max_length=150, blank=True, default="")
+    password = models.CharField(max_length=150, blank=True, default="")
+    packages = models.ManyToManyField(
+        "release.Package",
+        related_name="package_repositories",
+        blank=True,
+    )
+
+    def natural_key(self):
+        return (self.name,)
+
+    def __str__(self):  # pragma: no cover - simple representation
+        return self.name
+
+    def to_target(self):
+        from apps.release.release import Credentials, RepositoryTarget
+
+        token = (self.token or "").strip()
+        username = (self.username or "").strip()
+        password = (self.password or "").strip()
+
+        credentials = None
+        if token or (username and password):
+            credentials = Credentials(
+                token=token or None,
+                username=username or None,
+                password=password or None,
+            )
+
+        return RepositoryTarget(
+            name=self.name,
+            repository_url=(self.repository_url or None),
+            credentials=credentials,
+            verify_availability=self.verify_availability,
+            extra_args=tuple(self.extra_args or ()),
+        )
+
+    class Meta:
+        ordering = ("name",)
+        verbose_name = _("Package Repository")
+        verbose_name_plural = _("Package Repositories")
 
 
 @dataclass(slots=True)
