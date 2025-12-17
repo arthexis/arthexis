@@ -264,8 +264,15 @@ detect_service_port() {
 
 require_nginx() {
     if [ "$DISABLE_NGINX" = true ] || arthexis_nginx_disabled "$BASE_DIR"; then
-        echo "Skipping nginx requirement for the $1 role because nginx management is disabled."
-        return 0
+        if arthexis_can_manage_nginx; then
+            echo "Enabling nginx management for the $1 role."
+            DISABLE_NGINX=false
+            NGINX_MODE="internal"
+            arthexis_enable_nginx "$BASE_DIR"
+        else
+            echo "Skipping nginx requirement for the $1 role because nginx management is disabled."
+            return 0
+        fi
     fi
 
     if ! command -v nginx >/dev/null 2>&1; then
