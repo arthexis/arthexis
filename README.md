@@ -91,6 +91,8 @@ Arthexis Constellation ships in four node roles tailored to different deployment
 ### 2. Start and stop
 Terminal nodes can start directly with the scripts below without installing; Control, Satellite, and Watchtower roles require installation first. Both approaches listen on [`http://localhost:8888/`](http://localhost:8888/) by default.
 
+For local bootstrapping, run `make dev` to install with defaults, start the server, and execute a quick smoke test. Override the role, port, reload, Celery, and test selection with Makefile flags when needed.
+
 - **[VS Code](https://code.visualstudio.com/)**
    - Open the folder and go to the **Run and Debug** panel (`Ctrl+Shift+D`).
    - Select the **Run Server** (or **Debug Server**) configuration.
