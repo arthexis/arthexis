@@ -1,0 +1,38 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+  <div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+    &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+    &rsaquo; <a href="{% url 'admin:nginx_siteconfiguration_changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
+    &rsaquo; {% trans "Preview" %}
+  </div>
+
+  <h1>{% trans "Preview nginx configurations" %}</h1>
+
+  {% if config_previews %}
+    {% for preview in config_previews %}
+      <div class="module">
+        <h2>{{ preview.config }}</h2>
+        {% for file in preview.files %}
+          <div class="inline-group">
+            <div class="tabular inline-related">
+              <h3>{{ file.label }} <small><code>{{ file.path }}</code></small></h3>
+              <p class="help">{{ file.status }}</p>
+              {% if file.content %}
+                <pre style="white-space: pre-wrap; max-height: 50vh; overflow: auto;">{{ file.content }}</pre>
+              {% else %}
+                <p>{% trans "No content available." %}</p>
+              {% endif %}
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% endfor %}
+  {% else %}
+    <p>{% trans "No configurations were selected for preview." %}</p>
+  {% endif %}
+
+  <p><a href="{% url 'admin:nginx_siteconfiguration_changelist' %}">&larr; {% trans "Back to site configurations" %}</a></p>
+{% endblock %}

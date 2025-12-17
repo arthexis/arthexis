@@ -74,14 +74,7 @@ def generate_primary_config(
     return f"{http_block}\n"
 
 
-def apply_site_entries(
-    config_path: Path,
-    mode: str,
-    port: int,
-    dest_path: Path,
-    *,
-    sudo: str | None = None,
-) -> bool:
+def generate_site_entries_content(config_path: Path, mode: str, port: int) -> str:
     try:
         raw = config_path.read_text(encoding="utf-8")
         sites = json.loads(raw)
@@ -125,4 +118,16 @@ def apply_site_entries(
         site_blocks.append("# No managed sites configured.")
 
     content = "\n\n".join(site_blocks)
+    return content
+
+
+def apply_site_entries(
+    config_path: Path,
+    mode: str,
+    port: int,
+    dest_path: Path,
+    *,
+    sudo: str | None = None,
+) -> bool:
+    content = generate_site_entries_content(config_path, mode, port)
     return write_if_changed(dest_path, content, sudo=sudo)
