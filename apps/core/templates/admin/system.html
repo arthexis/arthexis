@@ -48,6 +48,14 @@
         </tr>
         <tr>
           <th scope="row">
+            <a href="{% url 'admin:system-sql-report' %}">
+              {% trans "SQL Report" %}
+            </a>
+          </th>
+          <td>{% trans "Execute SQL with sigils resolved, benchmark runtime, and save queries for reuse." %}</td>
+        </tr>
+        <tr>
+          <th scope="row">
             <a href="{% url 'admin:system-nginx-report' %}">
               {% trans "NGINX Report" %}
             </a>
