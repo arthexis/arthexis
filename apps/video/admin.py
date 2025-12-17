@@ -12,7 +12,7 @@ from apps.locals.user_data import EntityModelAdmin
 from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
 from apps.nodes.utils import save_screenshot
 
-from .models import VideoDevice, VideoRecording
+from .models import VideoDevice, VideoRecording, YoutubeChannel
 from .utils import capture_rpi_snapshot, has_rpi_camera_stack
 
 
@@ -241,3 +241,18 @@ class VideoRecordingAdmin(EntityModelAdmin):
     list_display = ("node", "path", "duration_seconds", "recorded_at", "method")
     search_fields = ("path", "node__hostname", "method")
     readonly_fields = ("recorded_at",)
+
+
+@admin.register(YoutubeChannel)
+class YoutubeChannelAdmin(EntityModelAdmin):
+    list_display = ("title", "handle_display", "channel_id", "channel_url")
+    search_fields = ("title", "channel_id", "handle", "description")
+    readonly_fields = ("channel_url",)
+
+    @admin.display(description=_("Handle"))
+    def handle_display(self, obj):
+        return obj.get_handle(include_at=True)
+
+    @admin.display(description=_("Channel URL"))
+    def channel_url(self, obj):
+        return obj.get_channel_url()
