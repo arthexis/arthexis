@@ -1,6 +1,7 @@
 import pytest
 from django.urls import reverse
 
+from apps.nginx import services
 from apps.nginx.models import SiteConfiguration
 from apps.nginx.renderers import generate_primary_config
 
@@ -49,3 +50,23 @@ def test_preview_view_denies_user_without_permission(client, django_user_model):
     response = client.get(url)
 
     assert response.status_code == 403
+
+
+@pytest.mark.django_db
+def test_preview_view_applies_configurations(monkeypatch, admin_client):
+    config = SiteConfiguration.objects.create(name="apply-preview")
+
+    calls: dict[str, dict[str, int | bool]] = {}
+
+    def fake_apply(self, *, reload: bool = True, remove: bool = False):
+        calls["kwargs"] = {"reload": reload, "remove": remove, "pk": self.pk}
+        return services.ApplyResult(changed=True, validated=True, reloaded=True, message="ok")
+
+    monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
+
+    url = reverse("admin:nginx_siteconfiguration_preview") + f"?ids={config.pk}"
+    response = admin_client.post(url, {"ids": str(config.pk)})
+
+    assert response.status_code == 302
+    assert response["Location"].endswith(f"?ids={config.pk}")
+    assert calls["kwargs"] == {"reload": True, "remove": False, "pk": config.pk}
