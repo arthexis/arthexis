@@ -428,6 +428,7 @@ LOCAL_APPS = [
     "apps.sigils",
     "apps.selenium",
     "apps.repos",
+    "apps.reports",
     "apps.app",
     "apps.rates",
     "apps.vehicle",

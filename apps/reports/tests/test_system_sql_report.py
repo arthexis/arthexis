@@ -3,7 +3,7 @@ from django.contrib.auth import get_user_model
 from django.urls import reverse
 from django.test import TestCase
 
-from apps.core.models import SQLReport
+from apps.reports.models import SQLReport
 from apps.sigils.models import SigilRoot
 
 
