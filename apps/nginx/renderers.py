@@ -79,6 +79,8 @@ def apply_site_entries(
     mode: str,
     port: int,
     dest_path: Path,
+    *,
+    sudo: str | None = None,
 ) -> bool:
     try:
         raw = config_path.read_text(encoding="utf-8")
@@ -87,8 +89,6 @@ def apply_site_entries(
         sites = []
     except json.JSONDecodeError as exc:  # pragma: no cover - invalid staging file
         raise ValueError(f"Invalid JSON in {config_path}: {exc}")
-
-    dest_path.parent.mkdir(parents=True, exist_ok=True)
 
     seen_domains: set[str] = set()
     mode = mode.lower()
@@ -125,4 +125,4 @@ def apply_site_entries(
         site_blocks.append("# No managed sites configured.")
 
     content = "\n\n".join(site_blocks)
-    return write_if_changed(dest_path, content)
+    return write_if_changed(dest_path, content, sudo=sudo)

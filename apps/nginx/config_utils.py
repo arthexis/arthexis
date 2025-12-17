@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import re
+import subprocess
+import tempfile
 import textwrap
 from pathlib import Path
 from typing import Iterable
@@ -202,7 +204,7 @@ def https_proxy_server(
     return _format_server_block(lines)
 
 
-def write_if_changed(path: Path, content: str) -> bool:
+def write_if_changed(path: Path, content: str, *, sudo: str | None = None) -> bool:
     """Write *content* to *path* if it differs from the existing file."""
 
     if path.exists():
@@ -213,5 +215,18 @@ def write_if_changed(path: Path, content: str) -> bool:
         if existing == content:
             return False
 
+    if sudo:
+        with tempfile.NamedTemporaryFile("w", delete=False, encoding="utf-8") as temp_file:
+            temp_file.write(content)
+            temp_path = Path(temp_file.name)
+
+        try:
+            subprocess.run([sudo, "mkdir", "-p", str(path.parent)], check=True)
+            subprocess.run([sudo, "cp", str(temp_path), str(path)], check=True)
+        finally:
+            temp_path.unlink(missing_ok=True)
+        return True
+
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content, encoding="utf-8")
     return True

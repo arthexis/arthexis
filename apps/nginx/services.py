@@ -146,7 +146,9 @@ def apply_nginx_configuration(
     site_changed = False
     if site_config_path and site_destination:
         try:
-            site_changed = apply_site_entries(site_config_path, mode, port, site_destination)
+            site_changed = apply_site_entries(
+                site_config_path, mode, port, site_destination, sudo=sudo
+            )
         except ValueError as exc:
             raise ValidationError(str(exc)) from exc
 
