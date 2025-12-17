@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from django.contrib import admin, messages
+from django.core.exceptions import PermissionDenied
 from django.http import HttpRequest, HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import path, reverse
@@ -75,7 +76,7 @@ class SiteConfigurationAdmin(admin.ModelAdmin):
 
     def preview_view(self, request: HttpRequest):
         if not self.has_view_permission(request):
-            return self._unauthorized(request)
+            raise PermissionDenied
 
         ids = request.GET.get("ids", "")
         if ids:

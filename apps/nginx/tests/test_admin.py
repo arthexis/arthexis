@@ -33,3 +33,19 @@ def test_preview_view_shows_file_status(admin_client, tmp_path):
     assert str(config.site_destination_path) in rendered
     assert "Existing file already matches this content." in rendered
     assert "File does not exist on disk." in rendered
+
+
+@pytest.mark.django_db
+def test_preview_view_denies_user_without_permission(client, django_user_model):
+    user = django_user_model.objects.create_user(
+        username="staff-no-view", email="staff@example.com", password="secret"
+    )
+    user.is_staff = True
+    user.save()
+
+    client.force_login(user)
+
+    url = reverse("admin:nginx_siteconfiguration_preview")
+    response = client.get(url)
+
+    assert response.status_code == 403
