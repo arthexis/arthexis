@@ -57,6 +57,31 @@
             </div>
           </div>
           <div class="form-check form-switch my-3">
+            {{ form.is_periodic }}
+            <label class="form-check-label" for="id_is_periodic">{% trans "Repeat this request" %}</label>
+            {% if form.is_periodic.errors %}
+              <div class="invalid-feedback d-block">{{ form.is_periodic.errors|join:" " }}</div>
+            {% endif %}
+          </div>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label" for="id_period">{% trans "Period" %}</label>
+              {{ form.period }}
+              <div class="form-text">{% trans "Length of each execution window (e.g. 7 days)." %}</div>
+              {% if form.period.errors %}
+                <div class="invalid-feedback d-block">{{ form.period.errors|join:" " }}</div>
+              {% endif %}
+            </div>
+            <div class="col-md-6">
+              <label class="form-label" for="id_period_deadline">{% trans "Period deadline" %}</label>
+              {{ form.period_deadline }}
+              <div class="form-text">{% trans "Optional cutoff before the period resets." %}</div>
+              {% if form.period_deadline.errors %}
+                <div class="invalid-feedback d-block">{{ form.period_deadline.errors|join:" " }}</div>
+              {% endif %}
+            </div>
+          </div>
+          <div class="form-check form-switch my-3">
             {{ form.enable_notifications }}
             <label class="form-check-label" for="id_enable_notifications">{% trans "Email reminders" %}</label>
             {% if form.enable_notifications.errors %}
