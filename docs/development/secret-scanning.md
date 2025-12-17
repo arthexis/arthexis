@@ -2,8 +2,8 @@
 
 The CI pipeline runs automated secret scans to prevent accidental exposure of credentials. Every pull request executes a
 [Gitleaks](https://github.com/gitleaks/gitleaks) scan against the committed history of the change and the working tree to catch
-leaks before they land on the main branch. The scanner is configured with [`.gitleaks.toml`](../../.gitleaks.toml) so that
-legitimate placeholder credentials used in test fixtures are ignored while any other matches will fail the build.
+leaks before they land on the main branch. The scanner is configured with [`.gitleaks.toml`](https://github.com/arthexis/arthexis/blob/main/.gitleaks.toml)
+so that legitimate placeholder credentials used in test fixtures are ignored while any other matches will fail the build.
 
 ## Running the scanner locally
 

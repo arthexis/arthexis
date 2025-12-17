@@ -1,0 +1,32 @@
+site_name: Arthexis Documentation
+site_description: Operator and contributor references for the Arthexis constellation.
+docs_dir: docs
+nav:
+  - Overview: index.md
+  - Operations:
+      - Install & Lifecycle Scripts Manual: development/install-lifecycle-scripts-manual.md
+      - Auto-Upgrade Flow: auto-upgrade.md
+  - Architecture:
+      - Architecture Manifest: architecture_manifest.md
+      - Logging Domain: logging-domain.md
+      - Startup Sequence: startup-sequence.md
+  - Charging Protocols:
+      - OCPP 1.6 Compliance Review: ocpp16_compliance_review.md
+      - OCPP Connection Status: ocpp_connection_status.md
+  - Reference:
+      - Energy Transactions Ledger: energy-transactions-ledger.md
+      - PyPI Install Report: pypi-install-report.md
+      - Runserver Log Duplication: runserver-log-duplication.md
+  - Development:
+      - CI Troubleshooting: development/ci-troubleshooting.md
+      - Migration Branch Guards: development/migration-branch-guards.md
+      - Pytest Role Markers: development/pytest-role-markers.md
+      - Secret Scanning: development/secret-scanning.md
+      - Maintenance Roadmap: development/maintenance-roadmap.md
+      - Documentation Refresh Tasks: development/documentation-refresh-tasks.md
+      - OCPP User Manual: development/ocpp-user-manual.md
+      - Release Package Options: development/release-package-options.md
+  - Performance:
+      - Public Charger Optimizations: performance/public_charger_optimizations.md
+  - Legal:
+      - Third-Party Licenses: legal/THIRD_PARTY_LICENSES.md

@@ -1,4 +1,4 @@
-.PHONY: help install start stop upgrade uninstall test dev
+.PHONY: help install start stop upgrade uninstall test dev lint docs
 
 ROLE ?= terminal
 PORT ?= 8888
@@ -18,14 +18,16 @@ celery_flag := $(if $(filter true,$(CELERY)),--celery,$(if $(filter false,$(CELE
 start_flag := $(if $(filter true,$(START_ON_INSTALL)),--start,$(if $(filter false,$(START_ON_INSTALL)),--no-start,))
 
 help:
-        @printf "Available targets:\n"
-        @printf "  make install [ROLE=terminal|control|satellite|watchtower] [PORT=8888] [START_ON_INSTALL=true|false] [CELERY=true|false] [CHANNEL=stable|latest|fixed] [EXTRA_INSTALL_ARGS=...]\\n"
-        @printf "  make start [PORT=8888] [RELOAD=true] [CELERY=true|false] [EXTRA_START_ARGS=...]\\n"
-        @printf "  make stop\\n"
-        @printf "  make upgrade [CHANNEL=stable|latest|fixed]\\n"
-        @printf "  make uninstall\\n"
-        @printf "  make test [TEST_ARGS=...]\\n"
-        @printf "  make dev [ROLE=terminal|control|satellite|watchtower] [PORT=8888] [RELOAD=true] [CELERY=true|false] [CHANNEL=stable|latest|fixed] [TEST_ARGS=...] [EXTRA_INSTALL_ARGS=...] [EXTRA_START_ARGS=...]\\n"
+	@printf "Available targets:\n"
+	@printf "  make install [ROLE=terminal|control|satellite|watchtower] [PORT=8888] [START_ON_INSTALL=true|false] [CELERY=true|false] [CHANNEL=stable|latest|fixed] [EXTRA_INSTALL_ARGS=...]\\n"
+	@printf "  make start [PORT=8888] [RELOAD=true] [CELERY=true|false] [EXTRA_START_ARGS=...]\\n"
+	@printf "  make stop\\n"
+	@printf "  make upgrade [CHANNEL=stable|latest|fixed]\\n"
+	@printf "  make uninstall\\n"
+	@printf "  make test [TEST_ARGS=...]\\n"
+	@printf "  make lint\\n"
+	@printf "  make docs\\n"
+  @printf "  make dev [ROLE=terminal|control|satellite|watchtower] [PORT=8888] [RELOAD=true] [CELERY=true|false] [CHANNEL=stable|latest|fixed] [TEST_ARGS=...] [EXTRA_INSTALL_ARGS=...] [EXTRA_START_ARGS=...]\\n"
 
 install:
 	./install.sh $(role_flag) $(port_arg) $(start_flag) $(celery_flag) $(channel_flag) $(EXTRA_INSTALL_ARGS)
@@ -43,9 +45,15 @@ uninstall:
 	./uninstall.sh
 
 test:
-        pytest $(TEST_ARGS)
+	pytest $(TEST_ARGS)
+
+lint:
+	black --check .
+
+docs:
+	mkdocs build --strict
 
 dev:
-        $(MAKE) install
-        $(MAKE) start
-        pytest $(if $(TEST_ARGS),$(TEST_ARGS),-k smoke)
+  $(MAKE) install
+  $(MAKE) start
+  pytest $(if $(TEST_ARGS),$(TEST_ARGS),-k smoke)

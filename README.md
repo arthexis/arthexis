@@ -110,6 +110,11 @@ For local bootstrapping, run `make dev` to install with defaults, start the serv
    - Consult the [Install & Lifecycle Scripts Manual](docs/development/install-lifecycle-scripts-manual.md) for complete flag descriptions and operational notes.
    - Review the [Auto-Upgrade Flow](docs/auto-upgrade.md) for how delegated upgrades run and how to observe them.
 
+- **Linters & docs:**
+   - Install the development dependencies (including [Black](https://black.readthedocs.io/) and [MkDocs](https://www.mkdocs.org/)) with `pip install -r requirements.txt` so that the Makefile utilities have the necessary tooling.
+   - Run `make lint` to execute the repository's Black formatting checks.
+   - Build the documentation site with `make docs`, which renders the Markdown guides under `docs/` into the MkDocs `site/` directory.
+
 - **Windows:**
    - Run [`install.bat`](install.bat) to install (Terminal role) and [`upgrade.bat`](upgrade.bat) to upgrade.
    - Installation is not required to start in Terminal mode (the default).
