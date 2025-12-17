@@ -12,6 +12,15 @@
   <h1>{% trans "Preview nginx configurations" %}</h1>
 
   {% if config_previews %}
+    {% if can_apply %}
+      <form method="post" class="submit-row">
+        {% csrf_token %}
+        <input type="hidden" name="ids" value="{{ ids_param }}" />
+        <input type="submit" value="{% trans 'Apply configurations' %}" class="default" />
+        <p class="help">{% trans 'Apply the selected configurations and reload nginx.' %}</p>
+      </form>
+    {% endif %}
+
     {% for preview in config_previews %}
       <div class="module">
         <h2>{{ preview.config }}</h2>

@@ -12,7 +12,6 @@ CERTIFICATE_PATH = DEFAULT_CERT_DIR / "fullchain.pem"
 CERTIFICATE_KEY_PATH = DEFAULT_CERT_DIR / "privkey.pem"
 SSL_OPTIONS_PATH = Path("/etc/letsencrypt/options-ssl-nginx.conf")
 SSL_DHPARAM_PATH = Path("/etc/letsencrypt/ssl-dhparams.pem")
-MAINTENANCE_ROOT = Path("/usr/share/arthexis-fallback")
 
 
 def slugify(domain: str) -> str:
@@ -20,37 +19,6 @@ def slugify(domain: str) -> str:
 
     slug = re.sub(r"[^a-z0-9]+", "-", domain.lower()).strip("-")
     return slug or "site"
-
-
-def maintenance_block() -> str:
-    """Return the shared maintenance configuration block."""
-
-    return textwrap.dedent(
-        f"""
-        error_page 404 /maintenance/404.html;
-        error_page 500 502 503 504 /maintenance/app-down.html;
-
-        location = /maintenance/index.html {{
-            root {MAINTENANCE_ROOT};
-            add_header Cache-Control \"no-store\";
-        }}
-
-        location = /maintenance/404.html {{
-            root {MAINTENANCE_ROOT};
-            add_header Cache-Control \"no-store\";
-        }}
-
-        location = /maintenance/app-down.html {{
-            root {MAINTENANCE_ROOT};
-            add_header Cache-Control \"no-store\";
-        }}
-
-        location /maintenance/ {{
-            alias {MAINTENANCE_ROOT}/;
-            add_header Cache-Control \"no-store\";
-        }}
-        """
-    ).strip()
 
 
 def proxy_block(port: int, *, trailing_slash: bool = True) -> str:
@@ -117,8 +85,6 @@ def http_proxy_server(
     for listen in _unique_preserve_order(listens):
         lines.append(f"    listen {listen};")
     lines.append(f"    server_name {server_names};")
-    lines.append("")
-    lines.append(textwrap.indent(maintenance_block(), "    "))
     lines.append("")
     lines.append(textwrap.indent(proxy_block(port, trailing_slash=trailing_slash), "    "))
     lines.append("}")
@@ -193,9 +159,6 @@ def https_proxy_server(
     for listen in _unique_preserve_order(listens):
         lines.append(f"    listen {listen};")
     lines.append(f"    server_name {server_names};")
-    lines.append("")
-    lines.append(textwrap.indent(maintenance_block(), "    "))
-    lines.append("")
     cert_path = str(certificate_path or CERTIFICATE_PATH)
     key_path = str(certificate_key_path or CERTIFICATE_KEY_PATH)
     lines.extend(

@@ -30,7 +30,6 @@ class SiteConfigurationAdmin(admin.ModelAdmin):
     search_fields = ("name", "role", "certificate__name")
     readonly_fields = ("last_applied_at", "last_validated_at", "last_message")
     actions = [
-        "apply_configurations",
         "validate_configurations",
         "preview_configurations",
     ]
@@ -44,18 +43,6 @@ class SiteConfigurationAdmin(admin.ModelAdmin):
             ),
         ]
         return custom + super().get_urls()
-
-    @admin.action(description=_("Apply selected configurations"))
-    def apply_configurations(self, request, queryset):
-        for config in queryset:
-            try:
-                result = config.apply()
-            except (services.NginxUnavailableError, services.ValidationError) as exc:
-                self.message_user(request, f"{config}: {exc}", messages.ERROR)
-                continue
-
-            level = messages.SUCCESS if result.validated else messages.INFO
-            self.message_user(request, f"{config}: {result.message}", level)
 
     @admin.action(description=_("Validate selected configurations"))
     def validate_configurations(self, request, queryset):
@@ -80,12 +67,36 @@ class SiteConfigurationAdmin(admin.ModelAdmin):
         if not self.has_view_permission(request):
             raise PermissionDenied
 
-        ids = request.GET.get("ids", "")
-        if ids:
-            pk_values = [pk for pk in ids.split(",") if pk]
+        ids_param = request.GET.get("ids", "") or request.POST.get("ids", "")
+        pk_values: list[int] = []
+        seen: set[int] = set()
+        for value in ids_param.split(","):
+            value = value.strip()
+            if not value:
+                continue
+            try:
+                pk_int = int(value)
+            except ValueError:
+                continue
+            if pk_int in seen:
+                continue
+            seen.add(pk_int)
+            pk_values.append(pk_int)
+
+        if pk_values:
             queryset = self.get_queryset(request).filter(pk__in=pk_values)
         else:
             queryset = self.get_queryset(request).none()
+
+        if request.method == "POST":
+            if not self.has_change_permission(request):
+                raise PermissionDenied
+            self._apply_configurations(request, queryset)
+            redirect_url = reverse("admin:nginx_siteconfiguration_preview")
+            if pk_values:
+                ids = ",".join(str(pk) for pk in pk_values)
+                redirect_url = f"{redirect_url}?ids={ids}"
+            return HttpResponseRedirect(redirect_url)
 
         config_previews = [
             {
@@ -101,11 +112,24 @@ class SiteConfigurationAdmin(admin.ModelAdmin):
             "title": _("Preview nginx configurations"),
             "config_previews": config_previews,
             "media": self.media,
+            "ids_param": ",".join(str(pk) for pk in pk_values),
+            "can_apply": self.has_change_permission(request),
         }
 
         return TemplateResponse(
             request, "admin/nginx/siteconfiguration/preview.html", context
         )
+
+    def _apply_configurations(self, request, queryset):
+        for config in queryset:
+            try:
+                result = config.apply()
+            except (services.NginxUnavailableError, services.ValidationError) as exc:
+                self.message_user(request, f"{config}: {exc}", messages.ERROR)
+                continue
+
+            level = messages.SUCCESS if result.validated else messages.INFO
+            self.message_user(request, f"{config}: {result.message}", level)
 
     def _build_file_previews(self, config: SiteConfiguration) -> list[dict]:
         files: list[dict] = []
