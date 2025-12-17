@@ -198,6 +198,12 @@ class NodeFeature(Entity):
                 url_name="admin:audio_recordingdevice_find_devices",
             ),
         ),
+        "gpio-rtc": (
+            NodeFeatureDefaultAction(
+                label="Find Clock Devices",
+                url_name="admin:clocks_clockdevice_find_devices",
+            ),
+        ),
         "screenshot-poll": (
             NodeFeatureDefaultAction(
                 label="Take Screenshot",

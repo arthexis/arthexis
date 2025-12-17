@@ -17,6 +17,7 @@ nav:
       - Energy Transactions Ledger: energy-transactions-ledger.md
       - PyPI Install Report: pypi-install-report.md
       - Runserver Log Duplication: runserver-log-duplication.md
+      - DS3231 RTC Wiring: ds3231-rtc-wiring.md
   - Development:
       - CI Troubleshooting: development/ci-troubleshooting.md
       - Migration Branch Guards: development/migration-branch-guards.md
