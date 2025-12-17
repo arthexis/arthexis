@@ -1453,15 +1453,6 @@ if [ $VENV_PRESENT -eq 0 ]; then
   fi
 fi
 
-configure_nginx_site
-
-if [ "$DISABLE_NGINX" -ne 1 ] && arthexis_can_manage_nginx; then
-  arthexis_refresh_nginx_maintenance "$BASE_DIR" \
-    "/etc/nginx/sites-enabled/arthexis.conf" \
-    "/etc/nginx/conf.d/arthexis-internal.conf" \
-    "/etc/nginx/conf.d/arthexis-public.conf"
-fi
-
 # Ensure Python dependencies and database schema stay aligned with the
 # freshly-pulled code before refreshing runtime data.
 if [ $VENV_PRESENT -eq 1 ]; then
@@ -1486,6 +1477,15 @@ if [ $VENV_PRESENT -eq 1 ]; then
     fi
   fi
   deactivate
+fi
+
+configure_nginx_site
+
+if [ "$DISABLE_NGINX" -ne 1 ] && arthexis_can_manage_nginx; then
+  arthexis_refresh_nginx_maintenance "$BASE_DIR" \
+    "/etc/nginx/sites-enabled/arthexis.conf" \
+    "/etc/nginx/conf.d/arthexis-internal.conf" \
+    "/etc/nginx/conf.d/arthexis-public.conf"
 fi
 
 # Remove existing database if requested
