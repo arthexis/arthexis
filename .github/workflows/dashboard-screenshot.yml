@@ -217,7 +217,7 @@ jobs:
           node artifacts/capture.js
 
       - name: Upload dashboard screenshot
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: admin-dashboard
           path: artifacts/admin-dashboard.png
@@ -250,7 +250,7 @@ jobs:
           node artifacts/capture-public.js
 
       - name: Upload public screenshot
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: public-site
           path: artifacts/public-site.png
@@ -298,7 +298,7 @@ jobs:
           node artifacts/capture-ocpp.js
 
       - name: Upload OCPP dashboard screenshot
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ocpp-dashboard
           path: artifacts/ocpp-dashboard.png
@@ -333,7 +333,7 @@ jobs:
           node artifacts/capture-evcs.js
 
       - name: Upload EVCS public screenshot
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: evcs-public
           path: artifacts/evcs-public.png
