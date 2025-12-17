@@ -1,0 +1,52 @@
+from django.contrib import admin, messages
+from django.utils.translation import gettext_lazy as _
+
+from apps.certs.models import CertbotCertificate, SelfSignedCertificate
+
+
+@admin.register(CertbotCertificate)
+class CertbotCertificateAdmin(admin.ModelAdmin):
+    list_display = (
+        "name",
+        "domain",
+        "email",
+        "certificate_path",
+        "last_requested_at",
+    )
+    search_fields = ("name", "domain", "email")
+    readonly_fields = ("last_requested_at", "last_message")
+    actions = ["request_certbot"]
+
+    @admin.action(description=_("Request or renew with certbot"))
+    def request_certbot(self, request, queryset):
+        for certificate in queryset:
+            try:
+                message = certificate.request()
+            except Exception as exc:  # pragma: no cover - admin plumbing
+                self.message_user(request, f"{certificate}: {exc}", messages.ERROR)
+            else:
+                self.message_user(request, f"{certificate}: {message}", messages.SUCCESS)
+
+
+@admin.register(SelfSignedCertificate)
+class SelfSignedCertificateAdmin(admin.ModelAdmin):
+    list_display = (
+        "name",
+        "domain",
+        "certificate_path",
+        "valid_days",
+        "last_generated_at",
+    )
+    search_fields = ("name", "domain")
+    readonly_fields = ("last_generated_at", "last_message")
+    actions = ["generate_self_signed"]
+
+    @admin.action(description=_("Generate self-signed certificate"))
+    def generate_self_signed(self, request, queryset):
+        for certificate in queryset:
+            try:
+                message = certificate.generate()
+            except Exception as exc:  # pragma: no cover - admin plumbing
+                self.message_user(request, f"{certificate}: {exc}", messages.ERROR)
+            else:
+                self.message_user(request, f"{certificate}: {message}", messages.SUCCESS)

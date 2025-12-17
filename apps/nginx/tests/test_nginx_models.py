@@ -35,6 +35,8 @@ def test_site_configuration_apply_records_state(monkeypatch):
     assert captured["mode"] == config.mode
     assert captured["port"] == config.port
     assert captured["role"] == config.role
+    assert captured["https_enabled"] is False
+    assert captured["certificate"] is None
     assert captured["destination"] == config.expected_destination
 
 

@@ -118,6 +118,8 @@ def apply_nginx_configuration(
     mode: str,
     port: int,
     role: str,
+    certificate=None,
+    https_enabled: bool,
     include_ipv6: bool,
     destination: Path | None = None,
     site_config_path: Path | None = None,
@@ -140,14 +142,25 @@ def apply_nginx_configuration(
     subprocess.run([sudo, "sh", "-c", "rm -f /etc/nginx/conf.d/arthexis-*.conf"], check=False)
 
     primary_dest = destination or Path("/etc/nginx/sites-enabled/arthexis.conf")
-    config_content = generate_primary_config(mode, port, include_ipv6=include_ipv6)
+    config_content = generate_primary_config(
+        mode,
+        port,
+        certificate=certificate,
+        https_enabled=https_enabled,
+        include_ipv6=include_ipv6,
+    )
     _write_config_with_sudo(primary_dest, config_content, sudo=sudo)
 
     site_changed = False
     if site_config_path and site_destination:
         try:
             site_changed = apply_site_entries(
-                site_config_path, mode, port, site_destination, sudo=sudo
+                site_config_path,
+                mode,
+                port,
+                site_destination,
+                https_enabled=https_enabled,
+                sudo=sudo,
             )
         except ValueError as exc:
             raise ValidationError(str(exc)) from exc

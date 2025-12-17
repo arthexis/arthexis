@@ -15,7 +15,7 @@ def test_generate_primary_config_internal_mode():
 
 
 def test_generate_primary_config_public_mode():
-    config = generate_primary_config("public", 8080)
+    config = generate_primary_config("public", 8080, https_enabled=True)
 
     assert "return 301 https://$host$request_uri;" in config
     assert "ssl_certificate" in config
@@ -36,7 +36,7 @@ def test_apply_site_entries(tmp_path: Path):
     )
 
     dest = tmp_path / "sites.conf"
-    changed = apply_site_entries(staging, "public", 8888, dest)
+    changed = apply_site_entries(staging, "public", 8888, dest, https_enabled=True)
 
     assert changed is True
     content = dest.read_text(encoding="utf-8")
