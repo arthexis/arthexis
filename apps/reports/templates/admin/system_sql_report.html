@@ -13,16 +13,10 @@
   {{ block.super }}
   <style>
     .sql-report-grid {
-      display: grid;
-      grid-template-columns: minmax(240px, 1fr) 2fr;
+      display: flex;
+      flex-direction: column;
       gap: 1.25rem;
-      align-items: start;
-    }
-
-    @media (max-width: 960px) {
-      .sql-report-grid {
-        grid-template-columns: 1fr;
-      }
+      align-items: stretch;
     }
 
     .sql-report-list {
@@ -57,6 +51,16 @@
 
     .sql-report-runner .submit-row {
       margin-top: 1rem;
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    .sql-report-runner textarea {
+      width: 100%;
+      min-width: 100%;
+      box-sizing: border-box;
+      font-family: monospace;
     }
 
     .sql-report-benchmark {
@@ -148,6 +152,7 @@
             </div>
           </fieldset>
           <div class="submit-row">
+            <button type="submit" name="_validate_sigils">{% trans "Validate sigils" %}</button>
             <button type="submit" class="default">{% trans "Save & Run SQL" %}</button>
           </div>
         </form>

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import timedelta
 from time import perf_counter
 from typing import Any
@@ -16,6 +17,7 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.reports.models import SQLReport
+from apps.sigils.models import SigilRoot
 from apps.sigils.sigil_resolver import resolve_sigils
 
 logger = logging.getLogger(__name__)
@@ -123,6 +125,32 @@ def _execute_sql_report_query(resolved_sql: str, database_alias: str) -> dict[st
     return result
 
 
+def _validate_query_sigils(query: str) -> tuple[bool, str]:
+    tokens = [match.group(1).strip() for match in re.finditer(r"\[([^\[\]]+)\]", query or "")]
+
+    if not tokens:
+        return False, str(_("No sigils were found in the SQL query."))
+
+    invalid_tokens: list[str] = []
+
+    for token in tokens:
+        prefix = re.split(r"[:.=]", token, 1)[0].strip()
+        if not prefix:
+            invalid_tokens.append(token)
+            continue
+
+        if not SigilRoot.objects.filter(prefix__iexact=prefix).exists():
+            invalid_tokens.append(token)
+
+    if invalid_tokens:
+        message = _("Invalid sigil(s) found: %(sigils)s") % {
+            "sigils": ", ".join(sorted(set(invalid_tokens)))
+        }
+        return False, str(message)
+
+    return True, str(_("All sigils are valid."))
+
+
 def _system_sql_report_view(request: HttpRequest):
     database_choices = _database_choices()
     report_id = request.GET.get("report") or request.POST.get("report_id")
@@ -139,7 +167,12 @@ def _system_sql_report_view(request: HttpRequest):
             database_choices=database_choices,
         )
 
-        if form.is_valid():
+        if "_validate_sigils" in request.POST:
+            form.is_valid()
+            is_valid, feedback = _validate_query_sigils(form.data.get("query") or "")
+            level = messages.SUCCESS if is_valid else messages.WARNING
+            messages.add_message(request, level, feedback)
+        elif form.is_valid():
             sql_report = form.save()
 
             resolved_sql = resolve_sigils(sql_report.query)
@@ -162,8 +195,6 @@ def _system_sql_report_view(request: HttpRequest):
                 )
                 sql_report.refresh_from_db(fields=["last_run_at", "last_run_duration"])
                 messages.success(request, _("Query executed successfully."))
-        else:
-            query_result = None
     else:
         form = SQLReportForm(
             instance=selected_report,
