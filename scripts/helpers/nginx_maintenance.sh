@@ -109,16 +109,35 @@ arthexis_detect_https_enabled() {
 
   local python_bin="$base_dir/.venv/bin/python"
   if [ -x "$python_bin" ] && [ -f "$base_dir/manage.py" ]; then
-    if "$python_bin" <<'PY'
-from apps.nginx.models import SiteConfiguration
+    if (cd "$base_dir" && ARTHEXIS_BASE_DIR="$base_dir" DJANGO_SETTINGS_MODULE="${DJANGO_SETTINGS_MODULE:-config.settings}" "$python_bin" <<'PY'
+import os
 import sys
+from pathlib import Path
+
+base_dir = Path(os.environ.get("ARTHEXIS_BASE_DIR", Path.cwd()))
+if str(base_dir) not in sys.path:
+    sys.path.insert(0, str(base_dir))
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", os.environ.get("DJANGO_SETTINGS_MODULE", "config.settings"))
 
 try:
-    protocol = SiteConfiguration.get_default().protocol.lower()
+    import django
+    django.setup()
+    from apps.nginx.models import SiteConfiguration
 except Exception:
     sys.exit(1)
 
-sys.exit(0 if protocol == "https" else 1)
+config = SiteConfiguration.get_default()
+if config.protocol.lower() != "https":
+    sys.exit(1)
+
+certificate = config.certificate
+if certificate is None:
+    sys.exit(1)
+
+paths = [certificate.certificate_path, certificate.certificate_key_path]
+missing = [path for path in paths if path and not Path(path).expanduser().exists()]
+sys.exit(0 if not missing else 1)
 PY
     then
       return 0

@@ -105,6 +105,22 @@ class SiteConfiguration(models.Model):
     def apply(self, *, reload: bool = True, remove: bool = False) -> services.ApplyResult:
         """Apply or remove the managed nginx configuration."""
 
+        if self.protocol == "https":
+            certificate = self.certificate
+            if certificate is None:
+                raise services.ValidationError("HTTPS configuration requires a certificate.")
+
+            missing_files: list[str] = []
+            for path in (certificate.certificate_path, certificate.certificate_key_path):
+                if not Path(path).expanduser().exists():
+                    missing_files.append(str(path))
+
+            if missing_files:
+                missing_display = ", ".join(missing_files)
+                raise services.ValidationError(
+                    f"HTTPS configuration requires existing certificate files: {missing_display}"
+                )
+
         if remove:
             result = services.remove_nginx_configuration(reload=reload)
         else:

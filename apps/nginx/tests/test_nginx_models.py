@@ -61,3 +61,11 @@ def test_site_configuration_validate_only(monkeypatch):
     config.refresh_from_db()
     assert config.last_validated_at == later
     assert config.last_message == "restarted"
+
+
+@pytest.mark.django_db
+def test_site_configuration_apply_requires_certificate_for_https():
+    config = SiteConfiguration.objects.create(name="https-required", protocol="https")
+
+    with pytest.raises(services.ValidationError):
+        config.apply()
