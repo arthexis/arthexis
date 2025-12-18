@@ -47,6 +47,66 @@ jobs:
         run: |
           source .venv/bin/activate
           pytest --maxfail=1 --disable-warnings -q --timeout=30
+  scripts-smoke:
+    needs: install
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Add windows-latest to validate the batch scripts (start.bat/stop.bat/upgrade.bat).
+        os: [ubuntu-latest]
+    steps:
+      - name: Ensure workspace is writable
+        run: sudo chown -R "$USER:$USER" "$GITHUB_WORKSPACE"
+      - uses: actions/checkout@v6
+        with:
+          clean: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+      - name: Prepare isolated workspace
+        id: prep
+        shell: bash
+        run: |
+          set -euo pipefail
+          iso_dir="$(mktemp -d "$RUNNER_TEMP/arthexis-smoke-XXXX")"
+          rsync -a "$GITHUB_WORKSPACE"/ "$iso_dir"/
+          echo "iso_dir=$iso_dir" >> "$GITHUB_OUTPUT"
+      - name: Install suite in smoke workspace
+        working-directory: ${{ steps.prep.outputs.iso_dir }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./install.sh --clean --no-start
+      - name: Start, check status, and stop
+        working-directory: ${{ steps.prep.outputs.iso_dir }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./start.sh --silent
+          ./status.sh
+          ./stop.sh
+      - name: Uninstall suite non-interactively
+        working-directory: ${{ steps.prep.outputs.iso_dir }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./uninstall.sh --non-interactive
+      - name: Upload logs on failure
+        if: failure() && steps.prep.outputs.iso_dir != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: scripts-smoke-logs-${{ matrix.os }}
+          path: |
+            ${{ steps.prep.outputs.iso_dir }}/logs
+            ${{ steps.prep.outputs.iso_dir }}/.locks
+          if-no-files-found: ignore
+      - name: Document Windows batch omission
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Windows batch scripts (start.bat/stop.bat/upgrade.bat) are not covered in this matrix. Add 'windows-latest' to enable cross-platform smoke coverage."
   upgrade:
     runs-on: ubuntu-latest
     steps:

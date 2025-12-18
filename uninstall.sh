@@ -14,9 +14,10 @@ exec > >(tee "$LOG_FILE") 2>&1
 
 SERVICE=""
 NO_WARN=0
+NON_INTERACTIVE=0
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--no-warn]" >&2
+    echo "Usage: $0 [--service NAME] [--no-warn] [--non-interactive]" >&2
     exit 1
 }
 
@@ -55,6 +56,11 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         --no-warn)
+            NO_WARN=1
+            shift
+            ;;
+        --non-interactive)
+            NON_INTERACTIVE=1
             NO_WARN=1
             shift
             ;;
@@ -98,10 +104,14 @@ if [ -z "$SERVICE" ] && [ ${#RECORDED_SYSTEMD_UNITS[@]} -gt 0 ]; then
     fi
 fi
 
-read -r -p "This will stop the Arthexis server. Continue? [y/N] " CONFIRM
-if [[ "$CONFIRM" != "y" && "$CONFIRM" != "Y" ]]; then
-    echo "Aborted."
-    exit 0
+if [ "$NON_INTERACTIVE" -eq 0 ]; then
+    read -r -p "This will stop the Arthexis server. Continue? [y/N] " CONFIRM
+    if [[ "$CONFIRM" != "y" && "$CONFIRM" != "Y" ]]; then
+        echo "Aborted."
+        exit 0
+    fi
+else
+    echo "Non-interactive uninstall requested; proceeding without confirmation."
 fi
 
 if ! confirm_database_deletion "Uninstalling Arthexis"; then
