@@ -47,6 +47,12 @@ jobs:
         run: |
           source .venv/bin/activate
           pytest --maxfail=1 --disable-warnings -q --timeout=30
+      - name: Upload install artifacts
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: install-venv
+          path: .venv
   upgrade:
     runs-on: ubuntu-latest
     steps:
@@ -85,3 +91,49 @@ jobs:
         run: |
           source .venv/bin/activate
           ./upgrade.sh --local --no-restart
+  scripts-smoke:
+    name: Scripts smoke
+    needs: install
+    runs-on: ubuntu-latest
+    # Windows batch smoke validation is omitted; add a windows-latest matrix with start.bat/stop.bat/upgrade.bat when cross-platform coverage is required.
+    steps:
+      - name: Ensure workspace is writable
+        run: sudo chown -R "$USER:$USER" "$GITHUB_WORKSPACE"
+      - uses: actions/checkout@v6
+        with:
+          clean: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+      - name: Prepare smoke workspace
+        run: |
+          set -euo pipefail
+          SMOKE_DIR="$(mktemp -d "${RUNNER_TEMP}/scripts-smoke-XXXX")"
+          rsync -a --exclude='.git' "$GITHUB_WORKSPACE"/ "$SMOKE_DIR"/
+          echo "SMOKE_DIR=$SMOKE_DIR" >> "$GITHUB_ENV"
+      - name: Download install artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: install-venv
+          path: ${{ env.SMOKE_DIR }}/.venv
+      - name: Validate lifecycle scripts
+        run: |
+          set -euo pipefail
+          cd "$SMOKE_DIR"
+          ./install.sh --clean --no-start
+          ./start.sh --no-tail
+          ./status.sh
+          ./stop.sh
+          ./uninstall.sh --non-interactive
+      - name: Upload smoke logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scripts-smoke-logs
+          path: |
+            ${{ env.SMOKE_DIR }}/logs
+            ${{ env.SMOKE_DIR }}/install.log
+            ${{ env.SMOKE_DIR }}/upgrade.log
+            ${{ env.SMOKE_DIR }}/*.log
+            ${{ env.SMOKE_DIR }}/logs/**/*.log
+          if-no-files-found: ignore
