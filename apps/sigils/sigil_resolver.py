@@ -1,3 +1,4 @@
+import concurrent.futures
 import json
 import logging
 import os
@@ -13,6 +14,8 @@ from .sigil_context import get_context
 from .system import get_system_sigil_values, resolve_system_namespace_value
 
 logger = logging.getLogger(__name__)
+
+ATTRIBUTE_RESOLUTION_TIMEOUT = float(os.environ.get("SIGIL_ATTRIBUTE_TIMEOUT", 2.0))
 
 
 def _first_instance(model: type[models.Model]) -> Optional[models.Model]:
@@ -66,6 +69,30 @@ def _call_attribute(obj, name: str, args: list[str]):
             continue
         attr = getattr(obj, candidate)
         if callable(attr):
+            if ATTRIBUTE_RESOLUTION_TIMEOUT and ATTRIBUTE_RESOLUTION_TIMEOUT > 0:
+                executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+                future = executor.submit(attr, *args)
+                shutdown_wait = True
+                try:
+                    return True, future.result(timeout=ATTRIBUTE_RESOLUTION_TIMEOUT)
+                except concurrent.futures.TimeoutError:
+                    future.cancel()
+                    shutdown_wait = False
+                    executor.shutdown(wait=False, cancel_futures=True)
+                    logger.warning(
+                        "Sigil attribute %s.%s exceeded timeout (%ss)",
+                        obj.__class__.__name__,
+                        candidate,
+                        ATTRIBUTE_RESOLUTION_TIMEOUT,
+                    )
+                    raise TimeoutError(
+                        f"Sigil attribute {obj.__class__.__name__}.{candidate} exceeded timeout"
+                    )
+                except TypeError:
+                    return True, None
+                finally:
+                    if shutdown_wait:
+                        executor.shutdown(wait=True, cancel_futures=True)
             try:
                 return True, attr(*args)
             except TypeError:
