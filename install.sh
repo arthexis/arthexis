@@ -12,13 +12,12 @@ PIP_INSTALL_HELPER="$SCRIPT_DIR/scripts/helpers/pip_install.py"
 . "$SCRIPT_DIR/scripts/helpers/version_marker.sh"
 # shellcheck source=scripts/helpers/ports.sh
 . "$SCRIPT_DIR/scripts/helpers/ports.sh"
-# shellcheck source=scripts/helpers/nginx_maintenance.sh
-. "$SCRIPT_DIR/scripts/helpers/nginx_maintenance.sh"
 # shellcheck source=scripts/helpers/systemd_locks.sh
 . "$SCRIPT_DIR/scripts/helpers/systemd_locks.sh"
 # shellcheck source=scripts/helpers/service_manager.sh
 . "$SCRIPT_DIR/scripts/helpers/service_manager.sh"
 
+# Determine the target user and re-exec as needed before continuing.
 if [ -z "${ARTHEXIS_RUN_AS_USER:-}" ]; then
   TARGET_USER="$(arthexis_detect_service_user "$SCRIPT_DIR")"
   if [ -n "$TARGET_USER" ] && [ "$TARGET_USER" != "root" ] && [ "$(id -un)" != "$TARGET_USER" ] && command -v sudo >/dev/null 2>&1 && sudo -n -u "$TARGET_USER" true >/dev/null 2>&1; then
@@ -29,11 +28,6 @@ arthexis_resolve_log_dir "$SCRIPT_DIR" LOG_DIR || exit 1
 # Write a copy of stdout/stderr to a dedicated log file for troubleshooting.
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 exec > >(tee "$LOG_FILE") 2>&1
-
-if arthexis_nginx_disabled "$SCRIPT_DIR"; then
-    DISABLE_NGINX=true
-    NGINX_MODE="none"
-fi
 
 # Default configuration flags populated by CLI parsing below.
 SERVICE=""
@@ -167,51 +161,6 @@ reset_service_units_for_repair() {
     fi
 }
 
-# Dependency checks for nginx and redis, populating redis.env when appropriate.
-ensure_nginx_in_path() {
-    if command -v nginx >/dev/null 2>&1; then
-        return 0
-    fi
-
-    local -a extra_paths=("/usr/sbin" "/usr/local/sbin" "/sbin")
-    local dir
-    for dir in "${extra_paths[@]}"; do
-        if [ -x "$dir/nginx" ]; then
-            case ":$PATH:" in
-                *":$dir:"*) ;;
-                *) PATH="${PATH:+$PATH:}$dir"
-                   export PATH ;;
-            esac
-            if command -v nginx >/dev/null 2>&1; then
-                return 0
-            fi
-        fi
-    done
-
-    return 1
-}
-
-require_nginx() {
-    if [ "$DISABLE_NGINX" = true ]; then
-        if arthexis_can_manage_nginx; then
-            echo "Enabling nginx management for the $1 role."
-            DISABLE_NGINX=false
-            NGINX_MODE="internal"
-            arthexis_enable_nginx "$SCRIPT_DIR"
-        else
-            echo "Skipping nginx requirement for $1 because --no-nginx was requested."
-            return 0
-        fi
-    fi
-
-    if ! ensure_nginx_in_path; then
-        echo "Nginx is required for the $1 role but is not installed."
-        echo "Install nginx and re-run this script. For Debian/Ubuntu:"
-        echo "  sudo apt-get update && sudo apt-get install nginx"
-        exit 1
-    fi
-}
-
 require_redis() {
     if ! command -v redis-cli >/dev/null 2>&1; then
         echo "Redis is required for the $1 role but is not installed."
@@ -221,67 +170,6 @@ require_redis() {
     fi
     if ! redis-cli ping >/dev/null 2>&1; then
         echo "Redis is required for the $1 role but does not appear to be running."
-        echo "Start redis and re-run this script. For Debian/Ubuntu:"
-        echo "  sudo systemctl start redis-server"
-        exit 1
-    fi
-    cat > "$BASE_DIR/redis.env" <<'EOF'
-CELERY_BROKER_URL=redis://localhost:6379/0
-CELERY_RESULT_BACKEND=redis://localhost:6379/0
-EOF
-}
-
-configure_nginx_site() {
-    local manage_cmd="$SCRIPT_DIR/command.sh"
-
-    if [ "$DISABLE_NGINX" = true ]; then
-        echo "Skipping nginx configuration because --no-nginx was requested."
-        return 0
-    fi
-
-    if [ ! -x "$manage_cmd" ]; then
-        echo "Django command wrapper missing at $manage_cmd; skipping nginx configuration." >&2
-        return 0
-    fi
-
-    if ! arthexis_can_manage_nginx; then
-        echo "Skipping nginx configuration; sudo privileges or nginx assets are unavailable." >&2
-        return 0
-    fi
-
-    if "$manage_cmd" nginx_configure --mode "$NGINX_MODE" --port "$PORT" --role "$NODE_ROLE"; then
-        echo "nginx configuration applied using Django management command."
-    else
-        echo "Warning: failed to configure nginx via management command" >&2
-    fi
-}
-
-check_nginx_and_redis() {
-    local role="$1"
-    local missing=()
-
-    if [ "$DISABLE_NGINX" != true ]; then
-        if ! ensure_nginx_in_path; then
-            missing+=("nginx")
-        fi
-    fi
-    if ! command -v redis-cli >/dev/null 2>&1; then
-        missing+=("redis-server")
-    fi
-
-    if [ ${#missing[@]} -gt 0 ]; then
-        if [ ${#missing[@]} -eq 1 ]; then
-            echo "${missing[0]} is required for the $role role but is not installed."
-        else
-            echo "${missing[*]} are required for the $role role but are not installed."
-        fi
-        echo "Install ${missing[*]} and re-run this script. For Debian/Ubuntu:"
-        echo "  sudo apt-get update && sudo apt-get install ${missing[*]}"
-        exit 1
-    fi
-
-    if ! redis-cli ping >/dev/null 2>&1; then
-        echo "Redis is required for the $role role but does not appear to be running."
         echo "Start redis and re-run this script. For Debian/Ubuntu:"
         echo "  sudo systemctl start redis-server"
         exit 1
@@ -401,7 +289,6 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --satellite)
-            require_nginx "satellite"
             NGINX_MODE="internal"
             SERVICE="arthexis"
             ENABLE_CELERY=true
@@ -417,7 +304,6 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --control)
-            require_nginx "control"
             NGINX_MODE="internal"
             SERVICE="arthexis"
             ENABLE_CELERY=true
@@ -432,7 +318,6 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --watchtower)
-            require_nginx "watchtower"
             NGINX_MODE="public"
             SERVICE="arthexis"
             ENABLE_CELERY=true
@@ -466,10 +351,6 @@ if [ "$REPAIR" = true ]; then
     fi
     if [ -f "$LOCK_DIR_PATH/nginx_mode.lck" ]; then
         NGINX_MODE="$(cat "$LOCK_DIR_PATH/nginx_mode.lck")"
-    fi
-    if arthexis_nginx_disabled "$SCRIPT_DIR" || [ "$NGINX_MODE" = "none" ]; then
-        DISABLE_NGINX=true
-        NGINX_MODE="none"
     fi
     if [ "$ENABLE_CELERY" = false ] && [ -f "$LOCK_DIR_PATH/celery.lck" ]; then
         ENABLE_CELERY=true
@@ -543,9 +424,7 @@ if [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_EMBEDDED" ]; then
 fi
 
 # Record role-specific prerequisites and capture supporting state for service management.
-if [ "$ENABLE_CONTROL" = true ]; then
-    check_nginx_and_redis "$NODE_ROLE"
-elif [ "$REQUIRES_REDIS" = true ]; then
+if [ "$REQUIRES_REDIS" = true ]; then
     require_redis "$NODE_ROLE"
 fi
 
@@ -584,15 +463,8 @@ if [ ! -d .venv ]; then
 fi
 
 echo "$PORT" > "$LOCK_DIR/backend_port.lck"
-if [ "$DISABLE_NGINX" = true ]; then
-    arthexis_disable_nginx "$BASE_DIR"
-else
-    arthexis_enable_nginx "$BASE_DIR"
-fi
 echo "$NGINX_MODE" > "$LOCK_DIR/nginx_mode.lck"
 echo "$NODE_ROLE" > "$LOCK_DIR/role.lck"
-
-configure_nginx_site
 
 source .venv/bin/activate
 pip install --upgrade pip
