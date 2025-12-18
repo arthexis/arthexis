@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from typing import Iterable, Mapping
 
-from apps.repos.models import GitHubIssue
+from apps.repos.services import github as github_service
+from apps.repos.services.github import GitHubIssue
 
 
 def resolve_repository() -> tuple[str, str]:
@@ -17,7 +18,7 @@ def resolve_repository() -> tuple[str, str]:
 def get_github_token() -> str:
     """Return the configured GitHub token."""
 
-    return GitHubIssue._get_github_token()
+    return github_service.get_github_issue_token()
 
 
 def build_issue_payload(
