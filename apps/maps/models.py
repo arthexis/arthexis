@@ -5,7 +5,7 @@ from django.db import models
 from django.utils.translation import gettext_lazy as _
 
 from apps.base.models import Entity
-from apps.energy.models import EnergyTariff
+from apps.energy.models.billing import EnergyTariff
 
 
 class Location(Entity):
