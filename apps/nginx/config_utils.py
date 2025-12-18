@@ -12,6 +12,8 @@ CERTIFICATE_PATH = DEFAULT_CERT_DIR / "fullchain.pem"
 CERTIFICATE_KEY_PATH = DEFAULT_CERT_DIR / "privkey.pem"
 SSL_OPTIONS_PATH = Path("/etc/letsencrypt/options-ssl-nginx.conf")
 SSL_DHPARAM_PATH = Path("/etc/letsencrypt/ssl-dhparams.pem")
+BUNDLED_SSL_OPTIONS_PATH = Path(__file__).with_name("options-ssl-nginx.conf")
+BUNDLED_SSL_DHPARAM_PATH = Path(__file__).with_name("ssl-dhparams.pem")
 
 
 def slugify(domain: str) -> str:
@@ -67,6 +69,29 @@ def _unique_preserve_order(values: Iterable[str]) -> list[str]:
         seen.add(value)
         unique.append(value)
     return unique
+
+
+def _resolve_ssl_asset_path(*candidates: Path) -> Path | None:
+    for candidate in candidates:
+        if candidate and candidate.exists():
+            return candidate
+    return None
+
+
+def _ssl_configuration_lines(cert_path: str, key_path: str) -> list[str]:
+    lines = [
+        f"    ssl_certificate {cert_path};",
+        f"    ssl_certificate_key {key_path};",
+    ]
+    options_path = _resolve_ssl_asset_path(SSL_OPTIONS_PATH, BUNDLED_SSL_OPTIONS_PATH)
+    if options_path:
+        lines.append(f"    include {options_path};")
+
+    dhparam_path = _resolve_ssl_asset_path(SSL_DHPARAM_PATH, BUNDLED_SSL_DHPARAM_PATH)
+    if dhparam_path:
+        lines.append(f"    ssl_dhparam {dhparam_path};")
+
+    return lines
 
 
 def http_proxy_server(
@@ -127,15 +152,8 @@ def default_reject_server(
     if https:
         cert_path = str(certificate_path or CERTIFICATE_PATH)
         key_path = str(certificate_key_path or CERTIFICATE_KEY_PATH)
-        lines.extend(
-            [
-                "",
-                f"    ssl_certificate {cert_path};",
-                f"    ssl_certificate_key {key_path};",
-                f"    include {SSL_OPTIONS_PATH};",
-                f"    ssl_dhparam {SSL_DHPARAM_PATH};",
-            ]
-        )
+        lines.append("")
+        lines.extend(_ssl_configuration_lines(cert_path, key_path))
 
     lines.extend(["", "    return 444;", "}"])
     return _format_server_block(lines)
@@ -161,15 +179,8 @@ def https_proxy_server(
     lines.append(f"    server_name {server_names};")
     cert_path = str(certificate_path or CERTIFICATE_PATH)
     key_path = str(certificate_key_path or CERTIFICATE_KEY_PATH)
-    lines.extend(
-        [
-            f"    ssl_certificate {cert_path};",
-            f"    ssl_certificate_key {key_path};",
-            f"    include {SSL_OPTIONS_PATH};",
-            f"    ssl_dhparam {SSL_DHPARAM_PATH};",
-            "",
-        ]
-    )
+    lines.extend(_ssl_configuration_lines(cert_path, key_path))
+    lines.append("")
     lines.append(textwrap.indent(proxy_block(port, trailing_slash=trailing_slash), "    "))
     lines.append("}")
     return _format_server_block(lines)

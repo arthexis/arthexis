@@ -85,6 +85,103 @@ arthexis_reload_or_start_nginx() {
   return 1
 }
 
+ARTHEXIS_SSL_OPTIONS_PATH="/etc/letsencrypt/options-ssl-nginx.conf"
+ARTHEXIS_SSL_OPTIONS_URL="https://raw.githubusercontent.com/certbot/certbot/master/certbot-nginx/certbot_nginx/_internal/tls_configs/options-ssl-nginx.conf"
+
+arthexis_detect_https_enabled() {
+  local base_dir="$1"
+  local desired_mode="${2:-}"
+  local lock_dir="$base_dir/.locks"
+
+  case "${desired_mode,,}" in
+    https|public)
+      return 0
+      ;;
+  esac
+
+  if [ -f "$lock_dir/nginx_protocol.lck" ]; then
+    local stored_protocol
+    stored_protocol=$(tr -d '\r\n\t ' < "$lock_dir/nginx_protocol.lck" 2>/dev/null || true)
+    if [ "${stored_protocol,,}" = "https" ]; then
+      return 0
+    fi
+  fi
+
+  local python_bin="$base_dir/.venv/bin/python"
+  if [ -x "$python_bin" ] && [ -f "$base_dir/manage.py" ]; then
+    if "$python_bin" <<'PY'
+from apps.nginx.models import SiteConfiguration
+import sys
+
+try:
+    protocol = SiteConfiguration.get_default().protocol.lower()
+except Exception:
+    sys.exit(1)
+
+sys.exit(0 if protocol == "https" else 1)
+PY
+    then
+      return 0
+    fi
+  fi
+
+  if [ -f "$lock_dir/nginx_mode.lck" ]; then
+    local stored_mode
+    stored_mode=$(tr -d '\r\n\t ' < "$lock_dir/nginx_mode.lck" 2>/dev/null || true)
+    if [ "${stored_mode,,}" = "public" ]; then
+      return 0
+    fi
+  fi
+
+  return 1
+}
+
+arthexis_provision_ssl_options_file() {
+  local base_dir="$1"
+  local https_required="${2:-0}"
+  local bundled_path="$base_dir/apps/nginx/options-ssl-nginx.conf"
+
+  case "${https_required,,}" in
+    1|true|yes|on)
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+
+  if [ -f "$ARTHEXIS_SSL_OPTIONS_PATH" ]; then
+    return 0
+  fi
+
+  if ! command -v sudo >/dev/null 2>&1; then
+    echo "sudo is required to install SSL options at $ARTHEXIS_SSL_OPTIONS_PATH; skipping." >&2
+    return 0
+  fi
+
+  local dest_dir
+  dest_dir="$(dirname "$ARTHEXIS_SSL_OPTIONS_PATH")"
+  if ! sudo mkdir -p "$dest_dir"; then
+    echo "Warning: unable to create $dest_dir for SSL options file." >&2
+    return 0
+  fi
+
+  if [ -f "$bundled_path" ]; then
+    if sudo cp "$bundled_path" "$ARTHEXIS_SSL_OPTIONS_PATH"; then
+      echo "Installed default nginx SSL options at $ARTHEXIS_SSL_OPTIONS_PATH."
+      return 0
+    fi
+  fi
+
+  if command -v curl >/dev/null 2>&1; then
+    if sudo curl -fsSL "$ARTHEXIS_SSL_OPTIONS_URL" -o "$ARTHEXIS_SSL_OPTIONS_PATH"; then
+      echo "Downloaded nginx SSL options from Certbot to $ARTHEXIS_SSL_OPTIONS_PATH."
+      return 0
+    fi
+  fi
+
+  echo "Warning: unable to provision default SSL options file at $ARTHEXIS_SSL_OPTIONS_PATH." >&2
+}
+
 arthexis_refresh_nginx_maintenance() {
   local base_dir="$1"
   shift || true

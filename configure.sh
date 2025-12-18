@@ -731,6 +731,11 @@ elif [ "$AUTO_UPGRADE_MODE" = "disable" ]; then
 fi
 
 if [ "$DISABLE_NGINX" != true ] && arthexis_can_manage_nginx; then
+    https_required=false
+    if arthexis_detect_https_enabled "$BASE_DIR" "$NGINX_MODE"; then
+        https_required=true
+    fi
+    arthexis_provision_ssl_options_file "$BASE_DIR" "$https_required"
     arthexis_refresh_nginx_maintenance "$BASE_DIR" "/etc/nginx/sites-enabled/arthexis.conf"
 fi
 
@@ -748,4 +753,3 @@ fi
 if [ "$REPAIR" = true ]; then
     echo "Repair completed for the $NODE_ROLE role."
 fi
-
