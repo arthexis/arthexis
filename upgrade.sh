@@ -25,8 +25,6 @@ log_upgrade_exit() {
   arthexis_log_startup_event "$BASE_DIR" "$UPGRADE_SCRIPT_NAME" "finish" "status=$status"
 }
 trap log_upgrade_exit EXIT
-# shellcheck source=scripts/helpers/nginx_maintenance.sh
-. "$BASE_DIR/scripts/helpers/nginx_maintenance.sh"
 # shellcheck source=scripts/helpers/desktop_shortcuts.sh
 . "$BASE_DIR/scripts/helpers/desktop_shortcuts.sh"
 # shellcheck source=scripts/helpers/ports.sh
@@ -60,9 +58,6 @@ SYSTEMD_UNITS_LOCK="$LOCK_DIR/systemd_services.lck"
 SERVICE_NAME=""
 [ -f "$LOCK_DIR/service.lck" ] && SERVICE_NAME="$(cat "$LOCK_DIR/service.lck")"
 DISABLE_NGINX=0
-if arthexis_nginx_disabled "$BASE_DIR"; then
-  DISABLE_NGINX=1
-fi
 
 mkdir -p "$LOCK_DIR"
 
@@ -148,28 +143,6 @@ ensure_virtualenv() {
 
   PYTHON_BIN="$venv_python"
   return 0
-}
-
-configure_nginx_site() {
-  local manage_cmd="$BASE_DIR/command.sh"
-
-  if [ "$DISABLE_NGINX" -eq 1 ]; then
-    echo "Skipping nginx configuration because nginx management is disabled."
-    return 0
-  fi
-
-  if [ ! -x "$manage_cmd" ]; then
-    return 0
-  fi
-
-  if ! arthexis_can_manage_nginx; then
-    echo "Skipping nginx configuration; sudo privileges or nginx assets are unavailable." >&2
-    return 0
-  fi
-
-  if ! "$manage_cmd" nginx_configure; then
-    echo "Warning: failed to configure nginx via management command" >&2
-  fi
 }
 
 ensure_git_safe_directory
@@ -807,10 +780,6 @@ run_detached_upgrade() {
 
 if (( DETACHED )); then
   run_detached_upgrade
-fi
-
-if [ "$DISABLE_NGINX" -eq 1 ]; then
-  arthexis_disable_nginx "$BASE_DIR"
 fi
 
 mkdir -p "$LOCK_DIR"
@@ -1490,23 +1459,6 @@ if [ $VENV_PRESENT -eq 1 ]; then
     fi
   fi
   deactivate
-fi
-
-if [ "$DISABLE_NGINX" -ne 1 ] && arthexis_can_manage_nginx; then
-  https_required=0
-  if arthexis_detect_https_enabled "$BASE_DIR"; then
-    https_required=1
-  fi
-  arthexis_provision_ssl_options_file "$BASE_DIR" "$https_required"
-fi
-
-configure_nginx_site
-
-if [ "$DISABLE_NGINX" -ne 1 ] && arthexis_can_manage_nginx; then
-  arthexis_refresh_nginx_maintenance "$BASE_DIR" \
-    "/etc/nginx/sites-enabled/arthexis.conf" \
-    "/etc/nginx/conf.d/arthexis-internal.conf" \
-    "/etc/nginx/conf.d/arthexis-public.conf"
 fi
 
 # Remove existing database if requested
