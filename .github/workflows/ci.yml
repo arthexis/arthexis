@@ -25,7 +25,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ~/.cache/pip
-          key: pip-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
+          key: pip-${{ runner.os }}-${{ hashFiles('requirements.txt', 'pyproject.toml') }}
           restore-keys: |
             pip-${{ runner.os }}-
       - name: Install suite from repository
@@ -40,3 +40,33 @@ jobs:
         run: |
           source .venv/bin/activate
           pytest --maxfail=1 --disable-warnings -q --timeout=30
+  upgrade:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure workspace is writable
+        run: sudo chown -R "$USER:$USER" "$GITHUB_WORKSPACE"
+      - name: Checkout base revision
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.event.before || 'main' }}
+          fetch-depth: 0
+          clean: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+      - name: Cache pip
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('requirements.txt', 'pyproject.toml') }}
+          restore-keys: |
+            pip-${{ runner.os }}-
+      - name: Install from base revision
+        run: |
+          ./install.sh --clean --no-start
+      - name: Checkout changes under test
+        uses: actions/checkout@v6
+        with:
+          clean: false
+      - name: Upgrade from PR
+        run: ./upgrade.sh --local --no-restart
