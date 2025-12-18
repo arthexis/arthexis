@@ -10,7 +10,7 @@ on:
     - cron: '0 2 * * *'
 
 jobs:
-  install-and-upgrade:
+  install:
     runs-on: ubuntu-latest
     steps:
       - name: Ensure workspace is writable
@@ -25,9 +25,16 @@ jobs:
         uses: actions/cache@v5
         with:
           path: ~/.cache/pip
-          key: pip-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
+          key: pip-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
           restore-keys: |
             pip-${{ runner.os }}-
+      - name: Cache virtualenv
+        uses: actions/cache@v5
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
+          restore-keys: |
+            venv-${{ runner.os }}-
       - name: Install suite from repository
         run: |
           ./install.sh --clean --no-start
@@ -40,3 +47,41 @@ jobs:
         run: |
           source .venv/bin/activate
           pytest --maxfail=1 --disable-warnings -q --timeout=30
+  upgrade:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure workspace is writable
+        run: sudo chown -R "$USER:$USER" "$GITHUB_WORKSPACE"
+      - name: Checkout main
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          clean: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+      - name: Cache pip
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
+          restore-keys: |
+            pip-${{ runner.os }}-
+      - name: Cache virtualenv
+        uses: actions/cache@v5
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
+          restore-keys: |
+            venv-${{ runner.os }}-
+      - name: Install from default branch
+        run: |
+          ./install.sh --clean --no-start
+      - name: Checkout PR changes
+        uses: actions/checkout@v6
+        with:
+          clean: false
+      - name: Apply upgrade
+        run: |
+          source .venv/bin/activate
+          ./upgrade.sh --local --no-restart
