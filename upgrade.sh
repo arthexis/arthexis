@@ -1492,6 +1492,14 @@ if [ $VENV_PRESENT -eq 1 ]; then
   deactivate
 fi
 
+if [ "$DISABLE_NGINX" -ne 1 ] && arthexis_can_manage_nginx; then
+  https_required=0
+  if arthexis_detect_https_enabled "$BASE_DIR"; then
+    https_required=1
+  fi
+  arthexis_provision_ssl_options_file "$BASE_DIR" "$https_required"
+fi
+
 configure_nginx_site
 
 if [ "$DISABLE_NGINX" -ne 1 ] && arthexis_can_manage_nginx; then
