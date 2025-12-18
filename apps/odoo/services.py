@@ -162,7 +162,7 @@ def _clean_text(value: object) -> str:
 
 
 def _read_config(path: Path) -> dict[str, object]:
-    parser = configparser.ConfigParser()
+    parser = configparser.ConfigParser(interpolation=None)
     try:
         with path.open(encoding="utf-8") as handle:
             parser.read_file(handle)
