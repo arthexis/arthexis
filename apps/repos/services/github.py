@@ -35,20 +35,45 @@ def build_headers(token: str, *, user_agent: str = "arthexis-admin") -> Mapping[
     }
 
 
+def _get_latest_release_token() -> str | None:
+    """Return the GitHub token from the latest package release, if available."""
+
+    try:
+        from apps.release.models import PackageRelease
+    except Exception:  # pragma: no cover - optional dependency during service-only tests
+        return None
+
+    latest_release = PackageRelease.latest()
+    if latest_release:
+        token = latest_release.get_github_token()
+        if token is not None:
+            cleaned = token.strip() if isinstance(token, str) else str(token).strip()
+            if cleaned:
+                return cleaned
+    return None
+
+
 def resolve_repository_token(package: Package | None) -> str:
     """Return the GitHub token for ``package`` or the environment."""
+
+    def _clean_token(token: object | None) -> str:
+        if token is None:
+            return ""
+        return token.strip() if isinstance(token, str) else str(token).strip()
 
     if package:
         manager = getattr(package, "release_manager", None)
         if manager:
-            token = getattr(manager, "github_token", "")
+            token = _clean_token(getattr(manager, "github_token", ""))
             if token:
-                cleaned = str(token).strip()
-                if cleaned:
-                    return cleaned
+                return token
+
+    release_token = _get_latest_release_token()
+    if release_token:
+        return release_token
 
     token = os.environ.get("GITHUB_TOKEN", "")
-    cleaned_env = token.strip() if isinstance(token, str) else str(token).strip()
+    cleaned_env = _clean_token(token)
     if not cleaned_env:
         raise GitHubRepositoryError("GitHub token is not configured")
     return cleaned_env

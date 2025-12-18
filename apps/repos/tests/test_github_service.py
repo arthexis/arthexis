@@ -53,3 +53,12 @@ def test_fetch_repository_pull_requests_raises_on_error(monkeypatch):
 
     with pytest.raises(github.GitHubRepositoryError):
         list(github.fetch_repository_pull_requests(token="tok", owner="octo", name="demo"))
+
+
+def test_resolve_repository_token_uses_latest_release_when_available(monkeypatch):
+    monkeypatch.setenv("GITHUB_TOKEN", "")
+    monkeypatch.setattr(github, "_get_latest_release_token", lambda: "release-token")
+
+    token = github.resolve_repository_token(package=None)
+
+    assert token == "release-token"
