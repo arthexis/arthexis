@@ -109,7 +109,9 @@ arthexis_detect_https_enabled() {
 
   local python_bin="$base_dir/.venv/bin/python"
   if [ -x "$python_bin" ] && [ -f "$base_dir/manage.py" ]; then
-    if "$python_bin" <<'PY'
+    if PYTHONPATH="${PYTHONPATH:+$PYTHONPATH:}$base_dir" \
+      DJANGO_SETTINGS_MODULE="config.settings" \
+      "$python_bin" <<'PY'
 from apps.nginx.models import SiteConfiguration
 import sys
 
