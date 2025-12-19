@@ -39,7 +39,7 @@ class Command(BaseCommand):
             if config.protocol == "https" and config.certificate is None:
                 message = (
                     f"{config}: HTTPS requires a linked certificate. "
-                    "Run create_local_certificates or assign one before applying."
+                    "Run generate_certs or assign one before applying."
                 )
                 self.stderr.write(self.style.ERROR(message))
                 errors.append(message)
