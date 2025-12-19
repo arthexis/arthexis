@@ -8,7 +8,8 @@ from django.core.management.base import BaseCommand, CommandError
 
 from apps.certs.models import CertificateBase, CertbotCertificate, SelfSignedCertificate
 from apps.nginx.config_utils import slugify
-from apps.nginx.management.commands._config_selection import get_configurations
+from apps.nginx.management.commands._config_selection import get_configurations, parse_ids
+from apps.nginx.models import SiteConfiguration
 
 
 class Command(BaseCommand):
@@ -35,10 +36,15 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        queryset = get_configurations(options["ids"], select_all=options["all"])
+        ids_value = options["ids"]
+        select_all = options["all"]
+        queryset = get_configurations(ids_value, select_all=select_all)
         configs = list(queryset)
         if not configs:
-            raise CommandError("No site configurations selected. Use --ids or --all.")
+            if not select_all and not parse_ids(ids_value):
+                self._write_available_sites()
+                raise CommandError("No site configurations selected. Use --ids or --all.")
+            raise CommandError("No site configurations matched the provided selection.")
 
         certificate_type = options["certificate_type"]
         errors: list[str] = []
@@ -170,3 +176,12 @@ class Command(BaseCommand):
         if certificate_type == self.CERTIFICATE_TYPE_CERTBOT:
             return "certbot"
         return "self-signed"
+
+    def _write_available_sites(self) -> None:
+        sites = list(SiteConfiguration.objects.order_by("id"))
+        if not sites:
+            self.stdout.write("No site configurations are available.")
+            return
+        self.stdout.write("Available site configurations:")
+        for site in sites:
+            self.stdout.write(f"- {site} (id={site.id})")
