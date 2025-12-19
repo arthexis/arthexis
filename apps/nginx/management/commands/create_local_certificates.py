@@ -1,0 +1,119 @@
+from __future__ import annotations
+
+import ipaddress
+from pathlib import Path
+
+from django.conf import settings
+from django.core.management.base import BaseCommand, CommandError
+
+from apps.certs.models import CertificateBase, SelfSignedCertificate
+from apps.nginx.config_utils import slugify
+from apps.nginx.management.commands._config_selection import get_configurations
+
+
+class Command(BaseCommand):
+    help = "Create and provision local certificates for selected nginx configurations."  # noqa: A003
+
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--ids",
+            default="",
+            help="Comma-separated SiteConfiguration ids to provision certificates for.",
+        )
+        parser.add_argument(
+            "--all",
+            action="store_true",
+            help="Provision certificates for all site configurations.",
+        )
+
+    def handle(self, *args, **options):
+        queryset = get_configurations(options["ids"], select_all=options["all"])
+        configs = list(queryset)
+        if not configs:
+            raise CommandError("No site configurations selected. Use --ids or --all.")
+
+        errors: list[str] = []
+        for config in configs:
+            if config.protocol != "https":
+                self.stdout.write(f"{config}: HTTPS is not enabled; skipping certificate provisioning.")
+                continue
+
+            certificate: CertificateBase | None = config.certificate
+            if certificate is None:
+                certificate = self._create_certificate_for_config(config)
+                self.stdout.write(
+                    f"{config}: Created a self-signed certificate for {certificate.domain}."
+                )
+
+            try:
+                message = certificate.provision()
+            except Exception as exc:  # pragma: no cover - provisioning errors
+                error_message = f"{config}: {exc}"
+                self.stderr.write(self.style.ERROR(error_message))
+                errors.append(error_message)
+            else:
+                self.stdout.write(self.style.SUCCESS(f"{config}: {message}"))
+
+        if errors:
+            raise CommandError("One or more certificates failed to provision. Review the output above.")
+
+    def _create_certificate_for_config(self, config) -> CertificateBase:
+        domain = self._get_default_certificate_domain()
+        slug = slugify(domain)
+        base_path = Path(settings.BASE_DIR) / "scripts" / "generated" / "certificates" / slug
+        defaults = {
+            "domain": domain,
+            "certificate_path": str(base_path / "fullchain.pem"),
+            "certificate_key_path": str(base_path / "privkey.pem"),
+        }
+
+        certificate, created = SelfSignedCertificate.objects.get_or_create(
+            name=f"{config.name or 'nginx-site'}-{slug}",
+            defaults=defaults,
+        )
+
+        updated_fields: list[str] = []
+        if not created:
+            for field, value in defaults.items():
+                if getattr(certificate, field) != value:
+                    setattr(certificate, field, value)
+                    updated_fields.append(field)
+            if updated_fields:
+                certificate.save(update_fields=updated_fields)
+
+        if config.certificate_id != certificate.id:
+            config.certificate = certificate
+            config.save(update_fields=["certificate"])
+
+        return certificate
+
+    def _get_default_certificate_domain(self) -> str:
+        hosts = getattr(settings, "ALLOWED_HOSTS", []) or []
+        candidates: list[str] = []
+        for host in hosts:
+            normalized = str(host or "").strip()
+            if not normalized or normalized.startswith("."):
+                continue
+            if "/" in normalized:
+                continue
+            if normalized.startswith("[") and "]" in normalized:
+                normalized = normalized.split("]", 1)[0].lstrip("[")
+            elif ":" in normalized and normalized.count(":") == 1:
+                normalized = normalized.rsplit(":", 1)[0]
+            if not normalized:
+                continue
+            try:
+                ipaddress.ip_address(normalized)
+            except ValueError:
+                candidates.append(normalized)
+            else:
+                continue
+
+        for candidate in candidates:
+            if "." in candidate:
+                return candidate
+
+        if candidates:
+            return candidates[0]
+
+        return "localhost"
