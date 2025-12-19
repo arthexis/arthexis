@@ -55,6 +55,17 @@ class CertificateBase(Certificate):
 
         raise TypeError(f"Unsupported certificate type: {type(self).__name__}")
 
+    def verify(self, *, sudo: str = "sudo") -> services.CertificateVerificationResult:
+        """Verify certificate validity and filesystem alignment."""
+        certificate_path = Path(self.certificate_path) if self.certificate_path else None
+        certificate_key_path = Path(self.certificate_key_path) if self.certificate_key_path else None
+        return services.verify_certificate(
+            domain=self.domain,
+            certificate_path=certificate_path,
+            certificate_key_path=certificate_key_path,
+            sudo=sudo,
+        )
+
     @property
     def _specific_certificate(self) -> "CertificateBase":
         if isinstance(self, (CertbotCertificate, SelfSignedCertificate)):
