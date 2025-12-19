@@ -6,13 +6,15 @@ from pathlib import Path
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.certs.models import CertificateBase, SelfSignedCertificate
+from apps.certs.models import CertificateBase, CertbotCertificate, SelfSignedCertificate
 from apps.nginx.config_utils import slugify
 from apps.nginx.management.commands._config_selection import get_configurations
 
 
 class Command(BaseCommand):
     help = "Create and provision local certificates for selected nginx configurations."  # noqa: A003
+    CERTIFICATE_TYPE_SELF_SIGNED = "self-signed"
+    CERTIFICATE_TYPE_CERTBOT = "certbot"
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -25,6 +27,12 @@ class Command(BaseCommand):
             action="store_true",
             help="Provision certificates for all site configurations.",
         )
+        parser.add_argument(
+            "--certificate-type",
+            choices=(self.CERTIFICATE_TYPE_SELF_SIGNED, self.CERTIFICATE_TYPE_CERTBOT),
+            default=self.CERTIFICATE_TYPE_SELF_SIGNED,
+            help="Certificate type to create when a site configuration is missing one.",
+        )
 
     def handle(self, *args, **options):
         queryset = get_configurations(options["ids"], select_all=options["all"])
@@ -32,6 +40,7 @@ class Command(BaseCommand):
         if not configs:
             raise CommandError("No site configurations selected. Use --ids or --all.")
 
+        certificate_type = options["certificate_type"]
         errors: list[str] = []
         for config in configs:
             if config.protocol != "https":
@@ -40,9 +49,12 @@ class Command(BaseCommand):
 
             certificate: CertificateBase | None = config.certificate
             if certificate is None:
-                certificate = self._create_certificate_for_config(config)
+                certificate = self._create_certificate_for_config(
+                    config, certificate_type=certificate_type
+                )
                 self.stdout.write(
-                    f"{config}: Created a self-signed certificate for {certificate.domain}."
+                    f"{config}: Created a {self._certificate_type_label(certificate_type)} certificate for "
+                    f"{certificate.domain}."
                 )
 
             try:
@@ -57,7 +69,14 @@ class Command(BaseCommand):
         if errors:
             raise CommandError("One or more certificates failed to provision. Review the output above.")
 
-    def _create_certificate_for_config(self, config) -> CertificateBase:
+    def _create_certificate_for_config(
+        self, config, *, certificate_type: str
+    ) -> CertificateBase:
+        if certificate_type == self.CERTIFICATE_TYPE_CERTBOT:
+            return self._create_certbot_certificate_for_config(config)
+        return self._create_self_signed_certificate_for_config(config)
+
+    def _create_self_signed_certificate_for_config(self, config) -> CertificateBase:
         domain = self._get_default_certificate_domain()
         slug = slugify(domain)
         base_path = Path(settings.BASE_DIR) / "scripts" / "generated" / "certificates" / slug
@@ -69,6 +88,35 @@ class Command(BaseCommand):
 
         certificate, created = SelfSignedCertificate.objects.get_or_create(
             name=f"{config.name or 'nginx-site'}-{slug}",
+            defaults=defaults,
+        )
+
+        updated_fields: list[str] = []
+        if not created:
+            for field, value in defaults.items():
+                if getattr(certificate, field) != value:
+                    setattr(certificate, field, value)
+                    updated_fields.append(field)
+            if updated_fields:
+                certificate.save(update_fields=updated_fields)
+
+        if config.certificate_id != certificate.id:
+            config.certificate = certificate
+            config.save(update_fields=["certificate"])
+
+        return certificate
+
+    def _create_certbot_certificate_for_config(self, config) -> CertificateBase:
+        domain = self._get_default_certificate_domain()
+        slug = slugify(domain)
+        defaults = {
+            "domain": domain,
+            "certificate_path": f"/etc/letsencrypt/live/{domain}/fullchain.pem",
+            "certificate_key_path": f"/etc/letsencrypt/live/{domain}/privkey.pem",
+        }
+
+        certificate, created = CertbotCertificate.objects.get_or_create(
+            name=f"{config.name or 'nginx-site'}-{slug}-certbot",
             defaults=defaults,
         )
 
@@ -117,3 +165,8 @@ class Command(BaseCommand):
             return candidates[0]
 
         return "localhost"
+
+    def _certificate_type_label(self, certificate_type: str) -> str:
+        if certificate_type == self.CERTIFICATE_TYPE_CERTBOT:
+            return "certbot"
+        return "self-signed"

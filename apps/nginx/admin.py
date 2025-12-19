@@ -10,7 +10,7 @@ from django.urls import path, reverse
 from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 
-from apps.certs.models import CertificateBase, SelfSignedCertificate
+from apps.certs.models import CertificateBase, CertbotCertificate, SelfSignedCertificate
 from apps.nginx import services
 from apps.nginx.config_utils import slugify
 from apps.nginx.models import SiteConfiguration
@@ -19,6 +19,9 @@ from apps.nginx.renderers import generate_primary_config, generate_site_entries_
 
 @admin.register(SiteConfiguration)
 class SiteConfigurationAdmin(admin.ModelAdmin):
+    CERTIFICATE_TYPE_SELF_SIGNED = "self-signed"
+    CERTIFICATE_TYPE_CERTBOT = "certbot"
+
     list_display = (
         "name",
         "enabled",
@@ -110,6 +113,8 @@ class SiteConfigurationAdmin(admin.ModelAdmin):
             "generate_certificates_url": reverse(
                 "admin:nginx_siteconfiguration_generate_certificates"
             ),
+            "certificate_type_choices": self._certificate_type_choices(),
+            "default_certificate_type": self.CERTIFICATE_TYPE_SELF_SIGNED,
         }
 
         return TemplateResponse(
@@ -123,7 +128,12 @@ class SiteConfigurationAdmin(admin.ModelAdmin):
         ids_param, _, queryset = self._get_selection_from_request(request)
 
         if request.method == "POST":
-            self._generate_certificates(request, queryset, ids_param)
+            certificate_type = self._normalize_certificate_type(
+                request.POST.get("certificate_type")
+            )
+            self._generate_certificates(
+                request, queryset, ids_param, certificate_type=certificate_type
+            )
             redirect_url = reverse("admin:nginx_siteconfiguration_preview")
             if ids_param:
                 redirect_url = f"{redirect_url}?ids={ids_param}"
@@ -247,7 +257,14 @@ class SiteConfigurationAdmin(admin.ModelAdmin):
         ) % {"config": config, "link": link}
         self.message_user(request, message, messages.ERROR)
 
-    def _generate_certificates(self, request: HttpRequest, queryset, ids_param: str = ""):
+    def _generate_certificates(
+        self,
+        request: HttpRequest,
+        queryset,
+        ids_param: str = "",
+        *,
+        certificate_type: str = CERTIFICATE_TYPE_SELF_SIGNED,
+    ):
         for config in queryset:
             if config.protocol != "https":
                 self.message_user(
@@ -259,10 +276,14 @@ class SiteConfigurationAdmin(admin.ModelAdmin):
 
             certificate: CertificateBase | None = config.certificate
             if certificate is None:
-                certificate = self._create_certificate_for_config(config)
+                certificate = self._create_certificate_for_config(
+                    config, certificate_type=certificate_type
+                )
+                created_label = self._certificate_type_label(certificate_type)
                 self.message_user(
                     request,
-                    _("%s: Created a self-signed certificate for %s.") % (config, certificate.domain),
+                    _("%(config)s: Created a %(type)s certificate for %(domain)s.")
+                    % {"config": config, "type": created_label, "domain": certificate.domain},
                     messages.INFO,
                 )
 
@@ -285,7 +306,14 @@ class SiteConfigurationAdmin(admin.ModelAdmin):
         missing = [config for config in queryset if config.protocol == "https" and config.certificate is None]
         return missing
 
-    def _create_certificate_for_config(self, config: SiteConfiguration) -> CertificateBase:
+    def _create_certificate_for_config(
+        self, config: SiteConfiguration, *, certificate_type: str
+    ) -> CertificateBase:
+        if certificate_type == self.CERTIFICATE_TYPE_CERTBOT:
+            return self._create_certbot_certificate_for_config(config)
+        return self._create_self_signed_certificate_for_config(config)
+
+    def _create_self_signed_certificate_for_config(self, config: SiteConfiguration) -> CertificateBase:
         domain = self._get_default_certificate_domain()
         slug = slugify(domain)
         base_path = Path(settings.BASE_DIR) / "scripts" / "generated" / "certificates" / slug
@@ -297,6 +325,35 @@ class SiteConfigurationAdmin(admin.ModelAdmin):
 
         certificate, created = SelfSignedCertificate.objects.get_or_create(
             name=f"{config.name or 'nginx-site'}-{slug}",
+            defaults=defaults,
+        )
+
+        updated_fields: list[str] = []
+        if not created:
+            for field, value in defaults.items():
+                if getattr(certificate, field) != value:
+                    setattr(certificate, field, value)
+                    updated_fields.append(field)
+            if updated_fields:
+                certificate.save(update_fields=updated_fields)
+
+        if config.certificate_id != certificate.id:
+            config.certificate = certificate
+            config.save(update_fields=["certificate"])
+
+        return certificate
+
+    def _create_certbot_certificate_for_config(self, config: SiteConfiguration) -> CertificateBase:
+        domain = self._get_default_certificate_domain()
+        slug = slugify(domain)
+        defaults = {
+            "domain": domain,
+            "certificate_path": f"/etc/letsencrypt/live/{domain}/fullchain.pem",
+            "certificate_key_path": f"/etc/letsencrypt/live/{domain}/privkey.pem",
+        }
+
+        certificate, created = CertbotCertificate.objects.get_or_create(
+            name=f"{config.name or 'nginx-site'}-{slug}-certbot",
             defaults=defaults,
         )
 
@@ -345,3 +402,17 @@ class SiteConfigurationAdmin(admin.ModelAdmin):
             return candidates[0]
 
         return "localhost"
+
+    def _certificate_type_choices(self) -> tuple[tuple[str, str], ...]:
+        return (
+            (self.CERTIFICATE_TYPE_SELF_SIGNED, _("Self-signed")),
+            (self.CERTIFICATE_TYPE_CERTBOT, _("Certbot")),
+        )
+
+    def _normalize_certificate_type(self, value: str | None) -> str:
+        if value == self.CERTIFICATE_TYPE_CERTBOT:
+            return value
+        return self.CERTIFICATE_TYPE_SELF_SIGNED
+
+    def _certificate_type_label(self, value: str) -> str:
+        return dict(self._certificate_type_choices()).get(value, _("self-signed"))

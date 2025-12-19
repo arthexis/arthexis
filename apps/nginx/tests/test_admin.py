@@ -1,7 +1,7 @@
 import pytest
 from django.urls import reverse
 
-from apps.certs.models import SelfSignedCertificate
+from apps.certs.models import CertbotCertificate, SelfSignedCertificate
 from apps.nginx import services
 from apps.nginx.models import SiteConfiguration
 from apps.nginx.renderers import generate_primary_config
@@ -147,6 +147,38 @@ def test_generate_certificates_view_creates_certificate_when_missing(monkeypatch
 
     messages = [str(message) for message in response.context["messages"]]
     assert any("auto-generated" in message for message in messages)
+
+
+@pytest.mark.django_db
+def test_generate_certificates_view_creates_certbot_certificate_when_selected(
+    monkeypatch, admin_client, settings
+):
+    settings.ALLOWED_HOSTS = ["certbot.example.com", "testserver"]
+
+    requested: dict[str, str] = {}
+
+    def fake_request(self, *, sudo: str = "sudo"):
+        requested["sudo"] = sudo
+        return "requested"
+
+    monkeypatch.setattr(CertbotCertificate, "request", fake_request)
+
+    config = SiteConfiguration.objects.create(name="missing-certbot", protocol="https")
+
+    url = reverse("admin:nginx_siteconfiguration_generate_certificates") + f"?ids={config.pk}"
+    response = admin_client.post(
+        url, {"ids": str(config.pk), "certificate_type": "certbot"}, follow=True
+    )
+
+    config.refresh_from_db()
+    certificate = config.certificate
+    assert certificate is not None
+    assert isinstance(certificate._specific_certificate, CertbotCertificate)
+    assert certificate.domain == "certbot.example.com"
+    assert requested["sudo"] == "sudo"
+
+    messages = [str(message) for message in response.context["messages"]]
+    assert any("requested" in message for message in messages)
 
 
 @pytest.mark.django_db
