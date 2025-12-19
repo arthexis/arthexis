@@ -8,6 +8,7 @@ from django.core.management.base import BaseCommand, CommandError
 
 from apps.certs.models import CertificateBase, CertbotCertificate, SelfSignedCertificate
 from apps.nginx.config_utils import slugify
+from apps.nginx.models import SiteConfiguration
 from apps.nginx.management.commands._config_selection import get_configurations
 
 
@@ -38,6 +39,7 @@ class Command(BaseCommand):
         queryset = get_configurations(options["ids"], select_all=options["all"])
         configs = list(queryset)
         if not configs:
+            self._render_available_sites()
             raise CommandError("No site configurations selected. Use --ids or --all.")
 
         certificate_type = options["certificate_type"]
@@ -170,3 +172,13 @@ class Command(BaseCommand):
         if certificate_type == self.CERTIFICATE_TYPE_CERTBOT:
             return "certbot"
         return "self-signed"
+
+    def _render_available_sites(self) -> None:
+        available = list(SiteConfiguration.objects.all().order_by("pk"))
+        if not available:
+            self.stdout.write("No site configurations are available.")
+            return
+        self.stdout.write("Available site configurations:")
+        for config in available:
+            name = config.name or "unnamed"
+            self.stdout.write(f"  [{config.pk}] {name}")
