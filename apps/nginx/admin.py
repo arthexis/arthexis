@@ -322,6 +322,14 @@ class SiteConfigurationAdmin(admin.ModelAdmin):
             normalized = str(host or "").strip()
             if not normalized or normalized.startswith("."):
                 continue
+            if "/" in normalized:
+                continue
+            if normalized.startswith("[") and "]" in normalized:
+                normalized = normalized.split("]", 1)[0].lstrip("[")
+            elif ":" in normalized and normalized.count(":") == 1:
+                normalized = normalized.rsplit(":", 1)[0]
+            if not normalized:
+                continue
             try:
                 ipaddress.ip_address(normalized)
             except ValueError:

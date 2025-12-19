@@ -147,3 +147,15 @@ def test_generate_certificates_view_creates_certificate_when_missing(monkeypatch
 
     messages = [str(message) for message in response.context["messages"]]
     assert any("auto-generated" in message for message in messages)
+
+
+@pytest.mark.django_db
+def test_default_certificate_domain_skips_cidr_and_ports(settings):
+    from django.contrib.admin.sites import AdminSite
+
+    from apps.nginx.admin import SiteConfigurationAdmin
+
+    settings.ALLOWED_HOSTS = ["10.0.0.0/16", "admin.example.com:8443", "portal.example.com"]
+    admin_view = SiteConfigurationAdmin(SiteConfiguration, AdminSite())
+
+    assert admin_view._get_default_certificate_domain() == "admin.example.com"
