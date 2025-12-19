@@ -35,6 +35,12 @@
       <form method="post" class="submit-row" action="{{ generate_certificates_url }}">
         {% csrf_token %}
         <input type="hidden" name="ids" value="{{ ids_param }}" />
+        <label for="certificate_type">{% trans "Certificate type" %}</label>
+        <select name="certificate_type" id="certificate_type">
+          {% for value, label in certificate_type_choices %}
+            <option value="{{ value }}"{% if value == default_certificate_type %} selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
         <input type="submit" value="{% trans 'Generate certificates' %}" />
         <p class="help">{% trans 'Provision certificates for the selected configurations before applying HTTPS.' %}</p>
       </form>
