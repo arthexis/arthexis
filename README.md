@@ -1,4 +1,4 @@
-# Arthexis Constellation
+# Constellation
 
 [![CI](https://img.shields.io/github/actions/workflow/status/arthexis/arthexis/ci.yml?branch=main&label=CI&cacheSeconds=300)](https://github.com/arthexis/arthexis/actions/workflows/ci.yml) [![OCPP 1.6 Coverage](https://raw.githubusercontent.com/arthexis/arthexis/main/media/ocpp_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md) [![OCPP 2.0.1 Coverage](https://raw.githubusercontent.com/arthexis/arthexis/main/media/ocpp201_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md) [![OCPP 2.1 Coverage](https://raw.githubusercontent.com/arthexis/arthexis/main/media/ocpp21_coverage.svg)](https://github.com/arthexis/arthexis/blob/main/docs/development/ocpp-user-manual.md) [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE) ![Watchtowers](https://raw.githubusercontent.com/arthexis/arthexis/main/media/watchtowers.svg)
 
