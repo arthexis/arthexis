@@ -134,7 +134,7 @@ def _validate_query_sigils(query: str) -> tuple[bool, str]:
     invalid_tokens: list[str] = []
 
     for token in tokens:
-        prefix = re.split(r"[:.=]", token, 1)[0].strip()
+        prefix = re.split(r"[:.=]", token, maxsplit=1)[0].strip()
         if not prefix:
             invalid_tokens.append(token)
             continue
