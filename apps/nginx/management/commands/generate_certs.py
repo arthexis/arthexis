@@ -28,11 +28,28 @@ class Command(BaseCommand):
             action="store_true",
             help="Provision certificates for all site configurations.",
         )
-        parser.add_argument(
+        parser.set_defaults(certificate_type=self.CERTIFICATE_TYPE_SELF_SIGNED)
+        certificate_type_group = parser.add_mutually_exclusive_group()
+        certificate_type_group.add_argument(
+            "--type",
             "--certificate-type",
+            dest="certificate_type",
             choices=(self.CERTIFICATE_TYPE_SELF_SIGNED, self.CERTIFICATE_TYPE_CERTBOT),
-            default=self.CERTIFICATE_TYPE_SELF_SIGNED,
             help="Certificate type to create when a site configuration is missing one.",
+        )
+        certificate_type_group.add_argument(
+            "--certbot",
+            action="store_const",
+            const=self.CERTIFICATE_TYPE_CERTBOT,
+            dest="certificate_type",
+            help="Create certbot certificates when a site configuration is missing one.",
+        )
+        certificate_type_group.add_argument(
+            "--self-signed",
+            action="store_const",
+            const=self.CERTIFICATE_TYPE_SELF_SIGNED,
+            dest="certificate_type",
+            help="Create self-signed certificates when a site configuration is missing one.",
         )
 
     def handle(self, *args, **options):
