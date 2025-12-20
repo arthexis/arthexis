@@ -22,7 +22,8 @@
 (async function() {
     const token = "{{ token|escapejs }}";
 
-    function buildUrlVariants(url) {
+    function buildUrlVariants(url, options) {
+        const allowInsecure = options && options.allowInsecure;
         const variants = [];
         try {
             const parsed = new URL(url, window.location.href);
@@ -30,6 +31,11 @@
                 const secure = new URL(parsed.href);
                 secure.protocol = "https:";
                 variants.push(secure.href);
+            }
+            if (parsed.protocol === "https:" && allowInsecure) {
+                const insecure = new URL(parsed.href);
+                insecure.protocol = "http:";
+                variants.push(insecure.href);
             }
             variants.push(parsed.href);
         } catch (err) {
@@ -76,7 +82,10 @@
     }
 
     try {
-        const infoTargets = buildUrlVariants("http://localhost:8888/nodes/info/?token=" + token);
+        const localBase = new URL("/nodes/info/", window.location.protocol + "//localhost:8888");
+        localBase.searchParams.set("token", token);
+        const allowInsecureLocal = window.location.protocol === "http:";
+        const infoTargets = buildUrlVariants(localBase.href, {allowInsecure: allowInsecureLocal});
         const info = await fetchJsonWithFallback(infoTargets);
         const resp = await fetch("{{ register_url|escapejs }}", {
             method: "POST",
