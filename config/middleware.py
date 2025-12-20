@@ -74,6 +74,21 @@ class SiteHttpsRedirectMiddleware:
         return self.get_response(request)
 
 
+class ContentSecurityPolicyMiddleware:
+    """Apply CSP headers to HTTPS responses."""
+
+    header_value = "upgrade-insecure-requests; block-all-mixed-content"
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+
+    def __call__(self, request):
+        response = self.get_response(request)
+        if _is_https_request(request):
+            response["Content-Security-Policy"] = self.header_value
+        return response
+
+
 class PageMissLoggingMiddleware:
     """Log 404 and 500 responses to a dedicated file handler."""
 
