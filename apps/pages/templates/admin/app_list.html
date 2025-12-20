@@ -20,12 +20,14 @@
             <tr class="model-{{ model_name }}{% if model.admin_url in request.path|urlencode %} current-model{% endif %}">
               <th scope="row" id="favorites-{{ model_app_label }}-{{ model_name }}">
                 {% if ct_id %}
-                  <form method="post" action="{% url 'admin:favorite_toggle' ct_id %}" class="favorite-toggle-form">
-                    {% csrf_token %}
-                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                    <input type="hidden" name="remove" value="1">
-                    <button type="submit" class="favorite-star favorited" title="{% translate 'Toggle favorite' %}" aria-label="{% translate 'Toggle favorite' %}">&#9733;</button>
-                  </form>
+                  <a
+                    href="{% url 'admin:favorite_toggle' ct_id %}?next={{ request.get_full_path|urlencode }}"
+                    class="favorite-star favorited"
+                    title="{% translate 'Toggle favorite' %}"
+                    aria-label="{% translate 'Toggle favorite' %}"
+                  >
+                    &#9733;
+                  </a>
                 {% endif %}
                 {% if model.admin_url %}
                   <a href="{{ model.admin_url }}"{% if model.admin_url in request.path|urlencode %} aria-current="page"{% endif %}>{{ fav.custom_label|default:model.name }}</a>
@@ -64,16 +66,14 @@
             <tr class="model-{{ model_name }}{% if model.admin_url in request.path|urlencode %} current-model{% endif %}">
               <th scope="row" id="{{ model_app_label }}-{{ model_name }}">
                 {% if ct_id %}
-                  <form method="post" action="{% url 'admin:favorite_toggle' ct_id %}" class="favorite-toggle-form">
-                    {% csrf_token %}
-                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
-                    {% if fav %}
-                      <input type="hidden" name="remove" value="1">
-                    {% else %}
-                      <input type="hidden" name="user_data" value="on">
-                    {% endif %}
-                    <button type="submit" class="favorite-star{% if fav %} favorited{% endif %}" title="{% translate 'Toggle favorite' %}" aria-label="{% translate 'Toggle favorite' %}">&#9733;</button>
-                  </form>
+                  <a
+                    href="{% url 'admin:favorite_toggle' ct_id %}?next={{ request.get_full_path|urlencode }}"
+                    class="favorite-star{% if fav %} favorited{% endif %}"
+                    title="{% translate 'Toggle favorite' %}"
+                    aria-label="{% translate 'Toggle favorite' %}"
+                  >
+                    &#9733;
+                  </a>
                 {% endif %}
                 {% if model.admin_url %}
                   <a href="{{ model.admin_url }}"{% if model.admin_url in request.path|urlencode %} aria-current="page"{% endif %}>{{ fav.custom_label|default:model.name }}</a>
