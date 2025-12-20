@@ -36,6 +36,15 @@ MARKDOWN_IMAGE_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
+MARKDOWN_ASSET_TAG_PATTERN = re.compile(
+    r"<(?P<tag>img|script|link|audio|video|source|iframe|embed)\b[^>]*>",
+    re.IGNORECASE,
+)
+MARKDOWN_HTTP_ASSET_ATTRIBUTE_PATTERN = re.compile(
+    r"\s+(?P<attr>src|href|srcset)=(?P<quote>[\"\'])(?P<value>.*?)(?P=quote)",
+    re.IGNORECASE,
+)
+
 ALLOWED_IMAGE_EXTENSIONS = {
     ".apng",
     ".avif",
@@ -54,6 +63,7 @@ def render_markdown_with_toc(text: str) -> tuple[str, str]:
     md = markdown.Markdown(extensions=MARKDOWN_EXTENSIONS)
     html = md.convert(text)
     html = _rewrite_markdown_asset_links(html)
+    html = _strip_http_subresources(html)
     toc_html = md.toc
     toc_html = _strip_toc_wrapper(toc_html)
     return html, toc_html
@@ -182,6 +192,22 @@ def _rewrite_markdown_asset_links(html: str) -> str:
         return f"{match.group('prefix')}{escape(asset_url)}{match.group('suffix')}"
 
     return MARKDOWN_IMAGE_PATTERN.sub(_replace, html)
+
+
+def _strip_http_subresources(html: str) -> str:
+    """Strip HTTP subresource URLs from HTML output."""
+
+    def _strip_http_attributes(match: re.Match[str]) -> str:
+        tag_html = match.group(0)
+
+        def _remove_attr(attr_match: re.Match[str]) -> str:
+            if "http://" in attr_match.group("value").lower():
+                return ""
+            return attr_match.group(0)
+
+        return MARKDOWN_HTTP_ASSET_ATTRIBUTE_PATTERN.sub(_remove_attr, tag_html)
+
+    return MARKDOWN_ASSET_TAG_PATTERN.sub(_strip_http_attributes, html)
 
 
 def _resolve_static_asset(path: str) -> Path:
