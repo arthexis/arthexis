@@ -16,6 +16,13 @@ def main() -> int:
     path = Path(sys.argv[1])
     try:
         return update_config(path)
+    except PermissionError:
+        print(
+            f"Permission denied updating {path}. Run this script with sudo or "
+            "ensure the file is writable by the current user.",
+            file=sys.stderr,
+        )
+        return 1
     except Exception as exc:  # pragma: no cover - defensive guard
         print(f"Failed to update {path}: {exc}", file=sys.stderr)
         return 1
