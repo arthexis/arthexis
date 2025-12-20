@@ -9,6 +9,8 @@ from utils.sites import get_site
 from .active_app import set_active_app
 from .request_utils import is_https_request
 
+_is_https_request = is_https_request
+
 
 class ActiveAppMiddleware:
     """Store the current app based on the request's site."""
