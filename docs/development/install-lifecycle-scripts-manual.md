@@ -31,7 +31,7 @@ Passing a role flag applies a curated bundle of options. Each preset still honou
 | `--auto-upgrade` | Explicitly enables unattended upgrades (off by default) and refreshes the Celery schedule when locks exist.【F:install.sh†L243-L259】【F:install.sh†L578-L603】 |
 | `--fixed` | Disables unattended upgrades and removes the auto-upgrade lock so future runs stay manual-only.【F:install.sh†L247-L259】【F:install.sh†L601-L603】 |
 | `--unstable` / `--latest` | Enables auto-upgrade on the unstable channel that follows origin/main revisions immediately.【F:install.sh†L251-L259】【F:install.sh†L578-L599】 |
-| `--stable` / `--regular` / `--normal` | Enables auto-upgrade on the stable release channel with 24-hour checks.【F:install.sh†L256-L259】【F:install.sh†L578-L599】 |
+| `--stable` / `--regular` / `--normal` | Enables auto-upgrade on the stable release channel with weekly Thursday-morning checks (before 5:00 AM).【F:install.sh†L256-L259】【F:install.sh†L578-L599】 |
 | `--celery` | Forces Celery services on even if the preset would leave them disabled. Rarely needed because all presets already enable Celery.【F:install.sh†L261-L263】【F:install.sh†L320-L341】 |
 | `--lcd-screen` / `--no-lcd-screen` | Adds or removes the LCD updater service and lock. Control preset enables it automatically; `--no-lcd-screen` removes an existing unit after reading `.locks/service.lck`.【F:install.sh†L275-L333】【F:install.sh†L526-L575】 |
 | `--clean` | Deletes `db.sqlite3` before installing, after first backing it up into `backups/` with version and Git metadata.【F:install.sh†L61-L120】 |
@@ -87,7 +87,7 @@ Supported options:
 | Flag | Purpose |
 | --- | --- |
 | `--latest` / `--unstable` | Follows the unstable channel, upgrading whenever the origin/main revision changes even if `VERSION` remains the same.【F:upgrade.sh†L249-L285】【F:upgrade.sh†L520-L550】 |
-| `--stable` / `--regular` / `--normal` | Uses the stable channel, aligning with release revisions and the 24-hour auto-upgrade cadence.【F:upgrade.sh†L249-L285】【F:upgrade.sh†L520-L550】 |
+| `--stable` / `--regular` / `--normal` | Uses the stable channel, aligning with release revisions and the weekly Thursday-morning auto-upgrade cadence (before 5:00 AM).【F:upgrade.sh†L249-L285】【F:upgrade.sh†L520-L550】 |
 | `--clean` | Deletes `db.sqlite3` (and any `db_*.sqlite3` snapshots) after confirmation so migrations start from a blank database.【F:upgrade.sh†L122-L167】【F:upgrade.sh†L420-L444】 |
 | `--start` / `--no-start` | Forces services to start after the upgrade (even if they were previously stopped) or keeps them offline afterwards; `--no-start` also accepts the legacy `--no-restart` alias.【F:upgrade.sh†L123-L144】【F:upgrade.sh†L404-L419】【F:upgrade.sh†L514-L551】 |
 | `--no-warn` | Skips interactive confirmation before destructive database operations (used with `--clean` or uninstall flows).【F:upgrade.sh†L122-L167】 |

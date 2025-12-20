@@ -119,8 +119,8 @@ Upgrade channels (opt-in during install/upgrade or with `scripts/delegated-upgra
 | Channel | Check cadence | Purpose | Opt-in flag |
 | --- | --- | --- | --- |
 | Fixed | None (manual upgrades only) | Disables the automatic upgrade loop for full operator control. | `--fixed` (default) |
-| Stable | 24 hours | Tracks release revisions with automated daily checks. | `--stable` |
-| Latest | 60 minutes | Follows the newest mainline revisions with hourly checks. | `--latest` |
+| Stable | Weekly (Thu before 5:00 AM) | Tracks release revisions with automated weekly checks. | `--stable` |
+| Latest | Daily (same hour) | Follows the newest mainline revisions with daily checks. | `--latest` |
 
 ### 4. Administration
 - Access the [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) at `localhost:8888/admin/` to review and manage live data. Use `--port` with the start scripts or installer when you need to expose a different port.

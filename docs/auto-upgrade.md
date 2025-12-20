@@ -15,6 +15,9 @@ delegated systemd unit is launched, and what to check if something fails.
   the lock is removed, the periodic task is removed as well, and any
   environment override set with `ARTHEXIS_UPGRADE_FREQ` is ignored unless it is
   a positive integer.
+- Stable auto-upgrades run once per week on Thursday mornings before 5:00 AM,
+  while latest runs daily at the same hour unless overridden with
+  `ARTHEXIS_UPGRADE_FREQ`.
 
 ## How delegation works
 
