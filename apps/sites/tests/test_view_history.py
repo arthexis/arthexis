@@ -1,6 +1,6 @@
 from django.test import TestCase
 
-from apps.pages.models import ViewHistory
+from apps.sites.models import ViewHistory
 
 
 class ViewHistoryModelTests(TestCase):

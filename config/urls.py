@@ -29,7 +29,7 @@ from apps.core.admindocs import (
     ModelGraphIndexView,
     OrderedModelIndexView,
 )
-from apps.pages import views as pages_views
+from apps.sites import views as pages_views
 
 # Ensure admin registrations (e.g., OCPP chargers) are loaded before URL
 # resolution to avoid missing admin views such as /admin/ocpp/charger/.
@@ -140,7 +140,7 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path("i18n/setlang/", csrf_exempt(set_language), name="set_language"),
     path("", include("apps.docs.urls")),
-    path("", include("apps.pages.urls")),
+    path("", include("apps.sites.urls")),
 ]
 
 urlpatterns += autodiscovered_urlpatterns()

@@ -8,7 +8,7 @@ from django.core.validators import MaxLengthValidator, MaxValueValidator, MinVal
 from django.db import models
 from django.utils.translation import gettext, gettext_lazy as _, get_language_info
 
-from apps.pages.tasks import create_user_story_github_issue
+from apps.sites.tasks import create_user_story_github_issue
 from apps.celery.utils import is_celery_enabled
 from apps.leads.models import Lead
 from apps.repos import github_issues

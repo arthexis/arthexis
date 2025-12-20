@@ -20,7 +20,7 @@ from django.utils.encoding import force_str
 from django.utils.translation import gettext_lazy as _
 
 from apps.nodes.models import Node
-from apps.pages.utils import landing
+from apps.sites.utils import landing
 from config.request_utils import is_https_request
 
 from .. import store

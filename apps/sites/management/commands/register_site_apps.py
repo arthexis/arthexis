@@ -4,7 +4,7 @@ from django.contrib.sites.models import Site
 from django.core.management.base import BaseCommand
 
 from apps.app.models import Application
-from apps.pages.defaults import DEFAULT_APPLICATION_DESCRIPTIONS
+from apps.sites.defaults import DEFAULT_APPLICATION_DESCRIPTIONS
 
 
 class Command(BaseCommand):

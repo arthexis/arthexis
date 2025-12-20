@@ -474,7 +474,7 @@ class NodeFeatureMixin:
                 defaults={
                     "crontab": schedule,
                     "interval": None,
-                    "task": "apps.pages.tasks.purge_expired_landing_leads",
+                    "task": "apps.sites.tasks.purge_expired_landing_leads",
                     "enabled": True,
                 },
             )

@@ -5,7 +5,7 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.locals.user_data import EntityModelAdmin
 from apps.nodes.forms import NodeRoleMultipleChoiceField
-from apps.pages.models import Landing
+from apps.sites.models import Landing
 
 from .models import Module
 

@@ -11,7 +11,7 @@ Create quick-access shortcuts for frequently used admin models and views.
 
 ## Access points
 
-- The admin dashboard renders star icons next to every app and model row (`apps/pages/templates/admin/app_list.html` and `apps/pages/templates/admin/includes/dashboard_app_list_content.html`).
+- The admin dashboard renders star icons next to every app and model row (`apps/sites/templates/admin/app_list.html` and `apps/sites/templates/admin/includes/dashboard_app_list_content.html`).
 - Clicking a star invokes the `admin:favorite_toggle` view defined in [`apps/locals/admin.py`](../../apps/locals/admin.py) and returns you to the current page after saving.
 - Use the **Favorites** link in the admin navigation sidebar to open the management list (`apps/locals/templates/admin/favorite_list.html`). The route is registered as `admin:favorite_list` in [`apps/locals/admin.py`](../../apps/locals/admin.py#L98-L135).
 
