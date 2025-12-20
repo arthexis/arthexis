@@ -77,10 +77,10 @@ def test_register_visitor_view_uses_clean_visitor_base(admin_client, monkeypatch
     assert context["register_url"] == reverse("register-node")
     assert context["telemetry_url"] == reverse("register-telemetry")
     assert context["visitor_proxy_url"] == reverse("register-visitor-proxy")
-    assert context["visitor_info_url"] == "http://visitor.example.com:9999/nodes/info/"
+    assert context["visitor_info_url"] == "https://visitor.example.com:9999/nodes/info/"
     assert (
         context["visitor_register_url"]
-        == "http://visitor.example.com:9999/nodes/register/"
+        == "https://visitor.example.com:9999/nodes/register/"
     )
     assert context["visitor_host"] == "visitor.example.com"
     assert context["visitor_port"] == 9999
@@ -106,8 +106,8 @@ def test_register_visitor_view_ignores_request_addr(admin_client, monkeypatch):
     assert response.status_code == 200
     context = response.context[-1]
     assert context["visitor_error"] is None
-    assert context["visitor_info_url"] == "http://192.0.2.10:8888/nodes/info/"
-    assert context["visitor_register_url"] == "http://192.0.2.10:8888/nodes/register/"
+    assert context["visitor_info_url"] == "https://192.0.2.10:8888/nodes/info/"
+    assert context["visitor_register_url"] == "https://192.0.2.10:8888/nodes/register/"
     assert context["telemetry_url"] == reverse("register-telemetry")
     assert context["visitor_proxy_url"] == reverse("register-visitor-proxy")
 
@@ -133,8 +133,8 @@ def test_register_visitor_view_ignores_forwarded_for(admin_client, monkeypatch):
     assert response.status_code == 200
     context = response.context[-1]
     assert context["visitor_error"] is None
-    assert context["visitor_info_url"] == "http://203.0.113.1:8888/nodes/info/"
-    assert context["visitor_register_url"] == "http://203.0.113.1:8888/nodes/register/"
+    assert context["visitor_info_url"] == "https://203.0.113.1:8888/nodes/info/"
+    assert context["visitor_register_url"] == "https://203.0.113.1:8888/nodes/register/"
     assert context["telemetry_url"] == reverse("register-telemetry")
     assert context["visitor_proxy_url"] == reverse("register-visitor-proxy")
 
@@ -213,8 +213,8 @@ def test_register_visitor_proxy_success(admin_client, monkeypatch):
         reverse("register-visitor-proxy"),
         data=json.dumps(
             {
-                "visitor_info_url": "http://visitor.test/nodes/info/",
-                "visitor_register_url": "http://visitor.test/nodes/register/",
+                "visitor_info_url": "https://visitor.test/nodes/info/",
+                "visitor_register_url": "https://visitor.test/nodes/register/",
                 "token": "",
             }
         ),
@@ -258,7 +258,7 @@ def test_register_visitor_proxy_fallbacks_to_8000(admin_client, monkeypatch):
 
         def get(self, url, timeout=None):
             self.requests.append(("get", url))
-            if url.startswith("http://visitor.test:8888"):
+            if url.startswith("https://visitor.test:8888"):
                 raise requests.ConnectTimeout()
             return FakeResponse(
                 {
@@ -273,7 +273,7 @@ def test_register_visitor_proxy_fallbacks_to_8000(admin_client, monkeypatch):
 
         def post(self, url, json=None, timeout=None):
             self.requests.append(("post", url, json))
-            if url.startswith("http://visitor.test:8888"):
+            if url.startswith("https://visitor.test:8888"):
                 raise requests.ConnectTimeout()
             return FakeResponse({"id": 3, "detail": "ok"})
 
@@ -290,8 +290,8 @@ def test_register_visitor_proxy_fallbacks_to_8000(admin_client, monkeypatch):
         reverse("register-visitor-proxy"),
         data=json.dumps(
             {
-                "visitor_info_url": "http://visitor.test:8888/nodes/info/",
-                "visitor_register_url": "http://visitor.test:8888/nodes/register/",
+                "visitor_info_url": "https://visitor.test:8888/nodes/info/",
+                "visitor_register_url": "https://visitor.test:8888/nodes/register/",
                 "token": "",
             }
         ),
@@ -301,10 +301,10 @@ def test_register_visitor_proxy_fallbacks_to_8000(admin_client, monkeypatch):
     assert response.status_code == 200
     assert sessions
     session = sessions[-1]
-    assert session.requests[0][1].startswith("http://visitor.test:8888")
-    assert session.requests[1][1].startswith("http://visitor.test:8000")
-    assert session.requests[2][1].startswith("http://visitor.test:8888")
-    assert session.requests[3][1].startswith("http://visitor.test:8000")
+    assert session.requests[0][1].startswith("https://visitor.test:8888")
+    assert session.requests[1][1].startswith("https://visitor.test:8000")
+    assert session.requests[2][1].startswith("https://visitor.test:8888")
+    assert session.requests[3][1].startswith("https://visitor.test:8000")
 
 
 @pytest.mark.django_db
@@ -327,8 +327,8 @@ def test_register_visitor_view_defaults_loopback_port(admin_client, monkeypatch)
     assert response.status_code == 200
     context = response.context[-1]
     assert context["visitor_error"] is None
-    assert context["visitor_info_url"] == "http://127.0.0.1:8888/nodes/info/"
-    assert context["visitor_register_url"] == "http://127.0.0.1:8888/nodes/register/"
+    assert context["visitor_info_url"] == "https://127.0.0.1:8888/nodes/info/"
+    assert context["visitor_register_url"] == "https://127.0.0.1:8888/nodes/register/"
     assert context["telemetry_url"] == reverse("register-telemetry")
 
 
