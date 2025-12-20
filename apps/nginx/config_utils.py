@@ -180,6 +180,10 @@ def https_proxy_server(
     cert_path = str(certificate_path or CERTIFICATE_PATH)
     key_path = str(certificate_key_path or CERTIFICATE_KEY_PATH)
     lines.extend(_ssl_configuration_lines(cert_path, key_path))
+    lines.append(
+        "    add_header Content-Security-Policy "
+        '"upgrade-insecure-requests; block-all-mixed-content" always;'
+    )
     lines.append("")
     lines.append(textwrap.indent(proxy_block(port, trailing_slash=trailing_slash), "    "))
     lines.append("}")

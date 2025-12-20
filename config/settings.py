@@ -518,6 +518,7 @@ MIDDLEWARE = [
     "django.contrib.sessions.middleware.SessionMiddleware",
     "config.middleware.ActiveAppMiddleware",
     "config.middleware.SiteHttpsRedirectMiddleware",
+    "config.middleware.ContentSecurityPolicyMiddleware",
     "django.middleware.locale.LocaleMiddleware",
     "apps.pages.middleware.LanguagePreferenceMiddleware",
     "django.middleware.common.CommonMiddleware",
