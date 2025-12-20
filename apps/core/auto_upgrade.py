@@ -6,20 +6,52 @@ from os import environ
 from pathlib import Path
 
 from django.conf import settings
+from django.utils import timezone
 
 
 AUTO_UPGRADE_TASK_NAME = "auto-upgrade-check"
 AUTO_UPGRADE_TASK_PATH = "apps.core.tasks.check_github_updates"
 
 DEFAULT_AUTO_UPGRADE_MODE = "stable"
+AUTO_UPGRADE_CADENCE_HOUR = 4
 AUTO_UPGRADE_INTERVAL_MINUTES = {
-    "latest": 60,
+    "latest": 1440,
     "unstable": 15,
-    "stable": 1440,
-    "regular": 1440,
-    "normal": 1440,
+    "stable": 10080,
+    "regular": 10080,
+    "normal": 10080,
 }
 AUTO_UPGRADE_FALLBACK_INTERVAL = AUTO_UPGRADE_INTERVAL_MINUTES[DEFAULT_AUTO_UPGRADE_MODE]
+AUTO_UPGRADE_CRONTAB_SCHEDULES = {
+    "latest": {
+        "minute": "0",
+        "hour": str(AUTO_UPGRADE_CADENCE_HOUR),
+        "day_of_week": "*",
+        "day_of_month": "*",
+        "month_of_year": "*",
+    },
+    "stable": {
+        "minute": "0",
+        "hour": str(AUTO_UPGRADE_CADENCE_HOUR),
+        "day_of_week": "4",
+        "day_of_month": "*",
+        "month_of_year": "*",
+    },
+    "regular": {
+        "minute": "0",
+        "hour": str(AUTO_UPGRADE_CADENCE_HOUR),
+        "day_of_week": "4",
+        "day_of_month": "*",
+        "month_of_year": "*",
+    },
+    "normal": {
+        "minute": "0",
+        "hour": str(AUTO_UPGRADE_CADENCE_HOUR),
+        "day_of_week": "4",
+        "day_of_month": "*",
+        "month_of_year": "*",
+    },
+}
 
 
 def auto_upgrade_base_dir() -> Path:
@@ -59,7 +91,11 @@ def ensure_auto_upgrade_periodic_task(
     mode_file = lock_dir / "auto_upgrade.lck"
 
     try:  # pragma: no cover - optional dependency failures
-        from django_celery_beat.models import IntervalSchedule, PeriodicTask
+        from django_celery_beat.models import (
+            CrontabSchedule,
+            IntervalSchedule,
+            PeriodicTask,
+        )
         from django.db.utils import OperationalError, ProgrammingError
     except Exception:
         return
@@ -90,15 +126,37 @@ def ensure_auto_upgrade_periodic_task(
                 interval_minutes = parsed_interval
 
     try:
-        schedule, _ = IntervalSchedule.objects.get_or_create(
-            every=interval_minutes, period=IntervalSchedule.MINUTES
-        )
+        if override_interval or _mode not in AUTO_UPGRADE_CRONTAB_SCHEDULES:
+            schedule, _ = IntervalSchedule.objects.get_or_create(
+                every=interval_minutes, period=IntervalSchedule.MINUTES
+            )
+            defaults = {
+                "interval": schedule,
+                "crontab": None,
+                "solar": None,
+                "clocked": None,
+                "task": AUTO_UPGRADE_TASK_PATH,
+            }
+        else:
+            crontab_config = AUTO_UPGRADE_CRONTAB_SCHEDULES[_mode]
+            schedule, _ = CrontabSchedule.objects.get_or_create(
+                minute=crontab_config["minute"],
+                hour=crontab_config["hour"],
+                day_of_week=crontab_config["day_of_week"],
+                day_of_month=crontab_config["day_of_month"],
+                month_of_year=crontab_config["month_of_year"],
+                timezone=timezone.get_current_timezone_name(),
+            )
+            defaults = {
+                "interval": None,
+                "crontab": schedule,
+                "solar": None,
+                "clocked": None,
+                "task": AUTO_UPGRADE_TASK_PATH,
+            }
         PeriodicTask.objects.update_or_create(
             name=AUTO_UPGRADE_TASK_NAME,
-            defaults={
-                "interval": schedule,
-                "task": AUTO_UPGRADE_TASK_PATH,
-            },
+            defaults=defaults,
         )
     except (OperationalError, ProgrammingError):  # pragma: no cover - DB not ready
         return
