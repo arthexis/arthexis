@@ -49,6 +49,25 @@ def iter_blocks(text: str, keyword: str):
         yield start, pos, text[start:pos]
 
 
+def normalize_orphaned_server_block(text: str) -> tuple[str, bool]:
+    stripped = text.lstrip()
+    if stripped.startswith("server {"):
+        return text, False
+
+    if not stripped.startswith(("listen", "location")):
+        return text, False
+
+    first_server = text.find("server {")
+    if first_server == -1:
+        wrapped = f"server {{\n{text.rstrip()}\n}}\n"
+        return wrapped, True
+
+    prefix = text[:first_server]
+    suffix = text[first_server:]
+    wrapped = f"server {{\n{prefix.rstrip()}\n}}\n\n{suffix.lstrip()}"
+    return wrapped, True
+
+
 def ensure_blocks(block: str) -> tuple[str, bool]:
     start_brace = block.find("{")
     end_brace = block.rfind("}")
@@ -132,6 +151,10 @@ def update_config(path: Path) -> int:
     original = path.read_text()
     updated = original
     changed = False
+
+    updated, normalized = normalize_orphaned_server_block(updated)
+    if normalized:
+        changed = True
 
     blocks = list(iter_blocks(updated, "server"))
     for start, end, block in reversed(blocks):
