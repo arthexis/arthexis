@@ -49,6 +49,7 @@ from typing import Dict, Optional
 
 import websockets
 from . import store
+from .utils import resolve_ws_scheme
 
 # ---------------------------------------------------------------------------
 # Helper utilities
@@ -187,6 +188,8 @@ async def simulate_cp(
     interval: float = 5.0,
     username: Optional[str] = None,
     password: Optional[str] = None,
+    ws_scheme: Optional[str] = None,
+    use_tls: Optional[bool] = None,
     *,
     sim_state: SimulatorState | None = None,
 ) -> None:
@@ -218,7 +221,12 @@ async def simulate_cp(
             self.password = password
             self.state = sim_state or _simulators.get(cp_idx + 1, _simulators[1])
 
-            base_uri = f"ws://{self.host}:{self.ws_port}" if self.ws_port else f"ws://{self.host}"
+            scheme = resolve_ws_scheme(ws_scheme=ws_scheme, use_tls=use_tls)
+            base_uri = (
+                f"{scheme}://{self.host}:{self.ws_port}"
+                if self.ws_port
+                else f"{scheme}://{self.host}"
+            )
             self.uri = f"{base_uri}/{self.cp_path}"
             self.connect_kwargs: dict[str, object] = {}
 
@@ -619,6 +627,8 @@ def simulate(
     interval: float = 5.0,
     username: Optional[str] = None,
     password: Optional[str] = None,
+    ws_scheme: Optional[str] = None,
+    use_tls: Optional[bool] = None,
     cp: int = 1,
     name: str = "Simulator",
     delay: Optional[float] = None,
@@ -659,6 +669,8 @@ def simulate(
         "interval": interval,
         "username": username,
         "password": password,
+        "ws_scheme": ws_scheme,
+        "use_tls": use_tls,
         "name": name,
         "delay": delay,
         "reconnect_slots": reconnect_slots,
@@ -692,6 +704,8 @@ def simulate(
                 interval,
                 username,
                 password,
+                ws_scheme,
+                use_tls,
                 sim_state=state,
             )
 
@@ -715,6 +729,8 @@ def simulate(
                     interval,
                     username,
                     password,
+                    ws_scheme,
+                    use_tls,
                     sim_state=state,
                 )
             )
@@ -768,6 +784,8 @@ def simulate(
                 interval,
                 username,
                 password,
+                ws_scheme,
+                use_tls,
                 sim_state=state,
             )
         )
@@ -795,6 +813,8 @@ def simulate(
                     interval,
                     username,
                     password,
+                    ws_scheme,
+                    use_tls,
                 ),
                 kwargs={"sim_state": state},
                 daemon=True,

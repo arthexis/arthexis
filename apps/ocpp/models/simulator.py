@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from .base import *
+from ..utils import resolve_ws_scheme
 
 class Simulator(Entity):
     """Preconfigured simulator that can be started from the admin."""
@@ -114,10 +115,12 @@ class Simulator(Entity):
         from ..simulator import SimulatorConfig
 
         configuration_keys, configuration_unknown_keys = self._configuration_payload()
+        ws_scheme = resolve_ws_scheme()
 
         return SimulatorConfig(
             host=self.host,
             ws_port=self.ws_port,
+            ws_scheme=ws_scheme,
             rfid=self.rfid,
             vin=self.vin,
             cp_path=self.cp_path,
@@ -157,6 +160,7 @@ class Simulator(Entity):
         path = self.cp_path
         if not path.endswith("/"):
             path += "/"
+        scheme = resolve_ws_scheme()
         if self.ws_port:
-            return f"ws://{self.host}:{self.ws_port}/{path}"
-        return f"ws://{self.host}/{path}"
+            return f"{scheme}://{self.host}:{self.ws_port}/{path}"
+        return f"{scheme}://{self.host}/{path}"

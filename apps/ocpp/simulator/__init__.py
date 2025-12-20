@@ -12,6 +12,7 @@ import websockets
 from config.offline import requires_network
 
 from .. import store
+from ..utils import resolve_ws_scheme
 
 
 class UnsupportedMessageError(RuntimeError):
@@ -24,6 +25,8 @@ class SimulatorConfig:
 
     host: str = "127.0.0.1"
     ws_port: Optional[int] = 8000
+    ws_scheme: Optional[str] = None
+    use_tls: Optional[bool] = None
     rfid: str = "FFFFFFFF"
     vin: str = ""
     # WebSocket path for the charge point. Defaults to just the charger ID at the root.
@@ -413,10 +416,11 @@ class ChargePointSimulator:
         self._last_ws_subprotocol = None
         self._last_close_code = None
         self._last_close_reason = None
+        scheme = resolve_ws_scheme(ws_scheme=cfg.ws_scheme, use_tls=cfg.use_tls)
         if cfg.ws_port:
-            uri = f"ws://{cfg.host}:{cfg.ws_port}/{cfg.cp_path}"
+            uri = f"{scheme}://{cfg.host}:{cfg.ws_port}/{cfg.cp_path}"
         else:
-            uri = f"ws://{cfg.host}/{cfg.cp_path}"
+            uri = f"{scheme}://{cfg.host}/{cfg.cp_path}"
         headers: dict[str, str] = {}
         if cfg.username and cfg.password:
             userpass = f"{cfg.username}:{cfg.password}"
