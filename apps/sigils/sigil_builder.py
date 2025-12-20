@@ -7,6 +7,7 @@ from django.urls import path, reverse
 from django.utils.translation import gettext_lazy as _
 
 from .fields import SigilAutoFieldMixin
+from .loader import load_fixture_sigil_roots
 from .models import SigilRoot
 from .sigil_resolver import resolve_sigils as resolve_sigils_in_text
 
@@ -42,6 +43,11 @@ def generate_model_sigils(**kwargs) -> None:
 
 
 def _sigil_builder_view(request):
+    if not SigilRoot.objects.filter(
+        context_type=SigilRoot.Context.ENTITY
+    ).exists():
+        load_fixture_sigil_roots()
+
     grouped: dict[str, dict[str, object]] = {}
     builtin_roots = [
         {
