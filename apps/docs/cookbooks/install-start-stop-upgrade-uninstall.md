@@ -10,6 +10,7 @@ This guide explains how to install, operate, upgrade, and remove an Arthexis nod
   - [2.1 Linux start options](#21-linux-start-options)
   - [2.2 Stopping services on Linux](#22-stopping-services-on-linux)
   - [2.3 Windows start workflow](#23-windows-start-workflow)
+  - [2.4 Post-deploy proxy and security header checks](#24-post-deploy-proxy-and-security-header-checks)
 - [3. Upgrading (`upgrade.sh` and `upgrade.bat`)](#3-upgrading-upgradesh-and-upgradebat)
   - [3.1 Safe-upgrade features](#31-safe-upgrade-features)
   - [3.2 Linux upgrade flags](#32-linux-upgrade-flags)
@@ -96,6 +97,19 @@ Available options:
 ### 2.3 Windows start workflow
 
 `start.bat` follows the same pattern with fewer switches. It verifies `.venv`, performs the static hash optimisation, and runs `manage.py runserver` with `--noreload` unless `--reload` is provided. The only supported options are `--port PORT` and `--reload`; other arguments cause a usage hint and the script exits with an error.【F:start.bat†L1-L55】 Stop the Windows server with `Ctrl+C` in the same console—there is no dedicated `stop.bat`.
+
+### 2.4 Post-deploy proxy and security header checks
+
+Use this checklist after deploying the Constellation site to ensure the reverse proxy is setting proxy headers correctly and that CSP headers are present.
+
+1. **Confirm the managed nginx config sets `X-Forwarded-Proto`.** The generated proxy block in `apps/nginx/config_utils.py` includes `proxy_set_header X-Forwarded-Proto $scheme;`. Validate the deployed file (default `/etc/nginx/sites-enabled/arthexis.conf`) still includes that line for the Constellation server block. You can render a preview without touching production using:
+   - `python manage.py preview_nginx_config --ids <site_configuration_id>`
+2. **Verify the production reverse proxy forwards HTTPS as expected.** From a host that can reach the deployed nginx or CDN, fetch headers and confirm the upstream sees `X-Forwarded-Proto: https` in access logs or application logs (see logging toggle below).
+3. **Check CSP headers on the Constellation landing page.** Run:
+   - `curl -I "https://arthexis.com/#constellation" | rg -i "content-security-policy"`
+
+   The fragment (`#constellation`) is not sent to the server, so the response headers should match `https://arthexis.com/`. Expect to see the CSP header configured in nginx (currently `upgrade-insecure-requests; block-all-mixed-content`).
+4. **Enable proxy-header logging when troubleshooting.** Set `LOG_X_FORWARDED_PROTO=true` in the production environment to log missing or unexpected `X-Forwarded-Proto` values in the `proxy_headers` logger. Disable it after investigation to avoid noisy logs.
 
 ## 3. Upgrading (`upgrade.sh` and `upgrade.bat`)
 
