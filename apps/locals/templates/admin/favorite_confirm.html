@@ -11,6 +11,9 @@
 </h1>
 <form method="post" class="favorite-confirm-form">
   {% csrf_token %}
+  {% if next %}
+    <input type="hidden" name="next" value="{{ next }}">
+  {% endif %}
   <p>
     {% if favorite %}
       {% blocktranslate with name=content_type.name %}Update your favorite for {{ name }}.{% endblocktranslate %}

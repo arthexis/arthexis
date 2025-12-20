@@ -15,7 +15,14 @@ from .models import Favorite
 def _get_safe_next_url(request):
     """Return a sanitized ``next`` parameter for redirect targets."""
 
-    candidate = request.POST.get("next") or request.GET.get("next")
+    candidate = (
+        request.POST.get("next")
+        or request.GET.get("next")
+        or request.META.get("HTTP_REFERER")
+    )
+    if not candidate:
+        return None
+    candidate = candidate.strip()
     if not candidate:
         return None
 
