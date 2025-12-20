@@ -413,7 +413,7 @@ def _latest_log_message(key: str) -> str:
 def test_rejects_invalid_serial_from_path_logs_reason():
     async def run_scenario():
         communicator = WebsocketCommunicator(application, "/<charger_id>")
-        connected, close_code = await communicator.connect()
+        connected, close_code = await communicator.connect(timeout=5)
         assert connected is False
         assert close_code == 4003
 
