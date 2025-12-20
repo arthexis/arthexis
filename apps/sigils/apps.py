@@ -11,6 +11,12 @@ class SigilsConfig(AppConfig):
         from .loader import load_fixture_sigil_roots
         from .sigil_builder import generate_model_sigils, patch_admin_sigil_builder_view
 
-        post_migrate.connect(generate_model_sigils, sender=self)
-        post_migrate.connect(load_fixture_sigil_roots, sender=self)
+        post_migrate.connect(
+            generate_model_sigils,
+            dispatch_uid="sigils_generate_model_sigils",
+        )
+        post_migrate.connect(
+            load_fixture_sigil_roots,
+            dispatch_uid="sigils_load_fixture_sigil_roots",
+        )
         patch_admin_sigil_builder_view()

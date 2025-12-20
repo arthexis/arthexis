@@ -24,3 +24,16 @@ class CustomSigilAdmin(EntityModelAdmin):
     def save_model(self, request, obj, form, change):
         obj.context_type = SigilRoot.Context.ENTITY
         super().save_model(request, obj, form, change)
+
+
+@admin.register(SigilRoot)
+class SigilRootAdmin(EntityModelAdmin):
+    list_display = (
+        "prefix",
+        "context_type",
+        "content_type",
+        "is_seed_data",
+        "is_deleted",
+    )
+    list_filter = ("context_type", "is_seed_data", "is_deleted")
+    search_fields = ("prefix",)
