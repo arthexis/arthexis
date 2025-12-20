@@ -1717,6 +1717,15 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             "MeterValues": self._handle_meter_values_action,
             "TransactionEvent": self._handle_transaction_event_action,
             "SecurityEventNotification": self._handle_security_event_notification_action,
+            "NotifyChargingLimit": self._handle_notify_charging_limit_action,
+            "NotifyCustomerInformation": self._handle_notify_customer_information_action,
+            "NotifyDisplayMessages": self._handle_notify_display_messages_action,
+            "NotifyEVChargingNeeds": self._handle_notify_ev_charging_needs_action,
+            "NotifyEVChargingSchedule": self._handle_notify_ev_charging_schedule_action,
+            "NotifyEvent": self._handle_notify_event_action,
+            "NotifyMonitoringReport": self._handle_notify_monitoring_report_action,
+            "PublishFirmwareStatusNotification": self._handle_publish_firmware_status_notification_action,
+            "ReportChargingProfiles": self._handle_report_charging_profiles_action,
             "DiagnosticsStatusNotification": self._handle_diagnostics_status_notification_action,
             "LogStatusNotification": self._handle_log_status_notification_action,
             "StartTransaction": self._handle_start_transaction_action,
@@ -1927,6 +1936,86 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         if payload_text and payload_text != "{}":
             message += f": {payload_text}"
         store.add_log(self.store_key, message, log_type="charger")
+        return {}
+
+    def _log_ocpp201_notification(self, label: str, payload) -> None:
+        message = label
+        if payload:
+            try:
+                payload_text = json.dumps(payload, separators=(",", ":"))
+            except (TypeError, ValueError):
+                payload_text = str(payload)
+            if payload_text and payload_text != "{}":
+                message += f": {payload_text}"
+        store.add_log(self.store_key, message, log_type="charger")
+
+    @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "NotifyChargingLimit")
+    async def _handle_notify_charging_limit_action(
+        self, payload, msg_id, raw, text_data
+    ):
+        self._log_ocpp201_notification("NotifyChargingLimit", payload)
+        return {}
+
+    @protocol_call(
+        "ocpp201",
+        ProtocolCallModel.CP_TO_CSMS,
+        "NotifyCustomerInformation",
+    )
+    async def _handle_notify_customer_information_action(
+        self, payload, msg_id, raw, text_data
+    ):
+        self._log_ocpp201_notification("NotifyCustomerInformation", payload)
+        return {}
+
+    @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "NotifyDisplayMessages")
+    async def _handle_notify_display_messages_action(
+        self, payload, msg_id, raw, text_data
+    ):
+        self._log_ocpp201_notification("NotifyDisplayMessages", payload)
+        return {}
+
+    @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "NotifyEVChargingNeeds")
+    async def _handle_notify_ev_charging_needs_action(
+        self, payload, msg_id, raw, text_data
+    ):
+        self._log_ocpp201_notification("NotifyEVChargingNeeds", payload)
+        return {}
+
+    @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "NotifyEVChargingSchedule")
+    async def _handle_notify_ev_charging_schedule_action(
+        self, payload, msg_id, raw, text_data
+    ):
+        self._log_ocpp201_notification("NotifyEVChargingSchedule", payload)
+        return {}
+
+    @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "NotifyEvent")
+    async def _handle_notify_event_action(self, payload, msg_id, raw, text_data):
+        self._log_ocpp201_notification("NotifyEvent", payload)
+        return {}
+
+    @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "NotifyMonitoringReport")
+    async def _handle_notify_monitoring_report_action(
+        self, payload, msg_id, raw, text_data
+    ):
+        self._log_ocpp201_notification("NotifyMonitoringReport", payload)
+        return {}
+
+    @protocol_call(
+        "ocpp201",
+        ProtocolCallModel.CP_TO_CSMS,
+        "PublishFirmwareStatusNotification",
+    )
+    async def _handle_publish_firmware_status_notification_action(
+        self, payload, msg_id, raw, text_data
+    ):
+        self._log_ocpp201_notification("PublishFirmwareStatusNotification", payload)
+        return {}
+
+    @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "ReportChargingProfiles")
+    async def _handle_report_charging_profiles_action(
+        self, payload, msg_id, raw, text_data
+    ):
+        self._log_ocpp201_notification("ReportChargingProfiles", payload)
         return {}
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "SecurityEventNotification")
@@ -2457,4 +2546,3 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
                     log_type="charger",
                 )
         return {}
-
