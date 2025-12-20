@@ -89,7 +89,7 @@ Arthexis Constellation ships in four node roles tailored to different deployment
 - **[Windows](https://en.wikipedia.org/wiki/Microsoft_Windows)**: open [PowerShell](https://learn.microsoft.com/powershell/) or [Git Bash](https://gitforwindows.org/) and run the same command.
 
 ### 2. Start and stop
-Terminal nodes can start directly with the scripts below without installing; Control, Satellite, and Watchtower roles require installation first. Both approaches listen on [`http://localhost:8888/`](http://localhost:8888/) by default.
+Terminal nodes can start directly with the scripts below without installing; Control, Satellite, and Watchtower roles require installation first. Both approaches listen on `localhost:8888` by default.
 
 For local bootstrapping, run `make dev` to install with defaults, start the server, and execute a quick smoke test. Override the role, port, reload, Celery, and test selection with Makefile flags when needed.
 
@@ -123,8 +123,8 @@ Upgrade channels (opt-in during install/upgrade or with `scripts/delegated-upgra
 | Latest | 60 minutes | Follows the newest mainline revisions with hourly checks. | `--latest` |
 
 ### 4. Administration
-- Access the [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) at [`http://localhost:8888/admin/`](http://localhost:8888/admin/) to review and manage live data. Use `--port` with the start scripts or installer when you need to expose a different port.
-- Browse the [admindocs](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/) at [`http://localhost:8888/admindocs/`](http://localhost:8888/admindocs/) for API documentation that is generated from your models.
+- Access the [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) at `localhost:8888/admin/` to review and manage live data. Use `--port` with the start scripts or installer when you need to expose a different port.
+- Browse the [admindocs](https://docs.djangoproject.com/en/stable/ref/contrib/admin/admindocs/) at `localhost:8888/admindocs/` for API documentation that is generated from your models.
 - Follow the [Install & Administration Guide](apps/docs/cookbooks/install-start-stop-upgrade-uninstall.md) for deployment, lifecycle tasks, and operational runbooks.
 - Onboard and service chargers with the [EVCS Connectivity & Maintenance Cookbook](apps/docs/cookbooks/evcs-connectivity-maintenance.md).
 - Configure payment gateways with the [Payment Processors Cookbook](apps/docs/cookbooks/payment-processors.md).
