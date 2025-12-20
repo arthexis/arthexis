@@ -1,6 +1,6 @@
 from django.utils.translation import gettext_lazy as _
 
-from config.request_utils import is_https_request
+from ..utils import resolve_ws_scheme
 
 from .common import *  # noqa: F401,F403
 from ..evcs import _start_simulator, _stop_simulator
@@ -11,7 +11,7 @@ from ..evcs import _start_simulator, _stop_simulator
 def cp_simulator(request):
     """Public landing page to control the OCPP charge point simulator."""
 
-    ws_scheme = "wss" if is_https_request(request) else "ws"
+    ws_scheme = resolve_ws_scheme(request=request)
 
     def _simulator_target_url(params: dict[str, object]) -> str:
         cp_path = str(params.get("cp_path") or "")
@@ -134,6 +134,7 @@ def cp_simulator(request):
             "repeat": bool(repeat_value),
             "username": request.POST.get("username", ""),
             "password": request.POST.get("password", ""),
+            "ws_scheme": ws_scheme,
         }
         simulator_slot = _cast_value(
             request.POST.get("simulator_slot"), int, simulator_slot
