@@ -103,9 +103,10 @@ def _default_config_locations() -> list[Path]:
 def _candidate_paths(
     additional_candidates: Iterable[Path | str] | None = None, *, scan_filesystem: bool = True
 ) -> list[Path]:
-    env_path = os.environ.get(CONFIG_ENV_VAR) or ""
-
-    defaults: list[Path | str] = [env_path, *_default_config_locations()]
+    defaults: list[Path | str] = []
+    if additional_candidates is None:
+        env_path = os.environ.get(CONFIG_ENV_VAR) or ""
+        defaults = [env_path, *_default_config_locations()]
 
     candidates: list[Path] = []
     seen: set[Path] = set()
