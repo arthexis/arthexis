@@ -13,6 +13,7 @@ import socket
 import uuid
 from pathlib import Path
 from typing import Optional, TYPE_CHECKING
+from urllib.parse import urlparse, urlunsplit
 
 from django.apps import apps
 from django.conf import settings
@@ -596,30 +597,38 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
             host_candidates = peer.get_remote_host_candidates()
             port = peer.port or 8888
             urls: list[str] = []
+            scheme_candidates = peer.iter_preferred_schemes()
             for host in host_candidates:
                 host = host.strip()
                 if not host:
                     continue
                 if host.startswith("http://") or host.startswith("https://"):
-                    normalized = host.rstrip("/")
-                    if normalized not in urls:
-                        urls.append(normalized)
+                    parsed = urlparse(host)
+                    netloc = parsed.netloc or parsed.path
+                    base_path = (parsed.path or "").rstrip("/")
+                    for scheme in peer.iter_preferred_schemes(
+                        default=parsed.scheme or "http"
+                    ):
+                        candidate = urlunsplit((scheme, netloc, base_path, "", "")).rstrip(
+                            "/"
+                        )
+                        if candidate and candidate not in urls:
+                            urls.append(candidate)
                     continue
                 if ":" in host and not host.startswith("["):
                     host = f"[{host}]"
-                http_url = (
-                    f"http://{host}/nodes/register/"
-                    if port == 80
-                    else f"http://{host}:{port}/nodes/register/"
-                )
-                https_url = (
-                    f"https://{host}/nodes/register/"
-                    if port in {80, 443}
-                    else f"https://{host}:{port}/nodes/register/"
-                )
-                for url in (https_url, http_url):
-                    if url not in urls:
-                        urls.append(url)
+                for scheme in scheme_candidates:
+                    scheme_default_port = 443 if scheme == "https" else 80
+                    if port in {80, 443} and port != scheme_default_port:
+                        scheme_port = None
+                    else:
+                        scheme_port = port
+                    if scheme_port and scheme_port != scheme_default_port:
+                        candidate = f"{scheme}://{host}:{scheme_port}/nodes/register/"
+                    else:
+                        candidate = f"{scheme}://{host}/nodes/register/"
+                    if candidate not in urls:
+                        urls.append(candidate)
             if not urls:
                 continue
             for url in urls:

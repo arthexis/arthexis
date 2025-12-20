@@ -148,7 +148,9 @@ def capture_node_screenshot(
 ) -> str:
     """Capture a screenshot of ``url`` and record it as a :class:`ContentSample`."""
     if url is None:
-        url = f"http://localhost:{port}"
+        node = Node.get_local()
+        scheme = node.get_preferred_scheme() if node else "http"
+        url = f"{scheme}://localhost:{port}"
     try:
         path: Path = capture_screenshot(url)
     except Exception as exc:  # pragma: no cover - depends on selenium setup
