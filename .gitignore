@@ -211,8 +211,12 @@ media/*
 !media/ocpp21_coverage.svg
 !media/watchtowers.svg
 # Collected static files
-/static/
+/static/*
 !/static/.gitignore
+!/static/docs/
+/static/docs/*
+!/static/docs/badges/
+!/static/docs/badges/*.svg
 /staticfiles/
 # Security keys generated for nodes
 work/nodes/security/
