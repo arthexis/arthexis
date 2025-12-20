@@ -35,16 +35,14 @@
   <div class="content-title-with-favorite">
     <h1>{{ title }}</h1>
     {% if ct_id %}
-      <form method="post" action="{% url 'admin:favorite_toggle' ct_id %}" class="favorite-toggle-form">
-        {% csrf_token %}
-        <input type="hidden" name="next" value="{{ request.get_full_path }}">
-        {% if fav %}
-          <input type="hidden" name="remove" value="1">
-        {% else %}
-          <input type="hidden" name="user_data" value="on">
-        {% endif %}
-        <button type="submit" class="favorite-star{% if fav %} favorited{% endif %}" title="{% translate 'Toggle favorite' %}" aria-label="{% translate 'Toggle favorite' %}">&#9733;</button>
-      </form>
+      <a
+        href="{% url 'admin:favorite_toggle' ct_id %}?next={{ request.get_full_path|urlencode }}"
+        class="favorite-star{% if fav %} favorited{% endif %}"
+        title="{% translate 'Toggle favorite' %}"
+        aria-label="{% translate 'Toggle favorite' %}"
+      >
+        &#9733;
+      </a>
     {% endif %}
   </div>
 {% endblock %}
