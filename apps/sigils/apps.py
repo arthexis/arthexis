@@ -13,10 +13,12 @@ class SigilsConfig(AppConfig):
 
         post_migrate.connect(
             generate_model_sigils,
+            sender=self,
             dispatch_uid="sigils_generate_model_sigils",
         )
         post_migrate.connect(
             load_fixture_sigil_roots,
+            sender=self,
             dispatch_uid="sigils_load_fixture_sigil_roots",
         )
         patch_admin_sigil_builder_view()
