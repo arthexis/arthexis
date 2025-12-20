@@ -285,7 +285,7 @@ def _iter_port_fallback_urls(base_url: str):
             continue
         yield urlunsplit(
             (
-                parsed.scheme or "http",
+                parsed.scheme or "https",
                 f"{netloc}:{candidate_port}",
                 parsed.path,
                 parsed.query,
@@ -1178,6 +1178,11 @@ def register_visitor_proxy(request):
 
     if not visitor_info_url or not visitor_register_url:
         return JsonResponse({"detail": "visitor info/register URLs required"}, status=400)
+
+    parsed_info = urlsplit(visitor_info_url)
+    parsed_register = urlsplit(visitor_register_url)
+    if parsed_info.scheme != "https" or parsed_register.scheme != "https":
+        return JsonResponse({"detail": "HTTPS is required for visitor registration"}, status=400)
 
     visitor_info_url = _append_token(visitor_info_url, token)
 

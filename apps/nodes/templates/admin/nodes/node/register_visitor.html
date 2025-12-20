@@ -294,7 +294,7 @@
     const hostRegisterUrl = "{{ register_url|escapejs }}";
     const telemetryUrl = "{{ telemetry_url|escapejs }}";
     const visitorProxyUrl = "{{ visitor_proxy_url|escapejs }}";
-    const visitorScheme = "{{ visitor_scheme|default:'http'|escapejs }}";
+    const visitorScheme = "{{ visitor_scheme|default:'https'|escapejs }}";
     const changeUrlTemplate = "{{ change_url_template|escapejs }}";
     const hostResult = document.getElementById("host-result");
     const visitorResult = document.getElementById("visitor-result");
@@ -319,7 +319,6 @@
         fetchAdvice: "{{ _('Browser could not reach the visiting node. Check the address/port from this browser, ensure TLS certificates are trusted, and confirm connectivity. If server logs show the registration succeeded, no further action is required.')|escapejs }}",
         visitorMissing: "{{ visitor_error|default:_('Visitor address missing. Reload with ?visitor=host[:port].')|escapejs }}",
         idle: "{{ _('Waiting to start registration.')|escapejs }}",
-        mixedContent: "{{ _('Cannot contact the visitor over HTTP from this HTTPS page. Open the admin over HTTP or enable HTTPS on the visitor node.')|escapejs }}",
     };
 
     function updateIndicator(indicator, state) {
@@ -454,11 +453,6 @@
         try {
             const parsed = new URL(url, window.location.href);
             const baseVariants = [];
-            if (parsed.protocol === "http:") {
-                const secure = new URL(parsed.href);
-                secure.protocol = "https:";
-                baseVariants.push(secure);
-            }
             baseVariants.push(parsed);
 
             const normalizedHost = parsed.hostname || "";
@@ -691,18 +685,6 @@
 
     async function executeRegistration(visitorInfoUrl, visitorRegisterUrl) {
         try {
-            const isSecurePage = window.isSecureContext && window.location.protocol === "https:";
-            const insecureVisitor =
-                visitorInfoUrl.startsWith("http:") || visitorRegisterUrl.startsWith("http:");
-
-            if (isSecurePage && insecureVisitor) {
-                setStatus(summary, messages.mixedContent, "error");
-                setStatus(hostResult, messages.aborted, "error");
-                setStatus(visitorResult, messages.mixedContent, "error");
-                sendTelemetry("mixed-content", visitorRegisterUrl, messages.mixedContent);
-                return;
-            }
-
             const visitorInfoTargets = buildUrlVariants(visitorInfoUrl + "?token=" + token);
             const visitorInfoPromise = requestWithFallback(visitorInfoTargets).catch(
                 (error) => {

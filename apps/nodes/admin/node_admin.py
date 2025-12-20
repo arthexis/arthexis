@@ -1066,11 +1066,11 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         parsed = urlsplit(candidate)
         hostname = parsed.hostname or ""
         if not hostname:
-            return None, "", default_port, "http"
+            return None, "", default_port, "https"
 
-        scheme = (parsed.scheme or "http").lower()
-        if scheme not in {"http", "https"}:
-            scheme = "http"
+        scheme = (parsed.scheme or "https").lower()
+        if scheme != "https":
+            scheme = "https"
 
         port = parsed.port or raw_port or default_port
         if ":" in hostname and not hostname.startswith("["):
@@ -1752,4 +1752,3 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
 
     update_node_action.label = _("Update Node")
     update_node_action.short_description = _("Update Node")
-
