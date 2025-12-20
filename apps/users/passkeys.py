@@ -10,6 +10,8 @@ from urllib.parse import urlparse
 from django.http import HttpRequest
 from django.http.request import split_domain_port
 
+from config.request_utils import is_https_request
+
 from webauthn import (
     generate_authentication_options,
     generate_registration_options,
@@ -55,7 +57,7 @@ def _rp_id(request: HttpRequest) -> str:
 
 def _expected_origins(request: HttpRequest) -> list[str]:
     origins: set[str] = set()
-    scheme = "https" if request.is_secure() else "http"
+    scheme = "https" if is_https_request(request) else "http"
     host = request.get_host()
     if host:
         origins.add(f"{scheme}://{host}")

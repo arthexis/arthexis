@@ -31,6 +31,7 @@ from django.utils.translation import gettext_lazy as _, ngettext
 
 from django.db import DatabaseError
 
+from config.request_utils import is_https_request
 from apps.celery.utils import is_celery_enabled
 from apps.core.auto_upgrade import (
     AUTO_UPGRADE_TASK_NAME,
@@ -2078,7 +2079,7 @@ def _upgrade_redirect(request, fallback: str) -> HttpResponseRedirect:
     if candidate and url_has_allowed_host_and_scheme(
         candidate,
         allowed_hosts={request.get_host()},
-        require_https=request.is_secure(),
+        require_https=is_https_request(request),
     ):
         return HttpResponseRedirect(candidate)
     return HttpResponseRedirect(fallback)
@@ -2221,4 +2222,3 @@ def patch_admin_system_view() -> None:
         return custom + urls
 
     admin.site.get_urls = get_urls
-

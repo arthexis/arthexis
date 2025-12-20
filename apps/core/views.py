@@ -34,6 +34,7 @@ from typing import Optional, Sequence
 from django.template.loader import get_template
 from django.test import signals
 
+from config.request_utils import is_https_request
 from utils import revision
 from apps.nodes.models import NetMessage, Node
 from apps.nodes.utils import save_screenshot
@@ -1747,7 +1748,7 @@ def rfid_login(request):
     if redirect_to and not url_has_allowed_host_and_scheme(
         redirect_to,
         allowed_hosts={request.get_host()},
-        require_https=request.is_secure(),
+        require_https=is_https_request(request),
     ):
         redirect_to = ""
 
@@ -2273,5 +2274,4 @@ def _dedupe_preserve_order(values):
         seen.add(value)
         result.append(value)
     return result
-
 

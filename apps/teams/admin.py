@@ -23,6 +23,7 @@ from apps.locals.user_data import (
     _user_allows_user_data,
 )
 from apps.nodes.models import Node
+from config.request_utils import is_https_request
 
 from .forms import (
     SlackBotProfileAdminForm,
@@ -168,7 +169,7 @@ class SlackBotProfileAdmin(DjangoObjectActions, EntityModelAdmin):
             callback_path = reverse("teams:slack-bot-callback")
         except NoReverseMatch:  # pragma: no cover - url configuration integrity
             callback_path = reverse("admin:teams_slackbotprofile_bot_creation_callback")
-        scheme = "https" if request.is_secure() else "http"
+        scheme = "https" if is_https_request(request) else "http"
 
         if host:
             netloc = host
