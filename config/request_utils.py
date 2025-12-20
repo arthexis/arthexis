@@ -25,14 +25,10 @@ def _has_proxy_headers(request) -> bool:
 def _log_forwarded_proto_issue(request, message: str, value: str = "") -> None:
     if not _LOG_X_FORWARDED_PROTO:
         return
-    path = getattr(request, "path", "")
-    host = request.META.get("HTTP_HOST", "") if hasattr(request, "META") else ""
     _logger.warning(
-        "%s (value=%s path=%s host=%s)",
+        "%s (value=%s)",
         message,
         value,
-        path,
-        host,
     )
 
 
