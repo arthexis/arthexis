@@ -11,6 +11,9 @@ from django.conf import settings
 
 from apps.nginx.renderers import apply_site_entries, generate_primary_config
 
+SITES_AVAILABLE_DIR = Path("/etc/nginx/sites-available")
+SITES_ENABLED_DIR = Path("/etc/nginx/sites-enabled")
+
 
 @dataclass
 class ApplyResult:
@@ -61,6 +64,15 @@ def reload_or_start_nginx(sudo: str = "sudo") -> bool:
 
     start_result = subprocess.run([sudo, "systemctl", "start", "nginx"], check=False)
     return start_result.returncode == 0
+
+
+def _ensure_site_enabled(source: Path, *, sudo: str = "sudo") -> None:
+    if source.parent != SITES_AVAILABLE_DIR:
+        return
+
+    enabled_path = SITES_ENABLED_DIR / source.name
+    subprocess.run([sudo, "mkdir", "-p", str(SITES_ENABLED_DIR)], check=False)
+    subprocess.run([sudo, "ln", "-sf", str(source), str(enabled_path)], check=True)
 
 
 def _write_lock(path: Path, content: str) -> None:
@@ -134,7 +146,7 @@ def apply_nginx_configuration(
 
     record_lock_state(mode, port, role)
 
-    subprocess.run([sudo, "mkdir", "-p", "/etc/nginx/sites-enabled"], check=False)
+    subprocess.run([sudo, "mkdir", "-p", str(SITES_ENABLED_DIR)], check=False)
     subprocess.run([sudo, "sh", "-c", "rm -f /etc/nginx/sites-enabled/arthexis*.conf"], check=False)
     subprocess.run([sudo, "sh", "-c", "rm -f /etc/nginx/sites-available/default"], check=False)
     subprocess.run([sudo, "sh", "-c", "rm -f /etc/nginx/conf.d/arthexis-*.conf"], check=False)
@@ -148,6 +160,7 @@ def apply_nginx_configuration(
         include_ipv6=include_ipv6,
     )
     _write_config_with_sudo(primary_dest, config_content, sudo=sudo)
+    _ensure_site_enabled(primary_dest, sudo=sudo)
 
     site_changed = False
     if site_config_path and site_destination:
@@ -162,6 +175,8 @@ def apply_nginx_configuration(
             )
         except ValueError as exc:
             raise ValidationError(str(exc)) from exc
+        else:
+            _ensure_site_enabled(site_destination, sudo=sudo)
 
     validated = False
     reloaded = False
