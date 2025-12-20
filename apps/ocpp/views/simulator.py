@@ -1,5 +1,7 @@
 from django.utils.translation import gettext_lazy as _
 
+from config.request_utils import is_https_request
+
 from .common import *  # noqa: F401,F403
 from ..evcs import _start_simulator, _stop_simulator
 
@@ -9,13 +11,15 @@ from ..evcs import _start_simulator, _stop_simulator
 def cp_simulator(request):
     """Public landing page to control the OCPP charge point simulator."""
 
+    ws_scheme = "wss" if is_https_request(request) else "ws"
+
     def _simulator_target_url(params: dict[str, object]) -> str:
         cp_path = str(params.get("cp_path") or "")
         host = str(params.get("host") or "")
         ws_port = params.get("ws_port")
         if ws_port:
-            return f"ws://{host}:{ws_port}/{cp_path}"
-        return f"ws://{host}/{cp_path}"
+            return f"{ws_scheme}://{host}:{ws_port}/{cp_path}"
+        return f"{ws_scheme}://{host}/{cp_path}"
 
     def _broadcast_simulator_started(
         name: str, delay: float | int | None, params: dict[str, object]

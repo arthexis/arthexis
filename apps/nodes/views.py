@@ -29,6 +29,7 @@ from django.test.client import RequestFactory
 
 import requests
 
+from config.request_utils import is_https_request
 from utils.api import api_login_required
 
 from cryptography.hazmat.primitives import serialization, hashes
@@ -321,7 +322,7 @@ def _get_host_port(request) -> int | None:
         if scheme == "http":
             return 80
 
-    if request.is_secure():
+    if is_https_request(request):
         return 443
 
     scheme = getattr(request, "scheme", "")

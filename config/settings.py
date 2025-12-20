@@ -32,6 +32,7 @@ from urllib.parse import urlsplit
 import django.utils.encoding as encoding
 from apps.celery.utils import resolve_celery_shutdown_timeout
 from config.whitenoise import add_headers as whitenoise_add_headers
+from config.request_utils import is_https_request
 
 from config.settings_helpers import (
     discover_local_ip_addresses,
@@ -115,6 +116,9 @@ ALLOWED_HOSTS = [
     "m.arthexis.com",
     ".arthexis.com",
 ]
+
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+USE_X_FORWARDED_HOST = True
 
 
 _DEFAULT_PORTS = {"http": "80", "https": "443"}
@@ -216,7 +220,7 @@ def _get_request_scheme(request, forwarded_entry: dict[str, str] | None = None) 
     if forwarded_entry and forwarded_entry.get("proto", "").lower() in {"http", "https"}:
         return forwarded_entry["proto"].lower()
 
-    if request.is_secure():
+    if is_https_request(request):
         return "https"
 
     forwarded_proto = request.META.get("HTTP_X_FORWARDED_PROTO", "")

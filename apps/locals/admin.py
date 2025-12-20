@@ -8,6 +8,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import path
 from django.utils.http import url_has_allowed_host_and_scheme
 
+from config.request_utils import is_https_request
 from .favorites_cache import clear_user_favorites_cache
 from .models import Favorite
 
@@ -32,7 +33,7 @@ def _get_safe_next_url(request):
     if url_has_allowed_host_and_scheme(
         candidate,
         allowed_hosts=allowed_hosts,
-        require_https=request.is_secure(),
+        require_https=is_https_request(request),
     ):
         return candidate
     return None

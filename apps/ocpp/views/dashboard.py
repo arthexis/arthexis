@@ -21,6 +21,7 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.nodes.models import Node
 from apps.pages.utils import landing
+from config.request_utils import is_https_request
 
 from .. import store
 from ..models import Charger, Transaction, annotate_transaction_energy_bounds
@@ -218,7 +219,7 @@ def dashboard(request):
             label, badge_color = STATUS_BADGE_MAP["charging"]
             parent_entry["state"] = label
             parent_entry["color"] = badge_color
-    scheme = "wss" if request.is_secure() else "ws"
+    scheme = "wss" if is_https_request(request) else "ws"
     host = request.get_host()
     ws_url = f"{scheme}://{host}/ocpp/<CHARGE_POINT_ID>/"
     context = {

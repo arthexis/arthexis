@@ -29,6 +29,7 @@ from django.utils.functional import LazyObject
 from django.utils.translation import gettext as _
 from django.utils.http import url_has_allowed_host_and_scheme
 
+from config.request_utils import is_https_request
 from apps.core.entity import Entity
 
 
@@ -743,7 +744,7 @@ def _safe_next_url(request):
     if url_has_allowed_host_and_scheme(
         candidate,
         allowed_hosts=allowed_hosts,
-        require_https=request.is_secure(),
+        require_https=is_https_request(request),
     ):
         return candidate
     return None

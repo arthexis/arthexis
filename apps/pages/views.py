@@ -38,6 +38,7 @@ from django.http import (
 )
 from django.shortcuts import get_object_or_404, redirect, render
 from apps.nodes.models import Node
+from config.request_utils import is_https_request
 from django.template import loader
 from django.template.response import TemplateResponse
 from django.test import RequestFactory, signals as test_signals
@@ -668,7 +669,7 @@ def rfid_login_page(request):
     if redirect_target and not url_has_allowed_host_and_scheme(
         redirect_target,
         allowed_hosts={request.get_host()},
-        require_https=request.is_secure(),
+        require_https=is_https_request(request),
     ):
         redirect_target = ""
     context = {
@@ -688,7 +689,7 @@ def logout_view(request):
     if redirect_target and not url_has_allowed_host_and_scheme(
         redirect_target,
         allowed_hosts={request.get_host()},
-        require_https=request.is_secure(),
+        require_https=is_https_request(request),
     ):
         redirect_target = ""
 
@@ -1496,5 +1497,4 @@ def whatsapp_webhook(request):
     if getattr(message, "pk", None):
         response_payload["message"] = message.pk
     return JsonResponse(response_payload, status=201)
-
 

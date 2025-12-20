@@ -7,6 +7,9 @@ from apps.nodes.models import Node
 from utils.sites import get_site
 
 from .active_app import set_active_app
+from .request_utils import is_https_request
+
+_is_https_request = is_https_request
 
 
 class ActiveAppMiddleware:
@@ -31,26 +34,6 @@ class ActiveAppMiddleware:
         return response
 
 
-def _is_https_request(request) -> bool:
-    if request.is_secure():
-        return True
-
-    forwarded_proto = request.META.get("HTTP_X_FORWARDED_PROTO", "")
-    if forwarded_proto:
-        candidate = forwarded_proto.split(",")[0].strip().lower()
-        if candidate == "https":
-            return True
-
-    forwarded_header = request.META.get("HTTP_FORWARDED", "")
-    for forwarded_part in forwarded_header.split(","):
-        for element in forwarded_part.split(";"):
-            key, _, value = element.partition("=")
-            if key.strip().lower() == "proto" and value.strip().strip('"').lower() == "https":
-                return True
-
-    return False
-
-
 class SiteHttpsRedirectMiddleware:
     """Redirect HTTP traffic to HTTPS for sites that require it."""
 
@@ -63,7 +46,7 @@ class SiteHttpsRedirectMiddleware:
             site = get_site(request)
             request.site = site
 
-        if getattr(site, "require_https", False) and not _is_https_request(request):
+        if getattr(site, "require_https", False) and not is_https_request(request):
             try:
                 host = request.get_host()
             except DisallowedHost:  # pragma: no cover - defensive guard
