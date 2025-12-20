@@ -327,8 +327,8 @@ def test_register_visitor_view_defaults_loopback_port(admin_client, monkeypatch)
     assert response.status_code == 200
     context = response.context[-1]
     assert context["visitor_error"] is None
-    assert context["visitor_info_url"] == "https://127.0.0.1:8888/nodes/info/"
-    assert context["visitor_register_url"] == "https://127.0.0.1:8888/nodes/register/"
+    assert context["visitor_info_url"] == "https://127.0.0.1:443/nodes/info/"
+    assert context["visitor_register_url"] == "https://127.0.0.1:443/nodes/register/"
     assert context["telemetry_url"] == reverse("register-telemetry")
 
 
