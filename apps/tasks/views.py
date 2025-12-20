@@ -4,7 +4,7 @@ from django.shortcuts import redirect, render
 from django.utils.translation import gettext_lazy as _
 
 from apps.nodes.models import Node
-from apps.pages.utils import landing
+from apps.sites.utils import landing
 
 from .forms import MaintenanceRequestForm
 

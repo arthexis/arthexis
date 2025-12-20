@@ -43,7 +43,7 @@ from apps.locale.models import Language
 from apps.protocols.decorators import protocol_call
 from apps.protocols.models import ProtocolCall as ProtocolCallModel
 
-from apps.pages.utils import landing
+from apps.sites.utils import landing
 from apps.cards.models import RFID as CoreRFID
 
 from django.utils.dateparse import parse_datetime

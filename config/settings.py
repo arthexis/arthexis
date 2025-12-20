@@ -447,7 +447,7 @@ LOCAL_APPS = [
     "apps.socials",
     "apps.modules",
     "apps.widgets",
-    "apps.pages",
+    "apps.sites",
     "apps.certs",
     "apps.nginx",
     "apps.cards",
@@ -524,12 +524,12 @@ MIDDLEWARE = [
     "config.middleware.SiteHttpsRedirectMiddleware",
     "config.middleware.ContentSecurityPolicyMiddleware",
     "django.middleware.locale.LocaleMiddleware",
-    "apps.pages.middleware.LanguagePreferenceMiddleware",
+    "apps.sites.middleware.LanguagePreferenceMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "apps.sigils.middleware.SigilContextMiddleware",
-    "apps.pages.middleware.ViewHistoryMiddleware",
+    "apps.sites.middleware.ViewHistoryMiddleware",
     "config.middleware.PageMissLoggingMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
@@ -559,7 +559,7 @@ if DEBUG:
 
         DEBUG_TOOLBAR_CONFIG = {"SHOW_TOOLBAR_CALLBACK": _show_toolbar}
 
-CSRF_FAILURE_VIEW = "apps.pages.views.csrf_failure"
+CSRF_FAILURE_VIEW = "apps.sites.views.csrf_failure"
 
 # Allow staff TODO pages to embed internal admin views inside iframes.
 X_FRAME_OPTIONS = "SAMEORIGIN"
@@ -569,7 +569,7 @@ ROOT_URLCONF = "config.urls"
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [BASE_DIR / "apps" / "pages" / "templates"],
+        "DIRS": [BASE_DIR / "apps" / "sites" / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -578,7 +578,7 @@ TEMPLATES = [
                 "django.template.context_processors.i18n",
                 "django.contrib.messages.context_processors.messages",
                 "config.context_processors.site_and_node",
-                "apps.pages.context_processors.nav_links",
+                "apps.sites.context_processors.nav_links",
             ],
         },
     },

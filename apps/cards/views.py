@@ -9,7 +9,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth.views import redirect_to_login
 from django.contrib.admin.views.decorators import staff_member_required
 from apps.nodes.models import Node, NodeFeature
-from apps.pages.utils import landing
+from apps.sites.utils import landing
 from apps.cards.sync import apply_rfid_payload, serialize_rfid
 from apps.nodes.views import _clean_requester_hint, _load_signed_node
 

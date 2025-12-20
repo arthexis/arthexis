@@ -4,7 +4,7 @@ import pytest
 from django.db.utils import OperationalError
 from django.test import RequestFactory
 
-from apps.pages import context_processors
+from apps.sites import context_processors
 
 
 @pytest.mark.django_db

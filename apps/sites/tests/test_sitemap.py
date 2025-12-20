@@ -1,7 +1,7 @@
 import pytest
 
 from apps.modules.models import Module
-from apps.pages import views
+from apps.sites import views
 
 
 @pytest.mark.django_db
