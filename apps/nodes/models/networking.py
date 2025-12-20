@@ -9,6 +9,40 @@ from urllib.parse import urlparse, urlunsplit
 class NodeNetworkingMixin:
     """Networking helpers for :class:`Node`."""
 
+    def prefers_https(self, *, require_https: bool | None = None) -> bool:
+        if require_https is not None:
+            return require_https
+        site = getattr(self, "base_site", None)
+        if site and bool(getattr(site, "require_https", False)):
+            return True
+        if getattr(self, "is_local", False):
+            detect_mode = getattr(self, "_detect_nginx_mode", None)
+            if callable(detect_mode) and detect_mode() == "public":
+                return True
+        if getattr(self, "port", None) == 443:
+            return True
+        return False
+
+    def iter_preferred_schemes(
+        self,
+        *,
+        default: str = "http",
+        require_https: bool | None = None,
+    ) -> tuple[str, ...]:
+        if self.prefers_https(require_https=require_https):
+            return ("https",)
+        if default == "https":
+            return ("https", "http")
+        return ("http", "https")
+
+    def get_preferred_scheme(
+        self,
+        *,
+        default: str = "http",
+        require_https: bool | None = None,
+    ) -> str:
+        return "https" if self.prefers_https(require_https=require_https) else default
+
     @staticmethod
     def _ip_preference(ip_value: str) -> tuple[int, str]:
         """Return a sort key favouring globally routable addresses."""
@@ -232,6 +266,7 @@ class NodeNetworkingMixin:
         default_port = self.port or 8888
         normalized_path = path if path.startswith("/") else f"/{path}"
         seen: set[str] = set()
+        scheme_candidates = self.iter_preferred_schemes()
 
         for host in host_candidates:
             host = host.strip()
@@ -248,20 +283,13 @@ class NodeNetworkingMixin:
                 combined_path = (
                     f"{base_path}{normalized_path}" if base_path else normalized_path
                 )
-                primary = urlunsplit((parsed.scheme, netloc, combined_path, "", ""))
-                if primary not in seen:
-                    seen.add(primary)
-                    yield primary
-                if parsed.scheme == "https":
-                    fallback = urlunsplit(("http", netloc, combined_path, "", ""))
-                    if fallback not in seen:
-                        seen.add(fallback)
-                        yield fallback
-                elif parsed.scheme == "http":
-                    alternate = urlunsplit(("https", netloc, combined_path, "", ""))
-                    if alternate not in seen:
-                        seen.add(alternate)
-                        yield alternate
+                for scheme in self.iter_preferred_schemes(
+                    default=parsed.scheme or "http"
+                ):
+                    candidate = urlunsplit((scheme, netloc, combined_path, "", ""))
+                    if candidate not in seen:
+                        seen.add(candidate)
+                        yield candidate
                 continue
 
             if host.startswith("[") and "]" in host:
@@ -304,7 +332,8 @@ class NodeNetworkingMixin:
 
             combined_path = f"{base_path}{normalized_path}" if base_path else normalized_path
 
-            for scheme, scheme_default_port in (("https", 443), ("http", 80)):
+            for scheme in scheme_candidates:
+                scheme_default_port = 443 if scheme == "https" else 80
                 base = f"{scheme}://{formatted_host}"
                 if port_override is not None:
                     scheme_port: int | None = port_override

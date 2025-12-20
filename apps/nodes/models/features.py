@@ -439,7 +439,7 @@ class NodeFeatureMixin:
                     "task": "apps.nodes.tasks.capture_node_screenshot",
                     "kwargs": json.dumps(
                         {
-                            "url": f"http://localhost:{self.port}",
+                            "url": f"{self.get_preferred_scheme()}://localhost:{self.port}",
                             "port": self.port,
                             "method": "AUTO",
                         }
