@@ -75,6 +75,7 @@ CALL_ACTION_LABELS = {
     "RemoteStopTransaction": _("Remote stop transaction"),
     "RequestStartTransaction": _("Request start transaction"),
     "RequestStopTransaction": _("Request stop transaction"),
+    "GetTransactionStatus": _("Get transaction status"),
     "GetDiagnostics": _("Get diagnostics"),
     "ChangeAvailability": _("Change availability"),
     "ChangeConfiguration": _("Change configuration"),
