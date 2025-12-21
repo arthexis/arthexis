@@ -1,5 +1,7 @@
 from unittest.mock import AsyncMock
 
+from asgiref.sync import sync_to_async
+
 import pytest
 
 from apps.ocpp import consumers, store
@@ -73,7 +75,9 @@ async def test_transaction_event_registered_for_ocpp201():
 @pytest.mark.anyio
 @pytest.mark.django_db
 async def test_get_15118_ev_certificate_persists_request():
-    charger = Charger.objects.create(charger_id="CERT-1")
+    charger = await sync_to_async(Charger.objects.create, thread_sensitive=True)(
+        charger_id="CERT-1"
+    )
     consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "CERT-1"
     consumer.charger = charger
@@ -85,7 +89,9 @@ async def test_get_15118_ev_certificate_persists_request():
     )
 
     assert result["status"] == "Rejected"
-    request = CertificateRequest.objects.get(charger=charger)
+    request = await sync_to_async(
+        CertificateRequest.objects.get, thread_sensitive=True
+    )(charger=charger)
     assert request.action == CertificateRequest.ACTION_15118
     assert request.csr == "CSRDATA"
     assert request.status == CertificateRequest.STATUS_REJECTED
@@ -95,7 +101,9 @@ async def test_get_15118_ev_certificate_persists_request():
 @pytest.mark.anyio
 @pytest.mark.django_db
 async def test_get_certificate_status_persists_check():
-    charger = Charger.objects.create(charger_id="CERT-2")
+    charger = await sync_to_async(Charger.objects.create, thread_sensitive=True)(
+        charger_id="CERT-2"
+    )
     consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "CERT-2"
     consumer.charger = charger
@@ -107,7 +115,9 @@ async def test_get_certificate_status_persists_check():
     )
 
     assert result["status"] == "Rejected"
-    status_check = CertificateStatusCheck.objects.get(charger=charger)
+    status_check = await sync_to_async(
+        CertificateStatusCheck.objects.get, thread_sensitive=True
+    )(charger=charger)
     assert status_check.status == CertificateStatusCheck.STATUS_REJECTED
     assert status_check.certificate_hash_data["hashAlgorithm"] == "SHA256"
 
@@ -115,7 +125,9 @@ async def test_get_certificate_status_persists_check():
 @pytest.mark.anyio
 @pytest.mark.django_db
 async def test_sign_certificate_persists_request():
-    charger = Charger.objects.create(charger_id="CERT-3")
+    charger = await sync_to_async(Charger.objects.create, thread_sensitive=True)(
+        charger_id="CERT-3"
+    )
     consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "CERT-3"
     consumer.charger = charger
@@ -127,6 +139,8 @@ async def test_sign_certificate_persists_request():
     )
 
     assert result["status"] == "Rejected"
-    request = CertificateRequest.objects.get(charger=charger)
+    request = await sync_to_async(
+        CertificateRequest.objects.get, thread_sensitive=True
+    )(charger=charger)
     assert request.action == CertificateRequest.ACTION_SIGN
     assert request.csr == "CSR-123"
