@@ -25,20 +25,26 @@ class SigilBuilderResponse(TemplateResponse):
 
 def generate_model_sigils(**kwargs) -> None:
     """Ensure built-in configuration SigilRoot entries exist."""
-    for prefix in ["ENV", "CONF", "SYS"]:
+    for prefix in ["ENV", "CONF", "SYS", "REQ"]:
         # Ensure built-in configuration roots exist without violating the
         # unique ``prefix`` constraint, even if older databases already have
         # entries with a different ``context_type`` or are soft deleted.
         root = SigilRoot.all_objects.filter(prefix__iexact=prefix).first()
         if root:
             root.prefix = prefix
-            root.context_type = SigilRoot.Context.CONFIG
+            root.context_type = (
+                SigilRoot.Context.REQUEST if prefix == "REQ" else SigilRoot.Context.CONFIG
+            )
             root.is_deleted = False
             root.save(update_fields=["prefix", "context_type", "is_deleted"])
         else:
             SigilRoot.objects.create(
                 prefix=prefix,
-                context_type=SigilRoot.Context.CONFIG,
+                context_type=(
+                    SigilRoot.Context.REQUEST
+                    if prefix == "REQ"
+                    else SigilRoot.Context.CONFIG
+                ),
             )
 
 
@@ -64,6 +70,11 @@ def _sigil_builder_view(request):
             "prefix": "SYS",
             "url": reverse("admin:system"),
             "label": _("System"),
+        },
+        {
+            "prefix": "REQ",
+            "url": "",
+            "label": _("Request"),
         },
     ]
     for root in SigilRoot.objects.filter(
