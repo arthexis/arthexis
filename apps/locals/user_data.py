@@ -712,7 +712,8 @@ class EntityModelAdmin(UserDatumAdminMixin, admin.ModelAdmin):
 
     def _purge_soft_deleted_queryset(self, request):
         queryset = self.get_soft_deleted_queryset(request)
-        return queryset._raw_delete(queryset.db)
+        purged, _ = queryset.delete()
+        return purged
 
     def purge_deleted_view(self, request):
         if not self._supports_soft_delete():
