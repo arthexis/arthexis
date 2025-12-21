@@ -279,8 +279,8 @@ def _summarize_update_results(local_result: dict | None, remote_result: dict | N
 
 
 @shared_task
-def update_all_nodes_information(enforce_feature: bool = True) -> dict:
-    """Invoke the admin "Update nodes" workflow for every node.
+def update_peer_nodes_information(enforce_feature: bool = True) -> dict:
+    """Invoke the admin "Update nodes" workflow for peer nodes.
 
     When ``enforce_feature`` is False the celery-queue requirement is skipped to
     allow manual refreshes from management commands.
@@ -318,7 +318,8 @@ def update_all_nodes_information(enforce_feature: bool = True) -> dict:
 
     node_admin = _resolve_node_admin()
 
-    for node in Node.objects.order_by("pk").iterator():
+    peer_qs = Node.objects.filter(current_relation=Node.Relation.PEER)
+    for node in peer_qs.order_by("pk").iterator():
         summary["total"] += 1
         try:
             local_result = node_admin._refresh_local_information(node)
