@@ -1819,14 +1819,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         )
 
     def get_queryset(self, request):
-        """Include soft-deleted nodes to avoid admin change 404s.
-
-        Using the ``all_objects`` manager allows administrators to inspect or
-        restore nodes that were soft deleted without the change view failing
-        with a 404 when the object still exists in the database.
-        """
-
-        return self.model.all_objects.all()
+        return super().get_queryset(request)
 
     def _format_update_detail(self, label: str, result: Mapping[str, object]) -> str:
         ok = bool(result.get("ok"))

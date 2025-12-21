@@ -1683,9 +1683,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         )
 
     def get_queryset(self, request):
-        """Include soft-deleted nodes to avoid admin change 404s."""
-
-        return self.model.all_objects.all()
+        return super().get_queryset(request)
 
     def _format_update_detail(self, label: str, result: Mapping[str, object]) -> str:
         ok = bool(result.get("ok"))

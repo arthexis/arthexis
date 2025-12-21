@@ -1,0 +1,22 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block content %}
+  <h1>{{ title }}</h1>
+  <p>
+    {% blocktrans count count=soft_deleted_count %}
+      This will permanently delete {{ count }} soft-deleted record.
+    {% plural %}
+      This will permanently delete {{ count }} soft-deleted records.
+    {% endblocktrans %}
+  </p>
+  <form method="post" action="{{ soft_deleted_purge_url }}" class="deletelink">
+    {% csrf_token %}
+    <input type="submit" value="{% trans 'Confirm purge' %}" class="button deletelink">
+    {% if soft_deleted_changelist_url %}
+      <a href="{{ soft_deleted_changelist_url }}" class="button cancel-link">
+        {% trans "Cancel" %}
+      </a>
+    {% endif %}
+  </form>
+{% endblock %}
