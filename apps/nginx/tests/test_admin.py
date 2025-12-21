@@ -95,6 +95,37 @@ def test_preview_view_blocks_https_without_certificate(monkeypatch, admin_client
 
 
 @pytest.mark.django_db
+def test_preview_default_view_creates_default(admin_client):
+    url = reverse("admin:nginx_siteconfiguration_preview_default")
+    response = admin_client.get(url)
+
+    assert response.status_code == 200
+    config = SiteConfiguration.objects.get(name="default")
+    rendered = response.content.decode()
+    assert str(config) in rendered
+
+
+@pytest.mark.django_db
+def test_preview_default_view_applies_configuration(monkeypatch, admin_client):
+    config = SiteConfiguration.get_default()
+
+    calls: dict[str, dict[str, int | bool]] = {}
+
+    def fake_apply(self, *, reload: bool = True, remove: bool = False):
+        calls["kwargs"] = {"reload": reload, "remove": remove, "pk": self.pk}
+        return services.ApplyResult(changed=True, validated=True, reloaded=True, message="ok")
+
+    monkeypatch.setattr(SiteConfiguration, "apply", fake_apply)
+
+    url = reverse("admin:nginx_siteconfiguration_preview_default")
+    response = admin_client.post(url, {"ids": str(config.pk)})
+
+    assert response.status_code == 302
+    assert response["Location"].endswith(url)
+    assert calls["kwargs"] == {"reload": True, "remove": False, "pk": config.pk}
+
+
+@pytest.mark.django_db
 def test_generate_certificates_view_provisions_linked_certificate(monkeypatch, admin_client):
     certificate = SelfSignedCertificate.objects.create(
         name="linked-cert",
