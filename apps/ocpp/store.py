@@ -183,7 +183,9 @@ def update_transaction_request(
         if status:
             entry["status"] = status
             entry["status_at"] = datetime.now(timezone.utc)
-        if connector_id is not None and entry.get("connector_id") != connector_id:
+        if connector_id is not None and connector_slug(entry.get("connector_id")) != connector_slug(
+            connector_id
+        ):
             old_key = _transaction_connector_key(
                 str(entry.get("charger_id") or ""), entry.get("connector_id")
             )
@@ -242,15 +244,11 @@ def find_transaction_requests(
             entry = transaction_requests.get(message_id)
             if not entry:
                 continue
-            if transaction_key:
-                entry_transaction_key = _normalize_transaction_id(
-                    entry.get("transaction_id") or entry.get("ocpp_transaction_id")
-                )
-                if entry_transaction_key != transaction_key:
-                    continue
             if entry.get("charger_id") != charger_id:
                 continue
-            if connector_id is not None and entry.get("connector_id") != connector_id:
+            if connector_id is not None and connector_slug(entry.get("connector_id")) != connector_slug(
+                connector_id
+            ):
                 continue
             if action and entry.get("action") != action:
                 continue
