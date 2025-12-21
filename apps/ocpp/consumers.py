@@ -1729,6 +1729,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             "NotifyEVChargingSchedule": self._handle_notify_ev_charging_schedule_action,
             "NotifyEvent": self._handle_notify_event_action,
             "NotifyMonitoringReport": self._handle_notify_monitoring_report_action,
+            "CostUpdated": self._handle_cost_updated_action,
             "PublishFirmwareStatusNotification": self._handle_publish_firmware_status_notification_action,
             "ReportChargingProfiles": self._handle_report_charging_profiles_action,
             "DiagnosticsStatusNotification": self._handle_diagnostics_status_notification_action,
@@ -1736,6 +1737,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             "StartTransaction": self._handle_start_transaction_action,
             "StopTransaction": self._handle_stop_transaction_action,
             "FirmwareStatusNotification": self._handle_firmware_status_notification_action,
+            "ReservationStatusUpdate": self._handle_reservation_status_update_action,
         }
         reply_payload = {}
         handler = action_handlers.get(action)
@@ -1959,6 +1961,22 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             if payload_text and payload_text != "{}":
                 message += f": {payload_text}"
         store.add_log(self.store_key, message, log_type="charger")
+
+    @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "CostUpdated")
+    async def _handle_cost_updated_action(self, payload, msg_id, raw, text_data):
+        self._log_ocpp201_notification("CostUpdated", payload)
+        return {}
+
+    @protocol_call(
+        "ocpp21",
+        ProtocolCallModel.CP_TO_CSMS,
+        "ReservationStatusUpdate",
+    )
+    async def _handle_reservation_status_update_action(
+        self, payload, msg_id, raw, text_data
+    ):
+        self._log_ocpp201_notification("ReservationStatusUpdate", payload)
+        return {}
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "NotifyChargingLimit")
     async def _handle_notify_charging_limit_action(

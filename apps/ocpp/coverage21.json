@@ -1,11 +1,12 @@
 {
   "coverage": {
     "cp_to_csms": {
-      "count": 19,
-      "percent": 73.08,
+      "count": 21,
+      "percent": 80.77,
       "supported": [
         "Authorize",
         "BootNotification",
+        "CostUpdated",
         "DataTransfer",
         "FirmwareStatusNotification",
         "Heartbeat",
@@ -20,6 +21,7 @@
         "NotifyMonitoringReport",
         "PublishFirmwareStatusNotification",
         "ReportChargingProfiles",
+        "ReservationStatusUpdate",
         "SecurityEventNotification",
         "StatusNotification",
         "TransactionEvent"
@@ -63,8 +65,8 @@
       "total": 39
     },
     "overall": {
-      "count": 47,
-      "percent": 73.44,
+      "count": 49,
+      "percent": 76.56,
       "supported": [
         "Authorize",
         "BootNotification",
@@ -74,6 +76,7 @@
         "ClearCache",
         "ClearChargingProfile",
         "ClearVariableMonitoring",
+        "CostUpdated",
         "DataTransfer",
         "DeleteCertificate",
         "FirmwareStatusNotification",
@@ -99,6 +102,7 @@
         "ReportChargingProfiles",
         "RequestStartTransaction",
         "RequestStopTransaction",
+        "ReservationStatusUpdate",
         "ReserveNow",
         "Reset",
         "SecurityEventNotification",
@@ -121,6 +125,7 @@
     "cp_to_csms": [
       "Authorize",
       "BootNotification",
+      "CostUpdated",
       "DataTransfer",
       "DiagnosticsStatusNotification",
       "FirmwareStatusNotification",
@@ -136,6 +141,7 @@
       "NotifyMonitoringReport",
       "PublishFirmwareStatusNotification",
       "ReportChargingProfiles",
+      "ReservationStatusUpdate",
       "SecurityEventNotification",
       "StartTransaction",
       "StatusNotification",
