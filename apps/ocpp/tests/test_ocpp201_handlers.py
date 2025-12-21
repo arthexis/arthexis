@@ -20,6 +20,11 @@ def reset_store(monkeypatch, tmp_path):
     store.log_names["charger"].clear()
 
 
+@pytest.fixture
+def anyio_backend():
+    return "asyncio"
+
+
 @pytest.mark.anyio
 async def test_cleared_charging_limit_logs_payload():
     consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
@@ -73,7 +78,7 @@ async def test_transaction_event_registered_for_ocpp201():
     ) in calls
 
 
-@pytest.mark.anyio("asyncio")
+@pytest.mark.anyio
 @pytest.mark.django_db
 async def test_get_15118_ev_certificate_persists_request():
     charger = await anyio.to_thread.run_sync(
@@ -99,7 +104,7 @@ async def test_get_15118_ev_certificate_persists_request():
     assert request.response_payload["status"] == "Rejected"
 
 
-@pytest.mark.anyio("asyncio")
+@pytest.mark.anyio
 @pytest.mark.django_db
 async def test_get_certificate_status_persists_check():
     charger = await anyio.to_thread.run_sync(
@@ -123,7 +128,7 @@ async def test_get_certificate_status_persists_check():
     assert status_check.certificate_hash_data["hashAlgorithm"] == "SHA256"
 
 
-@pytest.mark.anyio("asyncio")
+@pytest.mark.anyio
 @pytest.mark.django_db
 async def test_sign_certificate_persists_request():
     charger = await anyio.to_thread.run_sync(
