@@ -6,7 +6,7 @@ from functools import partial
 import pytest
 from channels.db import database_sync_to_async
 
-from apps.ocpp import consumers, store
+from apps.ocpp import consumers, store, call_result_handlers
 from apps.ocpp.models import (
     Charger,
     CertificateRequest,
@@ -27,10 +27,24 @@ def anyio_backend():
 def reset_store(monkeypatch, tmp_path):
     store.logs["charger"].clear()
     store.log_names["charger"].clear()
-    monkeypatch.setattr(store, "LOG_DIR", tmp_path)
+    store.transaction_requests.clear()
+    store._transaction_requests_by_connector.clear()
+    store._transaction_requests_by_transaction.clear()
+    log_dir = tmp_path / "logs"
+    session_dir = log_dir / "sessions"
+    lock_dir = tmp_path / "locks"
+    session_dir.mkdir(parents=True, exist_ok=True)
+    lock_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(store, "LOG_DIR", log_dir)
+    monkeypatch.setattr(store, "SESSION_DIR", session_dir)
+    monkeypatch.setattr(store, "LOCK_DIR", lock_dir)
+    monkeypatch.setattr(store, "SESSION_LOCK", lock_dir / "charging.lck")
     yield
     store.logs["charger"].clear()
     store.log_names["charger"].clear()
+    store.transaction_requests.clear()
+    store._transaction_requests_by_connector.clear()
+    store._transaction_requests_by_transaction.clear()
 
 
 @pytest.fixture
@@ -206,3 +220,78 @@ async def test_notify_monitoring_report_persists_data():
     )
     assert rule.variable_id == variable.pk
     assert rule.threshold == "240"
+
+
+@pytest.mark.anyio
+async def test_request_start_transaction_result_tracks_status():
+    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = "CP-REQ"
+    consumer.charger_id = "CP-REQ"
+    store.register_transaction_request(
+        "msg-req-1",
+        {
+            "action": "RequestStartTransaction",
+            "charger_id": "CP-REQ",
+            "connector_id": 1,
+        },
+    )
+
+    await call_result_handlers.handle_request_start_transaction_result(
+        consumer,
+        "msg-req-1",
+        {"action": "RequestStartTransaction"},
+        {"status": "Accepted", "transactionId": "TX-REQ"},
+        "CP-REQ",
+    )
+
+    assert store.transaction_requests["msg-req-1"]["status"] == "accepted"
+    assert store.transaction_requests["msg-req-1"]["transaction_id"] == "TX-REQ"
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+async def test_transaction_event_updates_request_status(monkeypatch):
+    charger = await database_sync_to_async(Charger.objects.create)(charger_id="CP-TRX")
+    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = store.identity_key(charger.charger_id, 1)
+    consumer.charger_id = charger.charger_id
+    consumer.charger = charger
+    consumer.aggregate_charger = None
+
+    async def fake_assign(connector):
+        consumer.connector_value = connector
+
+    consumer._assign_connector = AsyncMock(side_effect=fake_assign)
+    consumer._start_consumption_updates = AsyncMock()
+    consumer._process_meter_value_entries = AsyncMock()
+    consumer._record_rfid_attempt = AsyncMock()
+    consumer._update_consumption_message = AsyncMock()
+    consumer._cancel_consumption_message = AsyncMock()
+    consumer._consumption_message_uuid = None
+
+    store.register_transaction_request(
+        "msg-req-2",
+        {
+            "action": "RequestStartTransaction",
+            "charger_id": charger.charger_id,
+            "connector_id": 1,
+            "status": "accepted",
+        },
+    )
+
+    payload = {
+        "eventType": "Started",
+        "timestamp": "2024-01-01T00:00:00Z",
+        "evse": {"id": 1},
+        "transactionInfo": {"transactionId": "TX-201"},
+    }
+
+    await consumer._handle_transaction_event_action(payload, "msg-evt-1", "", "")
+
+    assert store.transaction_requests["msg-req-2"]["status"] == "started"
+    assert store.transaction_requests["msg-req-2"]["transaction_id"] == "TX-201"
+
+    payload["eventType"] = "Ended"
+    await consumer._handle_transaction_event_action(payload, "msg-evt-2", "", "")
+
+    assert store.transaction_requests["msg-req-2"]["status"] == "completed"
