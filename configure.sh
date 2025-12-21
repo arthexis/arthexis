@@ -676,7 +676,7 @@ if [ "$SKIP_SERVICE_RESTART" != true ] && [ -n "$SERVICE" ] && systemctl list-un
     fi
 fi
 
-for lock_name in celery.lck lcd_screen.lck lcd_screen_enabled.lck control.lck nginx_mode.lck nginx_disabled.lck role.lck service.lck; do
+for lock_name in celery.lck lcd_screen.lck control.lck nginx_mode.lck nginx_disabled.lck role.lck service.lck; do
     rm -f "$LOCK_DIR/$lock_name"
 done
 rm -f "$BASE_DIR"/*.role "$BASE_DIR"/.*.role 2>/dev/null || true
@@ -685,7 +685,6 @@ if [ "$ENABLE_CELERY" = true ]; then
     touch "$LOCK_DIR/celery.lck"
 fi
 if [ "$ENABLE_LCD_SCREEN" = true ]; then
-    touch "$LOCK_DIR/lcd_screen.lck"
     arthexis_enable_lcd_feature_flag "$LOCK_DIR"
 fi
 if [ "$ENABLE_CONTROL" = true ]; then

@@ -57,9 +57,6 @@ def send_startup_net_message(lock_file: str | None = None, port: str | None = No
     if not lcd_feature_enabled(lock_dir):
         return "skipped:lcd-disabled"
 
-    if target_lock.exists():
-        return "skipped:lock-exists"
-
     port_value = port or os.environ.get("PORT", "8888")
     try:
         queue_startup_message(base_dir=base_dir, port=port_value, lock_file=target_lock)

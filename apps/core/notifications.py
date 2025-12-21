@@ -14,6 +14,8 @@ import sys
 import threading
 from pathlib import Path
 
+from apps.screens.startup_notifications import render_lcd_lock_file
+
 try:  # pragma: no cover - optional dependency
     from plyer import notification as plyer_notification
 except Exception:  # pragma: no cover - plyer may not be installed
@@ -66,7 +68,11 @@ class NotificationManager:
         # Any failure will fall back to logging quietly.
 
     def _write_lock_file(self, subject: str, body: str) -> None:
-        self.lock_file.write_text(f"{subject}\n{body}\n", encoding="utf-8")
+        payload = render_lcd_lock_file(
+            subject=subject[:64],
+            body=body[:64],
+        )
+        self.lock_file.write_text(payload, encoding="utf-8")
 
     def send(self, subject: str, body: str = "") -> bool:
         """Store *subject* and *body* in ``lcd_screen.lck`` when available.

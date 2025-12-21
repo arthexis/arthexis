@@ -47,6 +47,7 @@ from apps.release.release import (
 )
 from apps.core.tasks import check_github_updates, _read_auto_upgrade_failure_count
 from apps.nginx.renderers import generate_primary_config
+from apps.screens.startup_notifications import lcd_feature_enabled
 from utils import revision
 from apps.core import changelog
 
@@ -1820,10 +1821,7 @@ def _configured_service_units(base_dir: Path) -> list[dict[str, str]]:
         ]:
             _add_unit(f"{prefix}-{service_name}", label=str(label))
 
-    lcd_enabled = (lock_dir / "lcd_screen_enabled.lck").exists() or (
-        lock_dir / "lcd_screen.lck"
-    ).exists()
-    if lcd_enabled:
+    if lcd_feature_enabled(lock_dir):
         _add_unit(f"lcd-{service_name}", label=str(_("LCD screen")))
 
     return service_units
