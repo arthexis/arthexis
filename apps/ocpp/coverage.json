@@ -126,6 +126,7 @@
       "GetTransactionStatus",
       "GetVariables",
       "InstallCertificate",
+      "PublishFirmware",
       "RemoteStartTransaction",
       "RemoteStopTransaction",
       "RequestStartTransaction",
@@ -140,6 +141,7 @@
       "SetVariables",
       "TriggerMessage",
       "UnlockConnector",
+      "UnpublishFirmware",
       "UpdateFirmware"
     ]
   },
