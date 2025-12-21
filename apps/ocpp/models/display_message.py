@@ -33,11 +33,11 @@ class DisplayMessageNotification(Entity):
         indexes = [
             models.Index(
                 fields=["ocpp_message_id"],
-                name="ocpp_display_ocpp_me_7e6f62_idx",
+                name="ocpp_display_ocpp_idx",
             ),
             models.Index(
                 fields=["charger", "request_id"],
-                name="ocpp_display_reqid_25e190_idx",
+                name="ocpp_display_req_idx",
             ),
         ]
 
@@ -84,7 +84,7 @@ class DisplayMessage(Entity):
         indexes = [
             models.Index(
                 fields=["message_id"],
-                name="ocpp_display_msgid_29b00c_idx",
+                name="ocpp_display_msg_idx",
             ),
         ]
 

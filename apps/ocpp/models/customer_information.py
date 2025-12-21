@@ -34,11 +34,11 @@ class CustomerInformationRequest(Entity):
         indexes = [
             models.Index(
                 fields=["ocpp_message_id"],
-                name="ocpp_custinfo_ocpp_me_6a4f32_idx",
+                name="ocpp_custinfo_ocpp_idx",
             ),
             models.Index(
                 fields=["charger", "request_id"],
-                name="ocpp_custinfo_reqid_1138b8_idx",
+                name="ocpp_custinfo_req_idx",
             ),
         ]
 
@@ -83,11 +83,11 @@ class CustomerInformationChunk(Entity):
         indexes = [
             models.Index(
                 fields=["ocpp_message_id"],
-                name="ocpp_custinfo_ocpp_me_6bca97_idx",
+                name="ocpp_custinfochunk_ocpp_idx",
             ),
             models.Index(
                 fields=["charger", "request_id"],
-                name="ocpp_custinfo_chunk_req_10b876_idx",
+                name="ocpp_custinfochunk_req_idx",
             ),
         ]
 
