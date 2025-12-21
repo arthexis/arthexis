@@ -32,6 +32,13 @@ from .cp_forwarder import (
     sync_forwarded_charge_points,
 )
 from .evcs_charge_point import EVCSChargePoint, EVCSChargePointManager
+from .certificates import (
+    CertificateRequest,
+    CertificateStatusCheck,
+    CertificateOperation,
+    InstalledCertificate,
+    TrustAnchor,
+)
 
 __all__ = [
     "Charger",
@@ -69,4 +76,9 @@ __all__ = [
     "sync_forwarded_charge_points",
     "EVCSChargePointManager",
     "EVCSChargePoint",
+    "CertificateRequest",
+    "CertificateStatusCheck",
+    "CertificateOperation",
+    "InstalledCertificate",
+    "TrustAnchor",
 ]

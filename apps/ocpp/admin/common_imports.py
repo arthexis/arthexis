@@ -64,6 +64,11 @@ from ..models import (
     SecurityEvent,
     ChargerLogRequest,
     CPForwarder,
+    CertificateRequest,
+    CertificateStatusCheck,
+    CertificateOperation,
+    InstalledCertificate,
+    TrustAnchor,
 )
 from ..simulator import ChargePointSimulator
 from .. import store

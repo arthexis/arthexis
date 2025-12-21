@@ -48,6 +48,8 @@ from .models import (
     SecurityEvent,
     ChargerLogRequest,
     PowerProjection,
+    CertificateRequest,
+    CertificateStatusCheck,
 )
 from apps.links.reference_utils import host_is_local_loopback
 from .evcs_discovery import (
@@ -2085,6 +2087,126 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             log_message += f", trigger={trigger_value}"
         store.add_log(self.store_key, log_message, log_type="charger")
         return {}
+
+    @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "Get15118EVCertificate")
+    async def _handle_get_15118_ev_certificate_action(
+        self, payload, msg_id, raw, text_data
+    ):
+        certificate_type = str(payload.get("certificateType") or "").strip()
+        csr_value = payload.get("exiRequest") or payload.get("csr")
+        if csr_value is None:
+            csr_value = ""
+        if not isinstance(csr_value, str):
+            csr_value = str(csr_value)
+        response_payload = {
+            "status": "Rejected",
+            "statusInfo": {
+                "reasonCode": "NotSupported",
+                "additionalInfo": "Manual certificate handling required.",
+            },
+        }
+
+        def _persist_request() -> None:
+            target = self.aggregate_charger or self.charger
+            if target is None:
+                return
+            CertificateRequest.objects.create(
+                charger=target,
+                action=CertificateRequest.ACTION_15118,
+                certificate_type=certificate_type,
+                csr=csr_value,
+                status=CertificateRequest.STATUS_REJECTED,
+                status_info="Manual certificate handling required.",
+                request_payload=payload,
+                response_payload=response_payload,
+                responded_at=timezone.now(),
+            )
+
+        await database_sync_to_async(_persist_request)()
+        store.add_log(
+            self.store_key,
+            "Get15118EVCertificate request received (rejected; manual handling).",
+            log_type="charger",
+        )
+        return response_payload
+
+    @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "GetCertificateStatus")
+    async def _handle_get_certificate_status_action(
+        self, payload, msg_id, raw, text_data
+    ):
+        hash_data = payload.get("certificateHashData") or {}
+        response_payload = {
+            "status": "Rejected",
+            "statusInfo": {
+                "reasonCode": "NotSupported",
+                "additionalInfo": "Manual certificate handling required.",
+            },
+        }
+
+        def _persist_status() -> None:
+            target = self.aggregate_charger or self.charger
+            if target is None:
+                return
+            CertificateStatusCheck.objects.create(
+                charger=target,
+                certificate_hash_data=hash_data if isinstance(hash_data, dict) else {},
+                ocsp_result={},
+                status=CertificateStatusCheck.STATUS_REJECTED,
+                status_info="Manual certificate handling required.",
+                request_payload=payload,
+                response_payload=response_payload,
+                responded_at=timezone.now(),
+            )
+
+        await database_sync_to_async(_persist_status)()
+        store.add_log(
+            self.store_key,
+            "GetCertificateStatus request received (rejected; manual handling).",
+            log_type="charger",
+        )
+        return response_payload
+
+    @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "SignCertificate")
+    async def _handle_sign_certificate_action(
+        self, payload, msg_id, raw, text_data
+    ):
+        csr_value = payload.get("csr")
+        if csr_value is None:
+            csr_value = ""
+        if not isinstance(csr_value, str):
+            csr_value = str(csr_value)
+        certificate_type = str(payload.get("certificateType") or "").strip()
+        response_payload = {
+            "status": "Rejected",
+            "statusInfo": {
+                "reasonCode": "NotSupported",
+                "additionalInfo": "Manual certificate handling required.",
+            },
+        }
+
+        def _persist_request() -> None:
+            target = self.aggregate_charger or self.charger
+            if target is None:
+                return
+            CertificateRequest.objects.create(
+                charger=target,
+                action=CertificateRequest.ACTION_SIGN,
+                certificate_type=certificate_type,
+                csr=csr_value,
+                status=CertificateRequest.STATUS_REJECTED,
+                status_info="Manual certificate handling required.",
+                request_payload=payload,
+                response_payload=response_payload,
+                responded_at=timezone.now(),
+            )
+
+        await database_sync_to_async(_persist_request)()
+        store.add_log(
+            self.store_key,
+            "SignCertificate request received (rejected; manual handling).",
+            log_type="charger",
+        )
+        return response_payload
 
     @protocol_call(
         "ocpp16",
