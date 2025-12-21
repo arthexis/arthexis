@@ -23,7 +23,7 @@ class LCDStartupNotificationTests(TestCase):
             base_dir = Path(tmpdir)
             lock_dir = base_dir / ".locks"
             lock_dir.mkdir(parents=True)
-            (lock_dir / "lcd_screen_enabled.lck").write_text("")
+            (lock_dir / "lcd_screen.lck").write_text("state=enabled\nbooting\nready\n")
 
             node = self._create_node(mac_address)
             feature = NodeFeature.objects.create(slug="lcd-screen", display="LCD Screen")
@@ -38,7 +38,7 @@ class LCDStartupNotificationTests(TestCase):
             base_dir = Path(tmpdir)
             lock_dir = base_dir / ".locks"
             lock_dir.mkdir(parents=True)
-            (lock_dir / "lcd_screen.lck").write_text("booting")
+            (lock_dir / "lcd_screen.lck").write_text("state=enabled\nbooting\nready\n")
 
             feature = NodeFeature.objects.create(slug="lcd-screen", display="LCD Screen")
             node = self._create_node(mac_address)
@@ -54,8 +54,37 @@ class LCDStartupNotificationTests(TestCase):
             node_base_path = base_dir / "work" / "nodes"
             lock_dir = node_base_path / ".locks"
             lock_dir.mkdir(parents=True)
-            (lock_dir / "lcd_screen.lck").write_text("booting")
+            (lock_dir / "lcd_screen.lck").write_text("state=enabled\nbooting\nready\n")
 
             self.assertTrue(
                 lcd_feature_enabled_for_paths(base_dir=base_dir, node_base_path=node_base_path)
             )
+
+    def test_lcd_feature_enabled_for_paths_respects_disabled_state(self):
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            node_base_path = base_dir / "work" / "nodes"
+            lock_dir = node_base_path / ".locks"
+            lock_dir.mkdir(parents=True)
+            (lock_dir / "lcd_screen.lck").write_text(
+                "state=disabled\nbooting\nready\n"
+            )
+
+            self.assertFalse(
+                lcd_feature_enabled_for_paths(base_dir=base_dir, node_base_path=node_base_path)
+            )
+
+    def test_lcd_feature_enabled_for_paths_backfills_legacy_lock(self):
+        with TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            lock_dir = base_dir / ".locks"
+            lock_dir.mkdir(parents=True)
+            (lock_dir / "lcd_screen_enabled.lck").write_text("")
+
+            self.assertTrue(
+                lcd_feature_enabled_for_paths(base_dir=base_dir, node_base_path=base_dir)
+            )
+
+            lock_file = lock_dir / "lcd_screen.lck"
+            self.assertTrue(lock_file.exists())
+            self.assertTrue(lock_file.read_text().startswith("state=enabled"))

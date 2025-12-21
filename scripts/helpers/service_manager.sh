@@ -2,8 +2,7 @@
 
 ARTHEXIS_SERVICE_MODE_EMBEDDED="embedded"
 ARTHEXIS_SERVICE_MODE_SYSTEMD="systemd"
-ARTHEXIS_LCD_FEATURE_LOCK="lcd_screen_enabled.lck"
-ARTHEXIS_LCD_RUNTIME_LOCK="lcd_screen.lck"
+ARTHEXIS_LCD_LOCK="lcd_screen.lck"
 
 # shellcheck source=scripts/helpers/systemd_locks.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/systemd_locks.sh"
@@ -235,10 +234,10 @@ arthexis_remove_service_unit_stack() {
   done < <(arthexis_service_unit_names "$service_name" "$include_celery" "$include_lcd" "$include_watchdog")
 }
 
-_arthexis_lcd_feature_lock_file() {
+_arthexis_lcd_lock_file() {
   local lock_dir="$1"
 
-  printf "%s/%s" "$lock_dir" "$ARTHEXIS_LCD_FEATURE_LOCK"
+  printf "%s/%s" "$lock_dir" "$ARTHEXIS_LCD_LOCK"
 }
 
 arthexis_lcd_feature_enabled() {
@@ -247,16 +246,20 @@ arthexis_lcd_feature_enabled() {
     return 1
   fi
 
-  local feature_lock
-  feature_lock="$(_arthexis_lcd_feature_lock_file "$lock_dir")"
+  local lock_file
+  lock_file="$(_arthexis_lcd_lock_file "$lock_dir")"
 
-  if [ -f "$feature_lock" ]; then
-    return 0
+  if [ ! -f "$lock_file" ]; then
+    return 1
   fi
 
-  local runtime_lock
-  runtime_lock="$lock_dir/$ARTHEXIS_LCD_RUNTIME_LOCK"
-  [ -f "$runtime_lock" ]
+  local state_line
+  state_line="$(head -n 1 "$lock_file" 2>/dev/null | tr -d '\r')"
+  if [[ "$state_line" == state=disabled ]]; then
+    return 1
+  fi
+
+  return 0
 }
 
 arthexis_enable_lcd_feature_flag() {
@@ -266,7 +269,28 @@ arthexis_enable_lcd_feature_flag() {
   fi
 
   mkdir -p "$lock_dir"
-  touch "$(_arthexis_lcd_feature_lock_file "$lock_dir")"
+  local lock_file tmp_file state_line
+  lock_file="$(_arthexis_lcd_lock_file "$lock_dir")"
+  tmp_file="${lock_file}.tmp"
+
+  if [ -f "$lock_file" ]; then
+    state_line="$(head -n 1 "$lock_file" 2>/dev/null)"
+    if [[ "$state_line" == state=* ]]; then
+      {
+        printf 'state=enabled\n'
+        tail -n +2 "$lock_file"
+      } > "$tmp_file"
+    else
+      {
+        printf 'state=enabled\n'
+        cat "$lock_file"
+      } > "$tmp_file"
+    fi
+  else
+    printf 'state=enabled\n\n\n' > "$tmp_file"
+  fi
+
+  mv "$tmp_file" "$lock_file"
 }
 
 arthexis_disable_lcd_feature_flag() {
@@ -275,5 +299,27 @@ arthexis_disable_lcd_feature_flag() {
     return 0
   fi
 
-  rm -f "$(_arthexis_lcd_feature_lock_file "$lock_dir")"
+  mkdir -p "$lock_dir"
+  local lock_file tmp_file state_line
+  lock_file="$(_arthexis_lcd_lock_file "$lock_dir")"
+  tmp_file="${lock_file}.tmp"
+
+  if [ -f "$lock_file" ]; then
+    state_line="$(head -n 1 "$lock_file" 2>/dev/null)"
+    if [[ "$state_line" == state=* ]]; then
+      {
+        printf 'state=disabled\n'
+        tail -n +2 "$lock_file"
+      } > "$tmp_file"
+    else
+      {
+        printf 'state=disabled\n'
+        cat "$lock_file"
+      } > "$tmp_file"
+    fi
+  else
+    printf 'state=disabled\n\n\n' > "$tmp_file"
+  fi
+
+  mv "$tmp_file" "$lock_file"
 }

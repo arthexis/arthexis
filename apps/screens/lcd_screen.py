@@ -1,12 +1,12 @@
 """Standalone LCD screen updater.
 
-The script polls ``.locks/lcd_screen.lck`` for up to two lines of text and
-writes them to the attached LCD1602 display. Each row scrolls
-independently when it exceeds 16 characters; shorter rows remain static.
-A third line in the lock file can define the scroll speed in milliseconds
-per character (default 1000 ms). When the suite service stops or the OS
-schedules a shutdown/reboot the updater temporarily overrides the lock
-file content to surface the alert directly on the display.
+The script polls ``.locks/lcd_screen.lck`` for a state line, two lines of
+text, and optional flags. Each row scrolls independently when it exceeds
+16 characters; shorter rows remain static. The ``scroll_ms=`` flag can
+define the scroll speed in milliseconds per character (default 1000 ms).
+When the suite service stops or the OS schedules a shutdown/reboot the
+updater temporarily overrides the lock file content to surface the alert
+directly on the display.
 """
 
 from __future__ import annotations
@@ -24,7 +24,11 @@ from typing import NamedTuple
 
 from apps.core.notifications import get_base_dir
 from apps.screens.lcd import CharLCD1602, LCDUnavailableError
-from apps.screens.startup_notifications import STARTUP_NET_MESSAGE_FLAG
+from apps.screens.startup_notifications import (
+    ensure_lcd_lock_file,
+    read_lcd_lock_file,
+    render_lcd_lock_file,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +36,6 @@ BASE_DIR = get_base_dir()
 LOCK_DIR = BASE_DIR / ".locks"
 LOCK_FILE = LOCK_DIR / "lcd_screen.lck"
 SERVICE_LOCK_FILE = LOCK_DIR / "service.lck"
-FEATURE_LOCK_NAME = "lcd_screen_enabled.lck"
 SHUTDOWN_SCHEDULE_FILE = Path("/run/systemd/shutdown/scheduled")
 DEFAULT_SCROLL_MS = 1000
 SCROLL_PADDING = 3
@@ -41,6 +44,7 @@ LCD_ROWS = CharLCD1602.rows
 
 
 class LockPayload(NamedTuple):
+    enabled: bool
     line1: str
     line2: str
     scroll_ms: int
@@ -59,46 +63,62 @@ class DisplayState(NamedTuple):
 
 
 def _read_lock_file() -> LockPayload:
-    try:
-        lines = LOCK_FILE.read_text(encoding="utf-8").splitlines()
-    except FileNotFoundError:
-        return LockPayload("", "", DEFAULT_SCROLL_MS, False)
-    line1 = lines[0][:64] if len(lines) > 0 else ""
-    line2 = lines[1][:64] if len(lines) > 1 else ""
+    ensure_lcd_lock_file(LOCK_DIR)
+    info = read_lcd_lock_file(LOCK_FILE)
+    if info is None:
+        return LockPayload(False, "", "", DEFAULT_SCROLL_MS, False)
 
-    raw_speed = lines[2] if len(lines) > 2 else ""
-    net_message = raw_speed.strip().lower() == STARTUP_NET_MESSAGE_FLAG
-    speed_hint = lines[3] if net_message and len(lines) > 3 else raw_speed
-    try:
-        speed = int(speed_hint) if speed_hint else DEFAULT_SCROLL_MS
-    except ValueError:
-        speed = DEFAULT_SCROLL_MS
-    return LockPayload(line1, line2, speed, net_message)
+    scroll_ms = info.scroll_ms if info.scroll_ms is not None else DEFAULT_SCROLL_MS
+    enabled = info.enabled
+    line1 = info.subject if enabled else ""
+    line2 = info.body if enabled else ""
+    net_message = info.net_message if enabled else False
+    return LockPayload(enabled, line1, line2, scroll_ms, net_message)
 
 
 def _clear_lock_file() -> None:
-    """Remove the LCD lock file after the payload has been consumed."""
+    """Clear the LCD payload after the message has been consumed."""
+
+    info = read_lcd_lock_file(LOCK_FILE)
+    if info is None:
+        return
 
     try:
-        LOCK_FILE.unlink()
-    except FileNotFoundError:
-        return
+        payload = render_lcd_lock_file(
+            "",
+            "",
+            enabled=info.enabled,
+            net_message=False,
+            scroll_ms=info.scroll_ms,
+            extra_flags=info.extra_flags,
+        )
+        LOCK_FILE.write_text(payload, encoding="utf-8")
     except OSError:
-        # The updater should continue running even if the lock file cannot be
-        # removed (for example, due to transient filesystem issues).
         logger.debug("Failed to clear LCD lock file", exc_info=True)
 
 
 def _disable_lcd_feature(lock_dir: Path = LOCK_DIR) -> None:
-    """Remove the LCD feature and runtime lock files when the bus is missing."""
+    """Disable the LCD feature state when the bus is missing."""
 
-    for filename in (FEATURE_LOCK_NAME, LOCK_FILE.name):
-        try:
-            (lock_dir / filename).unlink()
-        except FileNotFoundError:
-            continue
-        except OSError:
-            logger.debug("Failed to remove LCD lock file: %s", filename, exc_info=True)
+    lock_dir.mkdir(parents=True, exist_ok=True)
+    lock_file = lock_dir / LOCK_FILE.name
+    info = read_lcd_lock_file(lock_file)
+    subject = info.subject if info else ""
+    body = info.body if info else ""
+    scroll_ms = info.scroll_ms if info else None
+    extra_flags = info.extra_flags if info else ()
+    payload = render_lcd_lock_file(
+        subject,
+        body,
+        enabled=False,
+        net_message=False,
+        scroll_ms=scroll_ms,
+        extra_flags=extra_flags,
+    )
+    try:
+        lock_file.write_text(payload, encoding="utf-8")
+    except OSError:
+        logger.debug("Failed to disable LCD lock file", exc_info=True)
 
 
 def _handle_lcd_failure(exc: Exception, lock_dir: Path = LOCK_DIR) -> bool:
@@ -224,8 +244,10 @@ def _resolve_display_payload(
         line1, line2 = suite_notice
         return line1, line2, DEFAULT_SCROLL_MS, "suite-down"
 
-    line1, line2, speed, _ = lock_payload
-    return line1, line2, speed, "lock-file"
+    if not lock_payload.enabled:
+        return "", "", DEFAULT_SCROLL_MS, "disabled"
+
+    return lock_payload.line1, lock_payload.line2, lock_payload.scroll_ms, "lock-file"
 
 
 _DJANGO_READY = False
@@ -371,7 +393,7 @@ def _advance_display(lcd: CharLCD1602, state: DisplayState) -> DisplayState:
 def main() -> None:  # pragma: no cover - hardware dependent
     lcd = None
     last_lock_mtime = 0.0
-    lock_payload: LockPayload = LockPayload("", "", DEFAULT_SCROLL_MS, False)
+    lock_payload: LockPayload = LockPayload(False, "", "", DEFAULT_SCROLL_MS, False)
     last_display: tuple[str, str, int, str] | None = None
     display_state: DisplayState | None = None
     last_net_message: tuple[str, str] | None = None
