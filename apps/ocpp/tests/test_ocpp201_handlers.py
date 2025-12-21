@@ -14,6 +14,10 @@ from apps.ocpp.models import (
     Variable,
     MonitoringRule,
     MonitoringReport,
+    CustomerInformationRequest,
+    CustomerInformationChunk,
+    DisplayMessageNotification,
+    DisplayMessage,
 )
 from apps.protocols.models import ProtocolCall as ProtocolCallModel
 
@@ -220,6 +224,83 @@ async def test_notify_monitoring_report_persists_data():
     )
     assert rule.variable_id == variable.pk
     assert rule.threshold == "240"
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+async def test_notify_customer_information_persists_chunks():
+    charger = await database_sync_to_async(Charger.objects.create)(charger_id="INFO-1")
+    existing = await database_sync_to_async(CustomerInformationRequest.objects.create)(
+        charger=charger, request_id=7
+    )
+    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = "INFO-1"
+    consumer.charger_id = charger.charger_id
+    consumer.charger = charger
+    consumer.aggregate_charger = None
+
+    payload = {"requestId": 7, "data": "chunk-data", "tbc": False}
+    result = await consumer._handle_notify_customer_information_action(
+        payload, "msg-7", "", ""
+    )
+
+    assert result == {}
+    request = await database_sync_to_async(CustomerInformationRequest.objects.get)(
+        pk=existing.pk
+    )
+    assert request.last_notified_at is not None
+    assert request.completed_at is not None
+    chunk = await database_sync_to_async(CustomerInformationChunk.objects.get)(
+        charger=charger, request_id=7
+    )
+    assert chunk.request_id == 7
+    assert chunk.data == "chunk-data"
+    assert chunk.request_id == request.request_id
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+async def test_notify_display_messages_persists_messages():
+    charger = await database_sync_to_async(Charger.objects.create)(charger_id="DISP-1")
+    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = "DISP-1"
+    consumer.charger_id = charger.charger_id
+    consumer.charger = charger
+    consumer.aggregate_charger = None
+
+    payload = {
+        "requestId": 9,
+        "tbc": False,
+        "messageInfo": [
+            {
+                "messageId": 101,
+                "priority": "High",
+                "state": "Active",
+                "validFrom": "2024-01-01T00:00:00Z",
+                "validTo": "2024-01-02T00:00:00Z",
+                "message": {"content": "Hello", "language": "en"},
+                "component": {"name": "Display", "instance": "1"},
+                "variable": {"name": "Content", "instance": "main"},
+            }
+        ],
+    }
+    result = await consumer._handle_notify_display_messages_action(
+        payload, "msg-9", "", ""
+    )
+
+    assert result == {}
+    notification = await database_sync_to_async(
+        DisplayMessageNotification.objects.get
+    )(charger=charger, request_id=9)
+    assert notification.completed_at is not None
+    message = await database_sync_to_async(DisplayMessage.objects.get)(
+        charger=charger, message_id=101
+    )
+    assert message.notification_id == notification.pk
+    assert message.content == "Hello"
+    assert message.language == "en"
+    assert message.component_name == "Display"
+    assert message.variable_name == "Content"
 
 
 @pytest.mark.anyio

@@ -23,6 +23,8 @@ from .cp_firmware import CPFirmware
 from .cp_firmware_deployment import CPFirmwareDeployment
 from .cp_reservation import CPReservation
 from .station_model import StationModel, StationModelManager
+from .customer_information import CustomerInformationRequest, CustomerInformationChunk
+from .display_message import DisplayMessageNotification, DisplayMessage
 from .cp_forwarder import (
     CPForwarder,
     CPForwarderManager,
@@ -69,6 +71,10 @@ __all__ = [
     "CPReservation",
     "StationModelManager",
     "StationModel",
+    "CustomerInformationRequest",
+    "CustomerInformationChunk",
+    "DisplayMessageNotification",
+    "DisplayMessage",
     "CPForwarderManager",
     "CPForwarder",
     "OCPP_FORWARDING_MESSAGES",
