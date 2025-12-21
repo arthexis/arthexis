@@ -14,7 +14,9 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         summary = update_peer_nodes_information(enforce_feature=False)
+        self._report_summary(summary)
 
+    def _report_summary(self, summary: dict) -> None:
         if summary.get("skipped"):
             raise CommandError(summary.get("reason") or "Node refresh skipped")
 
