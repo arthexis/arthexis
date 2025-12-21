@@ -9,6 +9,7 @@
       "address": "arthexis.com",
       "port": 443,
       "trusted": true,
+      "last_seen": "2025-01-01T00:00:00Z",
       "current_relation": "SELF",
       "public_endpoint": "arthexis",
       "role": [
