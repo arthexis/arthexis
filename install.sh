@@ -434,7 +434,7 @@ else
     rm -f "$LOCK_DIR/celery.lck"
 fi
 
-LCD_LOCK="$LOCK_DIR/$ARTHEXIS_LCD_RUNTIME_LOCK"
+LCD_LOCK="$LOCK_DIR/$ARTHEXIS_LCD_LOCK"
 if [ "$ENABLE_LCD_SCREEN" = true ]; then
     touch "$LCD_LOCK"
     arthexis_enable_lcd_feature_flag "$LOCK_DIR"
