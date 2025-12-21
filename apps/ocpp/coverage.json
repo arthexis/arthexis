@@ -83,6 +83,7 @@
     "cp_to_csms": [
       "Authorize",
       "BootNotification",
+      "CostUpdated",
       "DataTransfer",
       "DiagnosticsStatusNotification",
       "FirmwareStatusNotification",
@@ -98,6 +99,7 @@
       "NotifyMonitoringReport",
       "PublishFirmwareStatusNotification",
       "ReportChargingProfiles",
+      "ReservationStatusUpdate",
       "SecurityEventNotification",
       "StartTransaction",
       "StatusNotification",
