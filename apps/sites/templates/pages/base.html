@@ -1051,8 +1051,12 @@
             </div>
             <button type="button" class="btn btn-primary w-100 mb-3" id="copy-embed-code">{% trans 'Copy embed code' %}</button>
             <div>
-              <label class="form-label" for="share-embed-preview">{% trans 'Preview' %}</label>
-              <div id="share-embed-preview" class="ratio ratio-16x9 border rounded"></div>
+              <span class="form-label d-block" id="share-embed-preview-label">{% trans 'Preview' %}</span>
+              <div
+                id="share-embed-preview"
+                class="ratio ratio-16x9 border rounded"
+                aria-labelledby="share-embed-preview-label"
+              ></div>
             </div>
           </div>
         </div>
