@@ -10,6 +10,7 @@ from django.utils.translation import gettext, gettext_lazy as _, ngettext
 
 from apps.ocpp.models import Charger, ChargerConfiguration, CPFirmware
 from apps.nodes.models import Node
+from apps.nginx.models import SiteConfiguration
 
 logger = logging.getLogger(__name__)
 
@@ -202,6 +203,31 @@ def evaluate_email_profile_rules() -> dict[str, object]:
 
     if issues:
         return rule_failure(" ".join(str(issue) for issue in issues))
+
+    return rule_success()
+
+
+def evaluate_nginx_site_configuration_rules() -> dict[str, object] | None:
+    if not SiteConfiguration.objects.filter(name="default").exists():
+        return rule_failure(_("Missing default site config."))
+
+    enabled_sites = list(SiteConfiguration.objects.filter(enabled=True))
+    if not enabled_sites:
+        return rule_failure(_("Enable at least one site."))
+
+    cutoff = timezone.now() - timedelta(days=3)
+    recent_validation = False
+    for site in enabled_sites:
+        last_activity = max(
+            (timestamp for timestamp in [site.last_applied_at, site.last_validated_at] if timestamp),
+            default=None,
+        )
+        if last_activity and last_activity >= cutoff:
+            recent_validation = True
+            break
+
+    if not recent_validation:
+        return rule_failure(_("Site validation is stale."))
 
     return rule_success()
 
