@@ -185,6 +185,10 @@ def https_proxy_server(
         "    add_header Content-Security-Policy "
         '"upgrade-insecure-requests; block-all-mixed-content" always;'
     )
+    lines.append(
+        '    add_header Strict-Transport-Security '
+        '"max-age=31536000; includeSubDomains; preload" always;'
+    )
     lines.append("")
     lines.append(textwrap.indent(proxy_block(port, trailing_slash=trailing_slash), "    "))
     lines.append("}")
