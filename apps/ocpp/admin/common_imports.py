@@ -69,6 +69,9 @@ from ..models import (
     CertificateOperation,
     InstalledCertificate,
     TrustAnchor,
+    Variable,
+    MonitoringRule,
+    MonitoringReport,
 )
 from ..simulator import ChargePointSimulator
 from .. import store

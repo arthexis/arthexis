@@ -91,6 +91,13 @@ CALL_ACTION_LABELS = {
     "DeleteCertificate": _("Delete certificate"),
     "CertificateSigned": _("Certificate signed"),
     "GetInstalledCertificateIds": _("Get installed certificate ids"),
+    "GetVariables": _("Get variables"),
+    "SetVariables": _("Set variables"),
+    "SetMonitoringBase": _("Set monitoring base"),
+    "SetMonitoringLevel": _("Set monitoring level"),
+    "SetVariableMonitoring": _("Set variable monitoring"),
+    "ClearVariableMonitoring": _("Clear variable monitoring"),
+    "GetMonitoringReport": _("Get monitoring report"),
 }
 
 CALL_EXPECTED_STATUSES: dict[str, set[str] | None] = {
@@ -114,6 +121,10 @@ CALL_EXPECTED_STATUSES: dict[str, set[str] | None] = {
     "DeleteCertificate": {"Accepted", "Rejected"},
     "CertificateSigned": {"Accepted", "Rejected"},
     "GetInstalledCertificateIds": {"Accepted", "NotSupported"},
+    "SetMonitoringBase": {"Accepted", "Rejected", "NotSupported"},
+    "SetMonitoringLevel": {"Accepted", "Rejected", "NotSupported"},
+    "ClearVariableMonitoring": {"Accepted", "Rejected", "NotSupported"},
+    "GetMonitoringReport": {"Accepted", "Rejected", "NotSupported"},
 }
 
 
@@ -1045,4 +1056,3 @@ def _diagnostics_payload(charger: Charger) -> dict[str, str | None]:
         "diagnosticsTimestamp": timestamp,
         "diagnosticsLocation": location,
     }
-

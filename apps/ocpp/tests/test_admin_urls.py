@@ -7,7 +7,7 @@ from django.core.exceptions import ValidationError
 from django.test.client import RequestFactory
 
 from apps.ocpp.admin import ChargerAdmin
-from apps.ocpp.models import Charger
+from apps.ocpp.models import Charger, Variable, MonitoringRule, MonitoringReport
 
 pytestmark = pytest.mark.django_db
 
@@ -67,3 +67,31 @@ def test_charger_admin_reports_validation_error(db):
 
     stored_messages = [message.message for message in list(request._messages)]
     assert any("Unable to create simulator" in message for message in stored_messages)
+
+
+def test_monitoring_admin_views_accessible(client):
+    User = get_user_model()
+    user = User.objects.create_superuser(username="admin", password="pass", email="admin@example.com")
+    client.force_login(user)
+
+    charger = Charger.objects.create(charger_id="CP-MON")
+    variable = Variable.objects.create(
+        charger=charger,
+        component_name="EVSE",
+        variable_name="Voltage",
+        attribute_type="Actual",
+        value="230",
+    )
+    MonitoringRule.objects.create(
+        charger=charger,
+        variable=variable,
+        monitoring_id=10,
+        monitor_type="UpperThreshold",
+        threshold="240",
+        severity=5,
+    )
+    MonitoringReport.objects.create(charger=charger, request_id=99, seq_no=1)
+
+    assert client.get(reverse("admin:ocpp_variable_changelist")).status_code == 200
+    assert client.get(reverse("admin:ocpp_monitoringrule_changelist")).status_code == 200
+    assert client.get(reverse("admin:ocpp_monitoringreport_changelist")).status_code == 200

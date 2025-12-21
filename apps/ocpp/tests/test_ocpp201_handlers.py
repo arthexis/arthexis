@@ -4,10 +4,23 @@ import anyio
 from functools import partial
 
 import pytest
+from channels.db import database_sync_to_async
 
 from apps.ocpp import consumers, store
-from apps.ocpp.models import Charger, CertificateRequest, CertificateStatusCheck
+from apps.ocpp.models import (
+    Charger,
+    CertificateRequest,
+    CertificateStatusCheck,
+    Variable,
+    MonitoringRule,
+    MonitoringReport,
+)
 from apps.protocols.models import ProtocolCall as ProtocolCallModel
+
+
+@pytest.fixture
+def anyio_backend():
+    return "asyncio"
 
 
 @pytest.fixture(autouse=True)
@@ -79,11 +92,9 @@ async def test_transaction_event_registered_for_ocpp201():
 
 
 @pytest.mark.anyio
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 async def test_get_15118_ev_certificate_persists_request():
-    charger = await anyio.to_thread.run_sync(
-        partial(Charger.objects.create, charger_id="CERT-1")
-    )
+    charger = await database_sync_to_async(Charger.objects.create)(charger_id="CERT-1")
     consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "CERT-1"
     consumer.charger = charger
@@ -95,9 +106,7 @@ async def test_get_15118_ev_certificate_persists_request():
     )
 
     assert result["status"] == "Rejected"
-    request = await anyio.to_thread.run_sync(
-        partial(CertificateRequest.objects.get, charger=charger)
-    )
+    request = await database_sync_to_async(CertificateRequest.objects.get)(charger=charger)
     assert request.action == CertificateRequest.ACTION_15118
     assert request.csr == "CSRDATA"
     assert request.status == CertificateRequest.STATUS_REJECTED
@@ -105,11 +114,9 @@ async def test_get_15118_ev_certificate_persists_request():
 
 
 @pytest.mark.anyio
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 async def test_get_certificate_status_persists_check():
-    charger = await anyio.to_thread.run_sync(
-        partial(Charger.objects.create, charger_id="CERT-2")
-    )
+    charger = await database_sync_to_async(Charger.objects.create)(charger_id="CERT-2")
     consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "CERT-2"
     consumer.charger = charger
@@ -121,19 +128,17 @@ async def test_get_certificate_status_persists_check():
     )
 
     assert result["status"] == "Rejected"
-    status_check = await anyio.to_thread.run_sync(
-        partial(CertificateStatusCheck.objects.get, charger=charger)
+    status_check = await database_sync_to_async(CertificateStatusCheck.objects.get)(
+        charger=charger
     )
     assert status_check.status == CertificateStatusCheck.STATUS_REJECTED
     assert status_check.certificate_hash_data["hashAlgorithm"] == "SHA256"
 
 
 @pytest.mark.anyio
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 async def test_sign_certificate_persists_request():
-    charger = await anyio.to_thread.run_sync(
-        partial(Charger.objects.create, charger_id="CERT-3")
-    )
+    charger = await database_sync_to_async(Charger.objects.create)(charger_id="CERT-3")
     consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "CERT-3"
     consumer.charger = charger
@@ -145,8 +150,59 @@ async def test_sign_certificate_persists_request():
     )
 
     assert result["status"] == "Rejected"
-    request = await anyio.to_thread.run_sync(
-        partial(CertificateRequest.objects.get, charger=charger)
-    )
+    request = await database_sync_to_async(CertificateRequest.objects.get)(charger=charger)
     assert request.action == CertificateRequest.ACTION_SIGN
     assert request.csr == "CSR-123"
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+async def test_notify_monitoring_report_persists_data():
+    charger = await database_sync_to_async(Charger.objects.create)(charger_id="MON-1")
+    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = "MON-1"
+    consumer.charger_id = charger.charger_id
+    consumer.charger = charger
+    consumer.aggregate_charger = None
+
+    payload = {
+        "requestId": 42,
+        "seqNo": 1,
+        "generatedAt": "2024-01-01T00:00:00Z",
+        "tbc": False,
+        "monitoringData": [
+            {
+                "component": {"name": "EVSE", "instance": "1"},
+                "variable": {"name": "Voltage"},
+                "variableMonitoring": [
+                    {
+                        "id": 101,
+                        "severity": 5,
+                        "type": "UpperThreshold",
+                        "value": "240",
+                        "transaction": True,
+                    }
+                ],
+            }
+        ],
+    }
+
+    result = await consumer._handle_notify_monitoring_report_action(
+        payload, "msg-5", "", ""
+    )
+
+    assert result == {}
+    exists = await database_sync_to_async(
+        MonitoringReport.objects.filter(charger=charger, request_id=42).exists
+    )()
+    assert exists
+    variable = await database_sync_to_async(Variable.objects.get)(
+        charger=charger,
+        component_name="EVSE",
+        variable_name="Voltage",
+    )
+    rule = await database_sync_to_async(MonitoringRule.objects.get)(
+        charger=charger, monitoring_id=101
+    )
+    assert rule.variable_id == variable.pk
+    assert rule.threshold == "240"

@@ -104,6 +104,7 @@ def clear_store_state():
     store._pending_call_results.clear()
     store._pending_call_handles.clear()
     store.triggered_followups.clear()
+    store.monitoring_report_requests.clear()
     yield
     cache.clear()
     store.connections.clear()
@@ -115,6 +116,7 @@ def clear_store_state():
     store._pending_call_results.clear()
     store._pending_call_handles.clear()
     store.triggered_followups.clear()
+    store.monitoring_report_requests.clear()
     store._STATE_REDIS = None
     store._STATE_REDIS_URL = getattr(settings, "OCPP_STATE_REDIS_URL", "")
 
@@ -168,6 +170,8 @@ def test_reconnect_resumes_pending_call(fake_state_redis, temp_store_dirs):
         store._pending_call_events.clear()
         store._pending_call_results.clear()
         store._pending_call_handles.clear()
+        store.monitoring_report_requests.clear()
+        store.monitoring_report_requests.clear()
 
         restored = store.restore_pending_calls(serial)
         assert message_id in restored
@@ -206,6 +210,7 @@ def test_replayed_result_keeps_pending_queue_intact(fake_state_redis, temp_store
         store._pending_call_events.clear()
         store._pending_call_results.clear()
         store._pending_call_handles.clear()
+        store.monitoring_report_requests.clear()
 
         restored = store.restore_pending_calls(serial)
         assert pending_id in restored

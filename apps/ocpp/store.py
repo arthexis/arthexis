@@ -60,6 +60,8 @@ _pending_call_results: dict[str, dict[str, object]] = {}
 _pending_call_lock = threading.Lock()
 _pending_call_handles: dict[str, asyncio.TimerHandle] = {}
 triggered_followups: dict[str, list[dict[str, object]]] = {}
+monitoring_report_requests: dict[int, dict[str, object]] = {}
+_monitoring_report_lock = threading.Lock()
 
 # mapping of charger id / cp_path to friendly names used for log files
 log_names: dict[str, dict[str, str]] = {"charger": {}, "simulator": {}}
@@ -368,6 +370,30 @@ def register_pending_call(message_id: str, metadata: dict[str, object]) -> None:
     _store_pending_metadata_redis(message_id, copy)
 
 
+def register_monitoring_report_request(request_id: int, metadata: dict[str, object]) -> None:
+    """Track a monitoring report request by request id."""
+
+    if request_id is None:
+        return
+    copy = dict(metadata)
+    with _monitoring_report_lock:
+        monitoring_report_requests[request_id] = copy
+
+
+def get_monitoring_report_request(request_id: int) -> dict[str, object] | None:
+    """Return metadata for a pending monitoring report request."""
+
+    with _monitoring_report_lock:
+        return monitoring_report_requests.get(request_id)
+
+
+def pop_monitoring_report_request(request_id: int) -> dict[str, object] | None:
+    """Remove and return metadata for a pending monitoring report request."""
+
+    with _monitoring_report_lock:
+        return monitoring_report_requests.pop(request_id, None)
+
+
 def pop_pending_call(message_id: str) -> dict[str, object] | None:
     """Return and remove metadata for a previously registered call."""
 
@@ -564,6 +590,14 @@ def clear_pending_calls(serial: str) -> None:
             _clear_pending_redis(key)
     for handle in to_cancel:
         _cancel_timer_handle(handle)
+    with _monitoring_report_lock:
+        stale_request_ids = [
+            request_id
+            for request_id, metadata in monitoring_report_requests.items()
+            if metadata.get("charger_id") == serial
+        ]
+        for request_id in stale_request_ids:
+            monitoring_report_requests.pop(request_id, None)
 
 
 def restore_pending_calls(serial: str) -> list[str]:

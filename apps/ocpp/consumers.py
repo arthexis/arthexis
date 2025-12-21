@@ -50,6 +50,9 @@ from .models import (
     PowerProjection,
     CertificateRequest,
     CertificateStatusCheck,
+    Variable,
+    MonitoringRule,
+    MonitoringReport,
 )
 from apps.links.reference_utils import host_is_local_loopback
 from .evcs_discovery import (
@@ -1999,6 +2002,120 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
     async def _handle_notify_monitoring_report_action(
         self, payload, msg_id, raw, text_data
     ):
+        payload_data = payload if isinstance(payload, dict) else {}
+        request_id_value = payload_data.get("requestId")
+        seq_no_value = payload_data.get("seqNo")
+        generated_at = _parse_ocpp_timestamp(payload_data.get("generatedAt"))
+        tbc_value = payload_data.get("tbc")
+        try:
+            request_id = int(request_id_value) if request_id_value is not None else None
+        except (TypeError, ValueError):
+            request_id = None
+        try:
+            seq_no = int(seq_no_value) if seq_no_value is not None else None
+        except (TypeError, ValueError):
+            seq_no = None
+        tbc = bool(tbc_value) if tbc_value is not None else False
+        monitoring_data = payload_data.get("monitoringData")
+        if not isinstance(monitoring_data, (list, tuple)):
+            monitoring_data = []
+
+        def _persist_monitoring_report() -> None:
+            charger = None
+            if self.charger and getattr(self.charger, "pk", None):
+                charger = self.charger
+            if charger is None and self.charger_id:
+                charger = Charger.objects.filter(
+                    charger_id=self.charger_id,
+                    connector_id=self.connector_value,
+                ).first()
+            if charger is None and self.charger_id:
+                charger, _created = Charger.objects.get_or_create(
+                    charger_id=self.charger_id,
+                    connector_id=self.connector_value,
+                )
+            if charger is None:
+                return
+
+            MonitoringReport.objects.create(
+                charger=charger,
+                request_id=request_id,
+                seq_no=seq_no,
+                generated_at=generated_at,
+                tbc=tbc,
+                raw_payload=payload_data,
+            )
+
+            for entry in monitoring_data:
+                if not isinstance(entry, dict):
+                    continue
+                component_data = entry.get("component")
+                variable_data = entry.get("variable")
+                if not isinstance(component_data, dict) or not isinstance(variable_data, dict):
+                    continue
+                component_name = str(component_data.get("name") or "").strip()
+                variable_name = str(variable_data.get("name") or "").strip()
+                if not component_name or not variable_name:
+                    continue
+                component_instance = str(component_data.get("instance") or "").strip()
+                variable_instance = str(variable_data.get("instance") or "").strip()
+                variable_obj, _created = Variable.objects.get_or_create(
+                    charger=charger,
+                    component_name=component_name,
+                    component_instance=component_instance,
+                    variable_name=variable_name,
+                    variable_instance=variable_instance,
+                    attribute_type="",
+                )
+
+                variable_monitoring = entry.get("variableMonitoring")
+                if not isinstance(variable_monitoring, (list, tuple)):
+                    continue
+                for monitor in variable_monitoring:
+                    if not isinstance(monitor, dict):
+                        continue
+                    monitoring_id_value = monitor.get("id") or monitor.get("monitoringId")
+                    try:
+                        monitoring_id = (
+                            int(monitoring_id_value)
+                            if monitoring_id_value is not None
+                            else None
+                        )
+                    except (TypeError, ValueError):
+                        monitoring_id = None
+                    if monitoring_id is None:
+                        continue
+                    severity_value = monitor.get("severity")
+                    try:
+                        severity = (
+                            int(severity_value) if severity_value is not None else None
+                        )
+                    except (TypeError, ValueError):
+                        severity = None
+                    threshold_value = monitor.get("value")
+                    threshold_text = (
+                        str(threshold_value) if threshold_value is not None else ""
+                    )
+                    monitor_type = str(monitor.get("type") or "").strip()
+                    transaction_value = monitor.get("transaction")
+                    is_transaction = bool(transaction_value) if transaction_value is not None else False
+                    MonitoringRule.objects.update_or_create(
+                        charger=charger,
+                        monitoring_id=monitoring_id,
+                        defaults={
+                            "variable": variable_obj,
+                            "severity": severity,
+                            "monitor_type": monitor_type,
+                            "threshold": threshold_text,
+                            "is_transaction": is_transaction,
+                            "is_active": True,
+                            "raw_payload": monitor,
+                        },
+                    )
+
+        await database_sync_to_async(_persist_monitoring_report)()
+        if request_id is not None and not tbc:
+            store.pop_monitoring_report_request(request_id)
         self._log_ocpp201_notification("NotifyMonitoringReport", payload)
         return {}
 
