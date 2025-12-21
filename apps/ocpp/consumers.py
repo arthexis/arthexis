@@ -53,6 +53,10 @@ from .models import (
     Variable,
     MonitoringRule,
     MonitoringReport,
+    CustomerInformationRequest,
+    CustomerInformationChunk,
+    DisplayMessageNotification,
+    DisplayMessage,
 )
 from apps.links.reference_utils import host_is_local_loopback
 from .evcs_discovery import (
@@ -1993,14 +1997,173 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
     async def _handle_notify_customer_information_action(
         self, payload, msg_id, raw, text_data
     ):
-        self._log_ocpp201_notification("NotifyCustomerInformation", payload)
+        payload_data = payload if isinstance(payload, dict) else {}
+        request_id_value = payload_data.get("requestId")
+        data_value = payload_data.get("data")
+        tbc_value = payload_data.get("tbc")
+        try:
+            request_id = int(request_id_value) if request_id_value is not None else None
+        except (TypeError, ValueError):
+            request_id = None
+        data_text = str(data_value or "")
+        tbc = bool(tbc_value) if tbc_value is not None else False
+        notified_at = timezone.now()
+
+        def _persist_customer_information() -> None:
+            charger = self.charger
+            if charger is None and self.charger_id:
+                charger = Charger.objects.filter(
+                    charger_id=self.charger_id,
+                    connector_id=self.connector_value,
+                ).first()
+            if charger is None and self.charger_id:
+                charger, _created = Charger.objects.get_or_create(
+                    charger_id=self.charger_id,
+                    connector_id=self.connector_value,
+                )
+            if charger is None:
+                return
+
+            request = None
+            if request_id is not None:
+                request = CustomerInformationRequest.objects.filter(
+                    charger=charger, request_id=request_id
+                ).first()
+            if request is None and msg_id:
+                request = CustomerInformationRequest.objects.filter(
+                    charger=charger, ocpp_message_id=msg_id
+                ).first()
+            if request is None:
+                request = CustomerInformationRequest.objects.create(
+                    charger=charger,
+                    ocpp_message_id=msg_id or "",
+                    request_id=request_id,
+                    payload=payload_data,
+                )
+            updates: dict[str, object] = {"last_notified_at": notified_at}
+            if not tbc:
+                updates["completed_at"] = notified_at
+            CustomerInformationRequest.objects.filter(pk=request.pk).update(**updates)
+            for field, value in updates.items():
+                setattr(request, field, value)
+
+            CustomerInformationChunk.objects.create(
+                charger=charger,
+                request_record=request,
+                ocpp_message_id=msg_id or "",
+                request_id=request_id,
+                data=data_text,
+                tbc=tbc,
+                raw_payload=payload_data,
+            )
+
+        await database_sync_to_async(_persist_customer_information)()
         return {}
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "NotifyDisplayMessages")
     async def _handle_notify_display_messages_action(
         self, payload, msg_id, raw, text_data
     ):
-        self._log_ocpp201_notification("NotifyDisplayMessages", payload)
+        payload_data = payload if isinstance(payload, dict) else {}
+        request_id_value = payload_data.get("requestId")
+        tbc_value = payload_data.get("tbc")
+        try:
+            request_id = int(request_id_value) if request_id_value is not None else None
+        except (TypeError, ValueError):
+            request_id = None
+        tbc = bool(tbc_value) if tbc_value is not None else False
+        received_at = timezone.now()
+        message_info = payload_data.get("messageInfo")
+        if not isinstance(message_info, (list, tuple)):
+            message_info = []
+
+        def _persist_display_messages() -> None:
+            charger = self.charger
+            if charger is None and self.charger_id:
+                charger = Charger.objects.filter(
+                    charger_id=self.charger_id,
+                    connector_id=self.connector_value,
+                ).first()
+            if charger is None and self.charger_id:
+                charger, _created = Charger.objects.get_or_create(
+                    charger_id=self.charger_id,
+                    connector_id=self.connector_value,
+                )
+            if charger is None:
+                return
+
+            notification = None
+            if request_id is not None:
+                notification = DisplayMessageNotification.objects.filter(
+                    charger=charger,
+                    request_id=request_id,
+                    completed_at__isnull=True,
+                ).order_by("-received_at").first()
+            if notification is None:
+                notification = DisplayMessageNotification.objects.create(
+                    charger=charger,
+                    ocpp_message_id=msg_id or "",
+                    request_id=request_id,
+                    tbc=tbc,
+                    raw_payload=payload_data,
+                )
+            updates: dict[str, object] = {"tbc": tbc}
+            if not tbc:
+                updates["completed_at"] = received_at
+            DisplayMessageNotification.objects.filter(pk=notification.pk).update(
+                **updates
+            )
+            for field, value in updates.items():
+                setattr(notification, field, value)
+
+            for entry in message_info:
+                if not isinstance(entry, dict):
+                    continue
+                message_id_value = entry.get("messageId")
+                try:
+                    message_id = (
+                        int(message_id_value)
+                        if message_id_value is not None
+                        else None
+                    )
+                except (TypeError, ValueError):
+                    message_id = None
+                message_payload = entry.get("message") or {}
+                if not isinstance(message_payload, dict):
+                    message_payload = {}
+                content_value = (
+                    message_payload.get("content")
+                    or message_payload.get("text")
+                    or entry.get("content")
+                    or ""
+                )
+                language_value = (
+                    message_payload.get("language") or entry.get("language") or ""
+                )
+                component = entry.get("component") or {}
+                variable = entry.get("variable") or {}
+                if not isinstance(component, dict):
+                    component = {}
+                if not isinstance(variable, dict):
+                    variable = {}
+                DisplayMessage.objects.create(
+                    notification=notification,
+                    charger=charger,
+                    message_id=message_id,
+                    priority=str(entry.get("priority") or ""),
+                    state=str(entry.get("state") or ""),
+                    valid_from=_parse_ocpp_timestamp(entry.get("validFrom")),
+                    valid_to=_parse_ocpp_timestamp(entry.get("validTo")),
+                    language=str(language_value or ""),
+                    content=str(content_value or ""),
+                    component_name=str(component.get("name") or ""),
+                    component_instance=str(component.get("instance") or ""),
+                    variable_name=str(variable.get("name") or ""),
+                    variable_instance=str(variable.get("instance") or ""),
+                    raw_payload=entry,
+                )
+
+        await database_sync_to_async(_persist_display_messages)()
         return {}
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "NotifyEVChargingNeeds")
