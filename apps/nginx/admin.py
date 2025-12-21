@@ -323,12 +323,13 @@ class SiteConfigurationAdmin(admin.ModelAdmin):
     ):
         for config in queryset:
             if config.protocol != "https":
+                config.protocol = "https"
+                config.save(update_fields=["protocol"])
                 self.message_user(
                     request,
-                    _("%s: HTTPS is not enabled; skipping certificate provisioning.") % config,
+                    _("%s: HTTPS enabled to allow certificate provisioning.") % config,
                     messages.INFO,
                 )
-                continue
 
             certificate: CertificateBase | None = config.certificate
             if certificate is None:
