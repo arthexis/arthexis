@@ -69,6 +69,11 @@ from ..models import (
     Simulator,
     StationModel,
     Transaction,
+    CertificateRequest,
+    CertificateStatusCheck,
+    CertificateOperation,
+    InstalledCertificate,
+    TrustAnchor,
 )
 from ..simulator import ChargePointSimulator
 from ..status_display import ERROR_OK_VALUES, STATUS_BADGE_MAP
@@ -102,6 +107,11 @@ for _model in (
     CPNetworkProfileDeployment,
     CPFirmwareRequest,
     RFIDSessionAttempt,
+    CertificateRequest,
+    CertificateStatusCheck,
+    CertificateOperation,
+    InstalledCertificate,
+    TrustAnchor,
 ):
     try:
         admin.site.unregister(_model)
@@ -2491,5 +2501,3 @@ class RFIDSessionAttemptAdmin(EntityModelAdmin):
         "transaction__ocpp_id",
     )
     readonly_fields = ("attempted_at",)
-
-

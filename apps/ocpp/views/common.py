@@ -87,6 +87,10 @@ CALL_ACTION_LABELS = {
     "UnlockConnector": _("Unlock connector"),
     "UpdateFirmware": _("Update firmware"),
     "SetChargingProfile": _("Set charging profile"),
+    "InstallCertificate": _("Install certificate"),
+    "DeleteCertificate": _("Delete certificate"),
+    "CertificateSigned": _("Certificate signed"),
+    "GetInstalledCertificateIds": _("Get installed certificate ids"),
 }
 
 CALL_EXPECTED_STATUSES: dict[str, set[str] | None] = {
@@ -106,6 +110,10 @@ CALL_EXPECTED_STATUSES: dict[str, set[str] | None] = {
     "UnlockConnector": {"Unlocked", "Accepted"},
     "UpdateFirmware": None,
     "SetChargingProfile": {"Accepted", "Rejected", "NotSupported"},
+    "InstallCertificate": {"Accepted", "Rejected"},
+    "DeleteCertificate": {"Accepted", "Rejected"},
+    "CertificateSigned": {"Accepted", "Rejected"},
+    "GetInstalledCertificateIds": {"Accepted", "NotSupported"},
 }
 
 
@@ -1037,5 +1045,4 @@ def _diagnostics_payload(charger: Charger) -> dict[str, str | None]:
         "diagnosticsTimestamp": timestamp,
         "diagnosticsLocation": location,
     }
-
 

@@ -4,6 +4,11 @@ import pytest
 
 from apps.ocpp import store
 from apps.ocpp.tasks import request_charge_point_log
+from apps.ocpp.models import (
+    Charger,
+    CertificateOperation,
+    InstalledCertificate,
+)
 from apps.ocpp.views import actions
 from apps.ocpp.views.common import ActionContext, ActionCall
 
@@ -128,8 +133,6 @@ def test_set_charging_profile_supports_ocpp201(monkeypatch, ws):
 
 @pytest.mark.django_db
 def test_get_log_supports_ocpp201(monkeypatch, ws):
-    from apps.ocpp.models import Charger
-
     monkeypatch.setattr(Charger, "get_absolute_url", lambda self: "/charger/")
     monkeypatch.setattr(Charger, "_full_url", lambda self: "https://example.com/charger/")
 
@@ -150,3 +153,86 @@ def test_get_log_supports_ocpp201(monkeypatch, ws):
     log_key = store.identity_key(charger.charger_id, connector_value)
     assert log_key in store.logs["charger"]
     assert any("GetLog" in entry for entry in store.logs["charger"][log_key])
+
+
+@pytest.mark.django_db
+def test_install_certificate_registers_pending_call(ws):
+    charger = Charger.objects.create(charger_id="CERT-CP-1")
+    log_key = store.identity_key(charger.charger_id, charger.connector_id)
+    context = ActionContext(charger.charger_id, charger.connector_id, charger, ws, log_key)
+
+    result = actions._handle_install_certificate(
+        context,
+        {"certificate": "CERTDATA", "certificateType": "V2G"},
+    )
+
+    assert isinstance(result, ActionCall)
+    message = json.loads(ws.sent[0])
+    assert message[2] == "InstallCertificate"
+    message_id = message[1]
+    assert message_id in store.pending_calls
+    metadata = store.pending_calls[message_id]
+    assert CertificateOperation.objects.filter(pk=metadata["operation_pk"]).exists()
+    assert InstalledCertificate.objects.filter(pk=metadata["installed_certificate_pk"]).exists()
+
+
+@pytest.mark.django_db
+def test_delete_certificate_registers_pending_call(ws):
+    charger = Charger.objects.create(charger_id="CERT-CP-2")
+    hash_data = {"hashAlgorithm": "SHA256", "issuerNameHash": "abc"}
+    installed = InstalledCertificate.objects.create(
+        charger=charger,
+        certificate_type="V2G",
+        certificate_hash_data=hash_data,
+        status=InstalledCertificate.STATUS_INSTALLED,
+    )
+    log_key = store.identity_key(charger.charger_id, charger.connector_id)
+    context = ActionContext(charger.charger_id, charger.connector_id, charger, ws, log_key)
+
+    result = actions._handle_delete_certificate(
+        context,
+        {"certificateHashData": hash_data},
+    )
+
+    assert isinstance(result, ActionCall)
+    message = json.loads(ws.sent[0])
+    assert message[2] == "DeleteCertificate"
+    message_id = message[1]
+    assert message_id in store.pending_calls
+    metadata = store.pending_calls[message_id]
+    assert metadata["installed_certificate_pk"] == installed.pk
+    installed.refresh_from_db()
+    assert installed.status == InstalledCertificate.STATUS_DELETE_PENDING
+
+
+@pytest.mark.django_db
+def test_certificate_signed_registers_pending_call(ws):
+    charger = Charger.objects.create(charger_id="CERT-CP-3")
+    log_key = store.identity_key(charger.charger_id, charger.connector_id)
+    context = ActionContext(charger.charger_id, charger.connector_id, charger, ws, log_key)
+
+    result = actions._handle_certificate_signed(
+        context,
+        {"certificateChain": "CHAIN"},
+    )
+
+    assert isinstance(result, ActionCall)
+    message = json.loads(ws.sent[0])
+    assert message[2] == "CertificateSigned"
+    message_id = message[1]
+    assert message_id in store.pending_calls
+
+
+@pytest.mark.django_db
+def test_get_installed_certificate_ids_registers_pending_call(ws):
+    charger = Charger.objects.create(charger_id="CERT-CP-4")
+    log_key = store.identity_key(charger.charger_id, charger.connector_id)
+    context = ActionContext(charger.charger_id, charger.connector_id, charger, ws, log_key)
+
+    result = actions._handle_get_installed_certificate_ids(context, {"certificateType": "V2G"})
+
+    assert isinstance(result, ActionCall)
+    message = json.loads(ws.sent[0])
+    assert message[2] == "GetInstalledCertificateIds"
+    message_id = message[1]
+    assert message_id in store.pending_calls

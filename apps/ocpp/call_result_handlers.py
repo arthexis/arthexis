@@ -18,7 +18,20 @@ from .models import (
     ChargerLogRequest,
     DataTransferMessage,
     PowerProjection,
+    CertificateOperation,
+    InstalledCertificate,
 )
+
+
+def _format_status_info(status_info: object) -> str:
+    if not status_info:
+        return ""
+    if isinstance(status_info, str):
+        return status_info.strip()
+    try:
+        return json.dumps(status_info, ensure_ascii=False, sort_keys=True)
+    except TypeError:
+        return str(status_info)
 class CallResultContext(Protocol):
     charger_id: str | None
     store_key: str
@@ -875,6 +888,242 @@ async def handle_set_network_profile_result(
     return True
 
 
+async def handle_install_certificate_result(
+    consumer: CallResultContext,
+    message_id: str,
+    metadata: dict,
+    payload_data: dict,
+    log_key: str,
+) -> bool:
+    status_value = str(payload_data.get("status") or "").strip() or "Unknown"
+    status_info = _format_status_info(payload_data.get("statusInfo"))
+    operation_pk = metadata.get("operation_pk")
+    installed_pk = metadata.get("installed_certificate_pk")
+    responded_at = timezone.now()
+
+    def _apply():
+        operation = CertificateOperation.objects.filter(pk=operation_pk).first()
+        if operation:
+            if status_value.casefold() == "accepted":
+                operation.status = CertificateOperation.STATUS_ACCEPTED
+            elif status_value.casefold() == "rejected":
+                operation.status = CertificateOperation.STATUS_REJECTED
+            else:
+                operation.status = CertificateOperation.STATUS_ERROR
+            operation.status_info = status_info
+            operation.response_payload = payload_data
+            operation.responded_at = responded_at
+            operation.save(
+                update_fields=["status", "status_info", "response_payload", "responded_at"]
+            )
+        installed = InstalledCertificate.objects.filter(pk=installed_pk).first()
+        if installed:
+            if status_value.casefold() == "accepted":
+                installed.status = InstalledCertificate.STATUS_INSTALLED
+                installed.installed_at = responded_at
+            elif status_value.casefold() == "rejected":
+                installed.status = InstalledCertificate.STATUS_REJECTED
+            else:
+                installed.status = InstalledCertificate.STATUS_ERROR
+            installed.last_action = CertificateOperation.ACTION_INSTALL
+            installed.save(update_fields=["status", "installed_at", "last_action"])
+
+    await database_sync_to_async(_apply)()
+    store.add_log(
+        log_key,
+        f"InstallCertificate result: status={status_value}",
+        log_type="charger",
+    )
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        payload=payload_data,
+    )
+    return True
+
+
+async def handle_delete_certificate_result(
+    consumer: CallResultContext,
+    message_id: str,
+    metadata: dict,
+    payload_data: dict,
+    log_key: str,
+) -> bool:
+    status_value = str(payload_data.get("status") or "").strip() or "Unknown"
+    status_info = _format_status_info(payload_data.get("statusInfo"))
+    operation_pk = metadata.get("operation_pk")
+    installed_pk = metadata.get("installed_certificate_pk")
+    responded_at = timezone.now()
+
+    def _apply():
+        operation = CertificateOperation.objects.filter(pk=operation_pk).first()
+        if operation:
+            if status_value.casefold() == "accepted":
+                operation.status = CertificateOperation.STATUS_ACCEPTED
+            elif status_value.casefold() == "rejected":
+                operation.status = CertificateOperation.STATUS_REJECTED
+            else:
+                operation.status = CertificateOperation.STATUS_ERROR
+            operation.status_info = status_info
+            operation.response_payload = payload_data
+            operation.responded_at = responded_at
+            operation.save(
+                update_fields=["status", "status_info", "response_payload", "responded_at"]
+            )
+        installed = InstalledCertificate.objects.filter(pk=installed_pk).first()
+        if installed:
+            if status_value.casefold() == "accepted":
+                installed.status = InstalledCertificate.STATUS_DELETED
+                installed.deleted_at = responded_at
+            elif status_value.casefold() == "rejected":
+                installed.status = InstalledCertificate.STATUS_REJECTED
+            else:
+                installed.status = InstalledCertificate.STATUS_ERROR
+            installed.last_action = CertificateOperation.ACTION_DELETE
+            installed.save(update_fields=["status", "deleted_at", "last_action"])
+
+    await database_sync_to_async(_apply)()
+    store.add_log(
+        log_key,
+        f"DeleteCertificate result: status={status_value}",
+        log_type="charger",
+    )
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        payload=payload_data,
+    )
+    return True
+
+
+async def handle_certificate_signed_result(
+    consumer: CallResultContext,
+    message_id: str,
+    metadata: dict,
+    payload_data: dict,
+    log_key: str,
+) -> bool:
+    status_value = str(payload_data.get("status") or "").strip() or "Unknown"
+    status_info = _format_status_info(payload_data.get("statusInfo"))
+    operation_pk = metadata.get("operation_pk")
+    responded_at = timezone.now()
+
+    def _apply():
+        operation = CertificateOperation.objects.filter(pk=operation_pk).first()
+        if operation:
+            if status_value.casefold() == "accepted":
+                operation.status = CertificateOperation.STATUS_ACCEPTED
+            elif status_value.casefold() == "rejected":
+                operation.status = CertificateOperation.STATUS_REJECTED
+            else:
+                operation.status = CertificateOperation.STATUS_ERROR
+            operation.status_info = status_info
+            operation.response_payload = payload_data
+            operation.responded_at = responded_at
+            operation.save(
+                update_fields=["status", "status_info", "response_payload", "responded_at"]
+            )
+
+    await database_sync_to_async(_apply)()
+    store.add_log(
+        log_key,
+        f"CertificateSigned result: status={status_value}",
+        log_type="charger",
+    )
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        payload=payload_data,
+    )
+    return True
+
+
+async def handle_get_installed_certificate_ids_result(
+    consumer: CallResultContext,
+    message_id: str,
+    metadata: dict,
+    payload_data: dict,
+    log_key: str,
+) -> bool:
+    status_value = str(payload_data.get("status") or "").strip() or "Unknown"
+    status_info = _format_status_info(payload_data.get("statusInfo"))
+    operation_pk = metadata.get("operation_pk")
+    charger_id = metadata.get("charger_id")
+    responded_at = timezone.now()
+    certificates = payload_data.get("certificateHashData") or []
+
+    def _apply():
+        operation = CertificateOperation.objects.filter(pk=operation_pk).first()
+        if operation:
+            if status_value.casefold() == "accepted":
+                operation.status = CertificateOperation.STATUS_ACCEPTED
+            elif status_value.casefold() == "rejected":
+                operation.status = CertificateOperation.STATUS_REJECTED
+            else:
+                operation.status = CertificateOperation.STATUS_ERROR
+            operation.status_info = status_info
+            operation.response_payload = payload_data
+            operation.responded_at = responded_at
+            operation.save(
+                update_fields=["status", "status_info", "response_payload", "responded_at"]
+            )
+        if status_value.casefold() != "accepted":
+            return
+        charger = Charger.objects.filter(charger_id=charger_id).first()
+        if charger is None:
+            return
+        if isinstance(certificates, dict):
+            entries = [certificates]
+        elif isinstance(certificates, list):
+            entries = certificates
+        else:
+            entries = []
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            hash_data = entry.get("hashData") or entry.get("certificateHashData") or entry
+            if not isinstance(hash_data, dict):
+                continue
+            cert_type = str(entry.get("certificateType") or "").strip()
+            installed, _created = InstalledCertificate.objects.get_or_create(
+                charger=charger,
+                certificate_hash_data=hash_data,
+                defaults={
+                    "certificate_type": cert_type,
+                    "status": InstalledCertificate.STATUS_INSTALLED,
+                    "last_action": CertificateOperation.ACTION_LIST,
+                    "installed_at": responded_at,
+                },
+            )
+            if not _created:
+                installed.certificate_type = cert_type or installed.certificate_type
+                installed.status = InstalledCertificate.STATUS_INSTALLED
+                installed.last_action = CertificateOperation.ACTION_LIST
+                if installed.installed_at is None:
+                    installed.installed_at = responded_at
+                installed.save(
+                    update_fields=[
+                        "certificate_type",
+                        "status",
+                        "last_action",
+                        "installed_at",
+                    ]
+                )
+
+    await database_sync_to_async(_apply)()
+    store.add_log(
+        log_key,
+        f"GetInstalledCertificateIds result: status={status_value}",
+        log_type="charger",
+    )
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        payload=payload_data,
+    )
+    return True
+
+
 CALL_RESULT_HANDLERS: dict[str, CallResultHandler] = {
     "ChangeConfiguration": handle_change_configuration_result,
     "DataTransfer": handle_data_transfer_result,
@@ -897,6 +1146,10 @@ CALL_RESULT_HANDLERS: dict[str, CallResultHandler] = {
     "ChangeAvailability": handle_change_availability_result,
     "SetChargingProfile": handle_set_charging_profile_result,
     "SetNetworkProfile": handle_set_network_profile_result,
+    "InstallCertificate": handle_install_certificate_result,
+    "DeleteCertificate": handle_delete_certificate_result,
+    "CertificateSigned": handle_certificate_signed_result,
+    "GetInstalledCertificateIds": handle_get_installed_certificate_ids_result,
 }
 
 
