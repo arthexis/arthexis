@@ -121,6 +121,7 @@
       "GetLocalListVersion",
       "GetLog",
       "GetMonitoringReport",
+      "GetTransactionStatus",
       "GetVariables",
       "InstallCertificate",
       "RemoteStartTransaction",
