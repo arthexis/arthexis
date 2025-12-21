@@ -1,11 +1,12 @@
 {
   "coverage": {
     "cp_to_csms": {
-      "count": 19,
-      "percent": 79.17,
+      "count": 21,
+      "percent": 80.77,
       "supported": [
         "Authorize",
         "BootNotification",
+        "CostUpdated",
         "DataTransfer",
         "FirmwareStatusNotification",
         "Heartbeat",
@@ -20,15 +21,16 @@
         "NotifyMonitoringReport",
         "PublishFirmwareStatusNotification",
         "ReportChargingProfiles",
+        "ReservationStatusUpdate",
         "SecurityEventNotification",
         "StatusNotification",
         "TransactionEvent"
       ],
-      "total": 24
+      "total": 26
     },
     "csms_to_cp": {
-      "count": 29,
-      "percent": 74.36,
+      "count": 31,
+      "percent": 79.49,
       "supported": [
         "CancelReservation",
         "CertificateSigned",
@@ -46,6 +48,7 @@
         "GetTransactionStatus",
         "GetVariables",
         "InstallCertificate",
+        "PublishFirmware",
         "RequestStartTransaction",
         "RequestStopTransaction",
         "ReserveNow",
@@ -58,13 +61,14 @@
         "SetVariables",
         "TriggerMessage",
         "UnlockConnector",
+        "UnpublishFirmware",
         "UpdateFirmware"
       ],
       "total": 39
     },
     "overall": {
-      "count": 47,
-      "percent": 75.81,
+      "count": 51,
+      "percent": 79.69,
       "supported": [
         "Authorize",
         "BootNotification",
@@ -74,6 +78,7 @@
         "ClearCache",
         "ClearChargingProfile",
         "ClearVariableMonitoring",
+        "CostUpdated",
         "DataTransfer",
         "DeleteCertificate",
         "FirmwareStatusNotification",
@@ -95,10 +100,12 @@
         "NotifyEVChargingSchedule",
         "NotifyEvent",
         "NotifyMonitoringReport",
+        "PublishFirmware",
         "PublishFirmwareStatusNotification",
         "ReportChargingProfiles",
         "RequestStartTransaction",
         "RequestStopTransaction",
+        "ReservationStatusUpdate",
         "ReserveNow",
         "Reset",
         "SecurityEventNotification",
@@ -112,15 +119,17 @@
         "TransactionEvent",
         "TriggerMessage",
         "UnlockConnector",
+        "UnpublishFirmware",
         "UpdateFirmware"
       ],
-      "total": 62
+      "total": 64
     }
   },
   "implemented": {
     "cp_to_csms": [
       "Authorize",
       "BootNotification",
+      "CostUpdated",
       "DataTransfer",
       "DiagnosticsStatusNotification",
       "FirmwareStatusNotification",
@@ -136,6 +145,7 @@
       "NotifyMonitoringReport",
       "PublishFirmwareStatusNotification",
       "ReportChargingProfiles",
+      "ReservationStatusUpdate",
       "SecurityEventNotification",
       "StartTransaction",
       "StatusNotification",
@@ -162,6 +172,7 @@
       "GetTransactionStatus",
       "GetVariables",
       "InstallCertificate",
+      "PublishFirmware",
       "RemoteStartTransaction",
       "RemoteStopTransaction",
       "RequestStartTransaction",
@@ -176,6 +187,7 @@
       "SetVariables",
       "TriggerMessage",
       "UnlockConnector",
+      "UnpublishFirmware",
       "UpdateFirmware"
     ]
   },
@@ -184,6 +196,7 @@
       "Authorize",
       "BootNotification",
       "ClearedChargingLimit",
+      "CostUpdated",
       "DataTransfer",
       "FirmwareStatusNotification",
       "Get15118EVCertificate",
@@ -201,6 +214,7 @@
       "NotifyReport",
       "PublishFirmwareStatusNotification",
       "ReportChargingProfiles",
+      "ReservationStatusUpdate",
       "SecurityEventNotification",
       "SignCertificate",
       "StatusNotification",

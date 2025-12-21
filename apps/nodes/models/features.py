@@ -597,7 +597,7 @@ class NodeFeatureMixin:
                 defaults={
                     "interval": schedule,
                     "crontab": None,
-                    "task": "apps.nodes.tasks.update_all_nodes_information",
+                    "task": "apps.nodes.tasks.update_peer_nodes_information",
                     "enabled": True,
                     "one_off": False,
                     "args": "[]",

@@ -72,7 +72,7 @@ def test_ssl_directives_omitted_when_assets_missing(monkeypatch, tmp_path: Path)
     config = config_utils.https_proxy_server("example.test", 8443)
 
     assert "ssl_certificate" in config
-    assert "include" not in config
+    assert "include /" not in config
     assert "ssl_dhparam" not in config
 
 

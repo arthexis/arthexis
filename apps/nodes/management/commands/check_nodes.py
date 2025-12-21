@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.nodes.tasks import update_all_nodes_information
+from apps.nodes.tasks import update_peer_nodes_information
 
 
 class Command(BaseCommand):
@@ -13,7 +13,7 @@ class Command(BaseCommand):
     help = "Refresh each node and show the outcome of local and remote updates."
 
     def handle(self, *args, **options):
-        summary = update_all_nodes_information(enforce_feature=False)
+        summary = update_peer_nodes_information(enforce_feature=False)
 
         if summary.get("skipped"):
             raise CommandError(summary.get("reason") or "Node refresh skipped")

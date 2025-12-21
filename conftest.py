@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import copy
 import os
 import sys
 from collections import defaultdict
@@ -8,14 +7,11 @@ from typing import Any, Dict, List
 
 import django
 import pytest
-from django.conf import settings
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 django.setup()
 
 from apps.tests.domain import RecordedTestResult, persist_results  # noqa: E402
-
-PRIMARY_DATABASE_SETTINGS: Dict[str, Any] = copy.deepcopy(settings.DATABASES["default"])
 COLLECTED_RESULTS: Dict[str, Dict[str, Any]] = defaultdict(lambda: {"logs": []})
 DB_BLOCKER = None
 
@@ -82,9 +78,9 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     try:
         if DB_BLOCKER:
             with DB_BLOCKER.unblock():
-                persist_results(results, PRIMARY_DATABASE_SETTINGS)
+                persist_results(results)
         else:
-            persist_results(results, PRIMARY_DATABASE_SETTINGS)
+            persist_results(results)
     except Exception as exc:  # pragma: no cover - best effort logging
         reporter = session.config.pluginmanager.get_plugin("terminalreporter")
         message = f"Unable to persist test results to primary database: {exc}"

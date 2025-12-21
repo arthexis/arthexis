@@ -8,9 +8,12 @@ from apps.ocpp.models import (
     Charger,
     CertificateOperation,
     InstalledCertificate,
+    CPFirmware,
+    CPFirmwareDeployment,
 )
 from apps.ocpp.views import actions
 from apps.ocpp.views.common import ActionContext, ActionCall
+from apps.protocols.models import ProtocolCall as ProtocolCallModel
 
 
 class DummyWebSocket:
@@ -133,6 +136,58 @@ def test_set_charging_profile_supports_ocpp201(monkeypatch, ws):
     assert message_id in store.pending_calls
     assert store.pending_calls[message_id]["charging_profile_id"] == profile.charging_profile_id
     assert message_id in store._pending_call_handles
+
+
+def test_firmware_actions_register_ocpp201_and_ocpp21():
+    update_calls = actions._handle_update_firmware.__protocol_calls__
+    publish_calls = actions._handle_publish_firmware.__protocol_calls__
+    unpublish_calls = actions._handle_unpublish_firmware.__protocol_calls__
+
+    assert ("ocpp201", ProtocolCallModel.CSMS_TO_CP, "UpdateFirmware") in update_calls
+    assert ("ocpp21", ProtocolCallModel.CSMS_TO_CP, "UpdateFirmware") in update_calls
+    assert ("ocpp201", ProtocolCallModel.CSMS_TO_CP, "PublishFirmware") in publish_calls
+    assert ("ocpp21", ProtocolCallModel.CSMS_TO_CP, "PublishFirmware") in publish_calls
+    assert ("ocpp201", ProtocolCallModel.CSMS_TO_CP, "UnpublishFirmware") in unpublish_calls
+    assert ("ocpp21", ProtocolCallModel.CSMS_TO_CP, "UnpublishFirmware") in unpublish_calls
+
+
+@pytest.mark.django_db
+def test_publish_firmware_supports_ocpp201(ws):
+    charger = Charger.objects.create(charger_id="FW-CP-1")
+    firmware = CPFirmware.objects.create(name="Test Firmware", payload_json={"v": 1})
+    log_key = store.identity_key(charger.charger_id, charger.connector_id)
+    context = ActionContext(charger.charger_id, charger.connector_id, charger, ws, log_key)
+
+    result = actions._handle_publish_firmware(context, {"firmwareId": firmware.pk})
+
+    assert isinstance(result, ActionCall)
+    message = json.loads(ws.sent[0])
+    assert message[2] == "PublishFirmware"
+    message_id = message[1]
+    payload = message[3]
+    assert "location" in payload
+    assert payload["requestId"]
+    deployment = CPFirmwareDeployment.objects.get(pk=payload["requestId"])
+    assert deployment.firmware_id == firmware.pk
+    assert message_id in store.pending_calls
+
+
+@pytest.mark.django_db
+def test_unpublish_firmware_supports_ocpp201(ws):
+    charger = Charger.objects.create(charger_id="FW-CP-2")
+    firmware = CPFirmware.objects.create(name="Test Firmware", payload_json={"v": 2})
+    log_key = store.identity_key(charger.charger_id, charger.connector_id)
+    context = ActionContext(charger.charger_id, charger.connector_id, charger, ws, log_key)
+
+    result = actions._handle_unpublish_firmware(context, {"firmwareId": firmware.pk})
+
+    assert isinstance(result, ActionCall)
+    message = json.loads(ws.sent[0])
+    assert message[2] == "UnpublishFirmware"
+    payload = message[3]
+    assert payload["checksum"] == firmware.checksum
+    message_id = message[1]
+    assert message_id in store.pending_calls
 
 
 @pytest.mark.django_db

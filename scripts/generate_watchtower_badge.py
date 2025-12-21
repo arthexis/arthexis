@@ -20,6 +20,7 @@ DEFAULT_BADGE_PATH = Path("media/watchtowers.svg")
 DEFAULT_TIMEOUT = 5
 DEFAULT_LABEL = "Watchtowers"
 BADGE_GREEN = "#28a745"
+BADGE_BLUE = "#007ec6"
 BADGE_RED = "#e05d44"
 
 
@@ -102,7 +103,12 @@ def is_online(target: WatchtowerTarget, *, timeout: int = DEFAULT_TIMEOUT) -> bo
 def write_badge(count: int, output_path: Path) -> None:
     """Render the watchtower badge to ``output_path``."""
 
-    color = BADGE_RED if count <= 0 else BADGE_GREEN
+    if count >= 2:
+        color = BADGE_GREEN
+    elif count == 1:
+        color = BADGE_BLUE
+    else:
+        color = BADGE_RED
     svg = render_badge(DEFAULT_LABEL, str(count), color)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(svg + "\n", encoding="utf-8")
@@ -128,17 +134,30 @@ def main() -> int:
         default=DEFAULT_TIMEOUT,
         help="HTTPS connection timeout for reachability checks.",
     )
+    parser.add_argument(
+        "--assume-online",
+        action="store_true",
+        help=(
+            "Count all Watchtower fixtures as online without network checks. "
+            "Intended for non-interactive runs only."
+        ),
+    )
     args = parser.parse_args()
+    if args.assume_online and sys.stdin.isatty():
+        parser.error("--assume-online is only allowed for non-interactive runs.")
 
     targets = load_watchtower_targets(args.fixtures_dir)
     if not targets:
         write_badge(0, args.output)
         return 0
 
-    online = 0
-    for target in targets:
-        if is_online(target, timeout=args.timeout):
-            online += 1
+    if args.assume_online:
+        online = len(targets)
+    else:
+        online = 0
+        for target in targets:
+            if is_online(target, timeout=args.timeout):
+                online += 1
     write_badge(online, args.output)
     return 0
 

@@ -53,6 +53,10 @@ from .models import (
     Variable,
     MonitoringRule,
     MonitoringReport,
+    CustomerInformationRequest,
+    CustomerInformationChunk,
+    DisplayMessageNotification,
+    DisplayMessage,
 )
 from apps.links.reference_utils import host_is_local_loopback
 from .evcs_discovery import (
@@ -1729,6 +1733,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             "NotifyEVChargingSchedule": self._handle_notify_ev_charging_schedule_action,
             "NotifyEvent": self._handle_notify_event_action,
             "NotifyMonitoringReport": self._handle_notify_monitoring_report_action,
+            "CostUpdated": self._handle_cost_updated_action,
             "PublishFirmwareStatusNotification": self._handle_publish_firmware_status_notification_action,
             "ReportChargingProfiles": self._handle_report_charging_profiles_action,
             "DiagnosticsStatusNotification": self._handle_diagnostics_status_notification_action,
@@ -1736,6 +1741,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             "StartTransaction": self._handle_start_transaction_action,
             "StopTransaction": self._handle_stop_transaction_action,
             "FirmwareStatusNotification": self._handle_firmware_status_notification_action,
+            "ReservationStatusUpdate": self._handle_reservation_status_update_action,
         }
         reply_payload = {}
         handler = action_handlers.get(action)
@@ -1918,6 +1924,11 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         ProtocolCallModel.CP_TO_CSMS,
         "ClearedChargingLimit",
     )
+    @protocol_call(
+        "ocpp21",
+        ProtocolCallModel.CP_TO_CSMS,
+        "ClearedChargingLimit",
+    )
     async def _handle_cleared_charging_limit_action(
         self, payload, msg_id, raw, text_data
     ):
@@ -1932,6 +1943,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         return {}
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "NotifyReport")
+    @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "NotifyReport")
     async def _handle_notify_report_action(self, payload, msg_id, raw, text_data):
         message = "NotifyReport"
         try:
@@ -1954,6 +1966,22 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
                 message += f": {payload_text}"
         store.add_log(self.store_key, message, log_type="charger")
 
+    @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "CostUpdated")
+    async def _handle_cost_updated_action(self, payload, msg_id, raw, text_data):
+        self._log_ocpp201_notification("CostUpdated", payload)
+        return {}
+
+    @protocol_call(
+        "ocpp21",
+        ProtocolCallModel.CP_TO_CSMS,
+        "ReservationStatusUpdate",
+    )
+    async def _handle_reservation_status_update_action(
+        self, payload, msg_id, raw, text_data
+    ):
+        self._log_ocpp201_notification("ReservationStatusUpdate", payload)
+        return {}
+
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "NotifyChargingLimit")
     async def _handle_notify_charging_limit_action(
         self, payload, msg_id, raw, text_data
@@ -1969,14 +1997,173 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
     async def _handle_notify_customer_information_action(
         self, payload, msg_id, raw, text_data
     ):
-        self._log_ocpp201_notification("NotifyCustomerInformation", payload)
+        payload_data = payload if isinstance(payload, dict) else {}
+        request_id_value = payload_data.get("requestId")
+        data_value = payload_data.get("data")
+        tbc_value = payload_data.get("tbc")
+        try:
+            request_id = int(request_id_value) if request_id_value is not None else None
+        except (TypeError, ValueError):
+            request_id = None
+        data_text = str(data_value or "")
+        tbc = bool(tbc_value) if tbc_value is not None else False
+        notified_at = timezone.now()
+
+        def _persist_customer_information() -> None:
+            charger = self.charger
+            if charger is None and self.charger_id:
+                charger = Charger.objects.filter(
+                    charger_id=self.charger_id,
+                    connector_id=self.connector_value,
+                ).first()
+            if charger is None and self.charger_id:
+                charger, _created = Charger.objects.get_or_create(
+                    charger_id=self.charger_id,
+                    connector_id=self.connector_value,
+                )
+            if charger is None:
+                return
+
+            request = None
+            if request_id is not None:
+                request = CustomerInformationRequest.objects.filter(
+                    charger=charger, request_id=request_id
+                ).first()
+            if request is None and msg_id:
+                request = CustomerInformationRequest.objects.filter(
+                    charger=charger, ocpp_message_id=msg_id
+                ).first()
+            if request is None:
+                request = CustomerInformationRequest.objects.create(
+                    charger=charger,
+                    ocpp_message_id=msg_id or "",
+                    request_id=request_id,
+                    payload=payload_data,
+                )
+            updates: dict[str, object] = {"last_notified_at": notified_at}
+            if not tbc:
+                updates["completed_at"] = notified_at
+            CustomerInformationRequest.objects.filter(pk=request.pk).update(**updates)
+            for field, value in updates.items():
+                setattr(request, field, value)
+
+            CustomerInformationChunk.objects.create(
+                charger=charger,
+                request_record=request,
+                ocpp_message_id=msg_id or "",
+                request_id=request_id,
+                data=data_text,
+                tbc=tbc,
+                raw_payload=payload_data,
+            )
+
+        await database_sync_to_async(_persist_customer_information)()
         return {}
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "NotifyDisplayMessages")
     async def _handle_notify_display_messages_action(
         self, payload, msg_id, raw, text_data
     ):
-        self._log_ocpp201_notification("NotifyDisplayMessages", payload)
+        payload_data = payload if isinstance(payload, dict) else {}
+        request_id_value = payload_data.get("requestId")
+        tbc_value = payload_data.get("tbc")
+        try:
+            request_id = int(request_id_value) if request_id_value is not None else None
+        except (TypeError, ValueError):
+            request_id = None
+        tbc = bool(tbc_value) if tbc_value is not None else False
+        received_at = timezone.now()
+        message_info = payload_data.get("messageInfo")
+        if not isinstance(message_info, (list, tuple)):
+            message_info = []
+
+        def _persist_display_messages() -> None:
+            charger = self.charger
+            if charger is None and self.charger_id:
+                charger = Charger.objects.filter(
+                    charger_id=self.charger_id,
+                    connector_id=self.connector_value,
+                ).first()
+            if charger is None and self.charger_id:
+                charger, _created = Charger.objects.get_or_create(
+                    charger_id=self.charger_id,
+                    connector_id=self.connector_value,
+                )
+            if charger is None:
+                return
+
+            notification = None
+            if request_id is not None:
+                notification = DisplayMessageNotification.objects.filter(
+                    charger=charger,
+                    request_id=request_id,
+                    completed_at__isnull=True,
+                ).order_by("-received_at").first()
+            if notification is None:
+                notification = DisplayMessageNotification.objects.create(
+                    charger=charger,
+                    ocpp_message_id=msg_id or "",
+                    request_id=request_id,
+                    tbc=tbc,
+                    raw_payload=payload_data,
+                )
+            updates: dict[str, object] = {"tbc": tbc}
+            if not tbc:
+                updates["completed_at"] = received_at
+            DisplayMessageNotification.objects.filter(pk=notification.pk).update(
+                **updates
+            )
+            for field, value in updates.items():
+                setattr(notification, field, value)
+
+            for entry in message_info:
+                if not isinstance(entry, dict):
+                    continue
+                message_id_value = entry.get("messageId")
+                try:
+                    message_id = (
+                        int(message_id_value)
+                        if message_id_value is not None
+                        else None
+                    )
+                except (TypeError, ValueError):
+                    message_id = None
+                message_payload = entry.get("message") or {}
+                if not isinstance(message_payload, dict):
+                    message_payload = {}
+                content_value = (
+                    message_payload.get("content")
+                    or message_payload.get("text")
+                    or entry.get("content")
+                    or ""
+                )
+                language_value = (
+                    message_payload.get("language") or entry.get("language") or ""
+                )
+                component = entry.get("component") or {}
+                variable = entry.get("variable") or {}
+                if not isinstance(component, dict):
+                    component = {}
+                if not isinstance(variable, dict):
+                    variable = {}
+                DisplayMessage.objects.create(
+                    notification=notification,
+                    charger=charger,
+                    message_id=message_id,
+                    priority=str(entry.get("priority") or ""),
+                    state=str(entry.get("state") or ""),
+                    valid_from=_parse_ocpp_timestamp(entry.get("validFrom")),
+                    valid_to=_parse_ocpp_timestamp(entry.get("validTo")),
+                    language=str(language_value or ""),
+                    content=str(content_value or ""),
+                    component_name=str(component.get("name") or ""),
+                    component_instance=str(component.get("instance") or ""),
+                    variable_name=str(variable.get("name") or ""),
+                    variable_instance=str(variable.get("instance") or ""),
+                    raw_payload=entry,
+                )
+
+        await database_sync_to_async(_persist_display_messages)()
         return {}
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "NotifyEVChargingNeeds")
@@ -2206,6 +2393,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         return {}
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "Get15118EVCertificate")
+    @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "Get15118EVCertificate")
     async def _handle_get_15118_ev_certificate_action(
         self, payload, msg_id, raw, text_data
     ):
@@ -2248,6 +2436,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         return response_payload
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "GetCertificateStatus")
+    @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "GetCertificateStatus")
     async def _handle_get_certificate_status_action(
         self, payload, msg_id, raw, text_data
     ):
@@ -2284,6 +2473,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         return response_payload
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "SignCertificate")
+    @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "SignCertificate")
     async def _handle_sign_certificate_action(
         self, payload, msg_id, raw, text_data
     ):
