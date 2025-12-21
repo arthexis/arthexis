@@ -128,17 +128,30 @@ def main() -> int:
         default=DEFAULT_TIMEOUT,
         help="HTTPS connection timeout for reachability checks.",
     )
+    parser.add_argument(
+        "--assume-online",
+        action="store_true",
+        help=(
+            "Count all Watchtower fixtures as online without network checks. "
+            "Intended for non-interactive runs only."
+        ),
+    )
     args = parser.parse_args()
+    if args.assume_online and sys.stdin.isatty():
+        parser.error("--assume-online is only allowed for non-interactive runs.")
 
     targets = load_watchtower_targets(args.fixtures_dir)
     if not targets:
         write_badge(0, args.output)
         return 0
 
-    online = 0
-    for target in targets:
-        if is_online(target, timeout=args.timeout):
-            online += 1
+    if args.assume_online:
+        online = len(targets)
+    else:
+        online = 0
+        for target in targets:
+            if is_online(target, timeout=args.timeout):
+                online += 1
     write_badge(online, args.output)
     return 0
 
