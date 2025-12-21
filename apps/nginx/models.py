@@ -85,7 +85,7 @@ class SiteConfiguration(models.Model):
 
     class Meta:
         verbose_name = _("Site configuration")
-        verbose_name_plural = _("Site configurations")
+        verbose_name_plural = _("Site Server Configs")
 
     def __str__(self) -> str:  # pragma: no cover - display helper
         return f"NGINX site {self.name}" if self.name else "NGINX site configuration"

@@ -78,7 +78,7 @@ class Migration(migrations.Migration):
             ],
             options={
                 "verbose_name": "Site configuration",
-                "verbose_name_plural": "Site configurations",
+                "verbose_name_plural": "Site Server Configs",
             },
         ),
     ]
