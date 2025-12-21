@@ -1918,6 +1918,11 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         ProtocolCallModel.CP_TO_CSMS,
         "ClearedChargingLimit",
     )
+    @protocol_call(
+        "ocpp21",
+        ProtocolCallModel.CP_TO_CSMS,
+        "ClearedChargingLimit",
+    )
     async def _handle_cleared_charging_limit_action(
         self, payload, msg_id, raw, text_data
     ):
@@ -1932,6 +1937,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         return {}
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "NotifyReport")
+    @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "NotifyReport")
     async def _handle_notify_report_action(self, payload, msg_id, raw, text_data):
         message = "NotifyReport"
         try:
@@ -2206,6 +2212,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         return {}
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "Get15118EVCertificate")
+    @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "Get15118EVCertificate")
     async def _handle_get_15118_ev_certificate_action(
         self, payload, msg_id, raw, text_data
     ):
@@ -2248,6 +2255,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         return response_payload
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "GetCertificateStatus")
+    @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "GetCertificateStatus")
     async def _handle_get_certificate_status_action(
         self, payload, msg_id, raw, text_data
     ):
@@ -2284,6 +2292,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         return response_payload
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "SignCertificate")
+    @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "SignCertificate")
     async def _handle_sign_certificate_action(
         self, payload, msg_id, raw, text_data
     ):
