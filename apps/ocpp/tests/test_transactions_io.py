@@ -199,7 +199,7 @@ def test_import_transactions_persists_meter_values(base_time):
     imported = import_transactions(data)
 
     assert imported == 1
-    charger = Charger.objects.get()
+    charger = Charger.objects.get(charger_id="CP-20")
     assert charger.charger_id == "CP-20"
     assert charger.connector_id == 3
     transaction = Transaction.objects.get()
