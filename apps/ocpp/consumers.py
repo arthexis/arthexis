@@ -2546,6 +2546,15 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
                 await self._process_meter_value_entries(
                     payload.get("meterValue"), connector_value, tx_obj
                 )
+                transaction_reference = ocpp_tx_id or tx_obj.ocpp_transaction_id or str(tx_obj.pk)
+                store.mark_transaction_requests(
+                    charger_id=self.charger_id,
+                    connector_id=connector_value,
+                    transaction_id=transaction_reference,
+                    actions={"RequestStartTransaction"},
+                    statuses={"accepted", "requested"},
+                    status="started",
+                )
                 await self._record_rfid_attempt(
                     rfid=id_tag or "",
                     status=RFIDSessionAttempt.Status.ACCEPTED,
@@ -2596,6 +2605,23 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             )
             await self._update_consumption_message(tx_obj.pk)
             await self._cancel_consumption_message()
+            transaction_reference = ocpp_tx_id or tx_obj.ocpp_transaction_id or str(tx_obj.pk)
+            store.mark_transaction_requests(
+                charger_id=self.charger_id,
+                connector_id=connector_value,
+                transaction_id=transaction_reference,
+                actions={"RequestStartTransaction"},
+                statuses={"started", "accepted", "requested"},
+                status="completed",
+            )
+            store.mark_transaction_requests(
+                charger_id=self.charger_id,
+                connector_id=connector_value,
+                transaction_id=transaction_reference,
+                actions={"RequestStopTransaction"},
+                statuses={"accepted", "requested"},
+                status="completed",
+            )
             store.end_session_log(self.store_key)
             store.stop_session_lock()
             return {}
