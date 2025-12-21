@@ -621,6 +621,130 @@ class EntityModelAdmin(UserDatumAdminMixin, admin.ModelAdmin):
     """ModelAdmin base class for :class:`Entity` models."""
 
     change_form_template = "admin/user_datum_change_form.html"
+    change_list_template = "admin/base/entity_change_list.html"
+    soft_deleted_change_list_template = "admin/base/soft_deleted_change_list.html"
+    soft_deleted_purge_template = "admin/base/soft_deleted_purge.html"
+
+    def _supports_soft_delete(self) -> bool:
+        return any(field.name == "is_deleted" for field in self.model._meta.fields)
+
+    def _admin_view_name(self, suffix: str) -> str:
+        opts = self.model._meta
+        return f"{opts.app_label}_{opts.model_name}_{suffix}"
+
+    def _soft_deleted_changelist_url(self):
+        try:
+            return reverse(f"admin:{self._admin_view_name('deleted_changelist')}")
+        except NoReverseMatch:
+            return None
+
+    def _soft_deleted_purge_url(self):
+        try:
+            return reverse(f"admin:{self._admin_view_name('purge_deleted')}")
+        except NoReverseMatch:
+            return None
+
+    def _active_changelist_url(self):
+        try:
+            return reverse(f"admin:{self._admin_view_name('changelist')}")
+        except NoReverseMatch:
+            return None
+
+    def get_soft_deleted_queryset(self, request):
+        manager = getattr(self.model, "all_objects", self.model._default_manager)
+        return manager.filter(is_deleted=True)
+
+    def get_queryset(self, request):
+        if getattr(request, "_soft_deleted_only", False):
+            return self.get_soft_deleted_queryset(request)
+        return super().get_queryset(request)
+
+    def get_urls(self):
+        urls = super().get_urls()
+        if not self._supports_soft_delete():
+            return urls
+        custom_urls = [
+            path(
+                "deleted/",
+                self.admin_site.admin_view(self.soft_deleted_changelist_view),
+                name=self._admin_view_name("deleted_changelist"),
+            ),
+            path(
+                "deleted/purge/",
+                self.admin_site.admin_view(self.purge_deleted_view),
+                name=self._admin_view_name("purge_deleted"),
+            ),
+        ]
+        return custom_urls + urls
+
+    def changelist_view(self, request, extra_context=None):
+        extra_context = extra_context or {}
+        if self._supports_soft_delete():
+            extra_context.setdefault("soft_delete_supported", True)
+            extra_context.setdefault(
+                "soft_deleted_url", self._soft_deleted_changelist_url()
+            )
+            extra_context.setdefault(
+                "soft_deleted_purge_url", self._soft_deleted_purge_url()
+            )
+            extra_context.setdefault(
+                "soft_deleted_active_url", self._active_changelist_url()
+            )
+            extra_context.setdefault(
+                "soft_deleted_count",
+                self.get_soft_deleted_queryset(request).count(),
+            )
+        if getattr(request, "_soft_deleted_only", False):
+            extra_context.setdefault("soft_deleted_view", True)
+        change_list_template = self.change_list_template
+        if getattr(request, "_soft_deleted_only", False):
+            self.change_list_template = self.soft_deleted_change_list_template
+        try:
+            return super().changelist_view(request, extra_context=extra_context)
+        finally:
+            self.change_list_template = change_list_template
+
+    def soft_deleted_changelist_view(self, request):
+        if not self._supports_soft_delete():
+            raise Http404
+        request._soft_deleted_only = True
+        return self.changelist_view(request)
+
+    def _purge_soft_deleted_queryset(self, request):
+        queryset = self.get_soft_deleted_queryset(request)
+        purged, _ = queryset.delete()
+        return purged
+
+    def purge_deleted_view(self, request):
+        if not self._supports_soft_delete():
+            raise Http404
+        if not self.has_delete_permission(request):
+            raise PermissionDenied
+        soft_deleted_count = self.get_soft_deleted_queryset(request).count()
+        if request.method == "POST":
+            purged = self._purge_soft_deleted_queryset(request)
+            self.message_user(
+                request,
+                ngettext(
+                    "Purged %(count)d deleted %(name)s.",
+                    "Purged %(count)d deleted %(name)s.",
+                    purged,
+                )
+                % {"count": purged, "name": self.model._meta.verbose_name_plural},
+                level=messages.SUCCESS,
+            )
+            return HttpResponseRedirect(self._soft_deleted_changelist_url() or "..")
+        context = {
+            **self.admin_site.each_context(request),
+            "opts": self.model._meta,
+            "title": _("Confirm purge of deleted %(name)s")
+            % {"name": self.model._meta.verbose_name_plural},
+            "soft_deleted_count": soft_deleted_count,
+            "soft_deleted_purge_url": self._soft_deleted_purge_url(),
+            "soft_deleted_changelist_url": self._soft_deleted_changelist_url(),
+            "soft_deleted_active_url": self._active_changelist_url(),
+        }
+        return TemplateResponse(request, self.soft_deleted_purge_template, context)
 
     def save_model(self, request, obj, form, change):
         copied = "_saveacopy" in request.POST

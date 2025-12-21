@@ -1,0 +1,20 @@
+{% extends "admin/change_list.html" %}
+{% load i18n %}
+
+{% block object-tools-items %}
+    {% if soft_deleted_active_url %}
+        <li>
+            <a href="{{ soft_deleted_active_url }}" class="viewlink">
+                {% trans "View active" %}
+            </a>
+        </li>
+    {% endif %}
+    {% if soft_deleted_purge_url and soft_deleted_count %}
+        <li>
+            <a href="{{ soft_deleted_purge_url }}" class="deletelink">
+                {% trans "Purge deleted" %}
+            </a>
+        </li>
+    {% endif %}
+    {{ block.super }}
+{% endblock %}
