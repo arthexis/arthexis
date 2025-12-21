@@ -3,6 +3,7 @@ from pathlib import Path
 
 from django.conf import settings
 from django.contrib import admin, messages
+from django.contrib.humanize.templatetags.humanize import naturaltime
 from django.core.exceptions import PermissionDenied
 from django.http import HttpRequest, HttpResponseRedirect
 from django.template.response import TemplateResponse
@@ -22,6 +23,7 @@ class SiteConfigurationAdmin(admin.ModelAdmin):
     CERTIFICATE_TYPE_SELF_SIGNED = "self-signed"
     CERTIFICATE_TYPE_CERTBOT = "certbot"
 
+    change_list_template = "admin/nginx/siteconfiguration/change_list.html"
     list_display = (
         "name",
         "enabled",
@@ -31,8 +33,7 @@ class SiteConfigurationAdmin(admin.ModelAdmin):
         "port",
         "certificate",
         "include_ipv6",
-        "last_applied_at",
-        "last_validated_at",
+        "last_sync_at",
     )
     list_filter = ("enabled", "mode", "protocol", "include_ipv6")
     search_fields = ("name", "role", "certificate__name")
@@ -51,12 +52,34 @@ class SiteConfigurationAdmin(admin.ModelAdmin):
                 name="nginx_siteconfiguration_preview",
             ),
             path(
+                "preview-default/",
+                self.admin_site.admin_view(self.preview_default_view),
+                name="nginx_siteconfiguration_preview_default",
+            ),
+            path(
                 "generate-certificates/",
                 self.admin_site.admin_view(self.generate_certificates_view),
                 name="nginx_siteconfiguration_generate_certificates",
             ),
         ]
         return custom + super().get_urls()
+
+    @admin.display(description=_("Last sync at"))
+    def last_sync_at(self, obj: SiteConfiguration) -> str:
+        latest = max(
+            (value for value in (obj.last_applied_at, obj.last_validated_at) if value),
+            default=None,
+        )
+        if not latest:
+            return "-"
+        return naturaltime(latest)
+
+    def changelist_view(self, request, extra_context=None):
+        extra_context = extra_context or {}
+        extra_context["default_preview_url"] = reverse(
+            "admin:nginx_siteconfiguration_preview_default"
+        )
+        return super().changelist_view(request, extra_context=extra_context)
 
     @admin.action(description=_("Validate selected configurations"))
     def validate_configurations(self, request, queryset):
@@ -93,6 +116,39 @@ class SiteConfigurationAdmin(admin.ModelAdmin):
                 redirect_url = f"{redirect_url}?ids={ids_param}"
             return HttpResponseRedirect(redirect_url)
 
+        return self._render_preview(
+            request, queryset=queryset, ids_param=ids_param, missing_certificates=missing_certificates
+        )
+
+    def preview_default_view(self, request: HttpRequest):
+        if not self.has_view_permission(request):
+            raise PermissionDenied
+
+        default_config = SiteConfiguration.get_default()
+        queryset = self.get_queryset(request).filter(pk=default_config.pk)
+        ids_param = str(default_config.pk)
+        missing_certificates = self._find_missing_certificates(queryset)
+
+        if request.method == "POST":
+            if not self.has_change_permission(request):
+                raise PermissionDenied
+            self._apply_configurations(request, queryset, ids_param)
+            return HttpResponseRedirect(
+                reverse("admin:nginx_siteconfiguration_preview_default")
+            )
+
+        return self._render_preview(
+            request, queryset=queryset, ids_param=ids_param, missing_certificates=missing_certificates
+        )
+
+    def _render_preview(
+        self,
+        request: HttpRequest,
+        *,
+        queryset,
+        ids_param: str,
+        missing_certificates: list[SiteConfiguration],
+    ):
         config_previews = [
             {
                 "config": config,

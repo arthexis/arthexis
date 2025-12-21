@@ -1,5 +1,8 @@
 from unittest.mock import AsyncMock
 
+import anyio
+from functools import partial
+
 import pytest
 from channels.db import database_sync_to_async
 
@@ -28,6 +31,11 @@ def reset_store(monkeypatch, tmp_path):
     yield
     store.logs["charger"].clear()
     store.log_names["charger"].clear()
+
+
+@pytest.fixture
+def anyio_backend():
+    return "asyncio"
 
 
 @pytest.mark.anyio
