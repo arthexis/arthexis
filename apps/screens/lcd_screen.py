@@ -1,10 +1,10 @@
 """Standalone LCD screen updater.
 
-The script polls ``.locks/lcd_screen.lck`` for up to two lines of text and
-writes them to the attached LCD1602 display. Each row scrolls
-independently when it exceeds 16 characters; shorter rows remain static.
-A third line in the lock file can define the scroll speed in milliseconds
-per character (default 1000 ms). When the suite service stops or the OS
+The script polls ``.locks/lcd_screen.lck`` for state and payload text and
+writes it to the attached LCD1602 display. Each row scrolls independently
+when it exceeds 16 characters; shorter rows remain static. Optional flag
+lines in the lock file can define scroll speed in milliseconds per
+character (default 1000 ms). When the suite service stops or the OS
 schedules a shutdown/reboot the updater temporarily overrides the lock
 file content to surface the alert directly on the display.
 """
@@ -24,15 +24,22 @@ from typing import NamedTuple
 
 from apps.core.notifications import get_base_dir
 from apps.screens.lcd import CharLCD1602, LCDUnavailableError
-from apps.screens.startup_notifications import STARTUP_NET_MESSAGE_FLAG
+from apps.screens.startup_notifications import (
+    LCD_LEGACY_FEATURE_LOCK,
+    LCD_LOCK_FILE,
+    LCD_STATE_DISABLED,
+    ensure_lcd_lock_file,
+    parse_lcd_flags,
+    read_lcd_lock_file,
+    render_lcd_lock_file,
+)
 
 logger = logging.getLogger(__name__)
 
 BASE_DIR = get_base_dir()
 LOCK_DIR = BASE_DIR / ".locks"
-LOCK_FILE = LOCK_DIR / "lcd_screen.lck"
+LOCK_FILE = LOCK_DIR / LCD_LOCK_FILE
 SERVICE_LOCK_FILE = LOCK_DIR / "service.lck"
-FEATURE_LOCK_NAME = "lcd_screen_enabled.lck"
 SHUTDOWN_SCHEDULE_FILE = Path("/run/systemd/shutdown/scheduled")
 DEFAULT_SCROLL_MS = 1000
 SCROLL_PADDING = 3
@@ -45,6 +52,7 @@ class LockPayload(NamedTuple):
     line2: str
     scroll_ms: int
     net_message: bool
+    enabled: bool
 
 
 class DisplayState(NamedTuple):
@@ -59,21 +67,17 @@ class DisplayState(NamedTuple):
 
 
 def _read_lock_file() -> LockPayload:
-    try:
-        lines = LOCK_FILE.read_text(encoding="utf-8").splitlines()
-    except FileNotFoundError:
-        return LockPayload("", "", DEFAULT_SCROLL_MS, False)
-    line1 = lines[0][:64] if len(lines) > 0 else ""
-    line2 = lines[1][:64] if len(lines) > 1 else ""
+    ensure_lcd_lock_file(LOCK_DIR)
+    lock_data = read_lcd_lock_file(LOCK_FILE)
+    if lock_data is None:
+        return LockPayload("", "", DEFAULT_SCROLL_MS, False, False)
 
-    raw_speed = lines[2] if len(lines) > 2 else ""
-    net_message = raw_speed.strip().lower() == STARTUP_NET_MESSAGE_FLAG
-    speed_hint = lines[3] if net_message and len(lines) > 3 else raw_speed
-    try:
-        speed = int(speed_hint) if speed_hint else DEFAULT_SCROLL_MS
-    except ValueError:
-        speed = DEFAULT_SCROLL_MS
-    return LockPayload(line1, line2, speed, net_message)
+    enabled = lock_data.state != LCD_STATE_DISABLED
+    net_message, scroll_ms = parse_lcd_flags(lock_data.flags)
+    speed = scroll_ms if scroll_ms is not None else DEFAULT_SCROLL_MS
+    if not enabled:
+        return LockPayload("", "", DEFAULT_SCROLL_MS, False, False)
+    return LockPayload(lock_data.subject, lock_data.body, speed, net_message, True)
 
 
 def _clear_lock_file() -> None:
@@ -90,15 +94,29 @@ def _clear_lock_file() -> None:
 
 
 def _disable_lcd_feature(lock_dir: Path = LOCK_DIR) -> None:
-    """Remove the LCD feature and runtime lock files when the bus is missing."""
+    """Mark the LCD feature as disabled when the I2C bus is missing."""
 
-    for filename in (FEATURE_LOCK_NAME, LOCK_FILE.name):
-        try:
-            (lock_dir / filename).unlink()
-        except FileNotFoundError:
-            continue
-        except OSError:
-            logger.debug("Failed to remove LCD lock file: %s", filename, exc_info=True)
+    lock_file = lock_dir / LCD_LOCK_FILE
+    try:
+        lock_file.parent.mkdir(parents=True, exist_ok=True)
+        lock_data = read_lcd_lock_file(lock_file)
+        payload = render_lcd_lock_file(
+            state=LCD_STATE_DISABLED,
+            subject=lock_data.subject if lock_data else "",
+            body=lock_data.body if lock_data else "",
+            flags=lock_data.flags if lock_data else None,
+        )
+        lock_file.write_text(payload, encoding="utf-8")
+    except OSError:
+        logger.debug("Failed to update LCD lock file state", exc_info=True)
+
+    legacy_lock = lock_dir / LCD_LEGACY_FEATURE_LOCK
+    try:
+        legacy_lock.unlink()
+    except FileNotFoundError:
+        return
+    except OSError:
+        logger.debug("Failed to remove legacy LCD lock file", exc_info=True)
 
 
 def _handle_lcd_failure(exc: Exception, lock_dir: Path = LOCK_DIR) -> bool:
@@ -224,7 +242,10 @@ def _resolve_display_payload(
         line1, line2 = suite_notice
         return line1, line2, DEFAULT_SCROLL_MS, "suite-down"
 
-    line1, line2, speed, _ = lock_payload
+    if not lock_payload.enabled:
+        return "", "", DEFAULT_SCROLL_MS, "disabled"
+
+    line1, line2, speed, _, _ = lock_payload
     return line1, line2, speed, "lock-file"
 
 
@@ -371,7 +392,7 @@ def _advance_display(lcd: CharLCD1602, state: DisplayState) -> DisplayState:
 def main() -> None:  # pragma: no cover - hardware dependent
     lcd = None
     last_lock_mtime = 0.0
-    lock_payload: LockPayload = LockPayload("", "", DEFAULT_SCROLL_MS, False)
+    lock_payload: LockPayload = LockPayload("", "", DEFAULT_SCROLL_MS, False, False)
     last_display: tuple[str, str, int, str] | None = None
     display_state: DisplayState | None = None
     last_net_message: tuple[str, str] | None = None
