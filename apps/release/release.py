@@ -990,21 +990,16 @@ def check_pypi_readiness(
 
     resp = None
     try:
-        resp = requests.get(
-            f"https://pypi.org/pypi/{package.name}/json", timeout=10
-        )
+        resp = requests.get("https://pypi.org/simple/", timeout=10)
     except Exception as exc:  # pragma: no cover - network failure
-        add("error", f"Failed to reach PyPI JSON API: {exc}")
+        add("error", f"Failed to reach PyPI index: {exc}")
     else:
         if resp.ok:
-            add(
-                "success",
-                f"PyPI JSON API reachable for project '{package.name}'",
-            )
+            add("success", "PyPI index reachable")
         else:
             add(
-                "error",
-                f"PyPI JSON API returned status {resp.status_code} for '{package.name}'",
+                "warning",
+                f"PyPI index returned status {resp.status_code}",
             )
     finally:
         if resp is not None:
@@ -1019,9 +1014,13 @@ def check_pypi_readiness(
         if url in checked_urls:
             continue
         checked_urls.add(url)
+        if not target.verify_availability:
+            add("warning", f"Skipping availability check for {target.name}")
+            continue
+
         resp = None
         try:
-            resp = requests.get(url, timeout=10)
+            resp = requests.head(url, timeout=10)
         except Exception as exc:  # pragma: no cover - network failure
             add("error", f"Failed to reach upload endpoint {url}: {exc}")
             continue
@@ -1034,7 +1033,7 @@ def check_pypi_readiness(
                 )
             else:
                 add(
-                    "error",
+                    "warning",
                     f"Upload endpoint {url} returned status {resp.status_code}",
                 )
         finally:
