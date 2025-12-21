@@ -1,5 +1,8 @@
 from unittest.mock import AsyncMock
 
+import anyio
+from functools import partial
+
 import pytest
 
 from apps.ocpp import consumers, store
@@ -15,6 +18,11 @@ def reset_store(monkeypatch, tmp_path):
     yield
     store.logs["charger"].clear()
     store.log_names["charger"].clear()
+
+
+@pytest.fixture
+def anyio_backend():
+    return "asyncio"
 
 
 @pytest.mark.anyio
@@ -73,7 +81,9 @@ async def test_transaction_event_registered_for_ocpp201():
 @pytest.mark.anyio
 @pytest.mark.django_db
 async def test_get_15118_ev_certificate_persists_request():
-    charger = Charger.objects.create(charger_id="CERT-1")
+    charger = await anyio.to_thread.run_sync(
+        partial(Charger.objects.create, charger_id="CERT-1")
+    )
     consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "CERT-1"
     consumer.charger = charger
@@ -85,7 +95,9 @@ async def test_get_15118_ev_certificate_persists_request():
     )
 
     assert result["status"] == "Rejected"
-    request = CertificateRequest.objects.get(charger=charger)
+    request = await anyio.to_thread.run_sync(
+        partial(CertificateRequest.objects.get, charger=charger)
+    )
     assert request.action == CertificateRequest.ACTION_15118
     assert request.csr == "CSRDATA"
     assert request.status == CertificateRequest.STATUS_REJECTED
@@ -95,7 +107,9 @@ async def test_get_15118_ev_certificate_persists_request():
 @pytest.mark.anyio
 @pytest.mark.django_db
 async def test_get_certificate_status_persists_check():
-    charger = Charger.objects.create(charger_id="CERT-2")
+    charger = await anyio.to_thread.run_sync(
+        partial(Charger.objects.create, charger_id="CERT-2")
+    )
     consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "CERT-2"
     consumer.charger = charger
@@ -107,7 +121,9 @@ async def test_get_certificate_status_persists_check():
     )
 
     assert result["status"] == "Rejected"
-    status_check = CertificateStatusCheck.objects.get(charger=charger)
+    status_check = await anyio.to_thread.run_sync(
+        partial(CertificateStatusCheck.objects.get, charger=charger)
+    )
     assert status_check.status == CertificateStatusCheck.STATUS_REJECTED
     assert status_check.certificate_hash_data["hashAlgorithm"] == "SHA256"
 
@@ -115,7 +131,9 @@ async def test_get_certificate_status_persists_check():
 @pytest.mark.anyio
 @pytest.mark.django_db
 async def test_sign_certificate_persists_request():
-    charger = Charger.objects.create(charger_id="CERT-3")
+    charger = await anyio.to_thread.run_sync(
+        partial(Charger.objects.create, charger_id="CERT-3")
+    )
     consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "CERT-3"
     consumer.charger = charger
@@ -127,6 +145,8 @@ async def test_sign_certificate_persists_request():
     )
 
     assert result["status"] == "Rejected"
-    request = CertificateRequest.objects.get(charger=charger)
+    request = await anyio.to_thread.run_sync(
+        partial(CertificateRequest.objects.get, charger=charger)
+    )
     assert request.action == CertificateRequest.ACTION_SIGN
     assert request.csr == "CSR-123"
