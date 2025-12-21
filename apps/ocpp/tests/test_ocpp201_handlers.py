@@ -84,7 +84,7 @@ async def test_transaction_event_registered_for_ocpp201():
 
 
 @pytest.mark.anyio
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 async def test_get_15118_ev_certificate_persists_request():
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="CERT-1")
     consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
@@ -106,7 +106,7 @@ async def test_get_15118_ev_certificate_persists_request():
 
 
 @pytest.mark.anyio
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 async def test_get_certificate_status_persists_check():
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="CERT-2")
     consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
@@ -128,7 +128,7 @@ async def test_get_certificate_status_persists_check():
 
 
 @pytest.mark.anyio
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 async def test_sign_certificate_persists_request():
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="CERT-3")
     consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
@@ -148,7 +148,7 @@ async def test_sign_certificate_persists_request():
 
 
 @pytest.mark.anyio
-@pytest.mark.django_db
+@pytest.mark.django_db(transaction=True)
 async def test_notify_monitoring_report_persists_data():
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="MON-1")
     consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
