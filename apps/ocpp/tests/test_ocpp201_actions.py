@@ -56,6 +56,9 @@ def reset_store_state(tmp_path, monkeypatch):
         store.history.clear()
         store.triggered_followups.clear()
         store.monitoring_report_requests.clear()
+        store.transaction_requests.clear()
+        store._transaction_requests_by_connector.clear()
+        store._transaction_requests_by_transaction.clear()
 
     _clear_state()
     yield
@@ -257,6 +260,59 @@ def test_get_variables_registers_pending_call(ws):
     message_id = message[1]
     assert message_id in store.pending_calls
     assert store.pending_calls[message_id]["action"] == "GetVariables"
+
+
+def test_request_start_transaction_registers_pending_call(ws):
+    log_key = store.identity_key("CID", 2)
+    context = ActionContext("CID", 2, charger=None, ws=ws, log_key=log_key)
+    result = actions._handle_request_start_transaction(
+        context,
+        {"idToken": "ABC", "remoteStartId": 123, "evseId": 2},
+    )
+
+    assert isinstance(result, ActionCall)
+    message = json.loads(ws.sent[0])
+    assert message[2] == "RequestStartTransaction"
+    payload = message[3]
+    assert payload["idToken"]["idToken"] == "ABC"
+    assert payload["remoteStartId"] == 123
+    assert payload["evseId"] == 2
+    message_id = message[1]
+    assert message_id in store.pending_calls
+    assert message_id in store.transaction_requests
+    assert store.transaction_requests[message_id]["status"] == "requested"
+
+
+def test_request_stop_transaction_registers_pending_call(ws):
+    log_key = store.identity_key("CID", 1)
+    context = ActionContext("CID", 1, charger=None, ws=ws, log_key=log_key)
+    result = actions._handle_request_stop_transaction(
+        context,
+        {"transactionId": "TX-42"},
+    )
+
+    assert isinstance(result, ActionCall)
+    message = json.loads(ws.sent[0])
+    assert message[2] == "RequestStopTransaction"
+    payload = message[3]
+    assert payload["transactionId"] == "TX-42"
+    message_id = message[1]
+    assert message_id in store.pending_calls
+    assert store.transaction_requests[message_id]["transaction_id"] == "TX-42"
+
+
+def test_get_transaction_status_registers_pending_call(ws):
+    log_key = store.identity_key("CID", None)
+    context = ActionContext("CID", None, charger=None, ws=ws, log_key=log_key)
+    result = actions._handle_get_transaction_status(context, {"transactionId": "TX-99"})
+
+    assert isinstance(result, ActionCall)
+    message = json.loads(ws.sent[0])
+    assert message[2] == "GetTransactionStatus"
+    payload = message[3]
+    assert payload["transactionId"] == "TX-99"
+    message_id = message[1]
+    assert message_id in store.pending_calls
 
 
 def test_set_variables_registers_pending_call(ws):

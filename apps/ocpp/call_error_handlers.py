@@ -677,6 +677,7 @@ async def handle_request_start_transaction_error(
         if suffix:
             message += f", description={suffix}"
     store.add_log(log_key, message, log_type="charger")
+    store.update_transaction_request(message_id, status="rejected")
     store.record_pending_call_result(
         message_id,
         metadata=metadata,
@@ -698,6 +699,35 @@ async def handle_request_stop_transaction_error(
     log_key: str,
 ) -> bool:
     message = "RequestStopTransaction error"
+    if error_code:
+        message += f": code={str(error_code).strip()}"
+    if description:
+        suffix = str(description).strip()
+        if suffix:
+            message += f", description={suffix}"
+    store.add_log(log_key, message, log_type="charger")
+    store.update_transaction_request(message_id, status="rejected")
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        success=False,
+        error_code=error_code,
+        error_description=description,
+        error_details=details,
+    )
+    return True
+
+
+async def handle_get_transaction_status_error(
+    consumer: CallErrorContext,
+    message_id: str,
+    metadata: dict,
+    error_code: str | None,
+    description: str | None,
+    details: dict | None,
+    log_key: str,
+) -> bool:
+    message = "GetTransactionStatus error"
     if error_code:
         message += f": code={str(error_code).strip()}"
     if description:
@@ -1051,6 +1081,7 @@ CALL_ERROR_HANDLERS: dict[str, CallErrorHandler] = {
     "GetDiagnostics": handle_get_diagnostics_error,
     "RequestStartTransaction": handle_request_start_transaction_error,
     "RequestStopTransaction": handle_request_stop_transaction_error,
+    "GetTransactionStatus": handle_get_transaction_status_error,
     "Reset": handle_reset_error,
     "ChangeAvailability": handle_change_availability_error,
     "SetChargingProfile": handle_set_charging_profile_error,

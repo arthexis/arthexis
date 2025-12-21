@@ -263,6 +263,158 @@ def _handle_remote_start(context: ActionContext, data: dict) -> JsonResponse | A
     )
 
 
+@protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "RequestStartTransaction")
+def _handle_request_start_transaction(
+    context: ActionContext, data: dict
+) -> JsonResponse | ActionCall:
+    raw_id_token = data.get("idToken") or data.get("idTag")
+    if not isinstance(raw_id_token, str) or not raw_id_token.strip():
+        return JsonResponse({"detail": "idToken required"}, status=400)
+    id_token_value = raw_id_token.strip()
+    id_token_type = data.get("idTokenType") or data.get("type") or "Central"
+    if not isinstance(id_token_type, str) or not id_token_type.strip():
+        return JsonResponse({"detail": "idToken type required"}, status=400)
+    id_token_type = id_token_type.strip()
+
+    remote_start_value = data.get("remoteStartId")
+    if remote_start_value in (None, ""):
+        remote_start_id = int(uuid.uuid4().int % 1_000_000_000)
+    else:
+        try:
+            remote_start_id = int(remote_start_value)
+        except (TypeError, ValueError):
+            return JsonResponse({"detail": "remoteStartId must be an integer"}, status=400)
+
+    evse_value = data.get("evseId")
+    if evse_value in (None, ""):
+        evse_value = data.get("connectorId")
+    if evse_value in (None, ""):
+        evse_value = context.connector_value
+    evse_payload: int | str | None = None
+    if evse_value not in (None, ""):
+        try:
+            evse_payload = int(evse_value)
+        except (TypeError, ValueError):
+            evse_payload = evse_value
+
+    payload: dict[str, object] = {
+        "idToken": {"idToken": id_token_value, "type": id_token_type},
+        "remoteStartId": remote_start_id,
+    }
+    if evse_payload is not None:
+        payload["evseId"] = evse_payload
+    if "chargingProfile" in data and data["chargingProfile"] is not None:
+        payload["chargingProfile"] = data["chargingProfile"]
+
+    message_id = uuid.uuid4().hex
+    ocpp_action = "RequestStartTransaction"
+    expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
+    msg = json.dumps([2, message_id, ocpp_action, payload])
+    async_to_sync(context.ws.send)(msg)
+    requested_at = timezone.now()
+    metadata = {
+        "action": ocpp_action,
+        "charger_id": context.cid,
+        "connector_id": evse_payload,
+        "log_key": context.log_key,
+        "id_token": id_token_value,
+        "id_token_type": id_token_type,
+        "remote_start_id": remote_start_id,
+        "requested_at": requested_at,
+    }
+    store.register_pending_call(message_id, metadata)
+    store.register_transaction_request(message_id, metadata)
+    return ActionCall(
+        msg=msg,
+        message_id=message_id,
+        ocpp_action=ocpp_action,
+        expected_statuses=expected_statuses,
+    )
+
+
+@protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "RequestStopTransaction")
+def _handle_request_stop_transaction(
+    context: ActionContext, data: dict
+) -> JsonResponse | ActionCall:
+    transaction_id = data.get("transactionId") or data.get("transaction_id")
+    tx_obj = None
+    if transaction_id in (None, ""):
+        tx_obj = store.get_transaction(context.cid, context.connector_value)
+        if not tx_obj:
+            return JsonResponse({"detail": "transactionId required"}, status=400)
+        transaction_id = tx_obj.ocpp_transaction_id or str(tx_obj.pk)
+    transaction_text = str(transaction_id).strip()
+    if not transaction_text:
+        return JsonResponse({"detail": "transactionId required"}, status=400)
+    payload = {"transactionId": transaction_text}
+    message_id = uuid.uuid4().hex
+    ocpp_action = "RequestStopTransaction"
+    expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
+    msg = json.dumps([2, message_id, ocpp_action, payload])
+    async_to_sync(context.ws.send)(msg)
+    connector_id = context.connector_value
+    if tx_obj is not None:
+        connector_id = getattr(tx_obj, "connector_id", connector_id)
+    requested_at = timezone.now()
+    metadata = {
+        "action": ocpp_action,
+        "charger_id": context.cid,
+        "connector_id": connector_id,
+        "log_key": context.log_key,
+        "transaction_id": transaction_text,
+        "requested_at": requested_at,
+    }
+    store.register_pending_call(message_id, metadata)
+    store.register_transaction_request(message_id, metadata)
+    return ActionCall(
+        msg=msg,
+        message_id=message_id,
+        ocpp_action=ocpp_action,
+        expected_statuses=expected_statuses,
+    )
+
+
+@protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "GetTransactionStatus")
+def _handle_get_transaction_status(
+    context: ActionContext, data: dict
+) -> JsonResponse | ActionCall:
+    transaction_id = data.get("transactionId") or data.get("transaction_id")
+    payload: dict[str, object] = {}
+    if transaction_id not in (None, ""):
+        transaction_text = str(transaction_id).strip()
+        if not transaction_text:
+            return JsonResponse({"detail": "transactionId must not be blank"}, status=400)
+        payload["transactionId"] = transaction_text
+    message_id = uuid.uuid4().hex
+    ocpp_action = "GetTransactionStatus"
+    expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
+    msg = json.dumps([2, message_id, ocpp_action, payload])
+    async_to_sync(context.ws.send)(msg)
+    store.register_pending_call(
+        message_id,
+        {
+            "action": ocpp_action,
+            "charger_id": context.cid,
+            "connector_id": context.connector_value,
+            "log_key": context.log_key,
+            "transaction_id": payload.get("transactionId"),
+            "requested_at": timezone.now(),
+        },
+    )
+    store.schedule_call_timeout(
+        message_id,
+        action=ocpp_action,
+        log_key=context.log_key,
+        message="GetTransactionStatus request timed out",
+    )
+    return ActionCall(
+        msg=msg,
+        message_id=message_id,
+        ocpp_action=ocpp_action,
+        expected_statuses=expected_statuses,
+    )
+
+
 @protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "GetDiagnostics")
 def _handle_get_diagnostics(
     context: ActionContext, data: dict
@@ -1599,6 +1751,9 @@ ACTION_HANDLERS = {
     "reserve_now": _handle_reserve_now,
     "remote_stop": _handle_remote_stop,
     "remote_start": _handle_remote_start,
+    "request_start_transaction": _handle_request_start_transaction,
+    "request_stop_transaction": _handle_request_stop_transaction,
+    "get_transaction_status": _handle_get_transaction_status,
     "get_diagnostics": _handle_get_diagnostics,
     "change_availability": _handle_change_availability,
     "change_configuration": _handle_change_configuration,
