@@ -1,0 +1,12 @@
+{% extends "admin/change_form.html" %}
+{% load i18n %}
+
+{% block after_field_sets %}
+  {{ block.super }}
+  {% if original %}
+    <div class="module">
+      <h2>{% trans "Monitoring Report Payload" %}</h2>
+      <pre>{{ original.raw_payload }}</pre>
+    </div>
+  {% endif %}
+{% endblock %}

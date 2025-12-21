@@ -55,6 +55,7 @@ def reset_store_state(tmp_path, monkeypatch):
         store._pending_call_handles.clear()
         store.history.clear()
         store.triggered_followups.clear()
+        store.monitoring_report_requests.clear()
 
     _clear_state()
     yield
@@ -236,3 +237,66 @@ def test_get_installed_certificate_ids_registers_pending_call(ws):
     assert message[2] == "GetInstalledCertificateIds"
     message_id = message[1]
     assert message_id in store.pending_calls
+
+
+def test_get_variables_registers_pending_call(ws):
+    log_key = store.identity_key("CID", None)
+    context = ActionContext("CID", None, charger=None, ws=ws, log_key=log_key)
+    result = actions._handle_get_variables(
+        context,
+        {
+            "getVariableData": [
+                {"component": {"name": "EVSE"}, "variable": {"name": "Voltage"}}
+            ]
+        },
+    )
+
+    assert isinstance(result, ActionCall)
+    message = json.loads(ws.sent[0])
+    assert message[2] == "GetVariables"
+    message_id = message[1]
+    assert message_id in store.pending_calls
+    assert store.pending_calls[message_id]["action"] == "GetVariables"
+
+
+def test_set_variables_registers_pending_call(ws):
+    log_key = store.identity_key("CID", None)
+    context = ActionContext("CID", None, charger=None, ws=ws, log_key=log_key)
+    result = actions._handle_set_variables(
+        context,
+        {
+            "setVariableData": [
+                {
+                    "component": {"name": "EVSE"},
+                    "variable": {"name": "Voltage"},
+                    "attributeValue": "230",
+                }
+            ]
+        },
+    )
+
+    assert isinstance(result, ActionCall)
+    message = json.loads(ws.sent[0])
+    assert message[2] == "SetVariables"
+    message_id = message[1]
+    assert message_id in store.pending_calls
+    metadata = store.pending_calls[message_id]
+    assert metadata["action"] == "SetVariables"
+    assert metadata["set_variable_data"][0]["attributeValue"] == "230"
+
+
+def test_get_monitoring_report_registers_pending_request(ws):
+    log_key = store.identity_key("CID", None)
+    context = ActionContext("CID", None, charger=None, ws=ws, log_key=log_key)
+    result = actions._handle_get_monitoring_report(
+        context,
+        {"reportBase": "ConfigurationInventory"},
+    )
+
+    assert isinstance(result, ActionCall)
+    message = json.loads(ws.sent[0])
+    assert message[2] == "GetMonitoringReport"
+    message_id = message[1]
+    assert message_id in store.pending_calls
+    request_id = store.pending_calls[message_id]["request_id"]
+    assert request_id in store.monitoring_report_requests

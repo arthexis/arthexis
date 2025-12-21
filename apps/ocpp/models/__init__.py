@@ -39,6 +39,7 @@ from .certificates import (
     InstalledCertificate,
     TrustAnchor,
 )
+from .monitoring import Variable, MonitoringRule, MonitoringReport
 
 __all__ = [
     "Charger",
@@ -81,4 +82,7 @@ __all__ = [
     "CertificateOperation",
     "InstalledCertificate",
     "TrustAnchor",
+    "Variable",
+    "MonitoringRule",
+    "MonitoringReport",
 ]

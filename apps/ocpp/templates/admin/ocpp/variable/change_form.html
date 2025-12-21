@@ -1,0 +1,25 @@
+{% extends "admin/change_form.html" %}
+{% load i18n %}
+
+{% block after_field_sets %}
+  {{ block.super }}
+  {% if original %}
+    <div class="module">
+      <h2>{% trans "Variable Details" %}</h2>
+      <p>
+        <strong>{% trans "Component" %}:</strong>
+        {{ original.component_name }}
+        {% if original.component_instance %}
+          ({{ original.component_instance }})
+        {% endif %}
+      </p>
+      <p>
+        <strong>{% trans "Variable" %}:</strong>
+        {{ original.variable_name }}
+        {% if original.variable_instance %}
+          ({{ original.variable_instance }})
+        {% endif %}
+      </p>
+    </div>
+  {% endif %}
+{% endblock %}

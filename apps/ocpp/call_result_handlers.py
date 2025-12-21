@@ -20,6 +20,8 @@ from .models import (
     PowerProjection,
     CertificateOperation,
     InstalledCertificate,
+    Variable,
+    MonitoringRule,
 )
 
 
@@ -32,6 +34,18 @@ def _format_status_info(status_info: object) -> str:
         return json.dumps(status_info, ensure_ascii=False, sort_keys=True)
     except TypeError:
         return str(status_info)
+
+
+def _extract_component_variable(entry: dict) -> tuple[str, str, str, str]:
+    component_data = entry.get("component")
+    variable_data = entry.get("variable")
+    if not isinstance(component_data, dict) or not isinstance(variable_data, dict):
+        return "", "", "", ""
+    component_name = str(component_data.get("name") or "").strip()
+    component_instance = str(component_data.get("instance") or "").strip()
+    variable_name = str(variable_data.get("name") or "").strip()
+    variable_instance = str(variable_data.get("instance") or "").strip()
+    return component_name, component_instance, variable_name, variable_instance
 class CallResultContext(Protocol):
     charger_id: str | None
     store_key: str
@@ -821,6 +835,355 @@ async def handle_reset_result(
     return True
 
 
+async def handle_get_variables_result(
+    consumer: CallResultContext,
+    message_id: str,
+    metadata: dict,
+    payload_data: dict,
+    log_key: str,
+) -> bool:
+    results = payload_data.get("getVariableResult")
+    if not isinstance(results, (list, tuple)):
+        store.record_pending_call_result(
+            message_id,
+            metadata=metadata,
+            payload=payload_data,
+        )
+        return True
+
+    def _apply() -> None:
+        charger_id = metadata.get("charger_id") or consumer.charger_id
+        connector_id = metadata.get("connector_id")
+        charger = None
+        if charger_id:
+            charger = Charger.objects.filter(
+                charger_id=charger_id,
+                connector_id=connector_id,
+            ).first()
+        if charger is None and charger_id:
+            charger, _created = Charger.objects.get_or_create(
+                charger_id=charger_id,
+                connector_id=connector_id,
+            )
+        if charger is None:
+            return
+        for entry in results:
+            if not isinstance(entry, dict):
+                continue
+            (
+                component_name,
+                component_instance,
+                variable_name,
+                variable_instance,
+            ) = _extract_component_variable(entry)
+            if not component_name or not variable_name:
+                continue
+            attribute_type = str(entry.get("attributeType") or "").strip()
+            attribute_status = str(entry.get("attributeStatus") or "").strip()
+            attribute_value = entry.get("attributeValue")
+            value_text = str(attribute_value) if attribute_value is not None else ""
+            Variable.objects.update_or_create(
+                charger=charger,
+                component_name=component_name,
+                component_instance=component_instance,
+                variable_name=variable_name,
+                variable_instance=variable_instance,
+                attribute_type=attribute_type,
+                defaults={
+                    "attribute_status": attribute_status,
+                    "value": value_text,
+                    "value_type": "",
+                },
+            )
+
+    await database_sync_to_async(_apply)()
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        payload=payload_data,
+    )
+    return True
+
+
+async def handle_set_variables_result(
+    consumer: CallResultContext,
+    message_id: str,
+    metadata: dict,
+    payload_data: dict,
+    log_key: str,
+) -> bool:
+    results = payload_data.get("setVariableResult")
+    if not isinstance(results, (list, tuple)):
+        store.record_pending_call_result(
+            message_id,
+            metadata=metadata,
+            payload=payload_data,
+        )
+        return True
+    request_entries = metadata.get("set_variable_data")
+    if not isinstance(request_entries, (list, tuple)):
+        request_entries = []
+    request_lookup: dict[tuple[str, str, str, str, str], str] = {}
+    for entry in request_entries:
+        if not isinstance(entry, dict):
+            continue
+        (
+            component_name,
+            component_instance,
+            variable_name,
+            variable_instance,
+        ) = _extract_component_variable(entry)
+        if not component_name or not variable_name:
+            continue
+        attribute_type = str(entry.get("attributeType") or "").strip()
+        attribute_value = entry.get("attributeValue")
+        value_text = str(attribute_value) if attribute_value is not None else ""
+        request_lookup[
+            (
+                component_name,
+                component_instance,
+                variable_name,
+                variable_instance,
+                attribute_type,
+            )
+        ] = value_text
+
+    def _apply() -> None:
+        charger_id = metadata.get("charger_id") or consumer.charger_id
+        connector_id = metadata.get("connector_id")
+        charger = None
+        if charger_id:
+            charger = Charger.objects.filter(
+                charger_id=charger_id,
+                connector_id=connector_id,
+            ).first()
+        if charger is None and charger_id:
+            charger, _created = Charger.objects.get_or_create(
+                charger_id=charger_id,
+                connector_id=connector_id,
+            )
+        if charger is None:
+            return
+        for entry in results:
+            if not isinstance(entry, dict):
+                continue
+            (
+                component_name,
+                component_instance,
+                variable_name,
+                variable_instance,
+            ) = _extract_component_variable(entry)
+            if not component_name or not variable_name:
+                continue
+            attribute_type = str(entry.get("attributeType") or "").strip()
+            attribute_status = str(entry.get("attributeStatus") or "").strip()
+            value_text = request_lookup.get(
+                (
+                    component_name,
+                    component_instance,
+                    variable_name,
+                    variable_instance,
+                    attribute_type,
+                ),
+                "",
+            )
+            Variable.objects.update_or_create(
+                charger=charger,
+                component_name=component_name,
+                component_instance=component_instance,
+                variable_name=variable_name,
+                variable_instance=variable_instance,
+                attribute_type=attribute_type,
+                defaults={
+                    "attribute_status": attribute_status,
+                    "value": value_text,
+                    "value_type": "",
+                },
+            )
+
+    await database_sync_to_async(_apply)()
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        payload=payload_data,
+    )
+    return True
+
+
+async def handle_set_variable_monitoring_result(
+    consumer: CallResultContext,
+    message_id: str,
+    metadata: dict,
+    payload_data: dict,
+    log_key: str,
+) -> bool:
+    results = payload_data.get("setMonitoringResult")
+    if not isinstance(results, (list, tuple)):
+        store.record_pending_call_result(
+            message_id,
+            metadata=metadata,
+            payload=payload_data,
+        )
+        return True
+    request_entries = metadata.get("set_monitoring_data")
+    if not isinstance(request_entries, (list, tuple)):
+        request_entries = []
+    request_lookup: dict[int, dict[str, object]] = {}
+    for entry in request_entries:
+        if not isinstance(entry, dict):
+            continue
+        variable_monitoring = entry.get("variableMonitoring")
+        if not isinstance(variable_monitoring, (list, tuple)):
+            continue
+        for monitor in variable_monitoring:
+            if not isinstance(monitor, dict):
+                continue
+            monitoring_id_value = monitor.get("id") or monitor.get("monitoringId")
+            try:
+                monitoring_id = (
+                    int(monitoring_id_value)
+                    if monitoring_id_value is not None
+                    else None
+                )
+            except (TypeError, ValueError):
+                monitoring_id = None
+            if monitoring_id is None:
+                continue
+            request_lookup[monitoring_id] = {
+                "entry": entry,
+                "monitor": monitor,
+            }
+
+    def _apply() -> None:
+        charger_id = metadata.get("charger_id") or consumer.charger_id
+        connector_id = metadata.get("connector_id")
+        charger = None
+        if charger_id:
+            charger = Charger.objects.filter(
+                charger_id=charger_id,
+                connector_id=connector_id,
+            ).first()
+        if charger is None and charger_id:
+            charger, _created = Charger.objects.get_or_create(
+                charger_id=charger_id,
+                connector_id=connector_id,
+            )
+        if charger is None:
+            return
+        for entry in results:
+            if not isinstance(entry, dict):
+                continue
+            monitoring_id_value = entry.get("id") or entry.get("monitoringId")
+            try:
+                monitoring_id = (
+                    int(monitoring_id_value)
+                    if monitoring_id_value is not None
+                    else None
+                )
+            except (TypeError, ValueError):
+                monitoring_id = None
+            if monitoring_id is None:
+                continue
+            status_value = str(entry.get("status") or "").strip()
+            request_entry = request_lookup.get(monitoring_id)
+            if not request_entry:
+                continue
+            component_name, component_instance, variable_name, variable_instance = _extract_component_variable(
+                request_entry["entry"]
+            )
+            if not component_name or not variable_name:
+                continue
+            variable_obj, _created = Variable.objects.get_or_create(
+                charger=charger,
+                component_name=component_name,
+                component_instance=component_instance,
+                variable_name=variable_name,
+                variable_instance=variable_instance,
+                attribute_type="",
+            )
+            monitor = request_entry["monitor"]
+            threshold_value = monitor.get("value")
+            threshold_text = str(threshold_value) if threshold_value is not None else ""
+            monitor_type = str(monitor.get("type") or "").strip()
+            transaction_value = monitor.get("transaction")
+            is_transaction = bool(transaction_value) if transaction_value is not None else False
+            MonitoringRule.objects.update_or_create(
+                charger=charger,
+                monitoring_id=monitoring_id,
+                defaults={
+                    "variable": variable_obj,
+                    "severity": monitor.get("severity"),
+                    "monitor_type": monitor_type,
+                    "threshold": threshold_text,
+                    "is_transaction": is_transaction,
+                    "is_active": status_value.casefold() == "accepted",
+                    "raw_payload": monitor,
+                },
+            )
+
+    await database_sync_to_async(_apply)()
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        payload=payload_data,
+    )
+    return True
+
+
+async def handle_clear_variable_monitoring_result(
+    consumer: CallResultContext,
+    message_id: str,
+    metadata: dict,
+    payload_data: dict,
+    log_key: str,
+) -> bool:
+    status_value = str(payload_data.get("status") or "").strip()
+    monitor_ids = metadata.get("monitoring_ids")
+    if not isinstance(monitor_ids, (list, tuple)):
+        monitor_ids = []
+
+    def _apply() -> None:
+        if status_value.casefold() != "accepted":
+            return
+        charger_id = metadata.get("charger_id") or consumer.charger_id
+        if not charger_id:
+            return
+        MonitoringRule.objects.filter(
+            charger__charger_id=charger_id,
+            monitoring_id__in=monitor_ids,
+        ).update(is_active=False)
+
+    await database_sync_to_async(_apply)()
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        payload=payload_data,
+    )
+    return True
+
+
+async def handle_get_monitoring_report_result(
+    consumer: CallResultContext,
+    message_id: str,
+    metadata: dict,
+    payload_data: dict,
+    log_key: str,
+) -> bool:
+    status_value = str(payload_data.get("status") or "").strip()
+    request_id = metadata.get("request_id")
+    if status_value.casefold() in {"rejected", "notsupported"} and request_id is not None:
+        try:
+            store.pop_monitoring_report_request(int(request_id))
+        except (TypeError, ValueError):
+            pass
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        payload=payload_data,
+    )
+    return True
+
+
 async def handle_change_availability_result(
     consumer: CallResultContext,
     message_id: str,
@@ -1150,6 +1513,11 @@ CALL_RESULT_HANDLERS: dict[str, CallResultHandler] = {
     "DeleteCertificate": handle_delete_certificate_result,
     "CertificateSigned": handle_certificate_signed_result,
     "GetInstalledCertificateIds": handle_get_installed_certificate_ids_result,
+    "GetVariables": handle_get_variables_result,
+    "SetVariables": handle_set_variables_result,
+    "SetVariableMonitoring": handle_set_variable_monitoring_result,
+    "ClearVariableMonitoring": handle_clear_variable_monitoring_result,
+    "GetMonitoringReport": handle_get_monitoring_report_result,
 }
 
 
