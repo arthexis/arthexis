@@ -1200,7 +1200,7 @@ def _major_minor_version_changed(previous: str, current: str) -> bool:
 
 
 def _step_check_version(release, ctx, log_path: Path, *, user=None) -> None:
-    from . import release as release_utils
+    from apps.release import release as release_utils
     from packaging.version import InvalidVersion, Version
 
     sync_error: Optional[Exception] = None
@@ -1442,7 +1442,7 @@ def _step_run_tests(release, ctx, log_path: Path, *, user=None) -> None:
 
 
 def _step_promote_build(release, ctx, log_path: Path, *, user=None) -> None:
-    from . import release as release_utils
+    from apps.release import release as release_utils
 
     _append_log(log_path, "Generating build files")
     ctx.pop("build_revision", None)
@@ -1551,7 +1551,7 @@ def _step_release_manager_approval(
 
 
 def _step_publish(release, ctx, log_path: Path, *, user=None) -> None:
-    from . import release as release_utils
+    from apps.release import release as release_utils
 
     if ctx.get("dry_run"):
         test_repository_url = os.environ.get(
@@ -2274,4 +2274,3 @@ def _dedupe_preserve_order(values):
         seen.add(value)
         result.append(value)
     return result
-
