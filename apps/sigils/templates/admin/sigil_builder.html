@@ -32,7 +32,7 @@
   <h2>{% trans "Built-in Sigil Roots" %}</h2>
   <ul>
     {% for root in builtin_roots %}
-      <li>[{{ root.prefix }}] – <a href="{{ root.url }}">{{ root.label }}</a></li>
+      <li>[{{ root.prefix }}] – {% if root.url %}<a href="{{ root.url }}">{{ root.label }}</a>{% else %}{{ root.label }}{% endif %}</li>
     {% endfor %}
   </ul>
   <input type="text" id="sigil-filter" placeholder="{% trans 'Filter' %}" />

@@ -11,7 +11,7 @@ from django.core import serializers
 from django.db import models
 
 from .models import SigilRoot
-from .sigil_context import get_context
+from .sigil_context import get_context, get_request
 from .system import get_system_sigil_values, resolve_system_namespace_value
 
 logger = logging.getLogger(__name__)
@@ -119,6 +119,54 @@ def _aggregate_values(values: Iterable[float], func: str) -> Optional[str]:
         return str(max(collected))
     # default to total
     return str(sum(collected))
+
+
+def _resolve_request_value(request, key: str, param: str) -> str:
+    if request is None or not key:
+        return ""
+    key = key.lower()
+    if key == "method":
+        return request.method
+    if key == "path":
+        return request.path
+    if key == "full_path":
+        return request.get_full_path()
+    if key == "scheme":
+        return request.scheme
+    if key == "host":
+        return request.get_host()
+    if key in {"url", "absolute_uri"}:
+        return request.build_absolute_uri()
+    if key == "query_string":
+        return request.META.get("QUERY_STRING", "")
+    if key in {"ip", "remote_addr"}:
+        return request.META.get("REMOTE_ADDR", "")
+    if key == "user":
+        user = getattr(request, "user", None)
+        if user and getattr(user, "is_authenticated", False):
+            return str(user)
+        return ""
+    if key in {"header", "headers"}:
+        if not param:
+            return ""
+        return request.headers.get(param, "")
+    if key == "meta":
+        if not param:
+            return ""
+        return str(request.META.get(param, ""))
+    if key in {"query", "get", "param"}:
+        if not param:
+            return ""
+        return request.GET.get(param, "")
+    if key == "post":
+        if not param:
+            return ""
+        return request.POST.get(param, "")
+    if key in {"cookie", "cookies"}:
+        if not param:
+            return ""
+        return request.COOKIES.get(param, "")
+    return ""
 
 
 def _resolve_token(token: str, current: Optional[models.Model] = None) -> str:
@@ -252,6 +300,16 @@ def _resolve_token(token: str, current: Optional[models.Model] = None) -> str:
                     key_upper or normalized_key or raw_key or "",
                 )
                 return _failed_resolution(original_token)
+        elif root.context_type == SigilRoot.Context.REQUEST:
+            if not normalized_key:
+                return ""
+            request = get_request()
+            param_value = param_args[0] if param_args else (param or "")
+            return _resolve_request_value(
+                request,
+                normalized_key or raw_key or "",
+                param_value,
+            )
         elif root.context_type == SigilRoot.Context.ENTITY:
             model = root.content_type.model_class() if root.content_type else None
             instance = None

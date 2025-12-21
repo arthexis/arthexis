@@ -4,7 +4,7 @@ from django.urls import resolve
 
 from apps.nodes.models import Node, NodeRole
 
-from .sigil_context import set_context, clear_context
+from .sigil_context import clear_context, clear_request, set_context, set_request
 
 
 class SigilContextMiddleware:
@@ -14,6 +14,7 @@ class SigilContextMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
+        set_request(request)
         context = {}
         if request.user.is_authenticated:
             context[get_user_model()] = request.user.pk
@@ -55,3 +56,4 @@ class SigilContextMiddleware:
             return self.get_response(request)
         finally:
             clear_context()
+            clear_request()
