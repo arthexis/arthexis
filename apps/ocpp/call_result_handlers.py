@@ -503,6 +503,58 @@ async def handle_update_firmware_result(
     return True
 
 
+async def handle_publish_firmware_result(
+    consumer: CallResultContext,
+    message_id: str,
+    metadata: dict,
+    payload_data: dict,
+    log_key: str,
+) -> bool:
+    deployment_pk = metadata.get("deployment_pk")
+
+    def _apply():
+        if not deployment_pk:
+            return
+        deployment = CPFirmwareDeployment.objects.filter(pk=deployment_pk).first()
+        if not deployment:
+            return
+        status_value = str(payload_data.get("status") or "").strip() or "Accepted"
+        deployment.mark_status(
+            status_value,
+            "",
+            timezone.now(),
+            response=payload_data,
+        )
+
+    await database_sync_to_async(_apply)()
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        payload=payload_data,
+    )
+    return True
+
+
+async def handle_unpublish_firmware_result(
+    consumer: CallResultContext,
+    message_id: str,
+    metadata: dict,
+    payload_data: dict,
+    log_key: str,
+) -> bool:
+    status_value = str(payload_data.get("status") or "").strip()
+    message = "UnpublishFirmware result"
+    if status_value:
+        message += f": status={status_value}"
+    store.add_log(log_key, message, log_type="charger")
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        payload=payload_data,
+    )
+    return True
+
+
 async def handle_get_configuration_result(
     consumer: CallResultContext,
     message_id: str,
@@ -1536,6 +1588,8 @@ CALL_RESULT_HANDLERS: dict[str, CallResultHandler] = {
     "GetLocalListVersion": handle_get_local_list_version_result,
     "ClearCache": handle_clear_cache_result,
     "UpdateFirmware": handle_update_firmware_result,
+    "PublishFirmware": handle_publish_firmware_result,
+    "UnpublishFirmware": handle_unpublish_firmware_result,
     "GetConfiguration": handle_get_configuration_result,
     "TriggerMessage": handle_trigger_message_result,
     "ReserveNow": handle_reserve_now_result,
