@@ -377,14 +377,33 @@ def _connect_sqlite_wal():
             return
         connection = kwargs.get("connection")
         if connection and connection.vendor == "sqlite":
-            cursor = connection.cursor()
-            cursor.execute("PRAGMA journal_mode=WAL;")
-            cursor.execute("PRAGMA busy_timeout=60000;")
-            cursor.close()
+            from django.db import DatabaseError
+
+            try:
+                with connection.cursor() as cursor:
+                    try:
+                        cursor.execute("PRAGMA journal_mode=WAL;")
+                        cursor.execute("PRAGMA busy_timeout=60000;")
+                    except DatabaseError as exc:
+                        logger.warning(
+                            "SQLite WAL setup failed; falling back to DELETE journal mode: %s",
+                            exc,
+                        )
+                        try:
+                            cursor.execute("PRAGMA journal_mode=DELETE;")
+                        except DatabaseError as fallback_exc:
+                            logger.warning(
+                                "SQLite DELETE journal mode fallback failed: %s",
+                                fallback_exc,
+                            )
+            except DatabaseError as exc:
+                logger.warning(
+                    "Skipping SQLite WAL setup; unable to open cursor: %s",
+                    exc,
+                )
 
     connection_created.connect(
         enable_sqlite_wal,
         dispatch_uid="apps.core.enable_sqlite_wal",
         weak=False,
     )
-
