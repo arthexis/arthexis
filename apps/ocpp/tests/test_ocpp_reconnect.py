@@ -192,6 +192,45 @@ def test_reconnect_resumes_pending_call(fake_state_redis, temp_store_dirs):
 
 
 @override_settings(ROOT_URLCONF="apps.ocpp.urls")
+def test_reconnect_resumes_pending_call_case_insensitive(
+    fake_state_redis, temp_store_dirs
+):
+    async def run_scenario():
+        serial = "CP-RESUME"
+        message_id = "resume-lower-1"
+        metadata = {
+            "charger_id": serial.lower(),
+            "action": "RemoteStartTransaction",
+            "log_key": store.identity_key(serial, None),
+        }
+        store.register_pending_call(message_id, metadata)
+
+        store.pending_calls.clear()
+        store._pending_call_events.clear()
+        store._pending_call_results.clear()
+        store._pending_call_handles.clear()
+        store.monitoring_report_requests.clear()
+        store.monitoring_report_requests.clear()
+
+        restored = store.restore_pending_calls(serial)
+        assert message_id in restored
+        assert message_id in store.pending_calls
+
+        communicator = WebsocketCommunicator(application, f"/{serial}")
+        connected, _ = await communicator.connect()
+        assert connected is True
+
+        await communicator.send_json_to([3, message_id, {"status": "Accepted"}])
+        result = await _wait_for_pending_result(message_id)
+        assert result is not None
+        assert result["payload"]["status"] == "Accepted"
+
+        await communicator.disconnect()
+
+    async_to_sync(run_scenario)()
+
+
+@override_settings(ROOT_URLCONF="apps.ocpp.urls")
 def test_replayed_result_keeps_pending_queue_intact(fake_state_redis, temp_store_dirs):
     async def run_scenario():
         serial = "CP-REPLAY"

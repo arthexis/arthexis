@@ -1372,7 +1372,12 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         metadata = store.pop_pending_call(message_id)
         if not metadata:
             return
-        if metadata.get("charger_id") and metadata.get("charger_id") != self.charger_id:
+        metadata_charger = metadata.get("charger_id")
+        if (
+            metadata_charger
+            and self.charger_id
+            and str(metadata_charger).lower() != str(self.charger_id).lower()
+        ):
             return
         action = metadata.get("action")
         log_key = metadata.get("log_key") or self.store_key
@@ -1403,7 +1408,12 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         metadata = store.pop_pending_call(message_id)
         if not metadata:
             return
-        if metadata.get("charger_id") and metadata.get("charger_id") != self.charger_id:
+        metadata_charger = metadata.get("charger_id")
+        if (
+            metadata_charger
+            and self.charger_id
+            and str(metadata_charger).lower() != str(self.charger_id).lower()
+        ):
             return
         action = metadata.get("action")
         log_key = metadata.get("log_key") or self.store_key
