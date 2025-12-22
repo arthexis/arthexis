@@ -239,12 +239,15 @@ def _register_admin_and_post_migrate_handlers(config):
     def create_default_arthexis(**kwargs):
         User = get_user_model()
         if not User.all_objects.exists():
-            User.all_objects.create_superuser(
+            user = User.all_objects.create_superuser(
                 pk=1,
                 username="arthexis",
                 email="arthexis@gmail.com",
                 password="arthexis",
             )
+            from apps.locals.models import ensure_admin_favorites
+
+            ensure_admin_favorites(user)
 
     post_migrate.connect(create_default_arthexis, sender=config)
 

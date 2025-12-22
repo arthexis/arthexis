@@ -118,6 +118,9 @@ class Command(BaseCommand):
         if delegate is not None:
             user.operate_as = delegate
         user.save()
+        from apps.locals.models import ensure_admin_favorites
+
+        ensure_admin_favorites(user)
         return user
 
     def _resolve_system_delegate(self, user):
