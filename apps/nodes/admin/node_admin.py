@@ -54,6 +54,7 @@ from apps.locals.user_data import EntityModelAdmin
 from apps.ocpp import store
 from apps.ocpp.models import (
     Charger,
+    CPForwarder,
     CPFirmware,
     CPFirmwareDeployment,
     CPFirmwareRequest,
