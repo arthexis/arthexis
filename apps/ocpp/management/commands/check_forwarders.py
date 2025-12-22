@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from urllib.parse import urlsplit, urlunsplit
+
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
+from apps.core.system import _build_nginx_report
 from apps.nodes.models import Node
 from apps.ocpp.models import CPForwarder, Charger
 
@@ -17,6 +20,27 @@ def _format_timestamp(value) -> str:
     return localized.strftime("%Y-%m-%d %H:%M:%S %Z")
 
 
+def _format_bool(value: bool | None) -> str:
+    if value is None:
+        return "—"
+    return "True" if value else "False"
+
+
+def _format_list(values: list[str]) -> str:
+    return ", ".join(values) if values else "—"
+
+
+def _iter_websocket_urls(node: Node, path: str) -> list[str]:
+    candidates: list[str] = []
+    for url in node.iter_remote_urls(path):
+        parsed = urlsplit(url)
+        if parsed.scheme not in {"http", "https"}:
+            continue
+        scheme = "wss" if parsed.scheme == "https" else "ws"
+        candidates.append(urlunsplit((scheme, parsed.netloc, parsed.path, "", "")))
+    return candidates
+
+
 class Command(BaseCommand):
     help = (
         "Report on charge point forwarding configuration and recent forwarding activity."
@@ -26,6 +50,55 @@ class Command(BaseCommand):
         local = Node.get_local()
         local_label = str(local) if local else "Unregistered"
         self.stdout.write(f"Local node: {local_label}")
+        self.stdout.write("")
+        self.stdout.write("Inbound forwarding readiness:")
+        if not local:
+            self.stdout.write("  Registered: False")
+        else:
+            host_candidates = local.get_remote_host_candidates(resolve_dns=False)
+            metadata_urls = list(
+                local.iter_remote_urls("/nodes/network/chargers/forward/")
+            )
+            ocpp_urls = _iter_websocket_urls(local, "/<charger_id>")
+            ocpp_ws_urls = _iter_websocket_urls(local, "/ws/<charger_id>")
+            nginx_report = _build_nginx_report()
+
+            self.stdout.write("  Registered: True")
+            self.stdout.write(f"  Preferred hosts: {_format_list(host_candidates)}")
+            self.stdout.write(
+                f"  Public endpoint slug: {local.public_endpoint or '—'}"
+            )
+            self.stdout.write(
+                f"  Public key configured: {_format_bool(bool(local.public_key))}"
+            )
+            self.stdout.write(
+                "  Metadata endpoints: "
+                f"{_format_list(metadata_urls)}"
+            )
+            self.stdout.write(
+                "  OCPP websocket endpoints: "
+                f"{_format_list(ocpp_urls)}"
+            )
+            self.stdout.write(
+                "  OCPP websocket endpoints (/ws): "
+                f"{_format_list(ocpp_ws_urls)}"
+            )
+            self.stdout.write("  Nginx configuration:")
+            self.stdout.write(f"    Mode: {nginx_report.get('mode') or '—'}")
+            self.stdout.write(f"    Backend port: {nginx_report.get('port') or '—'}")
+            self.stdout.write(
+                f"    Config path: {nginx_report.get('actual_path') or '—'}"
+            )
+            self.stdout.write(
+                "    Matches expected: "
+                f"{_format_bool(not nginx_report.get('differs'))}"
+            )
+            expected_error = nginx_report.get("expected_error") or ""
+            actual_error = nginx_report.get("actual_error") or ""
+            if expected_error:
+                self.stdout.write(f"    Expected config error: {expected_error}")
+            if actual_error:
+                self.stdout.write(f"    Actual config error: {actual_error}")
         self.stdout.write("")
 
         forwarders = list(
