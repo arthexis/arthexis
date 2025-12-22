@@ -128,9 +128,6 @@ def test_sync_forwarded_charge_points_respects_existing_sessions(monkeypatch):
 
     from apps.ocpp import forwarder as forwarder_module, forwarding_utils
 
-    monkeypatch.setitem(
-        sys.modules, "apps.ocpp.models.forwarding_utils", forwarding_utils
-    )
     monkeypatch.setitem(sys.modules, "apps.ocpp.models.forwarder", forwarder_module)
 
     local = Node.objects.create(hostname="local", mac_address=mac_address)
@@ -216,4 +213,3 @@ def test_sync_forwarded_charge_points_respects_existing_sessions(monkeypatch):
 
     assert CPForwarder.objects.get(pk=cp_forwarder.pk).is_running is False
     assert CPForwarder.objects.get(pk=cp_forwarder_two.pk).is_running is True
-

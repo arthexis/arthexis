@@ -182,7 +182,7 @@ class CPForwarder(Entity):
     def sync_chargers(self, *, apply_sessions: bool = True) -> None:
         """Apply the forwarder configuration to eligible charge points."""
 
-        from .forwarding_utils import (
+        from ..forwarding_utils import (
             attempt_forwarding_probe,
             load_local_node_credentials,
             send_forwarding_metadata,
