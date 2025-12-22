@@ -14,7 +14,10 @@ import sys
 import threading
 from pathlib import Path
 
-from apps.screens.startup_notifications import render_lcd_lock_file
+from apps.screens.startup_notifications import (
+    LCD_STICKY_NET_MESSAGE_FLAG,
+    render_lcd_lock_file,
+)
 
 try:  # pragma: no cover - optional dependency
     from plyer import notification as plyer_notification
@@ -67,14 +70,16 @@ class NotificationManager:
         # a non-interactive environment (e.g. service or CI).
         # Any failure will fall back to logging quietly.
 
-    def _write_lock_file(self, subject: str, body: str) -> None:
+    def _write_lock_file(self, subject: str, body: str, sticky: bool) -> None:
+        flags = [LCD_STICKY_NET_MESSAGE_FLAG] if sticky else None
         payload = render_lcd_lock_file(
             subject=subject[:64],
             body=body[:64],
+            flags=flags,
         )
         self.lock_file.write_text(payload, encoding="utf-8")
 
-    def send(self, subject: str, body: str = "") -> bool:
+    def send(self, subject: str, body: str = "", *, sticky: bool = False) -> bool:
         """Store *subject* and *body* in ``lcd_screen.lck`` when available.
 
         The method truncates each line to 64 characters. If the lock file is
@@ -84,19 +89,19 @@ class NotificationManager:
         """
 
         try:
-            self._write_lock_file(subject[:64], body[:64])
+            self._write_lock_file(subject[:64], body[:64], sticky)
             return True
         except Exception as exc:  # pragma: no cover - filesystem dependent
             logger.warning("LCD lock file write failed: %s", exc)
             self._gui_display(subject, body)
             return True
 
-    def send_async(self, subject: str, body: str = "") -> None:
+    def send_async(self, subject: str, body: str = "", *, sticky: bool = False) -> None:
         """Dispatch :meth:`send` on a background thread."""
 
         def _send() -> None:
             try:
-                self.send(subject, body)
+                self.send(subject, body, sticky=sticky)
             except Exception:
                 # Notification failures shouldn't affect callers.
                 pass
@@ -120,13 +125,13 @@ class NotificationManager:
 manager = NotificationManager()
 
 
-def notify(subject: str, body: str = "") -> bool:
+def notify(subject: str, body: str = "", *, sticky: bool = False) -> bool:
     """Convenience wrapper using the global :class:`NotificationManager`."""
 
-    return manager.send(subject=subject, body=body)
+    return manager.send(subject=subject, body=body, sticky=sticky)
 
 
-def notify_async(subject: str, body: str = "") -> None:
+def notify_async(subject: str, body: str = "", *, sticky: bool = False) -> None:
     """Run :func:`notify` without blocking the caller."""
 
-    manager.send_async(subject=subject, body=body)
+    manager.send_async(subject=subject, body=body, sticky=sticky)

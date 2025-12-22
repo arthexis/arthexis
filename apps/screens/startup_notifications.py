@@ -12,6 +12,7 @@ from utils import revision
 logger = logging.getLogger(__name__)
 
 STARTUP_NET_MESSAGE_FLAG = "net-message"
+LCD_STICKY_NET_MESSAGE_FLAG = "sticky-net-message"
 LCD_LOCK_FILE = "lcd_screen.lck"
 LCD_LEGACY_FEATURE_LOCK = "lcd_screen_enabled.lck"
 LCD_STATE_ENABLED = "enabled"
@@ -85,9 +86,10 @@ def render_lcd_lock_file(
     return "\n".join(lines) + "\n"
 
 
-def parse_lcd_flags(flags: Iterable[str]) -> tuple[bool, int | None]:
+def parse_lcd_flags(flags: Iterable[str]) -> tuple[bool, int | None, bool]:
     net_message = False
     scroll_ms: int | None = None
+    sticky = False
     for flag in flags:
         value = (flag or "").strip()
         if not value:
@@ -96,13 +98,16 @@ def parse_lcd_flags(flags: Iterable[str]) -> tuple[bool, int | None]:
         if normalized == STARTUP_NET_MESSAGE_FLAG:
             net_message = True
             continue
+        if normalized == LCD_STICKY_NET_MESSAGE_FLAG:
+            sticky = True
+            continue
         if normalized.startswith("scroll_ms="):
             normalized = normalized.split("=", 1)[1].strip()
         try:
             scroll_ms = int(normalized)
         except ValueError:
             continue
-    return net_message, scroll_ms
+    return net_message, scroll_ms, sticky
 
 
 def ensure_lcd_lock_file(lock_dir: Path) -> Path | None:

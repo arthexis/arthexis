@@ -55,6 +55,7 @@ class LockPayload(NamedTuple):
     line2: str
     scroll_ms: int
     net_message: bool
+    sticky: bool
     enabled: bool
 
 
@@ -76,11 +77,18 @@ def _read_lock_file() -> LockPayload:
         return LockPayload("", "", DEFAULT_SCROLL_MS, False, False)
 
     enabled = lock_data.state != LCD_STATE_DISABLED
-    net_message, scroll_ms = parse_lcd_flags(lock_data.flags)
+    net_message, scroll_ms, sticky = parse_lcd_flags(lock_data.flags)
     speed = scroll_ms if scroll_ms is not None else DEFAULT_SCROLL_MS
     if not enabled:
-        return LockPayload("", "", DEFAULT_SCROLL_MS, False, False)
-    return LockPayload(lock_data.subject, lock_data.body, speed, net_message, True)
+        return LockPayload("", "", DEFAULT_SCROLL_MS, False, False, False)
+    return LockPayload(
+        lock_data.subject,
+        lock_data.body,
+        speed,
+        net_message,
+        sticky,
+        True,
+    )
 
 
 def _clear_lock_file() -> None:
@@ -248,7 +256,7 @@ def _resolve_display_payload(
     if not lock_payload.enabled:
         return "", "", DEFAULT_SCROLL_MS, "disabled"
 
-    line1, line2, speed, _, _ = lock_payload
+    line1, line2, speed, _, _, _ = lock_payload
     return line1, line2, speed, "lock-file"
 
 
@@ -408,7 +416,9 @@ def _advance_display(lcd: CharLCD1602, state: DisplayState) -> DisplayState:
 def main() -> None:  # pragma: no cover - hardware dependent
     lcd = None
     last_lock_mtime = 0.0
-    lock_payload: LockPayload = LockPayload("", "", DEFAULT_SCROLL_MS, False, False)
+    lock_payload: LockPayload = LockPayload(
+        "", "", DEFAULT_SCROLL_MS, False, False, False
+    )
     last_display: tuple[str, str, int, str] | None = None
     display_state: DisplayState | None = None
     last_net_message: tuple[str, str] | None = None
@@ -464,7 +474,11 @@ def main() -> None:  # pragma: no cover - hardware dependent
                     lcd.clear()
                     display_state = _prepare_display_state(line1, line2, speed)
                     last_display = current_display
-                    if source == "lock-file" and _lock_file_matches(lock_payload, last_lock_mtime):
+                    if (
+                        source == "lock-file"
+                        and not lock_payload.sticky
+                        and _lock_file_matches(lock_payload, last_lock_mtime)
+                    ):
                         _clear_lock_file()
 
                 if lcd and display_state:

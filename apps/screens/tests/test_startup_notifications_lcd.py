@@ -6,10 +6,12 @@ from django.test import TestCase, override_settings
 
 from apps.nodes.models import Node, NodeFeature
 from apps.screens.startup_notifications import (
+    LCD_STICKY_NET_MESSAGE_FLAG,
     LCD_LEGACY_FEATURE_LOCK,
     LCD_LOCK_FILE,
     lcd_feature_enabled,
     lcd_feature_enabled_for_paths,
+    parse_lcd_flags,
 )
 
 
@@ -89,3 +91,12 @@ class LCDStartupNotificationTests(TestCase):
 
             self.assertTrue(lcd_feature_enabled(lock_dir))
             self.assertTrue((lock_dir / LCD_LOCK_FILE).exists())
+
+    def test_parse_lcd_flags_detects_sticky_net_message_flag(self):
+        net_message, scroll_ms, sticky = parse_lcd_flags(
+            ["scroll_ms=250", LCD_STICKY_NET_MESSAGE_FLAG]
+        )
+
+        self.assertFalse(net_message)
+        self.assertEqual(scroll_ms, 250)
+        self.assertTrue(sticky)

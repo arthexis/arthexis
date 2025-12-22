@@ -1383,7 +1383,7 @@ class NetMessage(Entity):
             )
             return
 
-        displayed = notify(self.subject, self.body)
+        displayed = notify(self.subject, self.body, sticky=True)
         local = Node.get_local()
         if displayed:
             cutoff = timezone.now() - timedelta(hours=24)
