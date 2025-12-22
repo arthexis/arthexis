@@ -159,7 +159,7 @@ def capture_node_screenshot(
 
 
 @shared_task
-def poll_unreachable_upstream() -> None:
+def poll_upstream() -> None:
     """Poll upstream nodes for queued NetMessages."""
 
     local = Node.get_local()
@@ -279,7 +279,7 @@ def _summarize_update_results(local_result: dict | None, remote_result: dict | N
 
 
 @shared_task
-def update_peer_nodes_information(enforce_feature: bool = True) -> dict:
+def poll_peers(enforce_feature: bool = True) -> dict:
     """Invoke the admin "Update nodes" workflow for peer nodes.
 
     When ``enforce_feature`` is False the celery-queue requirement is skipped to
@@ -349,7 +349,7 @@ def update_peer_nodes_information(enforce_feature: bool = True) -> dict:
 
 
 @shared_task
-def purge_stale_net_messages(retention_hours: int = 24) -> int:
+def purge_net_messages(retention_hours: int = 24) -> int:
     """Remove NetMessages (and pending queue entries) older than ``retention_hours``."""
 
     try:
@@ -375,7 +375,7 @@ def purge_stale_net_messages(retention_hours: int = 24) -> int:
 
 
 @shared_task
-def monitor_network_connectivity() -> dict[str, object]:
+def monitor_nmcli() -> dict[str, object]:
     """Ping a known address and attempt to remediate repeated failures."""
 
     local = Node.get_local()

@@ -335,13 +335,13 @@ def _configure_lock_dependent_tasks(config):
                 every=1, period=IntervalSchedule.HOURS
             )
             task_name = normalize_periodic_task_name(
-                PeriodicTask.objects, "poll_email_collectors"
+                PeriodicTask.objects, "poll_emails"
             )
             PeriodicTask.objects.update_or_create(
                 name=task_name,
                 defaults={
                     "interval": schedule,
-                    "task": "apps.core.tasks.poll_email_collectors",
+                    "task": "apps.core.tasks.poll_emails",
                 },
             )
         except (OperationalError, ProgrammingError):

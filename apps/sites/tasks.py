@@ -8,7 +8,9 @@ from datetime import timedelta
 from celery import shared_task
 
 from django.utils import timezone
+from django.apps import apps as django_apps
 
+from apps.leads.models import Lead
 
 logger = logging.getLogger(__name__)
 
@@ -59,16 +61,24 @@ def create_user_story_github_issue(user_story_id: int) -> str | None:
 
 
 @shared_task
-def purge_expired_landing_leads(days: int = 30) -> int:
-    """Remove landing leads older than ``days`` days."""
-
-    from .models import LandingLead
+def purge_leads(days: int = 30) -> int:
+    """Remove lead records older than ``days`` days."""
 
     cutoff = timezone.now() - timedelta(days=days)
-    queryset = LandingLead.objects.filter(created_on__lt=cutoff)
-    deleted, _ = queryset.delete()
-    if deleted:
-        logger.info(
-            "Purged %s landing leads older than %s days", deleted, days
-        )
-    return deleted
+    total_deleted = 0
+
+    lead_models = [
+        model
+        for model in django_apps.get_models()
+        if issubclass(model, Lead)
+        and not model._meta.abstract
+        and not model._meta.proxy
+    ]
+
+    for model in sorted(lead_models, key=lambda item: item._meta.label):
+        deleted, _ = model.objects.filter(created_on__lt=cutoff).delete()
+        total_deleted += deleted
+
+    if total_deleted:
+        logger.info("Purged %s leads older than %s days", total_deleted, days)
+    return total_deleted

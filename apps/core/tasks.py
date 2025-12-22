@@ -1941,7 +1941,7 @@ def check_github_updates(
 
 
 @shared_task
-def poll_email_collectors() -> None:
+def poll_emails() -> None:
     """Poll all configured email collectors for new messages."""
     try:
         from apps.emails.models import EmailCollector
