@@ -147,6 +147,24 @@ ensure_virtualenv() {
 
 ensure_git_safe_directory
 
+notify_lcd_manual_upgrade_required() {
+  if ! arthexis_lcd_feature_enabled "$LOCK_DIR"; then
+    return 0
+  fi
+
+  local lock_file="$LOCK_DIR/lcd_screen.lck"
+  local state_line="state=enabled"
+  if [ -f "$lock_file" ]; then
+    local first_line
+    first_line=$(head -n 1 "$lock_file" 2>/dev/null | tr -d '\r\n')
+    if printf '%s' "$first_line" | grep -iq '^state='; then
+      state_line="$first_line"
+    fi
+  fi
+
+  printf "%s\nManual action:\n> upgrade.sh\n" "$state_line" > "$lock_file"
+}
+
 reset_safe_git_changes() {
   local role="${1:-Terminal}"
 
@@ -661,6 +679,7 @@ DETACHED=0
 CHECK_ONLY=0
 PRE_CHECK=0
 REQUESTED_BRANCH=""
+SERVER_MODE=0
 FORWARDED_ARGS=()
 # Parse CLI options controlling the upgrade strategy.
 while [[ $# -gt 0 ]]; do
@@ -731,6 +750,11 @@ while [[ $# -gt 0 ]]; do
       ;;
     --check)
       CHECK_ONLY=1
+      shift
+      ;;
+    --server)
+      SERVER_MODE=1
+      FORWARDED_ARGS+=("$1")
       shift
       ;;
     --branch)
@@ -1411,6 +1435,7 @@ else
       printf 'SERVICE_WAS_ACTIVE=%s\n' "$SERVICE_WAS_ACTIVE"
       printf 'LCD_WAS_ACTIVE=%s\n' "$LCD_WAS_ACTIVE"
     } > "$UPGRADE_RERUN_LOCK"
+    notify_lcd_manual_upgrade_required
     echo "upgrade.sh was updated during git pull; please run the upgrade again to use the new script." >&2
     exit "$UPGRADE_RERUN_EXIT_CODE"
   fi
@@ -1557,3 +1582,30 @@ if arthexis_lcd_feature_enabled "$LOCK_DIR"; then
 fi
 
 arthexis_refresh_desktop_shortcuts "$BASE_DIR"
+
+if [[ $SERVER_MODE -eq 1 ]]; then
+  if [[ $LOCAL_ONLY -eq 1 ]]; then
+    echo "Upgrade server mode running with --local; remote polling is disabled."
+  fi
+  echo "Upgrade server mode enabled; polling for updates every 60 seconds."
+  while true; do
+    sleep 60
+    if [[ $LOCAL_ONLY -eq 1 ]]; then
+      continue
+    fi
+    if ! command -v git >/dev/null 2>&1; then
+      echo "git not available; unable to poll for updates." >&2
+      continue
+    fi
+    if ! fetch_branch_with_ref_repair origin "$BRANCH"; then
+      echo "Failed to fetch updates for origin/$BRANCH; retrying in 60 seconds." >&2
+      continue
+    fi
+    CURRENT_REVISION="$(git rev-parse HEAD 2>/dev/null || echo "")"
+    LATEST_REVISION="$(git rev-parse "origin/$BRANCH" 2>/dev/null || echo "")"
+    if [[ -n "$CURRENT_REVISION" && -n "$LATEST_REVISION" && "$CURRENT_REVISION" != "$LATEST_REVISION" ]]; then
+      echo "Updates detected on origin/$BRANCH; re-running upgrade."
+      exec "$UPGRADE_SCRIPT_PATH" "${FORWARDED_ARGS[@]}"
+    fi
+  done
+fi
