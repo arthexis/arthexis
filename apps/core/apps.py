@@ -283,11 +283,19 @@ def _patch_entity_deserialization():
                     lookup[field.attname] = value
                 if not lookup:
                     continue
-                existing = (
-                    manager.filter(**lookup)
-                    .only("pk", "is_seed_data", "is_user_data")
-                    .first()
-                )
+                try:
+                    existing = (
+                        manager.filter(**lookup)
+                        .only("pk", "is_seed_data", "is_user_data")
+                        .first()
+                    )
+                except Exception as exc:  # pragma: no cover - db not ready
+                    from django.db.utils import OperationalError, ProgrammingError
+
+                    if isinstance(exc, (OperationalError, ProgrammingError)):
+                        existing = None
+                    else:
+                        raise
                 if existing is not None:
                     obj.pk = existing.pk
                     obj.is_seed_data = existing.is_seed_data
