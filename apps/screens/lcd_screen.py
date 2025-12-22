@@ -45,6 +45,9 @@ DEFAULT_SCROLL_MS = 1000
 SCROLL_PADDING = 3
 LCD_COLUMNS = CharLCD1602.columns
 LCD_ROWS = CharLCD1602.rows
+CLOCK_MESSAGE_SECONDS = 6
+CLOCK_TIME_FORMAT = "%H:%M"
+CLOCK_DATE_FORMAT = "%Y-%m-%d"
 
 
 class LockPayload(NamedTuple):
@@ -249,6 +252,19 @@ def _resolve_display_payload(
     return line1, line2, speed, "lock-file"
 
 
+def _lcd_clock_enabled() -> bool:
+    return not os.getenv("DISABLE_LCD_CLOCK")
+
+
+def _clock_payload(now: datetime) -> tuple[str, str, int, str]:
+    return (
+        f"Date {now.strftime(CLOCK_DATE_FORMAT)}",
+        f"Time {now.strftime(CLOCK_TIME_FORMAT)}",
+        DEFAULT_SCROLL_MS,
+        "clock",
+    )
+
+
 _DJANGO_READY = False
 _SHUTDOWN_REQUESTED = False
 
@@ -396,6 +412,8 @@ def main() -> None:  # pragma: no cover - hardware dependent
     last_display: tuple[str, str, int, str] | None = None
     display_state: DisplayState | None = None
     last_net_message: tuple[str, str] | None = None
+    last_clock_minute: tuple[int, int, int, int, int] | None = None
+    clock_until = 0.0
 
     signal.signal(signal.SIGTERM, _request_shutdown)
     signal.signal(signal.SIGINT, _request_shutdown)
@@ -421,7 +439,23 @@ def main() -> None:  # pragma: no cover - hardware dependent
                     lock_payload, last_net_message
                 )
 
-                line1, line2, speed, source = _resolve_display_payload(lock_payload)
+                now = datetime.now()
+                if _lcd_clock_enabled():
+                    current_minute = (
+                        now.year,
+                        now.month,
+                        now.day,
+                        now.hour,
+                        now.minute,
+                    )
+                    if clock_until <= now.timestamp() and current_minute != last_clock_minute:
+                        clock_until = now.timestamp() + CLOCK_MESSAGE_SECONDS
+                        last_clock_minute = current_minute
+
+                if clock_until > now.timestamp():
+                    line1, line2, speed, source = _clock_payload(now)
+                else:
+                    line1, line2, speed, source = _resolve_display_payload(lock_payload)
                 current_display = (line1, line2, speed, source)
                 if current_display != last_display or lcd is None:
                     if lcd is None:
