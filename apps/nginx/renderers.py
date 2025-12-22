@@ -9,6 +9,7 @@ from apps.nginx.config_utils import (
     http_redirect_server,
     https_proxy_server,
     slugify,
+    websocket_map,
     write_if_changed,
 )
 
@@ -39,6 +40,7 @@ def generate_primary_config(
     https_server_names: str | None = None,
     https_enabled: bool = False,
     include_ipv6: bool = False,
+    external_websockets: bool = True,
 ) -> str:
     mode = mode.lower()
     if mode not in {"internal", "public"}:
@@ -68,6 +70,7 @@ def generate_primary_config(
                 port,
                 http_listens,
                 trailing_slash=False,
+                external_websockets=external_websockets,
             )
         http_default = default_reject_server(http_listens)
 
@@ -80,6 +83,7 @@ def generate_primary_config(
                 certificate_path=certificate_path,
                 certificate_key_path=certificate_key_path,
                 trailing_slash=False,
+                external_websockets=external_websockets,
             )
             https_default = default_reject_server(
                 https_listens,
@@ -88,6 +92,8 @@ def generate_primary_config(
                 certificate_key_path=certificate_key_path,
             )
             blocks.extend([https_block, https_default])
+        if external_websockets:
+            blocks.insert(0, websocket_map())
         return "\n\n".join(blocks) + "\n"
 
     http_names = http_server_names or "_"
@@ -96,6 +102,7 @@ def generate_primary_config(
         port,
         http_listens,
         trailing_slash=False,
+        external_websockets=external_websockets,
     )
     blocks = [http_block]
 
@@ -107,13 +114,21 @@ def generate_primary_config(
             certificate_path=certificate_path,
             certificate_key_path=certificate_key_path,
             trailing_slash=False,
+            external_websockets=external_websockets,
         )
         blocks.append(https_block)
+    if external_websockets:
+        blocks.insert(0, websocket_map())
     return "\n\n".join(blocks) + "\n"
 
 
 def generate_site_entries_content(
-    config_path: Path, mode: str, port: int, *, https_enabled: bool = False
+    config_path: Path,
+    mode: str,
+    port: int,
+    *,
+    https_enabled: bool = False,
+    external_websockets: bool = True,
 ) -> str:
     try:
         raw = config_path.read_text(encoding="utf-8")
@@ -143,10 +158,22 @@ def generate_site_entries_content(
         if require_https and mode == "public" and https_enabled:
             blocks.append(http_redirect_server(domain))
         else:
-            blocks.append(http_proxy_server(domain, port))
+            blocks.append(
+                http_proxy_server(
+                    domain,
+                    port,
+                    external_websockets=external_websockets,
+                )
+            )
 
         if mode == "public" and https_enabled:
-            blocks.append(https_proxy_server(domain, port))
+            blocks.append(
+                https_proxy_server(
+                    domain,
+                    port,
+                    external_websockets=external_websockets,
+                )
+            )
         elif require_https:
             blocks.append(
                 "# HTTPS requested but unavailable in this configuration."
@@ -168,9 +195,14 @@ def apply_site_entries(
     dest_path: Path,
     *,
     https_enabled: bool = False,
+    external_websockets: bool = True,
     sudo: str | None = None,
 ) -> bool:
     content = generate_site_entries_content(
-        config_path, mode, port, https_enabled=https_enabled
+        config_path,
+        mode,
+        port,
+        https_enabled=https_enabled,
+        external_websockets=external_websockets,
     )
     return write_if_changed(dest_path, content, sudo=sudo)

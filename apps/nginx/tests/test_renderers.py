@@ -23,6 +23,19 @@ def test_generate_primary_config_public_mode():
     assert "proxy_pass http://127.0.0.1:8080" in config
 
 
+def test_generate_primary_config_external_websockets_toggle():
+    config = generate_primary_config("internal", 8080, external_websockets=True)
+
+    assert config_utils.WEBSOCKET_MAP_DIRECTIVE in config
+    assert config_utils.WEBSOCKET_CONNECTION_HEADER in config
+    assert config_utils.WEBSOCKET_READ_TIMEOUT in config
+
+    disabled = generate_primary_config("internal", 8080, external_websockets=False)
+
+    assert config_utils.WEBSOCKET_MAP_DIRECTIVE not in disabled
+    assert config_utils.WEBSOCKET_CONNECTION_HEADER not in disabled
+
+
 def test_apply_site_entries(tmp_path: Path):
     staging = tmp_path / "sites.json"
     staging.write_text(
