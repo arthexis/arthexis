@@ -730,7 +730,11 @@ class Charger(Entity):
         update_list = list(update_fields) if update_fields is not None else None
         if not self.manager_node_id:
             local_node = Node.get_local()
-            if local_node:
+            if (
+                local_node
+                and local_node.pk
+                and Node.objects.filter(pk=local_node.pk).exists()
+            ):
                 self.manager_node = local_node
                 if update_list is not None and "manager_node" not in update_list:
                     update_list.append("manager_node")
