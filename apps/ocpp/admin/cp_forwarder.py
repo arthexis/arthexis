@@ -58,7 +58,13 @@ class CPForwarderAdmin(EntityModelAdmin):
         "created_at",
         "updated_at",
     )
-    actions = ["test_forwarders"]
+    actions = [
+        "enable_forwarders",
+        "disable_forwarders",
+        "enable_export_transactions",
+        "disable_export_transactions",
+        "test_forwarders",
+    ]
 
     fieldsets = (
         (
@@ -99,6 +105,97 @@ class CPForwarderAdmin(EntityModelAdmin):
         if obj.target_node:
             return str(obj.target_node)
         return _("Forwarder")
+
+    def _chargers_for_forwarder(self, forwarder):
+        from apps.ocpp.models import Charger
+
+        queryset = Charger.objects.all()
+        source_node = forwarder.source_node or Node.get_local()
+        if source_node and source_node.pk:
+            queryset = queryset.filter(
+                Q(node_origin=source_node) | Q(node_origin__isnull=True)
+            )
+        return queryset
+
+    def _toggle_forwarders(self, request, queryset, enabled: bool) -> None:
+        if not queryset.exists():
+            self.message_user(
+                request,
+                _("No forwarders were selected."),
+                messages.WARNING,
+            )
+            return
+        queryset.update(enabled=enabled)
+        synced = 0
+        failed = 0
+        for forwarder in queryset:
+            try:
+                forwarder.sync_chargers()
+                synced += 1
+            except Exception as exc:
+                failed += 1
+                self.message_user(
+                    request,
+                    _("Failed to sync forwarder %(name)s: %(error)s")
+                    % {"name": forwarder, "error": exc},
+                    messages.ERROR,
+                )
+        if synced:
+            self.message_user(
+                request,
+                _("Updated %(count)s forwarder(s).") % {"count": synced},
+                messages.SUCCESS,
+            )
+        if failed:
+            self.message_user(
+                request,
+                _("Failed to update %(count)s forwarder(s).") % {"count": failed},
+                messages.ERROR,
+            )
+
+    def _toggle_export_transactions(self, request, queryset, enabled: bool) -> None:
+        if not queryset.exists():
+            self.message_user(
+                request,
+                _("No forwarders were selected."),
+                messages.WARNING,
+            )
+            return
+        updated = 0
+        for forwarder in queryset:
+            chargers = self._chargers_for_forwarder(forwarder)
+            updated += chargers.update(export_transactions=enabled)
+            try:
+                forwarder.sync_chargers()
+            except Exception as exc:
+                self.message_user(
+                    request,
+                    _("Failed to sync forwarder %(name)s: %(error)s")
+                    % {"name": forwarder, "error": exc},
+                    messages.ERROR,
+                )
+        self.message_user(
+            request,
+            _("Updated export settings for %(count)s charge point(s).")
+            % {"count": updated},
+            messages.SUCCESS,
+        )
+
+    @admin.action(description=_("Enable selected forwarders"))
+    def enable_forwarders(self, request, queryset):
+        self._toggle_forwarders(request, queryset, True)
+
+    @admin.action(description=_("Disable selected forwarders"))
+    def disable_forwarders(self, request, queryset):
+        self._toggle_forwarders(request, queryset, False)
+
+    @admin.action(description=_("Enable export transactions for charge points"))
+    def enable_export_transactions(self, request, queryset):
+        self._toggle_export_transactions(request, queryset, True)
+
+    @admin.action(description=_("Disable export transactions for charge points"))
+    def disable_export_transactions(self, request, queryset):
+        self._toggle_export_transactions(request, queryset, False)
 
     @admin.action(description=_("Test forwarder configuration"))
     def test_forwarders(self, request, queryset):
