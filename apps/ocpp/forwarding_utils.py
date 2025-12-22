@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import base64
+import ipaddress
 import json
 from pathlib import Path
 from typing import Iterable, Mapping
@@ -73,6 +74,14 @@ def _iter_forwarding_urls(node: Node, charger_id: str) -> Iterable[str]:
         parsed = urlsplit(base)
         if parsed.scheme not in {"http", "https"}:
             continue
+        hostname = parsed.hostname or ""
+        if parsed.scheme == "https" and hostname:
+            try:
+                ipaddress.ip_address(hostname)
+            except ValueError:
+                pass
+            else:
+                continue
         scheme = "wss" if parsed.scheme == "https" else "ws"
         base_path = parsed.path.rstrip("/")
         for prefix in ("", "/ws"):

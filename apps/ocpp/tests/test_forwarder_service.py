@@ -38,6 +38,23 @@ def test_candidate_forwarding_urls_builds_ws_and_wss(forwarder_instance):
     ]
 
 
+def test_candidate_forwarding_urls_skips_tls_ip_targets(forwarder_instance):
+    node = SimpleNamespace(
+        iter_remote_urls=lambda path: [
+            "https://192.0.2.10/base/",
+            "http://192.0.2.10/base/",
+        ]
+    )
+    charger = SimpleNamespace(charger_id="CP/42")
+
+    urls = list(forwarder_instance._candidate_forwarding_urls(node, charger))
+
+    assert urls == [
+        "ws://192.0.2.10/base/CP%2F42",
+        "ws://192.0.2.10/base/ws/CP%2F42",
+    ]
+
+
 def test_connect_forwarding_session_handles_failures(monkeypatch, forwarder_instance):
     charger = SimpleNamespace(pk=1, charger_id="CP-1")
     node = SimpleNamespace(iter_remote_urls=lambda path: [
