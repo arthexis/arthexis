@@ -227,6 +227,27 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             return None
         return super().get_rate_limit_identifier()
 
+    def _resolve_certificate_target(self) -> Charger | None:
+        target = self.aggregate_charger or self.charger
+        if target and target.pk:
+            found = Charger.objects.filter(pk=target.pk).first()
+            if found:
+                return found
+
+        charger_id = ""
+        if target and getattr(target, "charger_id", ""):
+            charger_id = target.charger_id
+        elif getattr(self, "charger_id", ""):
+            charger_id = self.charger_id
+
+        if charger_id:
+            found = Charger.objects.filter(charger_id=charger_id).first()
+            if found:
+                return found
+            return Charger.objects.create(charger_id=charger_id)
+
+        return None
+
     def _extract_serial_identifier(self) -> str:
         """Return the charge point serial from the query string or path."""
 
@@ -2411,14 +2432,8 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             },
         }
 
-        def _resolve_target():
-            target = self.aggregate_charger or self.charger
-            if target is None or not target.pk:
-                return None
-            return Charger.objects.filter(pk=target.pk).first()
-
         def _persist_request() -> None:
-            target = _resolve_target()
+            target = self._resolve_certificate_target()
             if target is None:
                 return
             CertificateRequest.objects.create(
@@ -2455,14 +2470,8 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             },
         }
 
-        def _resolve_target():
-            target = self.aggregate_charger or self.charger
-            if target is None or not target.pk:
-                return None
-            return Charger.objects.filter(pk=target.pk).first()
-
         def _persist_status() -> None:
-            target = _resolve_target()
+            target = self._resolve_certificate_target()
             if target is None:
                 return
             CertificateStatusCheck.objects.create(
@@ -2503,14 +2512,8 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             },
         }
 
-        def _resolve_target():
-            target = self.aggregate_charger or self.charger
-            if target is None or not target.pk:
-                return None
-            return Charger.objects.filter(pk=target.pk).first()
-
         def _persist_request() -> None:
-            target = _resolve_target()
+            target = self._resolve_certificate_target()
             if target is None:
                 return
             CertificateRequest.objects.create(
