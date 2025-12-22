@@ -83,19 +83,6 @@ def _read_lock_file() -> LockPayload:
     return LockPayload(lock_data.subject, lock_data.body, speed, net_message, True)
 
 
-def _clear_lock_file() -> None:
-    """Remove the LCD lock file after the payload has been consumed."""
-
-    try:
-        LOCK_FILE.unlink()
-    except FileNotFoundError:
-        return
-    except OSError:
-        # The updater should continue running even if the lock file cannot be
-        # removed (for example, due to transient filesystem issues).
-        logger.debug("Failed to clear LCD lock file", exc_info=True)
-
-
 def _disable_lcd_feature(lock_dir: Path = LOCK_DIR) -> None:
     """Mark the LCD feature as disabled when the I2C bus is missing."""
 
@@ -134,22 +121,6 @@ def _handle_lcd_failure(exc: Exception, lock_dir: Path = LOCK_DIR) -> bool:
 
     logger.warning("LCD update failed: %s", exc)
     return False
-
-
-def _lock_file_matches(payload: LockPayload, expected_mtime: float) -> bool:
-    """Return True when the lock file still matches the consumed payload."""
-
-    try:
-        current_mtime = LOCK_FILE.stat().st_mtime
-    except FileNotFoundError:
-        return False
-    except OSError:
-        return False
-
-    if current_mtime != expected_mtime:
-        return False
-
-    return _read_lock_file() == payload
 
 
 def _read_service_name() -> str | None:
@@ -233,7 +204,7 @@ def _system_shutdown_notice() -> tuple[str, str] | None:
 
 
 def _resolve_display_payload(
-    lock_payload: LockPayload,
+    lock_payload: LockPayload, last_lock_display: tuple[str, str, int] | None
 ) -> tuple[str, str, int, str]:
     shutdown_notice = _system_shutdown_notice()
     if shutdown_notice:
@@ -244,6 +215,15 @@ def _resolve_display_payload(
     if suite_notice:
         line1, line2 = suite_notice
         return line1, line2, DEFAULT_SCROLL_MS, "suite-down"
+
+    if lock_payload.enabled:
+        line1, line2, speed, _, _ = lock_payload
+        if line1.strip() or line2.strip():
+            return line1, line2, speed, "lock-file"
+
+    if last_lock_display:
+        line1, line2, speed = last_lock_display
+        return line1, line2, speed, "lock-file"
 
     if not lock_payload.enabled:
         return "", "", DEFAULT_SCROLL_MS, "disabled"
@@ -414,6 +394,7 @@ def main() -> None:  # pragma: no cover - hardware dependent
     last_net_message: tuple[str, str] | None = None
     last_clock_minute: tuple[int, int, int, int, int] | None = None
     clock_until = 0.0
+    last_lock_display: tuple[str, str, int] | None = None
 
     signal.signal(signal.SIGTERM, _request_shutdown)
     signal.signal(signal.SIGINT, _request_shutdown)
@@ -439,6 +420,11 @@ def main() -> None:  # pragma: no cover - hardware dependent
                     lock_payload, last_net_message
                 )
 
+                if lock_payload.enabled:
+                    lock_line1, lock_line2, lock_speed, _, _ = lock_payload
+                    if lock_line1.strip() or lock_line2.strip():
+                        last_lock_display = (lock_line1, lock_line2, lock_speed)
+
                 now = datetime.now()
                 if _lcd_clock_enabled():
                     current_minute = (
@@ -455,7 +441,9 @@ def main() -> None:  # pragma: no cover - hardware dependent
                 if clock_until > now.timestamp():
                     line1, line2, speed, source = _clock_payload(now)
                 else:
-                    line1, line2, speed, source = _resolve_display_payload(lock_payload)
+                    line1, line2, speed, source = _resolve_display_payload(
+                        lock_payload, last_lock_display
+                    )
                 current_display = (line1, line2, speed, source)
                 if current_display != last_display or lcd is None:
                     if lcd is None:
@@ -464,8 +452,6 @@ def main() -> None:  # pragma: no cover - hardware dependent
                     lcd.clear()
                     display_state = _prepare_display_state(line1, line2, speed)
                     last_display = current_display
-                    if source == "lock-file" and _lock_file_matches(lock_payload, last_lock_mtime):
-                        _clear_lock_file()
 
                 if lcd and display_state:
                     display_state = _advance_display(lcd, display_state)

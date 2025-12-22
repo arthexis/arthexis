@@ -48,14 +48,14 @@ class Command(BaseCommand):
 
         self.stdout.write(self.style.SUCCESS("Lock file written with test message"))
 
-        if self._wait_for_lock_clear(lock_file, timeout, poll_interval):
+        if self._wait_for_lock_persist(lock_file, message, timeout, poll_interval):
             self.stdout.write(
-                self.style.SUCCESS("LCD daemon consumed and cleared the lock file")
+                self.style.SUCCESS("LCD daemon kept the lock file message sticky")
             )
             return
 
         raise CommandError(
-            "LCD daemon did not clear the lock file within the expected time"
+            "LCD daemon did not keep the lock file message sticky"
         )
 
     def _clear_existing_lock(self, lock_file: Path) -> None:
@@ -95,15 +95,24 @@ class Command(BaseCommand):
 
         return self._wait_for_condition(_written, timeout, poll_interval)
 
-    def _wait_for_lock_clear(
-        self, lock_file: Path, timeout: float, poll_interval: float
+    def _wait_for_lock_persist(
+        self, lock_file: Path, message: str, timeout: float, poll_interval: float
     ) -> bool:
-        def _cleared() -> bool:
+        expected = message[:64].strip()
+
+        def _matches() -> bool:
             if not lock_file.exists():
-                return True
+                return False
             try:
-                return lock_file.read_text(encoding="utf-8").strip() == ""
+                raw = lock_file.read_text(encoding="utf-8")
             except OSError:
                 return False
+            first_line = raw.splitlines()[0] if raw else ""
+            return first_line.strip() == expected
 
-        return self._wait_for_condition(_cleared, timeout, poll_interval)
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if not _matches():
+                return False
+            time.sleep(poll_interval)
+        return _matches()
