@@ -236,10 +236,38 @@ def _lcd_clock_enabled() -> bool:
     return not os.getenv("DISABLE_LCD_CLOCK")
 
 
+def _lcd_temperature_label() -> str | None:
+    if not _ensure_django():
+        return None
+
+    try:
+        from apps.sensors.models import Thermometer
+    except Exception:
+        logger.debug("Thermometer model unavailable", exc_info=True)
+        return None
+
+    try:
+        thermometer = Thermometer.objects.filter(is_active=True).order_by("name").first()
+    except Exception:
+        logger.debug("Unable to load thermometer reading", exc_info=True)
+        return None
+
+    if not thermometer:
+        return None
+
+    label = thermometer.format_lcd_reading()
+    return label or None
+
+
 def _clock_payload(now: datetime) -> tuple[str, str, int, str]:
+    temperature = _lcd_temperature_label()
+    date_label = now.strftime(CLOCK_DATE_FORMAT)
+    time_label = now.strftime(CLOCK_TIME_FORMAT)
+    if temperature:
+        time_label = f"{time_label} Temp {temperature}"
     return (
-        f"Date {now.strftime(CLOCK_DATE_FORMAT)}",
-        f"Time {now.strftime(CLOCK_TIME_FORMAT)}",
+        date_label,
+        time_label,
         DEFAULT_SCROLL_MS,
         "clock",
     )

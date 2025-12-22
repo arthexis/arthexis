@@ -405,6 +405,7 @@ LOCAL_APPS = [
     "apps.nodes",
     "apps.dns",
     "apps.screens",
+    "apps.sensors",
     "apps.pyxel",
     "apps.counters",
     "apps.energy",

@@ -1,0 +1,17 @@
+[
+  {
+    "model": "sensors.thermometer",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "name": "Ambient Thermometer",
+      "slug": "ambient-thermometer",
+      "description": "Ambient thermometer sensor reading.",
+      "unit": "C",
+      "report_regex": "temp(?:erature)?\\s*[=:]\\s*(?P<value>-?\\d+(?:\\.\\d+)?)",
+      "report_scale": "1",
+      "display_precision": 1,
+      "is_active": true
+    }
+  }
+]
