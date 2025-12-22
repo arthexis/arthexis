@@ -37,6 +37,7 @@ def test_site_configuration_apply_records_state(monkeypatch):
     assert captured["role"] == config.role
     assert captured["https_enabled"] is False
     assert captured["certificate"] is None
+    assert captured["external_websockets"] is True
     assert captured["destination"] == config.expected_destination
 
 

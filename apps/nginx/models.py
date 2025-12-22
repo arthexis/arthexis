@@ -63,6 +63,10 @@ class SiteConfiguration(models.Model):
         on_delete=models.SET_NULL,
         related_name="nginx_configurations",
     )
+    external_websockets = models.BooleanField(
+        default=True,
+        help_text=_("Enable websocket proxy directives for external EVCS traffic."),
+    )
     include_ipv6 = models.BooleanField(default=False)
     expected_path = models.CharField(
         max_length=255,
@@ -115,6 +119,7 @@ class SiteConfiguration(models.Model):
                 certificate=self.certificate,
                 https_enabled=self.protocol == "https",
                 include_ipv6=self.include_ipv6,
+                external_websockets=self.external_websockets,
                 destination=self.expected_destination,
                 site_config_path=self.staged_site_config,
                 site_destination=self.site_destination_path,

@@ -23,36 +23,93 @@ def slugify(domain: str) -> str:
     return slug or "site"
 
 
-def proxy_block(port: int, *, trailing_slash: bool = True) -> str:
+WEBSOCKET_MAP_DIRECTIVE = "map $http_upgrade $connection_upgrade {"
+WEBSOCKET_UPGRADE_HEADER = "proxy_set_header Upgrade $http_upgrade;"
+WEBSOCKET_CONNECTION_HEADER = "proxy_set_header Connection $connection_upgrade;"
+WEBSOCKET_READ_TIMEOUT = "proxy_read_timeout 1d;"
+WEBSOCKET_SEND_TIMEOUT = "proxy_send_timeout 1d;"
+
+
+def websocket_map() -> str:
+    return textwrap.dedent(
+        """
+        map $http_upgrade $connection_upgrade {
+            default upgrade;
+            '' close;
+        }
+        """
+    ).strip()
+
+
+def websocket_directives() -> tuple[str, ...]:
+    return (
+        WEBSOCKET_MAP_DIRECTIVE,
+        WEBSOCKET_UPGRADE_HEADER,
+        WEBSOCKET_CONNECTION_HEADER,
+        WEBSOCKET_READ_TIMEOUT,
+        WEBSOCKET_SEND_TIMEOUT,
+    )
+
+
+def proxy_block(
+    port: int,
+    *,
+    trailing_slash: bool = True,
+    external_websockets: bool = True,
+) -> str:
     """Return the proxy pass configuration block for *port*."""
 
     upstream = f"http://127.0.0.1:{port}"
     if trailing_slash:
         upstream += "/"
 
-    return textwrap.dedent(
-        f"""
+    if external_websockets:
+        websocket_lines = textwrap.dedent(
+            f"""
+            {WEBSOCKET_UPGRADE_HEADER}
+            {WEBSOCKET_CONNECTION_HEADER}
+            {WEBSOCKET_READ_TIMEOUT}
+            {WEBSOCKET_SEND_TIMEOUT}
+            """
+        ).strip()
+    else:
+        websocket_lines = textwrap.dedent(
+            f"""
+            {WEBSOCKET_UPGRADE_HEADER}
+            proxy_set_header Connection \"upgrade\";
+            """
+        ).strip()
+
+    return "\n".join(
+        [
+            textwrap.dedent(
+                f"""
         location / {{
-            set $simulator_redirect "";
+            set $simulator_redirect \"\";
             if ($server_port = 8900) {{
                 set $simulator_redirect $uri;
             }}
-            if ($simulator_redirect = "/") {{
+            if ($simulator_redirect = \"/\") {{
                 return 302 /ocpp/evcs/simulator/;
             }}
             proxy_pass {upstream};
             proxy_intercept_errors on;
             proxy_http_version 1.1;
-            proxy_set_header Upgrade $http_upgrade;
-            proxy_set_header Connection \"upgrade\";
+        """
+            ).strip(),
+            textwrap.indent(websocket_lines, "    "),
+            textwrap.dedent(
+                """
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Host $host;
             proxy_set_header X-Forwarded-Proto $scheme;
-        }}
-        """
-    ).strip()
+        }
+                """
+            ).strip(),
+        ]
+    )
 
 
 def _format_server_block(lines: Iterable[str]) -> str:
@@ -101,6 +158,7 @@ def http_proxy_server(
     listens: Iterable[str] | None = None,
     *,
     trailing_slash: bool = True,
+    external_websockets: bool = True,
 ) -> str:
     """Return an HTTP proxy server block for *server_names*."""
 
@@ -112,7 +170,16 @@ def http_proxy_server(
         lines.append(f"    listen {listen};")
     lines.append(f"    server_name {server_names};")
     lines.append("")
-    lines.append(textwrap.indent(proxy_block(port, trailing_slash=trailing_slash), "    "))
+    lines.append(
+        textwrap.indent(
+            proxy_block(
+                port,
+                trailing_slash=trailing_slash,
+                external_websockets=external_websockets,
+            ),
+            "    ",
+        )
+    )
     lines.append("}")
     return _format_server_block(lines)
 
@@ -168,6 +235,7 @@ def https_proxy_server(
     certificate_path: str | Path | None = None,
     certificate_key_path: str | Path | None = None,
     trailing_slash: bool = True,
+    external_websockets: bool = True,
 ) -> str:
     """Return an HTTPS proxy server block for *server_names*."""
 
@@ -190,7 +258,16 @@ def https_proxy_server(
         '"max-age=31536000; includeSubDomains; preload" always;'
     )
     lines.append("")
-    lines.append(textwrap.indent(proxy_block(port, trailing_slash=trailing_slash), "    "))
+    lines.append(
+        textwrap.indent(
+            proxy_block(
+                port,
+                trailing_slash=trailing_slash,
+                external_websockets=external_websockets,
+            ),
+            "    ",
+        )
+    )
     lines.append("}")
     return _format_server_block(lines)
 

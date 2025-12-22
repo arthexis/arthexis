@@ -43,8 +43,11 @@ def _site_http_protocol() -> str:
         from apps.nginx.models import SiteConfiguration
 
         config = SiteConfiguration.objects.filter(enabled=True).order_by("pk").first()
-        if config and config.protocol:
-            return str(config.protocol).strip().lower()
+        if config:
+            if not getattr(config, "external_websockets", True):
+                return "http"
+            if config.protocol:
+                return str(config.protocol).strip().lower()
     except Exception:
         pass
 

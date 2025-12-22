@@ -6,6 +6,7 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 
 from apps.core.system import _build_nginx_report
+from apps.nginx import config_utils
 from apps.nodes.models import Node
 from apps.ocpp.models import CPForwarder, Charger
 
@@ -39,6 +40,13 @@ def _iter_websocket_urls(node: Node, path: str) -> list[str]:
         scheme = "wss" if parsed.scheme == "https" else "ws"
         candidates.append(urlunsplit((scheme, parsed.netloc, parsed.path, "", "")))
     return candidates
+
+
+def _has_external_websocket_config(nginx_content: str) -> bool:
+    return all(
+        directive in nginx_content
+        for directive in config_utils.websocket_directives()
+    )
 
 
 class Command(BaseCommand):
@@ -89,6 +97,17 @@ class Command(BaseCommand):
             self.stdout.write(
                 f"    Config path: {nginx_report.get('actual_path') or '—'}"
             )
+            self.stdout.write(
+                "    External websockets enabled: "
+                f"{_format_bool(nginx_report.get('external_websockets'))}"
+            )
+            if nginx_report.get("external_websockets"):
+                actual_content = nginx_report.get("actual_content") or ""
+                websocket_configured = _has_external_websocket_config(actual_content)
+                self.stdout.write(
+                    "    External websocket config: "
+                    f"{_format_bool(websocket_configured)}"
+                )
             self.stdout.write(
                 "    Matches expected: "
                 f"{_format_bool(not nginx_report.get('differs'))}"

@@ -1506,8 +1506,23 @@ def _nginx_site_path() -> Path:
     return Path("/etc/nginx/sites-enabled/arthexis.conf")
 
 
+def _resolve_external_websockets(default: bool = True) -> bool:
+    try:
+        from apps.nginx.models import SiteConfiguration
+
+        config = SiteConfiguration.objects.filter(enabled=True).order_by("pk").first()
+        if config is not None:
+            return bool(config.external_websockets)
+    except Exception:
+        return default
+    return default
+
+
 def _build_nginx_report(
-    *, base_dir: Path | None = None, site_path: Path | None = None
+    *,
+    base_dir: Path | None = None,
+    site_path: Path | None = None,
+    external_websockets: bool | None = None,
 ) -> dict[str, object]:
     """Return comparison data for the managed nginx configuration file."""
 
@@ -1519,9 +1534,14 @@ def _build_nginx_report(
 
     expected_content = ""
     expected_error = ""
+    resolved_websockets = (
+        _resolve_external_websockets()
+        if external_websockets is None
+        else external_websockets
+    )
     try:
         expected_content = _normalize_nginx_content(
-            generate_primary_config(mode, port)
+            generate_primary_config(mode, port, external_websockets=resolved_websockets)
         )
     except Exception as exc:  # pragma: no cover - defensive guard
         logger.exception("Unable to generate expected nginx configuration")
@@ -1550,6 +1570,7 @@ def _build_nginx_report(
         "differs": differs,
         "mode": mode,
         "port": port,
+        "external_websockets": resolved_websockets,
     }
 
 

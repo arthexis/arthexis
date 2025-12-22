@@ -46,6 +46,7 @@ class Command(BaseCommand):
             certificate=config.certificate,
             https_enabled=config.protocol == "https",
             include_ipv6=config.include_ipv6,
+            external_websockets=config.external_websockets,
         )
         files.append(
             self._build_file_preview(
@@ -61,6 +62,7 @@ class Command(BaseCommand):
                 config.mode,
                 config.port,
                 https_enabled=config.protocol == "https",
+                external_websockets=config.external_websockets,
             )
         except ValueError as exc:
             files.append(

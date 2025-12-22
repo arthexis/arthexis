@@ -132,6 +132,7 @@ def apply_nginx_configuration(
     certificate=None,
     https_enabled: bool,
     include_ipv6: bool,
+    external_websockets: bool = True,
     destination: Path | None = None,
     site_config_path: Path | None = None,
     site_destination: Path | None = None,
@@ -158,6 +159,7 @@ def apply_nginx_configuration(
         certificate=certificate,
         https_enabled=https_enabled,
         include_ipv6=include_ipv6,
+        external_websockets=external_websockets,
     )
     _write_config_with_sudo(primary_dest, config_content, sudo=sudo)
     _ensure_site_enabled(primary_dest, sudo=sudo)
@@ -171,6 +173,7 @@ def apply_nginx_configuration(
                 port,
                 site_destination,
                 https_enabled=https_enabled,
+                external_websockets=external_websockets,
                 sudo=sudo,
             )
         except ValueError as exc:
