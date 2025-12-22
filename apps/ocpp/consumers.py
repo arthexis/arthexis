@@ -227,6 +227,27 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             return None
         return super().get_rate_limit_identifier()
 
+    def _resolve_certificate_target(self) -> Charger | None:
+        target = self.aggregate_charger or self.charger
+        if target and target.pk:
+            found = Charger.objects.filter(pk=target.pk).first()
+            if found:
+                return found
+
+        charger_id = ""
+        if target and getattr(target, "charger_id", ""):
+            charger_id = target.charger_id
+        elif getattr(self, "charger_id", ""):
+            charger_id = self.charger_id
+
+        if charger_id:
+            found = Charger.objects.filter(charger_id=charger_id).first()
+            if found:
+                return found
+            return Charger.objects.create(charger_id=charger_id)
+
+        return None
+
     def _extract_serial_identifier(self) -> str:
         """Return the charge point serial from the query string or path."""
 
@@ -1351,8 +1372,12 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         metadata = store.pop_pending_call(message_id)
         if not metadata:
             return
-        if metadata.get("charger_id") and metadata.get("charger_id") != self.charger_id:
-            return
+        metadata_charger = metadata.get("charger_id")
+        if metadata_charger and self.charger_id:
+            metadata_serial = Charger.normalize_serial(str(metadata_charger)).casefold()
+            consumer_serial = Charger.normalize_serial(self.charger_id).casefold()
+            if metadata_serial and consumer_serial and metadata_serial != consumer_serial:
+                return
         action = metadata.get("action")
         log_key = metadata.get("log_key") or self.store_key
         payload_data = payload if isinstance(payload, dict) else {}
@@ -1382,8 +1407,12 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         metadata = store.pop_pending_call(message_id)
         if not metadata:
             return
-        if metadata.get("charger_id") and metadata.get("charger_id") != self.charger_id:
-            return
+        metadata_charger = metadata.get("charger_id")
+        if metadata_charger and self.charger_id:
+            metadata_serial = Charger.normalize_serial(str(metadata_charger)).casefold()
+            consumer_serial = Charger.normalize_serial(self.charger_id).casefold()
+            if metadata_serial and consumer_serial and metadata_serial != consumer_serial:
+                return
         action = metadata.get("action")
         log_key = metadata.get("log_key") or self.store_key
         handled = await dispatch_call_error(
@@ -2412,7 +2441,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         }
 
         def _persist_request() -> None:
-            target = self.aggregate_charger or self.charger
+            target = self._resolve_certificate_target()
             if target is None:
                 return
             CertificateRequest.objects.create(
@@ -2450,7 +2479,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         }
 
         def _persist_status() -> None:
-            target = self.aggregate_charger or self.charger
+            target = self._resolve_certificate_target()
             if target is None:
                 return
             CertificateStatusCheck.objects.create(
@@ -2492,7 +2521,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         }
 
         def _persist_request() -> None:
-            target = self.aggregate_charger or self.charger
+            target = self._resolve_certificate_target()
             if target is None:
                 return
             CertificateRequest.objects.create(

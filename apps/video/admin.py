@@ -161,15 +161,29 @@ class VideoDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
         )
         if not feature:
             return redirect("..")
+        node = self._get_local_node(request)
+        if node is None:
+            return redirect("..")
+        if not VideoDevice.objects.filter(node=node).exists():
+            VideoDevice.refresh_from_system(node=node)
+        if not VideoDevice.objects.filter(node=node).exists():
+            self.message_user(
+                request,
+                _("No video devices were detected on this node."),
+                level=messages.WARNING,
+            )
+            return redirect("..")
         try:
             path = capture_rpi_snapshot()
         except Exception as exc:  # pragma: no cover - depends on camera stack
             self.message_user(request, str(exc), level=messages.ERROR)
             return redirect("..")
-        node = self._get_local_node(request)
-        if node is None:
-            return redirect("..")
-        sample = save_screenshot(path, node=node, method="RPI_CAMERA")
+        sample = save_screenshot(
+            path,
+            node=node,
+            method="RPI_CAMERA",
+            link_duplicates=True,
+        )
         if not sample:
             self.message_user(
                 request, _("Duplicate snapshot; not saved"), level=messages.INFO
@@ -181,7 +195,7 @@ class VideoDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
             level=messages.SUCCESS,
         )
         try:
-            change_url = reverse("admin:nodes_contentsample_change", args=[sample.pk])
+            change_url = reverse("admin:content_contentsample_change", args=[sample.pk])
         except NoReverseMatch:  # pragma: no cover - admin URL always registered
             self.message_user(
                 request,
