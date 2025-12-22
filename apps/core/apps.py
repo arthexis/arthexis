@@ -258,6 +258,7 @@ def _patch_entity_deserialization():
     from functools import wraps
 
     from django.core.serializers import base as serializer_base
+    from django.db.utils import OperationalError, ProgrammingError
 
     from .entity import Entity
 
@@ -283,11 +284,14 @@ def _patch_entity_deserialization():
                     lookup[field.attname] = value
                 if not lookup:
                     continue
-                existing = (
-                    manager.filter(**lookup)
-                    .only("pk", "is_seed_data", "is_user_data")
-                    .first()
-                )
+                try:
+                    existing = (
+                        manager.filter(**lookup)
+                        .only("pk", "is_seed_data", "is_user_data")
+                        .first()
+                    )
+                except (OperationalError, ProgrammingError):
+                    existing = None
                 if existing is not None:
                     obj.pk = existing.pk
                     obj.is_seed_data = existing.is_seed_data

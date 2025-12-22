@@ -107,12 +107,30 @@ def _load_fixture_with_retry(
 ) -> None:
     """Load *fixture* while retrying sqlite lock conflicts."""
 
+    schema_retry = False
     for attempt in range(1, attempts + 1):
         try:
             call_command("load_user_data", fixture, verbosity=0)
             return
         except OperationalError as exc:
-            if ("database is locked" not in str(exc).lower()) or not using_sqlite:
+            message = str(exc).lower()
+            if (
+                using_sqlite
+                and ("no such table" in message or "no such column" in message)
+            ):
+                if not schema_retry:
+                    schema_retry = True
+                    close_old_connections()
+                    print(
+                        f"Missing schema while loading {fixture}; running migrations.",
+                        flush=True,
+                    )
+                    call_command("migrate", interactive=False, run_syncdb=True)
+                    continue
+                raise DeserializationError(str(exc)) from exc
+            if "database is locked" not in message or not using_sqlite:
+                if "no such table" in message or "no such column" in message:
+                    raise DeserializationError(str(exc)) from exc
                 raise
             if attempt == attempts:
                 raise
