@@ -1,7 +1,8 @@
 from django.apps import apps as django_apps
 from django.conf import settings
 from django.contrib.contenttypes.models import ContentType
-from django.db import models
+from django.db import connections, models, router
+from django.db.utils import OperationalError, ProgrammingError
 from django.utils.translation import gettext_lazy as _
 
 from apps.core.entity import Entity
@@ -31,6 +32,14 @@ def ensure_admin_favorites(user) -> None:
     if not user:
         return
 
+    db_alias = router.db_for_write(Favorite, instance=user)
+    connection = connections[db_alias]
+    try:
+        if Favorite._meta.db_table not in connection.introspection.table_names():
+            return
+    except (OperationalError, ProgrammingError):
+        return
+
     model_targets = (
         ("nodes", "Node"),
         ("cards", "RFID"),
@@ -45,17 +54,25 @@ def ensure_admin_favorites(user) -> None:
             model = django_apps.get_model(app_label, model_name)
         except LookupError:
             continue
-        content_types.append(ContentType.objects.get_for_model(model))
+        try:
+            content_types.append(ContentType.objects.get_for_model(model))
+        except (OperationalError, ProgrammingError):
+            return
 
     if not content_types:
         return
 
-    existing = set(
-        Favorite.objects.filter(user=user, content_type__in=content_types).values_list(
-            "content_type_id",
-            flat=True,
+    try:
+        existing = set(
+            Favorite.objects.filter(
+                user=user, content_type__in=content_types
+            ).values_list(
+                "content_type_id",
+                flat=True,
+            )
         )
-    )
+    except (OperationalError, ProgrammingError):
+        return
     new_favorites = []
     for priority, content_type in enumerate(content_types):
         if content_type.pk in existing:
