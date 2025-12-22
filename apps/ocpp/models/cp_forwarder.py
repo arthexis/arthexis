@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import logging
+
 from .base import *
+
+logger = logging.getLogger(__name__)
 
 def sync_forwarded_charge_points(*, refresh_forwarders: bool = True) -> int:
     """Proxy to the OCPP forwarder for testability."""
@@ -90,7 +94,7 @@ class CPForwarder(Entity):
         help_text=_("Remote node that will receive forwarded sessions."),
     )
     enabled = models.BooleanField(
-        default=False,
+        default=True,
         help_text=_(
             "Enable to forward eligible charge points to the remote node. "
             "Charge points must also have Export transactions enabled."
@@ -169,7 +173,18 @@ class CPForwarder(Entity):
                 self.source_node = local
         super().save(*args, **kwargs)
         if sync_chargers:
-            self.sync_chargers()
+            try:
+                self.sync_chargers()
+            except Exception as exc:
+                logger.exception(
+                    "CP forwarder sync failed for %s", self.pk, exc_info=exc
+                )
+                self._update_fields(
+                    last_status=_("Forwarder synchronization failed."),
+                    last_error=str(exc),
+                    last_synced_at=timezone.now(),
+                    is_running=False,
+                )
 
     def delete(self, *args, **kwargs):
         was_enabled = self.enabled

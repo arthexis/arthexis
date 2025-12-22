@@ -290,7 +290,7 @@ class Charger(Entity):
         ),
     )
     export_transactions = models.BooleanField(
-        default=False,
+        default=True,
         help_text=_(
             "Enable to share this charge point's transactions with remote nodes "
             "or export tools. Required for CP forwarders."

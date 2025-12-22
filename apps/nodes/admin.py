@@ -1764,7 +1764,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
 
         defaults = {
             "name": target.hostname or str(target),
-            "enabled": False,
+            "enabled": True,
         }
         if local_node and local_node.pk:
             defaults["source_node"] = local_node
