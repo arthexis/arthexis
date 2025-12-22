@@ -14,6 +14,7 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.signals import user_logged_in
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.management import call_command
+from django.db.models.deletion import ProtectedError
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.http import (
@@ -26,7 +27,7 @@ from django.http import (
 from django.template.response import TemplateResponse
 from django.urls import NoReverseMatch, path, reverse
 from django.utils.functional import LazyObject
-from django.utils.translation import gettext as _
+from django.utils.translation import gettext as _, ngettext
 from django.utils.http import url_has_allowed_host_and_scheme
 
 from config.request_utils import is_https_request
@@ -712,8 +713,16 @@ class EntityModelAdmin(UserDatumAdminMixin, admin.ModelAdmin):
 
     def _purge_soft_deleted_queryset(self, request):
         queryset = self.get_soft_deleted_queryset(request)
-        purged, _ = queryset.delete()
-        return purged
+        purged = 0
+        protected = []
+        for obj in queryset:
+            try:
+                obj.delete()
+            except ProtectedError:
+                protected.append(obj)
+                continue
+            purged += 1
+        return purged, protected
 
     def purge_deleted_view(self, request):
         if not self._supports_soft_delete():
@@ -722,17 +731,32 @@ class EntityModelAdmin(UserDatumAdminMixin, admin.ModelAdmin):
             raise PermissionDenied
         soft_deleted_count = self.get_soft_deleted_queryset(request).count()
         if request.method == "POST":
-            purged = self._purge_soft_deleted_queryset(request)
-            self.message_user(
-                request,
-                ngettext(
-                    "Purged %(count)d deleted %(name)s.",
-                    "Purged %(count)d deleted %(name)s.",
-                    purged,
+            purged, protected = self._purge_soft_deleted_queryset(request)
+            if purged:
+                self.message_user(
+                    request,
+                    ngettext(
+                        "Purged %(count)d deleted %(name)s.",
+                        "Purged %(count)d deleted %(name)s.",
+                        purged,
+                    )
+                    % {"count": purged, "name": self.model._meta.verbose_name_plural},
+                    level=messages.SUCCESS,
                 )
-                % {"count": purged, "name": self.model._meta.verbose_name_plural},
-                level=messages.SUCCESS,
-            )
+            if protected:
+                self.message_user(
+                    request,
+                    ngettext(
+                        "Unable to purge %(count)d deleted %(name)s because related objects exist.",
+                        "Unable to purge %(count)d deleted %(name)s because related objects exist.",
+                        len(protected),
+                    )
+                    % {
+                        "count": len(protected),
+                        "name": self.model._meta.verbose_name_plural,
+                    },
+                    level=messages.ERROR,
+                )
             return HttpResponseRedirect(self._soft_deleted_changelist_url() or "..")
         context = {
             **self.admin_site.each_context(request),
