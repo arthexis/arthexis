@@ -186,7 +186,6 @@ class NodeNetworkingMixin:
             "ipv6_address",
             "ipv4_address",
             "address",
-            "public_endpoint",
         ):
             if attr == "ipv4_address":
                 for candidate in self.get_ipv4_addresses():
