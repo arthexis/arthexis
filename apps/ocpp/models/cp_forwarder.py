@@ -5,7 +5,7 @@ from .base import *
 def sync_forwarded_charge_points(*, refresh_forwarders: bool = True) -> int:
     """Proxy to the OCPP forwarder for testability."""
 
-    from .forwarder import forwarder
+    from ..forwarder import forwarder
 
     return forwarder.sync_forwarded_charge_points(
         refresh_forwarders=refresh_forwarders
@@ -14,7 +14,7 @@ def sync_forwarded_charge_points(*, refresh_forwarders: bool = True) -> int:
 def is_target_active(target_id: int | None) -> bool:
     """Proxy to check whether a forwarding session is active."""
 
-    from .forwarder import forwarder
+    from ..forwarder import forwarder
 
     return forwarder.is_target_active(target_id)
 
