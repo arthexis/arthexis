@@ -1374,8 +1374,8 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             return
         metadata_charger = metadata.get("charger_id")
         if metadata_charger and self.charger_id:
-            metadata_serial = Charger.normalize_serial(str(metadata_charger))
-            consumer_serial = Charger.normalize_serial(self.charger_id)
+            metadata_serial = Charger.normalize_serial(str(metadata_charger)).casefold()
+            consumer_serial = Charger.normalize_serial(self.charger_id).casefold()
             if metadata_serial and consumer_serial and metadata_serial != consumer_serial:
                 return
         action = metadata.get("action")
@@ -1409,8 +1409,8 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             return
         metadata_charger = metadata.get("charger_id")
         if metadata_charger and self.charger_id:
-            metadata_serial = Charger.normalize_serial(str(metadata_charger))
-            consumer_serial = Charger.normalize_serial(self.charger_id)
+            metadata_serial = Charger.normalize_serial(str(metadata_charger)).casefold()
+            consumer_serial = Charger.normalize_serial(self.charger_id).casefold()
             if metadata_serial and consumer_serial and metadata_serial != consumer_serial:
                 return
         action = metadata.get("action")
