@@ -142,7 +142,9 @@ def send_forwarding_metadata(
         ],
         "transactions": {"chargers": [], "transactions": []},
     }
-    payload_json = json.dumps(payload, separators=(',', ':'), sort_keys=True)
+    payload_json = json.dumps(
+        payload, separators=(",", ":"), sort_keys=True, default=str
+    )
     headers = {"Content-Type": "application/json"}
     if private_key:
         headers["X-Signature"] = sign_payload(private_key, payload_json)
