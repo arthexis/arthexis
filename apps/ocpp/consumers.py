@@ -1373,12 +1373,11 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         if not metadata:
             return
         metadata_charger = metadata.get("charger_id")
-        if (
-            metadata_charger
-            and self.charger_id
-            and str(metadata_charger).lower() != str(self.charger_id).lower()
-        ):
-            return
+        if metadata_charger and self.charger_id:
+            metadata_serial = Charger.normalize_serial(str(metadata_charger))
+            consumer_serial = Charger.normalize_serial(self.charger_id)
+            if metadata_serial and consumer_serial and metadata_serial != consumer_serial:
+                return
         action = metadata.get("action")
         log_key = metadata.get("log_key") or self.store_key
         payload_data = payload if isinstance(payload, dict) else {}
@@ -1409,12 +1408,11 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         if not metadata:
             return
         metadata_charger = metadata.get("charger_id")
-        if (
-            metadata_charger
-            and self.charger_id
-            and str(metadata_charger).lower() != str(self.charger_id).lower()
-        ):
-            return
+        if metadata_charger and self.charger_id:
+            metadata_serial = Charger.normalize_serial(str(metadata_charger))
+            consumer_serial = Charger.normalize_serial(self.charger_id)
+            if metadata_serial and consumer_serial and metadata_serial != consumer_serial:
+                return
         action = metadata.get("action")
         log_key = metadata.get("log_key") or self.store_key
         handled = await dispatch_call_error(
