@@ -340,7 +340,18 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
         if cached:
             node, expires_at = cached
             if expires_at > now:
-                return node
+                if node is None:
+                    return None
+                try:
+                    if cls.objects.filter(pk=node.pk).exists():
+                        return node
+                except DatabaseError:
+                    logger.debug(
+                        "nodes.Node.get_local skipped: database unavailable",
+                        exc_info=True,
+                    )
+                    return None
+                cls._local_cache.pop(mac, None)
 
         try:
             node = cls.objects.filter(mac_address__iexact=mac).first()
