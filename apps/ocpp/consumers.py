@@ -2411,8 +2411,14 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             },
         }
 
-        def _persist_request() -> None:
+        def _resolve_target():
             target = self.aggregate_charger or self.charger
+            if target is None or not target.pk:
+                return None
+            return Charger.objects.filter(pk=target.pk).first()
+
+        def _persist_request() -> None:
+            target = _resolve_target()
             if target is None:
                 return
             CertificateRequest.objects.create(
@@ -2449,8 +2455,14 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             },
         }
 
-        def _persist_status() -> None:
+        def _resolve_target():
             target = self.aggregate_charger or self.charger
+            if target is None or not target.pk:
+                return None
+            return Charger.objects.filter(pk=target.pk).first()
+
+        def _persist_status() -> None:
+            target = _resolve_target()
             if target is None:
                 return
             CertificateStatusCheck.objects.create(
@@ -2491,8 +2503,14 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             },
         }
 
-        def _persist_request() -> None:
+        def _resolve_target():
             target = self.aggregate_charger or self.charger
+            if target is None or not target.pk:
+                return None
+            return Charger.objects.filter(pk=target.pk).first()
+
+        def _persist_request() -> None:
+            target = _resolve_target()
             if target is None:
                 return
             CertificateRequest.objects.create(
