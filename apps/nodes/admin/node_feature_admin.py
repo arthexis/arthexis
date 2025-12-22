@@ -286,7 +286,7 @@ class NodeFeatureAdmin(EntityModelAdmin):
         )
         try:
             change_url = reverse(
-                "admin:nodes_contentsample_change", args=[sample.pk]
+                "admin:content_contentsample_change", args=[sample.pk]
             )
         except NoReverseMatch:  # pragma: no cover - admin URL always registered
             self.message_user(
@@ -296,4 +296,3 @@ class NodeFeatureAdmin(EntityModelAdmin):
             )
             return redirect("..")
         return redirect(change_url)
-

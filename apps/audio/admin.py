@@ -167,7 +167,9 @@ class RecordingDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
             level=messages.SUCCESS,
         )
         try:
-            change_url = reverse("admin:nodes_contentsample_change", args=[sample.pk])
+            change_url = reverse(
+                "admin:content_contentsample_change", args=[sample.pk]
+            )
         except NoReverseMatch:  # pragma: no cover - admin URL always registered
             self.message_user(
                 request,
