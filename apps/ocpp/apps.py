@@ -12,6 +12,7 @@ class OcppConfig(AppConfig):
     default_auto_field = "django.db.models.BigAutoField"
     name = "apps.ocpp"
     label = "ocpp"
+    verbose_name = "OCPP"
 
     logger = logging.getLogger(__name__)
     _cleared_cached_statuses = False
@@ -89,4 +90,3 @@ class OcppConfig(AppConfig):
 
         if cleared:
             self.logger.info("Cleared cached charger statuses for %s charge points", cleared)
-

@@ -93,7 +93,14 @@ class Application(Entity):
     @staticmethod
     def format_display_name(name: str) -> str:
         cleaned_name = re.sub(r"^\s*\d+\.\s*", "", name or "").strip()
-        return cleaned_name or str(name or "")
+        if not cleaned_name:
+            return str(name or "")
+
+        normalized = cleaned_name.lower()
+        acronyms = {
+            "ocpp": "OCPP",
+        }
+        return acronyms.get(normalized, cleaned_name)
 
 
 class ApplicationModel(models.Model):
