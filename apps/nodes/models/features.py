@@ -457,7 +457,7 @@ class NodeFeatureMixin:
 
         from django_celery_beat.models import CrontabSchedule, PeriodicTask
 
-        raw_task_name = "pages_purge_landing_leads"
+        raw_task_name = "purge_leads"
         task_name = normalize_periodic_task_name(
             PeriodicTask.objects, raw_task_name
         )
@@ -474,7 +474,7 @@ class NodeFeatureMixin:
                 defaults={
                     "crontab": schedule,
                     "interval": None,
-                    "task": "apps.sites.tasks.purge_expired_landing_leads",
+                    "task": "apps.sites.tasks.purge_leads",
                     "enabled": True,
                 },
             )
@@ -527,7 +527,7 @@ class NodeFeatureMixin:
 
         from django_celery_beat.models import IntervalSchedule, PeriodicTask
 
-        raw_task_name = "nodes_poll_upstream_messages"
+        raw_task_name = "poll_upstream"
         task_name = normalize_periodic_task_name(
             PeriodicTask.objects, raw_task_name
         )
@@ -539,7 +539,7 @@ class NodeFeatureMixin:
                 name=task_name,
                 defaults={
                     "interval": schedule,
-                    "task": "apps.nodes.tasks.poll_unreachable_upstream",
+                    "task": "apps.nodes.tasks.poll_upstream",
                     "enabled": True,
                 },
             )
@@ -554,7 +554,7 @@ class NodeFeatureMixin:
 
         from django_celery_beat.models import IntervalSchedule, PeriodicTask
 
-        raw_task_name = "nodes_purge_net_messages"
+        raw_task_name = "purge_net_messages"
         task_name = normalize_periodic_task_name(
             PeriodicTask.objects, raw_task_name
         )
@@ -567,7 +567,7 @@ class NodeFeatureMixin:
                 name=task_name,
                 defaults={
                     "interval": schedule,
-                    "task": "apps.nodes.tasks.purge_stale_net_messages",
+                    "task": "apps.nodes.tasks.purge_net_messages",
                     "enabled": True,
                 },
             )
@@ -582,7 +582,7 @@ class NodeFeatureMixin:
 
         from django_celery_beat.models import IntervalSchedule, PeriodicTask
 
-        raw_task_name = "nodes_update_all_information"
+        raw_task_name = "poll_peers"
         task_name = normalize_periodic_task_name(
             PeriodicTask.objects, raw_task_name
         )
@@ -597,7 +597,7 @@ class NodeFeatureMixin:
                 defaults={
                     "interval": schedule,
                     "crontab": None,
-                    "task": "apps.nodes.tasks.update_peer_nodes_information",
+                    "task": "apps.nodes.tasks.poll_peers",
                     "enabled": True,
                     "one_off": False,
                     "args": "[]",
@@ -618,7 +618,7 @@ class NodeFeatureMixin:
 
         from django_celery_beat.models import IntervalSchedule, PeriodicTask
 
-        raw_task_name = "nodes_monitor_network_connectivity"
+        raw_task_name = "monitor_nmcli"
         task_name = normalize_periodic_task_name(
             PeriodicTask.objects, raw_task_name
         )
@@ -632,7 +632,7 @@ class NodeFeatureMixin:
                 name=task_name,
                 defaults={
                     "interval": schedule,
-                    "task": "apps.nodes.tasks.monitor_network_connectivity",
+                    "task": "apps.nodes.tasks.monitor_nmcli",
                     "enabled": True,
                 },
             )

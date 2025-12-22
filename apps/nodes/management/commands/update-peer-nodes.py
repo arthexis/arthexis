@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from apps.nodes.tasks import update_peer_nodes_information
+from apps.nodes.tasks import poll_peers
 
 from .check_nodes import Command as CheckNodesCommand
 
@@ -13,5 +13,5 @@ class Command(CheckNodesCommand):
     help = "Refresh peer node information using the scheduled update workflow."
 
     def handle(self, *args, **options):
-        summary = update_peer_nodes_information()
+        summary = poll_peers()
         self._report_summary(summary)
