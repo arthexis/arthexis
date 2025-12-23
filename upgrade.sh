@@ -1508,7 +1508,7 @@ if [ -f "$LOCK_DIR/service.lck" ]; then
   if [ -f "$SERVICE_FILE" ] && grep -Fq "celery -A" "$SERVICE_FILE"; then
     echo "Migrating service configuration for Celery..."
     touch "$LOCK_DIR/celery.lck"
-  arthexis_install_service_stack "$BASE_DIR" "$LOCK_DIR" "$SERVICE_NAME" true "$BASE_DIR/scripts/service-start.sh" "$SERVICE_MANAGEMENT_MODE"
+    arthexis_install_service_stack "$BASE_DIR" "$LOCK_DIR" "$SERVICE_NAME" true "$BASE_DIR/scripts/service-start.sh" "$SERVICE_MANAGEMENT_MODE"
   fi
 fi
 
@@ -1542,9 +1542,6 @@ if [[ $NO_RESTART -eq 0 ]]; then
   else
     LCD_RESTART_REQUIRED=0
   fi
-fi
-
-if [ -n "$SERVICE_NAME" ] && [[ $NO_RESTART -eq 0 ]] && [[ $SHOULD_RESTART_AFTER_UPGRADE -eq 1 ]]; then
 fi
 
 if [ -n "$SERVICE_NAME" ] && [[ $NO_RESTART -eq 0 ]] && [[ $LCD_RESTART_REQUIRED -eq 1 ]]; then
