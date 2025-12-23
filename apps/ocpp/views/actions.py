@@ -26,6 +26,9 @@ from ..models import (
     CertificateOperation,
     CertificateRequest,
     InstalledCertificate,
+    CustomerInformationRequest,
+    CPNetworkProfile,
+    CPNetworkProfileDeployment,
 )
 from .common import (
     CALL_ACTION_LABELS,
@@ -1583,6 +1586,45 @@ def _build_component_variable_payload(entry: dict) -> tuple[dict[str, object], s
     return payload, None
 
 
+def _build_component_variable_entry(entry: dict) -> tuple[dict[str, object], str | None]:
+    component = entry.get("component")
+    variable = entry.get("variable")
+    if component is None or variable is None:
+        component_name = entry.get("componentName")
+        variable_name = entry.get("variableName")
+        if component_name in (None, "") or variable_name in (None, ""):
+            return {}, "component and variable are required"
+        component = {"name": component_name}
+        variable = {"name": variable_name}
+        component_instance = entry.get("componentInstance")
+        if component_instance not in (None, ""):
+            component["instance"] = component_instance
+        variable_instance = entry.get("variableInstance")
+        if variable_instance not in (None, ""):
+            variable["instance"] = variable_instance
+    if not isinstance(component, dict) or not isinstance(variable, dict):
+        return {}, "component and variable must be objects"
+    component_name = str(component.get("name") or "").strip()
+    variable_name = str(variable.get("name") or "").strip()
+    if not component_name or not variable_name:
+        return {}, "component.name and variable.name required"
+    return {"component": component, "variable": variable}, None
+
+
+def _coerce_bool(value: object, field_name: str) -> tuple[bool | None, str | None]:
+    if isinstance(value, bool):
+        return value, None
+    if isinstance(value, (int, float)) and value in (0, 1):
+        return bool(value), None
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"true", "yes", "1"}:
+            return True, None
+        if lowered in {"false", "no", "0"}:
+            return False, None
+    return None, f"{field_name} must be a boolean"
+
+
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "GetVariables")
 def _handle_get_variables(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
     raw_entries = data.get("getVariableData") or data.get("variables") or data.get("get_variable_data")
@@ -1665,6 +1707,573 @@ def _handle_set_variables(context: ActionContext, data: dict) -> JsonResponse | 
         action=ocpp_action,
         log_key=context.log_key,
         message="SetVariables request timed out",
+    )
+    return ActionCall(
+        msg=msg,
+        message_id=message_id,
+        ocpp_action=ocpp_action,
+        expected_statuses=expected_statuses,
+    )
+
+
+@protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "ClearDisplayMessage")
+def _handle_clear_display_message(
+    context: ActionContext, data: dict
+) -> JsonResponse | ActionCall:
+    message_id_value = data.get("id") or data.get("messageId") or data.get("message_id")
+    try:
+        display_message_id = int(message_id_value)
+    except (TypeError, ValueError):
+        return JsonResponse({"detail": "id required"}, status=400)
+    payload = {"id": display_message_id}
+    message_id = uuid.uuid4().hex
+    ocpp_action = "ClearDisplayMessage"
+    expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
+    msg = json.dumps([2, message_id, ocpp_action, payload])
+    async_to_sync(context.ws.send)(msg)
+    store.register_pending_call(
+        message_id,
+        {
+            "action": ocpp_action,
+            "charger_id": context.cid,
+            "connector_id": context.connector_value,
+            "log_key": context.log_key,
+            "requested_at": timezone.now(),
+            "display_message_id": display_message_id,
+        },
+    )
+    store.schedule_call_timeout(
+        message_id,
+        action=ocpp_action,
+        log_key=context.log_key,
+        message="ClearDisplayMessage request timed out",
+    )
+    return ActionCall(
+        msg=msg,
+        message_id=message_id,
+        ocpp_action=ocpp_action,
+        expected_statuses=expected_statuses,
+    )
+
+
+@protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "CustomerInformation")
+def _handle_customer_information(
+    context: ActionContext, data: dict
+) -> JsonResponse | ActionCall:
+    request_id_value = data.get("requestId") or data.get("request_id")
+    try:
+        request_id = int(request_id_value) if request_id_value is not None else None
+    except (TypeError, ValueError):
+        return JsonResponse({"detail": "requestId must be an integer"}, status=400)
+    if request_id is None:
+        request_id = int(uuid.uuid4().int % 1_000_000_000)
+    report_value = data.get("report")
+    clear_value = data.get("clear")
+    if report_value is None or clear_value is None:
+        return JsonResponse({"detail": "report and clear required"}, status=400)
+    report_flag, error = _coerce_bool(report_value, "report")
+    if error:
+        return JsonResponse({"detail": error}, status=400)
+    clear_flag, error = _coerce_bool(clear_value, "clear")
+    if error:
+        return JsonResponse({"detail": error}, status=400)
+    customer_identifier = data.get("customerIdentifier") or data.get("customer_identifier")
+    id_token = data.get("idToken") or data.get("id_token")
+    customer_certificate = data.get("customerCertificate") or data.get("customer_certificate")
+    if customer_identifier in (None, "") and id_token in (None, "") and customer_certificate in (
+        None,
+        "",
+    ):
+        return JsonResponse(
+            {"detail": "customerIdentifier, idToken, or customerCertificate required"},
+            status=400,
+        )
+    payload: dict[str, object] = {
+        "requestId": request_id,
+        "report": bool(report_flag),
+        "clear": bool(clear_flag),
+    }
+    if customer_identifier not in (None, ""):
+        payload["customerIdentifier"] = str(customer_identifier)
+    if id_token not in (None, ""):
+        if not isinstance(id_token, dict):
+            return JsonResponse({"detail": "idToken must be an object"}, status=400)
+        token_value = id_token.get("idToken") or id_token.get("id_token")
+        token_type = id_token.get("type") or id_token.get("tokenType") or id_token.get("token_type")
+        if token_value in (None, "") or token_type in (None, ""):
+            return JsonResponse({"detail": "idToken.idToken and idToken.type required"}, status=400)
+        token_payload: dict[str, object] = {
+            "idToken": token_value,
+            "type": token_type,
+        }
+        additional_info = id_token.get("additionalInfo") or id_token.get("additional_info")
+        if additional_info not in (None, ""):
+            token_payload["additionalInfo"] = additional_info
+        payload["idToken"] = token_payload
+    if customer_certificate not in (None, ""):
+        if not isinstance(customer_certificate, dict):
+            return JsonResponse(
+                {"detail": "customerCertificate must be an object"}, status=400
+            )
+        certificate_payload = {
+            "hashAlgorithm": customer_certificate.get("hashAlgorithm")
+            or customer_certificate.get("hash_algorithm"),
+            "issuerNameHash": customer_certificate.get("issuerNameHash")
+            or customer_certificate.get("issuer_name_hash"),
+            "issuerKeyHash": customer_certificate.get("issuerKeyHash")
+            or customer_certificate.get("issuer_key_hash"),
+            "serialNumber": customer_certificate.get("serialNumber")
+            or customer_certificate.get("serial_number"),
+        }
+        if any(value in (None, "") for value in certificate_payload.values()):
+            return JsonResponse(
+                {
+                    "detail": (
+                        "customerCertificate.hashAlgorithm, issuerNameHash, "
+                        "issuerKeyHash, and serialNumber required"
+                    )
+                },
+                status=400,
+            )
+        payload["customerCertificate"] = certificate_payload
+    message_id = uuid.uuid4().hex
+    ocpp_action = "CustomerInformation"
+    expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
+    msg = json.dumps([2, message_id, ocpp_action, payload])
+    async_to_sync(context.ws.send)(msg)
+    charger = context.charger or _get_or_create_charger(context.cid, context.connector_value)
+    if charger is None:
+        return JsonResponse({"detail": "charger not found"}, status=404)
+    request_record = CustomerInformationRequest.objects.create(
+        charger=charger,
+        ocpp_message_id=message_id,
+        request_id=request_id,
+        payload=payload,
+    )
+    store.register_pending_call(
+        message_id,
+        {
+            "action": ocpp_action,
+            "charger_id": context.cid,
+            "connector_id": context.connector_value,
+            "log_key": context.log_key,
+            "requested_at": timezone.now(),
+            "request_id": request_id,
+            "request_pk": request_record.pk,
+        },
+    )
+    store.schedule_call_timeout(
+        message_id,
+        action=ocpp_action,
+        log_key=context.log_key,
+        message="CustomerInformation request timed out",
+    )
+    return ActionCall(
+        msg=msg,
+        message_id=message_id,
+        ocpp_action=ocpp_action,
+        expected_statuses=expected_statuses,
+    )
+
+
+@protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "GetBaseReport")
+def _handle_get_base_report(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
+    request_id_value = data.get("requestId") or data.get("request_id")
+    try:
+        request_id = int(request_id_value) if request_id_value is not None else None
+    except (TypeError, ValueError):
+        return JsonResponse({"detail": "requestId must be an integer"}, status=400)
+    if request_id is None:
+        request_id = int(uuid.uuid4().int % 1_000_000_000)
+    report_base = data.get("reportBase") or data.get("report_base")
+    if report_base in (None, ""):
+        return JsonResponse({"detail": "reportBase required"}, status=400)
+    payload = {"requestId": request_id, "reportBase": report_base}
+    message_id = uuid.uuid4().hex
+    ocpp_action = "GetBaseReport"
+    expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
+    msg = json.dumps([2, message_id, ocpp_action, payload])
+    async_to_sync(context.ws.send)(msg)
+    store.register_pending_call(
+        message_id,
+        {
+            "action": ocpp_action,
+            "charger_id": context.cid,
+            "connector_id": context.connector_value,
+            "log_key": context.log_key,
+            "requested_at": timezone.now(),
+            "request_id": request_id,
+        },
+    )
+    store.schedule_call_timeout(
+        message_id,
+        action=ocpp_action,
+        log_key=context.log_key,
+        message="GetBaseReport request timed out",
+    )
+    return ActionCall(
+        msg=msg,
+        message_id=message_id,
+        ocpp_action=ocpp_action,
+        expected_statuses=expected_statuses,
+    )
+
+
+@protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "GetChargingProfiles")
+def _handle_get_charging_profiles(
+    context: ActionContext, data: dict
+) -> JsonResponse | ActionCall:
+    request_id_value = data.get("requestId") or data.get("request_id")
+    try:
+        request_id = int(request_id_value) if request_id_value is not None else None
+    except (TypeError, ValueError):
+        return JsonResponse({"detail": "requestId must be an integer"}, status=400)
+    if request_id is None:
+        request_id = int(uuid.uuid4().int % 1_000_000_000)
+    evse_id_value = data.get("evseId") or data.get("evse_id")
+    evse_id: int | None = None
+    if evse_id_value not in (None, ""):
+        try:
+            evse_id = int(evse_id_value)
+        except (TypeError, ValueError):
+            return JsonResponse({"detail": "evseId must be an integer"}, status=400)
+    charging_profile = data.get("chargingProfile") or data.get("charging_profile")
+    if charging_profile is None:
+        charging_profile = {}
+        profile_id_value = (
+            data.get("chargingProfileId")
+            or data.get("charging_profile_id")
+            or data.get("profileId")
+        )
+        if profile_id_value not in (None, ""):
+            try:
+                charging_profile["chargingProfileId"] = int(profile_id_value)
+            except (TypeError, ValueError):
+                return JsonResponse({"detail": "chargingProfileId must be an integer"}, status=400)
+        purpose = data.get("chargingProfilePurpose") or data.get("charging_profile_purpose")
+        if purpose not in (None, ""):
+            charging_profile["chargingProfilePurpose"] = purpose
+        stack_level_value = data.get("stackLevel") or data.get("stack_level")
+        if stack_level_value not in (None, ""):
+            try:
+                charging_profile["stackLevel"] = int(stack_level_value)
+            except (TypeError, ValueError):
+                return JsonResponse({"detail": "stackLevel must be an integer"}, status=400)
+        limit_source = data.get("chargingLimitSource") or data.get("charging_limit_source")
+        if limit_source not in (None, ""):
+            charging_profile["chargingLimitSource"] = limit_source
+    if not isinstance(charging_profile, dict):
+        return JsonResponse({"detail": "chargingProfile must be an object"}, status=400)
+    payload: dict[str, object] = {"requestId": request_id, "chargingProfile": charging_profile}
+    if evse_id is not None:
+        payload["evseId"] = evse_id
+    message_id = uuid.uuid4().hex
+    ocpp_action = "GetChargingProfiles"
+    expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
+    msg = json.dumps([2, message_id, ocpp_action, payload])
+    async_to_sync(context.ws.send)(msg)
+    store.register_pending_call(
+        message_id,
+        {
+            "action": ocpp_action,
+            "charger_id": context.cid,
+            "connector_id": context.connector_value,
+            "log_key": context.log_key,
+            "requested_at": timezone.now(),
+            "request_id": request_id,
+        },
+    )
+    store.schedule_call_timeout(
+        message_id,
+        action=ocpp_action,
+        log_key=context.log_key,
+        message="GetChargingProfiles request timed out",
+    )
+    return ActionCall(
+        msg=msg,
+        message_id=message_id,
+        ocpp_action=ocpp_action,
+        expected_statuses=expected_statuses,
+    )
+
+
+@protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "GetDisplayMessages")
+def _handle_get_display_messages(
+    context: ActionContext, data: dict
+) -> JsonResponse | ActionCall:
+    request_id_value = data.get("requestId") or data.get("request_id")
+    try:
+        request_id = int(request_id_value) if request_id_value is not None else None
+    except (TypeError, ValueError):
+        return JsonResponse({"detail": "requestId must be an integer"}, status=400)
+    if request_id is None:
+        request_id = int(uuid.uuid4().int % 1_000_000_000)
+    ids_value = (
+        data.get("id")
+        or data.get("ids")
+        or data.get("messageIds")
+        or data.get("message_ids")
+    )
+    payload: dict[str, object] = {"requestId": request_id}
+    if ids_value not in (None, ""):
+        if isinstance(ids_value, (list, tuple)):
+            ids = list(ids_value)
+        else:
+            ids = [ids_value]
+        if not ids:
+            return JsonResponse({"detail": "id list must not be empty"}, status=400)
+        normalized_ids: list[int] = []
+        for entry in ids:
+            try:
+                normalized_ids.append(int(entry))
+            except (TypeError, ValueError):
+                return JsonResponse({"detail": "id values must be integers"}, status=400)
+        payload["id"] = normalized_ids
+    priority = data.get("priority")
+    if priority not in (None, ""):
+        payload["priority"] = priority
+    state = data.get("state")
+    if state not in (None, ""):
+        payload["state"] = state
+    message_id = uuid.uuid4().hex
+    ocpp_action = "GetDisplayMessages"
+    expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
+    msg = json.dumps([2, message_id, ocpp_action, payload])
+    async_to_sync(context.ws.send)(msg)
+    store.register_pending_call(
+        message_id,
+        {
+            "action": ocpp_action,
+            "charger_id": context.cid,
+            "connector_id": context.connector_value,
+            "log_key": context.log_key,
+            "requested_at": timezone.now(),
+            "request_id": request_id,
+        },
+    )
+    store.schedule_call_timeout(
+        message_id,
+        action=ocpp_action,
+        log_key=context.log_key,
+        message="GetDisplayMessages request timed out",
+    )
+    return ActionCall(
+        msg=msg,
+        message_id=message_id,
+        ocpp_action=ocpp_action,
+        expected_statuses=expected_statuses,
+    )
+
+
+@protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "GetReport")
+def _handle_get_report(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
+    request_id_value = data.get("requestId") or data.get("request_id")
+    try:
+        request_id = int(request_id_value) if request_id_value is not None else None
+    except (TypeError, ValueError):
+        return JsonResponse({"detail": "requestId must be an integer"}, status=400)
+    if request_id is None:
+        request_id = int(uuid.uuid4().int % 1_000_000_000)
+    payload: dict[str, object] = {"requestId": request_id}
+    component_criteria = data.get("componentCriteria") or data.get("component_criteria")
+    if component_criteria not in (None, ""):
+        if not isinstance(component_criteria, (list, tuple)) or not component_criteria:
+            return JsonResponse({"detail": "componentCriteria must be a list"}, status=400)
+        payload["componentCriteria"] = list(component_criteria)
+    component_variable = data.get("componentVariable") or data.get("component_variable")
+    if component_variable not in (None, ""):
+        if not isinstance(component_variable, (list, tuple)) or not component_variable:
+            return JsonResponse({"detail": "componentVariable must be a list"}, status=400)
+        entries: list[dict[str, object]] = []
+        for entry in component_variable:
+            if not isinstance(entry, dict):
+                return JsonResponse(
+                    {"detail": "componentVariable entries must be objects"}, status=400
+                )
+            payload_entry, error = _build_component_variable_entry(entry)
+            if error:
+                return JsonResponse({"detail": error}, status=400)
+            entries.append(payload_entry)
+        payload["componentVariable"] = entries
+    message_id = uuid.uuid4().hex
+    ocpp_action = "GetReport"
+    expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
+    msg = json.dumps([2, message_id, ocpp_action, payload])
+    async_to_sync(context.ws.send)(msg)
+    store.register_pending_call(
+        message_id,
+        {
+            "action": ocpp_action,
+            "charger_id": context.cid,
+            "connector_id": context.connector_value,
+            "log_key": context.log_key,
+            "requested_at": timezone.now(),
+            "request_id": request_id,
+        },
+    )
+    store.schedule_call_timeout(
+        message_id,
+        action=ocpp_action,
+        log_key=context.log_key,
+        message="GetReport request timed out",
+    )
+    return ActionCall(
+        msg=msg,
+        message_id=message_id,
+        ocpp_action=ocpp_action,
+        expected_statuses=expected_statuses,
+    )
+
+
+@protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "SetDisplayMessage")
+def _handle_set_display_message(
+    context: ActionContext, data: dict
+) -> JsonResponse | ActionCall:
+    message_payload = data.get("message")
+    if message_payload is None:
+        message_payload = {}
+        message_id_value = data.get("id") or data.get("messageId") or data.get("message_id")
+        if message_id_value not in (None, ""):
+            message_payload["id"] = message_id_value
+        priority = data.get("priority")
+        if priority not in (None, ""):
+            message_payload["priority"] = priority
+        state = data.get("state")
+        if state not in (None, ""):
+            message_payload["state"] = state
+        display = data.get("display")
+        if display not in (None, ""):
+            message_payload["display"] = display
+        start_datetime = data.get("startDateTime") or data.get("start_date_time")
+        if start_datetime not in (None, ""):
+            message_payload["startDateTime"] = start_datetime
+        end_datetime = data.get("endDateTime") or data.get("end_date_time")
+        if end_datetime not in (None, ""):
+            message_payload["endDateTime"] = end_datetime
+        transaction_id = data.get("transactionId") or data.get("transaction_id")
+        if transaction_id not in (None, ""):
+            message_payload["transactionId"] = transaction_id
+        content_payload = data.get("messageContent") or data.get("message_content")
+        if content_payload is None:
+            content_value = data.get("content") or data.get("text")
+            format_value = data.get("format") or data.get("messageFormat")
+            language_value = data.get("language")
+            if content_value not in (None, "") or format_value not in (None, ""):
+                content_payload = {
+                    "content": content_value,
+                    "format": format_value,
+                }
+                if language_value not in (None, ""):
+                    content_payload["language"] = language_value
+        if content_payload is not None:
+            message_payload["message"] = content_payload
+    if not isinstance(message_payload, dict):
+        return JsonResponse({"detail": "message must be an object"}, status=400)
+    display_message_id = message_payload.get("id") or message_payload.get("messageId")
+    try:
+        message_id_value = int(display_message_id)
+    except (TypeError, ValueError):
+        return JsonResponse({"detail": "message.id required"}, status=400)
+    priority = message_payload.get("priority")
+    if priority in (None, ""):
+        return JsonResponse({"detail": "message.priority required"}, status=400)
+    content_payload = message_payload.get("message") or message_payload.get("messageContent")
+    if isinstance(content_payload, dict):
+        if content_payload.get("format") in (None, "") or content_payload.get("content") in (
+            None,
+            "",
+        ):
+            return JsonResponse(
+                {"detail": "message.message.format and message.message.content required"},
+                status=400,
+            )
+    else:
+        return JsonResponse({"detail": "message.message must be an object"}, status=400)
+    message_payload["id"] = message_id_value
+    message_payload["message"] = content_payload
+    payload = {"message": message_payload}
+    message_id = uuid.uuid4().hex
+    ocpp_action = "SetDisplayMessage"
+    expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
+    msg = json.dumps([2, message_id, ocpp_action, payload])
+    async_to_sync(context.ws.send)(msg)
+    store.register_pending_call(
+        message_id,
+        {
+            "action": ocpp_action,
+            "charger_id": context.cid,
+            "connector_id": context.connector_value,
+            "log_key": context.log_key,
+            "requested_at": timezone.now(),
+            "display_message_id": message_id_value,
+        },
+    )
+    store.schedule_call_timeout(
+        message_id,
+        action=ocpp_action,
+        log_key=context.log_key,
+        message="SetDisplayMessage request timed out",
+    )
+    return ActionCall(
+        msg=msg,
+        message_id=message_id,
+        ocpp_action=ocpp_action,
+        expected_statuses=expected_statuses,
+    )
+
+
+@protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "SetNetworkProfile")
+def _handle_set_network_profile(
+    context: ActionContext, data: dict
+) -> JsonResponse | ActionCall:
+    profile_id_value = (
+        data.get("networkProfileId")
+        or data.get("network_profile_id")
+        or data.get("profileId")
+        or data.get("profile")
+    )
+    try:
+        profile_id = int(profile_id_value)
+    except (TypeError, ValueError):
+        return JsonResponse({"detail": "networkProfileId required"}, status=400)
+    network_profile = CPNetworkProfile.objects.filter(pk=profile_id).first()
+    if network_profile is None:
+        return JsonResponse({"detail": "network profile not found"}, status=404)
+    charger = context.charger or _get_or_create_charger(context.cid, context.connector_value)
+    if charger is None:
+        return JsonResponse({"detail": "charger not found"}, status=404)
+    payload = network_profile.build_payload()
+    message_id = uuid.uuid4().hex
+    deployment = CPNetworkProfileDeployment.objects.create(
+        network_profile=network_profile,
+        charger=charger,
+        node=charger.node_origin if charger else None,
+        ocpp_message_id=message_id,
+        status="Pending",
+        status_info=_("Awaiting charge point response."),
+        status_timestamp=timezone.now(),
+        request_payload=payload,
+    )
+    ocpp_action = "SetNetworkProfile"
+    expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
+    msg = json.dumps([2, message_id, ocpp_action, payload])
+    async_to_sync(context.ws.send)(msg)
+    store.register_pending_call(
+        message_id,
+        {
+            "action": ocpp_action,
+            "charger_id": context.cid,
+            "connector_id": context.connector_value,
+            "deployment_pk": deployment.pk,
+            "log_key": context.log_key,
+            "requested_at": timezone.now(),
+        },
+    )
+    store.schedule_call_timeout(
+        message_id,
+        action=ocpp_action,
+        log_key=context.log_key,
+        message="SetNetworkProfile request timed out",
     )
     return ActionCall(
         msg=msg,
@@ -1944,6 +2553,14 @@ ACTION_HANDLERS = {
     "get_installed_certificate_ids": _handle_get_installed_certificate_ids,
     "get_variables": _handle_get_variables,
     "set_variables": _handle_set_variables,
+    "clear_display_message": _handle_clear_display_message,
+    "customer_information": _handle_customer_information,
+    "get_base_report": _handle_get_base_report,
+    "get_charging_profiles": _handle_get_charging_profiles,
+    "get_display_messages": _handle_get_display_messages,
+    "get_report": _handle_get_report,
+    "set_display_message": _handle_set_display_message,
+    "set_network_profile": _handle_set_network_profile,
     "set_monitoring_base": _handle_set_monitoring_base,
     "set_monitoring_level": _handle_set_monitoring_level,
     "set_variable_monitoring": _handle_set_variable_monitoring,
