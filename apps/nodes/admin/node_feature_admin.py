@@ -1,25 +1,20 @@
 from django.contrib import admin, messages
-from django.core.paginator import Paginator
 from django.shortcuts import redirect
 from django.urls import NoReverseMatch, path, reverse
-from django.utils import timezone
 from django.utils.html import format_html, format_html_join
 from django.utils.translation import gettext_lazy as _
 
 from apps.locals.user_data import EntityModelAdmin
 
 from ..models import Node, NodeFeature
-from ..reports import (
-    collect_celery_log_entries,
-    collect_scheduled_tasks,
-    iter_report_periods,
-    resolve_period,
-)
 from ..utils import capture_screenshot, save_screenshot
+from .actions import check_features_for_eligibility, enable_selected_features
 from .forms import NodeFeatureAdminForm
+from .reports_admin import CeleryReportAdminMixin
+
 
 @admin.register(NodeFeature)
-class NodeFeatureAdmin(EntityModelAdmin):
+class NodeFeatureAdmin(CeleryReportAdminMixin, EntityModelAdmin):
     form = NodeFeatureAdminForm
     list_display = (
         "display",
@@ -28,7 +23,7 @@ class NodeFeatureAdmin(EntityModelAdmin):
         "is_enabled_display",
         "available_actions",
     )
-    actions = ["check_features_for_eligibility", "enable_selected_features"]
+    actions = [check_features_for_eligibility, enable_selected_features]
     readonly_fields = ("is_enabled",)
     search_fields = ("display", "slug")
 
@@ -75,117 +70,9 @@ class NodeFeatureAdmin(EntityModelAdmin):
             return "This feature can be enabled manually."
         return "This feature cannot be enabled manually."
 
-    @admin.action(description="Check features for eligibility")
-    def check_features_for_eligibility(self, request, queryset):
-        from ..feature_checks import feature_checks
-
-        features = list(queryset)
-        total = len(features)
-        successes = 0
-        node = Node.get_local()
-        for feature in features:
-            enablement_message = self._manual_enablement_message(feature, node)
-            try:
-                result = feature_checks.run(feature, node=node)
-            except Exception as exc:  # pragma: no cover - defensive
-                self.message_user(
-                    request,
-                    f"{feature.display}: {exc} {enablement_message}",
-                    level=messages.ERROR,
-                )
-                continue
-            if result is None:
-                self.message_user(
-                    request,
-                    f"No check is configured for {feature.display}. {enablement_message}",
-                    level=messages.WARNING,
-                )
-                continue
-            message = result.message or (
-                f"{feature.display} check {'passed' if result.success else 'failed'}."
-            )
-            self.message_user(
-                request, f"{message} {enablement_message}", level=result.level
-            )
-            if result.success:
-                successes += 1
-        if total:
-            self.message_user(
-                request,
-                f"Completed {successes} of {total} feature check(s) successfully.",
-                level=messages.INFO,
-            )
-
-    @admin.action(description="Enable selected action")
-    def enable_selected_features(self, request, queryset):
-        node = Node.get_local()
-        if node is None:
-            self.message_user(
-                request,
-                "No local node is registered; unable to enable features manually.",
-                level=messages.ERROR,
-            )
-            return
-
-        manual_features = [
-            feature
-            for feature in queryset
-            if feature.slug in Node.MANUAL_FEATURE_SLUGS
-        ]
-        non_manual_features = [
-            feature
-            for feature in queryset
-            if feature.slug not in Node.MANUAL_FEATURE_SLUGS
-        ]
-        for feature in non_manual_features:
-            self.message_user(
-                request,
-                f"{feature.display} cannot be enabled manually.",
-                level=messages.WARNING,
-            )
-
-        if not manual_features:
-            self.message_user(
-                request,
-                "None of the selected features can be enabled manually.",
-                level=messages.WARNING,
-            )
-            return
-
-        current_manual = set(
-            node.features.filter(slug__in=Node.MANUAL_FEATURE_SLUGS).values_list(
-                "slug", flat=True
-            )
-        )
-        desired_manual = current_manual | {feature.slug for feature in manual_features}
-        newly_enabled = desired_manual - current_manual
-        if not newly_enabled:
-            self.message_user(
-                request,
-                "Selected manual features are already enabled.",
-                level=messages.INFO,
-            )
-            return
-
-        node.update_manual_features(desired_manual)
-        display_map = {feature.slug: feature.display for feature in manual_features}
-        newly_enabled_names = [display_map[slug] for slug in sorted(newly_enabled)]
-        self.message_user(
-            request,
-            "Enabled {} feature(s): {}".format(
-                len(newly_enabled), ", ".join(newly_enabled_names)
-            ),
-            level=messages.SUCCESS,
-        )
-
     def get_urls(self):
         urls = super().get_urls()
         custom = [
-            path(
-                "celery-report/",
-                self.admin_site.admin_view(self.celery_report),
-                name="nodes_nodefeature_celery_report",
-            ),
             path(
                 "take-screenshot/",
                 self.admin_site.admin_view(self.take_screenshot),
@@ -193,55 +80,6 @@ class NodeFeatureAdmin(EntityModelAdmin):
             ),
         ]
         return custom + urls
-
-    def celery_report(self, request):
-        period = resolve_period(request.GET.get("period"))
-        now = timezone.now()
-        window_end = now + period.delta
-        log_window_start = now - period.delta
-
-        scheduled_tasks = collect_scheduled_tasks(now, window_end)
-        log_collection = collect_celery_log_entries(log_window_start, now)
-
-        log_paginator = Paginator(log_collection.entries, 100)
-        log_page = log_paginator.get_page(request.GET.get("page"))
-        query_params = request.GET.copy()
-        if "page" in query_params:
-            query_params.pop("page")
-        base_query = query_params.urlencode()
-        log_page_base = f"?{base_query}&page=" if base_query else "?page="
-
-        period_options = [
-            {
-                "key": candidate.key,
-                "label": candidate.label,
-                "selected": candidate.key == period.key,
-                "url": f"?period={candidate.key}",
-            }
-            for candidate in iter_report_periods()
-        ]
-
-        context = {
-            **self.admin_site.each_context(request),
-            "title": _("Celery Report"),
-            "period": period,
-            "period_options": period_options,
-            "current_time": now,
-            "window_end": window_end,
-            "log_window_start": log_window_start,
-            "scheduled_tasks": scheduled_tasks,
-            "log_entries": list(log_page.object_list),
-            "log_page": log_page,
-            "log_paginator": log_paginator,
-            "is_paginated": log_page.has_other_pages(),
-            "log_page_base": log_page_base,
-            "log_sources": log_collection.checked_sources,
-        }
-        return TemplateResponse(
-            request,
-            "admin/nodes/nodefeature/celery_report.html",
-            context,
-        )
 
     def _ensure_feature_enabled(self, request, slug: str, action_label: str):
         try:
