@@ -263,6 +263,9 @@ class NodeNetworkingMixin:
 
         host_candidates = self.get_remote_host_candidates()
         default_port = self.port or 8888
+        port_candidates = [default_port]
+        if self.prefers_https() and default_port not in (80, 443):
+            port_candidates.insert(0, 443)
         normalized_path = path if path.startswith("/") else f"/{path}"
         seen: set[str] = set()
         scheme_candidates = self.iter_preferred_schemes()
@@ -334,31 +337,32 @@ class NodeNetworkingMixin:
             for scheme in scheme_candidates:
                 scheme_default_port = 443 if scheme == "https" else 80
                 base = f"{scheme}://{formatted_host}"
-                if port_override is not None:
-                    scheme_port: int | None = port_override
-                else:
-                    scheme_port = default_port
-
-                if (
-                    scheme_port in (80, 443)
-                    and scheme_port != scheme_default_port
-                ):
-                    scheme_port = None
-
-                if scheme_port and scheme_port != scheme_default_port:
-                    explicit = f"{base}:{scheme_port}{combined_path}"
-                    if explicit not in seen:
-                        seen.add(explicit)
-                        yield explicit
-
-                candidate_without_port = (
-                    scheme_port is None or scheme_port == scheme_default_port
+                port_sources = (
+                    [port_override] if port_override is not None else port_candidates
                 )
-                if candidate_without_port:
-                    candidate = f"{base}{combined_path}"
-                    if candidate not in seen:
-                        seen.add(candidate)
-                        yield candidate
+                for candidate_port in port_sources:
+                    scheme_port: int | None = candidate_port
+
+                    if (
+                        scheme_port in (80, 443)
+                        and scheme_port != scheme_default_port
+                    ):
+                        scheme_port = None
+
+                    if scheme_port and scheme_port != scheme_default_port:
+                        explicit = f"{base}:{scheme_port}{combined_path}"
+                        if explicit not in seen:
+                            seen.add(explicit)
+                            yield explicit
+
+                    candidate_without_port = (
+                        scheme_port is None or scheme_port == scheme_default_port
+                    )
+                    if candidate_without_port:
+                        candidate = f"{base}{combined_path}"
+                        if candidate not in seen:
+                            seen.add(candidate)
+                            yield candidate
 
     @classmethod
     def normalize_relation(cls, value):
