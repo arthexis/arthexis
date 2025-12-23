@@ -1745,7 +1745,6 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         connector_hint = payload.get("connectorId") if isinstance(payload, dict) else None
         self._log_triggered_follow_up(action, connector_hint)
         await self._assign_connector(payload.get("connectorId"))
-        await self._forward_charge_point_message(action, raw)
         action_handlers = {
             "BootNotification": self._handle_boot_notification_action,
             "DataTransfer": self._handle_data_transfer_action,
@@ -1781,6 +1780,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         store.add_log(
             self.store_key, f"< {json.dumps(response)}", log_type="charger"
         )
+        await self._forward_charge_point_message(action, raw)
 
     def _log_triggered_follow_up(self, action: str, connector_hint):
         follow_up = store.consume_triggered_followup(

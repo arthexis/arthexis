@@ -837,7 +837,7 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": crontab(minute=30, hour=0),
     },
     "ocpp_forwarding_push": {
-        "task": "apps.ocpp.tasks.push_forwarded_charge_points",
-        "schedule": timedelta(minutes=10),
+        "task": "apps.ocpp.tasks.setup_forwarders",
+        "schedule": timedelta(minutes=5),
     },
 }
