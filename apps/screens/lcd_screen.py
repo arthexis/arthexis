@@ -56,7 +56,6 @@ class LockPayload(NamedTuple):
     line1: str
     line2: str
     scroll_ms: int
-    net_message: bool
     enabled: bool
 
 
@@ -75,14 +74,14 @@ def _read_lock_file() -> LockPayload:
     ensure_lcd_lock_file(LOCK_DIR)
     lock_data = read_lcd_lock_file(LOCK_FILE)
     if lock_data is None:
-        return LockPayload("", "", DEFAULT_SCROLL_MS, False, False)
+        return LockPayload("", "", DEFAULT_SCROLL_MS, False)
 
     enabled = lock_data.state != LCD_STATE_DISABLED
-    net_message, scroll_ms = parse_lcd_flags(lock_data.flags)
+    _, scroll_ms = parse_lcd_flags(lock_data.flags)
     speed = scroll_ms if scroll_ms is not None else DEFAULT_SCROLL_MS
     if not enabled:
-        return LockPayload("", "", DEFAULT_SCROLL_MS, False, False)
-    return LockPayload(lock_data.subject, lock_data.body, speed, net_message, True)
+        return LockPayload("", "", DEFAULT_SCROLL_MS, False)
+    return LockPayload(lock_data.subject, lock_data.body, speed, True)
 
 
 def _disable_lcd_feature(lock_dir: Path = LOCK_DIR) -> None:
@@ -219,7 +218,7 @@ def _resolve_display_payload(
         return line1, line2, DEFAULT_SCROLL_MS, "suite-down"
 
     if lock_payload.enabled:
-        line1, line2, speed, _, _ = lock_payload
+        line1, line2, speed, _ = lock_payload
         if line1.strip() or line2.strip():
             return line1, line2, speed, "lock-file"
 
@@ -230,7 +229,7 @@ def _resolve_display_payload(
     if not lock_payload.enabled:
         return "", "", DEFAULT_SCROLL_MS, "disabled"
 
-    line1, line2, speed, _, _ = lock_payload
+    line1, line2, speed, _ = lock_payload
     return line1, line2, speed, "lock-file"
 
 
@@ -247,26 +246,7 @@ def _lcd_temperature_label() -> str | None:
 
 
 def _lcd_temperature_label_from_sensors() -> str | None:
-    if not _ensure_django():
-        return None
-
-    try:
-        from apps.sensors.models import Thermometer
-    except Exception:
-        logger.debug("Thermometer model unavailable", exc_info=True)
-        return None
-
-    try:
-        thermometer = Thermometer.objects.filter(is_active=True).order_by("name").first()
-    except Exception:
-        logger.debug("Unable to load thermometer reading", exc_info=True)
-        return None
-
-    if not thermometer:
-        return None
-
-    label = thermometer.format_lcd_reading()
-    return label or None
+    return None
 
 
 def _lcd_temperature_label_from_sysfs() -> str | None:
@@ -315,30 +295,7 @@ def _clock_payload(now: datetime) -> tuple[str, str, int, str]:
     )
 
 
-_DJANGO_READY = False
 _SHUTDOWN_REQUESTED = False
-
-
-def _ensure_django() -> bool:
-    global _DJANGO_READY
-    if _DJANGO_READY:
-        return True
-
-    try:
-        import django
-    except Exception:
-        logger.debug("Django import failed for Net Message broadcast", exc_info=True)
-        return False
-
-    try:
-        os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
-        django.setup()
-    except Exception:
-        logger.debug("Django setup failed for Net Message broadcast", exc_info=True)
-        return False
-
-    _DJANGO_READY = True
-    return True
 
 
 def _request_shutdown(signum, frame) -> None:  # pragma: no cover - signal handler
@@ -382,37 +339,9 @@ def _handle_shutdown_request(lcd: CharLCD1602 | None) -> bool:
     return True
 
 
-def _broadcast_net_message(subject: str, body: str) -> bool:
-    if not _ensure_django():
-        return False
-
-    try:
-        from apps.nodes.models import NetMessage
-    except Exception:
-        logger.debug("Net Message model unavailable", exc_info=True)
-        return False
-
-    try:
-        NetMessage.broadcast(subject=subject, body=body)
-        return True
-    except Exception:
-        logger.warning("Failed to broadcast Net Message", exc_info=True)
-        return False
-
-
 def _send_net_message_from_lock(
     lock_payload: LockPayload, last_sent: tuple[str, str] | None
 ) -> tuple[str, str] | None:
-    if not lock_payload.net_message:
-        return last_sent
-
-    current = (lock_payload.line1, lock_payload.line2)
-    if last_sent == current:
-        return last_sent
-
-    if _broadcast_net_message(*current):
-        return current
-
     return last_sent
 
 
@@ -458,7 +387,7 @@ def _advance_display(lcd: CharLCD1602, state: DisplayState) -> DisplayState:
 def main() -> None:  # pragma: no cover - hardware dependent
     lcd = None
     last_lock_mtime = 0.0
-    lock_payload: LockPayload = LockPayload("", "", DEFAULT_SCROLL_MS, False, False)
+    lock_payload: LockPayload = LockPayload("", "", DEFAULT_SCROLL_MS, False)
     last_display: tuple[str, str, int, str] | None = None
     display_state: DisplayState | None = None
     last_net_message: tuple[str, str] | None = None
@@ -491,7 +420,7 @@ def main() -> None:  # pragma: no cover - hardware dependent
                 )
 
                 if lock_payload.enabled:
-                    lock_line1, lock_line2, lock_speed, _, _ = lock_payload
+                    lock_line1, lock_line2, lock_speed, _ = lock_payload
                     if lock_line1.strip() or lock_line2.strip():
                         last_lock_display = (lock_line1, lock_line2, lock_speed)
 
