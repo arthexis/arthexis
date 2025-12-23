@@ -19,6 +19,8 @@ import signal
 import subprocess
 import time
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
+from glob import glob
 from pathlib import Path
 from typing import NamedTuple
 
@@ -238,6 +240,13 @@ def _lcd_clock_enabled() -> bool:
 
 
 def _lcd_temperature_label() -> str | None:
+    label = _lcd_temperature_label_from_sensors()
+    if label:
+        return label
+    return _lcd_temperature_label_from_sysfs()
+
+
+def _lcd_temperature_label_from_sensors() -> str | None:
     if not _ensure_django():
         return None
 
@@ -258,6 +267,38 @@ def _lcd_temperature_label() -> str | None:
 
     label = thermometer.format_lcd_reading()
     return label or None
+
+
+def _lcd_temperature_label_from_sysfs() -> str | None:
+    try:
+        from apps.sensors.thermometers import format_w1_temperature
+    except Exception:
+        format_w1_temperature = None
+
+    if format_w1_temperature:
+        try:
+            label = format_w1_temperature()
+        except Exception:
+            logger.debug("Unable to load sysfs thermometer reading", exc_info=True)
+        else:
+            if label:
+                return label
+
+    for path in glob("/sys/bus/w1/devices/28-*/temperature"):
+        try:
+            raw = Path(path).read_text(encoding="utf-8").strip()
+        except OSError:
+            continue
+        if not raw:
+            continue
+        try:
+            value = Decimal(raw)
+        except (InvalidOperation, ValueError):
+            continue
+        if value.copy_abs() >= Decimal("1000"):
+            value = value / Decimal("1000")
+        return f"{value:.1f}C"
+    return None
 
 
 def _clock_payload(now: datetime) -> tuple[str, str, int, str]:
