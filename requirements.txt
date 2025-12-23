@@ -37,7 +37,7 @@ django-object-actions==5.0.0
 django-otp==1.6.3
 django-timezone-field==7.2.1
 dnspython==2.7.0
-docutils==0.22.3
+docutils==0.22.4
 gpiozero==2.0.1; sys_platform == "linux"
 graphviz==0.21
 geckodriver-autoinstaller==0.1.0
