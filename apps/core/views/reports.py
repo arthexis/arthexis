@@ -1,394 +1,37 @@
-import base64
+from __future__ import annotations
+
 import contextlib
-import binascii
 import json
 import logging
 import os
-import shutil
+import subprocess
 import uuid
-from datetime import datetime, timedelta, timezone as datetime_timezone
+from pathlib import Path
+from typing import Optional, Sequence
 
 import requests
 from django.conf import settings
-from django.contrib.admin.sites import site as admin_site
-from django.contrib.admin.views.decorators import staff_member_required
-from django.contrib.auth import REDIRECT_FIELD_NAME, authenticate, login
 from django.contrib import messages
-from django.contrib.sites.models import Site
-from django.http import Http404, JsonResponse, HttpResponse
-from django.shortcuts import redirect, render, resolve_url
-from django.template.response import TemplateResponse
-from django.utils import timezone
-from django.utils.html import strip_tags
-from django.utils.translation import gettext as _
-from django.urls import NoReverseMatch, reverse
-from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_GET, require_POST
-from django.utils.http import url_has_allowed_host_and_scheme
-from pathlib import Path
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
-import errno
-import subprocess
-from typing import Optional, Sequence
-
+from django.contrib.admin.views.decorators import staff_member_required
+from django.http import HttpResponse
+from django.shortcuts import redirect
 from django.template.loader import get_template
 from django.test import signals
+from django.utils import timezone
+from django.utils.translation import gettext as _
+from django.urls import NoReverseMatch, reverse
 
-from config.request_utils import is_https_request
-from utils import revision
+from apps.loggers.paths import select_log_dir
 from apps.nodes.models import NetMessage, Node
-from apps.nodes.utils import save_screenshot
-from utils.api import api_login_required
+from apps.release import release as release_utils
+from apps.release.models import PackageRelease
+from utils import revision
 
 logger = logging.getLogger(__name__)
 
 PYPI_REQUEST_TIMEOUT = 10
 
-from apps.users import temp_passwords
-from apps.release.models import PackageRelease
-from .models import RFID
-from apps.odoo.models import OdooEmployee, OdooProduct
-from apps.energy.models import CustomerAccount
-
-
-@staff_member_required
-def odoo_products(request):
-    """Return available products from the user's Odoo instance."""
-
-    profile = getattr(request.user, "odoo_employee", None)
-    if not profile or not profile.is_verified:
-        raise Http404
-    try:
-        products = profile.execute(
-            "product.product",
-            "search_read",
-            fields=["name"],
-            limit=50,
-        )
-    except Exception:
-        logger.exception(
-            "Failed to fetch Odoo products via API for user %s (profile_id=%s, host=%s, database=%s)",
-            getattr(request.user, "pk", None),
-            getattr(profile, "pk", None),
-            getattr(profile, "host", None),
-            getattr(profile, "database", None),
-        )
-        return JsonResponse({"detail": "Unable to fetch products"}, status=502)
-    items = [{"id": p.get("id"), "name": p.get("name", "")} for p in products]
-    return JsonResponse(items, safe=False)
-
-
-@staff_member_required
-def odoo_quote_report(request):
-    """Display a consolidated quote report from the user's Odoo instance."""
-
-    profile = getattr(request.user, "odoo_employee", None)
-    context = {
-        "title": _("Quote Report"),
-        "profile": profile,
-        "error": None,
-        "template_stats": [],
-        "quotes": [],
-        "recent_products": [],
-        "installed_modules": [],
-        "profile_url": "",
-    }
-
-    profile_admin = admin_site._registry.get(OdooEmployee)
-    if profile_admin is not None:
-        try:
-            context["profile_url"] = profile_admin.get_my_profile_url(request)
-        except Exception:  # pragma: no cover - defensive fallback
-            context["profile_url"] = ""
-
-    if not profile or not profile.is_verified:
-        context["error"] = _(
-            "Configure and verify your Odoo employee before generating the report."
-        )
-        return TemplateResponse(
-            request, "admin/core/odoo_quote_report.html", context
-        )
-
-    def _parse_datetime(value):
-        if not value:
-            return None
-        if isinstance(value, datetime):
-            dt = value
-        else:
-            text = str(value)
-            try:
-                dt = datetime.fromisoformat(text)
-            except ValueError:
-                text_iso = text.replace(" ", "T")
-                try:
-                    dt = datetime.fromisoformat(text_iso)
-                except ValueError:
-                    for fmt in ("%Y-%m-%d %H:%M:%S.%f", "%Y-%m-%d %H:%M:%S"):
-                        try:
-                            dt = datetime.strptime(text, fmt)
-                            break
-                        except ValueError:
-                            continue
-                    else:
-                        return None
-        if timezone.is_naive(dt):
-            tzinfo = getattr(timezone, "utc", datetime_timezone.utc)
-            dt = timezone.make_aware(dt, tzinfo)
-        return dt
-
-    try:
-        templates = profile.execute(
-            "sale.order.template",
-            "search_read",
-            fields=["name"],
-            order="name asc",
-        )
-        template_usage = profile.execute(
-            "sale.order",
-            "read_group",
-            [[("sale_order_template_id", "!=", False)]],
-            ["sale_order_template_id"],
-            lazy=False,
-        )
-
-        usage_map = {}
-        for entry in template_usage:
-            template_info = entry.get("sale_order_template_id")
-            if not template_info:
-                continue
-            template_id = template_info[0]
-            usage_map[template_id] = entry.get(
-                "sale_order_template_id_count", 0
-            )
-
-        context["template_stats"] = [
-            {
-                "id": template.get("id"),
-                "name": template.get("name", ""),
-                "quote_count": usage_map.get(template.get("id"), 0),
-            }
-            for template in templates
-        ]
-
-        ninety_days_ago = timezone.now() - timedelta(days=90)
-        quotes = profile.execute(
-            "sale.order",
-            "search_read",
-            [
-                [
-                    ("create_date", ">=", ninety_days_ago.strftime("%Y-%m-%d %H:%M:%S")),
-                    ("state", "!=", "cancel"),
-                    ("quote_sent", "=", False),
-                ]
-            ],
-            fields=[
-                "name",
-                "amount_total",
-                "partner_id",
-                "activity_type_id",
-                "activity_summary",
-                "tag_ids",
-                "create_date",
-                "currency_id",
-            ],
-            order="create_date desc",
-        )
-
-        tag_ids = set()
-        currency_ids = set()
-        for quote in quotes:
-            tag_ids.update(quote.get("tag_ids") or [])
-            currency_info = quote.get("currency_id")
-            if (
-                isinstance(currency_info, (list, tuple))
-                and len(currency_info) >= 1
-                and currency_info[0]
-            ):
-                currency_ids.add(currency_info[0])
-
-        tag_map: dict[int, str] = {}
-        if tag_ids:
-            tag_records = profile.execute(
-                "sale.order.tag",
-                "read",
-                list(tag_ids),
-                fields=["name"],
-            )
-            for tag in tag_records:
-                tag_id = tag.get("id")
-                if tag_id is not None:
-                    tag_map[tag_id] = tag.get("name", "")
-
-        currency_map: dict[int, dict[str, str]] = {}
-        if currency_ids:
-            currency_records = profile.execute(
-                "res.currency",
-                "read",
-                list(currency_ids),
-                fields=["name", "symbol"],
-            )
-            for currency in currency_records:
-                currency_id = currency.get("id")
-                if currency_id is not None:
-                    currency_map[currency_id] = {
-                        "name": currency.get("name", ""),
-                        "symbol": currency.get("symbol", ""),
-                    }
-
-        prepared_quotes = []
-        for quote in quotes:
-            partner = quote.get("partner_id")
-            customer = ""
-            if isinstance(partner, (list, tuple)) and len(partner) >= 2:
-                customer = partner[1]
-
-            activity_type = quote.get("activity_type_id")
-            activity_name = ""
-            if isinstance(activity_type, (list, tuple)) and len(activity_type) >= 2:
-                activity_name = activity_type[1]
-
-            activity_summary = quote.get("activity_summary") or ""
-            activity_value = activity_summary or activity_name
-
-            quote_tags = [
-                tag_map.get(tag_id, str(tag_id))
-                for tag_id in quote.get("tag_ids") or []
-            ]
-
-            currency_info = quote.get("currency_id")
-            currency_label = ""
-            if isinstance(currency_info, (list, tuple)) and currency_info:
-                currency_id = currency_info[0]
-                currency_details = currency_map.get(currency_id, {})
-                currency_label = (
-                    currency_details.get("symbol")
-                    or currency_details.get("name")
-                    or (currency_info[1] if len(currency_info) >= 2 else "")
-                )
-
-            amount_total = quote.get("amount_total") or 0
-            if currency_label:
-                total_display = f"{currency_label}{amount_total:,.2f}"
-            else:
-                total_display = f"{amount_total:,.2f}"
-
-            prepared_quotes.append(
-                {
-                    "name": quote.get("name", ""),
-                    "customer": customer,
-                    "activity": activity_value,
-                    "tags": quote_tags,
-                    "create_date": _parse_datetime(quote.get("create_date")),
-                    "total": amount_total,
-                    "total_display": total_display,
-                }
-            )
-
-        context["quotes"] = prepared_quotes
-
-        products = profile.execute(
-            "product.product",
-            "search_read",
-            fields=["name", "default_code", "write_date", "create_date"],
-            limit=10,
-            order="write_date desc, create_date desc",
-        )
-        context["recent_products"] = [
-            {
-                "name": product.get("name", ""),
-                "default_code": product.get("default_code", ""),
-                "create_date": _parse_datetime(product.get("create_date")),
-                "write_date": _parse_datetime(product.get("write_date")),
-            }
-            for product in products
-        ]
-
-        modules = profile.execute(
-            "ir.module.module",
-            "search_read",
-            [[("state", "=", "installed")]],
-            fields=["name", "shortdesc", "latest_version", "author"],
-            order="name asc",
-        )
-        context["installed_modules"] = [
-            {
-                "name": module.get("name", ""),
-                "shortdesc": module.get("shortdesc", ""),
-                "latest_version": module.get("latest_version", ""),
-                "author": module.get("author", ""),
-            }
-            for module in modules
-        ]
-
-    except Exception:
-        logger.exception(
-            "Failed to build Odoo quote report for user %s (profile_id=%s)",
-            getattr(request.user, "pk", None),
-            getattr(profile, "pk", None),
-        )
-        context["error"] = _("Unable to generate the quote report from Odoo.")
-        return TemplateResponse(
-            request,
-            "admin/core/odoo_quote_report.html",
-            context,
-            status=502,
-        )
-
-    return TemplateResponse(request, "admin/core/odoo_quote_report.html", context)
-
-
-@staff_member_required
-@require_GET
-def request_temp_password(request):
-    """Generate a temporary password for the authenticated staff member."""
-
-    user = request.user
-    username = user.get_username()
-    password = temp_passwords.generate_password()
-    entry = temp_passwords.store_temp_password(
-        username,
-        password,
-        allow_change=True,
-    )
-    context = {
-        **admin_site.each_context(request),
-        "title": _("Temporary password"),
-        "username": username,
-        "password": password,
-        "expires_at": timezone.localtime(entry.expires_at),
-        "allow_change": entry.allow_change,
-        "return_url": reverse("admin:password_change"),
-    }
-    return TemplateResponse(
-        request,
-        "admin/core/request_temp_password.html",
-        context,
-    )
-
-
-@staff_member_required
-@require_GET
-def version_info(request):
-    """Return the running application version and Git revision."""
-
-    version = ""
-    version_path = Path(settings.BASE_DIR) / "VERSION"
-    if version_path.exists():
-        version = version_path.read_text(encoding="utf-8").strip()
-    return JsonResponse(
-        {
-            "version": version,
-            "revision": revision.get_revision(),
-        }
-    )
-
-
-from apps.release import release as release_utils
-from apps.loggers.paths import select_log_dir
-
-
 DIRTY_COMMIT_DEFAULT_MESSAGE = "chore: commit pending changes"
-
 
 DIRTY_STATUS_LABELS = {
     "A": _("Added"),
@@ -399,6 +42,14 @@ DIRTY_STATUS_LABELS = {
     "U": _("Updated"),
     "??": _("Untracked"),
 }
+
+
+class ApprovalRequired(Exception):
+    """Raised when release manager approval is required before continuing."""
+
+
+class DirtyRepository(Exception):
+    """Raised when the Git workspace has uncommitted changes."""
 
 
 def _append_log(path: Path, message: str) -> None:
@@ -572,7 +223,9 @@ def _handle_release_sync(
             request,
             release,
             action,
-            _("This release was already published and no longer matches the repository version."),
+            _(
+                "This release was already published and no longer matches the repository version."
+            ),
             status=409,
             debug_info={
                 "release_version": release.version,
@@ -1138,7 +791,9 @@ def _ensure_origin_main_unchanged(log_path: Path) -> None:
         origin_main = _git_stdout(["git", "rev-parse", "origin/main"])
         merge_base = _git_stdout(["git", "merge-base", "HEAD", "origin/main"])
     except subprocess.CalledProcessError as exc:
-        details = (getattr(exc, "stderr", "") or getattr(exc, "stdout", "") or str(exc)).strip()
+        details = (
+            getattr(exc, "stderr", "") or getattr(exc, "stdout", "") or str(exc)
+        ).strip()
         if details:
             _append_log(log_path, f"Failed to verify origin/main status: {details}")
         else:  # pragma: no cover - defensive fallback
@@ -1169,14 +824,6 @@ def _next_patch_version(version: str) -> str:
     return f"{parsed.major}.{parsed.minor}.{parsed.micro + 1}"
 
 
-class ApprovalRequired(Exception):
-    """Raised when release manager approval is required before continuing."""
-
-
-class DirtyRepository(Exception):
-    """Raised when the Git workspace has uncommitted changes."""
-
-
 def _major_minor_version_changed(previous: str, current: str) -> bool:
     """Return ``True`` when the version bump changes major or minor."""
 
@@ -1200,7 +847,6 @@ def _major_minor_version_changed(previous: str, current: str) -> bool:
 
 
 def _step_check_version(release, ctx, log_path: Path, *, user=None) -> None:
-    from apps.release import release as release_utils
     from packaging.version import InvalidVersion, Version
 
     sync_error: Optional[Exception] = None
@@ -1257,9 +903,7 @@ def _step_check_version(release, ctx, log_path: Path, *, user=None) -> None:
 
             log_fragments = []
             if fixture_files:
-                log_fragments.append(
-                    "fixtures " + ", ".join(fixture_files)
-                )
+                log_fragments.append("fixtures " + ", ".join(fixture_files))
             if version_dirty:
                 log_fragments.append("VERSION")
             details = ", ".join(log_fragments) if log_fragments else "changes"
@@ -1387,6 +1031,7 @@ def _step_handle_migrations(release, ctx, log_path: Path, *, user=None) -> None:
     _append_log(log_path, "Freeze, squash and approve migrations")
     _append_log(log_path, "Migration review acknowledged (manual step)")
 
+
 def _step_pre_release_actions(release, ctx, log_path: Path, *, user=None) -> None:
     _append_log(log_path, "Execute pre-release actions")
     if ctx.get("dry_run"):
@@ -1442,8 +1087,6 @@ def _step_run_tests(release, ctx, log_path: Path, *, user=None) -> None:
 
 
 def _step_promote_build(release, ctx, log_path: Path, *, user=None) -> None:
-    from apps.release import release as release_utils
-
     _append_log(log_path, "Generating build files")
     ctx.pop("build_revision", None)
     if ctx.get("dry_run"):
@@ -1551,8 +1194,6 @@ def _step_release_manager_approval(
 
 
 def _step_publish(release, ctx, log_path: Path, *, user=None) -> None:
-    from apps.release import release as release_utils
-
     if ctx.get("dry_run"):
         test_repository_url = os.environ.get(
             "PYPI_TEST_REPOSITORY_URL", "https://test.pypi.org/legacy/"
@@ -1642,7 +1283,9 @@ def _step_publish(release, ctx, log_path: Path, *, user=None) -> None:
     if repo_labels:
         _append_log(
             log_path,
-            "Uploading distribution" if len(repo_labels) == 1 else "Uploading distribution to: " + ", ".join(repo_labels),
+            "Uploading distribution"
+            if len(repo_labels) == 1
+            else "Uploading distribution to: " + ", ".join(repo_labels),
         )
     else:
         _append_log(log_path, "Uploading distribution")
@@ -1728,242 +1371,6 @@ PUBLISH_STEPS = [
 ]
 
 
-@csrf_exempt
-def rfid_login(request):
-    """Authenticate a user using an RFID."""
-
-    if request.method != "POST":
-        return JsonResponse({"detail": "POST required"}, status=400)
-
-    try:
-        data = json.loads(request.body.decode())
-    except json.JSONDecodeError:
-        data = request.POST
-
-    rfid = data.get("rfid")
-    if not rfid:
-        return JsonResponse({"detail": "rfid required"}, status=400)
-
-    redirect_to = data.get(REDIRECT_FIELD_NAME) or data.get("next")
-    if redirect_to and not url_has_allowed_host_and_scheme(
-        redirect_to,
-        allowed_hosts={request.get_host()},
-        require_https=is_https_request(request),
-    ):
-        redirect_to = ""
-
-    user = authenticate(request, rfid=rfid)
-    if user is None:
-        return JsonResponse({"detail": "invalid RFID"}, status=401)
-
-    login(request, user)
-    if redirect_to:
-        target = redirect_to
-    elif user.is_staff:
-        target = reverse("admin:index")
-    else:
-        target = "/"
-    return JsonResponse(
-        {"id": user.id, "username": user.username, "redirect": target}
-    )
-
-
-@api_login_required
-def product_list(request):
-    """Return a JSON list of products."""
-
-    products = list(
-        OdooProduct.objects.values("id", "name", "description", "renewal_period")
-    )
-    return JsonResponse({"products": products})
-
-
-@csrf_exempt
-@api_login_required
-def add_live_subscription(request):
-    """Create a live subscription for a customer account from POSTed JSON."""
-
-    if request.method != "POST":
-        return JsonResponse({"detail": "POST required"}, status=400)
-
-    try:
-        data = json.loads(request.body.decode())
-    except json.JSONDecodeError:
-        data = request.POST
-
-    account_id = data.get("account_id")
-    product_id = data.get("product_id")
-
-    if not account_id or not product_id:
-        return JsonResponse(
-            {"detail": "account_id and product_id required"}, status=400
-        )
-
-    try:
-        product = OdooProduct.objects.get(id=product_id)
-    except OdooProduct.DoesNotExist:
-        return JsonResponse({"detail": "invalid product"}, status=404)
-
-    try:
-        account = CustomerAccount.objects.get(id=account_id)
-    except CustomerAccount.DoesNotExist:
-        return JsonResponse({"detail": "invalid account"}, status=404)
-
-    start_date = timezone.now().date()
-    account.live_subscription_product = product
-    account.live_subscription_start_date = start_date
-    account.live_subscription_next_renewal = start_date + timedelta(
-        days=product.renewal_period
-    )
-    account.save()
-
-    return JsonResponse({"id": account.id})
-
-
-@api_login_required
-def live_subscription_list(request):
-    """Return live subscriptions for the given account_id."""
-
-    account_id = request.GET.get("account_id")
-    if not account_id:
-        return JsonResponse({"detail": "account_id required"}, status=400)
-
-    try:
-        account = CustomerAccount.objects.select_related("live_subscription_product").get(
-            id=account_id
-        )
-    except CustomerAccount.DoesNotExist:
-        return JsonResponse({"detail": "invalid account"}, status=404)
-
-    subs = []
-    product = account.live_subscription_product
-    if product:
-        next_renewal = account.live_subscription_next_renewal
-        if not next_renewal and account.live_subscription_start_date:
-            next_renewal = account.live_subscription_start_date + timedelta(
-                days=product.renewal_period
-            )
-
-        subs.append(
-            {
-                "id": account.id,
-                "product__name": product.name,
-                "next_renewal": next_renewal,
-            }
-        )
-
-    return JsonResponse({"live_subscriptions": subs})
-
-
-@csrf_exempt
-@api_login_required
-def rfid_batch(request):
-    """Export or import RFID tags in batch."""
-
-    if request.method == "GET":
-        color = request.GET.get("color", RFID.BLACK).upper()
-        released = request.GET.get("released")
-        if released is not None:
-            released = released.lower()
-        qs = RFID.objects.all()
-        if color != "ALL":
-            qs = qs.filter(color=color)
-        if released in ("true", "false"):
-            qs = qs.filter(released=(released == "true"))
-        tags = []
-        for t in qs.order_by("rfid"):
-            ids = list(t.energy_accounts.values_list("id", flat=True))
-            names = list(
-                t.energy_accounts.exclude(name="").values_list("name", flat=True)
-            )
-            payload = {
-                "rfid": t.rfid,
-                "custom_label": t.custom_label,
-                "customer_accounts": ids,
-                "customer_account_names": names,
-                "external_command": t.external_command,
-                "post_auth_command": t.post_auth_command,
-                "allowed": t.allowed,
-                "color": t.color,
-                "released": t.released,
-            }
-            payload["energy_accounts"] = ids
-            payload["energy_account_names"] = names
-            tags.append(payload)
-        return JsonResponse({"rfids": tags})
-
-    if request.method == "POST":
-        try:
-            data = json.loads(request.body.decode())
-        except json.JSONDecodeError:
-            return JsonResponse({"detail": "invalid JSON"}, status=400)
-
-        tags = data.get("rfids") if isinstance(data, dict) else data
-        if not isinstance(tags, list):
-            return JsonResponse({"detail": "rfids list required"}, status=400)
-
-        count = 0
-        for row in tags:
-            rfid = (row.get("rfid") or "").strip()
-            if not rfid:
-                continue
-            allowed = row.get("allowed", True)
-            energy_accounts = (
-                row.get("customer_accounts")
-                or row.get("energy_accounts")
-                or []
-            )
-            account_names = row.get("customer_account_names") or row.get(
-                "energy_account_names"
-            )
-            color = (row.get("color") or RFID.BLACK).strip().upper() or RFID.BLACK
-            released = row.get("released", False)
-            if isinstance(released, str):
-                released = released.lower() == "true"
-            custom_label = (row.get("custom_label") or "").strip()
-            external_command = row.get("external_command")
-            if not isinstance(external_command, str):
-                external_command = ""
-            else:
-                external_command = external_command.strip()
-            post_auth_command = row.get("post_auth_command")
-            if not isinstance(post_auth_command, str):
-                post_auth_command = ""
-            else:
-                post_auth_command = post_auth_command.strip()
-
-            tag, _ = RFID.update_or_create_from_code(
-                rfid,
-                {
-                    "allowed": allowed,
-                    "color": color,
-                    "released": released,
-                    "custom_label": custom_label,
-                    "external_command": external_command,
-                    "post_auth_command": post_auth_command,
-                },
-            )
-            accounts_qs = CustomerAccount.objects.none()
-            if energy_accounts:
-                accounts_qs = CustomerAccount.objects.filter(id__in=energy_accounts)
-            elif account_names:
-                names = [
-                    value.strip()
-                    for value in str(account_names).split(",")
-                    if value.strip()
-                ]
-                accounts_qs = CustomerAccount.objects.filter(name__in=names)
-            if accounts_qs:
-                tag.energy_accounts.set(accounts_qs)
-            else:
-                tag.energy_accounts.clear()
-            count += 1
-
-        return JsonResponse({"imported": count})
-
-    return JsonResponse({"detail": "GET or POST required"}, status=400)
-
-
 @staff_member_required
 def release_progress(request, pk: int, action: str):
     release, error_response = _get_release_or_response(request, pk, action)
@@ -2013,7 +1420,7 @@ def release_progress(request, pk: int, action: str):
         restart_path,
         log_dir_warning_message,
     )
-    
+
     steps = PUBLISH_STEPS
     total_steps = len(steps)
     step_count = ctx.get("step", 0)
@@ -2059,7 +1466,9 @@ def release_progress(request, pk: int, action: str):
             restart_path,
             log_dir,
             clean_repo=False,
-            message_text=_("Source changes detected after build. Restarting publish workflow."),
+            message_text=_(
+                "Source changes detected after build. Restarting publish workflow."
+            ),
         )
 
     ctx = _handle_dirty_repository_action(request, ctx, log_path)
