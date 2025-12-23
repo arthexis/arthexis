@@ -2,33 +2,19 @@ from collections import OrderedDict
 from collections.abc import Mapping
 import ipaddress
 from datetime import timedelta
-from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import urlsplit, urlunsplit
 import base64
 import binascii
 import json
-import os
-import subprocess
 import uuid
 
-from django import forms
-from django.conf import settings
 from django.contrib import admin, messages
-from django.contrib.admin import helpers
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Permission
 from django.core.exceptions import PermissionDenied
-from django.core.paginator import Paginator
 from django.db import models
-from django.db.models import Count, Q
-from django.http import (
-    Http404,
-    HttpResponse,
-    HttpResponseNotAllowed,
-    HttpResponseRedirect,
-    JsonResponse,
-)
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.template.response import TemplateResponse
 from django.test import signals
@@ -36,7 +22,7 @@ from django.urls import NoReverseMatch, path, reverse
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.utils.html import format_html, format_html_join
-from django.utils.translation import gettext_lazy as _, ngettext
+from django.utils.translation import gettext_lazy as _
 from asgiref.sync import async_to_sync
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
@@ -46,15 +32,12 @@ import requests
 from apps.nodes.logging import get_register_visitor_logger
 
 from apps.cards.models import RFID
-from apps.cards.sync import apply_rfid_payload, serialize_rfid
-from apps.camera import capture_rpi_snapshot
-from apps.core.admin import EmailOutboxAdminForm, SaveBeforeChangeAction
-from apps.emails.models import EmailOutbox
+from apps.cards.sync import apply_rfid_payload
+from apps.core.admin import SaveBeforeChangeAction
 from apps.locals.user_data import EntityModelAdmin
 from apps.ocpp import store
 from apps.ocpp.models import (
     Charger,
-    CPForwarder,
     CPFirmware,
     CPFirmwareDeployment,
     CPFirmwareRequest,
@@ -63,26 +46,19 @@ from apps.ocpp.models import (
 from apps.ocpp.network import serialize_charger_for_network
 from apps.users import temp_passwords
 
-from ..forms import NodeRoleMultipleChoiceField
-from ..models import (
-    NetMessage,
-    Node,
-    NodeFeature,
-    NodeFeatureAssignment,
-    NodeManager,
-    NodeRole,
-    NodeService,
-    Platform,
-    _format_upgrade_body,
+from ..models import Node, NodeRole, _format_upgrade_body
+from .actions import (
+    create_charge_point_forwarder,
+    download_evcs_firmware,
+    export_rfids_to_selected,
+    import_rfids_from_selected,
+    register_visitor,
+    run_task,
+    send_net_message,
+    take_screenshots,
+    update_selected_nodes,
 )
-from ..reports import (
-    collect_celery_log_entries,
-    collect_scheduled_tasks,
-    iter_report_periods,
-    resolve_period,
-)
-from ..utils import capture_screenshot, save_screenshot
-from .forms import DownloadFirmwareForm, NodeAdminForm, SendNetMessageForm
+from .forms import NodeAdminForm
 from .inlines import NodeFeatureAssignmentInline, SSHAccountInline
 
 
@@ -153,15 +129,15 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         ),
     )
     actions = [
-        "update_selected_nodes",
-        "register_visitor",
-        "run_task",
-        "take_screenshots",
-        "download_evcs_firmware",
-        "create_charge_point_forwarder",
-        "import_rfids_from_selected",
-        "export_rfids_to_selected",
-        "send_net_message",
+        update_selected_nodes,
+        register_visitor,
+        run_task,
+        take_screenshots,
+        download_evcs_firmware,
+        create_charge_point_forwarder,
+        import_rfids_from_selected,
+        export_rfids_to_selected,
+        send_net_message,
     ]
 
     def _create_registration_user(self):
@@ -306,97 +282,6 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             request=request,
         )
         return response
-
-    @admin.action(description="Register Visitor")
-    def register_visitor(self, request, queryset=None):
-        return self.register_visitor_view(request)
-
-    @admin.action(description=_("Update selected nodes"))
-    def update_selected_nodes(self, request, queryset):
-        node_ids = list(queryset.values_list("pk", flat=True))
-        if not node_ids:
-            self.message_user(request, _("No nodes selected."), messages.INFO)
-            return None
-        context = {
-            **self.admin_site.each_context(request),
-            "opts": self.model._meta,
-            "title": _("Update selected nodes"),
-            "nodes": list(queryset),
-            "node_ids": node_ids,
-            "progress_url": reverse("admin:nodes_node_update_selected_progress"),
-        }
-        return TemplateResponse(
-            request, "admin/nodes/node/update_selected.html", context
-        )
-
-    @admin.action(description=_("Send Net Message"))
-    def send_net_message(self, request, queryset):
-        is_submit = "apply" in request.POST
-        form = SendNetMessageForm(request.POST if is_submit else None)
-        selected_ids = request.POST.getlist(helpers.ACTION_CHECKBOX_NAME)
-        if not selected_ids:
-            selected_ids = [str(pk) for pk in queryset.values_list("pk", flat=True)]
-        nodes: list[Node] = []
-        cleaned_ids: list[int] = []
-        for value in selected_ids:
-            try:
-                cleaned_ids.append(int(value))
-            except (TypeError, ValueError):
-                continue
-        if cleaned_ids:
-            base_queryset = self.get_queryset(request).filter(pk__in=cleaned_ids)
-            nodes_by_pk = {str(node.pk): node for node in base_queryset}
-            nodes = [nodes_by_pk[value] for value in selected_ids if value in nodes_by_pk]
-        if not nodes:
-            nodes = list(queryset)
-            selected_ids = [str(node.pk) for node in nodes]
-        if not nodes:
-            self.message_user(request, _("No nodes selected."), messages.INFO)
-            return None
-        if is_submit and form.is_valid():
-            subject = form.cleaned_data["subject"]
-            body = form.cleaned_data["body"]
-            created = 0
-            for node in nodes:
-                message = NetMessage.objects.create(
-                    subject=subject,
-                    body=body,
-                    filter_node=node,
-                )
-                message.propagate()
-                created += 1
-            if created:
-                success_message = ngettext(
-                    "Sent %(count)d net message.",
-                    "Sent %(count)d net messages.",
-                    created,
-                ) % {"count": created}
-                self.message_user(request, success_message, messages.SUCCESS)
-            else:
-                self.message_user(
-                    request, _("No net messages were sent."), messages.INFO
-                )
-            return None
-        context = {
-            **self.admin_site.each_context(request),
-            "opts": self.model._meta,
-            "title": _("Send Net Message"),
-            "nodes": nodes,
-            "selected_ids": selected_ids,
-            "action_name": request.POST.get("action", "send_net_message"),
-            "select_across": request.POST.get("select_across", "0"),
-            "action_checkbox_name": helpers.ACTION_CHECKBOX_NAME,
-            "adminform": helpers.AdminForm(
-                form,
-                [(None, {"fields": ("subject", "body")})],
-                {},
-            ),
-            "form": form,
-            "media": self.media + form.media,
-        }
-        return TemplateResponse(
-            request, "admin/nodes/node/send_net_message.html", context
-        )
 
     def _coerce_metadata_value(self, value):
         if isinstance(value, (str, int, float, bool)) or value is None:
@@ -690,60 +575,6 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             level=messages.SUCCESS,
         )
         return True
-
-    @admin.action(description=_("Download EVCS firmware"))
-    def download_evcs_firmware(self, request, queryset):
-        nodes = list(queryset)
-        if len(nodes) != 1:
-            self.message_user(
-                request,
-                _("Select a single node to request firmware."),
-                level=messages.ERROR,
-            )
-            return None
-        node = nodes[0]
-
-        if "apply" in request.POST:
-            form = DownloadFirmwareForm(node, request.POST)
-            if form.is_valid():
-                if self._process_firmware_download(request, node, form.cleaned_data):
-                    return None
-        else:
-            form = DownloadFirmwareForm(node)
-
-        context = {
-            **self.admin_site.each_context(request),
-            "opts": self.model._meta,
-            "title": _("Download EVCS firmware"),
-            "node": node,
-            "nodes": [node],
-            "selected_ids": [str(node.pk)],
-            "action_name": request.POST.get(
-                "action", "download_evcs_firmware"
-            ),
-            "select_across": request.POST.get("select_across", "0"),
-            "action_checkbox_name": helpers.ACTION_CHECKBOX_NAME,
-            "adminform": helpers.AdminForm(
-                form,
-                [
-                    (
-                        None,
-                        {
-                            "fields": (
-                                "charger",
-                                "vendor_id",
-                            )
-                        },
-                    )
-                ],
-                {},
-            ),
-            "form": form,
-            "media": self.media + form.media,
-        }
-        return TemplateResponse(
-            request, "admin/nodes/node/download_firmware.html", context
-        )
 
     def update_selected_progress(self, request):
         if request.method != "POST":
@@ -1149,76 +980,6 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         self.message_user(request, "Public key not found", messages.ERROR)
         return redirect("..")
 
-    def run_task(self, request, queryset):
-        if "apply" in request.POST:
-            recipe_text = request.POST.get("recipe", "")
-            results = []
-            for node in queryset:
-                try:
-                    if not node.is_local:
-                        raise NotImplementedError(
-                            "Remote node execution is not implemented"
-                        )
-                    command = ["/bin/sh", "-c", recipe_text]
-                    result = subprocess.run(
-                        command,
-                        check=False,
-                        capture_output=True,
-                        text=True,
-                    )
-                    output = result.stdout + result.stderr
-                except Exception as exc:
-                    output = str(exc)
-                results.append((node, output))
-            context = {"recipe": recipe_text, "results": results}
-            return render(request, "admin/nodes/task_result.html", context)
-        context = {"nodes": queryset}
-        return render(request, "admin/nodes/node/run_task.html", context)
-
-    run_task.short_description = "Run task"
-
-    @admin.action(description="Take Screenshots")
-    def take_screenshots(self, request, queryset):
-        tx = uuid.uuid4()
-        sources = getattr(settings, "SCREENSHOT_SOURCES", ["/"])
-        count = 0
-        for node in queryset:
-            for source in sources:
-                try:
-                    contact_host = node.get_primary_contact()
-                    url = source.format(
-                        node=node, address=contact_host, port=node.port
-                    )
-                except Exception:
-                    url = source
-                if not url.startswith("http"):
-                    candidate = next(
-                        self._iter_remote_urls(node, url),
-                        "",
-                    )
-                    if not candidate:
-                        self.message_user(
-                            request,
-                            _(
-                                "No reachable host was available for %(node)s while generating %(path)s"
-                            )
-                            % {"node": node, "path": url},
-                            messages.WARNING,
-                        )
-                        continue
-                    url = candidate
-                try:
-                    path = capture_screenshot(url)
-                except Exception as exc:  # pragma: no cover - selenium issues
-                    self.message_user(request, f"{node}: {exc}", messages.ERROR)
-                    continue
-                sample = save_screenshot(
-                    path, node=node, method="ADMIN", transaction_uuid=tx
-                )
-                if sample:
-                    count += 1
-        self.message_user(request, f"{count} screenshots captured", messages.SUCCESS)
-
     def _init_rfid_result(self, node):
         return {
             "node": node,
@@ -1565,113 +1326,6 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             results.append(self._process_import_from_node(node, payload, headers))
 
         return self._render_rfid_sync(request, "import", results)
-
-    @admin.action(description=_("Import RFIDs from selected"))
-    def import_rfids_from_selected(self, request, queryset):
-        return self._run_rfid_import(request, queryset)
-
-    @admin.action(description=_("Export RFIDs to selected"))
-    def export_rfids_to_selected(self, request, queryset):
-        nodes = list(queryset)
-        local_node, private_key, error = self._load_local_node_credentials()
-        if error:
-            results = [self._skip_result(node, error) for node in nodes]
-            return self._render_rfid_sync(request, "export", results, setup_error=error)
-
-        if not nodes:
-            return self._render_rfid_sync(
-                request,
-                "export",
-                [],
-                setup_error=_("No nodes selected."),
-            )
-
-        rfids = [serialize_rfid(tag) for tag in RFID.objects.all().order_by("label_id")]
-        payload = json.dumps(
-            {"requester": str(local_node.uuid), "rfids": rfids},
-            separators=(",", ":"),
-            sort_keys=True,
-        )
-        signature = self._sign_payload(private_key, payload)
-        headers = {
-            "Content-Type": "application/json",
-            "X-Signature": signature,
-        }
-
-        results = []
-        for node in nodes:
-            if local_node.pk and node.pk == local_node.pk:
-                results.append(self._skip_result(node, _("Skipped local node.")))
-                continue
-            results.append(self._post_export_to_node(node, payload, headers))
-
-        return self._render_rfid_sync(request, "export", results)
-
-    @admin.action(description=_("Create Charge Point Forwarder"))
-    def create_charge_point_forwarder(self, request, queryset):
-        if queryset.count() != 1:
-            self.message_user(
-                request,
-                _("Select a single remote node."),
-                level=messages.ERROR,
-            )
-            return
-
-        target = queryset.first()
-        local_node = Node.get_local()
-        if local_node and target.pk == local_node.pk:
-            self.message_user(
-                request,
-                _("Cannot create a forwarder targeting the local node."),
-                level=messages.ERROR,
-            )
-            return
-
-        defaults = {
-            "name": target.hostname or str(target),
-            "enabled": True,
-        }
-        if local_node and local_node.pk:
-            defaults["source_node"] = local_node
-
-        eligible_qs = Charger.objects.filter(export_transactions=False)
-        if local_node and local_node.pk:
-            eligible_qs = eligible_qs.filter(
-                Q(node_origin=local_node) | Q(node_origin__isnull=True)
-            )
-
-        forwarder, created = CPForwarder.objects.get_or_create(
-            target_node=target, defaults=defaults
-        )
-
-        if created:
-            updated = eligible_qs.update(export_transactions=True)
-            if updated:
-                forwarder.sync_chargers()
-                self.message_user(
-                    request,
-                    _(
-                        "Enabled export transactions for %(count)s charge point(s)."
-                    )
-                    % {"count": updated},
-                    level=messages.INFO,
-                )
-            self.message_user(
-                request,
-                _("Created charge point forwarder for %(node)s.")
-                % {"node": target},
-                level=messages.SUCCESS,
-            )
-        else:
-            self.message_user(
-                request,
-                _("Forwarder for %(node)s already exists; opening configuration.")
-                % {"node": target},
-                level=messages.INFO,
-            )
-
-        url = reverse("admin:ocpp_cpforwarder_change", args=[forwarder.pk])
-        return HttpResponseRedirect(url)
 
     def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
         extra_context = extra_context or {}
