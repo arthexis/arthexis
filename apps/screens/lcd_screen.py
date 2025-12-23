@@ -238,6 +238,16 @@ def _lcd_clock_enabled() -> bool:
 
 
 def _lcd_temperature_label() -> str | None:
+    try:
+        from apps.sensors.temperature import read_w1_temperature_label
+    except Exception:
+        read_w1_temperature_label = None  # type: ignore[assignment]
+
+    if read_w1_temperature_label:
+        label = read_w1_temperature_label()
+        if label:
+            return label
+
     if not _ensure_django():
         return None
 
