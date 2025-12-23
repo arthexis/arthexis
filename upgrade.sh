@@ -1125,22 +1125,6 @@ restart_lcd_service() {
   wait_for_service_active "$lcd_service" 1
 }
 
-ensure_watchdog_running() {
-  local service_name="$1"
-
-  if [ -z "$service_name" ] || [ "$SERVICE_MANAGEMENT_MODE" != "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
-    return 0
-  fi
-
-  if ! command -v systemctl >/dev/null 2>&1; then
-    echo "Skipping watchdog start; systemctl is unavailable." >&2
-    return 0
-  fi
-
-  echo "Ensuring watchdog service ${service_name}-watchdog is installed and running..."
-  arthexis_install_watchdog_unit "$BASE_DIR" "$LOCK_DIR" "$service_name" "" "$SERVICE_MANAGEMENT_MODE"
-}
-
 upgrade_failure_recovery() {
   local exit_code=$?
 
@@ -1561,7 +1545,6 @@ if [[ $NO_RESTART -eq 0 ]]; then
 fi
 
 if [ -n "$SERVICE_NAME" ] && [[ $NO_RESTART -eq 0 ]] && [[ $SHOULD_RESTART_AFTER_UPGRADE -eq 1 ]]; then
-  ensure_watchdog_running "$SERVICE_NAME"
 fi
 
 if [ -n "$SERVICE_NAME" ] && [[ $NO_RESTART -eq 0 ]] && [[ $LCD_RESTART_REQUIRED -eq 1 ]]; then
