@@ -1,5 +1,7 @@
 # Nodes admin package
 
+[![PyPI](https://img.shields.io/pypi/v/arthexis?label=PyPI)](https://pypi.org/project/arthexis/)
+
 The Django admin setup for the nodes app is split across focused modules to keep the large surface area manageable:
 
 - `forms.py` — admin-only forms such as `NodeAdminForm`, firmware/DataTransfer helpers, and NetMessage forms. All admin classes import shared forms from here rather than defining them inline.
