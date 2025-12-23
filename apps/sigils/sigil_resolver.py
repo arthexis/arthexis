@@ -446,7 +446,7 @@ def _resolve_token(token: str, current: Optional[models.Model] = None) -> str:
 
 
 def resolve_sigils(text: str, current: Optional[models.Model] = None) -> str:
-    result = ""
+    parts: list[str] = []
     i = 0
     while i < len(text):
         if text[i] == "[":
@@ -459,16 +459,16 @@ def resolve_sigils(text: str, current: Optional[models.Model] = None) -> str:
                     depth -= 1
                 j += 1
             if depth:
-                result += text[i]
+                parts.append(text[i])
                 i += 1
                 continue
             token = text[i + 1 : j - 1]
-            result += _resolve_token(token, current)
+            parts.append(_resolve_token(token, current))
             i = j
         else:
-            result += text[i]
+            parts.append(text[i])
             i += 1
-    return result
+    return "".join(parts)
 
 
 def resolve_sigil(sigil: str, current: Optional[models.Model] = None) -> str:

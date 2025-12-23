@@ -22,6 +22,8 @@ from config.asgi import application
 
 pytestmark = pytest.mark.django_db(transaction=True)
 
+CONNECT_TIMEOUT = 5
+
 
 @pytest.fixture(autouse=True)
 def clear_store_state():
@@ -61,7 +63,7 @@ def test_charge_point_created_for_new_websocket_path():
         assert exists_before is False
 
         communicator = WebsocketCommunicator(application, path)
-        connected, _ = await communicator.connect()
+        connected, _ = await communicator.connect(timeout=CONNECT_TIMEOUT)
         assert connected is True
 
         boot_notification = [
@@ -145,7 +147,7 @@ def test_connect_prefers_stored_ocpp2_without_offered_subprotocol(preferred):
         communicator = WebsocketCommunicator(application, f"/{charger.charger_id}")
         communicator.scope["subprotocols"] = []
 
-        connected, agreed = await communicator.connect()
+        connected, agreed = await communicator.connect(timeout=CONNECT_TIMEOUT)
 
         assert connected is True
         assert agreed is None
@@ -165,11 +167,11 @@ def test_ocpp_websocket_rate_limit_enforced():
         path = f"/{serial}"
 
         first = WebsocketCommunicator(application, path)
-        connected, _ = await first.connect()
+        connected, _ = await first.connect(timeout=CONNECT_TIMEOUT)
         assert connected is True
 
         second = WebsocketCommunicator(application, path)
-        connected, _ = await second.connect()
+        connected, _ = await second.connect(timeout=CONNECT_TIMEOUT)
         assert connected is False
         await second.disconnect()
 
@@ -195,12 +197,12 @@ def test_local_ip_bypasses_rate_limit_with_custom_scope_client():
 
         throttled = WebsocketCommunicator(application, path)
         throttled.scope["client"] = ("8.8.8.8", 1000)
-        connected, _ = await throttled.connect()
+        connected, _ = await throttled.connect(timeout=CONNECT_TIMEOUT)
         assert connected is False
 
         local = WebsocketCommunicator(application, path)
         local.scope["client"] = ("127.0.0.1", 1001)
-        connected, _ = await local.connect()
+        connected, _ = await local.connect(timeout=CONNECT_TIMEOUT)
         assert connected is True
 
         await local.disconnect()
@@ -224,13 +226,13 @@ def test_pending_connection_replaced_on_reconnect():
         path = f"/{serial}"
 
         first = WebsocketCommunicator(application, path)
-        connected, _ = await first.connect()
+        connected, _ = await first.connect(timeout=CONNECT_TIMEOUT)
         assert connected is True
 
         existing_consumer = store.connections[store.pending_key(serial)]
 
         second = WebsocketCommunicator(application, path)
-        connected, _ = await second.connect()
+        connected, _ = await second.connect(timeout=CONNECT_TIMEOUT)
         assert connected is True
 
         close_event = await first.receive_output(1)
@@ -257,7 +259,7 @@ def test_assign_connector_rebinds_store_preserves_state():
         connector_key = store.identity_key(serial, 1)
 
         communicator = WebsocketCommunicator(application, path)
-        connected, _ = await communicator.connect()
+        connected, _ = await communicator.connect(timeout=CONNECT_TIMEOUT)
         assert connected is True
 
         consumer = store.connections[pending_key]
@@ -344,7 +346,7 @@ def test_existing_charger_clears_status_and_refreshes_forwarding(monkeypatch):
 
     async def run_scenario():
         communicator = WebsocketCommunicator(application, f"/{charger.charger_id}")
-        connected, _ = await communicator.connect()
+        connected, _ = await communicator.connect(timeout=CONNECT_TIMEOUT)
         assert connected is True
         await communicator.disconnect()
 
@@ -413,7 +415,7 @@ def _latest_log_message(key: str) -> str:
 def test_rejects_invalid_serial_from_path_logs_reason():
     async def run_scenario():
         communicator = WebsocketCommunicator(application, "/<charger_id>")
-        connected, close_code = await communicator.connect(timeout=5)
+        connected, close_code = await communicator.connect(timeout=CONNECT_TIMEOUT)
         assert connected is False
         assert close_code == 4003
 
@@ -428,7 +430,7 @@ def test_rejects_invalid_serial_from_path_logs_reason():
 def test_rejects_invalid_query_serial_and_logs_details():
     async def run_scenario():
         communicator = WebsocketCommunicator(application, "/?cid=")
-        connected, close_code = await communicator.connect()
+        connected, close_code = await communicator.connect(timeout=CONNECT_TIMEOUT)
         assert connected is False
         assert close_code == 4003
 
@@ -452,7 +454,7 @@ def test_basic_auth_rejects_when_missing_header():
 
     async def run_scenario():
         communicator = WebsocketCommunicator(application, f"/{charger.charger_id}")
-        connected, close_code = await communicator.connect()
+        connected, close_code = await communicator.connect(timeout=CONNECT_TIMEOUT)
         assert connected is False
         assert close_code == 4003
 
@@ -474,7 +476,7 @@ def test_basic_auth_rejects_invalid_header_format():
             f"/{charger.charger_id}",
             headers=[(b"authorization", b"Bearer token")],
         )
-        connected, close_code = await communicator.connect()
+        connected, close_code = await communicator.connect(timeout=CONNECT_TIMEOUT)
         assert connected is False
         assert close_code == 4003
 
@@ -496,7 +498,7 @@ def test_basic_auth_rejects_invalid_credentials():
             f"/{charger.charger_id}",
             headers=_auth_header("auth-fail", "wrong"),
         )
-        connected, close_code = await communicator.connect()
+        connected, close_code = await communicator.connect(timeout=CONNECT_TIMEOUT)
         assert connected is False
         assert close_code == 4003
 
@@ -521,7 +523,7 @@ def test_basic_auth_rejects_unauthorized_user():
             f"/{charger.charger_id}",
             headers=_auth_header("unauthorized", "secret"),
         )
-        connected, close_code = await communicator.connect()
+        connected, close_code = await communicator.connect(timeout=CONNECT_TIMEOUT)
         assert connected is False
         assert close_code == 4003
 
@@ -551,7 +553,7 @@ def test_basic_auth_accepts_authorized_user():
             f"/{charger.charger_id}",
             headers=_auth_header("auth-ok", "secret"),
         )
-        connected, close_code = await communicator.connect()
+        connected, close_code = await communicator.connect(timeout=CONNECT_TIMEOUT)
         connection_result["connected"] = connected
         connection_result["close_code"] = close_code
         if connected:
@@ -574,7 +576,7 @@ def test_unknown_extension_action_replies_with_empty_call_result():
     async def run_scenario():
         serial = "CP-EXT-ACTION"
         communicator = WebsocketCommunicator(application, f"/{serial}")
-        connected, _ = await communicator.connect()
+        connected, _ = await communicator.connect(timeout=CONNECT_TIMEOUT)
         assert connected is True
 
         message_id = "ext-call"
