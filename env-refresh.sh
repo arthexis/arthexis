@@ -129,8 +129,6 @@ install_watch_upgrade_helper() {
     chmod +x "$helper_path" 2>/dev/null || true
   fi
 
-  echo "Ensuring watch-upgrade helper for delegated/systemd auto-upgrades is available (optional)" >&2
-
   local target_dir
   target_dir="$(dirname "$target_path")"
 
