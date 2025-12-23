@@ -44,6 +44,9 @@ LOCK_FILE = LOCK_DIR / LCD_LOCK_FILE
 SERVICE_LOCK_FILE = LOCK_DIR / "service.lck"
 SHUTDOWN_SCHEDULE_FILE = Path("/run/systemd/shutdown/scheduled")
 DEFAULT_SCROLL_MS = 1000
+MIN_SCROLL_MS = 50
+CLEAR_RATE_LIMIT_SECONDS = 5
+LCD_RESET_INTERVAL_SECONDS = 300
 SCROLL_PADDING = 3
 LCD_COLUMNS = CharLCD1602.columns
 LCD_ROWS = CharLCD1602.rows
@@ -351,7 +354,7 @@ def _display(lcd: CharLCD1602, line1: str, line2: str, scroll_ms: int) -> None:
 
 
 def _prepare_display_state(line1: str, line2: str, scroll_ms: int) -> DisplayState:
-    scroll_sec = max(scroll_ms, 0) / 1000.0
+    scroll_sec = max(scroll_ms, MIN_SCROLL_MS) / 1000.0
     text1 = line1[:64]
     text2 = line2[:64]
     pad1 = (
@@ -386,6 +389,7 @@ def _advance_display(lcd: CharLCD1602, state: DisplayState) -> DisplayState:
 
 def main() -> None:  # pragma: no cover - hardware dependent
     lcd = None
+    last_reset_at = time.monotonic()
     last_lock_mtime = 0.0
     lock_payload: LockPayload = LockPayload("", "", DEFAULT_SCROLL_MS, False)
     last_display: tuple[str, str, int, str] | None = None
@@ -394,6 +398,7 @@ def main() -> None:  # pragma: no cover - hardware dependent
     last_clock_minute: tuple[int, int, int, int, int] | None = None
     clock_until = 0.0
     last_lock_display: tuple[str, str, int] | None = None
+    last_clear_at = 0.0
 
     signal.signal(signal.SIGTERM, _request_shutdown)
     signal.signal(signal.SIGINT, _request_shutdown)
@@ -448,11 +453,29 @@ def main() -> None:  # pragma: no cover - hardware dependent
                     if lcd is None:
                         lcd = CharLCD1602()
                         lcd.init_lcd()
-                    lcd.clear()
+                        last_reset_at = time.monotonic()
+                        last_clear_at = last_reset_at
+                    now_monotonic = time.monotonic()
+                    if now_monotonic - last_clear_at >= CLEAR_RATE_LIMIT_SECONDS:
+                        lcd.clear()
+                        last_clear_at = now_monotonic
                     display_state = _prepare_display_state(line1, line2, speed)
                     last_display = current_display
 
                 if lcd and display_state:
+                    now_monotonic = time.monotonic()
+                    if now_monotonic - last_reset_at >= LCD_RESET_INTERVAL_SECONDS:
+                        try:
+                            lcd.init_lcd()
+                            last_reset_at = now_monotonic
+                            display_state = _prepare_display_state(
+                                line1, line2, speed
+                            )
+                        except Exception:
+                            logger.debug(
+                                "Failed to reset LCD; will retry on next loop",
+                                exc_info=True,
+                            )
                     display_state = _advance_display(lcd, display_state)
                     sleep_duration = display_state.scroll_sec or sleep_duration
             except LCDUnavailableError as exc:
@@ -460,9 +483,11 @@ def main() -> None:  # pragma: no cover - hardware dependent
                 lcd = None
                 display_state = None
             except Exception as exc:
-                should_disable = _handle_lcd_failure(exc)
+                _blank_display(lcd)
                 lcd = None
                 display_state = None
+                last_display = None
+                should_disable = _handle_lcd_failure(exc)
                 if should_disable:
                     break
             time.sleep(sleep_duration)
