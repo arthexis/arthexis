@@ -1755,12 +1755,14 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             "TransactionEvent": self._handle_transaction_event_action,
             "SecurityEventNotification": self._handle_security_event_notification_action,
             "NotifyChargingLimit": self._handle_notify_charging_limit_action,
+            "ClearedChargingLimit": self._handle_cleared_charging_limit_action,
             "NotifyCustomerInformation": self._handle_notify_customer_information_action,
             "NotifyDisplayMessages": self._handle_notify_display_messages_action,
             "NotifyEVChargingNeeds": self._handle_notify_ev_charging_needs_action,
             "NotifyEVChargingSchedule": self._handle_notify_ev_charging_schedule_action,
             "NotifyEvent": self._handle_notify_event_action,
             "NotifyMonitoringReport": self._handle_notify_monitoring_report_action,
+            "NotifyReport": self._handle_notify_report_action,
             "CostUpdated": self._handle_cost_updated_action,
             "PublishFirmwareStatusNotification": self._handle_publish_firmware_status_notification_action,
             "ReportChargingProfiles": self._handle_report_charging_profiles_action,
@@ -1770,6 +1772,9 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             "StopTransaction": self._handle_stop_transaction_action,
             "FirmwareStatusNotification": self._handle_firmware_status_notification_action,
             "ReservationStatusUpdate": self._handle_reservation_status_update_action,
+            "Get15118EVCertificate": self._handle_get_15118_ev_certificate_action,
+            "GetCertificateStatus": self._handle_get_certificate_status_action,
+            "SignCertificate": self._handle_sign_certificate_action,
         }
         reply_payload = {}
         handler = action_handlers.get(action)
