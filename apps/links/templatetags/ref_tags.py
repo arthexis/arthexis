@@ -51,24 +51,6 @@ def build_footer_context(*, request=None, badge_site=None, badge_node=None, forc
     if revision_value and revision_value != release_revision:
         rev_short = revision_value[-6:]
 
-    has_release_info = bool(version or revision_value)
-
-    if version:
-        release_name = f"{release_name}-{version}"
-        if rev_short:
-            release_name = f"{release_name}-{rev_short}"
-        if release:
-            release_url = reverse("admin:release_packagerelease_change", args=[release.pk])
-
-    show_footer = force_footer or bool(visible_refs) or has_release_info
-    if not show_footer:
-        return {
-            "footer_refs": [],
-            "request": request,
-            "show_footer": False,
-            "show_release": False,
-        }
-
     base_dir = Path(settings.BASE_DIR)
     log_file = base_dir / "logs" / "auto-upgrade.log"
 
@@ -112,10 +94,27 @@ def build_footer_context(*, request=None, badge_site=None, badge_node=None, forc
                 if latest is None or dt > latest:
                     latest = dt
 
-    if latest is None:
-        latest = INSTANCE_START
+    fresh_since = None
+    if latest is not None:
+        fresh_since = timezone.localtime(latest).strftime("%Y-%m-%d %H:%M")
 
-    fresh_since = timezone.localtime(latest).strftime("%Y-%m-%d %H:%M")
+    has_release_info = bool(version or revision_value or fresh_since)
+
+    if version:
+        release_name = f"{release_name}-{version}"
+        if rev_short:
+            release_name = f"{release_name}-{rev_short}"
+        if release:
+            release_url = reverse("admin:release_packagerelease_change", args=[release.pk])
+
+    show_footer = force_footer or bool(visible_refs) or has_release_info
+    if not show_footer:
+        return {
+            "footer_refs": [],
+            "request": request,
+            "show_footer": False,
+            "show_release": False,
+        }
 
     return {
         "footer_refs": visible_refs,
