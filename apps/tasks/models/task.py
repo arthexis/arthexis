@@ -1,158 +1,21 @@
 from __future__ import annotations
 
-import logging
 from datetime import timedelta
-from decimal import Decimal
 from math import ceil
 from typing import Iterator, Sequence
 
 from django.core.exceptions import ValidationError
-from django.core.validators import MinValueValidator
 from django.db import models
 from django.db.models import F, Q
 from django.utils import formats, timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.celery.utils import is_celery_enabled
-from apps.core.entity import Entity, EntityAllManager, EntityManager
+from apps.core.entity import Entity
 from apps.emails import mailer
 from apps.groups.models import SecurityGroup as CoreSecurityGroup
 from apps.odoo.models import OdooProduct as CoreOdooProduct
 from apps.users.models import User as CoreUser
-
-
-logger = logging.getLogger(__name__)
-
-
-class TaskCategoryManager(EntityManager):
-    def get_by_natural_key(self, name):
-        return self.get(name=name)
-
-
-class TaskCategory(Entity):
-    """Standardized categories for manual work assignments."""
-
-    AVAILABILITY_NONE = "none"
-    AVAILABILITY_IMMEDIATE = "immediate"
-    AVAILABILITY_2_3_BUSINESS_DAYS = "2_3_business_days"
-    AVAILABILITY_2_3_WEEKS = "2_3_weeks"
-    AVAILABILITY_UNAVAILABLE = "unavailable"
-
-    AVAILABILITY_CHOICES = [
-        (AVAILABILITY_NONE, _("None")),
-        (AVAILABILITY_IMMEDIATE, _("Immediate")),
-        (AVAILABILITY_2_3_BUSINESS_DAYS, _("2-3 business days")),
-        (AVAILABILITY_2_3_WEEKS, _("2-3 weeks")),
-        (AVAILABILITY_UNAVAILABLE, _("Unavailable")),
-    ]
-
-    name = models.CharField(_("Name"), max_length=200)
-    description = models.TextField(
-        _("Description"),
-        blank=True,
-        help_text=_("Optional details supporting Markdown formatting."),
-    )
-    image = models.ImageField(
-        _("Image"), upload_to="workgroup/task_categories/", blank=True
-    )
-    cost = models.DecimalField(
-        _("Cost"),
-        max_digits=10,
-        decimal_places=2,
-        blank=True,
-        null=True,
-        validators=[MinValueValidator(Decimal("0"))],
-        help_text=_("Estimated fulfillment cost in local currency."),
-    )
-    default_duration = models.DurationField(
-        _("Default duration"),
-        null=True,
-        blank=True,
-        help_text=_("Typical time expected to complete tasks in this category."),
-    )
-    manager = models.ForeignKey(
-        "users.User",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="managed_task_categories",
-        verbose_name=_("Manager"),
-        help_text=_("User responsible for overseeing this category."),
-    )
-    odoo_products = models.ManyToManyField(
-        CoreOdooProduct,
-        related_name="task_categories",
-        verbose_name=_("Odoo products"),
-        blank=True,
-        help_text=_("Relevant Odoo products for this category."),
-    )
-    availability = models.CharField(
-        _("Availability"),
-        max_length=32,
-        choices=AVAILABILITY_CHOICES,
-        default=AVAILABILITY_NONE,
-        help_text=_("Typical lead time for scheduling this work."),
-    )
-    requestor_group = models.ForeignKey(
-        "groups.SecurityGroup",
-        on_delete=models.SET_NULL,
-        blank=True,
-        null=True,
-        related_name="task_categories_as_requestor",
-        verbose_name=_("Requestor group"),
-        help_text=_("Security group authorized to request this work."),
-    )
-    assigned_group = models.ForeignKey(
-        "groups.SecurityGroup",
-        on_delete=models.SET_NULL,
-        blank=True,
-        null=True,
-        related_name="task_categories_as_assignee",
-        verbose_name=_("Assigned to group"),
-        help_text=_("Security group typically assigned to this work."),
-    )
-
-    objects = TaskCategoryManager()
-    all_objects = EntityAllManager()
-
-    class Meta:
-        verbose_name = _("Task Category")
-        verbose_name_plural = _("Task Categories")
-        ordering = ("name",)
-        db_table = "core_taskcategory"
-
-    def __str__(self) -> str:  # pragma: no cover - simple representation
-        return self.name
-
-    def natural_key(self):  # pragma: no cover - simple representation
-        return (self.name,)
-
-    natural_key.dependencies = []  # type: ignore[attr-defined]
-
-    def availability_label(self) -> str:  # pragma: no cover - admin helper
-        return self.get_availability_display()
-
-    availability_label.short_description = _("Availability")  # type: ignore[attr-defined]
-
-
-class ManualSkill(Entity):
-    """Skills that can optionally constrain manual task execution."""
-
-    name = models.CharField(_("Name"), max_length=200)
-    description = models.TextField(
-        _("Description"),
-        blank=True,
-        help_text=_("Optional details supporting Markdown formatting."),
-    )
-
-    class Meta:
-        verbose_name = _("Manual Skill")
-        verbose_name_plural = _("Manual Skills")
-        ordering = ("name",)
-        db_table = "core_manualskill"
-
-    def __str__(self):  # pragma: no cover - simple representation
-        return self.name
 
 
 class ManualTaskRequest(Entity):
@@ -246,10 +109,12 @@ class ManualTaskRequest(Entity):
         help_text=_("Location associated with this manual task."),
     )
     scheduled_start = models.DateTimeField(
-        _("Scheduled start"), help_text=_("Planned start time for this work."),
+        _("Scheduled start"),
+        help_text=_("Planned start time for this work."),
     )
     scheduled_end = models.DateTimeField(
-        _("Scheduled end"), help_text=_("Planned completion time for this work."),
+        _("Scheduled end"),
+        help_text=_("Planned completion time for this work."),
     )
     is_periodic = models.BooleanField(
         _("Is periodic"),
@@ -582,44 +447,3 @@ class ManualTaskRequest(Entity):
                         break
         if should_schedule:
             self.schedule_notifications()
-
-
-class ManualTaskReport(Entity):
-    """Execution report submitted after completing a manual task request."""
-
-    request = models.ForeignKey(
-        "tasks.ManualTaskRequest",
-        on_delete=models.CASCADE,
-        related_name="reports",
-        verbose_name=_("Task request"),
-    )
-    executor = models.ForeignKey(
-        "users.User",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="executed_manual_task_reports",
-        verbose_name=_("Executor"),
-        help_text=_("User who performed the work. Can differ from the assignee."),
-    )
-    performed_at = models.DateTimeField(
-        _("Performed at"), default=timezone.now, help_text=_("When the work occurred."),
-    )
-    duration = models.DurationField(
-        _("Actual duration"),
-        null=True,
-        blank=True,
-        help_text=_("Actual time spent completing the task."),
-    )
-    details = models.TextField(
-        _("Details"), help_text=_("Executor notes and outcomes for this task."),
-    )
-
-    class Meta:
-        verbose_name = _("Manual Task Report")
-        verbose_name_plural = _("Manual Task Reports")
-        ordering = ("-performed_at",)
-        db_table = "core_manualtaskreport"
-
-    def __str__(self):  # pragma: no cover - simple representation
-        return _("Report for %(task)s") % {"task": self.request}
