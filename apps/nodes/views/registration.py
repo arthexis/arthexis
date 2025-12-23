@@ -3,6 +3,7 @@ import ipaddress
 import json
 import logging
 import socket
+from importlib import import_module
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -1183,7 +1184,8 @@ def register_visitor_telemetry(request):
 
     route_ip = ""
     if target_host:
-        route_ip = _get_route_address(target_host, target_port or 0)
+        views_module = import_module("apps.nodes.views")
+        route_ip = views_module._get_route_address(target_host, target_port or 0)
 
     extra_fields = {
         key: value
