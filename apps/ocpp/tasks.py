@@ -525,10 +525,10 @@ purge_meter_readings = purge_meter_values
 
 # The forwarding task previously used a "1/10m" rate limit that Celery 5.4+ no
 # longer parses (it expects a modifier of "s", "m", or "h").  Using an hourly
-# equivalent keeps the intent of running once every ten minutes while remaining
+# equivalent keeps the intent of running once every five minutes while remaining
 # compatible with Celery's parser.
-@shared_task(rate_limit="6/h")
-def push_forwarded_charge_points() -> int:
+@shared_task(rate_limit="12/h")
+def setup_forwarders() -> int:
     """Ensure websocket connections exist for forwarded charge points."""
 
     connected = forwarder.sync_forwarded_charge_points()
@@ -538,11 +538,19 @@ def push_forwarded_charge_points() -> int:
 
 
 # Backwards compatibility alias for legacy schedules
+@shared_task
+def push_forwarded_charge_points() -> int:
+    """Legacy forwarding task retained for older schedules."""
+
+    return setup_forwarders()
+
+
+# Backwards compatibility alias for legacy schedules
 @shared_task(name="apps.ocpp.tasks.sync_remote_chargers")
 def sync_remote_chargers() -> int:
     """Maintain the legacy task name used by older beat schedules."""
 
-    return push_forwarded_charge_points()
+    return setup_forwarders()
 
 
 def _resolve_report_window() -> tuple[datetime, datetime, date]:
@@ -705,5 +713,4 @@ def send_daily_session_report() -> int:
         "Sent OCPP session report for %s to %s", today.isoformat(), ", ".join(recipients)
     )
     return len(transactions)
-
 
