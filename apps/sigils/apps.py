@@ -18,7 +18,7 @@ class SigilsConfig(AppConfig):
         )
         post_migrate.connect(
             load_fixture_sigil_roots,
-            sender=self,
+            sender=None,
             dispatch_uid="sigils_load_fixture_sigil_roots",
         )
         patch_admin_sigil_builder_view()
