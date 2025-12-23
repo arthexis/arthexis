@@ -233,7 +233,8 @@ def _resolve_display_payload(
 
 
 def _lcd_clock_enabled() -> bool:
-    return not os.getenv("DISABLE_LCD_CLOCK")
+    raw = (os.getenv("DISABLE_LCD_CLOCK") or "").strip().lower()
+    return raw not in {"1", "true", "yes", "on"}
 
 
 def _lcd_temperature_label() -> str | None:
