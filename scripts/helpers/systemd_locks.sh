@@ -128,63 +128,6 @@ arthexis_read_systemd_unit_records() {
   cat "$lock_file"
 }
 
-# Install or update the main systemd service and optional Celery units.
-arthexis_install_watchdog_unit() {
-  local base_dir="$1"
-  local lock_dir="$2"
-  local service_name="$3"
-  local service_user="${4:-}"
-  local service_mode="${5:-systemd}"
-
-  if [ "$service_mode" != "systemd" ]; then
-    return 0
-  fi
-
-  if [ -z "$base_dir" ] || [ -z "$lock_dir" ] || [ -z "$service_name" ]; then
-    return 0
-  fi
-
-  if ! command -v systemctl >/dev/null 2>&1; then
-    echo "Skipping watchdog installation for ${service_name}; systemctl is unavailable." >&2
-    return 0
-  fi
-
-  if [ -z "$service_user" ]; then
-    service_user="$(arthexis_detect_service_user "$base_dir")"
-  fi
-
-  local systemd_dir
-  systemd_dir="${SYSTEMD_DIR:-/etc/systemd/system}"
-  local watchdog_service
-  watchdog_service="${service_name}-watchdog"
-  local watchdog_service_file
-  watchdog_service_file="${systemd_dir}/${watchdog_service}.service"
-  local watchdog_exec
-  watchdog_exec="$base_dir/scripts/helpers/watchdog.sh ${service_name}"
-
-  sudo bash -c "cat > '$watchdog_service_file'" <<WATCHDOGEOF
-[Unit]
-Description=Arthexis suite watchdog for ${service_name}
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-ExecStart=$watchdog_exec
-Restart=always
-RestartSec=15
-User=$service_user
-
-[Install]
-WantedBy=multi-user.target
-WATCHDOGEOF
-
-  arthexis_record_systemd_unit "$lock_dir" "${watchdog_service}.service"
-  sudo systemctl daemon-reload
-  sudo systemctl enable "$watchdog_service"
-  sudo systemctl start "$watchdog_service"
-}
-
 arthexis_install_service_stack() {
   local base_dir="$1"
   local lock_dir="$2"
@@ -192,7 +135,6 @@ arthexis_install_service_stack() {
   local enable_celery="${4:-false}"
   local exec_cmd="$5"
   local service_mode="${6:-embedded}"
-  local install_watchdog="${7:-true}"
 
   if [ -z "$base_dir" ] || [ -z "$lock_dir" ] || [ -z "$service_name" ]; then
     return 0
@@ -295,10 +237,6 @@ BEATSERVICEEOF
   sudo systemctl enable "$service_name"
   if [ "$manage_celery" = true ]; then
     sudo systemctl enable "$celery_service" "$celery_beat_service"
-  fi
-
-  if [ "$install_watchdog" = true ]; then
-    arthexis_install_watchdog_unit "$base_dir" "$lock_dir" "$service_name" "$service_user" "$service_mode"
   fi
 }
 

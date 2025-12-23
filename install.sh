@@ -49,10 +49,9 @@ NODE_ROLE="Terminal"
 REQUIRES_REDIS=false
 START_SERVICES=false
 REPAIR=false
-ENABLE_WATCHDOG=true
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--public|--internal|--no-nginx] [--port PORT] [--upgrade] [--fixed] [--stable|--regular|--normal|--unstable|--latest] [--satellite] [--terminal] [--control] [--watchtower] [--celery] [--embedded|--systemd] [--lcd-screen|--no-lcd-screen] [--watchdog|--no-watchdog] [--clean] [--start|--no-start] [--repair]" >&2
+    echo "Usage: $0 [--service NAME] [--public|--internal|--no-nginx] [--port PORT] [--upgrade] [--fixed] [--stable|--regular|--normal|--unstable|--latest] [--satellite] [--terminal] [--control] [--watchtower] [--celery] [--embedded|--systemd] [--lcd-screen|--no-lcd-screen] [--clean] [--start|--no-start] [--repair]" >&2
     exit 1
 }
 
@@ -60,7 +59,7 @@ usage() {
 stop_existing_units_for_repair() {
     local service_name="$1"
 
-    arthexis_stop_service_unit_stack "$service_name" "$ENABLE_CELERY" "$ENABLE_LCD_SCREEN" "$ENABLE_WATCHDOG"
+    arthexis_stop_service_unit_stack "$service_name" "$ENABLE_CELERY" "$ENABLE_LCD_SCREEN"
 }
 
 clean_previous_installation_state() {
@@ -90,7 +89,7 @@ clean_previous_installation_state() {
     fi
 
     if [ -n "$service_name" ]; then
-        arthexis_remove_service_unit_stack "$LOCK_DIR" "$service_name" true true true
+        arthexis_remove_service_unit_stack "$LOCK_DIR" "$service_name" true true
         arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${service_name}-upgrade-guard.service"
         arthexis_remove_systemd_unit_if_present "$LOCK_DIR" "${service_name}-upgrade-guard.timer"
     fi
@@ -151,7 +150,7 @@ reset_service_units_for_repair() {
         return 0
     fi
 
-    arthexis_remove_service_unit_stack "$LOCK_DIR" "$service_name" "$ENABLE_CELERY" "$ENABLE_LCD_SCREEN" "$ENABLE_WATCHDOG"
+    arthexis_remove_service_unit_stack "$LOCK_DIR" "$service_name" "$ENABLE_CELERY" "$ENABLE_LCD_SCREEN"
 
     if [ -f "$SYSTEMD_UNITS_LOCK" ]; then
         while IFS= read -r recorded_unit; do
@@ -240,14 +239,6 @@ while [[ $# -gt 0 ]]; do
             ;;
         --celery)
             ENABLE_CELERY=true
-            shift
-            ;;
-        --watchdog)
-            ENABLE_WATCHDOG=true
-            shift
-            ;;
-        --no-watchdog)
-            ENABLE_WATCHDOG=false
             shift
             ;;
         --embedded)
@@ -522,7 +513,7 @@ if [ -n "$SERVICE" ]; then
         arthexis_record_systemd_unit "$LOCK_DIR" "${SERVICE}.service"
     fi
     EXEC_CMD="$BASE_DIR/scripts/service-start.sh"
-    arthexis_install_service_stack "$BASE_DIR" "$LOCK_DIR" "$SERVICE" "$ENABLE_CELERY" "$EXEC_CMD" "$SERVICE_MANAGEMENT_MODE" "$ENABLE_WATCHDOG"
+    arthexis_install_service_stack "$BASE_DIR" "$LOCK_DIR" "$SERVICE" "$ENABLE_CELERY" "$EXEC_CMD" "$SERVICE_MANAGEMENT_MODE"
 fi
 
 if [ -n "$SERVICE" ]; then
