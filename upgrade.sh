@@ -165,6 +165,29 @@ notify_lcd_manual_upgrade_required() {
   printf "%s\nManual action:\n> upgrade.sh\n" "$state_line" > "$lock_file"
 }
 
+trigger_upgrade_reboot() {
+  if command -v systemctl >/dev/null 2>&1; then
+    if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+      sudo -n systemctl reboot || true
+    else
+      systemctl reboot || true
+    fi
+    return 0
+  fi
+
+  if command -v reboot >/dev/null 2>&1; then
+    if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+      sudo -n reboot || true
+    else
+      reboot || true
+    fi
+    return 0
+  fi
+
+  echo "No reboot command available on this system." >&2
+  return 1
+}
+
 reset_safe_git_changes() {
   local role="${1:-Terminal}"
 
@@ -1421,6 +1444,22 @@ else
       printf 'LCD_WAS_ACTIVE=%s\n' "$LCD_WAS_ACTIVE"
     } > "$UPGRADE_RERUN_LOCK"
     notify_lcd_manual_upgrade_required
+    if [[ $SERVER_MODE -eq 1 ]]; then
+      echo "upgrade.sh was updated during git pull; rebooting in 60 seconds to re-run with the new script." >&2
+      if [ -t 0 ]; then
+        echo "Press any key within 60 seconds to cancel the reboot." >&2
+        if read -r -n 1 -t 60; then
+          echo "Reboot cancelled. Please run the upgrade again to use the new script." >&2
+          exit "$UPGRADE_RERUN_EXIT_CODE"
+        fi
+      else
+        echo "No interactive terminal detected; waiting 60 seconds before reboot." >&2
+        sleep 60
+      fi
+      echo "Rebooting now to apply the updated upgrade script." >&2
+      trigger_upgrade_reboot
+      exit "$UPGRADE_RERUN_EXIT_CODE"
+    fi
     echo "upgrade.sh was updated during git pull; please run the upgrade again to use the new script." >&2
     exit "$UPGRADE_RERUN_EXIT_CODE"
   fi
