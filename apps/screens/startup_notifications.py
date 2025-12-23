@@ -185,9 +185,9 @@ def build_startup_message(base_dir: Path, port: str | None = None) -> tuple[str,
 
     body_parts = []
     if version:
-        body_parts.append(version)
+        body_parts.append(f"v{version}")
     if rev_short:
-        body_parts.append(rev_short)
+        body_parts.append(f"r{rev_short}")
 
     body = " ".join(body_parts)
 
