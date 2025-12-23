@@ -927,6 +927,230 @@ async def handle_change_availability_error(
     return True
 
 
+async def handle_clear_display_message_error(
+    consumer: CallErrorContext,
+    message_id: str,
+    metadata: dict,
+    error_code: str | None,
+    description: str | None,
+    details: dict | None,
+    log_key: str,
+) -> bool:
+    parts: list[str] = []
+    if error_code:
+        parts.append(f"code={str(error_code).strip()}")
+    if description:
+        parts.append(f"description={str(description).strip()}")
+    details_text = _json_details(details)
+    if details_text:
+        parts.append(f"details={details_text}")
+    message = "ClearDisplayMessage error"
+    if parts:
+        message += ": " + ", ".join(parts)
+    store.add_log(log_key, message, log_type="charger")
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        success=False,
+        error_code=error_code,
+        error_description=description,
+        error_details=details,
+    )
+    return True
+
+
+async def handle_customer_information_error(
+    consumer: CallErrorContext,
+    message_id: str,
+    metadata: dict,
+    error_code: str | None,
+    description: str | None,
+    details: dict | None,
+    log_key: str,
+) -> bool:
+    parts: list[str] = []
+    if error_code:
+        parts.append(f"code={str(error_code).strip()}")
+    if description:
+        parts.append(f"description={str(description).strip()}")
+    details_text = _json_details(details)
+    if details_text:
+        parts.append(f"details={details_text}")
+    message = "CustomerInformation error"
+    if parts:
+        message += ": " + ", ".join(parts)
+    store.add_log(log_key, message, log_type="charger")
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        success=False,
+        error_code=error_code,
+        error_description=description,
+        error_details=details,
+    )
+    return True
+
+
+async def handle_get_base_report_error(
+    consumer: CallErrorContext,
+    message_id: str,
+    metadata: dict,
+    error_code: str | None,
+    description: str | None,
+    details: dict | None,
+    log_key: str,
+) -> bool:
+    parts: list[str] = []
+    if error_code:
+        parts.append(f"code={str(error_code).strip()}")
+    if description:
+        parts.append(f"description={str(description).strip()}")
+    details_text = _json_details(details)
+    if details_text:
+        parts.append(f"details={details_text}")
+    message = "GetBaseReport error"
+    if parts:
+        message += ": " + ", ".join(parts)
+    store.add_log(log_key, message, log_type="charger")
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        success=False,
+        error_code=error_code,
+        error_description=description,
+        error_details=details,
+    )
+    return True
+
+
+async def handle_get_charging_profiles_error(
+    consumer: CallErrorContext,
+    message_id: str,
+    metadata: dict,
+    error_code: str | None,
+    description: str | None,
+    details: dict | None,
+    log_key: str,
+) -> bool:
+    parts: list[str] = []
+    if error_code:
+        parts.append(f"code={str(error_code).strip()}")
+    if description:
+        parts.append(f"description={str(description).strip()}")
+    details_text = _json_details(details)
+    if details_text:
+        parts.append(f"details={details_text}")
+    message = "GetChargingProfiles error"
+    if parts:
+        message += ": " + ", ".join(parts)
+    store.add_log(log_key, message, log_type="charger")
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        success=False,
+        error_code=error_code,
+        error_description=description,
+        error_details=details,
+    )
+    return True
+
+
+async def handle_get_display_messages_error(
+    consumer: CallErrorContext,
+    message_id: str,
+    metadata: dict,
+    error_code: str | None,
+    description: str | None,
+    details: dict | None,
+    log_key: str,
+) -> bool:
+    parts: list[str] = []
+    if error_code:
+        parts.append(f"code={str(error_code).strip()}")
+    if description:
+        parts.append(f"description={str(description).strip()}")
+    details_text = _json_details(details)
+    if details_text:
+        parts.append(f"details={details_text}")
+    message = "GetDisplayMessages error"
+    if parts:
+        message += ": " + ", ".join(parts)
+    store.add_log(log_key, message, log_type="charger")
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        success=False,
+        error_code=error_code,
+        error_description=description,
+        error_details=details,
+    )
+    return True
+
+
+async def handle_get_report_error(
+    consumer: CallErrorContext,
+    message_id: str,
+    metadata: dict,
+    error_code: str | None,
+    description: str | None,
+    details: dict | None,
+    log_key: str,
+) -> bool:
+    parts: list[str] = []
+    if error_code:
+        parts.append(f"code={str(error_code).strip()}")
+    if description:
+        parts.append(f"description={str(description).strip()}")
+    details_text = _json_details(details)
+    if details_text:
+        parts.append(f"details={details_text}")
+    message = "GetReport error"
+    if parts:
+        message += ": " + ", ".join(parts)
+    store.add_log(log_key, message, log_type="charger")
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        success=False,
+        error_code=error_code,
+        error_description=description,
+        error_details=details,
+    )
+    return True
+
+
+async def handle_set_display_message_error(
+    consumer: CallErrorContext,
+    message_id: str,
+    metadata: dict,
+    error_code: str | None,
+    description: str | None,
+    details: dict | None,
+    log_key: str,
+) -> bool:
+    parts: list[str] = []
+    if error_code:
+        parts.append(f"code={str(error_code).strip()}")
+    if description:
+        parts.append(f"description={str(description).strip()}")
+    details_text = _json_details(details)
+    if details_text:
+        parts.append(f"details={details_text}")
+    message = "SetDisplayMessage error"
+    if parts:
+        message += ": " + ", ".join(parts)
+    store.add_log(log_key, message, log_type="charger")
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        success=False,
+        error_code=error_code,
+        error_description=description,
+        error_details=details,
+    )
+    return True
+
+
 async def handle_set_network_profile_error(
     consumer: CallErrorContext,
     message_id: str,
@@ -1168,6 +1392,13 @@ CALL_ERROR_HANDLERS: dict[str, CallErrorHandler] = {
     "Reset": handle_reset_error,
     "ChangeAvailability": handle_change_availability_error,
     "SetChargingProfile": handle_set_charging_profile_error,
+    "ClearDisplayMessage": handle_clear_display_message_error,
+    "CustomerInformation": handle_customer_information_error,
+    "GetBaseReport": handle_get_base_report_error,
+    "GetChargingProfiles": handle_get_charging_profiles_error,
+    "GetDisplayMessages": handle_get_display_messages_error,
+    "GetReport": handle_get_report_error,
+    "SetDisplayMessage": handle_set_display_message_error,
     "SetNetworkProfile": handle_set_network_profile_error,
     "InstallCertificate": handle_install_certificate_error,
     "DeleteCertificate": handle_delete_certificate_error,

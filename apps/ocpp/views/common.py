@@ -101,6 +101,14 @@ CALL_ACTION_LABELS = {
     "SetVariableMonitoring": _("Set variable monitoring"),
     "ClearVariableMonitoring": _("Clear variable monitoring"),
     "GetMonitoringReport": _("Get monitoring report"),
+    "ClearDisplayMessage": _("Clear display message"),
+    "CustomerInformation": _("Customer information"),
+    "GetBaseReport": _("Get base report"),
+    "GetChargingProfiles": _("Get charging profiles"),
+    "GetDisplayMessages": _("Get display messages"),
+    "GetReport": _("Get report"),
+    "SetDisplayMessage": _("Set display message"),
+    "SetNetworkProfile": _("Set network profile"),
 }
 
 CALL_EXPECTED_STATUSES: dict[str, set[str] | None] = {
@@ -130,6 +138,21 @@ CALL_EXPECTED_STATUSES: dict[str, set[str] | None] = {
     "SetMonitoringLevel": {"Accepted", "Rejected", "NotSupported"},
     "ClearVariableMonitoring": {"Accepted", "Rejected", "NotSupported"},
     "GetMonitoringReport": {"Accepted", "Rejected", "NotSupported"},
+    "ClearDisplayMessage": {"Accepted", "Unknown"},
+    "CustomerInformation": {"Accepted", "Rejected", "Invalid"},
+    "GetBaseReport": {"Accepted", "Rejected", "NotSupported", "EmptyResultSet"},
+    "GetChargingProfiles": {"Accepted", "NoProfiles"},
+    "GetDisplayMessages": {"Accepted", "Unknown"},
+    "GetReport": {"Accepted", "Rejected", "NotSupported", "EmptyResultSet"},
+    "SetDisplayMessage": {
+        "Accepted",
+        "NotSupportedMessageFormat",
+        "Rejected",
+        "NotSupportedPriority",
+        "NotSupportedState",
+        "UnknownTransaction",
+    },
+    "SetNetworkProfile": {"Accepted", "Rejected", "Failed"},
 }
 
 

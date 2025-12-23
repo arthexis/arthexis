@@ -1302,6 +1302,146 @@ async def handle_change_availability_result(
     return True
 
 
+async def handle_clear_display_message_result(
+    consumer: CallResultContext,
+    message_id: str,
+    metadata: dict,
+    payload_data: dict,
+    log_key: str,
+) -> bool:
+    status_value = str(payload_data.get("status") or "").strip()
+    message = "ClearDisplayMessage result"
+    if status_value:
+        message += f": status={status_value}"
+    store.add_log(log_key, message, log_type="charger")
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        payload=payload_data,
+    )
+    return True
+
+
+async def handle_customer_information_result(
+    consumer: CallResultContext,
+    message_id: str,
+    metadata: dict,
+    payload_data: dict,
+    log_key: str,
+) -> bool:
+    status_value = str(payload_data.get("status") or "").strip()
+    message = "CustomerInformation result"
+    if status_value:
+        message += f": status={status_value}"
+    store.add_log(log_key, message, log_type="charger")
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        payload=payload_data,
+    )
+    return True
+
+
+async def handle_get_base_report_result(
+    consumer: CallResultContext,
+    message_id: str,
+    metadata: dict,
+    payload_data: dict,
+    log_key: str,
+) -> bool:
+    status_value = str(payload_data.get("status") or "").strip()
+    message = "GetBaseReport result"
+    if status_value:
+        message += f": status={status_value}"
+    store.add_log(log_key, message, log_type="charger")
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        payload=payload_data,
+    )
+    return True
+
+
+async def handle_get_charging_profiles_result(
+    consumer: CallResultContext,
+    message_id: str,
+    metadata: dict,
+    payload_data: dict,
+    log_key: str,
+) -> bool:
+    status_value = str(payload_data.get("status") or "").strip()
+    message = "GetChargingProfiles result"
+    if status_value:
+        message += f": status={status_value}"
+    store.add_log(log_key, message, log_type="charger")
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        payload=payload_data,
+    )
+    return True
+
+
+async def handle_get_display_messages_result(
+    consumer: CallResultContext,
+    message_id: str,
+    metadata: dict,
+    payload_data: dict,
+    log_key: str,
+) -> bool:
+    status_value = str(payload_data.get("status") or "").strip()
+    message = "GetDisplayMessages result"
+    if status_value:
+        message += f": status={status_value}"
+    store.add_log(log_key, message, log_type="charger")
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        payload=payload_data,
+    )
+    return True
+
+
+async def handle_get_report_result(
+    consumer: CallResultContext,
+    message_id: str,
+    metadata: dict,
+    payload_data: dict,
+    log_key: str,
+) -> bool:
+    status_value = str(payload_data.get("status") or "").strip()
+    message = "GetReport result"
+    if status_value:
+        message += f": status={status_value}"
+    store.add_log(log_key, message, log_type="charger")
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        payload=payload_data,
+    )
+    return True
+
+
+async def handle_set_display_message_result(
+    consumer: CallResultContext,
+    message_id: str,
+    metadata: dict,
+    payload_data: dict,
+    log_key: str,
+) -> bool:
+    status_value = str(payload_data.get("status") or "").strip()
+    message = "SetDisplayMessage result"
+    if status_value:
+        message += f": status={status_value}"
+    store.add_log(log_key, message, log_type="charger")
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        payload=payload_data,
+    )
+    return True
+
+
 async def handle_set_network_profile_result(
     consumer: CallResultContext,
     message_id: str,
@@ -1603,6 +1743,13 @@ CALL_RESULT_HANDLERS: dict[str, CallResultHandler] = {
     "Reset": handle_reset_result,
     "ChangeAvailability": handle_change_availability_result,
     "SetChargingProfile": handle_set_charging_profile_result,
+    "ClearDisplayMessage": handle_clear_display_message_result,
+    "CustomerInformation": handle_customer_information_result,
+    "GetBaseReport": handle_get_base_report_result,
+    "GetChargingProfiles": handle_get_charging_profiles_result,
+    "GetDisplayMessages": handle_get_display_messages_result,
+    "GetReport": handle_get_report_result,
+    "SetDisplayMessage": handle_set_display_message_result,
     "SetNetworkProfile": handle_set_network_profile_result,
     "InstallCertificate": handle_install_certificate_result,
     "DeleteCertificate": handle_delete_certificate_result,
