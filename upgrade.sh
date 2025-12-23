@@ -976,6 +976,7 @@ lcd_service_was_active() {
 
 # Restart core, LCD, and Celery services while respecting systemd when available.
 restart_services() {
+  local include_lcd="${1:-1}"
   echo "Restarting services..."
   if [ -f "$LOCK_DIR/service.lck" ]; then
     local service_name
@@ -1004,7 +1005,7 @@ restart_services() {
         "${systemctl_cmd[@]}" kill --signal=TERM "$service_name" || true
         restart_via_systemd=1
       fi
-      if lcd_systemd_unit_present "$service_name"; then
+      if [ "$include_lcd" -eq 1 ] && lcd_systemd_unit_present "$service_name"; then
         local lcd_service="lcd-$service_name"
         if "${systemctl_cmd[@]}" is-active --quiet "$lcd_service"; then
           echo "Signaling $lcd_service for restart via systemd..."
@@ -1017,7 +1018,7 @@ restart_services() {
         echo "Service $service_name did not become active after restart." >&2
         return 1
       fi
-      if lcd_systemd_unit_present "$service_name"; then
+      if [ "$include_lcd" -eq 1 ] && lcd_systemd_unit_present "$service_name"; then
         local lcd_service="lcd-$service_name"
         if ! wait_for_service_active "$lcd_service" 1; then
           if [ "$systemctl_available" -eq 1 ]; then
@@ -1087,7 +1088,7 @@ restart_services() {
       echo "Service $service_name did not become active after restart." >&2
       return 1
     fi
-    if lcd_systemd_unit_present "$service_name"; then
+    if [ "$include_lcd" -eq 1 ] && lcd_systemd_unit_present "$service_name"; then
       local lcd_service="lcd-$service_name"
       if ! wait_for_service_active "$lcd_service" 1; then
         echo "LCD service $lcd_service did not become active after restart." >&2
@@ -1535,12 +1536,17 @@ if [[ $NO_RESTART -eq 0 ]]; then
     else
       echo "Skipping automatic restart because services were not running before upgrade."
     fi
-  elif ! restart_services; then
-    echo "Detected failed restart after upgrade." >&2
-    echo "Manual intervention required to restore services." >&2
-    exit 1
   else
-    LCD_RESTART_REQUIRED=0
+    RESTART_LCD_WITH_CORE=0
+    if ! restart_services "$RESTART_LCD_WITH_CORE"; then
+      echo "Detected failed restart after upgrade." >&2
+      echo "Manual intervention required to restore services." >&2
+      exit 1
+    else
+      if [[ $RESTART_LCD_WITH_CORE -eq 1 ]]; then
+        LCD_RESTART_REQUIRED=0
+      fi
+    fi
   fi
 fi
 
