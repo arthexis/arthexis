@@ -52,6 +52,11 @@ class CharLCD1602:
 
     columns = 16
     rows = 2
+    pulse_enable_delay = 0.001
+    pulse_disable_delay = 0.001
+    command_delay = 0.002
+    data_delay = 0.002
+    clear_delay = 0.003
 
     def __init__(self, bus: _BusWrapper | None = None) -> None:
         if smbus is None:  # pragma: no cover - hardware dependent
@@ -71,9 +76,9 @@ class CharLCD1602:
 
     def _pulse_enable(self, data: int) -> None:
         self._write_word(self.LCD_ADDR, data | 0x04)
-        time.sleep(0.0005)
+        time.sleep(self.pulse_enable_delay)
         self._write_word(self.LCD_ADDR, data & ~0x04)
-        time.sleep(0.0001)
+        time.sleep(self.pulse_disable_delay)
 
     def send_command(self, cmd: int) -> None:
         high = cmd & 0xF0
@@ -83,7 +88,7 @@ class CharLCD1602:
         self._write_word(self.LCD_ADDR, low)
         self._pulse_enable(low)
         # Give the LCD time to process the command to avoid garbled output.
-        time.sleep(0.001)
+        time.sleep(self.command_delay)
 
     def send_data(self, data: int) -> None:
         high = (data & 0xF0) | 0x01
@@ -93,7 +98,7 @@ class CharLCD1602:
         self._write_word(self.LCD_ADDR, low)
         self._pulse_enable(low)
         # Allow the LCD controller to catch up between data writes.
-        time.sleep(0.001)
+        time.sleep(self.data_delay)
 
     def i2c_scan(self) -> list[str]:  # pragma: no cover - requires hardware
         """Return a list of detected I2C addresses.
@@ -147,7 +152,7 @@ class CharLCD1602:
 
     def clear(self) -> None:
         self.send_command(0x01)
-        time.sleep(0.002)
+        time.sleep(self.clear_delay)
 
     def reset(self) -> None:
         """Re-run the initialisation sequence to recover the display."""
