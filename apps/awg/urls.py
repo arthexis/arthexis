@@ -1,12 +1,12 @@
 from django.urls import path
 
-from . import views
+from .views import reports, requests
 
 app_name = "awg"
 
 urlpatterns = [
-    path("calculate/", views.awg_calculate, name="awg_calculate"),
-    path("", views.calculator, name="calculator"),
-    path("zapped/", views.zapped_result, name="zapped"),
-    path("energy-tariff/", views.energy_tariff_calculator, name="energy_tariff"),
+    path("calculate/", requests.awg_calculate, name="awg_calculate"),
+    path("", requests.calculator, name="calculator"),
+    path("zapped/", requests.zapped_result, name="zapped"),
+    path("energy-tariff/", reports.energy_tariff_calculator, name="energy_tariff"),
 ]
