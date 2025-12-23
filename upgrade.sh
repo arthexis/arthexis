@@ -1498,10 +1498,6 @@ if [ $VENV_PRESENT -eq 1 ]; then
   fi
   env "${pip_install_env[@]}" python -m pip install --upgrade pip "${pip_install_flags[@]}"
   install_requirements_if_changed
-  python manage.py migrate --noinput
-  if ls data/*.json >/dev/null 2>&1; then
-    python manage.py load_user_data data/*.json
-  fi
   if [[ $DEFER_BROADCAST_MESSAGE -eq 1 ]]; then
     if ! broadcast_upgrade_start_net_message "$LOCAL_REVISION" "$REMOTE_REVISION"; then
       echo "Warning: failed to broadcast upgrade Net Message" >&2
@@ -1527,6 +1523,10 @@ if [[ "$CHANNEL" == "unstable" ]]; then
 fi
 echo "Refreshing environment..."
 FAILOVER_CREATED=1 ./env-refresh.sh $ENV_ARGS
+
+if [ -n "${PYTHON_BIN:-}" ] && ls data/*.json >/dev/null 2>&1; then
+  "$PYTHON_BIN" manage.py load_user_data data/*.json
+fi
 
 if [ -n "$SERVICE_NAME" ]; then
   remove_prestart_env_refresh "$SERVICE_NAME"
