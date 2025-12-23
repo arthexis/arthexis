@@ -48,8 +48,8 @@ SCROLL_PADDING = 3
 LCD_COLUMNS = CharLCD1602.columns
 LCD_ROWS = CharLCD1602.rows
 CLOCK_MESSAGE_SECONDS = 6
-CLOCK_TIME_FORMAT = "%H:%M"
-CLOCK_DATE_FORMAT = "%Y-%m-%d"
+CLOCK_TIME_FORMAT = "%p %I:%M"
+CLOCK_DATE_FORMAT = "%Y-%m-%d %a"
 
 
 class LockPayload(NamedTuple):
@@ -306,7 +306,7 @@ def _clock_payload(now: datetime) -> tuple[str, str, int, str]:
     date_label = now.strftime(CLOCK_DATE_FORMAT)
     time_label = now.strftime(CLOCK_TIME_FORMAT)
     if temperature:
-        time_label = f"{time_label} Temp {temperature}"
+        time_label = f"{time_label} @ {temperature}"
     return (
         date_label,
         time_label,
