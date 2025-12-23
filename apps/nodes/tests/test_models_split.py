@@ -1,5 +1,7 @@
 import pytest
 
+from django.contrib.sites.models import Site
+
 from apps.nodes.models import Node
 
 
@@ -46,3 +48,22 @@ def test_ensure_keys_generates_keypair(monkeypatch, tmp_path):
     assert pub_path.exists()
     node.refresh_from_db()
     assert node.public_key == pub_path.read_text()
+
+
+@pytest.mark.django_db
+def test_iter_remote_urls_prefers_https_port_443_when_required():
+    site = Site.objects.create(
+        domain="arthexis.example",
+        name="Arthexis",
+        require_https=True,
+    )
+    node = Node(
+        hostname="watchtower",
+        base_site=site,
+        port=8888,
+    )
+
+    urls = list(node.iter_remote_urls("/nodes/info/"))
+
+    assert "https://arthexis.example/nodes/info/" in urls
+    assert "https://arthexis.example:8888/nodes/info/" in urls
