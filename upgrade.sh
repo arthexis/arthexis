@@ -752,7 +752,7 @@ while [[ $# -gt 0 ]]; do
       CHECK_ONLY=1
       shift
       ;;
-    --server)
+    --tail-server)
       SERVER_MODE=1
       FORWARDED_ARGS+=("$1")
       shift
@@ -1586,6 +1586,15 @@ arthexis_refresh_desktop_shortcuts "$BASE_DIR"
 if [[ $SERVER_MODE -eq 1 ]]; then
   if [[ $LOCAL_ONLY -eq 1 ]]; then
     echo "Upgrade server mode running with --local; remote polling is disabled."
+  fi
+  if [ -z "$PYTHON_BIN" ]; then
+    echo "Python executable not available; unable to run test suite." >&2
+    exit 1
+  fi
+  echo "Running test suite after upgrade..."
+  if ! "$PYTHON_BIN" -m pytest; then
+    echo "Test suite failed after upgrade." >&2
+    exit 1
   fi
   echo "Upgrade server mode enabled; polling for updates every 60 seconds."
   while true; do
