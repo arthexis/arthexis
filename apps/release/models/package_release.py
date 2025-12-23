@@ -1,236 +1,34 @@
 from __future__ import annotations
 
-import contextlib
 import json
-from datetime import date as datetime_date, datetime as datetime_datetime, time as datetime_time
+import logging
+import os
+import subprocess
+from datetime import datetime as datetime_datetime
 from pathlib import Path
-from typing import Any
+from urllib.parse import quote_plus, urlparse
 
-from django.apps import apps
-from django.conf import settings
 from django.core import serializers
 from django.core.exceptions import ValidationError
-from django.db import models
-from django.db.models import F, Q
+from django.db import DatabaseError, models
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
-from urllib.parse import urlparse
 
 from apps.base.models import Entity, EntityManager
 from apps.core.fixtures import ensure_seed_data_flags
-from apps.users.models import Profile
-from apps.sigils.fields import ConditionCheckResult, ConditionTextField, SigilShortAutoField
+from apps.locals import user_data
 from utils import revision as revision_utils
 
-from . import release as release_utils
-from .release import Credentials, DEFAULT_PACKAGE, GitCredentials, Package as ReleasePackage
+from ..release import Credentials, Package as ReleasePackage, RepositoryTarget
+from .package import Package
+from .release_manager import ReleaseManager
 
-class ReleaseManagerManager(EntityManager):
-    def get_by_natural_key(self, owner, package=None):
-        owner = owner or ""
-        if owner.startswith("group:"):
-            group_name = owner.split(":", 1)[1]
-            return self.get(group__name=group_name)
-        return self.get(user__username=owner)
-
-
-class PackageManager(EntityManager):
-    def get_by_natural_key(self, name):
-        return self.get(name=name)
+logger = logging.getLogger(__name__)
 
 
 class PackageReleaseManager(EntityManager):
     def get_by_natural_key(self, package, version):
         return self.get(package__name=package, version=version)
-
-
-class ReleaseManager(Profile):
-    """Store credentials for publishing packages."""
-
-    objects = ReleaseManagerManager()
-
-    def natural_key(self):
-        owner = self.owner_display()
-        if self.group_id and owner:
-            owner = f"group:{owner}"
-
-        pkg_name = ""
-        if self.pk:
-            pkg = self.package_set.first()
-            pkg_name = pkg.name if pkg else ""
-
-        return (owner or "", pkg_name)
-
-    profile_fields = (
-        "pypi_username",
-        "pypi_token",
-        "github_token",
-        "git_username",
-        "git_password",
-        "pypi_password",
-        "pypi_url",
-        "secondary_pypi_url",
-    )
-    pypi_username = SigilShortAutoField("PyPI username", max_length=100, blank=True)
-    pypi_token = SigilShortAutoField("PyPI token", max_length=200, blank=True)
-    github_token = SigilShortAutoField(
-        max_length=200,
-        blank=True,
-        help_text=(
-            "Personal access token for GitHub operations. "
-            "Used before the GITHUB_TOKEN environment variable."
-        ),
-    )
-    git_username = SigilShortAutoField(
-        "Git username",
-        max_length=100,
-        blank=True,
-        help_text="Username used for Git pushes (for example, your GitHub username).",
-    )
-    git_password = SigilShortAutoField(
-        "Git password/token",
-        max_length=200,
-        blank=True,
-        help_text=(
-            "Password or personal access token for HTTPS Git pushes. "
-            "Leave blank to use the GitHub token instead."
-        ),
-    )
-    pypi_password = SigilShortAutoField("PyPI password", max_length=200, blank=True)
-    pypi_url = SigilShortAutoField(
-        "PyPI URL",
-        max_length=200,
-        blank=True,
-        help_text=(
-            "Link to the PyPI user profile (for example, https://pypi.org/user/username/). "
-            "Use the account's user page, not a project-specific URL. "
-            "This value is informational and not used for uploads."
-        ),
-    )
-    secondary_pypi_url = SigilShortAutoField(
-        "Secondary PyPI URL",
-        max_length=200,
-        blank=True,
-        help_text=(
-            "Optional secondary repository upload endpoint."
-            " Leave blank to disable mirrored uploads."
-        ),
-    )
-
-    class Meta:
-        verbose_name = "Release Manager"
-        verbose_name_plural = "Release Managers"
-        constraints = [
-            models.CheckConstraint(
-                condition=(
-                    (Q(user__isnull=False) & Q(group__isnull=True))
-                    | (Q(user__isnull=True) & Q(group__isnull=False))
-                ),
-                name="releasemanager_requires_owner",
-            )
-        ]
-
-    def __str__(self) -> str:  # pragma: no cover - trivial
-        return self.name
-
-    @property
-    def name(self) -> str:  # pragma: no cover - simple proxy
-        owner = self.owner_display()
-        return owner or ""
-
-    def to_credentials(self) -> Credentials | None:
-        """Return credentials for this release manager."""
-        if self.pypi_token:
-            return Credentials(token=self.pypi_token)
-        if self.pypi_username and self.pypi_password:
-            return Credentials(username=self.pypi_username, password=self.pypi_password)
-        return None
-
-    def to_git_credentials(self) -> GitCredentials | None:
-        """Return Git credentials for pushing tags."""
-
-        username = (self.git_username or "").strip()
-        password_source = self.git_password or self.github_token or ""
-        password = password_source.strip()
-
-        if password and not username and password_source == self.github_token:
-            # GitHub personal access tokens require a username when used for
-            # HTTPS pushes. Default to the recommended ``x-access-token`` so
-            # release managers only need to provide their token.
-            username = "x-access-token"
-
-        if username and password:
-            return GitCredentials(username=username, password=password)
-        return None
-
-
-class Package(Entity):
-    """Package details shared across releases."""
-
-    objects = PackageManager()
-
-    def natural_key(self):
-        return (self.name,)
-
-    name = models.CharField(max_length=100, default=DEFAULT_PACKAGE.name, unique=True)
-    description = models.CharField(max_length=255, default=DEFAULT_PACKAGE.description)
-    author = models.CharField(max_length=100, default=DEFAULT_PACKAGE.author)
-    email = models.EmailField(default=DEFAULT_PACKAGE.email)
-    python_requires = models.CharField(
-        max_length=20, default=DEFAULT_PACKAGE.python_requires
-    )
-    license = models.CharField(max_length=100, default=DEFAULT_PACKAGE.license)
-    repository_url = models.URLField(default=DEFAULT_PACKAGE.repository_url)
-    homepage_url = models.URLField(default=DEFAULT_PACKAGE.homepage_url)
-    version_path = models.CharField(max_length=255, blank=True, default="")
-    dependencies_path = models.CharField(max_length=255, blank=True, default="")
-    test_command = models.TextField(blank=True, default="")
-    release_manager = models.ForeignKey(
-        ReleaseManager, on_delete=models.SET_NULL, null=True, blank=True
-    )
-    is_active = models.BooleanField(
-        default=False,
-        help_text="Designates the active package for version comparisons",
-    )
-
-    class Meta:
-        verbose_name = "Package"
-        verbose_name_plural = "Packages"
-        constraints = [
-            models.UniqueConstraint(
-                fields=("is_active",),
-                condition=models.Q(is_active=True),
-                name="unique_active_package",
-            )
-        ]
-
-    def __str__(self) -> str:  # pragma: no cover - trivial
-        return self.name
-
-    def save(self, *args, **kwargs):
-        if self.is_active:
-            type(self).objects.exclude(pk=self.pk).update(is_active=False)
-        super().save(*args, **kwargs)
-
-    def to_package(self) -> ReleasePackage:
-        """Return a :class:`ReleasePackage` instance from package data."""
-        repositories = [
-            repo.to_target() for repo in self.package_repositories.all().order_by("pk")
-        ]
-        return ReleasePackage(
-            name=self.name,
-            description=self.description,
-            author=self.author,
-            email=self.email,
-            python_requires=self.python_requires,
-            license=self.license,
-            repository_url=self.repository_url,
-            homepage_url=self.homepage_url,
-            version_path=self.version_path or None,
-            dependencies_path=self.dependencies_path or None,
-            test_command=self.test_command or None,
-            repositories=repositories,
-        )
 
 
 class PackageRelease(Entity):
@@ -669,8 +467,7 @@ class PackageRelease(Entity):
 
     def build(self, **kwargs) -> None:
         """Wrapper around :func:`core.release.build` for convenience."""
-        from . import release as release_utils
-        from utils import revision as revision_utils
+        from .. import release as release_utils
 
         release_utils.build(
             package=self.to_package(),
@@ -713,4 +510,3 @@ def validate_relative_url(value: str) -> None:
     parsed = urlparse(value)
     if parsed.scheme or parsed.netloc or not value.startswith("/"):
         raise ValidationError("URL must be relative")
-
