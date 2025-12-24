@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import logging
 from urllib.parse import urlsplit
 
 from django.conf import settings
 from django.core.exceptions import DisallowedHost
+from django.db import DatabaseError
 from django.http.request import split_domain_port
 from django.urls import path as django_path
 from django.utils.translation import get_language
@@ -15,7 +17,22 @@ except ImportError:  # pragma: no cover - fallback when constant is unavailable
     LANGUAGE_SESSION_KEY = "_language"
 
 
+logger = logging.getLogger(__name__)
+
+
 ORIGINAL_REFERER_SESSION_KEY = "pages:original_referer"
+
+
+def _safe_session_get(session, key, default=None):
+    """Return ``session[key]`` without raising backend errors."""
+
+    try:
+        return session.get(key, default)
+    except (AttributeError, DatabaseError):
+        return default
+    except Exception:  # pragma: no cover - best effort guard
+        logger.debug("Unable to read %s from session", key, exc_info=True)
+        return default
 
 
 def landing(label=None):
@@ -36,7 +53,8 @@ def cache_original_referer(request) -> None:
     if not hasattr(session, "get"):
         return
 
-    original = session.get(ORIGINAL_REFERER_SESSION_KEY)
+    original = _safe_session_get(session, ORIGINAL_REFERER_SESSION_KEY)
+
     if original:
         request.original_referer = original
         return
@@ -66,7 +84,11 @@ def cache_original_referer(request) -> None:
             return
 
     referer_value = referer[:1000]
-    session[ORIGINAL_REFERER_SESSION_KEY] = referer_value
+    try:
+        session[ORIGINAL_REFERER_SESSION_KEY] = referer_value
+    except Exception:  # pragma: no cover - best effort guard
+        logger.debug("Unable to cache original referer in session", exc_info=True)
+        return
     request.original_referer = referer_value
 
 
@@ -78,7 +100,7 @@ def get_original_referer(request) -> str:
 
     session = getattr(request, "session", None)
     if hasattr(session, "get"):
-        referer = session.get(ORIGINAL_REFERER_SESSION_KEY)
+        referer = _safe_session_get(session, ORIGINAL_REFERER_SESSION_KEY, "")
         if referer:
             request.original_referer = referer
             return referer
@@ -107,7 +129,7 @@ def get_request_language_code(request) -> str:
     language_code = ""
     session = getattr(request, "session", None)
     if hasattr(session, "get"):
-        language_code = session.get(LANGUAGE_SESSION_KEY, "")
+        language_code = _safe_session_get(session, LANGUAGE_SESSION_KEY, "")
     if not language_code:
         cookie_name = getattr(settings, "LANGUAGE_COOKIE_NAME", "django_language")
         language_code = getattr(request, "COOKIES", {}).get(cookie_name, "")
