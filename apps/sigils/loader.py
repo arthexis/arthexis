@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from pathlib import Path
 from typing import Iterable
 
 from django.contrib.contenttypes.models import ContentType
+from django.db import IntegrityError, OperationalError, connections
 
 from .models import SigilRoot
 
@@ -38,9 +40,11 @@ def _iter_fixture_entries(fixtures_dir: Path) -> Iterable[dict]:
 def load_fixture_sigil_roots(sender=None, **kwargs) -> None:
     """Hydrate bundled SigilRoot fixtures while tolerating missing models."""
 
-    del sender, kwargs
+    del sender
 
     fixtures_dir = Path(__file__).resolve().parent / "fixtures"
+    using = kwargs.get("using") or SigilRoot.all_objects.db
+    manager = _get_sigil_manager(using)
 
     for fields in _iter_fixture_entries(fixtures_dir):
         prefix = fields.get("prefix")
@@ -63,7 +67,7 @@ def load_fixture_sigil_roots(sender=None, **kwargs) -> None:
                 )
                 continue
 
-        SigilRoot.all_objects.update_or_create(
+        _save_sigil_root(
             prefix=prefix,
             defaults={
                 "context_type": context_type,
@@ -71,4 +75,44 @@ def load_fixture_sigil_roots(sender=None, **kwargs) -> None:
                 "is_seed_data": bool(fields.get("is_seed_data", False)),
                 "is_deleted": bool(fields.get("is_deleted", False)),
             },
+            using=using,
+            manager=manager,
         )
+
+
+def _get_sigil_manager(using: str):
+    return SigilRoot.all_objects.using(using)
+
+
+def _save_sigil_root(
+    *, prefix: str, defaults: dict, using: str, manager, retries: int = 3
+) -> None:
+    """Persist a SigilRoot record, retrying on SQLite lock errors."""
+
+    for attempt in range(1, retries + 1):
+        try:
+            manager.update_or_create(
+                prefix=prefix,
+                defaults=defaults,
+            )
+            return
+        except OperationalError as exc:
+            if "locked" not in str(exc).lower() or attempt >= retries:
+                raise
+            logger.warning(
+                "Retrying SigilRoot save after database lock (attempt %s/%s)",
+                attempt,
+                retries,
+            )
+            manager = _reset_connection(using)
+            time.sleep(0.2 * attempt)
+        except IntegrityError:
+            manager = _reset_connection(using)
+            raise
+
+
+def _reset_connection(using: str):
+    connection = connections[using]
+    connection.close()
+    connection.ensure_connection()
+    return _get_sigil_manager(using)
