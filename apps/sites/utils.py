@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import logging
 from urllib.parse import urlsplit
 
 from django.conf import settings
 from django.core.exceptions import DisallowedHost
+from django.db import DatabaseError
 from django.http.request import split_domain_port
 from django.urls import path as django_path
 from django.utils.translation import get_language
@@ -16,6 +18,9 @@ except ImportError:  # pragma: no cover - fallback when constant is unavailable
 
 
 ORIGINAL_REFERER_SESSION_KEY = "pages:original_referer"
+
+
+logger = logging.getLogger(__name__)
 
 
 def landing(label=None):
@@ -36,7 +41,11 @@ def cache_original_referer(request) -> None:
     if not hasattr(session, "get"):
         return
 
-    original = session.get(ORIGINAL_REFERER_SESSION_KEY)
+    try:
+        original = session.get(ORIGINAL_REFERER_SESSION_KEY)
+    except DatabaseError:  # pragma: no cover - database may not be ready yet
+        logger.debug("Session backend unavailable while reading referer", exc_info=True)
+        original = None
     if original:
         request.original_referer = original
         return
@@ -66,7 +75,10 @@ def cache_original_referer(request) -> None:
             return
 
     referer_value = referer[:1000]
-    session[ORIGINAL_REFERER_SESSION_KEY] = referer_value
+    try:
+        session[ORIGINAL_REFERER_SESSION_KEY] = referer_value
+    except DatabaseError:  # pragma: no cover - database may not be ready yet
+        logger.debug("Session backend unavailable while caching referer", exc_info=True)
     request.original_referer = referer_value
 
 
@@ -78,7 +90,11 @@ def get_original_referer(request) -> str:
 
     session = getattr(request, "session", None)
     if hasattr(session, "get"):
-        referer = session.get(ORIGINAL_REFERER_SESSION_KEY)
+        try:
+            referer = session.get(ORIGINAL_REFERER_SESSION_KEY)
+        except DatabaseError:  # pragma: no cover - database may not be ready yet
+            logger.debug("Session backend unavailable while reading referer", exc_info=True)
+            referer = None
         if referer:
             request.original_referer = referer
             return referer
@@ -107,7 +123,11 @@ def get_request_language_code(request) -> str:
     language_code = ""
     session = getattr(request, "session", None)
     if hasattr(session, "get"):
-        language_code = session.get(LANGUAGE_SESSION_KEY, "")
+        try:
+            language_code = session.get(LANGUAGE_SESSION_KEY, "")
+        except DatabaseError:  # pragma: no cover - database may not be ready yet
+            logger.debug("Session backend unavailable while reading language", exc_info=True)
+            language_code = ""
     if not language_code:
         cookie_name = getattr(settings, "LANGUAGE_COOKIE_NAME", "django_language")
         language_code = getattr(request, "COOKIES", {}).get(cookie_name, "")
