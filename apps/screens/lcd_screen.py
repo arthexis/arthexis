@@ -175,8 +175,17 @@ def _lcd_temperature_label_from_sysfs() -> str | None:
     return None
 
 
-def _clock_payload(now: datetime) -> tuple[str, str, int, str]:
+def _clock_payload(now: datetime, *, use_fahrenheit: bool = False) -> tuple[str, str, int, str]:
     temperature = _lcd_temperature_label()
+    if temperature and use_fahrenheit:
+        unit = temperature[-1].upper()
+        if unit == "C":
+            try:
+                temp_value = Decimal(temperature[:-1])
+            except (InvalidOperation, ValueError):
+                temp_value = None
+            if temp_value is not None:
+                temperature = f"{(temp_value * Decimal('9') / Decimal('5') + Decimal('32')):.1f}F"
     date_label = now.strftime(CLOCK_DATE_FORMAT)
     time_label = now.strftime(CLOCK_TIME_FORMAT)
     if temperature:
@@ -304,6 +313,7 @@ def main() -> None:  # pragma: no cover - hardware dependent
     scroll_scheduler = ScrollScheduler()
     state_order = ("latest", "sticky", "clock")
     state_index = 0
+    clock_cycle = 0
     health = LCDHealthMonitor()
     watchdog = LCDWatchdog()
     frame_writer: LCDFrameWriter | None = None
@@ -357,13 +367,18 @@ def main() -> None:  # pragma: no cover - hardware dependent
                         state_index = 0
 
                     def _payload_for_state(index: int) -> LockPayload:
+                        nonlocal clock_cycle
                         state_label = state_order[index]
                         if state_label == "sticky":
                             return sticky_payload
                         if state_label == "latest":
                             return latest_payload
                         if _lcd_clock_enabled():
-                            line1, line2, speed, _ = _clock_payload(datetime.now())
+                            use_fahrenheit = clock_cycle % 2 == 0
+                            line1, line2, speed, _ = _clock_payload(
+                                datetime.now(), use_fahrenheit=use_fahrenheit
+                            )
+                            clock_cycle += 1
                             return LockPayload(line1, line2, speed)
                         return LockPayload("", "", DEFAULT_SCROLL_MS)
 
@@ -411,15 +426,7 @@ def main() -> None:  # pragma: no cover - hardware dependent
                         latest_payload = _read_lock_file(LATEST_LOCK_FILE)
                     next_index = (state_index + 1) % len(state_order)
                     if lcd is not None:
-                        if state_order[next_index] == "clock" and not _lcd_clock_enabled():
-                            next_payload = LockPayload("", "", DEFAULT_SCROLL_MS)
-                        elif state_order[next_index] == "clock":
-                            line1, line2, speed, _ = _clock_payload(datetime.now())
-                            next_payload = LockPayload(line1, line2, speed)
-                        elif state_order[next_index] == "sticky":
-                            next_payload = sticky_payload
-                        else:
-                            next_payload = latest_payload
+                        next_payload = _payload_for_state(next_index)
                         next_display_state = _prepare_display_state(
                             next_payload.line1,
                             next_payload.line2,
