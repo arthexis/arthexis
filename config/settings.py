@@ -702,6 +702,7 @@ else:
         SQLITE_DB_PATH = BASE_DIR / "db.sqlite3"
 
     SQLITE_TEST_DB_PATH = BASE_DIR / "work" / "test_db" / "test_db.sqlite3"
+    SQLITE_TEST_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
     DATABASES = {
         "default": {
