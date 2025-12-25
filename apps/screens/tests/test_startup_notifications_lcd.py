@@ -7,7 +7,8 @@ from django.test import TestCase, override_settings
 from apps.nodes.models import Node, NodeFeature
 from apps.screens.startup_notifications import (
     LCD_LEGACY_FEATURE_LOCK,
-    LCD_LOCK_FILE,
+    LCD_LATEST_LOCK_FILE,
+    LCD_STICKY_LOCK_FILE,
     lcd_feature_enabled,
     lcd_feature_enabled_for_paths,
 )
@@ -28,8 +29,8 @@ class LCDStartupNotificationTests(TestCase):
             base_dir = Path(tmpdir)
             lock_dir = base_dir / ".locks"
             lock_dir.mkdir(parents=True)
-            (lock_dir / LCD_LOCK_FILE).write_text(
-                "state=enabled\nstartup\nmessage\n", encoding="utf-8"
+            (lock_dir / LCD_STICKY_LOCK_FILE).write_text(
+                "startup\nmessage\n", encoding="utf-8"
             )
 
             node = self._create_node(mac_address)
@@ -45,8 +46,8 @@ class LCDStartupNotificationTests(TestCase):
             base_dir = Path(tmpdir)
             lock_dir = base_dir / ".locks"
             lock_dir.mkdir(parents=True)
-            (lock_dir / LCD_LOCK_FILE).write_text(
-                "state=enabled\nbooting\n", encoding="utf-8"
+            (lock_dir / LCD_LATEST_LOCK_FILE).write_text(
+                "booting\n", encoding="utf-8"
             )
 
             feature = NodeFeature.objects.create(slug="lcd-screen", display="LCD Screen")
@@ -63,21 +64,18 @@ class LCDStartupNotificationTests(TestCase):
             node_base_path = base_dir / "work" / "nodes"
             lock_dir = node_base_path / ".locks"
             lock_dir.mkdir(parents=True)
-            (lock_dir / LCD_LOCK_FILE).write_text(
-                "state=enabled\nbooting\n", encoding="utf-8"
+            (lock_dir / LCD_LATEST_LOCK_FILE).write_text(
+                "booting\n", encoding="utf-8"
             )
 
             self.assertTrue(
                 lcd_feature_enabled_for_paths(base_dir=base_dir, node_base_path=node_base_path)
             )
 
-    def test_lcd_feature_disabled_state(self):
+    def test_lcd_feature_disabled_when_missing(self):
         with TemporaryDirectory() as tmpdir:
             lock_dir = Path(tmpdir) / ".locks"
             lock_dir.mkdir(parents=True)
-            (lock_dir / LCD_LOCK_FILE).write_text(
-                "state=disabled\nbooting\n", encoding="utf-8"
-            )
 
             self.assertFalse(lcd_feature_enabled(lock_dir))
 
@@ -88,4 +86,3 @@ class LCDStartupNotificationTests(TestCase):
             (lock_dir / LCD_LEGACY_FEATURE_LOCK).write_text("", encoding="utf-8")
 
             self.assertTrue(lcd_feature_enabled(lock_dir))
-            self.assertTrue((lock_dir / LCD_LOCK_FILE).exists())

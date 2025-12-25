@@ -11,49 +11,25 @@ from utils import revision
 
 logger = logging.getLogger(__name__)
 
-STARTUP_NET_MESSAGE_FLAG = "net-message"
-LCD_LOCK_FILE = "lcd_screen.lck"
+LCD_STICKY_LOCK_FILE = "lcd-sticky"
+LCD_LATEST_LOCK_FILE = "lcd-latest"
 LCD_LEGACY_FEATURE_LOCK = "lcd_screen_enabled.lck"
-LCD_STATE_ENABLED = "enabled"
-LCD_STATE_DISABLED = "disabled"
-LCD_STATE_PREFIX = "state="
+LCD_RUNTIME_LOCK_FILE = "lcd_screen.lck"
 
 
 @dataclass(frozen=True)
-class LcdLockFile:
-    state: str
+class LcdMessage:
     subject: str
     body: str
-    flags: tuple[str, ...]
 
 
-def _normalize_lcd_state(raw_state: str | None) -> str:
-    normalized = (raw_state or "").strip().lower()
-    if normalized == LCD_STATE_DISABLED:
-        return LCD_STATE_DISABLED
-    return LCD_STATE_ENABLED
+def _parse_lcd_lock_lines(lines: list[str]) -> LcdMessage:
+    subject = lines[0][:64] if lines else ""
+    body = lines[1][:64] if len(lines) > 1 else ""
+    return LcdMessage(subject=subject, body=body)
 
 
-def _parse_lcd_lock_lines(lines: list[str]) -> LcdLockFile:
-    state = LCD_STATE_ENABLED
-    payload_index = 0
-    if lines:
-        first_line = lines[0].strip()
-        if first_line.lower().startswith(LCD_STATE_PREFIX):
-            state = _normalize_lcd_state(first_line.split("=", 1)[1])
-            payload_index = 1
-
-    subject = lines[payload_index][:64] if len(lines) > payload_index else ""
-    body = (
-        lines[payload_index + 1][:64]
-        if len(lines) > payload_index + 1
-        else ""
-    )
-    flags = tuple(line.strip() for line in lines[payload_index + 2 :] if line.strip())
-    return LcdLockFile(state=state, subject=subject, body=body, flags=flags)
-
-
-def read_lcd_lock_file(lock_file: Path) -> LcdLockFile | None:
+def read_lcd_lock_file(lock_file: Path) -> LcdMessage | None:
     try:
         lines = lock_file.read_text(encoding="utf-8").splitlines()
     except FileNotFoundError:
@@ -64,64 +40,16 @@ def read_lcd_lock_file(lock_file: Path) -> LcdLockFile | None:
     return _parse_lcd_lock_lines(lines)
 
 
-def render_lcd_lock_file(
-    *,
-    state: str = LCD_STATE_ENABLED,
-    subject: str = "",
-    body: str = "",
-    flags: Iterable[str] | None = None,
-) -> str:
-    normalized_state = _normalize_lcd_state(state)
-    lines = [
-        f"{LCD_STATE_PREFIX}{normalized_state}",
-        subject.strip()[:64],
-        body.strip()[:64],
-    ]
-    if flags:
-        for flag in flags:
-            flag_value = str(flag).strip()
-            if flag_value:
-                lines.append(flag_value)
+def render_lcd_lock_file(*, subject: str = "", body: str = "") -> str:
+    lines = [subject.strip()[:64], body.strip()[:64]]
     return "\n".join(lines) + "\n"
 
 
-def parse_lcd_flags(flags: Iterable[str]) -> tuple[bool, int | None]:
-    net_message = False
-    scroll_ms: int | None = None
-    for flag in flags:
-        value = (flag or "").strip()
-        if not value:
-            continue
-        normalized = value.lower()
-        if normalized == STARTUP_NET_MESSAGE_FLAG:
-            net_message = True
-            continue
-        if normalized.startswith("scroll_ms="):
-            normalized = normalized.split("=", 1)[1].strip()
-        try:
-            scroll_ms = int(normalized)
-        except ValueError:
-            continue
-    return net_message, scroll_ms
-
-
-def ensure_lcd_lock_file(lock_dir: Path) -> Path | None:
+def ensure_lock_dir(lock_dir: Path) -> Path | None:
     if not lock_dir:
         return None
-
-    lock_file = lock_dir / LCD_LOCK_FILE
-    legacy_lock = lock_dir / LCD_LEGACY_FEATURE_LOCK
-    if lock_file.exists():
-        return lock_file
-
-    if legacy_lock.exists():
-        lock_dir.mkdir(parents=True, exist_ok=True)
-        lock_file.write_text(
-            render_lcd_lock_file(state=LCD_STATE_ENABLED), encoding="utf-8"
-        )
-        return lock_file
-
-    return lock_file
+    lock_dir.mkdir(parents=True, exist_ok=True)
+    return lock_dir
 
 
 def lcd_feature_enabled(lock_dir: Path) -> bool:
@@ -130,14 +58,15 @@ def lcd_feature_enabled(lock_dir: Path) -> bool:
     if not lock_dir:
         return False
 
-    lock_file = ensure_lcd_lock_file(lock_dir)
-    if not lock_file or not lock_file.exists():
-        return False
-
-    lock_payload = read_lcd_lock_file(lock_file)
-    if lock_payload is None:
-        return False
-    return lock_payload.state == LCD_STATE_ENABLED
+    for name in (
+        LCD_STICKY_LOCK_FILE,
+        LCD_LATEST_LOCK_FILE,
+        LCD_LEGACY_FEATURE_LOCK,
+        LCD_RUNTIME_LOCK_FILE,
+    ):
+        if (lock_dir / name).exists():
+            return True
+    return False
 
 
 def lcd_feature_enabled_in_dirs(lock_dirs: Iterable[Path] | None) -> bool:
@@ -198,20 +127,8 @@ def build_startup_message(base_dir: Path, port: str | None = None) -> tuple[str,
 def render_lcd_payload(
     subject: str,
     body: str,
-    *,
-    net_message: bool = False,
-    scroll_ms: int | None = None,
 ) -> str:
-    lines: list[str] = [
-        LCD_STATE_PREFIX + LCD_STATE_ENABLED,
-        subject.strip()[:64],
-        body.strip()[:64],
-    ]
-    if net_message:
-        lines.append(STARTUP_NET_MESSAGE_FLAG)
-    if scroll_ms is not None:
-        lines.append(f"scroll_ms={scroll_ms}")
-    return "\n".join(lines) + "\n"
+    return render_lcd_lock_file(subject=subject, body=body)
 
 
 def queue_startup_message(
@@ -222,19 +139,8 @@ def queue_startup_message(
 ) -> Path:
     subject, body = build_startup_message(base_dir=base_dir, port=port)
 
-    target = lock_file or (Path(base_dir) / ".locks" / LCD_LOCK_FILE)
+    target = lock_file or (Path(base_dir) / ".locks" / LCD_STICKY_LOCK_FILE)
     target.parent.mkdir(parents=True, exist_ok=True)
-    existing = read_lcd_lock_file(target)
-    if existing:
-        state = existing.state
-        flags = [flag for flag in existing.flags if flag != STARTUP_NET_MESSAGE_FLAG]
-    else:
-        state = LCD_STATE_ENABLED
-        flags = []
-
-    flags.append(STARTUP_NET_MESSAGE_FLAG)
-    payload = render_lcd_lock_file(
-        state=state, subject=subject, body=body, flags=flags
-    )
+    payload = render_lcd_lock_file(subject=subject, body=body)
     target.write_text(payload, encoding="utf-8")
     return target

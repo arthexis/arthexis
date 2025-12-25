@@ -9,6 +9,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 
 from apps.core.notifications import notify
+from apps.screens.startup_notifications import LCD_LATEST_LOCK_FILE
 from apps.screens.lcd import CharLCD1602, LCDUnavailableError
 
 
@@ -19,7 +20,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         base_dir = Path(settings.BASE_DIR)
-        lock_file = base_dir / ".locks" / "lcd_screen.lck"
+        lock_file = base_dir / ".locks" / LCD_LATEST_LOCK_FILE
         service_file = base_dir / ".locks" / "service.lck"
 
         self.stdout.write("LCD diagnostic report:")

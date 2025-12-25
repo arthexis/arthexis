@@ -1,12 +1,10 @@
-"""Standalone LCD screen updater.
+"""Standalone LCD screen updater with predictable rotations.
 
-The script polls ``.locks/lcd_screen.lck`` for state and payload text and
-writes it to the attached LCD1602 display. Each row scrolls independently
-when it exceeds 16 characters; shorter rows remain static. Optional flag
-lines in the lock file can define scroll speed in milliseconds per
-character (default 1000 ms). When the suite service stops or the OS
-schedules a shutdown/reboot the updater temporarily overrides the lock
-file content to surface the alert directly on the display.
+The script polls ``.locks/lcd-sticky`` and ``.locks/lcd-latest`` for
+payload text and writes it to the attached LCD1602 display. The screen
+rotates every 10 seconds across three states in a fixed order: Sticky,
+Latest, and Time/Temp. Each row scrolls independently when it exceeds 16
+characters; shorter rows remain static.
 """
 
 from __future__ import annotations
@@ -14,9 +12,7 @@ from __future__ import annotations
 import logging
 import math
 import os
-import shutil
 import signal
-import subprocess
 import time
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
@@ -27,39 +23,31 @@ from typing import NamedTuple
 from apps.core.notifications import get_base_dir
 from apps.screens.lcd import CharLCD1602, LCDUnavailableError
 from apps.screens.startup_notifications import (
-    LCD_LEGACY_FEATURE_LOCK,
-    LCD_LOCK_FILE,
-    LCD_STATE_DISABLED,
-    ensure_lcd_lock_file,
-    parse_lcd_flags,
+    LCD_LATEST_LOCK_FILE,
+    LCD_STICKY_LOCK_FILE,
     read_lcd_lock_file,
-    render_lcd_lock_file,
 )
 
 logger = logging.getLogger(__name__)
 
 BASE_DIR = get_base_dir()
 LOCK_DIR = BASE_DIR / ".locks"
-LOCK_FILE = LOCK_DIR / LCD_LOCK_FILE
-SERVICE_LOCK_FILE = LOCK_DIR / "service.lck"
-SHUTDOWN_SCHEDULE_FILE = Path("/run/systemd/shutdown/scheduled")
+STICKY_LOCK_FILE = LOCK_DIR / LCD_STICKY_LOCK_FILE
+LATEST_LOCK_FILE = LOCK_DIR / LCD_LATEST_LOCK_FILE
 DEFAULT_SCROLL_MS = 1000
 MIN_SCROLL_MS = 50
-CLEAR_RATE_LIMIT_SECONDS = 5
-LCD_RESET_INTERVAL_SECONDS = 300
 SCROLL_PADDING = 3
 LCD_COLUMNS = CharLCD1602.columns
 LCD_ROWS = CharLCD1602.rows
-CLOCK_MESSAGE_SECONDS = 20
 CLOCK_TIME_FORMAT = "%p %I:%M"
 CLOCK_DATE_FORMAT = "%Y-%m-%d %a"
+ROTATION_SECONDS = 10
 
 
 class LockPayload(NamedTuple):
     line1: str
     line2: str
     scroll_ms: int
-    enabled: bool
 
 
 class DisplayState(NamedTuple):
@@ -73,167 +61,11 @@ class DisplayState(NamedTuple):
     cycle: int
 
 
-def _read_lock_file() -> LockPayload:
-    ensure_lcd_lock_file(LOCK_DIR)
-    lock_data = read_lcd_lock_file(LOCK_FILE)
-    if lock_data is None:
-        return LockPayload("", "", DEFAULT_SCROLL_MS, False)
-
-    enabled = lock_data.state != LCD_STATE_DISABLED
-    _, scroll_ms = parse_lcd_flags(lock_data.flags)
-    speed = scroll_ms if scroll_ms is not None else DEFAULT_SCROLL_MS
-    if not enabled:
-        return LockPayload("", "", DEFAULT_SCROLL_MS, False)
-    return LockPayload(lock_data.subject, lock_data.body, speed, True)
-
-
-def _disable_lcd_feature(lock_dir: Path = LOCK_DIR) -> None:
-    """Mark the LCD feature as disabled when the I2C bus is missing."""
-
-    lock_file = lock_dir / LCD_LOCK_FILE
-    try:
-        lock_file.parent.mkdir(parents=True, exist_ok=True)
-        lock_data = read_lcd_lock_file(lock_file)
-        payload = render_lcd_lock_file(
-            state=LCD_STATE_DISABLED,
-            subject=lock_data.subject if lock_data else "",
-            body=lock_data.body if lock_data else "",
-            flags=lock_data.flags if lock_data else None,
-        )
-        lock_file.write_text(payload, encoding="utf-8")
-    except OSError:
-        logger.debug("Failed to update LCD lock file state", exc_info=True)
-
-    legacy_lock = lock_dir / LCD_LEGACY_FEATURE_LOCK
-    try:
-        legacy_lock.unlink()
-    except FileNotFoundError:
-        return
-    except OSError:
-        logger.debug("Failed to remove legacy LCD lock file", exc_info=True)
-
-
-def _handle_lcd_failure(exc: Exception, lock_dir: Path = LOCK_DIR) -> bool:
-    """Handle LCD errors and return True when the feature should be disabled."""
-
-    if isinstance(exc, FileNotFoundError) and "/dev/i2c-1" in str(exc):
-        logger.warning(
-            "LCD update failed: %s; disabling lcd-screen feature", exc
-        )
-        _disable_lcd_feature(lock_dir)
-        return True
-
-    logger.warning("LCD update failed: %s", exc)
-    return False
-
-
-def _read_service_name() -> str | None:
-    try:
-        raw = SERVICE_LOCK_FILE.read_text(encoding="utf-8").strip()
-    except OSError:
-        return None
-    return raw or None
-
-
-def _systemctl_status(service: str) -> str | None:
-    if not service or shutil.which("systemctl") is None:
-        return None
-    try:
-        result = subprocess.run(
-            ["systemctl", "is-active", service],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    except Exception:
-        return None
-    return result.stdout.strip() or None
-
-
-def _suite_down_notice() -> tuple[str, str] | None:
-    """Return a warning message when the suite service is not active."""
-
-    service = _read_service_name()
-    status = _systemctl_status(service or "")
-    if status is None or status == "active":
-        return None
-    status_label = status.capitalize()
-    service_label = service or "Suite"
-    return (f"{service_label} offline", f"Status: {status_label}")
-
-
-def _read_shutdown_schedule() -> dict[str, str] | None:
-    try:
-        content = SHUTDOWN_SCHEDULE_FILE.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        return None
-    except OSError:
-        return None
-    schedule: dict[str, str] = {}
-    for line in content.splitlines():
-        key, _, value = line.partition("=")
-        if key and _:
-            schedule[key.strip().upper()] = value.strip()
-    return schedule or None
-
-
-def _system_shutdown_notice() -> tuple[str, str] | None:
-    """Return a warning message when the OS scheduled a shutdown/reboot."""
-
-    schedule = _read_shutdown_schedule()
-    if not schedule:
-        return None
-
-    normalized_mode = (schedule.get("MODE") or schedule.get("UNIT") or "").lower()
-    if "reboot" in normalized_mode:
-        title = "System reboot"
-    elif "halt" in normalized_mode:
-        title = "System halt"
-    elif "power" in normalized_mode:
-        title = "System poweroff"
-    else:
-        title = "System shutdown"
-
-    eta_label = "Prepare system"
-    usec_text = schedule.get("USEC")
-    if usec_text:
-        try:
-            timestamp = datetime.fromtimestamp(int(usec_text) / 1_000_000)
-        except (ValueError, OverflowError, OSError):
-            timestamp = None
-        if timestamp is not None:
-            eta_label = timestamp.strftime("ETA %Y-%m-%d %H:%M")
-
-    return title, eta_label
-
-
-def _resolve_display_payload(
-    lock_payload: LockPayload, last_lock_display: tuple[str, str, int] | None
-) -> tuple[str, str, int, str]:
-    shutdown_notice = _system_shutdown_notice()
-    if shutdown_notice:
-        line1, line2 = shutdown_notice
-        return line1, line2, DEFAULT_SCROLL_MS, "system-shutdown"
-
-    suite_notice = _suite_down_notice()
-    if suite_notice:
-        line1, line2 = suite_notice
-        return line1, line2, DEFAULT_SCROLL_MS, "suite-down"
-
-    if lock_payload.enabled:
-        line1, line2, speed, _ = lock_payload
-        if line1.strip() or line2.strip():
-            return line1, line2, speed, "lock-file"
-
-    if last_lock_display:
-        line1, line2, speed = last_lock_display
-        return line1, line2, speed, "lock-file"
-
-    if not lock_payload.enabled:
-        return "", "", DEFAULT_SCROLL_MS, "disabled"
-
-    line1, line2, speed, _ = lock_payload
-    return line1, line2, speed, "lock-file"
+def _read_lock_file(lock_file: Path) -> LockPayload:
+    payload = read_lcd_lock_file(lock_file)
+    if payload is None:
+        return LockPayload("", "", DEFAULT_SCROLL_MS)
+    return LockPayload(payload.subject, payload.body, DEFAULT_SCROLL_MS)
 
 
 def _lcd_clock_enabled() -> bool:
@@ -342,12 +174,6 @@ def _handle_shutdown_request(lcd: CharLCD1602 | None) -> bool:
     return True
 
 
-def _send_net_message_from_lock(
-    lock_payload: LockPayload, last_sent: tuple[str, str] | None
-) -> tuple[str, str] | None:
-    return last_sent
-
-
 def _display(lcd: CharLCD1602, line1: str, line2: str, scroll_ms: int) -> None:
     state = _prepare_display_state(line1, line2, scroll_ms)
     _advance_display(lcd, state)
@@ -389,16 +215,15 @@ def _advance_display(lcd: CharLCD1602, state: DisplayState) -> DisplayState:
 
 def main() -> None:  # pragma: no cover - hardware dependent
     lcd = None
-    last_reset_at = time.monotonic()
-    last_lock_mtime = 0.0
-    lock_payload: LockPayload = LockPayload("", "", DEFAULT_SCROLL_MS, False)
-    last_display: tuple[str, str, int, str] | None = None
     display_state: DisplayState | None = None
-    last_net_message: tuple[str, str] | None = None
-    last_clock_minute: tuple[int, int, int, int, int] | None = None
-    clock_until = 0.0
-    last_lock_display: tuple[str, str, int] | None = None
-    last_clear_at = 0.0
+    next_display_state: DisplayState | None = None
+    sticky_payload = LockPayload("", "", DEFAULT_SCROLL_MS)
+    latest_payload = LockPayload("", "", DEFAULT_SCROLL_MS)
+    sticky_mtime = 0.0
+    latest_mtime = 0.0
+    rotation_deadline = 0.0
+    state_order = ("latest", "sticky", "clock")
+    state_index = 0
 
     signal.signal(signal.SIGTERM, _request_shutdown)
     signal.signal(signal.SIGINT, _request_shutdown)
@@ -406,91 +231,124 @@ def main() -> None:  # pragma: no cover - hardware dependent
 
     try:
         while True:
-            sleep_duration = 0.5
-
             if _handle_shutdown_request(lcd):
                 break
 
             try:
-                if LOCK_FILE.exists():
-                    mtime = LOCK_FILE.stat().st_mtime
-                    if mtime != last_lock_mtime:
-                        lock_payload = _read_lock_file()
-                        last_lock_mtime = mtime
-                else:
-                    last_lock_mtime = 0.0
+                now = time.monotonic()
 
-                last_net_message = _send_net_message_from_lock(
-                    lock_payload, last_net_message
-                )
+                if display_state is None or now >= rotation_deadline:
+                    sticky_available = True
+                    try:
+                        sticky_stat = STICKY_LOCK_FILE.stat()
+                        if sticky_stat.st_mtime != sticky_mtime:
+                            sticky_payload = _read_lock_file(STICKY_LOCK_FILE)
+                            sticky_mtime = sticky_stat.st_mtime
+                    except OSError:
+                        sticky_payload = LockPayload("", "", DEFAULT_SCROLL_MS)
+                        sticky_mtime = 0.0
+                        sticky_available = False
 
-                if lock_payload.enabled:
-                    lock_line1, lock_line2, lock_speed, _ = lock_payload
-                    if lock_line1.strip() or lock_line2.strip():
-                        last_lock_display = (lock_line1, lock_line2, lock_speed)
+                    try:
+                        latest_stat = LATEST_LOCK_FILE.stat()
+                        if latest_stat.st_mtime != latest_mtime:
+                            latest_payload = _read_lock_file(LATEST_LOCK_FILE)
+                            latest_mtime = latest_stat.st_mtime
+                    except OSError:
+                        latest_payload = LockPayload("", "", DEFAULT_SCROLL_MS)
+                        latest_mtime = 0.0
 
-                now = datetime.now()
-                if _lcd_clock_enabled():
-                    current_minute = (
-                        now.year,
-                        now.month,
-                        now.day,
-                        now.hour,
-                        now.minute,
+                    previous_order = state_order
+                    if sticky_available:
+                        state_order = ("latest", "sticky", "clock")
+                    else:
+                        state_order = ("latest", "clock")
+
+                    if previous_order and 0 <= state_index < len(previous_order):
+                        current_label = previous_order[state_index]
+                        if current_label in state_order:
+                            state_index = state_order.index(current_label)
+                        else:
+                            state_index = 0
+                    else:
+                        state_index = 0
+
+                    def _payload_for_state(index: int) -> LockPayload:
+                        state_label = state_order[index]
+                        if state_label == "sticky":
+                            return sticky_payload
+                        if state_label == "latest":
+                            return latest_payload
+                        if _lcd_clock_enabled():
+                            line1, line2, speed, _ = _clock_payload(datetime.now())
+                            return LockPayload(line1, line2, speed)
+                        return LockPayload("", "", DEFAULT_SCROLL_MS)
+
+                    current_payload = _payload_for_state(state_index)
+                    display_state = _prepare_display_state(
+                        current_payload.line1,
+                        current_payload.line2,
+                        current_payload.scroll_ms,
                     )
-                    if clock_until <= now.timestamp() and current_minute != last_clock_minute:
-                        clock_until = now.timestamp() + CLOCK_MESSAGE_SECONDS
-                        last_clock_minute = current_minute
+                    rotation_deadline = now + ROTATION_SECONDS
 
-                if clock_until > now.timestamp():
-                    line1, line2, speed, source = _clock_payload(now)
-                else:
-                    line1, line2, speed, source = _resolve_display_payload(
-                        lock_payload, last_lock_display
+                    next_index = (state_index + 1) % len(state_order)
+                    next_payload = _payload_for_state(next_index)
+                    next_display_state = _prepare_display_state(
+                        next_payload.line1,
+                        next_payload.line2,
+                        next_payload.scroll_ms,
                     )
-                current_display = (line1, line2, speed, source)
-                if current_display != last_display or lcd is None:
-                    if lcd is None:
-                        lcd = CharLCD1602()
-                        lcd.init_lcd()
-                        last_reset_at = time.monotonic()
-                        last_clear_at = last_reset_at
-                    now_monotonic = time.monotonic()
-                    if now_monotonic - last_clear_at >= CLEAR_RATE_LIMIT_SECONDS:
-                        lcd.clear()
-                        last_clear_at = now_monotonic
-                    display_state = _prepare_display_state(line1, line2, speed)
-                    last_display = current_display
 
-                if lcd and display_state:
-                    now_monotonic = time.monotonic()
-                    if now_monotonic - last_reset_at >= LCD_RESET_INTERVAL_SECONDS:
-                        try:
-                            lcd.init_lcd()
-                            last_reset_at = now_monotonic
-                            display_state = _prepare_display_state(
-                                line1, line2, speed
-                            )
-                        except Exception:
-                            logger.debug(
-                                "Failed to reset LCD; will retry on next loop",
-                                exc_info=True,
-                            )
+                if lcd is None:
+                    lcd = CharLCD1602()
+                    lcd.init_lcd()
+
+                if display_state:
                     display_state = _advance_display(lcd, display_state)
-                    sleep_duration = display_state.scroll_sec or sleep_duration
+                    sleep_duration = display_state.scroll_sec or 0.5
+                else:
+                    sleep_duration = 0.5
+
+                time.sleep(sleep_duration)
+
+                if time.monotonic() >= rotation_deadline:
+                    state_index = (state_index + 1) % len(state_order)
+                    display_state = next_display_state
+
+                    # Prepare the following state in advance for predictable timing.
+                    if lcd is not None:
+                        sticky_payload = _read_lock_file(STICKY_LOCK_FILE)
+                        latest_payload = _read_lock_file(LATEST_LOCK_FILE)
+                    next_index = (state_index + 1) % len(state_order)
+                    if lcd is not None:
+                        if state_order[next_index] == "clock" and not _lcd_clock_enabled():
+                            next_payload = LockPayload("", "", DEFAULT_SCROLL_MS)
+                        elif state_order[next_index] == "clock":
+                            line1, line2, speed, _ = _clock_payload(datetime.now())
+                            next_payload = LockPayload(line1, line2, speed)
+                        elif state_order[next_index] == "sticky":
+                            next_payload = sticky_payload
+                        else:
+                            next_payload = latest_payload
+                        next_display_state = _prepare_display_state(
+                            next_payload.line1,
+                            next_payload.line2,
+                            next_payload.scroll_ms,
+                        )
+                    rotation_deadline = time.monotonic() + ROTATION_SECONDS
             except LCDUnavailableError as exc:
                 logger.warning("LCD unavailable: %s", exc)
                 lcd = None
                 display_state = None
+                next_display_state = None
             except Exception as exc:
+                logger.warning("LCD update failed: %s", exc)
                 _blank_display(lcd)
                 lcd = None
                 display_state = None
-                last_display = None
-                should_disable = _handle_lcd_failure(exc)
-                if should_disable:
-                    break
-            time.sleep(sleep_duration)
+                next_display_state = None
+            
     finally:
         _blank_display(lcd)
         _reset_shutdown_flag()
