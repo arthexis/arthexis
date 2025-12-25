@@ -59,6 +59,8 @@ class DisplayState(NamedTuple):
     index2: int
     scroll_sec: float
     cycle: int
+    last_segment1: str | None
+    last_segment2: str | None
 
 
 def _read_lock_file(lock_file: Path) -> LockPayload:
@@ -196,7 +198,18 @@ def _prepare_display_state(line1: str, line2: str, scroll_ms: int) -> DisplaySta
     steps1 = max(len(pad1) - (LCD_COLUMNS - 1), 1)
     steps2 = max(len(pad2) - (LCD_COLUMNS - 1), 1)
     cycle = math.lcm(steps1, steps2)
-    return DisplayState(pad1, pad2, steps1, steps2, 0, 0, scroll_sec, cycle)
+    return DisplayState(
+        pad1,
+        pad2,
+        steps1,
+        steps2,
+        0,
+        0,
+        scroll_sec,
+        cycle,
+        None,
+        None,
+    )
 
 
 def _advance_display(lcd: CharLCD1602, state: DisplayState) -> DisplayState:
@@ -205,12 +218,21 @@ def _advance_display(lcd: CharLCD1602, state: DisplayState) -> DisplayState:
 
     segment1 = state.pad1[state.index1 : state.index1 + LCD_COLUMNS]
     segment2 = state.pad2[state.index2 : state.index2 + LCD_COLUMNS]
-    lcd.write(0, 0, segment1.ljust(LCD_COLUMNS))
-    lcd.write(0, 1, segment2.ljust(LCD_COLUMNS))
+
+    if segment1 != state.last_segment1:
+        lcd.write(0, 0, segment1.ljust(LCD_COLUMNS))
+
+    if segment2 != state.last_segment2:
+        lcd.write(0, 1, segment2.ljust(LCD_COLUMNS))
 
     next_index1 = (state.index1 + 1) % state.steps1
     next_index2 = (state.index2 + 1) % state.steps2
-    return state._replace(index1=next_index1, index2=next_index2)
+    return state._replace(
+        index1=next_index1,
+        index2=next_index2,
+        last_segment1=segment1,
+        last_segment2=segment2,
+    )
 
 
 def main() -> None:  # pragma: no cover - hardware dependent
