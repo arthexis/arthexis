@@ -240,7 +240,9 @@ def main() -> None:  # pragma: no cover - hardware dependent
                 if display_state is None or now >= rotation_deadline:
                     sticky_available = True
                     try:
+                        sticky_available = False
                         sticky_stat = STICKY_LOCK_FILE.stat()
+                        sticky_available = True
                         if sticky_stat.st_mtime != sticky_mtime:
                             sticky_payload = _read_lock_file(STICKY_LOCK_FILE)
                             sticky_mtime = sticky_stat.st_mtime
