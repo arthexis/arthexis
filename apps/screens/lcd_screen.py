@@ -63,6 +63,63 @@ class DisplayState(NamedTuple):
     last_segment2: str | None
 
 
+class LCDFrameWriter:
+    """Write full LCD frames with retry and batching."""
+
+    def __init__(self, lcd: CharLCD1602) -> None:
+        self.lcd = lcd
+
+    def write(self, line1: str, line2: str) -> None:
+        self.lcd.write_frame(line1, line2, retries=1)
+
+
+class LCDHealthMonitor:
+    """Track LCD failures and compute exponential backoff."""
+
+    def __init__(self, *, base_delay: float = 0.5, max_delay: float = 8.0) -> None:
+        self.base_delay = base_delay
+        self.max_delay = max_delay
+        self.failure_count = 0
+
+    def record_failure(self) -> float:
+        self.failure_count += 1
+        return min(self.base_delay * (2 ** (self.failure_count - 1)), self.max_delay)
+
+    def record_success(self) -> None:
+        self.failure_count = 0
+
+
+class LCDWatchdog:
+    """Request periodic resets to keep the controller healthy."""
+
+    def __init__(self, *, reset_every: int = 300) -> None:
+        self.reset_every = reset_every
+        self._counter = 0
+
+    def tick(self) -> bool:
+        self._counter += 1
+        return self._counter >= self.reset_every
+
+    def reset(self) -> None:
+        self._counter = 0
+
+
+class ScrollScheduler:
+    """Ensure scroll cadence is driven by time rather than loop duration."""
+
+    def __init__(self) -> None:
+        self.next_deadline = time.monotonic()
+
+    def sleep_until_ready(self) -> None:
+        now = time.monotonic()
+        if now < self.next_deadline:
+            time.sleep(self.next_deadline - now)
+
+    def advance(self, interval: float) -> None:
+        now = time.monotonic()
+        self.next_deadline = max(self.next_deadline + interval, now + interval)
+
+
 def _read_lock_file(lock_file: Path) -> LockPayload:
     payload = read_lcd_lock_file(lock_file)
     if payload is None:
@@ -178,7 +235,7 @@ def _handle_shutdown_request(lcd: CharLCD1602 | None) -> bool:
 
 def _display(lcd: CharLCD1602, line1: str, line2: str, scroll_ms: int) -> None:
     state = _prepare_display_state(line1, line2, scroll_ms)
-    _advance_display(lcd, state)
+    _advance_display(lcd, state, LCDFrameWriter(lcd))
 
 
 def _prepare_display_state(line1: str, line2: str, scroll_ms: int) -> DisplayState:
@@ -212,18 +269,18 @@ def _prepare_display_state(line1: str, line2: str, scroll_ms: int) -> DisplaySta
     )
 
 
-def _advance_display(lcd: CharLCD1602, state: DisplayState) -> DisplayState:
+def _advance_display(
+    lcd: CharLCD1602, state: DisplayState, frame_writer: LCDFrameWriter
+) -> DisplayState:
     if _shutdown_requested():
         return state
 
     segment1 = state.pad1[state.index1 : state.index1 + LCD_COLUMNS]
     segment2 = state.pad2[state.index2 : state.index2 + LCD_COLUMNS]
 
-    if segment1 != state.last_segment1:
-        lcd.write(0, 0, segment1.ljust(LCD_COLUMNS))
-
-    if segment2 != state.last_segment2:
-        lcd.write(0, 1, segment2.ljust(LCD_COLUMNS))
+    write_required = segment1 != state.last_segment1 or segment2 != state.last_segment2
+    if write_required:
+        frame_writer.write(segment1.ljust(LCD_COLUMNS), segment2.ljust(LCD_COLUMNS))
 
     next_index1 = (state.index1 + 1) % state.steps1
     next_index2 = (state.index2 + 1) % state.steps2
@@ -244,8 +301,12 @@ def main() -> None:  # pragma: no cover - hardware dependent
     sticky_mtime = 0.0
     latest_mtime = 0.0
     rotation_deadline = 0.0
+    scroll_scheduler = ScrollScheduler()
     state_order = ("latest", "sticky", "clock")
     state_index = 0
+    health = LCDHealthMonitor()
+    watchdog = LCDWatchdog()
+    frame_writer: LCDFrameWriter | None = None
 
     signal.signal(signal.SIGTERM, _request_shutdown)
     signal.signal(signal.SIGINT, _request_shutdown)
@@ -325,14 +386,20 @@ def main() -> None:  # pragma: no cover - hardware dependent
                 if lcd is None:
                     lcd = CharLCD1602()
                     lcd.init_lcd()
+                    frame_writer = LCDFrameWriter(lcd)
+                    health.record_success()
 
-                if display_state:
-                    display_state = _advance_display(lcd, display_state)
-                    sleep_duration = display_state.scroll_sec or 0.5
+                if display_state and frame_writer:
+                    scroll_scheduler.sleep_until_ready()
+                    display_state = _advance_display(lcd, display_state, frame_writer)
+                    health.record_success()
+                    if watchdog.tick():
+                        lcd.reset()
+                        watchdog.reset()
+                    scroll_scheduler.advance(display_state.scroll_sec or 0.5)
                 else:
-                    sleep_duration = 0.5
-
-                time.sleep(sleep_duration)
+                    scroll_scheduler.advance(0.5)
+                    scroll_scheduler.sleep_until_ready()
 
                 if time.monotonic() >= rotation_deadline:
                     state_index = (state_index + 1) % len(state_order)
@@ -362,15 +429,21 @@ def main() -> None:  # pragma: no cover - hardware dependent
             except LCDUnavailableError as exc:
                 logger.warning("LCD unavailable: %s", exc)
                 lcd = None
+                frame_writer = None
                 display_state = None
                 next_display_state = None
+                delay = health.record_failure()
+                time.sleep(delay)
             except Exception as exc:
                 logger.warning("LCD update failed: %s", exc)
                 _blank_display(lcd)
                 lcd = None
                 display_state = None
                 next_display_state = None
-            
+                frame_writer = None
+                delay = health.record_failure()
+                time.sleep(delay)
+
     finally:
         _blank_display(lcd)
         _reset_shutdown_flag()
