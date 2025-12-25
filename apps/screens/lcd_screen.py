@@ -222,7 +222,7 @@ def main() -> None:  # pragma: no cover - hardware dependent
     sticky_mtime = 0.0
     latest_mtime = 0.0
     rotation_deadline = 0.0
-    state_order = ("latest", "clock")
+    state_order = ("latest", "sticky", "clock")
     state_index = 0
 
     signal.signal(signal.SIGTERM, _request_shutdown)
@@ -238,6 +238,7 @@ def main() -> None:  # pragma: no cover - hardware dependent
                 now = time.monotonic()
 
                 if display_state is None or now >= rotation_deadline:
+                    sticky_available = True
                     try:
                         sticky_available = False
                         sticky_stat = STICKY_LOCK_FILE.stat()
@@ -248,6 +249,7 @@ def main() -> None:  # pragma: no cover - hardware dependent
                     except OSError:
                         sticky_payload = LockPayload("", "", DEFAULT_SCROLL_MS)
                         sticky_mtime = 0.0
+                        sticky_available = False
 
                     try:
                         latest_stat = LATEST_LOCK_FILE.stat()
@@ -258,11 +260,19 @@ def main() -> None:  # pragma: no cover - hardware dependent
                         latest_payload = LockPayload("", "", DEFAULT_SCROLL_MS)
                         latest_mtime = 0.0
 
+                    previous_order = state_order
                     if sticky_available:
-                        state_order = ("sticky", "latest", "clock")
+                        state_order = ("latest", "sticky", "clock")
                     else:
                         state_order = ("latest", "clock")
-                    if state_index >= len(state_order):
+
+                    if previous_order and 0 <= state_index < len(previous_order):
+                        current_label = previous_order[state_index]
+                        if current_label in state_order:
+                            state_index = state_order.index(current_label)
+                        else:
+                            state_index = 0
+                    else:
                         state_index = 0
 
                     def _payload_for_state(index: int) -> LockPayload:
