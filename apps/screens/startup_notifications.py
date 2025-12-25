@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 LCD_STICKY_LOCK_FILE = "lcd-sticky"
 LCD_LATEST_LOCK_FILE = "lcd-latest"
 LCD_LEGACY_FEATURE_LOCK = "lcd_screen_enabled.lck"
+LCD_LEGACY_RUNTIME_LOCK = "lcd_screen.lck"
 
 
 @dataclass(frozen=True)
@@ -57,7 +58,12 @@ def lcd_feature_enabled(lock_dir: Path) -> bool:
     if not lock_dir:
         return False
 
-    for name in (LCD_STICKY_LOCK_FILE, LCD_LATEST_LOCK_FILE, LCD_LEGACY_FEATURE_LOCK):
+    for name in (
+        LCD_STICKY_LOCK_FILE,
+        LCD_LATEST_LOCK_FILE,
+        LCD_LEGACY_FEATURE_LOCK,
+        LCD_LEGACY_RUNTIME_LOCK,
+    ):
         if (lock_dir / name).exists():
             return True
     return False

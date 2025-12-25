@@ -222,7 +222,7 @@ def main() -> None:  # pragma: no cover - hardware dependent
     sticky_mtime = 0.0
     latest_mtime = 0.0
     rotation_deadline = 0.0
-    state_order = ("sticky", "latest", "clock")
+    state_order = ("latest", "clock")
     state_index = 0
 
     signal.signal(signal.SIGTERM, _request_shutdown)
@@ -239,7 +239,9 @@ def main() -> None:  # pragma: no cover - hardware dependent
 
                 if display_state is None or now >= rotation_deadline:
                     try:
+                        sticky_available = False
                         sticky_stat = STICKY_LOCK_FILE.stat()
+                        sticky_available = True
                         if sticky_stat.st_mtime != sticky_mtime:
                             sticky_payload = _read_lock_file(STICKY_LOCK_FILE)
                             sticky_mtime = sticky_stat.st_mtime
@@ -255,6 +257,13 @@ def main() -> None:  # pragma: no cover - hardware dependent
                     except OSError:
                         latest_payload = LockPayload("", "", DEFAULT_SCROLL_MS)
                         latest_mtime = 0.0
+
+                    if sticky_available:
+                        state_order = ("sticky", "latest", "clock")
+                    else:
+                        state_order = ("latest", "clock")
+                    if state_index >= len(state_order):
+                        state_index = 0
 
                     def _payload_for_state(index: int) -> LockPayload:
                         state_label = state_order[index]
