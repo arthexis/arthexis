@@ -1361,6 +1361,20 @@ def _send_auto_upgrade_failure_message(base_dir: Path, reason: str, failure_coun
         )
 
 
+def _send_auto_upgrade_check_message(status: str) -> None:
+    from apps.nodes.models import NetMessage
+
+    timestamp = timezone.localtime(timezone.now()).strftime("%H:%M")
+    subject = f"UP-CHECK {timestamp}"
+
+    try:
+        NetMessage.broadcast(subject=subject, body=status[:16])
+    except Exception:
+        logger.warning(
+            "Failed to broadcast auto-upgrade check Net Message", exc_info=True
+        )
+
+
 def _record_auto_upgrade_failure(base_dir: Path, reason: str) -> int:
     normalized_reason = _normalize_failure_reason(reason)
     count = _read_auto_upgrade_failure_count(base_dir) + 1
@@ -1887,10 +1901,14 @@ def check_github_updates(
     branch = "main"
     ops = operations or _default_auto_upgrade_operations()
     state = AutoUpgradeState()
+    status = "FAILED"
 
     try:
         mode = _resolve_auto_upgrade_mode(base_dir, channel_override)
+        status = "NO-UPDATES"
+
         if not _apply_stable_schedule_guard(base_dir, mode, ops):
+            status = "SKIPPED"
             return
 
         startup = None
@@ -1915,13 +1933,17 @@ def check_github_updates(
 
         repo_state = _fetch_repository_state(base_dir, branch, mode, ops, state)
         if repo_state is None:
+            status = "SKIPPED"
             return
 
         plan = _plan_auto_upgrade(base_dir, mode, repo_state, notify, startup, ops)
         if plan is None:
+            status = "NO-UPDATES"
             return
 
         args, upgrade_was_applied = plan
+
+        status = "APPLIED" if upgrade_was_applied else "NO-UPDATES"
 
         _execute_upgrade_plan(
             base_dir,
@@ -1934,10 +1956,12 @@ def check_github_updates(
             state,
         )
     except Exception as exc:
+        status = "FAILED"
         _handle_auto_upgrade_failure(base_dir, exc, state)
         raise
     finally:
         _finalize_auto_upgrade(base_dir, state)
+        _send_auto_upgrade_check_message(status)
 
 
 @shared_task
