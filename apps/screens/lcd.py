@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import subprocess
 import time
+import os
 from dataclasses import dataclass
 
 try:  # pragma: no cover - hardware dependent
@@ -47,21 +48,49 @@ class _BusWrapper:
         bus.close()
 
 
+@dataclass
+class LCDTimings:
+    """Timing configuration for the LCD controller."""
+
+    pulse_enable_delay: float = 0.002
+    pulse_disable_delay: float = 0.002
+    command_delay: float = 0.005
+    data_delay: float = 0.003
+    clear_delay: float = 0.005
+
+    @classmethod
+    def from_env(cls) -> "LCDTimings":
+        """Load timing overrides from environment variables.
+
+        Values are interpreted as seconds to align with :func:`time.sleep`.
+        Unknown or invalid values fall back to the defaults.
+        """
+
+        def _load(name: str, default: float) -> float:
+            raw = os.getenv(name)
+            if not raw:
+                return default
+            try:
+                return float(raw)
+            except (TypeError, ValueError):
+                return default
+
+        return cls(
+            pulse_enable_delay=_load("LCD_PULSE_ENABLE_DELAY", cls.pulse_enable_delay),
+            pulse_disable_delay=_load("LCD_PULSE_DISABLE_DELAY", cls.pulse_disable_delay),
+            command_delay=_load("LCD_COMMAND_DELAY", cls.command_delay),
+            data_delay=_load("LCD_DATA_DELAY", cls.data_delay),
+            clear_delay=_load("LCD_CLEAR_DELAY", cls.clear_delay),
+        )
+
+
 class CharLCD1602:
     """Minimal driver for PCF8574/PCF8574A I2C backpack (LCD1602)."""
 
     columns = 16
     rows = 2
-    # The controller can misinterpret rapid nibble transitions on noisy buses,
-    # which causes writes intended for row 2 to land on row 1. Slower timings
-    # reduce the chance of missing enable pulses or truncated commands.
-    pulse_enable_delay = 0.002
-    pulse_disable_delay = 0.002
-    command_delay = 0.005
-    data_delay = 0.003
-    clear_delay = 0.005
 
-    def __init__(self, bus: _BusWrapper | None = None) -> None:
+    def __init__(self, bus: _BusWrapper | None = None, timings: LCDTimings | None = None) -> None:
         if smbus is None:  # pragma: no cover - hardware dependent
             raise LCDUnavailableError(SMBUS_HINT)
         self.bus = bus or _BusWrapper(1)
@@ -69,6 +98,7 @@ class CharLCD1602:
         self.PCF8574_address = 0x27
         self.PCF8574A_address = 0x3F
         self.LCD_ADDR = self.PCF8574_address
+        self.timings = timings or LCDTimings.from_env()
 
     def _write_word(self, addr: int, data: int) -> None:
         if self.BLEN:
@@ -79,9 +109,9 @@ class CharLCD1602:
 
     def _pulse_enable(self, data: int) -> None:
         self._write_word(self.LCD_ADDR, data | 0x04)
-        time.sleep(self.pulse_enable_delay)
+        time.sleep(self.timings.pulse_enable_delay)
         self._write_word(self.LCD_ADDR, data & ~0x04)
-        time.sleep(self.pulse_disable_delay)
+        time.sleep(self.timings.pulse_disable_delay)
 
     def send_command(self, cmd: int) -> None:
         high = cmd & 0xF0
@@ -91,7 +121,7 @@ class CharLCD1602:
         self._write_word(self.LCD_ADDR, low)
         self._pulse_enable(low)
         # Give the LCD time to process the command to avoid garbled output.
-        time.sleep(self.command_delay)
+        time.sleep(self.timings.command_delay)
 
     def send_data(self, data: int) -> None:
         high = (data & 0xF0) | 0x01
@@ -101,7 +131,7 @@ class CharLCD1602:
         self._write_word(self.LCD_ADDR, low)
         self._pulse_enable(low)
         # Allow the LCD controller to catch up between data writes.
-        time.sleep(self.data_delay)
+        time.sleep(self.timings.data_delay)
 
     def i2c_scan(self) -> list[str]:  # pragma: no cover - requires hardware
         """Return a list of detected I2C addresses.
@@ -155,7 +185,7 @@ class CharLCD1602:
 
     def clear(self) -> None:
         self.send_command(0x01)
-        time.sleep(self.clear_delay)
+        time.sleep(self.timings.clear_delay)
 
     def reset(self) -> None:
         """Re-run the initialisation sequence to recover the display."""
@@ -173,4 +203,34 @@ class CharLCD1602:
         addr = 0x80 + 0x40 * y + x
         self.send_command(addr)
         for ch in str(s):
+            self.send_data(ord(ch))
+
+    def write_frame(self, line1: str, line2: str, retries: int = 1) -> None:
+        """Write two rows as a single transaction with retry and cursor reset."""
+
+        last_error: Exception | None = None
+        for attempt in range(retries + 1):
+            try:
+                self._write_row(0, line1)
+                self._write_row(1, line2)
+                # Return the cursor home to avoid drifting address pointers when
+                # the controller misses an enable pulse.
+                self.send_command(0x02)
+                return
+            except Exception as exc:  # pragma: no cover - hardware dependent
+                last_error = exc
+                time.sleep(self.timings.command_delay)
+                try:
+                    self.reset()
+                except Exception:
+                    # Reset failures are not fatal for retry attempts.
+                    pass
+        if last_error:
+            raise last_error
+
+    def _write_row(self, row: int, text: str) -> None:
+        padded = str(text).ljust(self.columns)
+        addr = 0x80 + 0x40 * max(0, min(self.rows - 1, int(row)))
+        self.send_command(addr)
+        for ch in padded:
             self.send_data(ord(ch))
