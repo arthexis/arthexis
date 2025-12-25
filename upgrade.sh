@@ -702,7 +702,6 @@ DETACHED=0
 CHECK_ONLY=0
 PRE_CHECK=0
 REQUESTED_BRANCH=""
-SERVER_MODE=0
 FORWARDED_ARGS=()
 # Parse CLI options controlling the upgrade strategy.
 while [[ $# -gt 0 ]]; do
@@ -773,11 +772,6 @@ while [[ $# -gt 0 ]]; do
       ;;
     --check)
       CHECK_ONLY=1
-      shift
-      ;;
-    --tail-server)
-      SERVER_MODE=1
-      FORWARDED_ARGS+=("$1")
       shift
       ;;
     --branch)
@@ -1444,22 +1438,6 @@ else
       printf 'LCD_WAS_ACTIVE=%s\n' "$LCD_WAS_ACTIVE"
     } > "$UPGRADE_RERUN_LOCK"
     notify_lcd_manual_upgrade_required
-    if [[ $SERVER_MODE -eq 1 ]]; then
-      echo "upgrade.sh was updated during git pull; rebooting in 60 seconds to re-run with the new script." >&2
-      if [ -t 0 ]; then
-        echo "Press any key within 60 seconds to cancel the reboot." >&2
-        if read -r -n 1 -t 60; then
-          echo "Reboot cancelled. Please run the upgrade again to use the new script." >&2
-          exit "$UPGRADE_RERUN_EXIT_CODE"
-        fi
-      else
-        echo "No interactive terminal detected; waiting 60 seconds before reboot." >&2
-        sleep 60
-      fi
-      echo "Rebooting now to apply the updated upgrade script." >&2
-      trigger_upgrade_reboot
-      exit "$UPGRADE_RERUN_EXIT_CODE"
-    fi
     echo "upgrade.sh was updated during git pull; please run the upgrade again to use the new script." >&2
     exit "$UPGRADE_RERUN_EXIT_CODE"
   fi
@@ -1608,38 +1586,3 @@ fi
 
 arthexis_refresh_desktop_shortcuts "$BASE_DIR"
 
-if [[ $SERVER_MODE -eq 1 ]]; then
-  if [[ $LOCAL_ONLY -eq 1 ]]; then
-    echo "Upgrade server mode running with --local; remote polling is disabled."
-  fi
-  if [ -z "$PYTHON_BIN" ]; then
-    echo "Python executable not available; unable to run test suite." >&2
-    exit 1
-  fi
-  echo "Running test suite after upgrade..."
-  if ! "$PYTHON_BIN" -m pytest; then
-    echo "Test suite failed after upgrade." >&2
-    exit 1
-  fi
-  echo "Upgrade server mode enabled; polling for updates every 60 seconds."
-  while true; do
-    sleep 60
-    if [[ $LOCAL_ONLY -eq 1 ]]; then
-      continue
-    fi
-    if ! command -v git >/dev/null 2>&1; then
-      echo "git not available; unable to poll for updates." >&2
-      continue
-    fi
-    if ! fetch_branch_with_ref_repair origin "$BRANCH"; then
-      echo "Failed to fetch updates for origin/$BRANCH; retrying in 60 seconds." >&2
-      continue
-    fi
-    CURRENT_REVISION="$(git rev-parse HEAD 2>/dev/null || echo "")"
-    LATEST_REVISION="$(git rev-parse "origin/$BRANCH" 2>/dev/null || echo "")"
-    if [[ -n "$CURRENT_REVISION" && -n "$LATEST_REVISION" && "$CURRENT_REVISION" != "$LATEST_REVISION" ]]; then
-      echo "Updates detected on origin/$BRANCH; re-running upgrade."
-      exec "$UPGRADE_SCRIPT_PATH" "${FORWARDED_ARGS[@]}"
-    fi
-  done
-fi
