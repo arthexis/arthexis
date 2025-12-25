@@ -7,6 +7,7 @@ from django.test import TestCase, override_settings
 from apps.nodes.models import Node, NodeFeature
 from apps.screens.startup_notifications import (
     LCD_LEGACY_FEATURE_LOCK,
+    LCD_LEGACY_RUNTIME_LOCK,
     LCD_LATEST_LOCK_FILE,
     LCD_STICKY_LOCK_FILE,
     lcd_feature_enabled,
@@ -84,5 +85,13 @@ class LCDStartupNotificationTests(TestCase):
             lock_dir = Path(tmpdir) / ".locks"
             lock_dir.mkdir(parents=True)
             (lock_dir / LCD_LEGACY_FEATURE_LOCK).write_text("", encoding="utf-8")
+
+            self.assertTrue(lcd_feature_enabled(lock_dir))
+
+    def test_lcd_feature_enabled_detects_legacy_runtime_lock(self):
+        with TemporaryDirectory() as tmpdir:
+            lock_dir = Path(tmpdir) / ".locks"
+            lock_dir.mkdir(parents=True)
+            (lock_dir / LCD_LEGACY_RUNTIME_LOCK).write_text("", encoding="utf-8")
 
             self.assertTrue(lcd_feature_enabled(lock_dir))
