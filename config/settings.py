@@ -701,12 +701,14 @@ else:
     else:
         SQLITE_DB_PATH = BASE_DIR / "db.sqlite3"
 
+    SQLITE_TEST_DB_PATH = BASE_DIR / "work" / "test_db" / "test_db.sqlite3"
+
     DATABASES = {
         "default": {
             "ENGINE": "django.db.backends.sqlite3",
             "NAME": SQLITE_DB_PATH,
             "OPTIONS": {"timeout": 60},
-            "TEST": {"NAME": BASE_DIR / "test_db.sqlite3"},
+            "TEST": {"NAME": SQLITE_TEST_DB_PATH},
         }
     }
 
