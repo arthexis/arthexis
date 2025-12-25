@@ -1361,6 +1361,23 @@ def _send_auto_upgrade_failure_message(base_dir: Path, reason: str, failure_coun
         )
 
 
+def _broadcast_auto_upgrade_check_status(status: str) -> None:
+    """Send a short Net Message summarizing the upgrade check result."""
+
+    from apps.nodes.models import NetMessage
+
+    timestamp = timezone.localtime(timezone.now())
+    subject = timestamp.strftime("UP-CHECK %H:%M")
+    body = (status or "-")[:16]
+
+    try:
+        NetMessage.broadcast(subject=subject, body=body)
+    except Exception:
+        logger.warning(
+            "Failed to broadcast auto-upgrade check Net Message", exc_info=True
+        )
+
+
 def _record_auto_upgrade_failure(base_dir: Path, reason: str) -> int:
     normalized_reason = _normalize_failure_reason(reason)
     count = _read_auto_upgrade_failure_count(base_dir) + 1
@@ -1445,6 +1462,7 @@ class AutoUpgradeMode:
 class AutoUpgradeState:
     reset_network_failures: bool = True
     failure_recorded: bool = False
+    status: str = "FAILED"
 
 
 @dataclass
@@ -1768,6 +1786,7 @@ def _execute_upgrade_plan(
                 restart_if_active=False,
                 revert_on_failure=False,
             )
+            state.status = "RECENT-SKIP"
             return
 
     with log_file.open("a") as fh:
@@ -1792,6 +1811,7 @@ def _execute_upgrade_plan(
             restart_if_active=False,
             revert_on_failure=False,
         )
+        state.status = "RECENT-SKIP"
         return
 
     if upgrade_was_applied:
@@ -1821,6 +1841,7 @@ def _execute_upgrade_plan(
                 ),
             )
             _schedule_health_check(1)
+        state.status = "UPGRADE-RUN" if upgrade_was_applied else "CHECK-OK"
         return
 
     delegated_unit, ran_inline = ops.run_upgrade_command(base_dir, args)
@@ -1842,6 +1863,7 @@ def _execute_upgrade_plan(
                 ),
             )
             _schedule_health_check(1)
+        state.status = "UPGRADE-RUN" if upgrade_was_applied else "CHECK-OK"
         return
 
     if not ran_inline:
@@ -1851,6 +1873,7 @@ def _execute_upgrade_plan(
         )
         _record_auto_upgrade_failure(base_dir, "UPGRADE-LAUNCH")
         state.failure_recorded = True
+        state.status = "FAILED"
         return
 
     ops.ensure_runtime_services(
@@ -1858,6 +1881,7 @@ def _execute_upgrade_plan(
         restart_if_active=True,
         revert_on_failure=True,
     )
+    state.status = "UPGRADE-RUN" if upgrade_was_applied else "CHECK-OK"
 
 
 def _handle_auto_upgrade_failure(
@@ -1891,6 +1915,7 @@ def check_github_updates(
     try:
         mode = _resolve_auto_upgrade_mode(base_dir, channel_override)
         if not _apply_stable_schedule_guard(base_dir, mode, ops):
+            state.status = "GUARD-SKIP"
             return
 
         startup = None
@@ -1915,14 +1940,17 @@ def check_github_updates(
 
         repo_state = _fetch_repository_state(base_dir, branch, mode, ops, state)
         if repo_state is None:
+            state.status = "CHECK-SKIP"
             return
 
         plan = _plan_auto_upgrade(base_dir, mode, repo_state, notify, startup, ops)
         if plan is None:
+            state.status = "NO-UPDATE"
             return
 
         args, upgrade_was_applied = plan
 
+        state.status = "UPGRADE-RUN" if upgrade_was_applied else "CHECK-OK"
         _execute_upgrade_plan(
             base_dir,
             mode,
@@ -1934,10 +1962,12 @@ def check_github_updates(
             state,
         )
     except Exception as exc:
+        state.status = "FAILED"
         _handle_auto_upgrade_failure(base_dir, exc, state)
         raise
     finally:
         _finalize_auto_upgrade(base_dir, state)
+        _broadcast_auto_upgrade_check_status(state.status)
 
 
 @shared_task
