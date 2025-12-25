@@ -52,11 +52,14 @@ class CharLCD1602:
 
     columns = 16
     rows = 2
-    pulse_enable_delay = 0.001
-    pulse_disable_delay = 0.001
-    command_delay = 0.002
-    data_delay = 0.002
-    clear_delay = 0.003
+    # The controller can misinterpret rapid nibble transitions on noisy buses,
+    # which causes writes intended for row 2 to land on row 1. Slower timings
+    # reduce the chance of missing enable pulses or truncated commands.
+    pulse_enable_delay = 0.002
+    pulse_disable_delay = 0.002
+    command_delay = 0.005
+    data_delay = 0.003
+    clear_delay = 0.005
 
     def __init__(self, bus: _BusWrapper | None = None) -> None:
         if smbus is None:  # pragma: no cover - hardware dependent
