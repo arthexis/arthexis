@@ -3,12 +3,31 @@ from __future__ import annotations
 import os
 import sys
 from collections import defaultdict
+from pathlib import Path
 from typing import Any, Dict, List
 
 import django
 import pytest
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+
+
+def _ensure_clean_test_databases() -> None:
+    base_dir = Path(__file__).resolve().parent
+    candidates = [
+        base_dir / "test_db.sqlite3",
+        base_dir / "work" / "test_db.sqlite3",
+        base_dir / "work" / "test_db" / "test_db.sqlite3",
+    ]
+
+    for path in candidates:
+        if path.exists():
+            path.unlink()
+
+    (base_dir / "work" / "test_db").mkdir(parents=True, exist_ok=True)
+
+
+_ensure_clean_test_databases()
 django.setup()
 
 from apps.tests.domain import RecordedTestResult, persist_results  # noqa: E402
