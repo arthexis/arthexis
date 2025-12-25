@@ -9,9 +9,8 @@ from django.core.management import call_command
 from django.test import override_settings
 
 from apps.screens.startup_notifications import (
-    LCD_LOCK_FILE,
-    LCD_STATE_DISABLED,
-    LCD_STATE_ENABLED,
+    LCD_LATEST_LOCK_FILE,
+    LCD_STICKY_LOCK_FILE,
     read_lcd_lock_file,
 )
 
@@ -23,7 +22,7 @@ def temp_base_dir(tmp_path: Path) -> Path:
 
 
 def read_lock(base_dir: Path):
-    lock_file = base_dir / ".locks" / LCD_LOCK_FILE
+    lock_file = base_dir / ".locks" / LCD_LATEST_LOCK_FILE
     return read_lcd_lock_file(lock_file)
 
 
@@ -31,54 +30,35 @@ def test_creates_lock_file_and_sets_values(temp_base_dir: Path):
     with override_settings(BASE_DIR=temp_base_dir):
         call_command(
             "lcd_write",
-            state=LCD_STATE_ENABLED,
             subject="Hello",
             body="World",
-            flag=["net-message", "scroll_ms=1500"],
-            clear_flags=True,
         )
 
     lock_payload = read_lock(temp_base_dir)
     assert lock_payload is not None
-    assert lock_payload.state == LCD_STATE_ENABLED
     assert lock_payload.subject == "Hello"
     assert lock_payload.body == "World"
-    assert lock_payload.flags == ("net-message", "scroll_ms=1500")
 
 
 def test_updates_existing_lock_without_overwriting_missing_fields(temp_base_dir: Path):
-    lock_file = temp_base_dir / ".locks" / LCD_LOCK_FILE
-    lock_file.write_text(
-        "\n".join(
-            [
-                "state=disabled",
-                "Original",
-                "Body",
-                "scroll_ms=500",
-            ]
-        )
-        + "\n",
-        encoding="utf-8",
-    )
+    lock_file = temp_base_dir / ".locks" / LCD_LATEST_LOCK_FILE
+    lock_file.write_text("Original\nBody\n", encoding="utf-8")
 
     with override_settings(BASE_DIR=temp_base_dir):
         call_command(
             "lcd_write",
             body="Updated",
-            flag=["net-message"],
         )
 
     lock_payload = read_lock(temp_base_dir)
     assert lock_payload is not None
-    assert lock_payload.state == LCD_STATE_DISABLED
     assert lock_payload.subject == "Original"
     assert lock_payload.body == "Updated"
-    assert lock_payload.flags == ("scroll_ms=500", "net-message")
 
 
 def test_delete_lock_file(temp_base_dir: Path):
-    lock_file = temp_base_dir / ".locks" / LCD_LOCK_FILE
-    lock_file.write_text("state=enabled\nSubject\nBody\n", encoding="utf-8")
+    lock_file = temp_base_dir / ".locks" / LCD_LATEST_LOCK_FILE
+    lock_file.write_text("Subject\nBody\n", encoding="utf-8")
 
     with override_settings(BASE_DIR=temp_base_dir):
         call_command("lcd_write", delete=True)

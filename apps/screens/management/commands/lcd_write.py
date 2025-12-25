@@ -7,11 +7,9 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 from apps.screens.startup_notifications import (
-    LCD_LOCK_FILE,
-    LCD_STATE_DISABLED,
-    LCD_STATE_ENABLED,
-    LcdLockFile,
-    ensure_lcd_lock_file,
+    LCD_LATEST_LOCK_FILE,
+    LCD_STICKY_LOCK_FILE,
+    LcdMessage,
     read_lcd_lock_file,
     render_lcd_lock_file,
 )
@@ -21,25 +19,15 @@ from apps.sigils.sigil_resolver import resolve_sigils
 class Command(BaseCommand):
     """Update the LCD lock file or restart the LCD updater service."""
 
-    help = (
-        "Write subject/body/state/flags to the lcd lock file, delete it, or restart"
-        " the lcd updater service."
-    )
+    help = "Write subject/body to the lcd lock file, delete it, or restart the updater"
 
     def add_arguments(self, parser):
-        parser.add_argument("--state", choices=[LCD_STATE_ENABLED, LCD_STATE_DISABLED])
         parser.add_argument("--subject", help="First LCD line (max 64 chars)")
         parser.add_argument("--body", help="Second LCD line (max 64 chars)")
         parser.add_argument(
-            "--flag",
-            action="append",
-            dest="flags",
-            help="Additional flags such as 'net-message' or 'scroll_ms=1500'",
-        )
-        parser.add_argument(
-            "--clear-flags",
+            "--sticky",
             action="store_true",
-            help="Remove existing flags before applying new ones",
+            help="Write to the sticky LCD lock instead of the latest lock",
         )
         parser.add_argument(
             "--delete",
@@ -56,7 +44,7 @@ class Command(BaseCommand):
             dest="resolve_sigils",
             action="store_false",
             default=True,
-            help="Disable resolving [SIGILS] in subject/body/flags before writing the lock file",
+            help="Disable resolving [SIGILS] in subject/body before writing the lock file",
         )
         parser.add_argument(
             "--service",
@@ -70,7 +58,8 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         base_dir = Path(settings.BASE_DIR)
         lock_dir = base_dir / ".locks"
-        lock_file = lock_dir / LCD_LOCK_FILE
+        target_name = LCD_STICKY_LOCK_FILE if options.get("sticky") else LCD_LATEST_LOCK_FILE
+        lock_file = lock_dir / target_name
 
         if options["delete"]:
             self._delete_lock_file(lock_file)
@@ -90,43 +79,25 @@ class Command(BaseCommand):
 
     def _write_lock_file(self, lock_dir: Path, lock_file: Path, options: dict) -> None:
         lock_dir.mkdir(parents=True, exist_ok=True)
-        existing = read_lcd_lock_file(lock_file) or self._default_lock_payload(lock_dir)
+        existing = read_lcd_lock_file(lock_file) or self._default_lock_payload()
 
-        state = options.get("state") or existing.state
-        subject = options.get("subject") if options.get("subject") is not None else existing.subject
+        subject = (
+            options.get("subject")
+            if options.get("subject") is not None
+            else existing.subject
+        )
         body = options.get("body") if options.get("body") is not None else existing.body
-
-        if options.get("clear_flags"):
-            flags: list[str] = []
-        else:
-            flags = list(existing.flags)
-
-        for flag in options.get("flags") or []:
-            if flag and flag not in flags:
-                flags.append(flag)
 
         if options.get("resolve_sigils"):
             subject = resolve_sigils(subject)
             body = resolve_sigils(body)
-            flags = [resolve_sigils(flag) for flag in flags]
 
-        payload = render_lcd_lock_file(
-            state=state,
-            subject=subject,
-            body=body,
-            flags=flags,
-        )
+        payload = render_lcd_lock_file(subject=subject, body=body)
         lock_file.write_text(payload, encoding="utf-8")
         self.stdout.write(self.style.SUCCESS(f"Updated {lock_file}"))
 
-    def _default_lock_payload(self, lock_dir: Path) -> LcdLockFile:
-        ensure_lcd_lock_file(lock_dir)
-        payload = read_lcd_lock_file(lock_dir / LCD_LOCK_FILE)
-        if payload:
-            return payload
-        return LcdLockFile(
-            state=LCD_STATE_ENABLED, subject="", body="", flags=()
-        )
+    def _default_lock_payload(self) -> LcdMessage:
+        return LcdMessage(subject="", body="")
 
     def _restart_service(self, *, base_dir: Path, service_name: str | None) -> None:
         resolved_service = service_name or self._read_service_name(base_dir)

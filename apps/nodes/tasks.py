@@ -18,6 +18,7 @@ from django.utils import timezone as django_timezone
 
 from apps.content.models import ContentSample
 from apps.screens.startup_notifications import (
+    LCD_STICKY_LOCK_FILE,
     lcd_feature_enabled,
     queue_startup_message,
 )
@@ -51,7 +52,11 @@ def send_startup_net_message(lock_file: str | None = None, port: str | None = No
         logger.debug("Unable to set startup Net Message cache flag", exc_info=True)
 
     base_dir = Path(getattr(settings, "BASE_DIR", Path(__file__).resolve().parents[1]))
-    target_lock = Path(lock_file) if lock_file else base_dir / ".locks" / "lcd_screen.lck"
+    target_lock = (
+        Path(lock_file)
+        if lock_file
+        else base_dir / ".locks" / LCD_STICKY_LOCK_FILE
+    )
     lock_dir = target_lock.parent.resolve()
 
     if not lcd_feature_enabled(lock_dir):
