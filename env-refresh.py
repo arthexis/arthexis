@@ -98,6 +98,32 @@ def _fixture_files() -> list[str]:
     return sorted(fixtures)
 
 
+def _fixture_tables(fixtures: list[str]) -> set[str]:
+    """Return database table names referenced by *fixtures*.
+
+    Fixtures that target models missing from the current apps registry are
+    ignored so optional/removed fixtures do not block the refresh process.
+    """
+
+    required_tables: set[str] = set()
+    base_dir = Path(settings.BASE_DIR)
+    for name in fixtures:
+        source = base_dir / name
+        try:
+            with source.open() as f:
+                data = json.load(f)
+        except FileNotFoundError:
+            continue
+        for obj in data:
+            model_label = obj.get("model", "")
+            try:
+                model = apps.get_model(model_label)
+            except LookupError:
+                continue
+            required_tables.add(model._meta.db_table)
+    return required_tables
+
+
 def _load_fixture_with_retry(
     fixture: str,
     *,
@@ -433,6 +459,28 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
     )
 
     if should_load_fixtures:
+        required_tables = _fixture_tables(fixtures)
+        existing_tables = set(connection.introspection.table_names())
+        missing_tables = required_tables - existing_tables
+        if missing_tables:
+            if using_sqlite:
+                print(
+                    "Missing tables detected before loading fixtures; resetting "
+                    "SQLite database.",
+                    flush=True,
+                )
+                _unlink_sqlite_db(Path(default_db["NAME"]))
+                call_command("migrate", interactive=False)
+                SigilRoot.objects.all().delete()
+                call_command("register_site_apps")
+                existing_tables = set(connection.introspection.table_names())
+                missing_tables = required_tables - existing_tables
+            if missing_tables:
+                raise OperationalError(
+                    "Cannot load fixtures because required tables are missing: "
+                    f"{', '.join(sorted(missing_tables))}"
+                )
+
         fixtures.sort(key=_fixture_sort_key)
         with tempfile.TemporaryDirectory() as tmpdir:
             patched: dict[int, list[str]] = {}
