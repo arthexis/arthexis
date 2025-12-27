@@ -1,5 +1,15 @@
+#!/usr/bin/env python
+"""Static import resolution checker.
+
+This script walks the project tree looking for Python modules whose imports
+cannot be resolved. It is intended to be used as a lightweight linting step
+outside the runtime test suite.
+"""
+from __future__ import annotations
+
 import ast
 import importlib.util
+import os
 import sys
 from pathlib import Path
 from typing import Iterable, Iterator, NamedTuple
@@ -15,6 +25,15 @@ OPTIONAL_MODULES = {
     "pwd",
     "resource",
 }
+
+
+def _prepare_django() -> None:
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+    try:
+        import django
+    except ImportError:
+        return
+    django.setup(set_prefix=False)
 
 
 class ImportIssue(NamedTuple):
@@ -96,6 +115,9 @@ class ImportCollector(ast.NodeVisitor):
             return
         if module in OPTIONAL_MODULES:
             return
+        module_path = PROJECT_ROOT / Path(module.replace(".", "/"))
+        if self._path_exists(module_path):
+            return
         try:
             spec = importlib.util.find_spec(module)
         except Exception:
@@ -169,8 +191,9 @@ def collect_missing_imports(files: Iterable[Path]) -> list[ImportIssue]:
     return issues
 
 
-def test_imports_are_resolvable() -> None:
+def main() -> int:
     sys.path.insert(0, str(PROJECT_ROOT))
+    _prepare_django()
     files = list(iter_python_files(PROJECT_ROOT))
     issues = collect_missing_imports(files)
     if issues:
@@ -178,4 +201,10 @@ def test_imports_are_resolvable() -> None:
             f"{issue.path.relative_to(PROJECT_ROOT)}:{issue.lineno} -> {issue.module} ({issue.message})"
             for issue in sorted(issues)
         )
-        raise AssertionError(f"Unresolved imports detected:\n{formatted}")
+        print(f"Unresolved imports detected:\n{formatted}")
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
