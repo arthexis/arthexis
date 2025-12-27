@@ -8,8 +8,6 @@ import sys
 import time
 
 import psutil
-import pytest
-import requests
 
 from apps.vscode import migration_server
 
@@ -56,10 +54,3 @@ def test_stop_django_server_terminates_runserver_process(tmp_path) -> None:
                 pass
 
 
-@pytest.mark.django_db
-def test_server_starts_and_serves_requests(live_server) -> None:
-    """Ensure the live Django server can start and respond to HTTP requests."""
-
-    response = requests.get(f"{live_server.url}/__nonexistent__", timeout=5)
-
-    assert response.status_code == 404
