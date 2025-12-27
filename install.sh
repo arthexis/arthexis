@@ -16,6 +16,8 @@ PIP_INSTALL_HELPER="$SCRIPT_DIR/scripts/helpers/pip_install.py"
 . "$SCRIPT_DIR/scripts/helpers/systemd_locks.sh"
 # shellcheck source=scripts/helpers/service_manager.sh
 . "$SCRIPT_DIR/scripts/helpers/service_manager.sh"
+# shellcheck source=scripts/helpers/timing.sh
+. "$SCRIPT_DIR/scripts/helpers/timing.sh"
 
 # Determine the target user and re-exec as needed before continuing.
 if [ -z "${ARTHEXIS_RUN_AS_USER:-}" ]; then
@@ -373,6 +375,8 @@ LOCK_DIR="$BASE_DIR/.locks"
 SYSTEMD_UNITS_LOCK="$LOCK_DIR/systemd_services.lck"
 DB_FILE="$BASE_DIR/db.sqlite3"
 
+arthexis_timing_setup "install"
+
 # Ensure the VERSION marker reflects the current revision before proceeding.
 arthexis_update_version_marker "$BASE_DIR"
 if [ "$CLEAN" = true ]; then
@@ -448,9 +452,13 @@ if [ "$ENABLE_CONTROL" != true ]; then
 fi
 
 
+arthexis_timing_start "virtualenv_setup"
 # Create virtual environment if missing
 if [ ! -d .venv ]; then
     python3 -m venv .venv
+    arthexis_timing_end "virtualenv_setup" "created"
+else
+    arthexis_timing_end "virtualenv_setup" "existing"
 fi
 
 echo "$PORT" > "$LOCK_DIR/backend_port.lck"
@@ -458,13 +466,16 @@ echo "$NGINX_MODE" > "$LOCK_DIR/nginx_mode.lck"
 echo "$NODE_ROLE" > "$LOCK_DIR/role.lck"
 
 source .venv/bin/activate
+arthexis_timing_start "pip_bootstrap"
 pip install --upgrade pip
+arthexis_timing_end "pip_bootstrap"
 
 REQ_FILE="requirements.txt"
 MD5_FILE="$LOCK_DIR/requirements.md5"
 NEW_HASH=$(md5sum "$REQ_FILE" | awk '{print $1}')
 STORED_HASH=""
 [ -f "$MD5_FILE" ] && STORED_HASH=$(cat "$MD5_FILE")
+arthexis_timing_start "requirements_install"
 if [ "$NEW_HASH" != "$STORED_HASH" ]; then
     if [ -f "$PIP_INSTALL_HELPER" ] && command -v python >/dev/null 2>&1; then
         python "$PIP_INSTALL_HELPER" -r "$REQ_FILE"
@@ -472,8 +483,10 @@ if [ "$NEW_HASH" != "$STORED_HASH" ]; then
         pip install -r "$REQ_FILE"
     fi
     echo "$NEW_HASH" > "$MD5_FILE"
+    arthexis_timing_end "requirements_install" "installed"
 else
     echo "Requirements unchanged. Skipping installation."
+    arthexis_timing_end "requirements_install" "skipped"
 fi
 
 
@@ -489,19 +502,27 @@ if python -m apps.cards.detect; then
 fi
 
 # Apply database migrations for a ready-to-run schema.
+arthexis_timing_start "django_migrate"
 python manage.py migrate --noinput
+arthexis_timing_end "django_migrate"
 
 # Load personal user data fixtures if present
 if ls data/*.json >/dev/null 2>&1; then
+    arthexis_timing_start "load_user_data"
     python manage.py load_user_data data/*.json
+    arthexis_timing_end "load_user_data"
+else
+    arthexis_timing_record "load_user_data" 0 "skipped"
 fi
 
 # Refresh environment data and register this node
+arthexis_timing_start "env_refresh"
 if [ "$CHANNEL" = "unstable" ]; then
     ./env-refresh.sh --latest
 else
     ./env-refresh.sh
 fi
+arthexis_timing_end "env_refresh"
 
 deactivate
 

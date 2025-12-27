@@ -39,6 +39,8 @@ trap log_upgrade_exit EXIT
 . "$BASE_DIR/scripts/helpers/service_manager.sh"
 # shellcheck source=scripts/helpers/suite-uptime-lock.sh
 . "$BASE_DIR/scripts/helpers/suite-uptime-lock.sh"
+# shellcheck source=scripts/helpers/timing.sh
+. "$BASE_DIR/scripts/helpers/timing.sh"
 arthexis_resolve_log_dir "$BASE_DIR" LOG_DIR || exit 1
 # Prefer python3 but fall back to python when only the legacy binary is available.
 DEFAULT_VENV_PYTHON="$BASE_DIR/.venv/bin/python"
@@ -60,6 +62,8 @@ SERVICE_NAME=""
 DISABLE_NGINX=0
 
 mkdir -p "$LOCK_DIR"
+
+arthexis_timing_setup "upgrade"
 
 ensure_git_safe_directory() {
   if ! command -v git >/dev/null 2>&1; then
@@ -1476,7 +1480,9 @@ if [ $VENV_PRESENT -eq 1 ]; then
     pip_install_env+=("PIP_BREAK_SYSTEM_PACKAGES=1")
     pip_install_flags+=("--break-system-packages")
   fi
+  arthexis_timing_start "pip_bootstrap"
   env "${pip_install_env[@]}" python -m pip install --upgrade pip "${pip_install_flags[@]}"
+  arthexis_timing_end "pip_bootstrap"
   # env-refresh.sh is responsible for syncing requirements and updating the
   # requirements.md5 lock file; avoid duplicating that work here.
   if [[ $DEFER_BROADCAST_MESSAGE -eq 1 ]]; then
@@ -1485,6 +1491,8 @@ if [ $VENV_PRESENT -eq 1 ]; then
     fi
   fi
   deactivate
+else
+  arthexis_timing_record "pip_bootstrap" 0 "skipped"
 fi
 
 # Remove existing database if requested
@@ -1503,10 +1511,16 @@ if [[ "$CHANNEL" == "unstable" ]]; then
   ENV_ARGS="--latest"
 fi
 echo "Refreshing environment..."
+arthexis_timing_start "env_refresh"
 FAILOVER_CREATED=1 ./env-refresh.sh $ENV_ARGS
+arthexis_timing_end "env_refresh"
 
 if [ -n "${PYTHON_BIN:-}" ] && ls data/*.json >/dev/null 2>&1; then
+  arthexis_timing_start "load_user_data"
   "$PYTHON_BIN" manage.py load_user_data data/*.json
+  arthexis_timing_end "load_user_data"
+elif [ -n "${PYTHON_BIN:-}" ]; then
+  arthexis_timing_record "load_user_data" 0 "skipped"
 fi
 
 if [ -n "$SERVICE_NAME" ]; then
