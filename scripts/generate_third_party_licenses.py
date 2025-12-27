@@ -43,24 +43,29 @@ def resolve_dependency_tree(dependencies: list[str]) -> list[tuple[str, str]]:
     if not dependencies:
         return []
 
-    with NamedTemporaryFile("w", delete=False) as tmp:
-        tmp.write("\n".join(dependencies))
-        req_path = tmp.name
+    req_path = ""
+    try:
+        with NamedTemporaryFile("w", delete=False) as tmp:
+            tmp.write("\n".join(dependencies))
+            req_path = tmp.name
 
-    cmd = [
-        sys.executable,
-        "-m",
-        "pip",
-        "install",
-        "--dry-run",
-        "--report",
-        "-",
-        "--ignore-installed",
-        "--quiet",
-        "-r",
-        req_path,
-    ]
-    result = subprocess.run(cmd, capture_output=True, text=True)
+        cmd = [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "--dry-run",
+            "--report",
+            "-",
+            "--ignore-installed",
+            "--quiet",
+            "-r",
+            req_path,
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+    finally:
+        if req_path:
+            Path(req_path).unlink(missing_ok=True)
     if result.returncode != 0:
         raise RuntimeError(
             "Failed to resolve dependency tree: "
