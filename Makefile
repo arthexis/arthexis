@@ -5,7 +5,6 @@ PORT ?= 8888
 CHANNEL ?= stable
 RELOAD ?=
 CELERY ?=
-START_ON_INSTALL ?=
 EXTRA_INSTALL_ARGS ?=
 EXTRA_START_ARGS ?=
 TEST_ARGS ?=
@@ -15,11 +14,10 @@ channel_flag := $(if $(filter latest,$(CHANNEL)),--latest,$(if $(filter stable,$
 port_arg := $(if $(PORT),--port $(PORT),)
 reload_flag := $(if $(filter true,$(RELOAD)),--reload,)
 celery_flag := $(if $(filter true,$(CELERY)),--celery,$(if $(filter false,$(CELERY)),--no-celery,))
-start_flag := $(if $(filter true,$(START_ON_INSTALL)),--start,$(if $(filter false,$(START_ON_INSTALL)),--no-start,))
 
 help:
 	@printf "Available targets:\n"
-	@printf "  make install [ROLE=terminal|control|satellite|watchtower] [PORT=8888] [START_ON_INSTALL=true|false] [CELERY=true|false] [CHANNEL=stable|latest|fixed] [EXTRA_INSTALL_ARGS=...]\\n"
+        @printf "  make install [ROLE=terminal|control|satellite|watchtower] [PORT=8888] [CELERY=true|false] [CHANNEL=stable|latest|fixed] [EXTRA_INSTALL_ARGS=...]\\n"
 	@printf "  make start [PORT=8888] [RELOAD=true] [CELERY=true|false] [EXTRA_START_ARGS=...]\\n"
 	@printf "  make stop\\n"
 	@printf "  make upgrade [CHANNEL=stable|latest|fixed]\\n"
@@ -30,7 +28,7 @@ help:
   @printf "  make dev [ROLE=terminal|control|satellite|watchtower] [PORT=8888] [RELOAD=true] [CELERY=true|false] [CHANNEL=stable|latest|fixed] [TEST_ARGS=...] [EXTRA_INSTALL_ARGS=...] [EXTRA_START_ARGS=...]\\n"
 
 install:
-	./install.sh $(role_flag) $(port_arg) $(start_flag) $(celery_flag) $(channel_flag) $(EXTRA_INSTALL_ARGS)
+        ./install.sh $(role_flag) $(port_arg) $(celery_flag) $(channel_flag) $(EXTRA_INSTALL_ARGS)
 
 start:
 	./start.sh $(port_arg) $(reload_flag) $(celery_flag) $(EXTRA_START_ARGS)
