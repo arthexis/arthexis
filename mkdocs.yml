@@ -7,7 +7,6 @@ nav:
       - Install & Lifecycle Scripts Manual: development/install-lifecycle-scripts-manual.md
       - Auto-Upgrade Flow: auto-upgrade.md
   - Architecture:
-      - Architecture Manifest: architecture_manifest.md
       - Logging Domain: logging-domain.md
       - Startup Sequence: startup-sequence.md
   - Charging Protocols:
