@@ -14,7 +14,12 @@ __all__ = ["unlink_sqlite_db"]
 
 
 def unlink_sqlite_db(path: Path) -> None:
-    """Close database connections and remove only the SQLite DB file."""
+    """Close database connections and remove only the SQLite DB file.
+
+    Related SQLite support files (``-wal``, ``-shm`` and ``-journal``) are
+    also removed to clear any lingering locks left behind by an interrupted
+    process.
+    """
 
     connections.close_all()
     try:
@@ -28,10 +33,14 @@ def unlink_sqlite_db(path: Path) -> None:
         raise RuntimeError(f"Refusing to delete database outside {base_dir}: {path}")
     if not re.fullmatch(r"(?:test_)?db(?:_[0-9a-f]{6})?\.sqlite3", path.name):
         raise RuntimeError(f"Refusing to delete unexpected database file: {path.name}")
-    for _ in range(5):
-        try:
-            path.unlink(missing_ok=True)
-            break
-        except PermissionError:
-            time.sleep(0.1)
-            connections.close_all()
+    related_suffixes = ("", "-wal", "-shm", "-journal")
+    targets = [path.with_name(path.name + suffix) for suffix in related_suffixes]
+
+    for target in targets:
+        for _ in range(5):
+            try:
+                target.unlink(missing_ok=True)
+                break
+            except PermissionError:
+                time.sleep(0.1)
+                connections.close_all()
