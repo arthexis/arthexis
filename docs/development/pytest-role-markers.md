@@ -1,16 +1,16 @@
 # Pytest node role and feature markers
 
-The CI pipeline now runs the full baseline test suite for every node role
-(Watchtower, Control, Satellite, and Terminal). Role-specific and hardware
-feature checks are enabled on top of that baseline by annotating tests with
-pytest markers. This keeps the common smoke coverage consistent while still
-allowing specialised suites to run only where they make sense.
+Our current CI runs a single Python test pipeline (on both a fresh install and
+an upgraded install) without a role matrix. Every CI job invokes `pytest` with no
+`NODE_ROLE` or `NODE_FEATURES` environment variables set, so the entire suite
+runs in the default configuration. There are no per-role test partitions at the
+moment.
 
 ## Role markers
 
 Use `@pytest.mark.role(<role name>)` when a test only applies to a particular
 node role. Tests without a role marker are assumed to be part of the baseline
-and run for every role.
+and run everywhere, which matches the default CI behaviour.
 
 Examples of role markers include:
 
@@ -26,16 +26,16 @@ when the behaviour spans several roles.
 When a test exercises functionality that depends on a `nodes.NodeFeature`, add
 `@pytest.mark.feature(<feature slug>)`. The slug must match the entry from the
 NodeFeature fixtures (for example `lcd-screen`, `rfid-scanner`, or
-`celery-queue`). Feature-marked tests are only executed for roles that ship that
-feature.
+`celery-queue`). Feature-marked tests should be used for suites that verify
+optional hardware integrations or node capabilities.
 
-Use feature markers for suites that verify optional hardware integrations or
-node capabilities. This keeps the per-role jobs focused on the features they
-actually ship.
+Because CI leaves `NODE_FEATURES` unset, feature-marked tests always run in the
+default pipeline. Locally you can constrain them to a specific set of features
+by exporting `NODE_FEATURES`.
 
 ## Local filtering
 
-Pytest honours the following environment variables:
+Pytest honours the following environment variables for local filtering:
 
 - `NODE_ROLE` – skips tests whose role markers do not include the requested
   role. Baseline tests (without role markers) always run.
@@ -44,7 +44,7 @@ Pytest honours the following environment variables:
   cover only the role-specific suites and fail fast when markers are missing.
 - `NODE_FEATURES` – comma-separated list of feature slugs to enable. Tests
   marked with `@pytest.mark.feature` are skipped if their features are not
-  listed. Leaving this unset (the default) runs all feature tests.
+  listed. Leaving this unset (the default in CI) runs all feature tests.
 
 Example invocations:
 
@@ -52,6 +52,3 @@ Example invocations:
 NODE_ROLE=Control pytest tests
 NODE_ROLE=Terminal NODE_FEATURES="lcd-screen,gui-toast" pytest tests/test_lcd_*.py
 ```
-
-Leaving `NODE_FEATURES` unset replicates the behaviour of the default CI jobs,
-which automatically populate the variable based on the role's enabled features.
