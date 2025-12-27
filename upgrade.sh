@@ -702,6 +702,8 @@ DETACHED=0
 CHECK_ONLY=0
 PRE_CHECK=0
 REQUESTED_BRANCH=""
+CLEAR_LOGS=0
+CLEAR_WORK=0
 FORWARDED_ARGS=()
 # Parse CLI options controlling the upgrade strategy.
 while [[ $# -gt 0 ]]; do
@@ -774,6 +776,16 @@ while [[ $# -gt 0 ]]; do
       CHECK_ONLY=1
       shift
       ;;
+    --clear-logs)
+      CLEAR_LOGS=1
+      FORWARDED_ARGS+=("$1")
+      shift
+      ;;
+    --clear-work)
+      CLEAR_WORK=1
+      FORWARDED_ARGS+=("$1")
+      shift
+      ;;
     --branch)
       if [[ -z "${2:-}" ]]; then
         echo "--branch requires an argument" >&2
@@ -817,6 +829,34 @@ run_detached_upgrade() {
   echo "Launching detached upgrade via $delegated_script..."
   "$delegated_script" "${upgrade_cmd[@]}"
   exit $?
+}
+
+clear_log_directory() {
+  local log_dir="$1"
+  local preserve_file="$2"
+
+  if [ -z "$log_dir" ] || [ ! -d "$log_dir" ]; then
+    return 0
+  fi
+
+  echo "Clearing log files in $log_dir..."
+  local -a find_args=("$log_dir" -mindepth 1)
+  if [ -n "$preserve_file" ]; then
+    find_args+=(-not -path "$preserve_file")
+  fi
+
+  find "${find_args[@]}" -exec rm -rf -- {} +
+}
+
+clear_work_directory() {
+  local work_dir="$BASE_DIR/work"
+
+  if [ ! -d "$work_dir" ]; then
+    return 0
+  fi
+
+  echo "Clearing work directory at $work_dir..."
+  find "$work_dir" -mindepth 1 -exec rm -rf -- {} +
 }
 
 if (( DETACHED )); then
@@ -1534,6 +1574,15 @@ if [ -f "$LOCK_DIR/service.lck" ]; then
 fi
 
 restore_stashed_changes_after_upgrade
+
+if [[ $CLEAR_LOGS -eq 1 ]]; then
+  clear_log_directory "$LOG_DIR" "$LOG_FILE"
+  clear_log_directory "$BASE_DIR/logs" "$LOG_FILE"
+fi
+
+if [[ $CLEAR_WORK -eq 1 ]]; then
+  clear_work_directory
+fi
 
 if [ -n "$SERVICE_NAME" ] && lcd_systemd_unit_present "$SERVICE_NAME"; then
   arthexis_install_lcd_service_unit "$BASE_DIR" "$LOCK_DIR" "$SERVICE_NAME"
