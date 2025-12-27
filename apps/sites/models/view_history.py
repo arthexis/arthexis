@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 
+from django.contrib.sites.models import Site
 from django.db import models
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
@@ -12,6 +13,20 @@ from apps.core.entity import Entity
 class ViewHistory(Entity):
     """Record of public site visits."""
 
+    class Kind(models.TextChoices):
+        SITE = "site", _("Site")
+        ADMIN = "admin", _("Admin")
+
+    kind = models.CharField(
+        max_length=20, choices=Kind.choices, default=Kind.SITE, db_index=True
+    )
+    site = models.ForeignKey(
+        Site,
+        on_delete=models.SET_NULL,
+        related_name="view_history",
+        null=True,
+        blank=True,
+    )
     path = models.CharField(max_length=2048)
     method = models.CharField(max_length=10)
     status_code = models.PositiveSmallIntegerField()
@@ -24,6 +39,10 @@ class ViewHistory(Entity):
         ordering = ["-visited_at"]
         verbose_name = _("View History")
         verbose_name_plural = _("View Histories")
+        indexes = [
+            models.Index(fields=["kind", "visited_at"]),
+            models.Index(fields=["site", "visited_at"]),
+        ]
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return f"{self.method} {self.path} ({self.status_code})"
