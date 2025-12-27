@@ -29,6 +29,7 @@ from django.db import connections, connection, close_old_connections
 from django.db.migrations.exceptions import (
     InconsistentMigrationHistory,
     InvalidBasesError,
+    MigrationSchemaMissing,
 )
 from django.db.utils import OperationalError
 from django.db.migrations.recorder import MigrationRecorder
@@ -149,6 +150,31 @@ def _load_fixture_with_retry(
                 flush=True,
             )
             time.sleep(delay)
+
+
+def _run_migrate(using_sqlite: bool, default_db: dict[str, Any], **kwargs: Any) -> None:
+    """Run migrations, rebuilding a corrupted SQLite database if needed."""
+
+    def _attempt() -> None:
+        call_command("migrate", **kwargs)
+
+    if not using_sqlite:
+        _attempt()
+        return
+
+    try:
+        _attempt()
+    except (MigrationSchemaMissing, OperationalError) as exc:
+        message = str(exc).lower()
+        if "database is locked" not in message and "disk i/o error" not in message:
+            raise
+        print(
+            "Detected locked or corrupted SQLite migrations; resetting database.",
+            flush=True,
+        )
+        _unlink_sqlite_db(Path(default_db["NAME"]))
+        close_old_connections()
+        _attempt()
 
 
 def _assign_many_to_many(instance: "Model", field_name: str, value: Any) -> bool:
@@ -388,7 +414,11 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
 
     if not connection.in_atomic_block:
         try:
-            call_command("migrate", interactive=False)
+            _run_migrate(
+                using_sqlite=using_sqlite,
+                default_db=default_db,
+                interactive=False,
+            )
         except MissingBranchSplinterError as exc:
             print(
                 "Detected a retroactively edited migration branch that this database "
@@ -401,13 +431,21 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
             raise
         except InconsistentMigrationHistory:
             call_command("reset_ocpp_migrations")
-            call_command("migrate", interactive=False)
+            _run_migrate(
+                using_sqlite=using_sqlite,
+                default_db=default_db,
+                interactive=False,
+            )
         except InvalidBasesError:
             raise
         except OperationalError as exc:
             if using_sqlite:
                 _unlink_sqlite_db(Path(default_db["NAME"]))
-                call_command("migrate", interactive=False)
+                _run_migrate(
+                    using_sqlite=using_sqlite,
+                    default_db=default_db,
+                    interactive=False,
+                )
             else:  # pragma: no cover - unreachable in sqlite
                 try:
                     import psycopg
@@ -427,7 +465,11 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                                     sql.Identifier(default_db["NAME"])
                                 )
                             )
-                    call_command("migrate", interactive=False)
+                    _run_migrate(
+                        using_sqlite=using_sqlite,
+                        default_db=default_db,
+                        interactive=False,
+                    )
                 except Exception:
                     raise exc
 
@@ -470,7 +512,11 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                     flush=True,
                 )
                 _unlink_sqlite_db(Path(default_db["NAME"]))
-                call_command("migrate", interactive=False)
+                _run_migrate(
+                    using_sqlite=using_sqlite,
+                    default_db=default_db,
+                    interactive=False,
+                )
                 SigilRoot.objects.all().delete()
                 call_command("register_site_apps")
                 existing_tables = set(connection.introspection.table_names())
