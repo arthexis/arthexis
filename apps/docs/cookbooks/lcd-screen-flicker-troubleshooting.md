@@ -2,6 +2,8 @@
 
 This guide helps troubleshoot LCD panels that briefly show the start message and then turn off until firmware upgrade or reboot completes.
 
+The LCD service now force-resets the controller whenever it restarts to clear garbled frames that can appear after upgrades.
+
 ## Quick checklist
 - **Power stability:** Confirm the display has a stable 12–24 V supply; voltage dips can cause the backlight controller to reset.
 - **Data cables:** Reseat the LVDS/eDP ribbon and the panel power connector to rule out loose seating.

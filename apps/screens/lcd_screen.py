@@ -381,6 +381,13 @@ def _advance_display(
         write_success,
     )
 
+def _initialize_lcd(reset: bool = True) -> CharLCD1602:
+    lcd = CharLCD1602()
+    lcd.init_lcd()
+    if reset:
+        lcd.reset()
+    return lcd
+
 
 def main() -> None:  # pragma: no cover - hardware dependent
     lcd = None
@@ -404,6 +411,15 @@ def main() -> None:  # pragma: no cover - hardware dependent
     signal.signal(signal.SIGHUP, _request_shutdown)
 
     try:
+        try:
+            lcd = _initialize_lcd()
+            frame_writer = LCDFrameWriter(lcd)
+            health.record_success()
+        except LCDUnavailableError as exc:
+            logger.warning("LCD unavailable during startup: %s", exc)
+        except Exception as exc:
+            logger.warning("LCD startup failed: %s", exc, exc_info=True)
+
         while True:
             if _handle_shutdown_request(lcd):
                 break
@@ -480,8 +496,7 @@ def main() -> None:  # pragma: no cover - hardware dependent
                     )
 
                 if lcd is None:
-                    lcd = CharLCD1602()
-                    lcd.init_lcd()
+                    lcd = _initialize_lcd()
                     frame_writer = LCDFrameWriter(lcd)
                     health.record_success()
 
