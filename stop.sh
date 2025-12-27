@@ -21,6 +21,8 @@ DJANGO_PID_FILE="$LOCK_DIR/django.pid"
 CELERY_WORKER_PID_FILE="$LOCK_DIR/celery_worker.pid"
 CELERY_BEAT_PID_FILE="$LOCK_DIR/celery_beat.pid"
 LCD_PID_FILE="$LOCK_DIR/lcd.pid"
+SERVICE_NAME=""
+[ -f "$LOCK_DIR/service.lck" ] && SERVICE_NAME="$(tr -d '\r\n' < "$LOCK_DIR/service.lck")"
 
 kill_from_pid_file() {
   local pid_file="$1"
@@ -46,6 +48,34 @@ kill_from_pid_file() {
   fi
 
   rm -f "$pid_file"
+}
+
+stop_embedded_lcd_processes() {
+  kill_from_pid_file "$LCD_PID_FILE" "LCD screen"
+  pkill -f "python -m apps.screens\\.lcd_screen" || true
+  rm -f "$LCD_PID_FILE"
+}
+
+stop_systemd_lcd_service() {
+  local service_name="$1"
+  if [ -z "$service_name" ] || ! command -v systemctl >/dev/null 2>&1; then
+    return 0
+  fi
+
+  local lcd_service="lcd-${service_name}"
+  if arthexis_lcd_feature_enabled "$LOCK_DIR" || systemctl list-unit-files | awk '{print $1}' | grep -Fxq "${lcd_service}.service"; then
+    $SUDO systemctl stop "$lcd_service" || true
+    $SUDO systemctl status "$lcd_service" --no-pager || true
+  fi
+}
+
+stop_all_lcd_modes() {
+  if [ "$SKIP_LCD_STOP" = "1" ] || [ "$SKIP_LCD_STOP" = "true" ]; then
+    return 0
+  fi
+
+  stop_embedded_lcd_processes
+  stop_systemd_lcd_service "$SERVICE_NAME"
 }
 
 # Use non-interactive sudo if available
@@ -149,8 +179,7 @@ SKIP_LCD_STOP="${ARTHEXIS_SKIP_LCD_STOP:-0}"
 arthexis_clear_suite_uptime_lock "$BASE_DIR" || true
 
 # Stop systemd-managed services when present
-if [ -f "$LOCK_DIR/service.lck" ]; then
-  SERVICE_NAME="$(cat "$LOCK_DIR/service.lck")"
+if [ -n "$SERVICE_NAME" ]; then
   if systemctl list-unit-files | grep -Fq "${SERVICE_NAME}.service"; then
     $SUDO systemctl stop "$SERVICE_NAME" || true
     $SUDO systemctl status "$SERVICE_NAME" --no-pager || true
@@ -174,13 +203,7 @@ if [ -f "$LOCK_DIR/service.lck" ]; then
       pkill -f "celery -A config" || true
     fi
 
-    if [ "$SKIP_LCD_STOP" != "1" ] && [ "$SKIP_LCD_STOP" != "true" ]; then
-      LCD_SERVICE="lcd-$SERVICE_NAME"
-      if arthexis_lcd_feature_enabled "$LOCK_DIR" || systemctl list-unit-files | awk '{print $1}' | grep -Fxq "${LCD_SERVICE}.service"; then
-        $SUDO systemctl stop "$LCD_SERVICE" || true
-        $SUDO systemctl status "$LCD_SERVICE" --no-pager || true
-      fi
-    fi
+    stop_all_lcd_modes
 
     exit 0
   fi
@@ -190,9 +213,7 @@ fi
 kill_from_pid_file "$DJANGO_PID_FILE" "Django server"
 kill_from_pid_file "$CELERY_WORKER_PID_FILE" "Celery worker"
 kill_from_pid_file "$CELERY_BEAT_PID_FILE" "Celery beat"
-if [ "$SKIP_LCD_STOP" != "1" ] && [ "$SKIP_LCD_STOP" != "true" ]; then
-  kill_from_pid_file "$LCD_PID_FILE" "LCD screen"
-fi
+stop_all_lcd_modes
 
 # Fall back to stopping locally-run processes
 PATTERN="manage.py runserver"
@@ -203,10 +224,3 @@ else
 fi
 # Also stop any Celery components started by start.sh
 pkill -f "celery -A config" || true
-if [ "$SKIP_LCD_STOP" != "1" ] && [ "$SKIP_LCD_STOP" != "true" ]; then
-  if arthexis_lcd_feature_enabled "$LOCK_DIR"; then
-    if [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_EMBEDDED" ] || ! command -v systemctl >/dev/null 2>&1; then
-      pkill -f "python -m apps.core\.lcd_screen" || true
-    fi
-  fi
-fi

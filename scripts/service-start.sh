@@ -227,6 +227,27 @@ if arthexis_lcd_feature_enabled "$LOCK_DIR"; then
   LCD_FEATURE=true
 fi
 
+stop_all_lcd_modes() {
+  local service_name="$1"
+
+  pkill -f "python -m apps.screens\\.lcd_screen" >/dev/null 2>&1 || true
+  rm -f "$LCD_PID_FILE"
+
+  if [ -z "$service_name" ] || ! command -v systemctl >/dev/null 2>&1; then
+    return 0
+  fi
+
+  local lcd_service="lcd-${service_name}"
+  if systemctl list-unit-files | awk '{print $1}' | grep -Fxq "${lcd_service}.service"; then
+    local -a systemctl_cmd=(systemctl)
+    if command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null; then
+      systemctl_cmd=(sudo -n systemctl)
+    fi
+
+    "${systemctl_cmd[@]}" stop "$lcd_service" || true
+  fi
+}
+
 queue_startup_net_message() {
   python - "$BASE_DIR" "$PORT" <<'PY'
 import sys
@@ -412,6 +433,7 @@ case "$CELERY_MANAGEMENT_MODE" in
 esac
 
 if [ "$LCD_FEATURE" = true ]; then
+  stop_all_lcd_modes "$SERVICE_NAME"
   if [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ] && [ "$LCD_SYSTEMD_UNIT" = true ]; then
     LCD_EMBEDDED=false
   else

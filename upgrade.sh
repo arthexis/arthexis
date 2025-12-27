@@ -1000,11 +1000,26 @@ lcd_service_was_active() {
     return 1
   fi
 
-  if pgrep -f "python -m apps.core\\.lcd_screen" >/dev/null 2>&1; then
+  if pgrep -f "python -m apps.screens\\.lcd_screen" >/dev/null 2>&1; then
     return 0
   fi
 
   return 1
+}
+
+stop_all_lcd_modes() {
+  local service_name="$1"
+
+  pgrep -f "python -m apps.screens\\.lcd_screen" >/dev/null 2>&1 && pkill -f "python -m apps.screens\\.lcd_screen" || true
+
+  if [ -z "$service_name" ] || [ ${#SYSTEMCTL_CMD[@]} -eq 0 ]; then
+    return 0
+  fi
+
+  local lcd_service="lcd-${service_name}"
+  if "${SYSTEMCTL_CMD[@]}" list-unit-files | awk '{print $1}' | grep -Fxq "${lcd_service}.service"; then
+    "${SYSTEMCTL_CMD[@]}" stop "$lcd_service" || true
+  fi
 }
 
 # Restart core, LCD, and Celery services while respecting systemd when available.
@@ -1014,6 +1029,9 @@ restart_services() {
   if [ -f "$LOCK_DIR/service.lck" ]; then
     local service_name
     service_name="$(cat "$LOCK_DIR/service.lck")"
+    if [ "$include_lcd" -eq 1 ]; then
+      stop_all_lcd_modes "$service_name"
+    fi
     local env_refresh_running=0
     if env_refresh_in_progress; then
       env_refresh_running=1
