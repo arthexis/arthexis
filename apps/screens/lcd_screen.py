@@ -13,13 +13,14 @@ import json
 import logging
 import math
 import os
+import random
 import signal
 import time
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from glob import glob
 from pathlib import Path
-from typing import NamedTuple
+from typing import Callable, NamedTuple
 
 def _resolve_base_dir() -> Path:
     env_base = os.getenv("ARTHEXIS_BASE_DIR")
@@ -79,6 +80,38 @@ LCD_ROWS = CharLCD1602.rows
 CLOCK_TIME_FORMAT = "%p %I:%M"
 CLOCK_DATE_FORMAT = "%Y-%m-%d %a"
 ROTATION_SECONDS = 10
+
+
+class FateDeck:
+    """Shuffle and draw from a 54-card fate deck."""
+
+    suits = ("D", "H", "C", "V")
+    values = ("A", "2", "3", "4", "5", "6", "7", "8", "9", "X", "J", "Q", "K")
+    jokers = ("XX", "XY")
+
+    def __init__(self, *, rng: random.Random | None = None) -> None:
+        self.rng = rng or random.Random()
+        self._cards: list[str] = []
+        self._reshuffle()
+
+    def _reshuffle(self) -> None:
+        deck = [f"{suit}{value}" for suit in self.suits for value in self.values]
+        deck.extend(self.jokers)
+        self.rng.shuffle(deck)
+        self._cards = deck
+
+    def draw(self) -> str:
+        if not self._cards:
+            self._reshuffle()
+        return self._cards.pop()
+
+    @property
+    def remaining(self) -> int:
+        return len(self._cards)
+
+
+FATE_VECTOR = ""
+_fate_deck = FateDeck()
 
 
 def _write_work_display(line1: str, line2: str, *, target: Path = WORK_FILE) -> None:
@@ -213,6 +246,17 @@ def _lcd_temperature_label() -> str | None:
     return None
 
 
+def _use_fate_vector() -> bool:
+    return random.random() < 0.5
+
+
+def _draw_fate_vector(deck: FateDeck | None = None) -> str:
+    global FATE_VECTOR
+    card = (deck or _fate_deck).draw()
+    FATE_VECTOR = card
+    return card
+
+
 def _lcd_temperature_label_from_sensors() -> str | None:
     return None
 
@@ -249,7 +293,13 @@ def _lcd_temperature_label_from_sysfs() -> str | None:
     return None
 
 
-def _clock_payload(now: datetime, *, use_fahrenheit: bool = False) -> tuple[str, str, int, str]:
+def _clock_payload(
+    now: datetime,
+    *,
+    use_fahrenheit: bool = False,
+    fate_deck: FateDeck | None = None,
+    choose_fate: Callable[[], bool] | None = None,
+) -> tuple[str, str, int, str]:
     temperature = _lcd_temperature_label()
     if temperature and use_fahrenheit:
         unit = temperature[-1].upper()
@@ -262,7 +312,9 @@ def _clock_payload(now: datetime, *, use_fahrenheit: bool = False) -> tuple[str,
                 temperature = f"{(temp_value * Decimal('9') / Decimal('5') + Decimal('32')):.1f}F"
     week_label = f"{now.isocalendar().week:02d}"
     date_label = f"{now.strftime(CLOCK_DATE_FORMAT)}{week_label}"
-    time_label = now.strftime(CLOCK_TIME_FORMAT)
+    fate = choose_fate or _use_fate_vector
+    prefix = _draw_fate_vector(fate_deck) if fate() else now.strftime("%p")
+    time_label = f"{prefix} {now.strftime('%I:%M')}"
     if temperature:
         time_label = f"{time_label} @ {temperature}"
     return (
