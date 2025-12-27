@@ -1211,7 +1211,7 @@ confirm_database_deletion() {
       targets+=("$name")
       seen[$name]=1
     fi
-  done < <(find "$BASE_DIR" -maxdepth 1 -type f \( -name 'db.sqlite3*' -o -name 'db_*.sqlite3*' \) -print0 2>/dev/null)
+  done < <(find "$BASE_DIR" -maxdepth 1 \( -type f -o -type l \) \( -name 'db.sqlite3*' -o -name 'db_*.sqlite3*' \) -print0 2>/dev/null)
 
   if [ ${#targets[@]} -eq 0 ] || [[ $NO_WARN -eq 1 ]]; then
     return 0
