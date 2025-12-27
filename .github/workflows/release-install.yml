@@ -21,7 +21,8 @@ jobs:
         with:
           python-version: '3.x'
       - run: |
-          bash install.sh --terminal || true
+          set -euo pipefail
+          bash install.sh --terminal
   upgrade:
     runs-on: ubuntu-latest
     steps:
@@ -35,7 +36,8 @@ jobs:
           python-version: '3.x'
       - name: Install from main
         run: |
-          bash install.sh --terminal || true
+          set -euo pipefail
+          bash install.sh --terminal
       - name: Checkout PR changes
         uses: actions/checkout@v6
         with:

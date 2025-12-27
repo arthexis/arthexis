@@ -104,7 +104,7 @@ For local bootstrapping, run `make dev` to install with defaults, start the serv
 
 ### 3. Install and upgrade
 - **Linux:**
-   - Run `make install ROLE=terminal` to bootstrap a default Terminal node (pass `ROLE=control`, `satellite`, or `watchtower` as needed). Override the port with `PORT=8888` (the default fallback), auto-start with `START_ON_INSTALL=true`, and control Celery with `CELERY=true|false`; other flags can be forwarded via `EXTRA_INSTALL_ARGS`.
+  - Run `make install ROLE=terminal` to bootstrap a default Terminal node (pass `ROLE=control`, `satellite`, or `watchtower` as needed). Override the port with `PORT=8888` (the default fallback) and control Celery with `CELERY=true|false`; other flags can be forwarded via `EXTRA_INSTALL_ARGS`.
    - Use `make upgrade` with `CHANNEL=stable|latest|fixed` to wrap [`upgrade.sh`](upgrade.sh).
    - Call the underlying scripts directly (`./install.sh`, `./upgrade.sh`) when you need flags not covered by the Makefile. Use `./install.sh --help` to see every available option.
    - Consult the [Install & Lifecycle Scripts Manual](docs/development/install-lifecycle-scripts-manual.md) for complete flag descriptions and operational notes.
