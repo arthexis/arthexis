@@ -258,7 +258,8 @@ def _clock_payload(now: datetime, *, use_fahrenheit: bool = False) -> tuple[str,
                 temp_value = None
             if temp_value is not None:
                 temperature = f"{(temp_value * Decimal('9') / Decimal('5') + Decimal('32')):.1f}F"
-    date_label = now.strftime(CLOCK_DATE_FORMAT)
+    week_label = f"{now.isocalendar().week:02d}"
+    date_label = f"{now.strftime(CLOCK_DATE_FORMAT)}{week_label}"
     time_label = now.strftime(CLOCK_TIME_FORMAT)
     if temperature:
         time_label = f"{time_label} @ {temperature}"

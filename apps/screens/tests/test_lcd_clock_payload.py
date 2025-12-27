@@ -21,5 +21,6 @@ def test_clock_payload_formats_temperature_units(monkeypatch, use_fahrenheit, ex
         datetime(2024, 1, 1, 12, 0), use_fahrenheit=use_fahrenheit
     )
 
-    assert line1 == "2024-01-01 Mon"
+    assert line1 == "2024-01-01 Mon01"
+    assert len(line1) == 16
     assert line2.endswith(expected_suffix)
