@@ -15,7 +15,7 @@ python scripts/generate_third_party_licenses.py
 
 | Package | Version / Marker | License | License text or project page |
 | --- | --- | --- | --- |
-| `amqp` | `amqp==5.3.1` | BSD | [link](http://github.com/celery/py-amqp) |
+| `amqp` | `amqp==5.3.1` | BSD | [link](https://github.com/celery/py-amqp) |
 | `anyio` | `anyio==4.12.0` | Unknown | [link](https://pypi.org/project/anyio/) |
 | `asgiref` | `asgiref==3.11.0` | BSD-3-Clause | [link](https://github.com/django/asgiref/) |
 | `asn1crypto` | `asn1crypto==1.5.1` | MIT | [link](https://github.com/wbond/asn1crypto) |
@@ -31,8 +31,8 @@ python scripts/generate_third_party_licenses.py
 | `celery` | `celery==5.5.3` | BSD-3-Clause | [link](https://docs.celeryq.dev/) |
 | `certifi` | `certifi==2025.11.12` | MPL-2.0 | [link](https://github.com/certifi/python-certifi) |
 | `cffi` | `cffi==2.0.0` | Unknown | [link](https://pypi.org/project/cffi/) |
-| `channels` | `channels==4.3.2` | BSD | [link](http://github.com/django/channels) |
-| `channels_redis` | `channels_redis==4.3.0` | BSD | [link](http://github.com/django/channels_redis/) |
+| `channels` | `channels==4.3.2` | BSD | [link](https://github.com/django/channels) |
+| `channels_redis` | `channels_redis==4.3.0` | BSD | [link](https://github.com/django/channels_redis/) |
 | `charset-normalizer` | `charset-normalizer==3.4.4` | MIT | [link](https://pypi.org/project/charset-normalizer/) |
 | `click` | `click==8.3.1` | Unknown | [link](https://pypi.org/project/click/) |
 | `click-didyoumean` | `click-didyoumean==0.3.1` | MIT | [link](https://github.com/click-contrib/click-didyoumean) |
@@ -119,9 +119,9 @@ python scripts/generate_third_party_licenses.py
 | `reportlab` | `reportlab==4.4.7` | BSD license (see license.txt for details), Copyright (c) 2000-2025, ReportLab Inc. | [link](https://www.reportlab.com/) |
 | `requests` | `requests==2.32.5` | Apache-2.0 | [link](https://requests.readthedocs.io) |
 | `requests-toolbelt` | `requests-toolbelt==1.0.0` | Apache 2.0 | [link](https://toolbelt.readthedocs.io/) |
-| `rfc3986` | `rfc3986==2.0.0` | Apache 2.0 | [link](http://rfc3986.readthedocs.io) |
+| `rfc3986` | `rfc3986==2.0.0` | Apache 2.0 | [link](https://rfc3986.readthedocs.io) |
 | `rich` | `rich==14.2.0` | MIT | [link](https://github.com/Textualize/rich) |
-| `RPi.GPIO` | `RPi.GPIO==0.7.1` | MIT | [link](http://sourceforge.net/projects/raspberry-gpio-python/) |
+| `RPi.GPIO` | `RPi.GPIO==0.7.1` | MIT | [link](https://sourceforge.net/projects/raspberry-gpio-python/) |
 | `s3transfer` | `s3transfer==0.11.1` | Apache License 2.0 | [link](https://github.com/boto/s3transfer) |
 | `SecretStorage` | `SecretStorage==3.5.0` | Unknown | [link](https://github.com/mitya57/secretstorage) |
 | `selenium` | `selenium==4.34.2` | Apache-2.0 | [link](https://www.selenium.dev) |
@@ -130,8 +130,8 @@ python scripts/generate_third_party_licenses.py
 | `six` | `six==1.17.0` | MIT | [link](https://github.com/benjaminp/six) |
 | `smbus2` | `smbus2==0.6.0` | MIT | [link](https://github.com/kplindegaard/smbus2) |
 | `sniffio` | `sniffio==1.3.1` | MIT OR Apache-2.0 | [link](https://github.com/python-trio/sniffio) |
-| `sortedcontainers` | `sortedcontainers==2.4.0` | Apache 2.0 | [link](http://www.grantjenks.com/docs/sortedcontainers/) |
-| `spidev` | `spidev==3.8` | MIT | [link](http://github.com/doceme/py-spidev) |
+| `sortedcontainers` | `sortedcontainers==2.4.0` | Apache 2.0 | [link](https://www.grantjenks.com/docs/sortedcontainers/) |
+| `spidev` | `spidev==3.8` | MIT | [link](https://github.com/doceme/py-spidev) |
 | `sqlparse` | `sqlparse==0.5.5` | BSD License | [link](https://pypi.org/project/sqlparse/) |
 | `tablib` | `tablib==3.9.0` | MIT License | [link](https://pypi.org/project/tablib/) |
 | `tinycss2` | `tinycss2==1.5.1` | BSD License | [link](https://www.courtbouillon.org/tinycss2) |
