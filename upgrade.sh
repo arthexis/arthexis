@@ -1475,7 +1475,8 @@ if [ $VENV_PRESENT -eq 1 ]; then
     pip_install_flags+=("--break-system-packages")
   fi
   env "${pip_install_env[@]}" python -m pip install --upgrade pip "${pip_install_flags[@]}"
-  install_requirements_if_changed
+  # env-refresh.sh is responsible for syncing requirements and updating the
+  # requirements.md5 lock file; avoid duplicating that work here.
   if [[ $DEFER_BROADCAST_MESSAGE -eq 1 ]]; then
     if ! broadcast_upgrade_start_net_message "$LOCAL_REVISION" "$REMOTE_REVISION"; then
       echo "Warning: failed to broadcast upgrade Net Message" >&2
