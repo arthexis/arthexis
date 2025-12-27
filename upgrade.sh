@@ -701,6 +701,8 @@ LOCAL_ONLY=0
 DETACHED=0
 CHECK_ONLY=0
 PRE_CHECK=0
+CLEAR_LOGS=0
+CLEAR_WORK=0
 REQUESTED_BRANCH=""
 FORWARDED_ARGS=()
 # Parse CLI options controlling the upgrade strategy.
@@ -753,6 +755,16 @@ while [[ $# -gt 0 ]]; do
       ;;
     --no-check)
       PRE_CHECK=0
+      FORWARDED_ARGS+=("$1")
+      shift
+      ;;
+    --clear-logs)
+      CLEAR_LOGS=1
+      FORWARDED_ARGS+=("$1")
+      shift
+      ;;
+    --clear-work)
+      CLEAR_WORK=1
       FORWARDED_ARGS+=("$1")
       shift
       ;;
@@ -1141,6 +1153,42 @@ restart_lcd_service() {
   echo "Restarting LCD service ${lcd_service}..."
   "${SYSTEMCTL_CMD[@]}" restart "$lcd_service" || return 1
   wait_for_service_active "$lcd_service" 1
+}
+
+clear_log_files_before_restart() {
+  local -a log_dirs=()
+
+  if [ -n "${LOG_DIR:-}" ]; then
+    log_dirs+=("$LOG_DIR")
+  fi
+
+  if [ -n "${BASE_DIR:-}" ]; then
+    local default_logs="$BASE_DIR/logs"
+    if [ -z "${LOG_DIR:-}" ] || [ "$LOG_DIR" != "$default_logs" ]; then
+      log_dirs+=("$default_logs")
+    fi
+  fi
+
+  local dir
+  for dir in "${log_dirs[@]}"; do
+    if [ -d "$dir" ]; then
+      echo "Clearing log files in $dir before restart..."
+      if [ -n "${LOG_FILE:-}" ]; then
+        find "$dir" -type f ! -path "$LOG_FILE" ! -name ".gitkeep" -print -delete
+      else
+        find "$dir" -type f ! -name ".gitkeep" -print -delete
+      fi
+    fi
+  done
+}
+
+clear_workdir_before_restart() {
+  local work_dir="$BASE_DIR/work"
+
+  if [ -d "$work_dir" ]; then
+    echo "Clearing work directory before restart..."
+    find "$work_dir" -mindepth 1 -exec rm -rf -- {} +
+  fi
 }
 
 upgrade_failure_recovery() {
@@ -1534,6 +1582,14 @@ if [ -f "$LOCK_DIR/service.lck" ]; then
 fi
 
 restore_stashed_changes_after_upgrade
+
+if [[ $CLEAR_LOGS -eq 1 ]]; then
+  clear_log_files_before_restart
+fi
+
+if [[ $CLEAR_WORK -eq 1 ]]; then
+  clear_workdir_before_restart
+fi
 
 if [ -n "$SERVICE_NAME" ] && lcd_systemd_unit_present "$SERVICE_NAME"; then
   arthexis_install_lcd_service_unit "$BASE_DIR" "$LOCK_DIR" "$SERVICE_NAME"

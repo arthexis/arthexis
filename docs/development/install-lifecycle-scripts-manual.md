@@ -89,6 +89,8 @@ Supported options:
 | `--latest` / `--unstable` | Follows the unstable channel, upgrading whenever the origin/main revision changes even if `VERSION` remains the same.【F:upgrade.sh†L249-L285】【F:upgrade.sh†L520-L550】 |
 | `--stable` / `--regular` / `--normal` | Uses the stable channel, aligning with release revisions and the weekly Thursday-morning auto-upgrade cadence (before 5:00 AM).【F:upgrade.sh†L249-L285】【F:upgrade.sh†L520-L550】 |
 | `--clean` | Deletes `db.sqlite3` (and any `db_*.sqlite3` snapshots) after confirmation so migrations start from a blank database.【F:upgrade.sh†L122-L167】【F:upgrade.sh†L420-L444】 |
+| `--clear-logs` | Removes existing log files so the next start writes fresh logs without previous entries.【F:upgrade.sh†L1024-L1061】【F:upgrade.sh†L1505-L1512】 |
+| `--clear-work` | Deletes the contents of `work/` before restarting, keeping temporary run artifacts from carrying over.【F:upgrade.sh†L1063-L1069】【F:upgrade.sh†L1505-L1512】 |
 | `--start` / `--no-start` | Forces services to start after the upgrade (even if they were previously stopped) or keeps them offline afterwards; `--no-start` also accepts the legacy `--no-restart` alias.【F:upgrade.sh†L123-L144】【F:upgrade.sh†L404-L419】【F:upgrade.sh†L514-L551】 |
 | `--no-warn` | Skips interactive confirmation before destructive database operations (used with `--clean` or uninstall flows).【F:upgrade.sh†L122-L167】 |
 
