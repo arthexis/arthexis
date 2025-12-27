@@ -1000,7 +1000,11 @@ lcd_service_was_active() {
     return 1
   fi
 
-  if pgrep -f "python -m apps.core\\.lcd_screen" >/dev/null 2>&1; then
+  if pgrep -f "python -m apps.screens\\.lcd_screen" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if pgrep -f "apps/screens/lcd_screen.py" >/dev/null 2>&1; then
     return 0
   fi
 
@@ -1014,6 +1018,9 @@ restart_services() {
   if [ -f "$LOCK_DIR/service.lck" ]; then
     local service_name
     service_name="$(cat "$LOCK_DIR/service.lck")"
+    if [ "$include_lcd" -eq 1 ]; then
+      arthexis_disable_lcd_modes "$LOCK_DIR" "$service_name"
+    fi
     local env_refresh_running=0
     if env_refresh_in_progress; then
       env_refresh_running=1

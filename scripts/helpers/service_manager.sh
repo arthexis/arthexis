@@ -107,6 +107,44 @@ arthexis_using_embedded_mode() {
   [ "$mode" = "$ARTHEXIS_SERVICE_MODE_EMBEDDED" ]
 }
 
+arthexis_stop_embedded_lcd_processes() {
+  local lock_dir="$1"
+
+  pkill -f "python -m apps.screens\\.lcd_screen" 2>/dev/null || true
+  pkill -f "apps/screens/lcd_screen.py" 2>/dev/null || true
+
+  if [ -n "$lock_dir" ]; then
+    rm -f "$lock_dir/lcd.pid"
+  fi
+}
+
+arthexis_start_systemd_unit_if_present() {
+  local unit_name="$1"
+
+  if [ -z "$unit_name" ] || ! command -v systemctl >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if systemctl list-unit-files | awk '{print $1}' | grep -Fxq "$unit_name"; then
+    if command -v sudo >/dev/null 2>&1; then
+      sudo systemctl start "$unit_name" || true
+    else
+      systemctl start "$unit_name" || true
+    fi
+  fi
+}
+
+arthexis_disable_lcd_modes() {
+  local lock_dir="$1"
+  local service_name="$2"
+
+  arthexis_stop_embedded_lcd_processes "$lock_dir"
+
+  if [ -n "$service_name" ]; then
+    arthexis_stop_systemd_unit_if_present "lcd-${service_name}.service"
+  fi
+}
+
 arthexis_stop_systemd_unit_if_present() {
   local unit_name="$1"
 

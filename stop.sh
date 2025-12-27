@@ -180,6 +180,7 @@ if [ -f "$LOCK_DIR/service.lck" ]; then
         $SUDO systemctl stop "$LCD_SERVICE" || true
         $SUDO systemctl status "$LCD_SERVICE" --no-pager || true
       fi
+      arthexis_stop_embedded_lcd_processes "$LOCK_DIR"
     fi
 
     exit 0
@@ -206,7 +207,7 @@ pkill -f "celery -A config" || true
 if [ "$SKIP_LCD_STOP" != "1" ] && [ "$SKIP_LCD_STOP" != "true" ]; then
   if arthexis_lcd_feature_enabled "$LOCK_DIR"; then
     if [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_EMBEDDED" ] || ! command -v systemctl >/dev/null 2>&1; then
-      pkill -f "python -m apps.core\.lcd_screen" || true
+      arthexis_stop_embedded_lcd_processes "$LOCK_DIR"
     fi
   fi
 fi

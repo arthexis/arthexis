@@ -191,6 +191,7 @@ SYSTEMD_CELERY_UNITS=false
 LCD_FEATURE=false
 LCD_SYSTEMD_UNIT=false
 LCD_EMBEDDED=false
+LCD_TARGET_MODE="$ARTHEXIS_SERVICE_MODE_EMBEDDED"
 CELERY_WORKER_PID=""
 CELERY_BEAT_PID=""
 LCD_PROCESS_PID=""
@@ -413,7 +414,16 @@ esac
 
 if [ "$LCD_FEATURE" = true ]; then
   if [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ] && [ "$LCD_SYSTEMD_UNIT" = true ]; then
+    LCD_TARGET_MODE="$ARTHEXIS_SERVICE_MODE_SYSTEMD"
+  fi
+
+  arthexis_disable_lcd_modes "$LOCK_DIR" "$SERVICE_NAME"
+
+  if [ "$LCD_TARGET_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
     LCD_EMBEDDED=false
+    if [ -n "$SERVICE_NAME" ]; then
+      arthexis_start_systemd_unit_if_present "lcd-${SERVICE_NAME}.service"
+    fi
   else
     LCD_EMBEDDED=true
     if [ "$LCD_SYSTEMD_UNIT" = true ]; then
