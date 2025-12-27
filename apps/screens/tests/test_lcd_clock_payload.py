@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import random
 
 import pytest
 
@@ -24,3 +25,43 @@ def test_clock_payload_formats_temperature_units(monkeypatch, use_fahrenheit, ex
     assert line1 == "2024-01-01 Mon01"
     assert len(line1) == 16
     assert line2.endswith(expected_suffix)
+
+
+def test_clock_payload_can_use_fate_vector(monkeypatch):
+    deck = lcd_screen.FateDeck(rng=random.Random(0))
+    monkeypatch.setattr(lcd_screen, "FATE_VECTOR", "")
+
+    line1, line2, _, _ = lcd_screen._clock_payload(
+        datetime(2024, 1, 1, 3, 15),
+        fate_deck=deck,
+        choose_fate=lambda: True,
+    )
+
+    assert line1.startswith("2024-01-01")
+    assert line2.startswith("HQ 03:15")
+    assert lcd_screen.FATE_VECTOR == "HQ"
+
+
+def test_clock_payload_respects_standard_am_pm(monkeypatch):
+    deck = lcd_screen.FateDeck(rng=random.Random(0))
+    lcd_screen.FATE_VECTOR = "PREVIOUS"
+
+    _, line2, _, _ = lcd_screen._clock_payload(
+        datetime(2024, 1, 1, 3, 15),
+        fate_deck=deck,
+        choose_fate=lambda: False,
+    )
+
+    assert line2.startswith("AM 03:15")
+    assert lcd_screen.FATE_VECTOR == "PREVIOUS"
+
+
+def test_fate_deck_reshuffles_when_empty():
+    deck = lcd_screen.FateDeck(rng=random.Random(1))
+    drawn = [deck.draw() for _ in range(54)]
+
+    next_card = deck.draw()
+
+    assert len(set(drawn)) == 54
+    assert deck.remaining == 53
+    assert next_card
