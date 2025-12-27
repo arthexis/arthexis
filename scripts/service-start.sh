@@ -434,6 +434,19 @@ run_runserver_preflight() {
     return 0
   fi
 
+  echo "Inspecting migrations before runserver..."
+  if migration_plan=$(python manage.py showmigrations --plan); then
+    if echo "$migration_plan" | grep -q '^\s*\[ \]'; then
+      echo "Applying pending migrations..."
+      python manage.py migrate --noinput
+    else
+      echo "No pending migrations detected; skipping migrate."
+    fi
+  else
+    echo "Failed to inspect migrations" >&2
+    return 1
+  fi
+
   echo "Running Django migration check once before runserver..."
   python manage.py migrate --check
 
