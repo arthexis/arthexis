@@ -1,15 +1,22 @@
 import json
 import re
+import subprocess
 import sys
 import textwrap
 import tomllib
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
 ROOT = Path(__file__).resolve().parents[1]
 PYPROJECT = ROOT / "pyproject.toml"
 DOC_PATH = ROOT / "docs" / "legal" / "THIRD_PARTY_LICENSES.md"
+LGPL3_URL = "https://www.gnu.org/licenses/lgpl-3.0.html"
+LICENSE_OVERRIDES: dict[str, tuple[str, str]] = {
+    "psycopg": ("LGPL-3.0-or-later", LGPL3_URL),
+    "psycopg-binary": ("LGPL-3.0-or-later", LGPL3_URL),
+}
 
 
 def load_dependencies() -> list[tuple[str, str]]:
@@ -30,6 +37,51 @@ def load_dependencies() -> list[tuple[str, str]]:
         spec_display = spec + (f"; {marker}" if marker else "")
         parsed.append((name, spec_display))
     return parsed
+
+
+def resolve_dependency_tree(dependencies: list[str]) -> list[tuple[str, str]]:
+    if not dependencies:
+        return []
+
+    with NamedTemporaryFile("w", delete=False) as tmp:
+        tmp.write("\n".join(dependencies))
+        req_path = tmp.name
+
+    cmd = [
+        sys.executable,
+        "-m",
+        "pip",
+        "install",
+        "--dry-run",
+        "--report",
+        "-",
+        "--ignore-installed",
+        "--quiet",
+        "-r",
+        req_path,
+    ]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(
+            "Failed to resolve dependency tree: "
+            f"{result.stderr.strip() or result.stdout.strip()}"
+        )
+
+    try:
+        report = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError("Failed to parse dependency resolution report") from exc
+
+    resolved: list[tuple[str, str]] = []
+    for item in report.get("install", []):
+        metadata = item.get("metadata") or {}
+        name = metadata.get("name")
+        version = metadata.get("version")
+        if not name or not version:
+            continue
+        resolved.append((name, f"{name}=={version}"))
+
+    return resolved
 
 
 def fetch_license(name: str) -> tuple[str, str]:
@@ -64,13 +116,19 @@ def fetch_license(name: str) -> tuple[str, str]:
     if len(license_name) > 180:
         license_name = license_name[:177] + "..."
 
+    override = LICENSE_OVERRIDES.get(name.lower())
+    if override:
+        license_name, license_url_override = override
+        license_url = license_url_override or license_url
+
     return license_name, license_url
 
 
 def build_inventory() -> list[dict[str, str]]:
     inventory: list[dict[str, str]] = []
     seen: set[str] = set()
-    for name, spec in load_dependencies():
+    dependency_specs = [spec for _, spec in load_dependencies()]
+    for name, spec in resolve_dependency_tree(dependency_specs):
         canonical = name.lower()
         if canonical in seen:
             continue
