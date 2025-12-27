@@ -162,6 +162,13 @@ def _run_migrate(using_sqlite: bool, default_db: dict[str, Any], **kwargs: Any) 
         _attempt()
         return
 
+    db_path = Path(default_db["NAME"])
+    if not db_path.exists():
+        _unlink_sqlite_db(db_path)
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        db_path.touch()
+        connections.close_all()
+
     try:
         _attempt()
     except (MigrationSchemaMissing, OperationalError) as exc:
@@ -173,6 +180,8 @@ def _run_migrate(using_sqlite: bool, default_db: dict[str, Any], **kwargs: Any) 
             flush=True,
         )
         _unlink_sqlite_db(Path(default_db["NAME"]))
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        db_path.touch()
         close_old_connections()
         _attempt()
 
