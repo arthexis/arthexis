@@ -1203,13 +1203,15 @@ versions_share_minor() {
 confirm_database_deletion() {
   local action="$1"
   local -a targets=()
+  local -A seen=()
 
-  if [ -f "$BASE_DIR/db.sqlite3" ]; then
-    targets+=("db.sqlite3")
-  fi
   while IFS= read -r -d '' path; do
-    targets+=("$(basename "$path")")
-  done < <(find "$BASE_DIR" -maxdepth 1 -type f -name 'db_*.sqlite3' -print0 2>/dev/null)
+    local name="$(basename "$path")"
+    if [[ -z ${seen[$name]:-} ]]; then
+      targets+=("$name")
+      seen[$name]=1
+    fi
+  done < <(find "$BASE_DIR" -maxdepth 1 -type f \( -name 'db.sqlite3*' -o -name 'db_*.sqlite3*' \) -print0 2>/dev/null)
 
   if [ ${#targets[@]} -eq 0 ] || [[ $NO_WARN -eq 1 ]]; then
     return 0
@@ -1491,8 +1493,8 @@ if [ "$CLEAN" -eq 1 ]; then
     echo "Upgrade aborted by user."
     exit 1
   fi
-  rm -f db.sqlite3
-  rm -f db_*.sqlite3 2>/dev/null || true
+  rm -f db.sqlite3 db.sqlite3* 2>/dev/null || true
+  rm -f db_*.sqlite3* 2>/dev/null || true
 fi
 
 # Refresh environment and restart service
