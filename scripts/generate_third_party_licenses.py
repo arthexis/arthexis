@@ -126,6 +126,9 @@ def fetch_license(name: str) -> tuple[str, str]:
         license_name, license_url_override = override
         license_url = license_url_override or license_url
 
+    license_name = license_name.replace("http://", "https://")
+    license_url = license_url.replace("http://", "https://")
+
     return license_name, license_url
 
 
