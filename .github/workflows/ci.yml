@@ -83,5 +83,19 @@ jobs:
           clean: false
       - name: Apply upgrade
         run: |
+          set -Eeuo pipefail
           source .venv/bin/activate
           ./upgrade.sh --local --no-restart
+
+      - name: Validate upgraded migrations
+        run: |
+          set -Eeuo pipefail
+          source .venv/bin/activate
+          python manage.py makemigrations --check --dry-run
+          python manage.py migrate --noinput --database default
+
+      - name: Run tests on upgraded install
+        run: |
+          set -Eeuo pipefail
+          source .venv/bin/activate
+          pytest --maxfail=1 --disable-warnings -q --timeout=30
