@@ -43,6 +43,10 @@ jobs:
           source .venv/bin/activate
           python manage.py makemigrations --check --dry-run
           python manage.py migrate --noinput --database default
+      - name: Check import resolution
+        run: |
+          source .venv/bin/activate
+          python scripts/check_import_resolution.py
       - name: Run tests
         run: |
           source .venv/bin/activate
@@ -93,6 +97,12 @@ jobs:
           source .venv/bin/activate
           python manage.py makemigrations --check --dry-run
           python manage.py migrate --noinput --database default
+
+      - name: Check import resolution on upgraded install
+        run: |
+          set -Eeuo pipefail
+          source .venv/bin/activate
+          python scripts/check_import_resolution.py
 
       - name: Run tests on upgraded install
         run: |
