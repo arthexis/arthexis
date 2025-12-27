@@ -14,6 +14,11 @@ try:  # pragma: no cover - optional dependency may be missing
 except Exception:  # pragma: no cover - fallback when installer is unavailable
     install_geckodriver = None
 
+try:  # pragma: no cover - optional dependency may be missing
+    from PIL import ImageGrab
+except Exception:  # pragma: no cover - fallback when dependency is unavailable
+    ImageGrab = None
+
 from apps.content.models import ContentSample
 from apps.content.utils import save_content_sample
 
@@ -88,6 +93,26 @@ def capture_screenshot(url: str, cookies=None) -> Path:
                 "Firefox WebDriver is unavailable. Install geckodriver or configure the GECKODRIVER environment variable so Selenium can locate it."
             )
         raise RuntimeError(f"Screenshot capture failed: {message}") from exc
+
+
+def capture_local_screenshot() -> Path:
+    """Capture a screenshot of the current screen and save it locally."""
+
+    if ImageGrab is None:
+        raise RuntimeError(
+            "Local screenshot capture failed: Pillow is not installed. Install Pillow to enable local screenshots."
+        )
+
+    SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
+    filename = SCREENSHOT_DIR / f"{datetime.utcnow():%Y%m%d%H%M%S}.png"
+
+    try:
+        image = ImageGrab.grab()
+    except Exception as exc:  # pragma: no cover - relies on system screenshot support
+        raise RuntimeError(f"Local screenshot capture failed: {exc}") from exc
+
+    image.save(filename)
+    return filename
 
 
 def save_screenshot(
