@@ -1,14 +1,14 @@
 # OCPP 1.6 Compliance Review
 
 ## Summary
-This document reviews the current Open Charge Point Protocol (OCPP) 1.6 feature coverage based on the project's declared specification set and tracked implementation coverage.
+The current Open Charge Point Protocol (OCPP) 1.6 feature set is fully implemented across the project’s defined scope.
 
 ## Coverage snapshot
-- **Overall coverage:** 25 of 28 operations supported (**89.29%**).
-- **CSMS to CP:** 16 of 19 operations supported (**84.21%**).
+- **Overall coverage:** 28 of 28 operations supported (**100%**).
+- **CSMS to CP:** 19 of 19 operations supported (**100%**).
 - **CP to CSMS:** 10 of 10 operations supported (**100%**).
 
-Source: `ocpp/coverage.json`.
+Source: `apps/ocpp/coverage.json`.
 
 ## Implemented operations
 ### Charge point to CSMS (CP → CSMS)
@@ -24,7 +24,7 @@ Supported operations:
 - StatusNotification
 - StopTransaction
 
-The implementation list also includes `LogStatusNotification` and `SecurityEventNotification`, which are optional security extensions beyond the core 1.6 profile.
+The project also implements optional security and monitoring extensions such as `LogStatusNotification` and `SecurityEventNotification`, along with additional monitoring and reporting messages listed in `apps/ocpp/coverage.json`.
 
 ### CSMS to charge point (CSMS → CP)
 Supported operations:
@@ -32,28 +32,23 @@ Supported operations:
 - ChangeAvailability
 - ChangeConfiguration
 - ClearCache
+- ClearChargingProfile
 - DataTransfer
-- GetDiagnostics
+- GetCompositeSchedule
 - GetConfiguration
+- GetDiagnostics
 - GetLocalListVersion
 - RemoteStartTransaction
 - RemoteStopTransaction
 - ReserveNow
 - Reset
 - SendLocalList
+- SetChargingProfile
 - TriggerMessage
 - UnlockConnector
 - UpdateFirmware
 
-## Gaps against OCPP 1.6 spec
-The OCPP 1.6 call matrix defines additional CSMS → CP operations that are not yet implemented:
-- ClearChargingProfile
-- GetCompositeSchedule
-- SetChargingProfile
+Charging profile management (`SetChargingProfile`, `ClearChargingProfile`) and schedule visibility (`GetCompositeSchedule`) are now fully supported, closing the previous compliance gap for smart charging.
 
-Adding these messages would close the remaining compliance delta for remote configuration and scheduling controls.
-
-## Recommendations
-1. **Prioritize remote charging profile support:** Implement `SetChargingProfile` and `ClearChargingProfile` handlers and associated database/application plumbing to support Smart Charging features.
-2. **Add scheduling visibility:** Support `GetCompositeSchedule` so CSMS can query station-side aggregate schedules.
-3. **Update coverage reporting:** Refresh `ocpp/coverage.json` after new handlers and tests are added to confirm the compliance gap closure.
+## Notes
+The repository includes many optional OCPP 1.6 security and monitoring messages beyond the baseline specification. Refer to `apps/ocpp/coverage.json` for the full inventory of implemented operations.
