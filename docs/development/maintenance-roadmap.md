@@ -1,11 +1,11 @@
 # Maintenance Improvement Proposals
 
 ## 1. Modularize and Test Settings Helpers
-- **Current state:** `config/settings_helpers.py` now hosts the extracted helpers for loading the Django secret key and installing the subnet-aware host validator, while `config/settings.py` still imports them and performs the monkeypatch during module import without dedicated integration coverage. 【F:config/settings_helpers.py†L1-L90】【F:config/settings.py†L31-L74】
+- **Current state:** `config/settings_helpers.py` now centralizes the subnet-aware host validation helpers, IP discovery utilities, and secret-key loader, while `config/settings.py` imports them, applies the monkeypatch at import time, and layers hostname discovery plus CSRF origin normalization inline without integration-level tests protecting that behavior. 【F:config/settings_helpers.py†L21-L286】【F:config/settings.py†L37-L397】
 - **Proposed actions:**
-  - Add integration and middleware-level tests that exercise `install_validate_host_with_subnets` alongside CSRF origin checks to guard against regressions when Django updates its host validation behavior. 【F:config/settings.py†L96-L143】
-  - Consolidate duplicated hostname logic (e.g. `_host_is_allowed`, `_iter_local_hostnames`) around the shared helpers so that monkeypatch responsibilities and hostname normalization live in one place. 【F:config/settings.py†L76-L143】
-  - Document how the helper module should be extended during future settings refactors so contributors understand which logic belongs in `config/settings_helpers.py` versus the main settings file. 【F:config/settings_helpers.py†L1-L90】【F:config/settings.py†L31-L143】
+  - Add integration and middleware-level tests that exercise `install_validate_host_with_subnets` alongside the CSRF origin hooks so regressions in Django's host validation or monkeypatched middleware are caught early. 【F:config/settings.py†L45-L397】
+  - Consolidate the hostname normalization and allowed-host utilities (e.g. `_iter_local_hostnames`, `_host_is_allowed`, `_candidate_origin_tuples`) into the shared helpers so the monkeypatch and hostname handling live behind a single module boundary. 【F:config/settings_helpers.py†L21-L208】【F:config/settings.py†L127-L349】
+  - Document the split of responsibilities between `config/settings_helpers.py` and `config/settings.py` (monkeypatch, hostname expansion, CSRF origin handling) so future refactors extend the helper module instead of reintroducing inline duplicates. 【F:config/settings_helpers.py†L21-L286】【F:config/settings.py†L37-L397】
 
 ## 2. Separate Runtime and Tooling Dependencies
 - **Current state:** `pyproject.toml` lists developer tooling (e.g. `black`, `twine`, `selenium`) alongside runtime dependencies, so production installs pull in packages that are only needed for development or publishing. 【F:pyproject.toml†L1-L40】
