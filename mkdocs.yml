@@ -15,7 +15,7 @@ nav:
       - OCPP Connection Status: ocpp_connection_status.md
   - Reference:
       - Energy Transactions Ledger: energy-transactions-ledger.md
-      - PyPI Install Report: pypi-install-report.md
+      - Release Install Checks: release-install-checks.md
       - Runserver Log Duplication: runserver-log-duplication.md
       - DS3231 RTC Wiring: ds3231-rtc-wiring.md
   - Development:
