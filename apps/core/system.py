@@ -49,6 +49,7 @@ from apps.release.release import (
 from apps.core.tasks import check_github_updates, _read_auto_upgrade_failure_count
 from apps.nginx.renderers import generate_primary_config
 from apps.screens.startup_notifications import lcd_feature_enabled
+from apps.core.systemctl import _systemctl_command
 from utils import revision
 from apps.core import changelog
 
@@ -76,32 +77,6 @@ UPGRADE_CHANNEL_CHOICES: dict[str, dict[str, object]] = {
 
 
 logger = logging.getLogger(__name__)
-
-
-def _systemctl_command() -> list[str]:
-    """Return the base systemctl command, preferring sudo when available."""
-
-    if shutil.which("systemctl") is None:
-        return []
-
-    sudo_path = shutil.which("sudo")
-    if sudo_path is None:
-        return ["systemctl"]
-
-    try:
-        sudo_ready = subprocess.run(
-            [sudo_path, "-n", "true"],
-            check=False,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-    except OSError:
-        sudo_ready = None
-
-    if sudo_ready is not None and sudo_ready.returncode == 0:
-        return [sudo_path, "-n", "systemctl"]
-
-    return ["systemctl"]
 
 
 def _github_repo_path(remote_url: str | None) -> str:
