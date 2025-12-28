@@ -14,7 +14,7 @@ from django.views.decorators.http import require_GET, require_POST
 from django.core.cache import cache
 
 from apps.core import changelog
-from apps.docs import views as docs_views
+from apps.docs import rendering
 from apps.groups.decorators import security_group_required
 from apps.links.templatetags.ref_tags import build_footer_context
 from apps.modules.models import Module
@@ -102,7 +102,7 @@ def release_checklist(request):
     if not file_path.exists():
         raise Http404("Release checklist not found")
     text = file_path.read_text(encoding="utf-8")
-    html, toc_html = docs_views.render_markdown_with_toc(text)
+    html, toc_html = rendering.render_markdown_with_toc(text)
     context = {"content": html, "title": "Release Checklist", "toc": toc_html}
     response = render(request, "docs/readme.html", context)
     patch_vary_headers(response, ["Accept-Language", "Cookie"])
