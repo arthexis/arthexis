@@ -1,18 +1,11 @@
 from datetime import datetime
 from pathlib import Path
 import logging
-import shutil
-import subprocess
 
 from django.conf import settings
 from selenium import webdriver
 from selenium.webdriver.firefox.options import Options
 from selenium.common.exceptions import WebDriverException
-
-try:  # pragma: no cover - optional dependency may be missing
-    from geckodriver_autoinstaller import install as install_geckodriver
-except Exception:  # pragma: no cover - fallback when installer is unavailable
-    install_geckodriver = None
 
 try:  # pragma: no cover - optional dependency may be missing
     from PIL import ImageGrab
@@ -22,34 +15,11 @@ except Exception:  # pragma: no cover - fallback when dependency is unavailable
 from apps.content.models import ContentSample
 from apps.content.utils import save_content_sample
 from apps.nodes.models import Node
+from apps.selenium.utils.firefox import ensure_geckodriver, find_firefox_binary
 
 WORK_DIR = Path(settings.BASE_DIR) / "work"
 SCREENSHOT_DIR = settings.LOG_DIR / "screenshots"
 logger = logging.getLogger(__name__)
-
-_FIREFOX_BINARY_CANDIDATES = ("firefox", "firefox-esr", "firefox-bin")
-
-
-def _find_firefox_binary() -> str | None:
-    """Return the first available Firefox binary path or ``None``."""
-
-    for candidate in _FIREFOX_BINARY_CANDIDATES:
-        path = shutil.which(candidate)
-        if path:
-            return path
-    return None
-
-
-def _ensure_geckodriver() -> None:
-    """Install geckodriver on demand when possible."""
-
-    if install_geckodriver is None:  # pragma: no cover - dependency not installed
-        return
-    try:
-        install_geckodriver()
-    except Exception as exc:  # pragma: no cover - external failures are rare in tests
-        logger.warning("Unable to ensure geckodriver availability: %s", exc)
-
 
 def capture_screenshot(url: str, cookies=None) -> Path:
     """Capture a screenshot of ``url`` and save it to :data:`SCREENSHOT_DIR`.
@@ -57,7 +27,7 @@ def capture_screenshot(url: str, cookies=None) -> Path:
     ``cookies`` can be an iterable of Selenium cookie mappings which will be
     applied after the initial navigation and before the screenshot is taken.
     """
-    firefox_binary = _find_firefox_binary()
+    firefox_binary = find_firefox_binary()
     if not firefox_binary:
         raise RuntimeError(
             "Screenshot capture failed: Firefox is not installed. Install Firefox to enable screenshot capture."
@@ -66,7 +36,7 @@ def capture_screenshot(url: str, cookies=None) -> Path:
     options = Options()
     options.binary_location = firefox_binary
     options.add_argument("-headless")
-    _ensure_geckodriver()
+    ensure_geckodriver()
     try:
         with webdriver.Firefox(options=options) as browser:
             browser.set_window_size(1280, 720)
