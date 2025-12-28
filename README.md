@@ -91,7 +91,7 @@ Arthexis Constellation ships in four node roles tailored to different deployment
 ### 2. Start and stop
 Terminal nodes can start directly with the scripts below without installing; Control, Satellite, and Watchtower roles require installation first. Both approaches listen on `localhost:8888` by default.
 
-For local bootstrapping, run `make dev` to install with defaults, start the server, and execute a quick smoke test. Override the role, port, reload, Celery, and test selection with Makefile flags when needed.
+For local bootstrapping, run `./install.sh --terminal` to install with defaults, start the server with `./start.sh` (optionally passing `--reload` or `--celery`), and execute a quick smoke test with `pytest -k smoke`. Override the role, port, reload, Celery, and test selection with the script flags when needed.
 
 - **[VS Code](https://code.visualstudio.com/)**
    - Open the folder and go to the **Run and Debug** panel (`Ctrl+Shift+D`).
@@ -99,14 +99,13 @@ For local bootstrapping, run `make dev` to install with defaults, start the serv
    - Press the green start button. Stop the server with the red square button (`Shift+F5`).
 
 - **[Shell](https://en.wikipedia.org/wiki/Shell_(computing))**
-   - Linux: run `make start` and stop with `make stop` (wrapping [`start.sh`](start.sh) and [`stop.sh`](stop.sh)).
+   - Linux: run [`./start.sh`](start.sh) and stop with [`./stop.sh`](stop.sh).
    - Windows: run [`start.bat`](start.bat) and stop with `Ctrl+C`.
 
 ### 3. Install and upgrade
 - **Linux:**
-  - Run `make install ROLE=terminal` to bootstrap a default Terminal node (pass `ROLE=control`, `satellite`, or `watchtower` as needed). Override the port with `PORT=8888` (the default fallback) and control Celery with `CELERY=true|false`; other flags can be forwarded via `EXTRA_INSTALL_ARGS`.
-   - Use `make upgrade` with `CHANNEL=stable|latest|fixed` to wrap [`upgrade.sh`](upgrade.sh).
-   - Call the underlying scripts directly (`./install.sh`, `./upgrade.sh`) when you need flags not covered by the Makefile. Use `./install.sh --help` to see every available option.
+  - Run `./install.sh --terminal` to bootstrap a default Terminal node (pass `--control`, `--satellite`, or `--watchtower` as needed). Override the port with `--port 8888` (the default fallback) and control Celery with `--celery` or `--no-celery`. Use `./install.sh --help` to see every available option.
+  - Use [`./upgrade.sh`](upgrade.sh) with `--stable` (weekly) or `--latest`/`--unstable` (daily) to follow the preferred release cadence.
    - Consult the [Install & Lifecycle Scripts Manual](docs/development/install-lifecycle-scripts-manual.md) for complete flag descriptions and operational notes.
    - Review the [Auto-Upgrade Flow](docs/auto-upgrade.md) for how delegated upgrades run and how to observe them.
 
@@ -118,9 +117,9 @@ Upgrade channels (opt-in during install/upgrade or with `scripts/delegated-upgra
 
 | Channel | Check cadence | Purpose | Opt-in flag |
 | --- | --- | --- | --- |
-| Fixed | None (manual upgrades only) | Disables the automatic upgrade loop for full operator control. | `--fixed` (default) |
-| Stable | Weekly (Thu before 5:00 AM) | Tracks release revisions with automated weekly checks. | `--stable` |
-| Latest | Daily (same hour) | Follows the newest mainline revisions with daily checks. | `--latest` |
+| Stable | Weekly (Thu before 5:00 AM) | Tracks release revisions with automated weekly checks. | `--stable` (default) |
+| Latest | Daily (same hour) | Follows the newest mainline revisions with daily checks. | `--latest` or `--unstable` |
+| Manual | None (manual upgrades only) | Disables the automatic upgrade loop for full operator control. | _Run upgrades on demand without specifying a channel flag._ |
 
 ### 4. Administration
 - Access the [Django admin](https://docs.djangoproject.com/en/stable/ref/contrib/admin/) at `localhost:8888/admin/` to review and manage live data. Use `--port` with the start scripts or installer when you need to expose a different port.
