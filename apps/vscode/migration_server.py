@@ -60,7 +60,6 @@ WATCH_EXTENSIONS = {
 
 WATCH_FILENAMES = {
     "Dockerfile",
-    "Makefile",
     "manage.py",
     "pyproject.toml",
     "requirements.txt",
