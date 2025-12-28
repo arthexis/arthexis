@@ -32,6 +32,7 @@ class ViewHistory(Entity):
     status_code = models.PositiveSmallIntegerField()
     status_text = models.CharField(max_length=100, blank=True)
     error_message = models.TextField(blank=True)
+    exception_name = models.CharField(max_length=200, blank=True)
     view_name = models.CharField(max_length=200, blank=True)
     visited_at = models.DateTimeField(auto_now_add=True)
 
