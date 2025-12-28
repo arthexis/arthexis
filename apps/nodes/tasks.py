@@ -282,19 +282,9 @@ def poll_upstream() -> None:
 
     requester_payload = {"requester": str(local.uuid)}
     payload_json = json.dumps(requester_payload, separators=(",", ":"), sort_keys=True)
-    try:
-        signature = base64.b64encode(
-            private_key.sign(
-                payload_json.encode(),
-                padding.PSS(
-                    mgf=padding.MGF1(hashes.SHA256()),
-                    salt_length=padding.PSS.MAX_LENGTH,
-                ),
-                hashes.SHA256(),
-            )
-        ).decode()
-    except Exception as exc:
-        logger.warning("Failed to sign upstream poll request: %s", exc)
+    signature, error = Node.sign_payload(payload_json, private_key)
+    if error:
+        logger.warning("Failed to sign upstream poll request: %s", error)
         return
 
     headers = {"Content-Type": "application/json", "X-Signature": signature}

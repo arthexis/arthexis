@@ -751,17 +751,9 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             return {"ok": False, "message": f"Failed to load private key: {exc}"}
 
         token = uuid.uuid4().hex
-        try:
-            signature = private_key.sign(
-                token.encode(),
-                padding.PSS(
-                    mgf=padding.MGF1(hashes.SHA256()),
-                    salt_length=padding.PSS.MAX_LENGTH,
-                ),
-                hashes.SHA256(),
-            )
-        except Exception as exc:  # pragma: no cover - unexpected errors
-            return {"ok": False, "message": f"Failed to sign payload: {exc}"}
+        signature, error = Node.sign_payload(token, private_key)
+        if error or not signature:
+            return {"ok": False, "message": f"Failed to sign payload: {error}"}
 
         payload = {
             "hostname": local_node.hostname,
@@ -773,7 +765,7 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             "mac_address": local_node.mac_address,
             "public_key": local_node.public_key,
             "token": token,
-            "signature": base64.b64encode(signature).decode(),
+            "signature": signature,
         }
         if local_node.installed_version:
             payload["installed_version"] = local_node.installed_version
@@ -1026,18 +1018,6 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
 
         return local_node, private_key, None
 
-    def _sign_payload(self, private_key, payload: str) -> str:
-        return base64.b64encode(
-            private_key.sign(
-                payload.encode(),
-                padding.PSS(
-                    mgf=padding.MGF1(hashes.SHA256()),
-                    salt_length=padding.PSS.MAX_LENGTH,
-                ),
-                hashes.SHA256(),
-            )
-        ).decode()
-
     def _send_forwarding_metadata(
         self,
         request,
@@ -1068,15 +1048,15 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         payload_json = json.dumps(payload, separators=(",", ":"), sort_keys=True)
         headers = {"Content-Type": "application/json"}
         if private_key:
-            try:
-                headers["X-Signature"] = self._sign_payload(private_key, payload_json)
-            except Exception as exc:  # pragma: no cover - defensive
+            signature, error = Node.sign_payload(payload_json, private_key)
+            if error or not signature:
                 _safe_message(
                     messages.ERROR,
                     _("Failed to sign forwarding payload: %(error)s")
-                    % {"error": exc},
+                    % {"error": error},
                 )
                 return False
+            headers["X-Signature"] = signature
 
         errors: list[str] = []
         for url in self._iter_remote_urls(target, "/nodes/network/chargers/forward/"):
@@ -1312,7 +1292,14 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
             separators=(",", ":"),
             sort_keys=True,
         )
-        signature = self._sign_payload(private_key, payload)
+        signature, error = Node.sign_payload(payload, private_key)
+        if error or not signature:
+            message = _("Failed to sign payload.")
+            if error:
+                message = _("Failed to sign payload: %(error)s") % {"error": error}
+            return self._render_rfid_sync(
+                request, "import", [], setup_error=message
+            )
         headers = {
             "Content-Type": "application/json",
             "X-Signature": signature,
