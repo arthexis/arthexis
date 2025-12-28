@@ -28,6 +28,7 @@ from apps.core.auto_upgrade import (
     append_auto_upgrade_log,
     auto_upgrade_base_dir,
 )
+from apps.core.systemctl import _systemctl_command
 from apps.release import release_workflow
 from django.conf import settings
 from django.db import DatabaseError, models
@@ -476,32 +477,6 @@ def _delegate_upgrade_via_script(base_dir: Path, args: list[str]) -> str | None:
         return None
 
     return unit_name
-
-
-def _systemctl_command() -> list[str]:
-    """Return the base systemctl command, preferring sudo when available."""
-
-    if shutil.which("systemctl") is None:
-        return []
-
-    sudo_path = shutil.which("sudo")
-    if sudo_path is None:
-        return ["systemctl"]
-
-    try:
-        sudo_ready = subprocess.run(
-            [sudo_path, "-n", "true"],
-            check=False,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-    except OSError:
-        sudo_ready = None
-
-    if sudo_ready is not None and sudo_ready.returncode == 0:
-        return [sudo_path, "-n", "systemctl"]
-
-    return ["systemctl"]
 
 
 def _wait_for_service_restart(
