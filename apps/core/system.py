@@ -37,6 +37,7 @@ from apps.core.auto_upgrade import (
     AUTO_UPGRADE_TASK_NAME,
     AUTO_UPGRADE_TASK_PATH,
     auto_upgrade_base_dir,
+    auto_upgrade_log_file,
     ensure_auto_upgrade_periodic_task,
 )
 from apps.release.release import (
@@ -54,7 +55,6 @@ from apps.core import changelog
 
 AUTO_UPGRADE_LOCK_NAME = "auto_upgrade.lck"
 AUTO_UPGRADE_SKIP_LOCK_NAME = "auto_upgrade_skip_revisions.lck"
-AUTO_UPGRADE_LOG_NAME = "auto-upgrade.log"
 AUTO_UPGRADE_LOG_LIMIT = 30
 UPGRADE_REVISION_SESSION_KEY = "system_upgrade_revision_info"
 
@@ -173,10 +173,6 @@ def _auto_upgrade_mode_file(base_dir: Path) -> Path:
 
 def _auto_upgrade_skip_file(base_dir: Path) -> Path:
     return base_dir / ".locks" / AUTO_UPGRADE_SKIP_LOCK_NAME
-
-
-def _auto_upgrade_log_file(base_dir: Path) -> Path:
-    return base_dir / "logs" / AUTO_UPGRADE_LOG_NAME
 
 
 def _clear_auto_upgrade_skip_revisions(base_dir: Path) -> None:
@@ -541,7 +537,7 @@ def _load_auto_upgrade_log_entries(
 ) -> dict[str, object]:
     """Return the most recent auto-upgrade log entries."""
 
-    log_file = _auto_upgrade_log_file(base_dir)
+    log_file = auto_upgrade_log_file(base_dir)
     result: dict[str, object] = {
         "path": log_file,
         "entries": [],

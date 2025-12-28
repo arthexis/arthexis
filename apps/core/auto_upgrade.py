@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from os import environ
 from pathlib import Path
 
@@ -9,6 +10,7 @@ from django.conf import settings
 from django.utils import timezone
 
 
+AUTO_UPGRADE_LOG_NAME = "auto-upgrade.log"
 AUTO_UPGRADE_TASK_NAME = "auto-upgrade-check"
 AUTO_UPGRADE_TASK_PATH = "apps.core.tasks.check_github_updates"
 
@@ -52,6 +54,31 @@ AUTO_UPGRADE_CRONTAB_SCHEDULES = {
         "month_of_year": "*",
     },
 }
+
+
+logger = logging.getLogger(__name__)
+
+
+def auto_upgrade_log_file(base_dir: Path) -> Path:
+    """Return the auto-upgrade log path, creating parent directories."""
+
+    log_dir = Path(base_dir) / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    return log_dir / AUTO_UPGRADE_LOG_NAME
+
+
+def append_auto_upgrade_log(base_dir: Path, message: str) -> Path:
+    """Append a timestamped message to the auto-upgrade log."""
+
+    log_file = auto_upgrade_log_file(base_dir)
+    timestamp = timezone.now().isoformat()
+    try:
+        with log_file.open("a", encoding="utf-8") as handle:
+            handle.write(f"{timestamp} {message}\n")
+    except Exception:  # pragma: no cover - best effort logging only
+        logger.warning("Failed to append auto-upgrade log entry: %s", message)
+
+    return log_file
 
 
 def auto_upgrade_base_dir() -> Path:

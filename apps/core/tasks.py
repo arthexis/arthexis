@@ -25,6 +25,7 @@ from apps.core.auto_upgrade import (
     AUTO_UPGRADE_FALLBACK_INTERVAL,
     AUTO_UPGRADE_INTERVAL_MINUTES,
     DEFAULT_AUTO_UPGRADE_MODE,
+    append_auto_upgrade_log,
     auto_upgrade_base_dir,
 )
 from apps.release import release_workflow
@@ -133,31 +134,10 @@ def legacy_heartbeat(self) -> None:
     heartbeat()
 
 
-def _auto_upgrade_log_path(base_dir: Path) -> Path:
-    """Return the log file used for auto-upgrade events."""
-
-    log_dir = base_dir / "logs"
-    log_dir.mkdir(parents=True, exist_ok=True)
-    return log_dir / "auto-upgrade.log"
-
-
 def _project_base_dir() -> Path:
     """Return the filesystem base directory for runtime operations."""
 
     return auto_upgrade_base_dir()
-
-
-def _append_auto_upgrade_log(base_dir: Path, message: str) -> None:
-    """Append ``message`` to the auto-upgrade log, ignoring errors."""
-
-    try:
-        log_file = _auto_upgrade_log_path(base_dir)
-        timestamp = timezone.now().isoformat()
-        with log_file.open("a") as fh:
-            fh.write(f"{timestamp} {message}\n")
-    except Exception:  # pragma: no cover - best effort logging only
-        logger.warning("Failed to append auto-upgrade log entry: %s", message)
-
 
 def _recency_lock_path(base_dir: Path) -> Path:
     return base_dir / ".locks" / AUTO_UPGRADE_RECENCY_LOCK_NAME
@@ -322,7 +302,7 @@ def _run_upgrade_command(
 
     if require_detached and missing_prereqs:
         reason = "; ".join(missing_prereqs)
-        _append_auto_upgrade_log(
+        append_auto_upgrade_log(
             base_dir,
             (
                 "Detached auto-upgrade unavailable; "
@@ -383,7 +363,7 @@ def _run_upgrade_command(
             return str(result)
 
         try:
-            _append_auto_upgrade_log(
+            append_auto_upgrade_log(
                 base_dir,
                 (
                     "Delegating auto-upgrade to transient unit "
@@ -403,7 +383,7 @@ def _run_upgrade_command(
                 "Detached auto-upgrade launch failed; keeping current service running",
                 extra={"stdout": (result.stdout or "").strip(), "stderr": (result.stderr or "").strip()},
             )
-            _append_auto_upgrade_log(
+            append_auto_upgrade_log(
                 base_dir,
                 (
                     "Detached auto-upgrade launch failed "
@@ -416,7 +396,7 @@ def _run_upgrade_command(
                 "Detached auto-upgrade launch failed; keeping current service running",
                 exc_info=True,
             )
-            _append_auto_upgrade_log(
+            append_auto_upgrade_log(
                 base_dir,
                 (
                     "Detached auto-upgrade launch failed "
@@ -438,7 +418,7 @@ def _run_upgrade_command(
             "Inline auto-upgrade launch failed; will retry on next cycle",
             exc_info=True,
         )
-        _append_auto_upgrade_log(
+        append_auto_upgrade_log(
             base_dir,
             (
                 "Inline auto-upgrade launch failed "
@@ -455,14 +435,14 @@ def _delegate_upgrade_via_script(base_dir: Path, args: list[str]) -> str | None:
 
     script = base_dir / "scripts" / "delegated-upgrade.sh"
     if not script.exists():
-        _append_auto_upgrade_log(
+        append_auto_upgrade_log(
             base_dir,
             "Delegated upgrade script missing; skipping auto-upgrade delegation",
         )
         return None
 
     if not WATCH_UPGRADE_BINARY.exists():
-        _append_auto_upgrade_log(
+        append_auto_upgrade_log(
             base_dir,
             "watch-upgrade helper missing; skipping delegated auto-upgrade",
         )
@@ -486,7 +466,7 @@ def _delegate_upgrade_via_script(base_dir: Path, args: list[str]) -> str | None:
     if result.returncode != 0:
         stderr_output = (result.stderr or result.stdout or "").strip()
         details = f"; {stderr_output}" if stderr_output else ""
-        _append_auto_upgrade_log(
+        append_auto_upgrade_log(
             base_dir,
             (
                 "Delegated upgrade launch failed "
@@ -560,7 +540,7 @@ def _restart_service_via_start_script(base_dir: Path, service: str) -> bool:
 
     start_script = base_dir / "start.sh"
     if not start_script.exists():
-        _append_auto_upgrade_log(
+        append_auto_upgrade_log(
             base_dir,
             (
                 "start.sh not found after upgrade; manual restart "
@@ -573,7 +553,7 @@ def _restart_service_via_start_script(base_dir: Path, service: str) -> bool:
         subprocess.run(["./start.sh"], cwd=base_dir, check=True)
     except Exception:  # pragma: no cover - defensive restart handling
         logger.exception("start.sh restart failed after upgrade")
-        _append_auto_upgrade_log(
+        append_auto_upgrade_log(
             base_dir,
             (
                 f"start.sh restart failed after upgrade for {service or 'service'}; "
@@ -588,7 +568,7 @@ def _restart_service_via_start_script(base_dir: Path, service: str) -> bool:
 def _record_restart_failure(base_dir: Path, service: str) -> None:
     """Record restart failures in the auto-upgrade log."""
 
-    _append_auto_upgrade_log(
+    append_auto_upgrade_log(
         base_dir,
         (
             f"Service {service or 'unknown'} failed to restart after upgrade; "
@@ -635,13 +615,13 @@ def _ensure_managed_service(
     if restart_if_active:
         restarted = False
         if restart_via_systemd("post-upgrade restart"):
-            _append_auto_upgrade_log(
+            append_auto_upgrade_log(
                 base_dir,
                 f"Restarting {service} via systemd restart after upgrade",
             )
             restarted = True
         else:
-            _append_auto_upgrade_log(
+            append_auto_upgrade_log(
                 base_dir,
                 f"Systemd restart unavailable for {service}; restarting via start.sh",
             )
@@ -652,18 +632,18 @@ def _ensure_managed_service(
         if not restarted:
             return handle_restart_failure()
 
-        _append_auto_upgrade_log(
+        append_auto_upgrade_log(
             base_dir,
             f"Waiting for {service} to restart after upgrade",
         )
         if not _wait_for_service_restart(base_dir, service):
-            _append_auto_upgrade_log(
+            append_auto_upgrade_log(
                 base_dir,
                 f"Service {service} did not report active status after automatic restart",
             )
             return handle_restart_failure()
 
-        _append_auto_upgrade_log(
+        append_auto_upgrade_log(
             base_dir,
             f"Service {service} restarted successfully after upgrade",
         )
@@ -679,17 +659,17 @@ def _ensure_managed_service(
     )
 
     if restart_via_systemd("auto-upgrade recovery"):
-        _append_auto_upgrade_log(
+        append_auto_upgrade_log(
             base_dir,
             f"{base_message}; restarting via systemd restart",
         )
     else:
-        _append_auto_upgrade_log(
+        append_auto_upgrade_log(
             base_dir,
             f"{base_message}; restarting via start.sh",
         )
         if not _restart_service_via_start_script(base_dir, service):
-            _append_auto_upgrade_log(
+            append_auto_upgrade_log(
                 base_dir,
                 (
                     "Automatic restart via start.sh failed for inactive service "
@@ -701,12 +681,12 @@ def _ensure_managed_service(
             return False
 
     if command:
-        _append_auto_upgrade_log(
+        append_auto_upgrade_log(
             base_dir,
             f"Waiting for {service} to restart after upgrade",
         )
         if not _wait_for_service_restart(base_dir, service):
-            _append_auto_upgrade_log(
+            append_auto_upgrade_log(
                 base_dir,
                 (
                     f"Service {service} did not report active status after "
@@ -717,7 +697,7 @@ def _ensure_managed_service(
                 _record_restart_failure(base_dir, service)
             return False
 
-    _append_auto_upgrade_log(
+    append_auto_upgrade_log(
         base_dir,
         f"Service {service} restarted successfully during auto-upgrade check",
     )
@@ -735,7 +715,7 @@ def _ensure_development_server(
             cwd=base_dir,
         )
         if result.returncode == 0:
-            _append_auto_upgrade_log(
+            append_auto_upgrade_log(
                 base_dir,
                 "Restarting development server via start.sh after upgrade",
             )
@@ -750,7 +730,7 @@ def _ensure_development_server(
                         start_new_session=True,
                     )
                 except Exception as exc:  # pragma: no cover - subprocess errors
-                    _append_auto_upgrade_log(
+                    append_auto_upgrade_log(
                         base_dir,
                         (
                             "Failed to restart development server automatically: "
@@ -759,12 +739,12 @@ def _ensure_development_server(
                     )
                     raise
             else:  # pragma: no cover - installation invariant
-                _append_auto_upgrade_log(
+                append_auto_upgrade_log(
                     base_dir,
                     "start.sh not found; manual restart required for development server",
                 )
         else:
-            _append_auto_upgrade_log(
+            append_auto_upgrade_log(
                 base_dir,
                 (
                     "No manage.py runserver process was active during upgrade; "
@@ -782,13 +762,13 @@ def _ensure_development_server(
     if check.returncode == 0:
         return True
 
-    _append_auto_upgrade_log(
+    append_auto_upgrade_log(
         base_dir,
         "Development server inactive during auto-upgrade check; restarting via start.sh",
     )
     start_script = base_dir / "start.sh"
     if not start_script.exists():  # pragma: no cover - installation invariant
-        _append_auto_upgrade_log(
+        append_auto_upgrade_log(
             base_dir,
             "start.sh not found; manual restart required for development server",
         )
@@ -802,7 +782,7 @@ def _ensure_development_server(
             start_new_session=True,
         )
     except Exception as exc:  # pragma: no cover - subprocess errors
-        _append_auto_upgrade_log(
+        append_auto_upgrade_log(
             base_dir,
             (
                 "Failed to restart development server automatically: "
@@ -827,7 +807,7 @@ def _ensure_runtime_services(
             service = ""
         if not service:
             if restart_if_active:
-                _append_auto_upgrade_log(
+                append_auto_upgrade_log(
                     base_dir,
                     "Service restart requested but service lock was empty; "
                     "skipping automatic verification",
@@ -1099,7 +1079,7 @@ def _add_skipped_revision(base_dir: Path, revision: str) -> None:
             return
         with skip_file.open("a", encoding="utf-8") as fh:
             fh.write(f"{revision}\n")
-        _append_auto_upgrade_log(
+        append_auto_upgrade_log(
             base_dir, f"Recorded blocked revision {revision} for auto-upgrade"
         )
     except OSError:
@@ -1186,7 +1166,7 @@ def _is_network_failure(exc: subprocess.CalledProcessError) -> bool:
 def _record_network_failure(base_dir: Path, detail: str) -> int:
     count = _read_network_failure_count(base_dir) + 1
     _write_network_failure_count(base_dir, count)
-    _append_auto_upgrade_log(
+    append_auto_upgrade_log(
         base_dir,
         f"Auto-upgrade network failure {count}: {detail}",
     )
@@ -1219,12 +1199,12 @@ def _trigger_auto_upgrade_reboot(base_dir: Path) -> None:
 
 def _reboot_if_no_charge_point(base_dir: Path) -> None:
     if _charge_point_active(base_dir):
-        _append_auto_upgrade_log(
+        append_auto_upgrade_log(
             base_dir,
             "Skipping reboot after repeated auto-upgrade network failures; a charge point is active",
         )
         return
-    _append_auto_upgrade_log(
+    append_auto_upgrade_log(
         base_dir,
         "Rebooting due to repeated auto-upgrade network failures",
     )
@@ -1379,7 +1359,7 @@ def _record_auto_upgrade_failure(base_dir: Path, reason: str) -> int:
     normalized_reason = _normalize_failure_reason(reason)
     count = _read_auto_upgrade_failure_count(base_dir) + 1
     _write_auto_upgrade_failure_count(base_dir, count)
-    _append_auto_upgrade_log(
+    append_auto_upgrade_log(
         base_dir,
         f"Auto-upgrade failure {count}: {normalized_reason}",
     )
@@ -1551,10 +1531,7 @@ def _resolve_auto_upgrade_mode(
 
 
 def _log_auto_upgrade_trigger(base_dir: Path) -> Path:
-    log_file = _auto_upgrade_log_path(base_dir)
-    with log_file.open("a") as fh:
-        fh.write(f"{timezone.now().isoformat()} check_github_updates triggered\n")
-    return log_file
+    return append_auto_upgrade_log(base_dir, "check_github_updates triggered")
 
 
 def _apply_stable_schedule_guard(
@@ -1567,7 +1544,7 @@ def _apply_stable_schedule_guard(
     if _is_within_stable_upgrade_window(now_local):
         return True
 
-    _append_auto_upgrade_log(
+    append_auto_upgrade_log(
         base_dir,
         "Skipping stable auto-upgrade; outside the 7:30 PM to 5:30 AM window",
     )
@@ -1593,7 +1570,7 @@ def _fetch_repository_state(
         error_message = f"Git fetch failed (exit code {exc.returncode})"
         if fetch_error_output:
             error_message = f"{error_message}: {fetch_error_output}"
-        _append_auto_upgrade_log(base_dir, error_message)
+        append_auto_upgrade_log(base_dir, error_message)
         handled_network = _handle_network_failure_if_applicable(base_dir, exc)
         if handled_network:
             state.reset_network_failures = False
@@ -1612,7 +1589,7 @@ def _fetch_repository_state(
 
     skipped_revisions = _load_skipped_revisions(base_dir)
     if remote_revision in skipped_revisions:
-        _append_auto_upgrade_log(
+        append_auto_upgrade_log(
             base_dir,
             f"Skipping auto-upgrade for blocked revision {remote_revision}",
         )
@@ -1625,7 +1602,7 @@ def _fetch_repository_state(
 
     ci_status = _ci_status_for_revision(base_dir, remote_revision, branch=branch)
     if ci_status and ci_status != "success":
-        _append_auto_upgrade_log(
+        append_auto_upgrade_log(
             base_dir,
             (
                 "Skipping auto-upgrade; CI status is "
@@ -1673,7 +1650,7 @@ def _plan_auto_upgrade(
 
     if mode.mode == "unstable":
         if repo_state.severity == SEVERITY_LOW:
-            _append_auto_upgrade_log(
+            append_auto_upgrade_log(
                 base_dir,
                 "Skipping auto-upgrade for low severity patch on latest channel",
             )
@@ -1724,7 +1701,7 @@ def _plan_auto_upgrade(
                     repo_state.release_version, repo_state.remote_revision
                 )
             if not matches_revision:
-                _append_auto_upgrade_log(
+                append_auto_upgrade_log(
                     base_dir,
                     (
                         "Skipping stable auto-upgrade; release revision does not "
@@ -1745,7 +1722,7 @@ def _plan_auto_upgrade(
 
     if os.name != "nt" and args and args[0].lower().endswith(".bat"):
         args = ["./upgrade.sh", *args[1:]]
-        _append_auto_upgrade_log(
+        append_auto_upgrade_log(
             base_dir,
             "Normalized upgrade command for POSIX host",
         )
@@ -1770,7 +1747,7 @@ def _execute_upgrade_plan(
         and mode.mode_file_physical
     ):
         if _auto_upgrade_ran_recently(base_dir, mode.interval_minutes):
-            _append_auto_upgrade_log(
+            append_auto_upgrade_log(
                 base_dir,
                 (
                     "Skipping auto-upgrade; last run was less than "
@@ -1794,7 +1771,7 @@ def _execute_upgrade_plan(
         and mode.mode_file_physical
         and _auto_upgrade_ran_recently(base_dir, mode.interval_minutes)
     ):
-        _append_auto_upgrade_log(
+        append_auto_upgrade_log(
             base_dir,
             (
                 "Skipping auto-upgrade; last run was less than "
@@ -1819,7 +1796,7 @@ def _execute_upgrade_plan(
         delegated_unit = ops.delegate_upgrade(base_dir, args)
 
     if delegated_unit:
-        _append_auto_upgrade_log(
+        append_auto_upgrade_log(
             base_dir,
             (
                 "Auto-upgrade delegated to systemd; review "
@@ -1827,7 +1804,7 @@ def _execute_upgrade_plan(
             ),
         )
         if upgrade_was_applied:
-            _append_auto_upgrade_log(
+            append_auto_upgrade_log(
                 base_dir,
                 (
                     "Scheduled post-upgrade health check in %s seconds"
@@ -1840,7 +1817,7 @@ def _execute_upgrade_plan(
     delegated_unit, ran_inline = ops.run_upgrade_command(base_dir, args)
 
     if delegated_unit:
-        _append_auto_upgrade_log(
+        append_auto_upgrade_log(
             base_dir,
             (
                 "Auto-upgrade delegated to systemd; review "
@@ -1848,7 +1825,7 @@ def _execute_upgrade_plan(
             ),
         )
         if upgrade_was_applied:
-            _append_auto_upgrade_log(
+            append_auto_upgrade_log(
                 base_dir,
                 (
                     "Scheduled post-upgrade health check in %s seconds"
@@ -1859,7 +1836,7 @@ def _execute_upgrade_plan(
         return
 
     if not ran_inline:
-        _append_auto_upgrade_log(
+        append_auto_upgrade_log(
             base_dir,
             "Delegated auto-upgrade launch failed; will retry on next cycle",
         )
@@ -1920,7 +1897,7 @@ def check_github_updates(
         log_file = _log_auto_upgrade_trigger(base_dir)
 
         if mode.override_log:
-            _append_auto_upgrade_log(
+            append_auto_upgrade_log(
                 base_dir,
                 f"Using admin override channel: {mode.override_log}",
             )
@@ -2016,7 +1993,7 @@ def _record_health_check_result(
 ) -> None:
     status_display = status if status is not None else "unreachable"
     message = "Health check attempt %s %s (%s)" % (attempt, detail, status_display)
-    _append_auto_upgrade_log(base_dir, message)
+    append_auto_upgrade_log(base_dir, message)
 
 
 def _schedule_health_check(next_attempt: int) -> None:
@@ -2048,7 +2025,7 @@ def _handle_failed_health_check(base_dir: Path, detail: str) -> None:
         )
 
     _add_skipped_revision(base_dir, revision)
-    _append_auto_upgrade_log(
+    append_auto_upgrade_log(
         base_dir, "Health check failed; manual intervention required"
     )
     _record_auto_upgrade_failure(base_dir, detail or "Health check failed")
