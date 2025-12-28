@@ -62,5 +62,6 @@ class Command(BaseCommand):
             self.stdout.write(str(path))
             return str(path)
 
-        self.stdout.write(self.style.SUCCESS(f"Snapshot saved to {sample.path}"))
-        return str(Path(sample.path))
+        saved_path = Path(sample.path).as_posix()
+        self.stdout.write(self.style.SUCCESS(f"Snapshot saved to {saved_path}"))
+        return saved_path
