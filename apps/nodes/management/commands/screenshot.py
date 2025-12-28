@@ -5,8 +5,7 @@ from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.nodes.models import Node
-from apps.nodes.utils import capture_local_screenshot, capture_screenshot, save_screenshot
+from apps.nodes.utils import capture_and_save_screenshot
 
 
 class Command(BaseCommand):
@@ -42,19 +41,18 @@ class Command(BaseCommand):
         if local_capture and url:
             raise CommandError("--local cannot be used together with a URL")
 
-        if not local_capture:
-            url = url or self._default_url()
-        node = Node.get_local()
         last_path: Path | None = None
-
-        capture = capture_local_screenshot if local_capture else capture_screenshot
 
         try:
             while True:
-                path = capture() if local_capture else capture(url)
-                save_screenshot(path, node=node, method="COMMAND")
-                self.stdout.write(str(path))
-                last_path = path
+                path = capture_and_save_screenshot(
+                    url=url,
+                    method="COMMAND",
+                    local=local_capture,
+                )
+                path_str = str(path) if path else ""
+                self.stdout.write(path_str)
+                last_path = Path(path_str) if path_str else None
                 if frequency is None:
                     break
                 time.sleep(frequency)
@@ -62,8 +60,3 @@ class Command(BaseCommand):
             self.stdout.write(self.style.WARNING("Stopping screenshot capture"))
 
         return str(last_path) if last_path else ""
-
-    def _default_url(self, port: int = 8888) -> str:
-        node = Node.get_local()
-        scheme = node.get_preferred_scheme() if node else "http"
-        return f"{scheme}://localhost:{port}"
