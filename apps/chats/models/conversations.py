@@ -1,158 +1,20 @@
 from __future__ import annotations
 
-import hashlib
 import logging
 import uuid
 from datetime import timedelta
 
 from django.conf import settings
 from django.contrib.sites.models import Site
-from django.core.exceptions import ValidationError
 from django.db import models
-from django.db.models import Q
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import gettext, gettext_lazy as _
 
-from apps.core.entity import Entity, EntityManager
-
+from apps.core.entity import Entity
+from .utils import gravatar_url
 
 logger = logging.getLogger(__name__)
-
-
-class ChatAvatar(Entity):
-    """Represents an operator identity for handling chats."""
-
-    name = models.CharField(max_length=150)
-    photo = models.ImageField(upload_to="chats/avatars/", blank=True)
-    is_enabled = models.BooleanField(default=True)
-    user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name="chat_avatars",
-    )
-    group = models.ForeignKey(
-        "groups.SecurityGroup",
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name="chat_avatars",
-    )
-
-    class Meta:
-        ordering = ["name", "pk"]
-        verbose_name = _("Chat Avatar")
-        verbose_name_plural = _("Chat Avatars")
-
-    def __str__(self) -> str:  # pragma: no cover - simple representation
-        return self.name
-
-    def clean(self):
-        super().clean()
-        owners = [field for field in ("user", "group") if getattr(self, f"{field}_id")]
-        if len(owners) > 1:
-            raise ValidationError(
-                {
-                    field: _("Select either a user or a security group, not both.")
-                    for field in owners
-                }
-            )
-        if not owners:
-            raise ValidationError(
-                _("Avatars must be assigned to a user or a security group."),
-            )
-
-    @property
-    def owner(self):
-        return self.user if self.user_id else self.group
-
-    def owner_display(self) -> str:
-        owner = self.owner
-        if owner is None:
-            return ""
-        if hasattr(owner, "get_username"):
-            return owner.get_username()
-        if hasattr(owner, "name"):
-            return owner.name
-        return str(owner)
-
-    def is_available(self) -> bool:
-        if not self.is_enabled:
-            return False
-        if self.user_id:
-            return bool(getattr(self.user, "is_online", False))
-        if self.group_id:
-            for member in self.group.user_set.all():
-                if getattr(member, "is_online", False):
-                    return True
-        return False
-
-
-def gravatar_url(email: str, *, size: int = 128, default: str = "identicon") -> str:
-    """Return the Gravatar URL for the given email address."""
-
-    normalized = (email or "").strip().lower()
-    if not normalized:
-        return ""
-    digest = hashlib.md5(normalized.encode("utf-8"), usedforsecurity=False).hexdigest()
-    return f"https://www.gravatar.com/avatar/{digest}?s={size}&d={default}"
-
-
-class ChatBridgeManager(EntityManager):
-    """Manager providing helpers for chat bridge lookups."""
-
-    def for_site(self, site: Site | None):
-        queryset = self.filter(is_enabled=True)
-        if site and getattr(site, "pk", None):
-            bridge = queryset.filter(site=site).first()
-            if bridge:
-                return bridge
-        return queryset.filter(is_default=True).first()
-
-
-class ChatBridge(Entity):
-    """Base configuration for routing chat messages to external services."""
-
-    site = models.ForeignKey(
-        Site,
-        on_delete=models.CASCADE,
-        related_name="%(app_label)s_%(class)s_bridges",
-        null=True,
-        blank=True,
-        help_text=_("Restrict this bridge to a specific site. Leave blank to use it as a fallback."),
-    )
-    is_enabled = models.BooleanField(
-        default=True,
-        help_text=_("Disable to stop forwarding chat messages to this bridge."),
-    )
-    is_default = models.BooleanField(
-        default=False,
-        help_text=_("Use as the fallback bridge when no site-specific configuration is defined."),
-    )
-    avatars = models.ManyToManyField(
-        "chats.ChatAvatar",
-        related_name="%(app_label)s_%(class)s_bridges",
-        blank=True,
-        help_text=_("Avatars allowed to use this bridge."),
-    )
-
-    objects = ChatBridgeManager()
-
-    default_site_error_message = _("Default chat bridges cannot target a specific site.")
-
-    class Meta:
-        abstract = True
-        ordering = ["site__domain", "pk"]
-
-    def clean(self):
-        super().clean()
-        errors: dict[str, list[str]] = {}
-        if self.is_default and self.site_id:
-            errors.setdefault("is_default", []).append(self.default_site_error_message)
-        if errors:
-            raise ValidationError(errors)
 
 
 class ChatSession(Entity):
