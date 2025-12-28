@@ -165,11 +165,16 @@ def _queue_boot_status_message(base_dir: Path, lock_dir: Path, port: str) -> Non
     status_label = str(status_code) if status_code is not None else "?"
     subject = f"BOOT {seconds_label} {status_label}"
 
+    target = lock_dir / LCD_LATEST_LOCK_FILE
     try:
+        lock_dir.mkdir(parents=True, exist_ok=True)
         payload = render_lcd_lock_file(subject=subject, body=role_label)
-        target = lock_dir / LCD_LATEST_LOCK_FILE
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(payload, encoding="utf-8")
+
+        # Write atomically to avoid transient empty reads while the LCD script polls
+        # the latest payload during rotation.
+        tmp_path = target.with_suffix(".tmp")
+        tmp_path.write_text(payload, encoding="utf-8")
+        tmp_path.replace(target)
     except Exception:
         logger.exception("Failed to queue boot status LCD message")
 
