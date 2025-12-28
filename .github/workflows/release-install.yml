@@ -1,5 +1,8 @@
 name: Install latest release
 
+env:
+  NODE_OPTIONS: '--no-deprecation'
+
 on:
   pull_request:
     paths:

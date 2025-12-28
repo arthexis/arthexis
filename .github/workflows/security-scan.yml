@@ -1,5 +1,8 @@
 name: Security Scan
 
+env:
+  NODE_OPTIONS: '--no-deprecation'
+
 on:
   schedule:
     - cron: '0 2 * * 1'

@@ -3,6 +3,7 @@ name: Screenshot
 env:
   PYTHONDONTWRITEBYTECODE: '1'
   PLAYWRIGHT_VERSION: '1.45.2'
+  NODE_OPTIONS: '--no-deprecation'
 
 on:
   workflow_dispatch:
