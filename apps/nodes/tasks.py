@@ -4,7 +4,7 @@ import logging
 import os
 import shutil
 import subprocess
-from datetime import timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import requests
@@ -17,10 +17,13 @@ from django.contrib import admin
 from django.utils import timezone as django_timezone
 
 from apps.content.models import ContentSample
+from apps.core.system import SUITE_UPTIME_LOCK_NAME
 from apps.screens.startup_notifications import (
+    LCD_LATEST_LOCK_FILE,
     LCD_STICKY_LOCK_FILE,
     lcd_feature_enabled,
     queue_startup_message,
+    render_lcd_lock_file,
 )
 from .models import NetMessage, Node, PendingNetMessage
 from .utils import capture_screenshot, save_screenshot
@@ -69,7 +72,111 @@ def send_startup_net_message(lock_file: str | None = None, port: str | None = No
         logger.exception("Failed to queue startup Net Message")
         raise
 
+    _queue_boot_status_message(
+        base_dir=base_dir,
+        lock_dir=lock_dir,
+        port=port_value,
+    )
+
     return f"queued:{target_lock}"
+
+
+def _parse_suite_start_timestamp(raw_value: object) -> datetime | None:
+    if not raw_value:
+        return None
+
+    text = str(raw_value).strip()
+    if not text:
+        return None
+
+    if text[-1] in {"Z", "z"}:
+        text = f"{text[:-1]}+00:00"
+
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+
+    if django_timezone.is_naive(parsed):
+        try:
+            parsed = django_timezone.make_aware(
+                parsed, django_timezone.get_current_timezone()
+            )
+        except Exception:
+            return None
+
+    return parsed
+
+
+def _startup_duration_seconds(base_dir: Path) -> int | None:
+    lock_path = base_dir / ".locks" / SUITE_UPTIME_LOCK_NAME
+    try:
+        payload = json.loads(lock_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+    started_at = _parse_suite_start_timestamp(
+        payload.get("started_at") or payload.get("boot_time")
+    )
+    if not started_at:
+        return None
+
+    seconds = int((django_timezone.now() - started_at).total_seconds())
+    if seconds < 0:
+        return None
+    return seconds
+
+
+def _probe_local_status(port: str, node: Node | None) -> int | None:
+    scheme = "http"
+    if node:
+        try:
+            scheme = node.get_preferred_scheme()
+        except Exception:
+            logger.debug("Failed to resolve preferred scheme for node", exc_info=True)
+
+    url = f"{scheme}://localhost:{port}/"
+    try:
+        response = requests.get(url, timeout=5)
+    except Exception:
+        logger.warning("Startup status probe failed for %s", url, exc_info=True)
+        return None
+    return int(response.status_code)
+
+
+def _node_role_label(node: Node | None) -> str:
+    if node and getattr(node, "role", None):
+        return str(getattr(node.role, "name", "") or "")
+    return ""
+
+
+def _queue_boot_status_message(base_dir: Path, lock_dir: Path, port: str) -> None:
+    local_node = None
+    try:
+        local_node = Node.get_local()
+    except Exception:
+        logger.debug("Unable to load local node for boot status message", exc_info=True)
+
+    boot_time_seconds = _startup_duration_seconds(base_dir)
+    status_code = _probe_local_status(port, local_node)
+    role_label = _node_role_label(local_node)
+
+    seconds_label = f"{boot_time_seconds}s" if boot_time_seconds is not None else "?s"
+    status_label = str(status_code) if status_code is not None else "?"
+    subject = f"BOOT {seconds_label} {status_label}"
+
+    target = lock_dir / LCD_LATEST_LOCK_FILE
+    try:
+        lock_dir.mkdir(parents=True, exist_ok=True)
+        payload = render_lcd_lock_file(subject=subject, body=role_label)
+
+        # Write atomically to avoid transient empty reads while the LCD script polls
+        # the latest payload during rotation.
+        tmp_path = target.with_suffix(".tmp")
+        tmp_path.write_text(payload, encoding="utf-8")
+        tmp_path.replace(target)
+    except Exception:
+        logger.exception("Failed to queue boot status LCD message")
 
 
 PING_FAILURE_CACHE_KEY = "nodes:connectivity:wlan1_failures"
