@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import contextlib
-import os
 import logging
-import shutil
+import os
 
 from django.db import models
 from django.db.models import Q
@@ -13,28 +12,10 @@ from selenium import webdriver
 from selenium.webdriver.firefox.options import Options as FirefoxOptions
 
 from apps.core.entity import Entity, EntityManager
+from apps.selenium.utils.firefox import ensure_geckodriver, find_firefox_binary
 from apps.sigils.sigil_resolver import resolve_sigils
 
 logger = logging.getLogger(__name__)
-
-try:  # pragma: no cover - optional dependency may be missing
-    from geckodriver_autoinstaller import install as install_geckodriver
-except Exception:  # pragma: no cover - fallback when installer is unavailable
-    install_geckodriver = None
-
-
-_FIREFOX_BINARY_CANDIDATES = ("firefox", "firefox-esr", "firefox-bin")
-
-
-def _ensure_geckodriver() -> None:
-    """Install geckodriver on demand when possible."""
-
-    if install_geckodriver is None:  # pragma: no cover - dependency not installed
-        return
-    try:  # pragma: no cover - external call
-        install_geckodriver()
-    except Exception as exc:  # pragma: no cover - external failures rare in tests
-        logger.warning("Unable to ensure geckodriver availability: %s", exc)
 
 
 class SeleniumBrowserManager(EntityManager):
@@ -90,18 +71,9 @@ class SeleniumBrowser(Entity):
     def default(cls) -> "SeleniumBrowser | None":
         return cls.objects.default()
 
-    def _find_firefox_binary(self) -> str | None:
-        if self.binary_path:
-            return self.binary_path
-        for candidate in _FIREFOX_BINARY_CANDIDATES:
-            path = shutil.which(candidate)
-            if path:
-                return path
-        return None
-
     def _build_firefox_options(self) -> FirefoxOptions:
         options = FirefoxOptions()
-        binary = self._find_firefox_binary()
+        binary = find_firefox_binary(self.binary_path)
         if binary:
             options.binary_location = binary
         mode = self.mode
@@ -116,7 +88,7 @@ class SeleniumBrowser(Entity):
         if self.engine != self.Engine.FIREFOX:
             raise RuntimeError(f"Unsupported browser engine: {self.engine}")
 
-        _ensure_geckodriver()
+        ensure_geckodriver()
         options = self._build_firefox_options()
         return webdriver.Firefox(options=options)
 
