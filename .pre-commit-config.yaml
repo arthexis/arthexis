@@ -18,6 +18,11 @@ repos:
         entry: python scripts/check_migrations.py
         language: system
         pass_filenames: false
+      - id: lint-seed-fixtures
+        name: Lint seed fixtures
+        entry: python scripts/lint_seed_fixtures.py
+        language: system
+        pass_filenames: false
       - id: validation-todos
         name: Ensure validation TODOs
         entry: python scripts/ensure_validation_todos.py
