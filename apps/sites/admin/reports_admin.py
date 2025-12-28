@@ -26,15 +26,19 @@ logger = logging.getLogger(__name__)
 class ViewHistoryAdmin(EntityModelAdmin):
     date_hierarchy = "visited_at"
     list_display = (
+        "kind",
+        "site",
         "path",
         "status_code",
         "status_text",
         "method",
         "visited_at",
     )
-    list_filter = ("method", "status_code")
+    list_filter = ("kind", "site", "method", "status_code")
     search_fields = ("path", "error_message", "view_name", "status_text")
     readonly_fields = (
+        "kind",
+        "site",
         "path",
         "method",
         "status_code",

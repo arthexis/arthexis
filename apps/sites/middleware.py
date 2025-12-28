@@ -37,7 +37,8 @@ class LanguagePreferenceMiddleware:
 class ViewHistoryMiddleware:
     """Persist public site visits for analytics."""
 
-    _EXCLUDED_PREFIXES = ("/admin", "/__debug__", "/healthz", "/status")
+    _EXCLUDED_PREFIXES = ("/__debug__", "/healthz", "/status")
+    _ADMIN_PREFIX = "/admin"
 
     def __init__(self, get_response):
         self.get_response = get_response
@@ -93,6 +94,11 @@ class ViewHistoryMiddleware:
         except ValueError:
             status_text = ""
 
+        kind = (
+            ViewHistory.Kind.ADMIN
+            if request.path.startswith(self._ADMIN_PREFIX)
+            else ViewHistory.Kind.SITE
+        )
         view_name = self._resolve_view_name(request)
         full_path = request.get_full_path()
         if not error_message and status_code >= HTTPStatus.BAD_REQUEST:
@@ -102,8 +108,19 @@ class ViewHistoryMiddleware:
         if status_code < HTTPStatus.BAD_REQUEST:
             landing = self._resolve_landing(request)
 
+        site = getattr(request, "site", None)
+        if site is None:
+            try:
+                from utils.sites import get_site
+
+                site = get_site(request)
+            except Exception:  # pragma: no cover - best effort logging
+                site = None
+
         try:
             ViewHistory.objects.create(
+                kind=kind,
+                site=site,
                 path=full_path,
                 method=request.method,
                 status_code=status_code,
