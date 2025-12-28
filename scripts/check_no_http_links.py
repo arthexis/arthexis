@@ -1,6 +1,8 @@
+#!/usr/bin/env python3
 from __future__ import annotations
 
 import pathlib
+import sys
 
 
 def _iter_document_paths(repo_root: pathlib.Path) -> list[pathlib.Path]:
@@ -16,14 +18,24 @@ def _iter_document_paths(repo_root: pathlib.Path) -> list[pathlib.Path]:
     return sorted({*readmes, *docs})
 
 
-def test_docs_do_not_include_http_links():
+def main() -> int:
     repo_root = pathlib.Path(__file__).resolve().parents[1]
     offenders = []
+
     for path in _iter_document_paths(repo_root):
         contents = path.read_text(encoding="utf-8", errors="ignore")
         if "http://" in contents:
             offenders.append(path.relative_to(repo_root))
-    assert not offenders, (
-        "Found HTTP links in documentation files:\n"
-        + "\n".join(str(path) for path in offenders)
-    )
+
+    if offenders:
+        message = ["Found HTTP links in documentation files:"]
+        message.extend(f" - {path}" for path in offenders)
+        print("\n".join(message))
+        return 1
+
+    print("No HTTP links found in README* or docs/ files.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
