@@ -1,4 +1,4 @@
-from django.contrib import admin, messages
+from django.contrib import messages
 from django.shortcuts import redirect
 from django.urls import path, reverse
 
@@ -37,10 +37,6 @@ class EmailOutboxAdmin(EntityModelAdmin):
             },
         ),
     )
-
-    @admin.display(description="Owner")
-    def owner_label(self, obj):
-        return obj.owner_display()
 
     def get_urls(self):
         urls = super().get_urls()
