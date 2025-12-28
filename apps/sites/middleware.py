@@ -55,12 +55,16 @@ class ViewHistoryMiddleware:
             return self.get_response(request)
 
         error_message = ""
+        exception_name = ""
         try:
             response = self.get_response(request)
         except Exception as exc:  # pragma: no cover - re-raised for Django
             status_code = getattr(exc, "status_code", 500) or 500
             error_message = str(exc)
-            self._record_visit(request, status_code, error_message)
+            exception_name = exc.__class__.__name__
+            self._record_visit(
+                request, status_code, error_message, exception_name=exception_name
+            )
             raise
         else:
             status_code = getattr(response, "status_code", 0) or 0
@@ -87,7 +91,14 @@ class ViewHistoryMiddleware:
 
         return True
 
-    def _record_visit(self, request, status_code: int, error_message: str) -> None:
+    def _record_visit(
+        self,
+        request,
+        status_code: int,
+        error_message: str,
+        *,
+        exception_name: str = "",
+    ) -> None:
         try:
             status = HTTPStatus(status_code)
             status_text = status.phrase
@@ -126,6 +137,7 @@ class ViewHistoryMiddleware:
                 status_code=status_code,
                 status_text=status_text,
                 error_message=(error_message or "")[:1000],
+                exception_name=exception_name,
                 view_name=view_name,
             )
         except Exception:  # pragma: no cover - best effort logging
