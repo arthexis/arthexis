@@ -13,6 +13,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name="viewhistory",
             name="exception_name",
-            field=models.CharField(blank=True, max_length=200),
+            field=models.CharField(blank=True, default="", max_length=200),
+            preserve_default=False,
         ),
     ]
