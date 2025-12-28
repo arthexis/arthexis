@@ -47,3 +47,39 @@ def test_frame_writer_writes_fallback_file_on_failure(tmp_path):
     assert success is False
     contents = work_file.read_text(encoding="utf-8").splitlines()
     assert contents == ["hello".ljust(lcd_screen.LCD_COLUMNS), "world".ljust(lcd_screen.LCD_COLUMNS)]
+
+
+def test_scroll_interval_defaults_when_state_cleared(monkeypatch):
+    class FailingLCD:
+        def write_frame(self, *args, **kwargs):
+            raise RuntimeError("boom")
+
+    display_state = lcd_screen._prepare_display_state(
+        "hello world" * 2, "", lcd_screen.DEFAULT_SCROLL_MS
+    )
+    writer = lcd_screen.LCDFrameWriter(FailingLCD())
+    scheduler = lcd_screen.ScrollScheduler()
+    health = lcd_screen.LCDHealthMonitor(base_delay=0.0, max_delay=0.0)
+
+    advanced: list[float] = []
+    monkeypatch.setattr(scheduler, "advance", lambda interval: advanced.append(interval))
+    monkeypatch.setattr(lcd_screen.time, "sleep", lambda delay: None)
+
+    scheduler.sleep_until_ready()
+    display_state, write_success = lcd_screen._advance_display(display_state, writer)
+    assert write_success is False
+
+    lcd = object()
+    next_display_state = object()
+    if lcd is not None and writer.lcd is None:
+        lcd = None
+        writer = lcd_screen.LCDFrameWriter(None)
+        display_state = None
+        next_display_state = None
+    health.record_failure()
+
+    scheduler.advance(display_state.scroll_sec if display_state else 0.5)
+
+    assert advanced == [0.5]
+    assert lcd is None
+    assert next_display_state is None
