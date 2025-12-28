@@ -1,46 +1,26 @@
+import contextlib
+import ipaddress
+import secrets
+from urllib.parse import urlencode, urlparse, urlunparse
+
+import requests
 from django.conf import settings
-from django.contrib import admin, messages
+from django.contrib import messages
 from django.http import HttpResponseRedirect
 from django.http.request import split_domain_port
 from django.template.response import TemplateResponse
 from django.urls import NoReverseMatch, path, reverse
-from urllib.parse import urlencode, urlparse, urlunparse
-import contextlib
-import ipaddress
-import secrets
-import requests
-from django.utils import formats, timezone
-from django.utils.translation import gettext_lazy as _, ngettext
+from django.utils.translation import gettext_lazy as _
 from django_object_actions import DjangoObjectActions
-from apps.core.admin import InviteLeadAdmin
-from apps.locals.user_data import (
-    EntityModelAdmin,
-    UserDatumAdminMixin,
-    delete_user_fixture,
-    dump_user_fixture,
-    _fixture_path,
-    _resolve_fixture_user,
-    _user_allows_user_data,
-)
+
 from apps.nodes.models import Node
 from config.request_utils import is_https_request
 
-from .forms import (
-    SlackBotProfileAdminForm,
-    SlackBotWizardSetupForm,
-)
-from .models import (
-    InviteLead,
-    SlackBotProfile,
-)
+from ..forms import SlackBotProfileAdminForm, SlackBotWizardSetupForm
+from ..models import SlackBotProfile
+from .fixtures import EntityModelAdmin
 
 
-@admin.register(InviteLead)
-class InviteLeadAdminProxy(InviteLeadAdmin):
-    pass
-
-
-@admin.register(SlackBotProfile)
 class SlackBotProfileAdmin(DjangoObjectActions, EntityModelAdmin):
     WIZARD_SESSION_KEY = "slack_bot_wizard_config"
     DEFAULT_SCOPE = "commands,chat:write,chat:write.public"
@@ -437,3 +417,8 @@ class SlackBotProfileAdmin(DjangoObjectActions, EntityModelAdmin):
         return HttpResponseRedirect(
             reverse("admin:teams_slackbotprofile_change", args=[bot.pk])
         )
+
+
+__all__ = [
+    "SlackBotProfileAdmin",
+]
