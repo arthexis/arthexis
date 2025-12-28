@@ -6,8 +6,8 @@ from unittest import mock
 
 import pytest
 from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.test import override_settings
-from pathlib import Path
 
 from apps.screens.startup_notifications import (
     LCD_HIGH_LOCK_FILE,
@@ -76,6 +76,35 @@ def test_restart_uses_service_lock(temp_base_dir: Path):
                 ["systemctl", "restart", "lcd-demo"], returncode=0, stdout="", stderr=""
             )
             call_command("lcd_write", restart=True)
+
+    mock_run.assert_called_once_with(
+        ["systemctl", "restart", "lcd-demo"], capture_output=True, text=True
+    )
+
+
+def test_restart_reports_failure(temp_base_dir: Path):
+    with override_settings(BASE_DIR=temp_base_dir):
+        with mock.patch.object(subprocess, "run") as mock_run:
+            mock_run.return_value = subprocess.CompletedProcess(
+                ["systemctl", "restart", "lcd-demo"],
+                returncode=1,
+                stdout="",
+                stderr="restart failed",
+            )
+
+            with pytest.raises(CommandError, match="restart failed"):
+                call_command("lcd_write", restart=True, service_name="demo")
+
+
+def test_restart_handles_missing_systemctl(temp_base_dir: Path):
+    with override_settings(BASE_DIR=temp_base_dir):
+        with mock.patch.object(
+            subprocess, "run", side_effect=FileNotFoundError
+        ) as mock_run:
+            with pytest.raises(
+                CommandError, match="systemctl not available; cannot restart lcd service"
+            ):
+                call_command("lcd_write", restart=True, service_name="demo")
 
     mock_run.assert_called_once_with(
         ["systemctl", "restart", "lcd-demo"], capture_output=True, text=True
