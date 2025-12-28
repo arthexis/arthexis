@@ -53,10 +53,17 @@ logger = logging.getLogger(__name__)
 local_registration_logger = get_register_local_node_logger()
 
 
+class NameRepresentationMixin:
+    """Provide a name-based ``__str__`` for models with a ``name`` field."""
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return self.name
+
+
 ROLE_RENAMES: dict[str, str] = {"Constellation": "Watchtower"}
 
 
-class Platform(Entity):
+class Platform(NameRepresentationMixin, Entity):
     """Supported hardware and operating system combinations."""
 
     name = models.CharField(max_length=100, unique=True)
@@ -75,10 +82,6 @@ class Platform(Entity):
                 name="nodes_platform_hardware_os_unique",
             )
         ]
-
-    def __str__(self) -> str:  # pragma: no cover - simple representation
-        return self.name
-
 
 def _upgrade_in_progress() -> bool:
     lock_file = Path(settings.BASE_DIR) / ".locks" / "upgrade_in_progress.lck"
@@ -117,7 +120,7 @@ class NodeRoleManager(models.Manager):
             raise
 
 
-class NodeRole(Entity):
+class NodeRole(NameRepresentationMixin, Entity):
     """Assignable role for a :class:`Node`."""
 
     name = models.CharField(max_length=50, unique=True)
@@ -132,10 +135,6 @@ class NodeRole(Entity):
 
     def natural_key(self):  # pragma: no cover - simple representation
         return (self.name,)
-
-    def __str__(self) -> str:  # pragma: no cover - simple representation
-        return self.name
-
 
 def get_terminal_role():
     """Return the NodeRole representing a Terminal if it exists."""
