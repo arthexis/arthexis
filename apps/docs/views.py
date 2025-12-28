@@ -1,270 +1,21 @@
-import csv
-import io
 import logging
 import mimetypes
-import re
-from html import escape
 from pathlib import Path
 from types import SimpleNamespace
 
-import markdown
 from django.conf import settings
-from django.contrib.staticfiles import finders
 from django.utils.cache import patch_cache_control, patch_vary_headers
-from django.core.exceptions import PermissionDenied, SuspiciousFileOperation
 from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import render
-from django.urls import NoReverseMatch, reverse
-from django.utils._os import safe_join
 from django.views.decorators.cache import never_cache
 
 from apps.nodes.models import Node
 from apps.modules.models import Module
 
+from . import assets, rendering
+
 
 logger = logging.getLogger(__name__)
-
-
-MARKDOWN_EXTENSIONS = ["toc", "tables", "mdx_truly_sane_lists"]
-
-MARKDOWN_FILE_EXTENSIONS = {".md", ".markdown"}
-PLAINTEXT_FILE_EXTENSIONS = {".txt", ".text"}
-CSV_FILE_EXTENSIONS = {".csv"}
-
-MARKDOWN_IMAGE_PATTERN = re.compile(
-    r"(?P<prefix><img\b[^>]*\bsrc=[\"\'])(?P<scheme>(?:static|work))://(?P<path>[^\"\']+)(?P<suffix>[\"\'])",
-    re.IGNORECASE,
-)
-
-MARKDOWN_ASSET_TAG_PATTERN = re.compile(
-    r"<(?P<tag>img|script|link|audio|video|source|iframe|embed)\b[^>]*>",
-    re.IGNORECASE,
-)
-MARKDOWN_HTTP_ASSET_ATTRIBUTE_PATTERN = re.compile(
-    r"\s+(?P<attr>src|href|srcset)=(?P<quote>[\"\'])(?P<value>.*?)(?P=quote)",
-    re.IGNORECASE,
-)
-
-ALLOWED_IMAGE_EXTENSIONS = {
-    ".apng",
-    ".avif",
-    ".gif",
-    ".jpg",
-    ".jpeg",
-    ".png",
-    ".svg",
-    ".webp",
-}
-
-
-def render_markdown_with_toc(text: str) -> tuple[str, str]:
-    """Render ``text`` to HTML and return the HTML and stripped TOC."""
-
-    md = markdown.Markdown(extensions=MARKDOWN_EXTENSIONS)
-    html = md.convert(text)
-    html = _rewrite_markdown_asset_links(html)
-    html = _strip_http_subresources(html)
-    toc_html = md.toc
-    toc_html = _strip_toc_wrapper(toc_html)
-    return html, toc_html
-
-
-def _render_plain_text_document(text: str) -> tuple[str, str]:
-    """Render plain text content using a preformatted block."""
-
-    html = (
-        '<pre class="reader-plain-text bg-body-tertiary border rounded p-3 text-break">'
-        f"{escape(text)}"
-        "</pre>"
-    )
-    return html, ""
-
-
-def _render_csv_document(text: str) -> tuple[str, str]:
-    """Render CSV content into a responsive HTML table."""
-
-    reader = csv.reader(io.StringIO(text))
-    rows = list(reader)
-    if not rows:
-        empty_html = (
-            '<div class="table-responsive">'
-            '<table class="table table-striped table-bordered table-sm reader-table">'
-            "<tbody><tr><td class=\"text-muted\">No data available.</td></tr></tbody>"
-            "</table></div>"
-        )
-        return empty_html, ""
-
-    column_count = max(len(row) for row in rows)
-
-    def _normalize(row: list[str]) -> list[str]:
-        normalized = list(row)
-        if len(normalized) < column_count:
-            normalized.extend([""] * (column_count - len(normalized)))
-        return normalized
-
-    header_cells = "".join(
-        f"<th scope=\"col\">{escape(value)}</th>" for value in _normalize(rows[0])
-    )
-    header_html = f"<thead><tr>{header_cells}</tr></thead>"
-
-    body_rows = rows[1:]
-    if body_rows:
-        body_html = "".join(
-            "<tr>"
-            + "".join(f"<td>{escape(value)}</td>" for value in _normalize(row))
-            + "</tr>"
-            for row in body_rows
-        )
-    else:
-        body_html = (
-            f"<tr><td class=\"text-muted\" colspan=\"{column_count}\">No rows available.</td></tr>"
-        )
-    body_html = f"<tbody>{body_html}</tbody>"
-
-    table_html = (
-        '<div class="table-responsive">'
-        '<table class="table table-striped table-bordered table-sm reader-table">'
-        f"{header_html}{body_html}</table></div>"
-    )
-    return table_html, ""
-
-
-def _render_code_document(text: str) -> tuple[str, str]:
-    """Render arbitrary text content inside a code viewer block."""
-
-    html = (
-        '<pre class="reader-code-viewer bg-body-tertiary border rounded p-3">'
-        f"<code class=\"font-monospace\">{escape(text)}</code>"
-        "</pre>"
-    )
-    return html, ""
-
-
-def _read_document_text(file_path: Path) -> str:
-    """Read ``file_path`` as UTF-8 text, replacing undecodable bytes."""
-
-    return file_path.read_text(encoding="utf-8", errors="replace")
-
-
-def _render_document_file(file_path: Path) -> tuple[str, str]:
-    """Render a documentation file according to its extension."""
-
-    extension = file_path.suffix.lower()
-    text = _read_document_text(file_path)
-    if extension in MARKDOWN_FILE_EXTENSIONS:
-        return render_markdown_with_toc(text)
-    if extension in CSV_FILE_EXTENSIONS:
-        return _render_csv_document(text)
-    if extension in PLAINTEXT_FILE_EXTENSIONS:
-        return _render_plain_text_document(text)
-    return _render_code_document(text)
-
-
-def _strip_toc_wrapper(toc_html: str) -> str:
-    """Normalize ``markdown``'s TOC output by removing the wrapper ``div``."""
-
-    toc_html = toc_html.strip()
-    if toc_html.startswith('<div class="toc">'):
-        toc_html = toc_html[len('<div class="toc">') :]
-        if toc_html.endswith("</div>"):
-            toc_html = toc_html[: -len("</div>")]
-    return toc_html.strip()
-
-
-def _rewrite_markdown_asset_links(html: str) -> str:
-    """Rewrite asset links that reference local asset schemes."""
-
-    def _replace(match: re.Match[str]) -> str:
-        scheme = match.group("scheme").lower()
-        asset_path = match.group("path").lstrip("/")
-        if not asset_path:
-            return match.group(0)
-        extension = Path(asset_path).suffix.lower()
-        if extension not in ALLOWED_IMAGE_EXTENSIONS:
-            return match.group(0)
-        try:
-            asset_url = reverse(
-                "docs:readme-asset",
-                kwargs={"source": scheme, "asset": asset_path},
-            )
-        except NoReverseMatch:
-            return match.group(0)
-        return f"{match.group('prefix')}{escape(asset_url)}{match.group('suffix')}"
-
-    return MARKDOWN_IMAGE_PATTERN.sub(_replace, html)
-
-
-def _strip_http_subresources(html: str) -> str:
-    """Strip HTTP subresource URLs from HTML output."""
-
-    def _strip_http_attributes(match: re.Match[str]) -> str:
-        tag_html = match.group(0)
-
-        def _remove_attr(attr_match: re.Match[str]) -> str:
-            if "http://" in attr_match.group("value").lower():
-                return ""
-            return attr_match.group(0)
-
-        return MARKDOWN_HTTP_ASSET_ATTRIBUTE_PATTERN.sub(_remove_attr, tag_html)
-
-    return MARKDOWN_ASSET_TAG_PATTERN.sub(_strip_http_attributes, html)
-
-
-def _resolve_static_asset(path: str) -> Path:
-    normalized = path.lstrip("/")
-    if not normalized:
-        raise Http404("Asset not found")
-    resolved = finders.find(normalized)
-    if not resolved:
-        raise Http404("Asset not found")
-    if isinstance(resolved, (list, tuple)):
-        resolved = resolved[0]
-    file_path = Path(resolved)
-    if file_path.is_dir():
-        raise Http404("Asset not found")
-    return file_path
-
-
-def _resolve_work_asset(user, path: str) -> Path:
-    if not (user and getattr(user, "is_authenticated", False)):
-        raise PermissionDenied
-    normalized = path.lstrip("/")
-    if not normalized:
-        raise Http404("Asset not found")
-    username = getattr(user, "get_username", None)
-    if callable(username):
-        username = username()
-    else:
-        username = getattr(user, "username", "")
-    username_component = Path(str(username or user.pk)).name
-    base_work = Path(settings.BASE_DIR) / "work"
-    try:
-        user_dir = Path(safe_join(str(base_work), username_component))
-        asset_path = Path(safe_join(str(user_dir), normalized))
-    except SuspiciousFileOperation as exc:
-        logger.warning("Rejected suspicious work asset path: %s", normalized, exc_info=exc)
-        raise Http404("Asset not found") from exc
-    try:
-        user_dir_resolved = user_dir.resolve(strict=True)
-    except FileNotFoundError as exc:
-        logger.warning(
-            "Work directory missing for asset request: %s", user_dir, exc_info=exc
-        )
-        raise Http404("Asset not found") from exc
-    try:
-        asset_resolved = asset_path.resolve(strict=True)
-    except FileNotFoundError as exc:
-        raise Http404("Asset not found") from exc
-    try:
-        asset_resolved.relative_to(user_dir_resolved)
-    except ValueError as exc:
-        logger.warning(
-            "Rejected work asset outside directory: %s", asset_resolved, exc_info=exc
-        )
-        raise Http404("Asset not found") from exc
-    if asset_resolved.is_dir():
-        raise Http404("Asset not found")
-    return asset_resolved
 
 
 def _locate_readme_document(role, doc: str | None, lang: str) -> SimpleNamespace:
@@ -363,21 +114,6 @@ def _locate_readme_document(role, doc: str | None, lang: str) -> SimpleNamespace
         root_base=root_base,
     )
 
-
-def _split_html_sections(html: str, keep_sections: int) -> tuple[str, str]:
-    """Return ``keep_sections`` leading sections and the remaining HTML."""
-
-    if keep_sections < 1:
-        return "", html
-
-    heading_matches = list(re.finditer(r"<h[1-6]\\b[^>]*>", html, flags=re.IGNORECASE))
-    if len(heading_matches) <= keep_sections:
-        return html, ""
-
-    split_index = heading_matches[keep_sections].start()
-    return html[:split_index], html[split_index:]
-
-
 def _normalize_docs_path(doc: str | None, prepend_docs: bool) -> str | None:
     if not doc or not prepend_docs:
         return doc
@@ -396,9 +132,9 @@ def render_readme_page(
         node = Node.get_local()
         role = node.role if node else None
     document = _locate_readme_document(role, normalized_doc, lang)
-    html, toc_html = _render_document_file(document.file)
+    html, toc_html = rendering.render_document_file(document.file)
     full_document = request.GET.get("full") == "1"
-    initial_content, remaining_content = _split_html_sections(html, 2)
+    initial_content, remaining_content = rendering.split_html_sections(html, 2)
     if full_document:
         initial_content = html
         remaining_content = ""
@@ -439,9 +175,9 @@ def readme(request, doc=None, prepend_docs: bool = False):
 def readme_asset(request, source: str, asset: str):
     source_normalized = (source or "").lower()
     if source_normalized == "static":
-        file_path = _resolve_static_asset(asset)
+        file_path = assets.resolve_static_asset(asset)
     elif source_normalized == "work":
-        file_path = _resolve_work_asset(getattr(request, "user", None), asset)
+        file_path = assets.resolve_work_asset(getattr(request, "user", None), asset)
     else:
         raise Http404("Asset not found")
 
@@ -449,7 +185,7 @@ def readme_asset(request, source: str, asset: str):
         raise Http404("Asset not found")
 
     extension = file_path.suffix.lower()
-    if extension not in ALLOWED_IMAGE_EXTENSIONS:
+    if extension not in assets.ALLOWED_IMAGE_EXTENSIONS:
         raise Http404("Asset not found")
 
     try:

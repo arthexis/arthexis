@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 
-from apps.docs import views
+from apps.docs import rendering
 
 
 ASSET_HTTP_PATTERN = re.compile(
@@ -27,7 +27,7 @@ def test_render_markdown_with_toc_strips_http_subresources():
 [External link](http://example.com)
     """
 
-    html, toc = views.render_markdown_with_toc(markdown_text)
+    html, toc = rendering.render_markdown_with_toc(markdown_text)
 
     assert toc is not None
     assert not ASSET_HTTP_PATTERN.search(html), html
