@@ -22,6 +22,7 @@ from apps.base.models import Entity
 from apps.celery.utils import normalize_periodic_task_name, periodic_task_name_variants
 from apps.emails import mailer
 from apps.video import has_rpi_camera_stack
+from .slug_entities import SlugDisplayNaturalKeyMixin, SlugEntityManager
 
 if TYPE_CHECKING:  # pragma: no cover - used for type checking
     from .node_core import Node
@@ -30,9 +31,8 @@ if TYPE_CHECKING:  # pragma: no cover - used for type checking
 logger = logging.getLogger(__name__)
 
 
-class NodeFeatureManager(models.Manager):
-    def get_by_natural_key(self, slug: str):
-        return self.get(slug=slug)
+class NodeFeatureManager(SlugEntityManager):
+    pass
 
 
 @dataclass(frozen=True)
@@ -41,7 +41,7 @@ class NodeFeatureDefaultAction:
     url_name: str
 
 
-class NodeFeature(Entity):
+class NodeFeature(SlugDisplayNaturalKeyMixin, Entity):
     """Feature that may be enabled on nodes and roles."""
 
     slug = models.SlugField(max_length=50, unique=True)
@@ -106,12 +106,6 @@ class NodeFeature(Entity):
         ordering = ["display"]
         verbose_name = "Node Feature"
         verbose_name_plural = "Node Features"
-
-    def natural_key(self):  # pragma: no cover - simple representation
-        return (self.slug,)
-
-    def __str__(self) -> str:  # pragma: no cover - simple representation
-        return self.display
 
     @property
     def is_enabled(self) -> bool:

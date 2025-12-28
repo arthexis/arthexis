@@ -22,10 +22,11 @@ from .node_core import (
     node_information_updated,
 )
 from .services import NodeService, NodeServiceManager
+from .slug_entities import SlugDisplayNaturalKeyMixin, SlugEntityManager
 
 __all__ = [
     "NetMessage",
-    "Node",
+    "Node", 
     "NodeFeature",
     "NodeFeatureAssignment",
     "NodeFeatureDefaultAction",
@@ -36,6 +37,8 @@ __all__ = [
     "NodeRoleManager",
     "NodeService",
     "NodeServiceManager",
+    "SlugDisplayNaturalKeyMixin",
+    "SlugEntityManager",
     "PendingNetMessage",
     "Platform",
     "ROLE_RENAMES",
