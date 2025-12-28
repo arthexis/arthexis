@@ -1,5 +1,8 @@
 name: Close stale PRs
 
+env:
+  NODE_OPTIONS: '--no-deprecation'
+
 on:
   schedule:
     - cron: '0 0,8,16 * * *'
