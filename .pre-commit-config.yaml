@@ -23,6 +23,11 @@ repos:
         entry: python scripts/ensure_validation_todos.py
         language: system
         pass_filenames: false
+      - id: docs-no-http-links
+        name: Ensure documentation uses HTTPS links
+        entry: python scripts/check_no_http_links.py
+        language: system
+        pass_filenames: false
       - id: nested-git-repositories
         name: Prevent nested Git repositories
         entry: python scripts/check_nested_git_repositories.py

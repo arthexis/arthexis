@@ -39,6 +39,10 @@ jobs:
       - name: Install suite from repository
         run: |
           ./install.sh --clean --no-start
+      - name: Check documentation links use HTTPS
+        run: |
+          source .venv/bin/activate
+          python scripts/check_no_http_links.py
       - name: Validate migrations
         run: |
           source .venv/bin/activate
