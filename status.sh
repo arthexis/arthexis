@@ -266,7 +266,8 @@ if [ "$LCD_FEATURE" = true ]; then
     LCD_STATUS=$(systemctl is-active -- "lcd-$SERVICE" || true)
     echo "  LCD screen service status: $LCD_STATUS"
   else
-    if pgrep -f "core\.lcd_screen" >/dev/null 2>&1; then
+    if pgrep -f "python -m apps\.screens\\.lcd_screen" >/dev/null 2>&1 || \
+       pgrep -f "apps/screens/lcd_screen.py" >/dev/null 2>&1; then
       echo "  LCD screen process: running"
     else
       echo "  LCD screen process: not running"
