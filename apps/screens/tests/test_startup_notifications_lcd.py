@@ -6,9 +6,9 @@ from django.test import TestCase, override_settings
 
 from apps.nodes.models import Node, NodeFeature
 from apps.screens.startup_notifications import (
+    LCD_HIGH_LOCK_FILE,
     LCD_LEGACY_FEATURE_LOCK,
-    LCD_LATEST_LOCK_FILE,
-    LCD_STICKY_LOCK_FILE,
+    LCD_LOW_LOCK_FILE,
     lcd_feature_enabled,
     lcd_feature_enabled_for_paths,
 )
@@ -29,7 +29,7 @@ class LCDStartupNotificationTests(TestCase):
             base_dir = Path(tmpdir)
             lock_dir = base_dir / ".locks"
             lock_dir.mkdir(parents=True)
-            (lock_dir / LCD_STICKY_LOCK_FILE).write_text(
+            (lock_dir / LCD_HIGH_LOCK_FILE).write_text(
                 "startup\nmessage\n", encoding="utf-8"
             )
 
@@ -46,7 +46,7 @@ class LCDStartupNotificationTests(TestCase):
             base_dir = Path(tmpdir)
             lock_dir = base_dir / ".locks"
             lock_dir.mkdir(parents=True)
-            (lock_dir / LCD_LATEST_LOCK_FILE).write_text(
+            (lock_dir / LCD_LOW_LOCK_FILE).write_text(
                 "booting\n", encoding="utf-8"
             )
 
@@ -64,7 +64,7 @@ class LCDStartupNotificationTests(TestCase):
             node_base_path = base_dir / "work" / "nodes"
             lock_dir = node_base_path / ".locks"
             lock_dir.mkdir(parents=True)
-            (lock_dir / LCD_LATEST_LOCK_FILE).write_text(
+            (lock_dir / LCD_LOW_LOCK_FILE).write_text(
                 "booting\n", encoding="utf-8"
             )
 

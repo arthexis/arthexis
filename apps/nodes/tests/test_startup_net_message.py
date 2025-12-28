@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timedelta
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -38,14 +39,24 @@ def test_send_startup_net_message_writes_boot_status(
         json.dumps({"started_at": started_at.isoformat()}), encoding="utf-8"
     )
 
+    def write_high_lock(*, base_dir, port, lock_file=None):
+        target = lock_file or (Path(base_dir) / ".locks" / tasks.LCD_HIGH_LOCK_FILE)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("hi\nthere\n", encoding="utf-8")
+        return target
+
     monkeypatch.setattr(
         tasks.django_timezone, "now", lambda: started_at + timedelta(seconds=42)
     )
     monkeypatch.setattr(tasks.Node, "get_local", lambda: DummyNode())
     monkeypatch.setattr(tasks.requests, "get", lambda *_, **__: DummyResponse())
+    monkeypatch.setattr(tasks, "queue_startup_message", write_high_lock)
 
     tasks.send_startup_net_message()
 
-    latest_lines = (lock_dir / tasks.LCD_LATEST_LOCK_FILE).read_text().splitlines()
-    assert latest_lines[0] == "BOOT 42s 201"
-    assert latest_lines[1] == "Controller"
+    high_lines = (lock_dir / tasks.LCD_HIGH_LOCK_FILE).read_text().splitlines()
+    assert high_lines == ["hi", "there"]
+
+    low_lines = (lock_dir / tasks.LCD_LOW_LOCK_FILE).read_text().splitlines()
+    assert low_lines[0] == "BOOT 42s 201"
+    assert low_lines[1] == "Controller"

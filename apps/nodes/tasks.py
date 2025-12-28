@@ -19,8 +19,8 @@ from django.utils import timezone as django_timezone
 from apps.content.models import ContentSample
 from apps.core.system import SUITE_UPTIME_LOCK_NAME
 from apps.screens.startup_notifications import (
-    LCD_LATEST_LOCK_FILE,
-    LCD_STICKY_LOCK_FILE,
+    LCD_HIGH_LOCK_FILE,
+    LCD_LOW_LOCK_FILE,
     lcd_feature_enabled,
     queue_startup_message,
     render_lcd_lock_file,
@@ -58,7 +58,7 @@ def send_startup_net_message(lock_file: str | None = None, port: str | None = No
     target_lock = (
         Path(lock_file)
         if lock_file
-        else base_dir / ".locks" / LCD_STICKY_LOCK_FILE
+        else base_dir / ".locks" / LCD_HIGH_LOCK_FILE
     )
     lock_dir = target_lock.parent.resolve()
 
@@ -165,13 +165,13 @@ def _queue_boot_status_message(base_dir: Path, lock_dir: Path, port: str) -> Non
     status_label = str(status_code) if status_code is not None else "?"
     subject = f"BOOT {seconds_label} {status_label}"
 
-    target = lock_dir / LCD_LATEST_LOCK_FILE
+    target = lock_dir / LCD_LOW_LOCK_FILE
     try:
         lock_dir.mkdir(parents=True, exist_ok=True)
         payload = render_lcd_lock_file(subject=subject, body=role_label)
 
         # Write atomically to avoid transient empty reads while the LCD script polls
-        # the latest payload during rotation.
+        # the low-priority payload during rotation.
         tmp_path = target.with_suffix(".tmp")
         tmp_path.write_text(payload, encoding="utf-8")
         tmp_path.replace(target)

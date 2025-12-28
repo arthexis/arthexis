@@ -15,8 +15,8 @@ import threading
 from pathlib import Path
 
 from apps.screens.startup_notifications import (
-    LCD_LATEST_LOCK_FILE,
-    LCD_STICKY_LOCK_FILE,
+    LCD_HIGH_LOCK_FILE,
+    LCD_LOW_LOCK_FILE,
     render_lcd_lock_file,
 )
 
@@ -69,9 +69,9 @@ class NotificationManager:
         sticky_lock_file: Path | None = None,
     ) -> None:
         base_dir = get_base_dir()
-        self.lock_file = lock_file or base_dir / ".locks" / LCD_LATEST_LOCK_FILE
+        self.lock_file = lock_file or base_dir / ".locks" / LCD_LOW_LOCK_FILE
         self.sticky_lock_file = (
-            sticky_lock_file or base_dir / ".locks" / LCD_STICKY_LOCK_FILE
+            sticky_lock_file or base_dir / ".locks" / LCD_HIGH_LOCK_FILE
         )
         self.lock_file.parent.mkdir(parents=True, exist_ok=True)
         self.sticky_lock_file.parent.mkdir(parents=True, exist_ok=True)

@@ -7,7 +7,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 from apps.core.notifications import notify
-from apps.screens.startup_notifications import LCD_LATEST_LOCK_FILE
+from apps.screens.startup_notifications import LCD_LOW_LOCK_FILE
 
 
 class Command(BaseCommand):
@@ -36,7 +36,7 @@ class Command(BaseCommand):
         poll_interval: float = options["poll_interval"]
 
         base_dir = Path(settings.BASE_DIR)
-        lock_file = base_dir / ".locks" / LCD_LATEST_LOCK_FILE
+        lock_file = base_dir / ".locks" / LCD_LOW_LOCK_FILE
         lock_file.parent.mkdir(parents=True, exist_ok=True)
 
         self.stdout.write(f"Sending test message to LCD: {message}")
