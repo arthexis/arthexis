@@ -1077,6 +1077,12 @@ restart_services() {
             return 1
           fi
         fi
+        LCD_RESTART_COMPLETED=1
+      elif [ "$include_lcd" -eq 0 ] && lcd_systemd_unit_present "$service_name"; then
+        local lcd_service="lcd-$service_name"
+        if wait_for_service_active "$lcd_service" 1; then
+          LCD_RESTART_COMPLETED=1
+        fi
       fi
       if [ -f "$LOCK_DIR/celery.lck" ] && [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
         local celery_service="celery-$service_name"
@@ -1426,6 +1432,7 @@ elif [[ $RERUN_AFTER_SELF_UPDATE -eq 1 ]] && [[ ${RERUN_LCD_WAS_ACTIVE:-0} -eq 1
   LCD_WAS_ACTIVE=1
 fi
 LCD_RESTART_REQUIRED=$LCD_WAS_ACTIVE
+LCD_RESTART_COMPLETED=0
 
 stop_running_instance() {
   local skip_if_inactive="${1:-0}"
@@ -1645,6 +1652,10 @@ if [[ $NO_RESTART -eq 0 ]]; then
       fi
     fi
   fi
+fi
+
+if [[ ${LCD_RESTART_COMPLETED:-0} -eq 1 ]]; then
+  LCD_RESTART_REQUIRED=0
 fi
 
 if [ -n "$SERVICE_NAME" ] && [[ $NO_RESTART -eq 0 ]] && [[ $LCD_RESTART_REQUIRED -eq 1 ]]; then
