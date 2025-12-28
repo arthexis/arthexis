@@ -8,10 +8,10 @@ from django.core.validators import MaxLengthValidator, MaxValueValidator, MinVal
 from django.db import models
 from django.utils.translation import gettext, gettext_lazy as _, get_language_info
 
-from apps.sites.tasks import create_user_story_github_issue
 from apps.celery.utils import is_celery_enabled
 from apps.leads.models import Lead
-from apps.repos import github_issues
+from apps.repos import github
+from apps.sites.tasks import create_user_story_github_issue
 
 logger = logging.getLogger(__name__)
 
@@ -129,7 +129,7 @@ class UserStory(Lead):
         if self.github_issue_url:
             return self.github_issue_url
 
-        response = github_issues.create_issue(
+        response = github.create_issue(
             self.build_github_issue_title(),
             self.build_github_issue_body(),
             labels=self.get_github_issue_labels(),

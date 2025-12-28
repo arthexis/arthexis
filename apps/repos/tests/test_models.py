@@ -3,7 +3,8 @@ from __future__ import annotations
 import pytest
 from django.utils import timezone
 
-from apps.repos.models import GitHubRepository, RepositoryIssue, RepositoryPullRequest
+from apps.repos.models.issues import RepositoryIssue, RepositoryPullRequest
+from apps.repos.models.repositories import GitHubRepository
 
 
 @pytest.mark.django_db

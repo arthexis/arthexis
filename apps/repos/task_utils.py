@@ -5,7 +5,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from apps.repos.models import GitHubRepository, GitHubRepositoryError
+from apps.repos.models.repositories import GitHubRepository
+from apps.repos.services import GitHubRepositoryError
 
 if TYPE_CHECKING:  # pragma: no cover - typing only
     from apps.release.models import Package

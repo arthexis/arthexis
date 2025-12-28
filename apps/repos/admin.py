@@ -4,12 +4,8 @@ from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 from django_object_actions import DjangoObjectActions
 
-from apps.repos.models import (
-    GitHubRepository,
-    PackageRepository,
-    RepositoryIssue,
-    RepositoryPullRequest,
-)
+from apps.repos.models.issues import RepositoryIssue, RepositoryPullRequest
+from apps.repos.models.repositories import GitHubRepository, PackageRepository
 
 
 class FetchFromGitHubMixin(DjangoObjectActions):

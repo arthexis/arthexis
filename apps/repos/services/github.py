@@ -402,7 +402,7 @@ class GitHubIssue:
 
     @classmethod
     def from_active_repository(cls) -> "GitHubIssue":
-        from apps.repos.models import GitHubRepository
+        from apps.repos.models.repositories import GitHubRepository
 
         repository = GitHubRepository.resolve_active_repository()
         token = get_github_issue_token()
