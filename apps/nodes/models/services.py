@@ -9,6 +9,7 @@ from django.db import models
 from django.utils.translation import gettext_lazy as _
 
 from apps.base.models import Entity
+from .slug_entities import SlugDisplayNaturalKeyMixin, SlugEntityManager
 
 SERVICE_TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "service_templates"
 
@@ -17,12 +18,11 @@ def _systemd_directory() -> Path:
     return Path(os.environ.get("SYSTEMD_DIR", "/etc/systemd/system"))
 
 
-class NodeServiceManager(models.Manager):
-    def get_by_natural_key(self, slug: str):
-        return self.get(slug=slug)
+class NodeServiceManager(SlugEntityManager):
+    pass
 
 
-class NodeService(Entity):
+class NodeService(SlugDisplayNaturalKeyMixin, Entity):
     """Expected service managed on a node with its systemd template."""
 
     slug = models.SlugField(max_length=50, unique=True)
@@ -58,12 +58,6 @@ class NodeService(Entity):
         ordering = ["display"]
         verbose_name = "Node Service"
         verbose_name_plural = "Node Services"
-
-    def __str__(self) -> str:  # pragma: no cover - simple representation
-        return self.display
-
-    def natural_key(self):  # pragma: no cover - simple representation
-        return (self.slug,)
 
     @staticmethod
     def detect_service_name(base_dir: Path) -> str:
