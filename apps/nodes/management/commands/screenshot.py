@@ -50,7 +50,7 @@ class Command(BaseCommand):
                     method="COMMAND",
                     local=local_capture,
                 )
-                path_str = str(path) if path else ""
+                path_str = path.as_posix() if path else ""
                 self.stdout.write(path_str)
                 last_path = Path(path_str) if path_str else None
                 if frequency is None:
