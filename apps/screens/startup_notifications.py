@@ -11,8 +11,8 @@ from utils import revision
 
 logger = logging.getLogger(__name__)
 
-LCD_STICKY_LOCK_FILE = "lcd-sticky"
-LCD_LATEST_LOCK_FILE = "lcd-latest"
+LCD_HIGH_LOCK_FILE = "lcd-high"
+LCD_LOW_LOCK_FILE = "lcd-low"
 LCD_LEGACY_FEATURE_LOCK = "lcd_screen_enabled.lck"
 LCD_RUNTIME_LOCK_FILE = "lcd_screen.lck"
 
@@ -59,8 +59,8 @@ def lcd_feature_enabled(lock_dir: Path) -> bool:
         return False
 
     for name in (
-        LCD_STICKY_LOCK_FILE,
-        LCD_LATEST_LOCK_FILE,
+        LCD_HIGH_LOCK_FILE,
+        LCD_LOW_LOCK_FILE,
         LCD_LEGACY_FEATURE_LOCK,
         LCD_RUNTIME_LOCK_FILE,
     ):
@@ -139,7 +139,7 @@ def queue_startup_message(
 ) -> Path:
     subject, body = build_startup_message(base_dir=base_dir, port=port)
 
-    target = lock_file or (Path(base_dir) / ".locks" / LCD_STICKY_LOCK_FILE)
+    target = lock_file or (Path(base_dir) / ".locks" / LCD_HIGH_LOCK_FILE)
     target.parent.mkdir(parents=True, exist_ok=True)
     payload = render_lcd_lock_file(subject=subject, body=body)
     target.write_text(payload, encoding="utf-8")

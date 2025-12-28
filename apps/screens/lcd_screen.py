@@ -1,10 +1,10 @@
 """Standalone LCD screen updater with predictable rotations.
 
-The script polls ``.locks/lcd-sticky`` and ``.locks/lcd-latest`` for
-payload text and writes it to the attached LCD1602 display. The screen
-rotates every 10 seconds across three states in a fixed order: Sticky,
-Latest, and Time/Temp. Each row scrolls independently when it exceeds 16
-characters; shorter rows remain static.
+The script polls ``.locks/lcd-high`` and ``.locks/lcd-low`` for payload
+text and writes it to the attached LCD1602 display. The screen rotates
+every 10 seconds across three states in a fixed order: High, Low, and
+Time/Temp. Each row scrolls independently when it exceeds 16 characters;
+shorter rows remain static.
 """
 
 from __future__ import annotations
@@ -63,15 +63,15 @@ root_logger.setLevel(logging.DEBUG)
 
 from apps.screens.lcd import CharLCD1602, LCDUnavailableError
 from apps.screens.startup_notifications import (
-    LCD_LATEST_LOCK_FILE,
-    LCD_STICKY_LOCK_FILE,
+    LCD_HIGH_LOCK_FILE,
+    LCD_LOW_LOCK_FILE,
     read_lcd_lock_file,
 )
 
 logger = logging.getLogger(__name__)
 LOCK_DIR = BASE_DIR / ".locks"
-STICKY_LOCK_FILE = LOCK_DIR / LCD_STICKY_LOCK_FILE
-LATEST_LOCK_FILE = LOCK_DIR / LCD_LATEST_LOCK_FILE
+HIGH_LOCK_FILE = LOCK_DIR / LCD_HIGH_LOCK_FILE
+LOW_LOCK_FILE = LOCK_DIR / LCD_LOW_LOCK_FILE
 DEFAULT_SCROLL_MS = 1000
 MIN_SCROLL_MS = 50
 SCROLL_PADDING = 3
@@ -515,13 +515,13 @@ def main() -> None:  # pragma: no cover - hardware dependent
     lcd = None
     display_state: DisplayState | None = None
     next_display_state: DisplayState | None = None
-    sticky_payload = LockPayload("", "", DEFAULT_SCROLL_MS)
-    latest_payload = LockPayload("", "", DEFAULT_SCROLL_MS)
-    sticky_mtime = 0.0
-    latest_mtime = 0.0
+    high_payload = LockPayload("", "", DEFAULT_SCROLL_MS)
+    low_payload = LockPayload("", "", DEFAULT_SCROLL_MS)
+    high_mtime = 0.0
+    low_mtime = 0.0
     rotation_deadline = 0.0
     scroll_scheduler = ScrollScheduler()
-    state_order = ("latest", "sticky", "clock")
+    state_order = ("high", "low", "clock")
     state_index = 0
     clock_cycle = 0
     health = LCDHealthMonitor()
@@ -571,31 +571,33 @@ def main() -> None:  # pragma: no cover - hardware dependent
                 now = time.monotonic()
 
                 if display_state is None or now >= rotation_deadline:
-                    sticky_available = True
+                    high_available = True
                     try:
-                        sticky_stat = STICKY_LOCK_FILE.stat()
-                        if sticky_stat.st_mtime != sticky_mtime:
-                            sticky_payload = _read_lock_file(STICKY_LOCK_FILE)
-                            sticky_mtime = sticky_stat.st_mtime
+                        high_stat = HIGH_LOCK_FILE.stat()
+                        if high_stat.st_mtime != high_mtime:
+                            high_payload = _read_lock_file(HIGH_LOCK_FILE)
+                            high_mtime = high_stat.st_mtime
                     except OSError:
-                        sticky_payload = LockPayload("", "", DEFAULT_SCROLL_MS)
-                        sticky_mtime = 0.0
-                        sticky_available = False
+                        high_payload = LockPayload("", "", DEFAULT_SCROLL_MS)
+                        high_mtime = 0.0
+                        high_available = False
 
+                    low_available = True
                     try:
-                        latest_stat = LATEST_LOCK_FILE.stat()
-                        if latest_stat.st_mtime != latest_mtime:
-                            latest_payload = _read_lock_file(LATEST_LOCK_FILE)
-                            latest_mtime = latest_stat.st_mtime
+                        low_stat = LOW_LOCK_FILE.stat()
+                        if low_stat.st_mtime != low_mtime:
+                            low_payload = _read_lock_file(LOW_LOCK_FILE)
+                            low_mtime = low_stat.st_mtime
                     except OSError:
-                        latest_payload = LockPayload("", "", DEFAULT_SCROLL_MS)
-                        latest_mtime = 0.0
+                        low_payload = LockPayload("", "", DEFAULT_SCROLL_MS)
+                        low_mtime = 0.0
+                        low_available = False
 
                     previous_order = state_order
-                    if sticky_available:
-                        state_order = ("latest", "sticky", "clock")
+                    if high_available:
+                        state_order = ("high", "low", "clock") if low_available else ("high", "clock")
                     else:
-                        state_order = ("latest", "clock")
+                        state_order = ("low", "clock") if low_available else ("clock",)
 
                     if previous_order and 0 <= state_index < len(previous_order):
                         current_label = previous_order[state_index]
@@ -609,10 +611,10 @@ def main() -> None:  # pragma: no cover - hardware dependent
                     def _payload_for_state(index: int) -> LockPayload:
                         nonlocal clock_cycle
                         state_label = state_order[index]
-                        if state_label == "sticky":
-                            return sticky_payload
-                        if state_label == "latest":
-                            return latest_payload
+                        if state_label == "high":
+                            return high_payload
+                        if state_label == "low":
+                            return low_payload
                         if _lcd_clock_enabled():
                             use_fahrenheit = clock_cycle % 2 == 0
                             line1, line2, speed, _ = _clock_payload(
@@ -677,8 +679,8 @@ def main() -> None:  # pragma: no cover - hardware dependent
                     display_state = next_display_state
 
                     # Prepare the following state in advance for predictable timing.
-                    sticky_payload = _read_lock_file(STICKY_LOCK_FILE)
-                    latest_payload = _read_lock_file(LATEST_LOCK_FILE)
+                    high_payload = _read_lock_file(HIGH_LOCK_FILE)
+                    low_payload = _read_lock_file(LOW_LOCK_FILE)
                     next_index = (state_index + 1) % len(state_order)
                     next_payload = _payload_for_state(next_index)
                     next_display_state = _prepare_display_state(

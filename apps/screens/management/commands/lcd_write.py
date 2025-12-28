@@ -7,8 +7,8 @@ from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 from apps.screens.startup_notifications import (
-    LCD_LATEST_LOCK_FILE,
-    LCD_STICKY_LOCK_FILE,
+    LCD_HIGH_LOCK_FILE,
+    LCD_LOW_LOCK_FILE,
     LcdMessage,
     read_lcd_lock_file,
     render_lcd_lock_file,
@@ -27,7 +27,7 @@ class Command(BaseCommand):
         parser.add_argument(
             "--sticky",
             action="store_true",
-            help="Write to the sticky LCD lock instead of the latest lock",
+            help="Write to the high-priority LCD lock instead of the low lock",
         )
         parser.add_argument(
             "--delete",
@@ -58,7 +58,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         base_dir = Path(settings.BASE_DIR)
         lock_dir = base_dir / ".locks"
-        target_name = LCD_STICKY_LOCK_FILE if options.get("sticky") else LCD_LATEST_LOCK_FILE
+        target_name = LCD_HIGH_LOCK_FILE if options.get("sticky") else LCD_LOW_LOCK_FILE
         lock_file = lock_dir / target_name
 
         if options["delete"]:

@@ -7,10 +7,11 @@ from unittest import mock
 import pytest
 from django.core.management import call_command
 from django.test import override_settings
+from pathlib import Path
 
 from apps.screens.startup_notifications import (
-    LCD_LATEST_LOCK_FILE,
-    LCD_STICKY_LOCK_FILE,
+    LCD_HIGH_LOCK_FILE,
+    LCD_LOW_LOCK_FILE,
     read_lcd_lock_file,
 )
 
@@ -22,7 +23,7 @@ def temp_base_dir(tmp_path: Path) -> Path:
 
 
 def read_lock(base_dir: Path):
-    lock_file = base_dir / ".locks" / LCD_LATEST_LOCK_FILE
+    lock_file = base_dir / ".locks" / LCD_LOW_LOCK_FILE
     return read_lcd_lock_file(lock_file)
 
 
@@ -41,7 +42,7 @@ def test_creates_lock_file_and_sets_values(temp_base_dir: Path):
 
 
 def test_updates_existing_lock_without_overwriting_missing_fields(temp_base_dir: Path):
-    lock_file = temp_base_dir / ".locks" / LCD_LATEST_LOCK_FILE
+    lock_file = temp_base_dir / ".locks" / LCD_LOW_LOCK_FILE
     lock_file.write_text("Original\nBody\n", encoding="utf-8")
 
     with override_settings(BASE_DIR=temp_base_dir):
@@ -57,7 +58,7 @@ def test_updates_existing_lock_without_overwriting_missing_fields(temp_base_dir:
 
 
 def test_delete_lock_file(temp_base_dir: Path):
-    lock_file = temp_base_dir / ".locks" / LCD_LATEST_LOCK_FILE
+    lock_file = temp_base_dir / ".locks" / LCD_LOW_LOCK_FILE
     lock_file.write_text("Subject\nBody\n", encoding="utf-8")
 
     with override_settings(BASE_DIR=temp_base_dir):
