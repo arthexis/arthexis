@@ -26,7 +26,7 @@ from apps.screens.startup_notifications import (
     render_lcd_lock_file,
 )
 from .models import NetMessage, Node, PendingNetMessage
-from .utils import capture_screenshot, save_screenshot
+from .utils import capture_and_save_screenshot
 
 logger = logging.getLogger(__name__)
 
@@ -256,18 +256,15 @@ def capture_node_screenshot(
     url: str | None = None, port: int = 8888, method: str = "TASK"
 ) -> str:
     """Capture a screenshot of ``url`` and record it as a :class:`ContentSample`."""
-    if url is None:
-        node = Node.get_local()
-        scheme = node.get_preferred_scheme() if node else "http"
-        url = f"{scheme}://localhost:{port}"
-    try:
-        path: Path = capture_screenshot(url)
-    except Exception as exc:  # pragma: no cover - depends on selenium setup
-        logger.error("Screenshot capture failed: %s", exc)
-        return ""
-    node = Node.get_local()
-    save_screenshot(path, node=node, method=method)
-    return str(path)
+    path = capture_and_save_screenshot(
+        url=url,
+        port=port,
+        method=method,
+        logger=logger,
+        log_capture_errors=True,
+    )
+
+    return str(path) if path else ""
 
 
 @shared_task

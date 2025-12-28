@@ -21,6 +21,7 @@ except Exception:  # pragma: no cover - fallback when dependency is unavailable
 
 from apps.content.models import ContentSample
 from apps.content.utils import save_content_sample
+from apps.nodes.models import Node
 
 WORK_DIR = Path(settings.BASE_DIR) / "work"
 SCREENSHOT_DIR = settings.LOG_DIR / "screenshots"
@@ -113,6 +114,41 @@ def capture_local_screenshot() -> Path:
 
     image.save(filename)
     return filename
+
+
+def capture_and_save_screenshot(
+    url: str | None = None,
+    port: int = 8888,
+    method: str = "TASK",
+    local: bool = False,
+    *,
+    logger: logging.Logger | None = None,
+    log_capture_errors: bool = False,
+):
+    """Capture a screenshot and persist it as a :class:`ContentSample`.
+
+    When ``url`` is not provided and ``local`` is ``False``, the URL defaults to
+    the local node using ``localhost`` and ``port``. Errors during capture can be
+    logged and suppressed when ``log_capture_errors`` is ``True``.
+    """
+
+    node = Node.get_local()
+    target_url = url
+
+    if target_url is None and not local:
+        scheme = node.get_preferred_scheme() if node else "http"
+        target_url = f"{scheme}://localhost:{port}"
+
+    try:
+        path = capture_local_screenshot() if local else capture_screenshot(target_url)
+    except Exception as exc:
+        if log_capture_errors and logger is not None:
+            logger.error("Screenshot capture failed: %s", exc)
+            return None
+        raise
+
+    save_screenshot(path, node=node, method=method)
+    return path
 
 
 def save_screenshot(
