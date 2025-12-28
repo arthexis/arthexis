@@ -48,6 +48,10 @@ jobs:
         run: |
           source .venv/bin/activate
           python scripts/check_import_resolution.py
+      - name: Lint seed fixtures
+        run: |
+          source .venv/bin/activate
+          python scripts/lint_seed_fixtures.py
       - name: Run tests
         run: |
           source .venv/bin/activate
@@ -104,6 +108,11 @@ jobs:
           set -Eeuo pipefail
           source .venv/bin/activate
           python scripts/check_import_resolution.py
+      - name: Lint seed fixtures on upgraded install
+        run: |
+          set -Eeuo pipefail
+          source .venv/bin/activate
+          python scripts/lint_seed_fixtures.py
 
       - name: Run tests on upgraded install
         run: |
