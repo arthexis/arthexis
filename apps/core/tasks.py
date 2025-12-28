@@ -20,7 +20,7 @@ import urllib.request
 import requests
 
 from celery import shared_task
-from apps.repos import github_issues
+from apps.repos import github
 from apps.core.auto_upgrade import (
     AUTO_UPGRADE_FALLBACK_INTERVAL,
     AUTO_UPGRADE_INTERVAL_MINUTES,
@@ -1935,11 +1935,11 @@ def report_runtime_issue(
     labels: list[str] | None = None,
     fingerprint: str | None = None,
 ):
-    """Report a runtime issue to GitHub using :mod:`apps.repos.github_issues`."""
+    """Report a runtime issue to GitHub using :mod:`apps.repos.github`."""
 
     response = None
     try:
-        response = github_issues.create_issue(
+        response = github.create_issue(
             title,
             body,
             labels=labels,
