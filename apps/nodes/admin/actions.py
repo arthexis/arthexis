@@ -269,7 +269,17 @@ def export_rfids_to_selected(modeladmin, request, queryset):
         separators=(",", ":"),
         sort_keys=True,
     )
-    signature = modeladmin._sign_payload(private_key, payload)
+    signature, error = Node.sign_payload(payload, private_key)
+    if error or not signature:
+        message = _("Failed to sign payload.")
+        if error:
+            message = _("Failed to sign payload: %(error)s") % {"error": error}
+        return modeladmin._render_rfid_sync(
+            request,
+            "export",
+            [],
+            setup_error=message,
+        )
     headers = {
         "Content-Type": "application/json",
         "X-Signature": signature,

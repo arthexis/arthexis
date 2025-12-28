@@ -313,25 +313,26 @@ def node_info(request):
             private_key = serialization.load_pem_private_key(
                 priv_path.read_bytes(), password=None
             )
-            signature = private_key.sign(
-                token.encode(),
-                padding.PSS(
-                    mgf=padding.MGF1(hashes.SHA256()),
-                    salt_length=padding.PSS.MAX_LENGTH,
-                ),
-                hashes.SHA256(),
-            )
-            data["token_signature"] = base64.b64encode(signature).decode()
-            registration_logger.info(
-                "Visitor registration: token signed for node %s",
-                node.public_endpoint,
-            )
         except Exception as exc:
             registration_logger.warning(
-                "Visitor registration: unable to sign token for %s: %s",
+                "Visitor registration: unable to load key for %s: %s",
                 node.public_endpoint,
                 exc,
             )
+        else:
+            signature, error = Node.sign_payload(token, private_key)
+            if signature:
+                data["token_signature"] = signature
+                registration_logger.info(
+                    "Visitor registration: token signed for node %s",
+                    node.public_endpoint,
+                )
+            else:
+                registration_logger.warning(
+                    "Visitor registration: unable to sign token for %s: %s",
+                    node.public_endpoint,
+                    error,
+                )
 
     response = JsonResponse(data)
     response["Access-Control-Allow-Origin"] = "*"

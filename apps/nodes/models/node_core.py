@@ -570,17 +570,9 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
             logger.warning("Failed to load private key for %s: %s", self, exc)
             return
         token = token_hex(16)
-        try:
-            signature = private_key.sign(
-                token.encode(),
-                padding.PSS(
-                    mgf=padding.MGF1(hashes.SHA256()),
-                    salt_length=padding.PSS.MAX_LENGTH,
-                ),
-                hashes.SHA256(),
-            )
-        except Exception as exc:  # pragma: no cover - defensive
-            logger.warning("Failed to sign peer update for %s: %s", self, exc)
+        signature, error = Node.sign_payload(token, private_key)
+        if not signature:
+            logger.warning("Failed to sign peer update for %s: %s", self, error)
             return
 
         payload = {
@@ -593,7 +585,7 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
             "mac_address": self.mac_address,
             "public_key": self.public_key,
             "token": token,
-            "signature": base64.b64encode(signature).decode(),
+            "signature": signature,
         }
         if self.installed_version:
             payload["installed_version"] = self.installed_version
@@ -724,6 +716,36 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
             )
         except Exception:
             return None
+
+    @staticmethod
+    def sign_payload(
+        payload: str, private_key
+    ) -> tuple[str | None, str | None]:
+        """Sign ``payload`` with ``private_key`` and return a base64 signature.
+
+        Returns a tuple of ``(signature, error_message)``. The signature is a
+        base64-encoded string that preserves padding. When signing fails, the
+        error message describes the failure and ``None`` is returned for the
+        signature.
+        """
+
+        if not private_key:
+            return None, "Private key unavailable"
+
+        try:
+            signature = private_key.sign(
+                payload.encode(),
+                padding.PSS(
+                    mgf=padding.MGF1(hashes.SHA256()),
+                    salt_length=padding.PSS.MAX_LENGTH,
+                ),
+                hashes.SHA256(),
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.warning("Failed to sign payload: %s", exc)
+            return None, str(exc)
+
+        return base64.b64encode(signature).decode("ascii"), None
 
     @property
     def is_local(self):
@@ -1232,20 +1254,8 @@ class NetMessage(Entity):
 
     @staticmethod
     def _sign_payload(payload_json: str, private_key) -> str | None:
-        if not private_key:
-            return None
-        try:
-            signature = private_key.sign(
-                payload_json.encode(),
-                padding.PSS(
-                    mgf=padding.MGF1(hashes.SHA256()),
-                    salt_length=padding.PSS.MAX_LENGTH,
-                ),
-                hashes.SHA256(),
-            )
-        except Exception:
-            return None
-        return base64.b64encode(signature).decode()
+        signature, _error = Node.sign_payload(payload_json, private_key)
+        return signature
 
     def queue_for_node(self, node: "Node", seen: list[str]) -> None:
         """Queue this message for later delivery to ``node``."""
