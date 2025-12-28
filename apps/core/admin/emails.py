@@ -114,10 +114,6 @@ class EmailInboxAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdmi
         ),
     )
 
-    @admin.display(description="Owner")
-    def owner_label(self, obj):
-        return obj.owner_display()
-
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)
 

@@ -629,6 +629,10 @@ class EntityModelAdmin(UserDatumAdminMixin, admin.ModelAdmin):
     def _supports_soft_delete(self) -> bool:
         return any(field.name == "is_deleted" for field in self.model._meta.fields)
 
+    @admin.display(description="Owner")
+    def owner_label(self, obj):
+        return obj.owner_display()
+
     def _admin_view_name(self, suffix: str) -> str:
         opts = self.model._meta
         return f"{opts.app_label}_{opts.model_name}_{suffix}"
