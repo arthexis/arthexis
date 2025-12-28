@@ -21,6 +21,7 @@ from decimal import Decimal, InvalidOperation
 from glob import glob
 from pathlib import Path
 from typing import Callable, NamedTuple
+from itertools import cycle, islice
 
 def _resolve_base_dir() -> Path:
     env_base = os.getenv("ARTHEXIS_BASE_DIR")
@@ -62,6 +63,7 @@ if not any(
 root_logger.setLevel(logging.DEBUG)
 
 from apps.screens.lcd import CharLCD1602, LCDUnavailableError
+from apps.screens.animations import AnimationLoadError, default_tree_frames
 from apps.screens.startup_notifications import (
     LCD_HIGH_LOCK_FILE,
     LCD_LOW_LOCK_FILE,
@@ -80,6 +82,16 @@ LCD_ROWS = CharLCD1602.rows
 CLOCK_TIME_FORMAT = "%p %I:%M"
 CLOCK_DATE_FORMAT = "%Y-%m-%d %a"
 ROTATION_SECONDS = 10
+GAP_ANIMATION_FRAMES_PER_PAYLOAD = 4
+GAP_ANIMATION_SCROLL_MS = 600
+
+try:
+    GAP_ANIMATION_FRAMES = default_tree_frames()
+except AnimationLoadError:
+    logger.debug("Falling back to blank animation frames", exc_info=True)
+    GAP_ANIMATION_FRAMES = [" " * (LCD_COLUMNS * LCD_ROWS)]
+
+GAP_ANIMATION_CYCLE = cycle(GAP_ANIMATION_FRAMES)
 
 
 class FateDeck:
@@ -224,6 +236,38 @@ def _read_lock_file(lock_file: Path) -> LockPayload:
     if payload is None:
         return LockPayload("", "", DEFAULT_SCROLL_MS)
     return LockPayload(payload.subject, payload.body, DEFAULT_SCROLL_MS)
+
+
+def _payload_has_text(payload: LockPayload) -> bool:
+    return bool(payload.line1.strip() or payload.line2.strip())
+
+
+def _animation_payload(
+    frame_cycle, *, frames_per_payload: int = GAP_ANIMATION_FRAMES_PER_PAYLOAD, scroll_ms: int = GAP_ANIMATION_SCROLL_MS
+) -> LockPayload:
+    frames = list(islice(frame_cycle, frames_per_payload))
+    if not frames:
+        return LockPayload("", "", scroll_ms)
+
+    line1 = " ".join(frame[:LCD_COLUMNS] for frame in frames).rstrip()
+    line2 = " ".join(frame[LCD_COLUMNS:] for frame in frames).rstrip()
+    return LockPayload(line1, line2, scroll_ms)
+
+
+def _select_low_payload(
+    payload: LockPayload,
+    frame_cycle=GAP_ANIMATION_CYCLE,
+    scroll_ms: int | None = None,
+    frames_per_payload: int | None = None,
+) -> LockPayload:
+    if _payload_has_text(payload):
+        return payload
+
+    return _animation_payload(
+        frame_cycle,
+        frames_per_payload=frames_per_payload or GAP_ANIMATION_FRAMES_PER_PAYLOAD,
+        scroll_ms=scroll_ms or GAP_ANIMATION_SCROLL_MS,
+    )
 
 
 def _lcd_clock_enabled() -> bool:
@@ -592,6 +636,13 @@ def main() -> None:  # pragma: no cover - hardware dependent
                         low_payload = LockPayload("", "", DEFAULT_SCROLL_MS)
                         low_mtime = 0.0
                         low_available = False
+
+                    low_payload = _select_low_payload(
+                        low_payload,
+                        frame_cycle=GAP_ANIMATION_CYCLE,
+                        scroll_ms=GAP_ANIMATION_SCROLL_MS,
+                    )
+                    low_available = _payload_has_text(low_payload)
 
                     previous_order = state_order
                     if high_available:

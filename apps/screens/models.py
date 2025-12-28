@@ -1,6 +1,7 @@
 from collections.abc import Sequence
 from typing import Any
 
+from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
@@ -148,4 +149,45 @@ class PixelScreen(DeviceScreen):
             self.last_refresh_at = timestamp
             self.save(update_fields=["pixel_buffer", "last_refresh_at"])
         return True
+
+
+class LCDAnimation(Entity):
+    """Bundled or custom animation for the LCD display."""
+
+    slug = models.SlugField(max_length=64, unique=True)
+    name = models.CharField(max_length=100)
+    description = models.TextField(blank=True)
+    source_path = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text=_("Path to a 32-character-per-line animation file."),
+    )
+    generator_path = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text=_("Python path to a generator that yields 32-character frames."),
+    )
+    frame_interval_ms = models.PositiveIntegerField(
+        default=750,
+        help_text=_("Preferred delay between animation frames in milliseconds."),
+    )
+    is_active = models.BooleanField(default=True)
+
+    class Meta(Entity.Meta):
+        ordering = ["name"]
+        verbose_name = _("LCD Animation")
+        verbose_name_plural = _("LCD Animations")
+
+    def clean(self) -> None:
+        if not (self.source_path or self.generator_path):
+            raise ValidationError(
+                {"source_path": _("Provide a source file or generator for the animation.")}
+            )
+        if self.source_path and self.generator_path:
+            raise ValidationError(
+                {"generator_path": _("Specify only one animation source.")}
+            )
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return self.name
 
