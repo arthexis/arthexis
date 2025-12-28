@@ -14,6 +14,7 @@ from django.views.decorators.http import require_GET, require_POST
 from django.core.cache import cache
 
 from apps.core import changelog
+from apps.docs import views as docs_views
 from apps.docs import rendering
 from apps.groups.decorators import security_group_required
 from apps.links.templatetags.ref_tags import build_footer_context
