@@ -93,31 +93,51 @@ class CertificateGenerationMixin:
     def _create_certificate_for_config(
         self, config: SiteConfiguration, *, certificate_type: str
     ) -> CertificateBase:
+        domain = self._get_default_certificate_domain()
+        params = self._certificate_parameters(certificate_type, domain)
+        return self._upsert_certificate(
+            config,
+            model=params["model"],
+            name=self._certificate_name(config, params["name_suffix"]),
+            defaults=params["defaults"],
+        )
+
+    def _certificate_parameters(self, certificate_type: str, domain: str) -> dict:
+        slug = slugify(domain)
+
         if certificate_type == self.CERTIFICATE_TYPE_CERTBOT:
-            return self._create_certbot_certificate_for_config(config)
-        return self._create_self_signed_certificate_for_config(config)
+            return {
+                "model": CertbotCertificate,
+                "name_suffix": f"{slug}-certbot",
+                "defaults": {
+                    "domain": domain,
+                    "certificate_path": f"/etc/letsencrypt/live/{domain}/fullchain.pem",
+                    "certificate_key_path": f"/etc/letsencrypt/live/{domain}/privkey.pem",
+                },
+            }
 
-    def _create_self_signed_certificate_for_config(self, config: SiteConfiguration) -> CertificateBase:
-        domain = self._get_default_certificate_domain()
-        slug = slugify(domain)
-        base_path = Path(settings.BASE_DIR) / "scripts" / "generated" / "certificates" / slug
-        defaults = {
-            "domain": domain,
-            "certificate_path": str(base_path / "fullchain.pem"),
-            "certificate_key_path": str(base_path / "privkey.pem"),
+        base_path = (
+            Path(settings.BASE_DIR) / "scripts" / "generated" / "certificates" / slug
+        )
+        return {
+            "model": SelfSignedCertificate,
+            "name_suffix": slug,
+            "defaults": {
+                "domain": domain,
+                "certificate_path": str(base_path / "fullchain.pem"),
+                "certificate_key_path": str(base_path / "privkey.pem"),
+            },
         }
 
-        certificate, created = SelfSignedCertificate.objects.get_or_create(
-            name=f"{config.name or 'nginx-site'}-{slug}",
-            defaults=defaults,
-        )
+    def _upsert_certificate(self, config, *, model, name: str, defaults: dict) -> CertificateBase:
+        certificate, created = model.objects.get_or_create(name=name, defaults=defaults)
 
-        updated_fields: list[str] = []
         if not created:
-            for field, value in defaults.items():
-                if getattr(certificate, field) != value:
-                    setattr(certificate, field, value)
-                    updated_fields.append(field)
+            updated_fields = [
+                field for field, value in defaults.items() if getattr(certificate, field) != value
+            ]
+            for field in updated_fields:
+                setattr(certificate, field, defaults[field])
             if updated_fields:
                 certificate.save(update_fields=updated_fields)
 
@@ -127,34 +147,8 @@ class CertificateGenerationMixin:
 
         return certificate
 
-    def _create_certbot_certificate_for_config(self, config: SiteConfiguration) -> CertificateBase:
-        domain = self._get_default_certificate_domain()
-        slug = slugify(domain)
-        defaults = {
-            "domain": domain,
-            "certificate_path": f"/etc/letsencrypt/live/{domain}/fullchain.pem",
-            "certificate_key_path": f"/etc/letsencrypt/live/{domain}/privkey.pem",
-        }
-
-        certificate, created = CertbotCertificate.objects.get_or_create(
-            name=f"{config.name or 'nginx-site'}-{slug}-certbot",
-            defaults=defaults,
-        )
-
-        updated_fields: list[str] = []
-        if not created:
-            for field, value in defaults.items():
-                if getattr(certificate, field) != value:
-                    setattr(certificate, field, value)
-                    updated_fields.append(field)
-            if updated_fields:
-                certificate.save(update_fields=updated_fields)
-
-        if config.certificate_id != certificate.id:
-            config.certificate = certificate
-            config.save(update_fields=["certificate"])
-
-        return certificate
+    def _certificate_name(self, config: SiteConfiguration, suffix: str) -> str:
+        return f"{config.name or 'nginx-site'}-{suffix}"
 
     def _find_missing_certificates(self, queryset):
         return [
