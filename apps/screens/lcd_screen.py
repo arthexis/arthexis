@@ -712,14 +712,14 @@ def main() -> None:  # pragma: no cover - hardware dependent
                         if lcd and watchdog.tick():
                             lcd.reset()
                             watchdog.reset()
-                        else:
-                            if lcd is not None and frame_writer.lcd is None:
-                                lcd = None
-                                frame_writer = LCDFrameWriter(None)
-                                display_state = None
-                                next_display_state = None
-                            delay = health.record_failure()
-                            time.sleep(delay)
+                    else:
+                        if lcd is not None and frame_writer.lcd is None:
+                            lcd = None
+                            frame_writer = LCDFrameWriter(None)
+                            display_state = None
+                            next_display_state = None
+                        delay = health.record_failure()
+                        time.sleep(delay)
                     scroll_scheduler.advance(
                         display_state.scroll_sec if display_state else 0.5
                     )
