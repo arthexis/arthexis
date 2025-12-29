@@ -548,7 +548,23 @@ def _advance_display(
     )
 
 
-def _clear_low_lock_file(lock_file: Path = LOW_LOCK_FILE) -> None:
+def _clear_low_lock_file(
+    lock_file: Path = LOW_LOCK_FILE, *, stale_after_seconds: float = 3600
+) -> None:
+    """Remove stale low-priority lock files without erasing fresh payloads."""
+
+    try:
+        stat = lock_file.stat()
+    except FileNotFoundError:
+        return
+    except OSError:
+        logger.debug("Unable to stat low LCD lock file", exc_info=True)
+        return
+
+    age = time.time() - stat.st_mtime
+    if age < stale_after_seconds:
+        return
+
     try:
         lock_file.unlink()
     except FileNotFoundError:
