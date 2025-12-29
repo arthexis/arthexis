@@ -547,6 +547,16 @@ def _advance_display(
         write_success,
     )
 
+
+def _clear_low_lock_file(lock_file: Path = LOW_LOCK_FILE) -> None:
+    try:
+        lock_file.unlink()
+    except FileNotFoundError:
+        return
+    except OSError:
+        logger.debug("Unable to clear low LCD lock file", exc_info=True)
+
+
 def _initialize_lcd(reset: bool = True) -> CharLCD1602:
     lcd = CharLCD1602()
     lcd.init_lcd()
@@ -575,6 +585,8 @@ def main() -> None:  # pragma: no cover - hardware dependent
     boot_id = _current_boot_id()
     timing_anchor = TimingAnchor.load(TIMING_ANCHOR_FILE, expected_boot=boot_id)
     anchor_applied = False
+
+    _clear_low_lock_file()
 
     def _apply_timing_anchor_once() -> None:
         nonlocal anchor_applied

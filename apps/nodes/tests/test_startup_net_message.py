@@ -50,6 +50,7 @@ def test_send_startup_net_message_writes_boot_status(
     )
     monkeypatch.setattr(tasks.Node, "get_local", lambda: DummyNode())
     monkeypatch.setattr(tasks, "queue_startup_message", write_high_lock)
+    monkeypatch.setattr(tasks, "_active_interface_label", lambda: "n/a")
 
     tasks.send_startup_net_message()
 
@@ -57,8 +58,8 @@ def test_send_startup_net_message_writes_boot_status(
     assert high_lines == ["hi", "there"]
 
     low_lines = (lock_dir / tasks.LCD_LOW_LOCK_FILE).read_text().splitlines()
-    assert low_lines[0] == "UP 0m42s"
-    assert low_lines[1] == "Controller"
+    assert low_lines[0] == "UP 0d0h0m Controller"
+    assert low_lines[1] == "ON 0h0m n/a"
 
 
 @pytest.mark.django_db
@@ -86,13 +87,10 @@ def test_boot_message_reports_uptime(monkeypatch, settings, tmp_path):
     )
     monkeypatch.setattr(tasks.Node, "get_local", lambda: DummyNode())
     monkeypatch.setattr(tasks, "queue_startup_message", write_high_lock)
+    monkeypatch.setattr(tasks, "_active_interface_label", lambda: "n/a")
 
     tasks.send_startup_net_message()
 
     low_lines = (lock_dir / tasks.LCD_LOW_LOCK_FILE).read_text().splitlines()
-    minutes_seconds = low_lines[0].split()[1]
-    minutes, seconds = minutes_seconds.split("m")
-    seconds = seconds.rstrip("s")
-
-    total_seconds_reported = int(minutes) * 60 + int(seconds)
-    assert 73 <= total_seconds_reported <= 75
+    assert low_lines[0].startswith("UP ")
+    assert low_lines[1] == "ON 0h1m n/a"
