@@ -8,6 +8,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 import requests
+import psutil
 from celery import shared_task
 from django.conf import settings
 from django.core.cache import cache
@@ -126,6 +127,29 @@ def _startup_duration_seconds(base_dir: Path) -> int | None:
     return seconds
 
 
+def _uptime_components(seconds: int | None) -> tuple[int, int, int] | None:
+    if seconds is None or seconds < 0:
+        return None
+
+    minutes_total, _ = divmod(seconds, 60)
+    days, remaining_minutes = divmod(minutes_total, 24 * 60)
+    hours, minutes = divmod(remaining_minutes, 60)
+    return days, hours, minutes
+
+
+def _active_interface_label() -> str:
+    try:
+        stats = psutil.net_if_stats()
+    except Exception:
+        return "n/a"
+
+    for name in ("eth0", "wlan1", "wlan0"):
+        details = stats.get(name)
+        if details and details.isup:
+            return name
+    return "n/a"
+
+
 def _node_role_label(node: Node | None) -> str:
     if node and getattr(node, "role", None):
         return str(getattr(node.role, "name", "") or "")
@@ -142,18 +166,23 @@ def _queue_boot_status_message(base_dir: Path, lock_dir: Path) -> None:
     boot_time_seconds = _startup_duration_seconds(base_dir)
     role_label = _node_role_label(local_node)
 
-    minutes = None if boot_time_seconds is None else boot_time_seconds // 60
-    seconds = None if boot_time_seconds is None else boot_time_seconds % 60
+    uptime_parts = _uptime_components(boot_time_seconds)
 
-    if minutes is None or seconds is None:
-        subject = "UP ?m?s"
+    if uptime_parts is None:
+        subject = "UP ?d?h?m"
+        body = f"ON ?h?m {_active_interface_label()}"
     else:
-        subject = f"UP {minutes}m{seconds}s"
+        days, hours, minutes = uptime_parts
+        subject = f"UP {days}d{hours}h{minutes}m"
+        body = f"ON {hours}h{minutes}m {_active_interface_label()}"
+
+    if role_label:
+        subject = f"{subject} {role_label}".strip()
 
     target = lock_dir / LCD_LOW_LOCK_FILE
     try:
         lock_dir.mkdir(parents=True, exist_ok=True)
-        payload = render_lcd_lock_file(subject=subject, body=role_label)
+        payload = render_lcd_lock_file(subject=subject, body=body)
 
         # Write atomically to avoid transient empty reads while the LCD script polls
         # the low-priority payload during rotation.

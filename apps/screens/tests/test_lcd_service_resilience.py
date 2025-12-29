@@ -47,3 +47,12 @@ def test_frame_writer_writes_fallback_file_on_failure(tmp_path):
     assert success is False
     contents = work_file.read_text(encoding="utf-8").splitlines()
     assert contents == ["hello".ljust(lcd_screen.LCD_COLUMNS), "world".ljust(lcd_screen.LCD_COLUMNS)]
+
+
+def test_low_lock_file_cleared_on_startup(tmp_path):
+    lock_file = tmp_path / "lcd-low"
+    lock_file.write_text("data", encoding="utf-8")
+
+    lcd_screen._clear_low_lock_file(lock_file=lock_file)
+
+    assert not lock_file.exists()
