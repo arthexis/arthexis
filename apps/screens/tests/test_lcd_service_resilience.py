@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import builtins
 import importlib.util
+import os
 import sys
+import time
 from pathlib import Path
 
 from apps.screens import lcd_screen
@@ -49,10 +51,22 @@ def test_frame_writer_writes_fallback_file_on_failure(tmp_path):
     assert contents == ["hello".ljust(lcd_screen.LCD_COLUMNS), "world".ljust(lcd_screen.LCD_COLUMNS)]
 
 
-def test_low_lock_file_cleared_on_startup(tmp_path):
+def test_low_lock_file_cleared_on_startup_when_stale(tmp_path):
     lock_file = tmp_path / "lcd-low"
     lock_file.write_text("data", encoding="utf-8")
 
-    lcd_screen._clear_low_lock_file(lock_file=lock_file)
+    old_timestamp = time.time() - (2 * 3600)
+    os.utime(lock_file, (old_timestamp, old_timestamp))
+
+    lcd_screen._clear_low_lock_file(lock_file=lock_file, stale_after_seconds=3600)
 
     assert not lock_file.exists()
+
+
+def test_low_lock_file_kept_when_recent(tmp_path):
+    lock_file = tmp_path / "lcd-low"
+    lock_file.write_text("data", encoding="utf-8")
+
+    lcd_screen._clear_low_lock_file(lock_file=lock_file, stale_after_seconds=3600)
+
+    assert lock_file.exists()
