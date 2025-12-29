@@ -127,27 +127,18 @@ def _startup_duration_seconds(base_dir: Path) -> int | None:
     return seconds
 
 
-def _probe_local_status(port: str, node: Node | None) -> int | None:
-    scheme = "http"
-    if node:
-        try:
-            scheme = node.get_preferred_scheme()
-        except Exception:
-            logger.debug("Failed to resolve preferred scheme for node", exc_info=True)
-
-    url = f"{scheme}://localhost:{port}/"
-    try:
-        response = requests.get(url, timeout=5)
-    except Exception:
-        logger.warning("Startup status probe failed for %s", url, exc_info=True)
-        return None
-    return int(response.status_code)
-
-
 def _node_role_label(node: Node | None) -> str:
     if node and getattr(node, "role", None):
         return str(getattr(node.role, "name", "") or "")
     return ""
+
+
+def _format_uptime_label(seconds: int | None) -> str:
+    if seconds is None or seconds < 0:
+        return "?m?s"
+
+    minutes, remaining_seconds = divmod(seconds, 60)
+    return f"{minutes}m{remaining_seconds}s"
 
 
 def _queue_boot_status_message(base_dir: Path, lock_dir: Path, port: str) -> None:
@@ -158,12 +149,10 @@ def _queue_boot_status_message(base_dir: Path, lock_dir: Path, port: str) -> Non
         logger.debug("Unable to load local node for boot status message", exc_info=True)
 
     boot_time_seconds = _startup_duration_seconds(base_dir)
-    status_code = _probe_local_status(port, local_node)
     role_label = _node_role_label(local_node)
 
-    seconds_label = f"{boot_time_seconds}s" if boot_time_seconds is not None else "?s"
-    status_label = str(status_code) if status_code is not None else "?"
-    subject = f"BOOT {seconds_label} {status_label}"
+    uptime_label = _format_uptime_label(boot_time_seconds)
+    subject = f"UP {uptime_label}"
 
     target = lock_dir / LCD_LOW_LOCK_FILE
     try:
