@@ -9,7 +9,6 @@ shorter rows remain static.
 
 from __future__ import annotations
 
-import json
 import logging
 import math
 import os
@@ -41,7 +40,6 @@ LOG_FILE = LOGS_DIR / "lcd-screen.log"
 WORK_DIR = BASE_DIR / "work"
 WORK_FILE = WORK_DIR / "lcd-screen.txt"
 LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
-TIMING_ANCHOR_FILE = WORK_DIR / "lcd-timing.json"
 
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
 WORK_DIR.mkdir(parents=True, exist_ok=True)
@@ -372,74 +370,6 @@ def _clock_payload(
 _SHUTDOWN_REQUESTED = False
 
 
-def _current_boot_id(boot_id_path: Path = Path("/proc/sys/kernel/random/boot_id")) -> str | None:
-    try:
-        return boot_id_path.read_text(encoding="utf-8").strip()
-    except OSError:
-        return None
-
-
-class TimingAnchor(NamedTuple):
-    """Persist a timing offset relative to the system clock."""
-
-    boot_id: str
-    offset: float
-
-    @classmethod
-    def load(
-        cls, path: Path, *, expected_boot: str | None
-    ) -> "TimingAnchor | None":
-        if not path.exists() or not expected_boot:
-            return None
-        try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-            boot_id = str(data["boot_id"])
-            offset = float(data["offset"]) % 1.0
-        except Exception:
-            logger.debug("Failed to read LCD timing anchor", exc_info=True)
-            return None
-
-        if boot_id != expected_boot:
-            try:
-                path.unlink()
-            except OSError:
-                logger.debug("Failed to remove stale LCD timing anchor", exc_info=True)
-            return None
-
-        if math.isnan(offset):
-            return None
-
-        return cls(boot_id=boot_id, offset=offset)
-
-    def persist(self, path: Path) -> None:
-        try:
-            payload = {"boot_id": self.boot_id, "offset": self.offset % 1.0}
-            path.write_text(json.dumps(payload), encoding="utf-8")
-        except OSError:
-            logger.debug("Failed to persist LCD timing anchor", exc_info=True)
-
-    def alignment_delay(self, now: float | None = None) -> float:
-        clock = time.monotonic if now is None else lambda: now
-        fractional = clock() % 1.0
-        delay = (self.offset - fractional) % 1.0
-        return 0.0 if math.isclose(delay, 0.0, abs_tol=0.001) else delay
-
-
-def _capture_timing_anchor(
-    *,
-    path: Path,
-    boot_id: str | None,
-    existing: TimingAnchor | None,
-    clock_source=time.monotonic,
-) -> TimingAnchor | None:
-    if existing or not boot_id:
-        return existing
-
-    anchor = TimingAnchor(boot_id=boot_id, offset=clock_source() % 1.0)
-    anchor.persist(path)
-    return anchor
-
-
 def _request_shutdown(signum, frame) -> None:  # pragma: no cover - signal handler
     """Mark the loop for shutdown when the process receives a signal."""
 
@@ -598,22 +528,7 @@ def main() -> None:  # pragma: no cover - hardware dependent
     watchdog = LCDWatchdog()
     frame_writer: LCDFrameWriter = LCDFrameWriter(None)
 
-    boot_id = _current_boot_id()
-    timing_anchor = TimingAnchor.load(TIMING_ANCHOR_FILE, expected_boot=boot_id)
-    anchor_applied = False
-
     _clear_low_lock_file()
-
-    def _apply_timing_anchor_once() -> None:
-        nonlocal anchor_applied
-        if anchor_applied or timing_anchor is None:
-            return
-
-        delay = timing_anchor.alignment_delay()
-        if delay > 0:
-            logger.debug("Applying LCD timing anchor delay: %.3fs", delay)
-            time.sleep(delay)
-        anchor_applied = True
 
     signal.signal(signal.SIGTERM, _request_shutdown)
     signal.signal(signal.SIGINT, _request_shutdown)
@@ -621,15 +536,9 @@ def main() -> None:  # pragma: no cover - hardware dependent
 
     try:
         try:
-            _apply_timing_anchor_once()
             lcd = _initialize_lcd()
             frame_writer = LCDFrameWriter(lcd)
             health.record_success()
-            timing_anchor = _capture_timing_anchor(
-                path=TIMING_ANCHOR_FILE,
-                boot_id=boot_id,
-                existing=timing_anchor,
-            )
         except LCDUnavailableError as exc:
             logger.warning("LCD unavailable during startup: %s", exc)
         except Exception as exc:
@@ -720,15 +629,9 @@ def main() -> None:  # pragma: no cover - hardware dependent
                     )
 
                 if lcd is None:
-                    _apply_timing_anchor_once()
                     lcd = _initialize_lcd()
                     frame_writer = LCDFrameWriter(lcd)
                     health.record_success()
-                    timing_anchor = _capture_timing_anchor(
-                        path=TIMING_ANCHOR_FILE,
-                        boot_id=boot_id,
-                        existing=timing_anchor,
-                    )
 
                 if display_state and frame_writer:
                     scroll_scheduler.sleep_until_ready()
