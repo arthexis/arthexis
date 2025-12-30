@@ -6,7 +6,7 @@ ACRONYM_MAP = {
     "Control": "CTRL",
     "Satellite": "SATL",
     "Watchtower": "WTTW",
-    "Constellation": "WTTW",
+    "Constellation": "CONS",
 }
 
 
