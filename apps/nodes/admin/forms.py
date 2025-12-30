@@ -88,7 +88,7 @@ class NodeRoleAdminForm(forms.ModelForm):
 
     class Meta:
         model = NodeRole
-        fields = ("name", "description", "nodes")
+        fields = ("name", "acronym", "description", "nodes")
 
     class Media:
         css = {"all": ("nodes/css/noderole_admin.css",)}
