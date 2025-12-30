@@ -124,6 +124,7 @@ class NodeRole(NameRepresentationMixin, Entity):
     """Assignable role for a :class:`Node`."""
 
     name = models.CharField(max_length=50, unique=True)
+    acronym = models.CharField(max_length=4, unique=True, null=True, blank=True)
     description = models.CharField(max_length=200, blank=True)
 
     objects = NodeRoleManager()

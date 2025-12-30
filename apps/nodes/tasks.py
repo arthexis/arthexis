@@ -152,7 +152,8 @@ def _active_interface_label() -> str:
 
 def _node_role_label(node: Node | None) -> str:
     if node and getattr(node, "role", None):
-        return str(getattr(node.role, "name", "") or "")
+        role = getattr(node, "role")
+        return str(getattr(role, "acronym", None) or getattr(role, "name", "") or "")
     return ""
 
 

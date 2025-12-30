@@ -5,6 +5,7 @@
       "is_seed_data": true,
       "is_deleted": false,
       "name": "Watchtower",
+      "acronym": "WTTW",
       "description": "Multi-User Cloud & Orchestration"
     }
   }
