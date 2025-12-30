@@ -61,6 +61,13 @@ class NameRepresentationMixin:
 
 
 ROLE_RENAMES: dict[str, str] = {"Constellation": "Watchtower"}
+ROLE_ACRONYMS: dict[str, str] = {
+    "Terminal": "TERM",
+    "Control": "CTRL",
+    "Satellite": "SATL",
+    "Watchtower": "WTTW",
+    "Constellation": "CONS",
+}
 
 
 class Platform(NameRepresentationMixin, Entity):

@@ -17,7 +17,7 @@ class DummyResponse:
 
 
 class DummyNode:
-    role = SimpleNamespace(name="Controller")
+    role = SimpleNamespace(name="Control", acronym="CTRL")
 
     def get_preferred_scheme(self) -> str:
         return "http"
@@ -58,7 +58,7 @@ def test_send_startup_net_message_writes_boot_status(
     assert high_lines == ["hi", "there"]
 
     low_lines = (lock_dir / tasks.LCD_LOW_LOCK_FILE).read_text().splitlines()
-    assert low_lines[0] == "UP 0d0h0m Controller"
+    assert low_lines[0] == "UP 0d0h0m CTRL"
     assert low_lines[1] == "ON 0h0m n/a"
 
 

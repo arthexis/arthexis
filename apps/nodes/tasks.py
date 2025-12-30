@@ -26,7 +26,7 @@ from apps.screens.startup_notifications import (
     queue_startup_message,
     render_lcd_lock_file,
 )
-from .models import NetMessage, Node, PendingNetMessage
+from .models import NetMessage, Node, NodeRole, PendingNetMessage
 from .utils import capture_and_save_screenshot
 
 logger = logging.getLogger(__name__)
@@ -151,10 +151,14 @@ def _active_interface_label() -> str:
 
 
 def _node_role_label(node: Node | None) -> str:
-    if node and getattr(node, "role", None):
-        role = getattr(node, "role")
-        return str(getattr(role, "acronym", None) or getattr(role, "name", "") or "")
-    return ""
+    if not node or not getattr(node, "role", None):
+        return ""
+
+    role = getattr(node, "role")
+    name = getattr(role, "name", "") or ""
+    acronym = getattr(role, "acronym", None) or NodeRole.ROLE_ACRONYMS.get(name, "")
+
+    return str(acronym or name or "")
 
 
 def _queue_boot_status_message(base_dir: Path, lock_dir: Path) -> None:
