@@ -71,6 +71,7 @@ def test_boot_message_reports_uptime(monkeypatch, settings, tmp_path):
     lock_dir = tmp_path / ".locks"
     lock_dir.mkdir()
     (lock_dir / "lcd_screen_enabled.lck").write_text("", encoding="utf-8")
+    (lock_dir / "role.lck").write_text("Control", encoding="utf-8")
 
     started_at = timezone.make_aware(datetime(2024, 1, 1, 0, 0, 0))
     (lock_dir / "suite_uptime.lck").write_text(
@@ -95,6 +96,38 @@ def test_boot_message_reports_uptime(monkeypatch, settings, tmp_path):
     low_lines = (lock_dir / tasks.LCD_LOW_LOCK_FILE).read_text().splitlines()
     assert low_lines[0].startswith("UP ")
     assert low_lines[1] == "ON 0h1m n/a"
+
+
+@pytest.mark.django_db
+def test_boot_message_uses_system_boot_time(monkeypatch, settings, tmp_path):
+    settings.BASE_DIR = tmp_path
+    cache.delete(tasks.STARTUP_NET_MESSAGE_CACHE_KEY)
+
+    lock_dir = tmp_path / ".locks"
+    lock_dir.mkdir()
+    (lock_dir / "lcd_screen_enabled.lck").write_text("", encoding="utf-8")
+    (lock_dir / "role.lck").write_text("Control", encoding="utf-8")
+
+    now = timezone.make_aware(datetime(2024, 1, 1, 0, 3, 0))
+    boot_timestamp = (now - timedelta(minutes=2, seconds=30)).timestamp()
+
+    def write_high_lock(*, base_dir, port, lock_file=None):
+        target = lock_file or (Path(base_dir) / ".locks" / tasks.LCD_HIGH_LOCK_FILE)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("hi\nthere\n", encoding="utf-8")
+        return target
+
+    monkeypatch.setattr(tasks.django_timezone, "now", lambda: now)
+    monkeypatch.setattr(tasks.psutil, "boot_time", lambda: boot_timestamp)
+    monkeypatch.setattr(tasks.Node, "get_local", lambda: DummyNode())
+    monkeypatch.setattr(tasks, "queue_startup_message", write_high_lock)
+    monkeypatch.setattr(tasks, "_active_interface_label", lambda: "n/a")
+
+    tasks.send_startup_net_message()
+
+    low_lines = (lock_dir / tasks.LCD_LOW_LOCK_FILE).read_text().splitlines()
+    assert low_lines[0] == "UP 0d0h2m CTRL"
+    assert low_lines[1] == "ON 0h2m n/a"
 
 
 @pytest.mark.django_db

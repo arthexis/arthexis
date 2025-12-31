@@ -4,7 +4,7 @@ import logging
 import os
 import shutil
 import subprocess
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone as datetime_timezone
 from pathlib import Path
 
 import requests
@@ -111,21 +111,37 @@ def _parse_suite_start_timestamp(raw_value: object) -> datetime | None:
 
 def _startup_duration_seconds(base_dir: Path) -> int | None:
     lock_path = base_dir / ".locks" / SUITE_UPTIME_LOCK_NAME
+    now = django_timezone.now()
+
+    payload = None
     try:
         payload = json.loads(lock_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
+        payload = None
+
+    if payload:
+        started_at = _parse_suite_start_timestamp(
+            payload.get("started_at") or payload.get("boot_time")
+        )
+        if started_at:
+            seconds = int((now - started_at).total_seconds())
+            if seconds >= 0:
+                return seconds
+
+    try:
+        boot_timestamp = float(psutil.boot_time())
+    except Exception:
         return None
 
-    started_at = _parse_suite_start_timestamp(
-        payload.get("started_at") or payload.get("boot_time")
-    )
-    if not started_at:
+    if not boot_timestamp:
         return None
 
-    seconds = int((django_timezone.now() - started_at).total_seconds())
-    if seconds < 0:
+    boot_time = datetime.fromtimestamp(boot_timestamp, tz=datetime_timezone.utc)
+    if boot_time > now:
         return None
-    return seconds
+
+    seconds = int((now - boot_time.astimezone(now.tzinfo)).total_seconds())
+    return seconds if seconds >= 0 else None
 
 
 def _uptime_components(seconds: int | None) -> tuple[int, int, int] | None:
