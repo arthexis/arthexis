@@ -49,6 +49,28 @@ def _append_log(report: pytest.TestReport, entry: Dict[str, Any]) -> None:
         entry["logs"].append("\n\n".join(log_parts))
 
 
+def _extract_features(item: pytest.Item) -> list[dict[str, str | None]]:
+    features: list[dict[str, str | None]] = []
+    for mark in item.iter_markers("feature"):
+        candidates = list(mark.kwargs.values()) if mark.kwargs else []
+        candidates += list(mark.args)
+        for candidate in candidates:
+            if isinstance(candidate, dict):
+                slug = candidate.get("slug")
+                package = candidate.get("package")
+            elif isinstance(candidate, str):
+                slug = candidate
+                package = None
+            else:
+                continue
+            if not slug:
+                continue
+            feature_payload = {"slug": slug, "package": package}
+            if feature_payload not in features:
+                features.append(feature_payload)
+    return features
+
+
 def _record_outcome(report: pytest.TestReport, entry: Dict[str, Any]) -> None:
     outcome = report.outcome
     if report.failed and report.when != "call":
@@ -62,6 +84,8 @@ def _store_result(report: pytest.TestReport, item: pytest.Item) -> None:
     node_id = report.nodeid
     entry = COLLECTED_RESULTS[node_id]
     entry.setdefault("name", getattr(item, "name", node_id.split("::")[-1]))
+    if not entry.get("features"):
+        entry["features"] = _extract_features(item)
     _record_outcome(report, entry)
     _append_log(report, entry)
 
@@ -90,6 +114,7 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
             status=payload.get("status", "error"),
             duration=payload.get("duration"),
             log="\n\n".join(payload.get("logs", [])).strip(),
+            features=payload.get("features", []),
         )
         for node_id, payload in COLLECTED_RESULTS.items()
     ]
