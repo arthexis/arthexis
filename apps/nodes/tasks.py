@@ -27,6 +27,7 @@ from apps.screens.startup_notifications import (
     render_lcd_lock_file,
 )
 from .models import NetMessage, Node, NodeRole, PendingNetMessage
+from .models.node_core import ROLE_ACRONYMS
 from .utils import capture_and_save_screenshot
 
 logger = logging.getLogger(__name__)
@@ -156,7 +157,7 @@ def _node_role_label(node: Node | None) -> str:
 
     role = getattr(node, "role")
     name = getattr(role, "name", "") or ""
-    acronym = getattr(role, "acronym", None) or NodeRole.ROLE_ACRONYMS.get(name, "")
+    acronym = getattr(role, "acronym", None) or ROLE_ACRONYMS.get(name, "")
 
     return str(acronym or name or "")
 
