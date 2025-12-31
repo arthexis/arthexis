@@ -52,7 +52,9 @@ def _append_log(report: pytest.TestReport, entry: Dict[str, Any]) -> None:
 def _extract_features(item: pytest.Item) -> list[dict[str, str | None]]:
     features: list[dict[str, str | None]] = []
     for mark in item.iter_markers("feature"):
-        candidates = list(mark.kwargs.values()) if mark.kwargs else []
+        candidates: list[object] = []
+        if mark.kwargs:
+            candidates.append(dict(mark.kwargs))
         candidates += list(mark.args)
         for candidate in candidates:
             if isinstance(candidate, dict):
