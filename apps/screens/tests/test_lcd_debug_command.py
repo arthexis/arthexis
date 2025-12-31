@@ -24,6 +24,7 @@ def test_generates_debug_report(monkeypatch, tmp_path: Path, capsys):
     (logs_dir / "lcd-screen.log").write_text("log entry", encoding="utf-8")
 
     monkeypatch.setenv("LCD_MODE", "demo")
+    monkeypatch.setenv("LCD_SKIP_PROBE", "1")
 
     sleeps: list[int] = []
 
@@ -42,11 +43,13 @@ def test_generates_debug_report(monkeypatch, tmp_path: Path, capsys):
 
     report = report_path.read_text(encoding="utf-8")
     assert "LCD Debug Report" in report
+    assert "LCD timings:" in report
     assert "After 30s" in report
     assert "After 60s" in report
     assert "lcd-high" in report
     assert "lcd-screen.txt" in report
     assert "lcd-screen.log" in report
+    assert "Encoding health checks:" in report
     assert "LCD_MODE=demo" in report
 
     out = capsys.readouterr().out

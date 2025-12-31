@@ -152,6 +152,25 @@ class DisplayState(NamedTuple):
     last_segment2: str | None
 
 
+_NON_ASCII_CACHE: set[str] = set()
+
+
+def _non_ascii_positions(text: str) -> list[str]:
+    printable = {9, 10, 13} | set(range(32, 127))
+    return [f"0x{ord(ch):02x}@{idx}" for idx, ch in enumerate(text) if ord(ch) not in printable]
+
+
+def _warn_on_non_ascii_payload(payload: LockPayload, label: str) -> None:
+    cache_key = (label, payload.line1, payload.line2)
+    if cache_key in _NON_ASCII_CACHE:
+        return
+
+    issues = _non_ascii_positions(payload.line1) + _non_ascii_positions(payload.line2)
+    if issues:
+        logger.warning("Non-ASCII characters detected in %s payload: %s", label, ", ".join(issues))
+        _NON_ASCII_CACHE.add(cache_key)
+
+
 class LCDFrameWriter:
     """Write full LCD frames with retry and batching."""
 
@@ -613,6 +632,7 @@ def main() -> None:  # pragma: no cover - hardware dependent
                         return LockPayload("", "", DEFAULT_SCROLL_MS)
 
                     current_payload = _payload_for_state(state_index)
+                    _warn_on_non_ascii_payload(current_payload, state_order[state_index])
                     display_state = _prepare_display_state(
                         current_payload.line1,
                         current_payload.line2,
@@ -622,6 +642,7 @@ def main() -> None:  # pragma: no cover - hardware dependent
 
                     next_index = (state_index + 1) % len(state_order)
                     next_payload = _payload_for_state(next_index)
+                    _warn_on_non_ascii_payload(next_payload, state_order[next_index])
                     next_display_state = _prepare_display_state(
                         next_payload.line1,
                         next_payload.line2,
