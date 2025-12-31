@@ -10,6 +10,7 @@ from pathlib import Path
 from django.conf import settings
 from django.core.management.base import BaseCommand
 
+from apps.screens.lcd import LCDTimings, LCDUnavailableError, CharLCD1602
 from apps.screens.lcd_screen import LOG_FILE, WORK_FILE
 from apps.screens.startup_notifications import (
     LCD_HIGH_LOCK_FILE,
@@ -57,6 +58,8 @@ class Command(BaseCommand):
         report_lines: list[str] = []
         report_lines.extend(self._metadata_section(base_dir))
         report_lines.append("")
+        report_lines.extend(self._lcd_timing_section())
+        report_lines.append("")
 
         elapsed = 0
         samples = 0
@@ -77,6 +80,10 @@ class Command(BaseCommand):
 
         report_lines.append("")
         report_lines.extend(self._environment_section())
+        report_lines.append("")
+        report_lines.extend(self._lcd_probe_section(base_dir))
+        report_lines.append("")
+        report_lines.extend(self._encoding_health_section(base_dir))
 
         report = "\n".join(report_lines)
         outfile.parent.mkdir(parents=True, exist_ok=True)
@@ -125,6 +132,17 @@ class Command(BaseCommand):
             f"PID: {os.getpid()}",
             f"Python: {platform.python_version()} ({platform.platform()})",
             f"Started at: {datetime.now(tz=timezone.utc).isoformat()}",
+        ]
+
+    def _lcd_timing_section(self) -> list[str]:
+        timings = LCDTimings.from_env()
+        return [
+            "LCD timings:",
+            f"- pulse_enable_delay: {timings.pulse_enable_delay:.4f}s (LCD_PULSE_ENABLE_DELAY={os.getenv('LCD_PULSE_ENABLE_DELAY', 'default')})",
+            f"- pulse_disable_delay: {timings.pulse_disable_delay:.4f}s (LCD_PULSE_DISABLE_DELAY={os.getenv('LCD_PULSE_DISABLE_DELAY', 'default')})",
+            f"- command_delay: {timings.command_delay:.4f}s (LCD_COMMAND_DELAY={os.getenv('LCD_COMMAND_DELAY', 'default')})",
+            f"- data_delay: {timings.data_delay:.4f}s (LCD_DATA_DELAY={os.getenv('LCD_DATA_DELAY', 'default')})",
+            f"- clear_delay: {timings.clear_delay:.4f}s (LCD_CLEAR_DELAY={os.getenv('LCD_CLEAR_DELAY', 'default')})",
         ]
 
     def _lockfile_section(self, base_dir: Path) -> list[str]:
@@ -215,6 +233,86 @@ class Command(BaseCommand):
             lines.append(f"    {line}")
         if len(content) > max_lines:
             lines.append(f"    ... ({len(content) - max_lines} more lines)")
+        return lines
+
+    def _encoding_health_section(self, base_dir: Path) -> list[str]:
+        lock_dir = base_dir / ".locks"
+        work_file = base_dir / "work" / WORK_FILE.name
+        lines = ["Encoding health checks:"]
+        targets = [
+            ("lcd-high", lock_dir / LCD_HIGH_LOCK_FILE),
+            ("lcd-low", lock_dir / LCD_LOW_LOCK_FILE),
+            ("lcd-screen", work_file),
+        ]
+
+        for label, path in targets:
+            lines.extend(self._encoding_notes(path, label))
+        return lines
+
+    def _encoding_notes(self, path: Path, label: str) -> list[str]:
+        lines = [f"- {label} -> {path}"]
+        try:
+            raw = path.read_bytes()
+        except FileNotFoundError:
+            lines.append("  missing")
+            return lines
+        except OSError as exc:
+            lines.append(f"  (unable to read: {exc})")
+            return lines
+
+        if not raw:
+            lines.append("  content: <empty>")
+            return lines
+
+        printable = {9, 10, 13} | set(range(32, 127))
+        non_ascii = [f"0x{byte:02x}@{idx}" for idx, byte in enumerate(raw) if byte not in printable]
+        preview = raw.decode("utf-8", errors="replace").splitlines()
+        lines.append(f"  bytes: {len(raw)}")
+        if non_ascii:
+            lines.append(f"  non-printable bytes: {', '.join(non_ascii[:8])}")
+            if len(non_ascii) > 8:
+                lines.append(f"  ... {len(non_ascii) - 8} more occurrences")
+        else:
+            lines.append("  non-printable bytes: none detected")
+
+        if preview:
+            lines.append("  decoded preview:")
+            for line in preview[:5]:
+                lines.append(f"    {line}")
+            if len(preview) > 5:
+                lines.append(f"    ... ({len(preview) - 5} more lines)")
+        return lines
+
+    def _lcd_probe_section(self, base_dir: Path) -> list[str]:
+        lock_dir = base_dir / ".locks"
+        lines = ["LCD probe:"]
+        if str(os.getenv("LCD_SKIP_PROBE", "")).lower() in {"1", "true", "yes", "on"}:
+            lines.append("- skipped (LCD_SKIP_PROBE is set)")
+            return lines
+        try:
+            lcd = CharLCD1602()
+        except LCDUnavailableError as exc:
+            lines.append(f"- lcd init failed: {exc}")
+            return lines
+        except Exception as exc:  # pragma: no cover - hardware dependent
+            lines.append(f"- lcd init failed: {exc}")
+            return lines
+
+        try:
+            addresses = lcd.i2c_scan()
+        except Exception as exc:  # pragma: no cover - requires hardware/tools
+            lines.append(f"- i2c scan failed: {exc}")
+        else:
+            if addresses:
+                lines.append(f"- detected I2C addresses: {', '.join(addresses)}")
+            else:
+                lines.append("- detected I2C addresses: none")
+
+        for name in (LCD_HIGH_LOCK_FILE, LCD_LOW_LOCK_FILE):
+            path = lock_dir / name
+            if path.exists():
+                modified = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc).isoformat()
+                lines.append(f"- {name} mtime: {modified}")
         return lines
 
     def _sleep(self, seconds: int) -> None:
