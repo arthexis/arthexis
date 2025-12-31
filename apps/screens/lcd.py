@@ -200,9 +200,10 @@ class CharLCD1602:
     def write(self, x: int, y: int, s: str) -> None:
         x = max(0, min(self.columns - 1, int(x)))
         y = max(0, min(self.rows - 1, int(y)))
+        text = str(s)[: self.columns - x]
         addr = 0x80 + 0x40 * y + x
         self.send_command(addr)
-        for ch in str(s):
+        for ch in text:
             self.send_data(ord(ch))
 
     def write_frame(self, line1: str, line2: str, retries: int = 1) -> None:
@@ -229,7 +230,7 @@ class CharLCD1602:
             raise last_error
 
     def _write_row(self, row: int, text: str) -> None:
-        padded = str(text).ljust(self.columns)
+        padded = str(text)[: self.columns].ljust(self.columns)
         addr = 0x80 + 0x40 * max(0, min(self.rows - 1, int(row)))
         self.send_command(addr)
         for ch in padded:
