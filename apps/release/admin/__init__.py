@@ -17,6 +17,11 @@ from django.utils.translation import gettext_lazy as _
 from apps.core.admin import EntityModelAdmin, SaveBeforeChangeAction
 from apps.release import release as release_utils
 from apps.release.admin.credentials import ReleaseManagerAdmin
+from apps.release.admin.features import (
+    FeatureAdmin,
+    FeatureArtifactAdmin,
+    FeatureTestCaseAdmin,
+)
 from apps.release.admin.package_actions import (
     PackageAdminActionsMixin,
     prepare_package_release,
@@ -349,5 +354,8 @@ admin.site.register(PackageRelease, PackageReleaseAdmin)
 __all__ = [
     "PackageAdmin",
     "PackageReleaseAdmin",
+    "FeatureAdmin",
+    "FeatureArtifactAdmin",
+    "FeatureTestCaseAdmin",
     "ReleaseManagerAdmin",
 ]
