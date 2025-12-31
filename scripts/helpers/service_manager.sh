@@ -53,11 +53,9 @@ arthexis_detect_service_mode() {
 
       local unit_name
       for unit_name in "${candidate_units[@]}"; do
-        if command -v systemctl >/dev/null 2>&1; then
-          if systemctl list-unit-files | awk '{print $1}' | grep -Fxq "$unit_name"; then
-            echo "$ARTHEXIS_SERVICE_MODE_SYSTEMD"
-            return
-          fi
+        if _arthexis_systemd_unit_present "$unit_name"; then
+          echo "$ARTHEXIS_SERVICE_MODE_SYSTEMD"
+          return
         fi
 
         if [ -f "${systemd_dir}/${unit_name}" ]; then
@@ -107,6 +105,25 @@ arthexis_using_embedded_mode() {
   [ "$mode" = "$ARTHEXIS_SERVICE_MODE_EMBEDDED" ]
 }
 
+_arthexis_systemd_unit_present() {
+  local unit_name="$1"
+
+  if [ -z "$unit_name" ] || ! command -v systemctl >/dev/null 2>&1; then
+    return 1
+  fi
+
+  local unit_list
+  unit_list=$(systemctl list-unit-files --no-legend --no-pager "$unit_name" 2>/dev/null || true)
+
+  while read -r name _; do
+    if [ "$name" = "$unit_name" ]; then
+      return 0
+    fi
+  done <<< "$unit_list"
+
+  return 1
+}
+
 arthexis_stop_embedded_lcd_processes() {
   local lock_dir="$1"
 
@@ -125,7 +142,7 @@ arthexis_start_systemd_unit_if_present() {
     return 0
   fi
 
-  if systemctl list-unit-files | awk '{print $1}' | grep -Fxq "$unit_name"; then
+  if _arthexis_systemd_unit_present "$unit_name"; then
     if command -v sudo >/dev/null 2>&1; then
       sudo systemctl start "$unit_name" || true
     else
@@ -152,7 +169,7 @@ arthexis_stop_systemd_unit_if_present() {
     return 0
   fi
 
-  if systemctl list-unit-files | awk '{print $1}' | grep -Fxq "$unit_name"; then
+  if _arthexis_systemd_unit_present "$unit_name"; then
     if command -v sudo >/dev/null 2>&1; then
       sudo systemctl stop "$unit_name" || true
     else
@@ -174,7 +191,7 @@ arthexis_remove_systemd_unit_if_present() {
   arthexis_stop_systemd_unit_if_present "$unit_name"
 
   if command -v systemctl >/dev/null 2>&1; then
-    if systemctl list-unit-files | awk '{print $1}' | grep -Fxq "$unit_name"; then
+    if _arthexis_systemd_unit_present "$unit_name"; then
       if command -v sudo >/dev/null 2>&1; then
         sudo systemctl disable "$unit_name" || true
       else
