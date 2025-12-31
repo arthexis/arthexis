@@ -26,7 +26,8 @@ from apps.screens.startup_notifications import (
     queue_startup_message,
     render_lcd_lock_file,
 )
-from .models import NetMessage, Node, PendingNetMessage
+from .models import NetMessage, Node, NodeRole, PendingNetMessage
+from .models.node_core import ROLE_ACRONYMS, ROLE_RENAMES
 from .utils import capture_and_save_screenshot
 
 logger = logging.getLogger(__name__)
@@ -150,22 +151,23 @@ def _active_interface_label() -> str:
     return "n/a"
 
 
-def _node_role_label(node: Node | None) -> str:
-    if node and getattr(node, "role", None):
-        role = getattr(node, "role")
-        return str(getattr(role, "acronym", None) or getattr(role, "name", "") or "")
-    return ""
+def _role_label_from_lock(lock_dir: Path) -> str:
+    if not lock_dir:
+        return ""
+
+    role_path = lock_dir / "role.lck"
+    try:
+        role_name = role_path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
+
+    normalized_name = ROLE_RENAMES.get(role_name, role_name)
+    return ROLE_ACRONYMS.get(normalized_name, normalized_name)
 
 
 def _queue_boot_status_message(base_dir: Path, lock_dir: Path) -> None:
-    local_node = None
-    try:
-        local_node = Node.get_local()
-    except Exception:
-        logger.debug("Unable to load local node for boot status message", exc_info=True)
-
     boot_time_seconds = _startup_duration_seconds(base_dir)
-    role_label = _node_role_label(local_node)
+    role_label = _role_label_from_lock(lock_dir)
 
     uptime_parts = _uptime_components(boot_time_seconds)
 
