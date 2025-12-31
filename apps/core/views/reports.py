@@ -24,7 +24,8 @@ from django.urls import NoReverseMatch, reverse
 from apps.loggers.paths import select_log_dir
 from apps.nodes.models import NetMessage, Node
 from apps.release import release as release_utils
-from apps.release.models import PackageRelease
+from apps.release.models import Feature, FeatureTestCase, PackageRelease
+from apps.tests.models import TestResult
 from utils import revision
 
 logger = logging.getLogger(__name__)
@@ -1086,6 +1087,46 @@ def _step_run_tests(release, ctx, log_path: Path, *, user=None) -> None:
     _append_log(log_path, "Test suite completion acknowledged")
 
 
+def _step_verify_features(release, ctx, log_path: Path, *, user=None) -> None:
+    _append_log(log_path, "Validate release features for this version")
+    try:
+        features = (
+            Feature.objects.filter(package=release.package, is_active=True)
+            .due_for_version(release.version)
+            .prefetch_related("test_cases")
+        )
+    except Exception as exc:  # pragma: no cover - defensive
+        _append_log(log_path, f"Feature validation skipped: {exc}")
+        return
+
+    if not features:
+        _append_log(log_path, "No feature expectations registered for this release")
+        return
+
+    failing: list[FeatureTestCase] = []
+    missing: list[Feature] = []
+    for feature in features:
+        test_cases = list(feature.test_cases.all())
+        if not test_cases:
+            missing.append(feature)
+            continue
+        for test_case in test_cases:
+            if test_case.last_status != TestResult.Status.PASSED:
+                failing.append(test_case)
+
+    if missing:
+        labels = ", ".join(f"{feature.package.name}:{feature.slug}" for feature in missing)
+        _append_log(log_path, f"Feature coverage missing: {labels}")
+    if failing:
+        names = ", ".join(test.test_node_id for test in failing)
+        _append_log(log_path, f"Feature tests failing: {names}")
+
+    if missing or failing:
+        raise Exception("Feature expectations are not satisfied")
+
+    _append_log(log_path, "Feature expectations confirmed for this release")
+
+
 def _step_promote_build(release, ctx, log_path: Path, *, user=None) -> None:
     _append_log(log_path, "Generating build files")
     ctx.pop("build_revision", None)
@@ -1366,6 +1407,7 @@ PUBLISH_STEPS = [
     ("Execute pre-release actions", _step_pre_release_actions),
     ("Build release artifacts", _step_promote_build),
     ("Complete test suite with --all flag", _step_run_tests),
+    ("Confirm release feature expectations", _step_verify_features),
     ("Get Release Manager Approval", _step_release_manager_approval),
     ("Upload final build to PyPI", _step_publish),
 ]

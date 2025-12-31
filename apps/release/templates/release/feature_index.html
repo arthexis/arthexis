@@ -1,0 +1,61 @@
+{% extends "pages/base.html" %}
+{% load i18n %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="row g-3 mb-4">
+  <div class="col-md-3">
+    <label class="form-label" for="package-filter">{% trans "Package" %}</label>
+    <select id="package-filter" class="form-select" onchange="location.href=this.value">
+      <option value="?">{% trans "All packages" %}</option>
+      {% for package in packages %}
+      {% with url='?package='|add:package.name %}
+      <option value="{{ url }}" {% if package.name == package_filter %}selected{% endif %}>{{ package.name }}</option>
+      {% endwith %}
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-md-3">
+    <form method="get" class="d-flex flex-column gap-2">
+      <label class="form-label" for="version-filter">{% trans "Release version" %}</label>
+      <div class="input-group">
+        <input type="text" class="form-control" id="version-filter" name="version" value="{{ version_filter }}" placeholder="1.2.3" />
+        <button class="btn btn-primary" type="submit">{% trans "Filter" %}</button>
+      </div>
+      <div class="form-check">
+        <input class="form-check-input" type="checkbox" value="1" id="due-only" name="due" {% if show_due_only %}checked{% endif %}>
+        <label class="form-check-label" for="due-only">{% trans "Only show features due by this version" %}</label>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="row g-3">
+  {% for feature in features %}
+  <div class="col-12 col-lg-6">
+    <div class="card h-100">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start mb-2">
+          <div>
+            <h5 class="card-title mb-1">{{ feature.name }}</h5>
+            <div class="text-muted small">{{ feature.package.name }} · v{{ feature.expected_version }}</div>
+          </div>
+          <a class="btn btn-sm btn-outline-primary" href="{% url 'release-feature-detail' feature.package.name feature.slug %}">{% trans "View" %}</a>
+        </div>
+        {% if feature.summary %}
+        <p class="mb-2">{{ feature.summary }}</p>
+        {% endif %}
+        {% if feature.scope %}
+        <div class="small text-muted">{{ feature.scope|linebreaks }}</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% empty %}
+  <div class="col-12">
+    <div class="alert alert-info mb-0">{% trans "No features match the current filters." %}</div>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

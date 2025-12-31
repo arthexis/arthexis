@@ -1,0 +1,81 @@
+{% extends "pages/base.html" %}
+{% load i18n %}
+
+{% block title %}{{ feature.name }}{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+  <div class="col-12 col-lg-8">
+    <h2 class="mb-1">{{ feature.name }}</h2>
+    <div class="text-muted">{{ feature.package.name }} · v{{ feature.expected_version }}</div>
+    {% if feature.summary %}
+    <p class="lead mt-3">{{ feature.summary }}</p>
+    {% endif %}
+    {% if feature.scope %}
+    <div class="mb-3">
+      <h6 class="text-uppercase text-muted small">{% trans "Scope" %}</h6>
+      <div class="border rounded p-3 bg-light">{{ feature.scope|linebreaks }}</div>
+    </div>
+    {% endif %}
+    {% if feature.content %}
+    <div class="mb-3">
+      <h6 class="text-uppercase text-muted small">{% trans "Notes" %}</h6>
+      <div class="border rounded p-3 bg-white">{{ feature.content|linebreaks }}</div>
+    </div>
+    {% endif %}
+  </div>
+  <div class="col-12 col-lg-4">
+    <div class="card mb-3">
+      <div class="card-header">{% trans "Linked tests" %}</div>
+      <div class="card-body">
+        {% with test_cases=feature.test_cases.all %}
+        {% if test_cases %}
+        <ul class="list-unstyled mb-0">
+          {% for test in test_cases %}
+          <li class="mb-2">
+            <div class="fw-semibold">{{ test.test_name }}</div>
+            <div class="small text-muted">{{ test.test_node_id }}</div>
+            {% if test.last_status %}
+            <span class="badge {% if test.last_status == 'passed' %}bg-success{% elif test.last_status == 'skipped' %}bg-secondary{% else %}bg-danger{% endif %}">{{ test.last_status|capfirst }}</span>
+            {% endif %}
+          </li>
+          {% empty %}
+          <div class="text-muted">{% trans "No tests have been linked to this feature." %}</div>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <div class="text-muted">{% trans "No tests have been linked to this feature." %}</div>
+        {% endif %}
+        {% endwith %}
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">{% trans "Artifacts" %}</div>
+      <div class="card-body">
+        {% with artifacts=feature.artifacts.all %}
+        {% if artifacts %}
+        <ul class="list-unstyled mb-0">
+          {% for artifact in artifacts %}
+          <li class="mb-3">
+            <div class="fw-semibold">{% firstof artifact.label _("Attachment") %}</div>
+            {% if artifact.attachment %}
+            <div class="small"><a href="{{ artifact.attachment.url }}" target="_blank">{{ artifact.attachment.name }}</a></div>
+            {% endif %}
+            {% if artifact.content %}
+            <div class="small text-muted">{{ artifact.content|linebreaks }}</div>
+            {% endif %}
+          </li>
+          {% empty %}
+          <div class="text-muted">{% trans "No artifacts have been uploaded yet." %}</div>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <div class="text-muted">{% trans "No artifacts have been uploaded yet." %}</div>
+        {% endif %}
+        {% endwith %}
+      </div>
+    </div>
+  </div>
+</div>
+<a class="btn btn-link" href="{% url 'release-feature-index' %}">&larr; {% trans "Back to index" %}</a>
+{% endblock %}
