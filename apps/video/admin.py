@@ -6,13 +6,14 @@ from django.shortcuts import redirect
 from django.template.response import TemplateResponse
 from django.urls import NoReverseMatch, path, reverse
 from django.utils.translation import gettext_lazy as _
+from django.utils.html import format_html
 from django_object_actions import DjangoObjectActions
 
 from apps.locals.user_data import EntityModelAdmin
 from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
 from apps.nodes.utils import save_screenshot
 
-from .models import VideoDevice, VideoRecording, YoutubeChannel
+from .models import MjpegStream, VideoDevice, VideoRecording, YoutubeChannel
 from .utils import capture_rpi_snapshot, has_rpi_camera_stack
 
 
@@ -255,6 +256,28 @@ class VideoRecordingAdmin(EntityModelAdmin):
     list_display = ("node", "path", "duration_seconds", "recorded_at", "method")
     search_fields = ("path", "node__hostname", "method")
     readonly_fields = ("recorded_at",)
+
+
+@admin.register(MjpegStream)
+class MjpegStreamAdmin(EntityModelAdmin):
+    list_display = ("name", "slug", "video_device", "is_active", "public_link")
+    search_fields = ("name", "slug", "video_device__identifier")
+    list_filter = ("is_active",)
+
+    def get_view_on_site_url(self, obj=None):
+        if obj:
+            return obj.get_absolute_url()
+        return super().get_view_on_site_url(obj)
+
+    @admin.display(description=_("Public link"))
+    def public_link(self, obj):
+        if not obj:
+            return ""
+        return format_html(
+            '<a href="{}" target="_blank" rel="noopener">{}</a>',
+            obj.get_absolute_url(),
+            _("View"),
+        )
 
 
 @admin.register(YoutubeChannel)

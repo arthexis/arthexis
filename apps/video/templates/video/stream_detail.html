@@ -1,0 +1,30 @@
+{% extends "pages/base.html" %}
+{% load i18n %}
+
+{% block title %}{{ stream.name }} | {% trans "Video" %}{% endblock %}
+
+{% block content %}
+<div class="container py-5">
+  <div class="row justify-content-center">
+    <div class="col-lg-8">
+      <div class="d-flex align-items-center justify-content-between mb-3">
+        <div>
+          <p class="text-muted mb-1">{% trans "Live stream" %}</p>
+          <h1 class="h3 mb-0">{{ stream.name }}</h1>
+        </div>
+        {% if request.user.is_staff %}
+        <a class="btn btn-outline-primary" href="{{ stream.get_admin_url }}">
+          {% trans "Configure" %}
+        </a>
+        {% endif %}
+      </div>
+      <div class="ratio ratio-16x9 bg-dark rounded shadow-sm d-flex align-items-center justify-content-center overflow-hidden">
+        <img src="{{ stream_url }}" class="img-fluid w-100 h-100 object-fit-cover" alt="{% trans 'Live video stream' %}">
+      </div>
+      <p class="mt-3 text-muted">
+        {% trans "This stream serves Motion JPEG frames directly from the configured device." %}
+      </p>
+    </div>
+  </div>
+</div>
+{% endblock %}
