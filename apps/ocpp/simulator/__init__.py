@@ -417,10 +417,15 @@ class ChargePointSimulator:
         self._last_close_code = None
         self._last_close_reason = None
         scheme = resolve_ws_scheme(ws_scheme=cfg.ws_scheme, use_tls=cfg.use_tls)
-        if cfg.ws_port:
-            uri = f"{scheme}://{cfg.host}:{cfg.ws_port}/{cfg.cp_path}"
-        else:
-            uri = f"{scheme}://{cfg.host}/{cfg.cp_path}"
+        fallback_scheme = "ws" if scheme == "wss" else "wss"
+        candidate_schemes = [scheme]
+        if fallback_scheme != scheme:
+            candidate_schemes.append(fallback_scheme)
+
+        def _build_uri(ws_scheme: str) -> str:
+            if cfg.ws_port:
+                return f"{ws_scheme}://{cfg.host}:{cfg.ws_port}/{cfg.cp_path}"
+            return f"{ws_scheme}://{cfg.host}/{cfg.cp_path}"
         headers: dict[str, str] = {}
         if cfg.username and cfg.password:
             userpass = f"{cfg.username}:{cfg.password}"
@@ -432,20 +437,47 @@ class ChargePointSimulator:
             connect_kwargs["additional_headers"] = headers
 
         ws = None
+        last_error: Exception | None = None
         try:
             self._unsupported_message = False
             self._unsupported_message_reason = ""
-            try:
-                ws = await websockets.connect(
-                    uri, subprotocols=["ocpp1.6"], **connect_kwargs
+            for ws_scheme in candidate_schemes:
+                uri = _build_uri(ws_scheme)
+                try:
+                    ws = await websockets.connect(
+                        uri, subprotocols=["ocpp1.6"], **connect_kwargs
+                    )
+                except Exception as exc:
+                    store.add_log(
+                        cfg.cp_path,
+                        f"Connection with subprotocol failed ({ws_scheme}): {exc}",
+                        log_type="simulator",
+                    )
+                    try:
+                        ws = await websockets.connect(uri, **connect_kwargs)
+                    except Exception as inner_exc:
+                        last_error = inner_exc
+                        ws = None
+                        store.add_log(
+                            cfg.cp_path,
+                            f"Connection failed ({ws_scheme}): {inner_exc}",
+                            log_type="simulator",
+                        )
+                        if ws_scheme != candidate_schemes[-1]:
+                            store.add_log(
+                                cfg.cp_path,
+                                f"Retrying connection with scheme {candidate_schemes[-1]}",
+                                log_type="simulator",
+                            )
+                        continue
+
+                if ws:
+                    break
+
+            if ws is None:
+                raise last_error if last_error else RuntimeError(
+                    "Unable to establish simulator websocket connection"
                 )
-            except Exception as exc:
-                store.add_log(
-                    cfg.cp_path,
-                    f"Connection with subprotocol failed: {exc}",
-                    log_type="simulator",
-                )
-                ws = await websockets.connect(uri, **connect_kwargs)
 
             store.add_log(
                 cfg.cp_path,
