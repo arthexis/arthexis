@@ -10,8 +10,10 @@ from apps.screens import lcd_screen
 @pytest.fixture(autouse=True)
 def reset_shutdown_flag():
     lcd_screen._reset_shutdown_flag()
+    lcd_screen._reset_pause_flag()
     yield
     lcd_screen._reset_shutdown_flag()
+    lcd_screen._reset_pause_flag()
 
 
 def test_shutdown_flag_can_be_reset_and_requested():
@@ -66,3 +68,39 @@ def test_blank_display_swallows_lcd_errors(monkeypatch):
     should_exit = lcd_screen._handle_shutdown_request(FailingLCD())
 
     assert should_exit is True
+
+
+def test_pause_flag_can_be_requested_and_resumed():
+    assert lcd_screen._pause_requested() is False
+
+    lcd_screen._request_pause(signal.SIGUSR1, None)
+
+    assert lcd_screen._pause_requested() is True
+
+    lcd_screen._request_resume(signal.SIGUSR2, None)
+
+    assert lcd_screen._pause_requested() is False
+
+
+def test_handle_pause_blanks_and_releases_display():
+    class FakeLCD:
+        def __init__(self) -> None:
+            self.cleared = False
+            self.writes: list[tuple[int, int, str]] = []
+
+        def clear(self) -> None:
+            self.cleared = True
+
+        def write(self, col: int, row: int, text: str) -> None:
+            self.writes.append((col, row, text))
+
+    lcd = FakeLCD()
+    lcd_screen._request_pause(signal.SIGUSR1, None)
+
+    paused_lcd, paused = lcd_screen._handle_pause_request(lcd)
+
+    assert paused is True
+    assert paused_lcd is None
+    assert lcd.cleared is True
+    blank_row = " " * lcd_screen.LCD_COLUMNS
+    assert lcd.writes == [(0, row, blank_row) for row in range(lcd_screen.LCD_ROWS)]
