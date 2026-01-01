@@ -13,14 +13,21 @@ logger = logging.getLogger(__name__)
 
 LCD_HIGH_LOCK_FILE = "lcd-high"
 LCD_LOW_LOCK_FILE = "lcd-low"
+LCD_EVENT_LOCK_FILE = "lcd-event"
 LCD_LEGACY_FEATURE_LOCK = "lcd_screen_enabled.lck"
 LCD_RUNTIME_LOCK_FILE = "lcd_screen.lck"
+DEFAULT_EVENT_DURATION_SECONDS = 60
 
 
 @dataclass(frozen=True)
 class LcdMessage:
     subject: str
     body: str
+
+
+@dataclass(frozen=True)
+class LcdEventMessage(LcdMessage):
+    duration_seconds: int = DEFAULT_EVENT_DURATION_SECONDS
 
 
 def _parse_lcd_lock_lines(lines: list[str]) -> LcdMessage:
@@ -40,8 +47,43 @@ def read_lcd_lock_file(lock_file: Path) -> LcdMessage | None:
     return _parse_lcd_lock_lines(lines)
 
 
+def _parse_event_duration(raw: str | None, default: int = DEFAULT_EVENT_DURATION_SECONDS) -> int:
+    try:
+        duration = int(raw) if raw is not None else default
+    except (TypeError, ValueError):
+        duration = default
+
+    return duration if duration > 0 else default
+
+
+def read_lcd_event_lock_file(lock_file: Path) -> LcdEventMessage | None:
+    try:
+        lines = lock_file.read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError:
+        return None
+    except OSError:
+        logger.debug("Failed to read LCD event lock file: %s", lock_file, exc_info=True)
+        return None
+
+    message = _parse_lcd_lock_lines(lines)
+    duration = _parse_event_duration(lines[2] if len(lines) > 2 else None)
+    return LcdEventMessage(
+        subject=message.subject,
+        body=message.body,
+        duration_seconds=duration,
+    )
+
+
 def render_lcd_lock_file(*, subject: str = "", body: str = "") -> str:
     lines = [subject.strip()[:64], body.strip()[:64]]
+    return "\n".join(lines) + "\n"
+
+
+def render_lcd_event_lock_file(
+    *, subject: str = "", body: str = "", duration_seconds: int | None = None
+) -> str:
+    duration = _parse_event_duration(duration_seconds)
+    lines = [subject.strip()[:64], body.strip()[:64], str(duration)]
     return "\n".join(lines) + "\n"
 
 
@@ -61,6 +103,7 @@ def lcd_feature_enabled(lock_dir: Path) -> bool:
     for name in (
         LCD_HIGH_LOCK_FILE,
         LCD_LOW_LOCK_FILE,
+        LCD_EVENT_LOCK_FILE,
         LCD_LEGACY_FEATURE_LOCK,
         LCD_RUNTIME_LOCK_FILE,
     ):

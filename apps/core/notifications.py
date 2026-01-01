@@ -15,8 +15,10 @@ import threading
 from pathlib import Path
 
 from apps.screens.startup_notifications import (
+    LCD_EVENT_LOCK_FILE,
     LCD_HIGH_LOCK_FILE,
     LCD_LOW_LOCK_FILE,
+    render_lcd_event_lock_file,
     render_lcd_lock_file,
 )
 
@@ -67,24 +69,58 @@ class NotificationManager:
         self,
         lock_file: Path | None = None,
         sticky_lock_file: Path | None = None,
+        event_lock_file: Path | None = None,
     ) -> None:
         base_dir = get_base_dir()
         self.lock_file = lock_file or base_dir / ".locks" / LCD_LOW_LOCK_FILE
         self.sticky_lock_file = (
             sticky_lock_file or base_dir / ".locks" / LCD_HIGH_LOCK_FILE
         )
+        self.event_lock_file = (
+            event_lock_file or base_dir / ".locks" / LCD_EVENT_LOCK_FILE
+        )
         self.lock_file.parent.mkdir(parents=True, exist_ok=True)
         self.sticky_lock_file.parent.mkdir(parents=True, exist_ok=True)
+        self.event_lock_file.parent.mkdir(parents=True, exist_ok=True)
         # ``plyer`` is only available on Windows and can fail when used in
         # a non-interactive environment (e.g. service or CI).
         # Any failure will fall back to logging quietly.
 
-    def _write_lock_file(self, subject: str, body: str, *, sticky: bool = False) -> None:
-        payload = render_lcd_lock_file(subject=subject[:64], body=body[:64])
-        target = self.sticky_lock_file if sticky else self.lock_file
+    def _write_lock_file(
+        self,
+        subject: str,
+        body: str,
+        *,
+        sticky: bool = False,
+        channel: str = "low",
+        duration_seconds: int | None = None,
+    ) -> None:
+        normalized_channel = channel or "low"
+        if normalized_channel not in {"low", "high", "event"}:
+            normalized_channel = "low"
+
+        if normalized_channel == "event":
+            payload = render_lcd_event_lock_file(
+                subject=subject[:64],
+                body=body[:64],
+                duration_seconds=duration_seconds,
+            )
+            target = self.event_lock_file
+        else:
+            payload = render_lcd_lock_file(subject=subject[:64], body=body[:64])
+            target = self.sticky_lock_file if (sticky or normalized_channel == "high") else self.lock_file
+
         target.write_text(payload, encoding="utf-8")
 
-    def send(self, subject: str, body: str = "", *, sticky: bool = False) -> bool:
+    def send(
+        self,
+        subject: str,
+        body: str = "",
+        *,
+        sticky: bool = False,
+        channel: str = "low",
+        duration_seconds: int | None = None,
+    ) -> bool:
         """Store *subject* and *body* in the LCD lock file when available.
 
         The method truncates each line to 64 characters. If the lock file is
@@ -94,12 +130,28 @@ class NotificationManager:
         """
 
         try:
-            self._write_lock_file(subject[:64], body[:64], sticky=sticky)
+            self._write_lock_file(
+                subject[:64],
+                body[:64],
+                sticky=sticky,
+                channel=channel,
+                duration_seconds=duration_seconds,
+            )
             return True
         except Exception as exc:  # pragma: no cover - filesystem dependent
             logger.warning("LCD lock file write failed: %s", exc)
             self._gui_display(subject, body)
             return True
+
+    def send_event(
+        self, subject: str, body: str = "", *, duration_seconds: int | None = None
+    ) -> bool:
+        return self.send(
+            subject=subject,
+            body=body,
+            channel="event",
+            duration_seconds=duration_seconds,
+        )
 
     def send_async(self, subject: str, body: str = "", *, sticky: bool = False) -> None:
         """Dispatch :meth:`send` on a background thread."""
@@ -130,13 +182,39 @@ class NotificationManager:
 manager = NotificationManager()
 
 
-def notify(subject: str, body: str = "", *, sticky: bool = False) -> bool:
+def notify(
+    subject: str,
+    body: str = "",
+    *,
+    sticky: bool = False,
+    channel: str = "low",
+    duration_seconds: int | None = None,
+) -> bool:
     """Convenience wrapper using the global :class:`NotificationManager`."""
 
-    return manager.send(subject=subject, body=body, sticky=sticky)
+    return manager.send(
+        subject=subject,
+        body=body,
+        sticky=sticky,
+        channel=channel,
+        duration_seconds=duration_seconds,
+    )
 
 
-def notify_async(subject: str, body: str = "", *, sticky: bool = False) -> None:
+def notify_async(
+    subject: str,
+    body: str = "",
+    *,
+    sticky: bool = False,
+    channel: str = "low",
+    duration_seconds: int | None = None,
+) -> None:
     """Run :func:`notify` without blocking the caller."""
 
-    manager.send_async(subject=subject, body=body, sticky=sticky)
+    manager.send_async(
+        subject=subject,
+        body=body,
+        sticky=sticky,
+        channel=channel,
+        duration_seconds=duration_seconds,
+    )

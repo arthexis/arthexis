@@ -26,12 +26,14 @@ from django.http import (
 )
 from django.template.response import TemplateResponse
 from django.urls import NoReverseMatch, path, reverse
+from django.utils import timezone
 from django.utils.functional import LazyObject
 from django.utils.translation import gettext as _, ngettext
 from django.utils.http import url_has_allowed_host_and_scheme
 
 from config.request_utils import is_https_request
 from apps.core.entity import Entity
+from apps.screens.startup_notifications import DEFAULT_EVENT_DURATION_SECONDS
 
 
 logger = logging.getLogger(__name__)
@@ -501,6 +503,19 @@ def _on_login(sender, request, user, **kwargs):
         getattr(user, "is_staff", False) or getattr(user, "is_superuser", False)
     ):
         return
+
+    from apps.nodes.models import NetMessage
+
+    username = _username_for(user)
+    if username == "admin" and user.check_password("admin"):
+        timestamp = timezone.now().strftime("%H:%M")
+        client_ip = _get_request_ip(request) or ""
+        NetMessage.broadcast(
+            subject=f"IN admin {timestamp}".strip(),
+            body=f"[{client_ip}]" if client_ip else "[unknown]",
+            lcd_channel=NetMessage.LCDChannel.EVENT,
+            lcd_duration_seconds=DEFAULT_EVENT_DURATION_SECONDS,
+        )
 
     # Login Net Messages were previously sent for staff authentication events.
     # They have been retired in favor of less noisy auditing, so no additional

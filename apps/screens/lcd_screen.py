@@ -66,8 +66,11 @@ root_logger.setLevel(logging.DEBUG)
 from apps.screens.lcd import CharLCD1602, LCDUnavailableError
 from apps.screens.animations import AnimationLoadError, default_tree_frames
 from apps.screens.startup_notifications import (
+    DEFAULT_EVENT_DURATION_SECONDS,
+    LCD_EVENT_LOCK_FILE,
     LCD_HIGH_LOCK_FILE,
     LCD_LOW_LOCK_FILE,
+    read_lcd_event_lock_file,
     read_lcd_lock_file,
 )
 
@@ -75,6 +78,7 @@ logger = logging.getLogger(__name__)
 LOCK_DIR = BASE_DIR / ".locks"
 HIGH_LOCK_FILE = LOCK_DIR / LCD_HIGH_LOCK_FILE
 LOW_LOCK_FILE = LOCK_DIR / LCD_LOW_LOCK_FILE
+EVENT_LOCK_FILE = LOCK_DIR / LCD_EVENT_LOCK_FILE
 DEFAULT_SCROLL_MS = 1000
 MIN_SCROLL_MS = 50
 SCROLL_PADDING = 3
@@ -257,6 +261,15 @@ def _read_lock_file(lock_file: Path) -> LockPayload:
     if payload is None:
         return LockPayload("", "", DEFAULT_SCROLL_MS)
     return LockPayload(payload.subject, payload.body, DEFAULT_SCROLL_MS)
+
+
+def _read_event_lock_file(lock_file: Path) -> tuple[LockPayload, int] | None:
+    payload = read_lcd_event_lock_file(lock_file)
+    if payload is None:
+        return None
+
+    duration = max(int(payload.duration_seconds or 0), 1)
+    return LockPayload(payload.subject, payload.body, DEFAULT_SCROLL_MS), duration
 
 
 def _payload_has_text(payload: LockPayload) -> bool:
@@ -681,9 +694,12 @@ def main() -> None:  # pragma: no cover - hardware dependent
     next_display_state: DisplayState | None = None
     high_payload = LockPayload("", "", DEFAULT_SCROLL_MS)
     low_payload = LockPayload("", "", DEFAULT_SCROLL_MS)
+    event_payload: LockPayload | None = None
     high_mtime = 0.0
     low_mtime = 0.0
+    event_mtime = 0.0
     rotation_deadline = 0.0
+    event_deadline = 0.0
     scroll_scheduler = ScrollScheduler()
     state_order = ("high", "low", "clock")
     state_index = 0
@@ -725,8 +741,57 @@ def main() -> None:  # pragma: no cover - hardware dependent
 
             try:
                 now = time.monotonic()
+                wall_now = time.time()
 
-                if display_state is None or now >= rotation_deadline:
+                event_active = False
+                try:
+                    if event_deadline and wall_now >= event_deadline:
+                        try:
+                            EVENT_LOCK_FILE.unlink()
+                        except FileNotFoundError:
+                            pass
+                        except OSError:
+                            logger.debug("Failed to clear expired event lock", exc_info=True)
+                        event_deadline = 0.0
+                        event_payload = None
+                        if state_order == ("event",):
+                            display_state = None
+                            next_display_state = None
+
+                    event_stat = EVENT_LOCK_FILE.stat()
+                    if event_stat.st_mtime != event_mtime or event_payload is None:
+                        parsed = _read_event_lock_file(EVENT_LOCK_FILE)
+                        if parsed:
+                            event_payload, duration = parsed
+                            event_mtime = event_stat.st_mtime
+                            event_deadline = max(wall_now, event_stat.st_mtime) + duration
+                    if event_payload and event_deadline and wall_now < event_deadline:
+                        event_active = True
+                except OSError:
+                    if state_order == ("event",):
+                        display_state = None
+                        next_display_state = None
+                    event_payload = None
+                    event_deadline = 0.0
+                    event_mtime = 0.0
+
+                if event_active:
+                    if state_order != ("event",) or display_state is None:
+                        state_order = ("event",)
+                        state_index = 0
+                        display_state = _prepare_display_state(
+                            event_payload.line1,
+                            event_payload.line2,
+                            event_payload.scroll_ms,
+                        )
+                        next_display_state = display_state
+                    rotation_deadline = time.monotonic() + ROTATION_SECONDS
+                elif state_order == ("event",):
+                    display_state = None
+                    next_display_state = None
+                    state_order = ("high", "low", "clock")
+
+                if not event_active and (display_state is None or now >= rotation_deadline):
                     high_available = True
                     try:
                         high_stat = HIGH_LOCK_FILE.stat()

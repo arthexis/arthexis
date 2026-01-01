@@ -1029,6 +1029,11 @@ class NodeManager(Profile):
 class NetMessage(Entity):
     """Message propagated across nodes."""
 
+    class LCDChannel(models.TextChoices):
+        LOW = "low", "Low"
+        HIGH = "high", "High"
+        EVENT = "event", "Event"
+
     uuid = models.UUIDField(
         default=uuid.uuid4,
         unique=True,
@@ -1044,6 +1049,12 @@ class NetMessage(Entity):
     )
     subject = models.CharField(max_length=64, blank=True)
     body = models.CharField(max_length=256, blank=True)
+    lcd_channel = models.CharField(
+        max_length=10,
+        choices=LCDChannel.choices,
+        default=LCDChannel.LOW,
+    )
+    lcd_duration_seconds = models.PositiveIntegerField(null=True, blank=True)
     attachments = models.JSONField(blank=True, null=True)
     filter_node = models.ForeignKey(
         "Node",
@@ -1115,6 +1126,8 @@ class NetMessage(Entity):
         reach: NodeRole | str | None = None,
         seen: list[str] | None = None,
         attachments: list[dict[str, object]] | None = None,
+        lcd_channel: str | None = None,
+        lcd_duration_seconds: int | None = None,
     ):
         role = None
         if reach:
@@ -1126,12 +1139,18 @@ class NetMessage(Entity):
             role = NodeRole.objects.filter(name="Terminal").first()
         origin = Node.get_local()
         normalized_attachments = cls.normalize_attachments(attachments)
+        channel = lcd_channel or cls.LCDChannel.LOW
+        if channel not in cls.LCDChannel.values:
+            channel = cls.LCDChannel.LOW
+
         msg = cls.objects.create(
             subject=subject[:64],
             body=body[:256],
             reach=role,
             node_origin=origin,
             attachments=normalized_attachments or None,
+            lcd_channel=channel,
+            lcd_duration_seconds=lcd_duration_seconds,
         )
         if normalized_attachments:
             msg.apply_attachments(normalized_attachments)
@@ -1234,11 +1253,14 @@ class NetMessage(Entity):
             "uuid": str(self.uuid),
             "subject": self.subject,
             "body": self.body,
+            "lcd_channel": self.lcd_channel,
             "seen": list(seen),
             "reach": reach_name,
             "sender": sender_id,
             "origin": origin_uuid,
         }
+        if self.lcd_duration_seconds is not None:
+            payload["lcd_duration_seconds"] = int(self.lcd_duration_seconds)
         if self.attachments:
             payload["attachments"] = self.attachments
         if self.filter_node:
@@ -1318,6 +1340,14 @@ class NetMessage(Entity):
             raise ValueError("uuid required")
         subject = (data.get("subject") or "")[:64]
         body = (data.get("body") or "")[:256]
+        lcd_channel_value = data.get("lcd_channel") or cls.LCDChannel.LOW
+        if lcd_channel_value not in cls.LCDChannel.values:
+            lcd_channel_value = cls.LCDChannel.LOW
+        lcd_duration_raw = data.get("lcd_duration_seconds")
+        try:
+            lcd_duration = int(lcd_duration_raw) if lcd_duration_raw is not None else None
+        except (TypeError, ValueError):
+            lcd_duration = None
         attachments = cls.normalize_attachments(data.get("attachments"))
         reach_name = data.get("reach")
         reach_role = None
@@ -1360,6 +1390,8 @@ class NetMessage(Entity):
                 "reach": reach_role,
                 "node_origin": origin_node,
                 "attachments": attachments or None,
+                "lcd_channel": lcd_channel_value,
+                "lcd_duration_seconds": lcd_duration,
                 "filter_node": filter_node,
                 "filter_node_feature": filter_feature,
                 "filter_node_role": filter_role,
@@ -1372,6 +1404,12 @@ class NetMessage(Entity):
             msg.subject = subject
             msg.body = body
             update_fields = ["subject", "body"]
+            if msg.lcd_channel != lcd_channel_value:
+                msg.lcd_channel = lcd_channel_value
+                update_fields.append("lcd_channel")
+            if msg.lcd_duration_seconds != lcd_duration:
+                msg.lcd_duration_seconds = lcd_duration
+                update_fields.append("lcd_duration_seconds")
             if reach_role and msg.reach_id != reach_role.id:
                 msg.reach = reach_role
                 update_fields.append("reach")
@@ -1411,7 +1449,13 @@ class NetMessage(Entity):
             )
             return
 
-        displayed = notify(self.subject, self.body)
+        displayed = notify(
+            self.subject,
+            self.body,
+            channel=self.lcd_channel or self.LCDChannel.LOW,
+            duration_seconds=self.lcd_duration_seconds,
+            sticky=self.lcd_channel == self.LCDChannel.HIGH,
+        )
         local = Node.get_local()
         if displayed:
             cutoff = timezone.now() - timedelta(hours=24)
