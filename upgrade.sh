@@ -712,15 +712,15 @@ FORWARDED_ARGS=()
 # Parse CLI options controlling the upgrade strategy.
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --latest|--unstable)
+    --latest|--unstable|-l)
       CHANNEL="unstable"
-      FORWARDED_ARGS+=("$1")
+      FORWARDED_ARGS+=("--latest")
       shift
       ;;
-    --force)
+    --force|-f)
       FORCE_STOP=1
       FORCE_UPGRADE=1
-      FORWARDED_ARGS+=("$1")
+      FORWARDED_ARGS+=("--force")
       shift
       ;;
     --clean)

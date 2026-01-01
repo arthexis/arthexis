@@ -105,7 +105,7 @@ For local bootstrapping, run `./install.sh --terminal` to install with defaults,
 ### 3. Install and upgrade
 - **Linux:**
   - Run `./install.sh --terminal` to bootstrap a default Terminal node (pass `--control`, `--satellite`, or `--watchtower` as needed). Override the port with `--port 8888` (the default fallback) and control Celery with `--celery` or `--no-celery`. Use `./install.sh --help` to see every available option.
-  - Use [`./upgrade.sh`](upgrade.sh) with `--stable` (weekly) or `--latest`/`--unstable` (daily) to follow the preferred release cadence.
+  - Use [`./upgrade.sh`](upgrade.sh) with `--stable` (weekly) or `--latest`/`-l`/`--unstable` (daily) to follow the preferred release cadence.
    - Consult the [Install & Lifecycle Scripts Manual](docs/development/install-lifecycle-scripts-manual.md) for complete flag descriptions and operational notes.
    - Review the [Auto-Upgrade Flow](docs/auto-upgrade.md) for how delegated upgrades run and how to observe them.
 
@@ -118,7 +118,7 @@ Upgrade channels (opt-in during install/upgrade or with `scripts/delegated-upgra
 | Channel | Check cadence | Purpose | Opt-in flag |
 | --- | --- | --- | --- |
 | Stable | Weekly (Thu before 5:00 AM) | Tracks release revisions with automated weekly checks. | `--stable` (default) |
-| Latest | Daily (same hour) | Follows the newest mainline revisions with daily checks. | `--latest` or `--unstable` |
+| Latest | Daily (same hour) | Follows the newest mainline revisions with daily checks. | `--latest` / `-l` or `--unstable` |
 | Manual | None (manual upgrades only) | Disables the automatic upgrade loop for full operator control. | _Run upgrades on demand without specifying a channel flag._ |
 
 ### 4. Administration
