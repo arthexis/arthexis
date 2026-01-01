@@ -38,8 +38,10 @@ def test_clock_payload_can_use_fate_vector(monkeypatch):
     )
 
     assert line1.startswith("2024-01-01")
-    assert line2.startswith("HQ 03:15")
-    assert lcd_screen.FATE_VECTOR == "HQ"
+    prefix = line2.split()[0]
+
+    assert prefix == lcd_screen.FATE_VECTOR
+    assert line2.startswith(f"{prefix} 03:15")
 
 
 def test_clock_payload_respects_standard_am_pm(monkeypatch):
@@ -58,10 +60,11 @@ def test_clock_payload_respects_standard_am_pm(monkeypatch):
 
 def test_fate_deck_reshuffles_when_empty():
     deck = lcd_screen.FateDeck(rng=random.Random(1))
-    drawn = [deck.draw() for _ in range(54)]
+    drawn = [deck.draw() for _ in range(55)]
 
     next_card = deck.draw()
 
-    assert len(set(drawn)) == 54
-    assert deck.remaining == 53
+    assert len(set(drawn)) == 55
+    assert "YY" in set(drawn)
+    assert deck.remaining == 54
     assert next_card
