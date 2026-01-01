@@ -485,6 +485,7 @@ def _clock_payload(
 
 
 _SHUTDOWN_REQUESTED = False
+_PAUSE_REQUESTED = False
 
 
 def _request_shutdown(signum, frame) -> None:  # pragma: no cover - signal handler
@@ -501,6 +502,29 @@ def _shutdown_requested() -> bool:
 def _reset_shutdown_flag() -> None:
     global _SHUTDOWN_REQUESTED
     _SHUTDOWN_REQUESTED = False
+
+
+def _request_pause(signum, frame) -> None:  # pragma: no cover - signal handler
+    """Pause LCD updates so another process can take over."""
+
+    global _PAUSE_REQUESTED
+    _PAUSE_REQUESTED = True
+
+
+def _request_resume(signum, frame) -> None:  # pragma: no cover - signal handler
+    """Resume LCD updates after a pause."""
+
+    global _PAUSE_REQUESTED
+    _PAUSE_REQUESTED = False
+
+
+def _pause_requested() -> bool:
+    return _PAUSE_REQUESTED
+
+
+def _reset_pause_flag() -> None:
+    global _PAUSE_REQUESTED
+    _PAUSE_REQUESTED = False
 
 
 def _blank_display(lcd: CharLCD1602 | None) -> None:
@@ -526,6 +550,16 @@ def _handle_shutdown_request(lcd: CharLCD1602 | None) -> bool:
 
     _blank_display(lcd)
     return True
+
+
+def _handle_pause_request(lcd: CharLCD1602 | None) -> tuple[CharLCD1602 | None, bool]:
+    """Blank the display when pausing so other processes start cleanly."""
+
+    if not _pause_requested():
+        return lcd, False
+
+    _blank_display(lcd)
+    return None, True
 
 
 def _display(
@@ -657,12 +691,15 @@ def main() -> None:  # pragma: no cover - hardware dependent
     health = LCDHealthMonitor()
     watchdog = LCDWatchdog()
     frame_writer: LCDFrameWriter = LCDFrameWriter(None)
+    paused = False
 
     _clear_low_lock_file()
 
     signal.signal(signal.SIGTERM, _request_shutdown)
     signal.signal(signal.SIGINT, _request_shutdown)
     signal.signal(signal.SIGHUP, _request_shutdown)
+    signal.signal(signal.SIGUSR1, _request_pause)
+    signal.signal(signal.SIGUSR2, _request_resume)
 
     try:
         try:
@@ -677,6 +714,14 @@ def main() -> None:  # pragma: no cover - hardware dependent
         while True:
             if _handle_shutdown_request(lcd):
                 break
+
+            lcd, paused = _handle_pause_request(lcd)
+            if paused:
+                frame_writer = LCDFrameWriter(None)
+                display_state = None
+                next_display_state = None
+                time.sleep(0.1)
+                continue
 
             try:
                 now = time.monotonic()
@@ -824,6 +869,7 @@ def main() -> None:  # pragma: no cover - hardware dependent
     finally:
         _blank_display(lcd)
         _reset_shutdown_flag()
+        _reset_pause_flag()
 
 
 if __name__ == "__main__":  # pragma: no cover - script entry point
