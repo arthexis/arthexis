@@ -6,6 +6,7 @@ from pathlib import Path
 from django.db import models
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
+from django.urls import reverse
 
 from apps.base.models import Entity
 from .utils import (
@@ -106,6 +107,83 @@ class VideoDevice(Entity):
         """Return ``True`` when a Raspberry Pi video device is available."""
 
         return bool(cls.detect_devices())
+
+
+class VideoStream(Entity):
+    """Base configuration for a video stream that can be exposed publicly."""
+
+    name = models.CharField(max_length=255)
+    slug = models.SlugField(unique=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        abstract = True
+        ordering = ["name"]
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return self.name or self.slug
+
+    def get_absolute_url(self) -> str:
+        return reverse("video:stream-detail", args=[self.slug])
+
+    def get_admin_url(self) -> str:
+        return reverse(
+            f"admin:{self._meta.app_label}_{self._meta.model_name}_change",
+            args=[self.pk],
+        )
+
+
+class MjpegStream(VideoStream):
+    """Multipart JPEG stream sourced from a configured video device."""
+
+    video_device = models.ForeignKey(
+        VideoDevice,
+        on_delete=models.PROTECT,
+        related_name="mjpeg_streams",
+    )
+
+    class Meta:
+        verbose_name = _("MJPEG Stream")
+        verbose_name_plural = _("MJPEG Streams")
+
+    def get_stream_url(self) -> str:
+        return reverse("video:mjpeg-stream", args=[self.slug])
+
+    def iter_frame_bytes(self):
+        """Yield encoded JPEG frames from the configured capture device."""
+
+        try:
+            import cv2  # type: ignore
+        except ImportError as exc:  # pragma: no cover - runtime dependency
+            raise RuntimeError("MJPEG streaming requires the OpenCV (cv2) package") from exc
+
+        capture = cv2.VideoCapture(self.video_device.identifier)
+
+        if not capture.isOpened():
+            capture.release()
+            raise RuntimeError(
+                _("Unable to open video device %(device)s")
+                % {"device": self.video_device.identifier}
+            )
+
+        try:
+            while True:
+                success, frame = capture.read()
+                if not success:
+                    break
+                success, buffer = cv2.imencode(".jpg", frame)
+                if not success:
+                    continue
+                yield buffer.tobytes()
+        finally:  # pragma: no cover - release resource
+            capture.release()
+
+    def mjpeg_stream(self):
+        boundary = b"--frame\r\n"
+        content_type = b"Content-Type: image/jpeg\r\n\r\n"
+
+        for frame in self.iter_frame_bytes():
+            yield boundary + content_type + frame + b"\r\n"
 
 
 class YoutubeChannel(Entity):
