@@ -9,17 +9,20 @@ shorter rows remain static.
 
 from __future__ import annotations
 
+import json
 import logging
 import math
 import os
 import random
 import signal
 import time
-from datetime import datetime
+from datetime import datetime, timezone as datetime_timezone
 from decimal import Decimal, InvalidOperation
 from glob import glob
 from pathlib import Path
 from typing import Callable, NamedTuple
+
+import psutil
 from itertools import cycle, islice
 
 def _resolve_base_dir() -> Path:
@@ -82,6 +85,7 @@ CLOCK_DATE_FORMAT = "%Y-%m-%d %a"
 ROTATION_SECONDS = 10
 GAP_ANIMATION_FRAMES_PER_PAYLOAD = 4
 GAP_ANIMATION_SCROLL_MS = 600
+SUITE_UPTIME_LOCK_NAME = "suite_uptime.lck"
 
 try:
     GAP_ANIMATION_FRAMES = default_tree_frames()
@@ -93,11 +97,11 @@ GAP_ANIMATION_CYCLE = cycle(GAP_ANIMATION_FRAMES)
 
 
 class FateDeck:
-    """Shuffle and draw from a 54-card fate deck."""
+    """Shuffle and draw from a 55-card fate deck."""
 
     suits = ("D", "H", "C", "V")
     values = ("A", "2", "3", "4", "5", "6", "7", "8", "9", "X", "J", "Q", "K")
-    jokers = ("XX", "XY")
+    jokers = ("XX", "XY", "YY")
 
     def __init__(self, *, rng: random.Random | None = None) -> None:
         self.rng = rng or random.Random()
@@ -316,6 +320,100 @@ def _draw_fate_vector(deck: FateDeck | None = None) -> str:
     card = (deck or _fate_deck).draw()
     FATE_VECTOR = card
     return card
+
+
+def _parse_start_timestamp(raw: object) -> datetime | None:
+    if not raw:
+        return None
+
+    text = str(raw).strip()
+    if not text:
+        return None
+
+    if text[-1] in {"Z", "z"}:
+        text = f"{text[:-1]}+00:00"
+
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=datetime_timezone.utc)
+
+    return parsed.astimezone(datetime_timezone.utc)
+
+
+def _uptime_components(seconds: int | None) -> tuple[int, int, int] | None:
+    if seconds is None or seconds < 0:
+        return None
+
+    minutes_total, _ = divmod(seconds, 60)
+    days, remaining_minutes = divmod(minutes_total, 24 * 60)
+    hours, minutes = divmod(remaining_minutes, 60)
+    return days, hours, minutes
+
+
+def _uptime_seconds(
+    base_dir: Path = BASE_DIR, *, now: datetime | None = None
+) -> int | None:
+    lock_path = Path(base_dir) / ".locks" / SUITE_UPTIME_LOCK_NAME
+    now_value = now or datetime.now(datetime_timezone.utc)
+
+    payload = None
+    try:
+        payload = json.loads(lock_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        payload = None
+
+    if isinstance(payload, dict):
+        started_at = _parse_start_timestamp(
+            payload.get("started_at") or payload.get("boot_time")
+        )
+        if started_at:
+            seconds = int((now_value - started_at).total_seconds())
+            if seconds >= 0:
+                return seconds
+
+    try:
+        boot_time = float(psutil.boot_time())
+    except Exception:
+        return None
+
+    if not boot_time:
+        return None
+
+    boot_dt = datetime.fromtimestamp(boot_time, tz=datetime_timezone.utc)
+    seconds = int((now_value - boot_dt).total_seconds())
+    return seconds if seconds >= 0 else None
+
+
+def _format_uptime_label(seconds: int | None) -> str | None:
+    components = _uptime_components(seconds)
+    if components is None:
+        return None
+
+    days, hours, minutes = components
+    return f"{days}d{hours}h{minutes}m"
+
+
+def _refresh_uptime_payload(
+    payload: LockPayload, *, base_dir: Path = BASE_DIR, now: datetime | None = None
+) -> LockPayload:
+    if not payload.line1.startswith("UP "):
+        return payload
+
+    uptime_label = _format_uptime_label(_uptime_seconds(base_dir, now=now))
+    if not uptime_label:
+        return payload
+
+    suffix = payload.line1[3:].strip()
+    role_suffix = suffix.split(maxsplit=1)[1].strip() if " " in suffix else ""
+    subject = f"UP {uptime_label}"
+    if role_suffix:
+        subject = f"{subject} {role_suffix}"
+
+    return payload._replace(line1=subject)
 
 
 def _lcd_temperature_label_from_sensors() -> str | None:
@@ -621,7 +719,7 @@ def main() -> None:  # pragma: no cover - hardware dependent
                         if state_label == "high":
                             return high_payload
                         if state_label == "low":
-                            return low_payload
+                            return _refresh_uptime_payload(low_payload)
                         if _lcd_clock_enabled():
                             use_fahrenheit = clock_cycle % 2 == 0
                             line1, line2, speed, _ = _clock_payload(
