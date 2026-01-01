@@ -613,6 +613,19 @@ def _clear_low_lock_file(
         return
 
     try:
+        contents = lock_file.read_text(encoding="utf-8")
+    except OSError:
+        logger.debug("Unable to read low LCD lock file", exc_info=True)
+        return
+
+    if contents.strip():
+        # Preserve populated payloads so uptime messages remain available even
+        # when the underlying file is old. The LCD loop refreshes the uptime
+        # label on every cycle, so keeping the payload avoids blank screens
+        # when the boot-time lock is the only source.
+        return
+
+    try:
         lock_file.unlink()
     except FileNotFoundError:
         return

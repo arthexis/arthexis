@@ -51,9 +51,9 @@ def test_frame_writer_writes_fallback_file_on_failure(tmp_path):
     assert contents == ["hello".ljust(lcd_screen.LCD_COLUMNS), "world".ljust(lcd_screen.LCD_COLUMNS)]
 
 
-def test_low_lock_file_cleared_on_startup_when_stale(tmp_path):
+def test_low_lock_file_cleared_on_startup_when_stale_and_empty(tmp_path):
     lock_file = tmp_path / "lcd-low"
-    lock_file.write_text("data", encoding="utf-8")
+    lock_file.write_text("\n", encoding="utf-8")
 
     old_timestamp = time.time() - (2 * 3600)
     os.utime(lock_file, (old_timestamp, old_timestamp))
@@ -61,6 +61,18 @@ def test_low_lock_file_cleared_on_startup_when_stale(tmp_path):
     lcd_screen._clear_low_lock_file(lock_file=lock_file, stale_after_seconds=3600)
 
     assert not lock_file.exists()
+
+
+def test_low_lock_file_kept_when_stale_but_populated(tmp_path):
+    lock_file = tmp_path / "lcd-low"
+    lock_file.write_text("UP 0d0h0m\nON\n", encoding="utf-8")
+
+    old_timestamp = time.time() - (2 * 3600)
+    os.utime(lock_file, (old_timestamp, old_timestamp))
+
+    lcd_screen._clear_low_lock_file(lock_file=lock_file, stale_after_seconds=3600)
+
+    assert lock_file.exists()
 
 
 def test_low_lock_file_kept_when_recent(tmp_path):
