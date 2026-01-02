@@ -1,4 +1,5 @@
 import json
+import os
 from datetime import datetime, timedelta, timezone
 
 from apps.screens import lcd_screen
@@ -11,11 +12,11 @@ def test_refresh_uptime_payload_updates_subject(tmp_path):
 
     started_at = datetime(2024, 1, 1, 0, 0, tzinfo=timezone.utc)
     payload = {"started_at": started_at.isoformat()}
-    (lock_dir / lcd_screen.SUITE_UPTIME_LOCK_NAME).write_text(
-        json.dumps(payload), encoding="utf-8"
-    )
+    lock_path = lock_dir / lcd_screen.SUITE_UPTIME_LOCK_NAME
+    lock_path.write_text(json.dumps(payload), encoding="utf-8")
 
     now = started_at + timedelta(hours=1, minutes=2)
+    os.utime(lock_path, (now.timestamp(), now.timestamp()))
     uptime_payload = lcd_screen.LockPayload(
         "UP 0d0h0m ROLE", "ON 0h0m iface", lcd_screen.DEFAULT_SCROLL_MS
     )
@@ -34,3 +35,24 @@ def test_refresh_uptime_payload_passes_through_non_uptime_payload(tmp_path):
     refreshed = lcd_screen._refresh_uptime_payload(payload, base_dir=tmp_path)
 
     assert refreshed == payload
+
+
+def test_uptime_seconds_ignores_stale_lock(monkeypatch, tmp_path):
+    base_dir = tmp_path
+    lock_dir = base_dir / ".locks"
+    lock_dir.mkdir()
+
+    now = datetime(2024, 1, 2, 0, 0, tzinfo=timezone.utc)
+    started_at = now - timedelta(days=1)
+    lock_path = lock_dir / lcd_screen.SUITE_UPTIME_LOCK_NAME
+    lock_path.write_text(json.dumps({"started_at": started_at.isoformat()}), encoding="utf-8")
+
+    stale_timestamp = (now - timedelta(hours=1)).timestamp()
+    os.utime(lock_path, (stale_timestamp, stale_timestamp))
+
+    boot_time = now - timedelta(minutes=5)
+    monkeypatch.setattr(
+        lcd_screen.psutil, "boot_time", lambda: boot_time.timestamp()
+    )
+
+    assert lcd_screen._uptime_seconds(base_dir, now=now) == 300

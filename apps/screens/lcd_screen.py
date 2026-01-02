@@ -16,7 +16,7 @@ import os
 import random
 import signal
 import time
-from datetime import datetime, timezone as datetime_timezone
+from datetime import datetime, timedelta, timezone as datetime_timezone
 from decimal import Decimal, InvalidOperation
 from glob import glob
 from pathlib import Path
@@ -86,6 +86,7 @@ ROTATION_SECONDS = 10
 GAP_ANIMATION_FRAMES_PER_PAYLOAD = 4
 GAP_ANIMATION_SCROLL_MS = 600
 SUITE_UPTIME_LOCK_NAME = "suite_uptime.lck"
+SUITE_UPTIME_LOCK_MAX_AGE = timedelta(minutes=10)
 
 try:
     GAP_ANIMATION_FRAMES = default_tree_frames()
@@ -361,19 +362,29 @@ def _uptime_seconds(
     now_value = now or datetime.now(datetime_timezone.utc)
 
     payload = None
+    lock_fresh = False
     try:
-        payload = json.loads(lock_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        payload = None
+        stats = lock_path.stat()
+        heartbeat = datetime.fromtimestamp(stats.st_mtime, tz=datetime_timezone.utc)
+        if heartbeat <= now_value:
+            lock_fresh = (now_value - heartbeat) <= SUITE_UPTIME_LOCK_MAX_AGE
+    except OSError:
+        lock_fresh = False
 
-    if isinstance(payload, dict):
-        started_at = _parse_start_timestamp(
-            payload.get("started_at") or payload.get("boot_time")
-        )
-        if started_at:
-            seconds = int((now_value - started_at).total_seconds())
-            if seconds >= 0:
-                return seconds
+    if lock_fresh:
+        try:
+            payload = json.loads(lock_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            payload = None
+
+        if isinstance(payload, dict):
+            started_at = _parse_start_timestamp(
+                payload.get("started_at") or payload.get("boot_time")
+            )
+            if started_at:
+                seconds = int((now_value - started_at).total_seconds())
+                if seconds >= 0:
+                    return seconds
 
     try:
         boot_time = float(psutil.boot_time())
