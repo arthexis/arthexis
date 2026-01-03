@@ -41,6 +41,7 @@ def reset_store(monkeypatch, tmp_path):
     store._transaction_requests_by_connector.clear()
     store._transaction_requests_by_transaction.clear()
     store.billing_updates.clear()
+    store.ev_charging_needs.clear()
     store.clear_display_message_compliance()
     log_dir = tmp_path / "logs"
     session_dir = log_dir / "sessions"
@@ -58,6 +59,7 @@ def reset_store(monkeypatch, tmp_path):
     store._transaction_requests_by_connector.clear()
     store._transaction_requests_by_transaction.clear()
     store.billing_updates.clear()
+    store.ev_charging_needs.clear()
 
 
 @pytest.fixture
@@ -619,3 +621,68 @@ async def test_transaction_event_updates_request_status(monkeypatch):
     await consumer._handle_transaction_event_action(payload, "msg-evt-2", "", "")
 
     assert store.transaction_requests["msg-req-2"]["status"] == "completed"
+
+
+@pytest.mark.anyio
+async def test_notify_ev_charging_needs_records_requirements(monkeypatch):
+    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = store.identity_key("NEEDS-1", 1)
+    consumer.charger_id = "NEEDS-1"
+    consumer.connector_value = 1
+
+    recorded: list[dict[str, object]] = []
+
+    def _record(*args, **kwargs):
+        if args:
+            kwargs["charger_id"] = args[0]
+        if "connector_id" in kwargs:
+            kwargs["connector_id"] = store.connector_slug(kwargs["connector_id"])
+        recorded.append(kwargs)
+
+    monkeypatch.setattr(store, "record_ev_charging_needs", _record)
+
+    payload = {
+        "evseId": 2,
+        "chargingNeeds": {
+            "acChargingParameters": {"energyAmount": 12000},
+            "departureTime": "2024-01-01T01:30:00Z",
+        },
+    }
+
+    result = await consumer._handle_notify_ev_charging_needs_action(
+        payload, "needs-1", "", ""
+    )
+
+    assert result == {}
+    assert recorded
+    entry = recorded[0]
+    assert entry["charger_id"] == "NEEDS-1"
+    assert entry["connector_id"] == "1"
+    assert entry["evse_id"] == 2
+    assert entry["requested_energy"] == 12000
+    assert entry["departure_time"].isoformat().startswith("2024-01-01T01:30:00")
+    assert entry["charging_needs"]["acChargingParameters"]["energyAmount"] == 12000
+
+
+@pytest.mark.anyio
+async def test_notify_ev_charging_needs_requires_fields(monkeypatch):
+    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = "NEEDS-2"
+    consumer.charger_id = "NEEDS-2"
+
+    called = False
+
+    def _record(*args, **kwargs):  # pragma: no cover - test guard
+        nonlocal called
+        called = True
+
+    monkeypatch.setattr(store, "record_ev_charging_needs", _record)
+
+    payload = {"chargingNeeds": {"acChargingParameters": {"energyAmount": 5000}}}
+
+    result = await consumer._handle_notify_ev_charging_needs_action(
+        payload, "needs-2", "", ""
+    )
+
+    assert result == {}
+    assert called is False
