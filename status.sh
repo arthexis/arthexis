@@ -155,17 +155,10 @@ else
   echo "Service: not installed"
 fi
 
-# Determine nginx mode and port
-MODE="internal"
-if [ -f "$LOCK_DIR/nginx_disabled.lck" ]; then
-  MODE="none"
-elif [ -f "$LOCK_DIR/nginx_mode.lck" ]; then
-  MODE="$(cat "$LOCK_DIR/nginx_mode.lck")"
-fi
+# Determine configured port
 CONFIGURED_PORT="$(arthexis_detect_backend_port "$BASE_DIR")"
 PORT="$CONFIGURED_PORT"
 
-echo "Nginx mode: $MODE"
 echo "Configured port: $CONFIGURED_PORT"
 
 ROLE="${NODE_ROLE:-Terminal}"

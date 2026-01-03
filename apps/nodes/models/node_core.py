@@ -316,21 +316,9 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
             return site, domain, bool(getattr(site, "require_https", False))
         return None, "", False
 
-    @staticmethod
-    def _detect_nginx_mode() -> str:
-        mode_file = Path(settings.BASE_DIR) / ".locks" / "nginx_mode.lck"
-        try:
-            value = mode_file.read_text(encoding="utf-8").strip().lower()
-        except OSError:
-            return ""
-        return value if value in {"internal", "public"} else ""
-
     @classmethod
     def _preferred_site_port(cls, require_https: bool) -> int:
-        mode = cls._detect_nginx_mode()
-        if mode == "public" or require_https:
-            return 443
-        return 80
+        return 443 if require_https else 80
 
     @staticmethod
     def get_current_mac() -> str:
