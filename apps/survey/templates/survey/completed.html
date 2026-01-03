@@ -1,0 +1,10 @@
+{% extends "pages/base.html" %}
+{% load i18n %}
+
+{% block title %}{{ topic.name }} Survey{% endblock %}
+
+{% block content %}
+  <div class="alert alert-success" role="alert">
+    {% trans "Thanks for completing this survey." %}
+  </div>
+{% endblock %}
