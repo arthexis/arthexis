@@ -76,6 +76,7 @@ def serialize_charger_for_network(
         "allow_remote": charger.allow_remote,
         "export_transactions": charger.export_transactions,
         "last_meter_values": charger.last_meter_values or {},
+        "last_charging_limit": charger.last_charging_limit or {},
     }
 
     data["language"] = charger.language_code()
@@ -86,6 +87,12 @@ def serialize_charger_for_network(
     for field in datetime_fields:
         value = getattr(charger, field)
         data[field] = value.isoformat() if value else None
+
+    data["last_charging_limit_at"] = (
+        charger.last_charging_limit_at.isoformat()
+        if charger.last_charging_limit_at
+        else None
+    )
 
     if charger.location:
         location = charger.location
@@ -186,6 +193,8 @@ def apply_remote_charger_payload(
         "temperature_unit",
         "diagnostics_status",
         "diagnostics_location",
+        "last_charging_limit_source",
+        "last_charging_limit_is_grid_critical",
     ]
 
     for field in simple_fields:
@@ -201,6 +210,10 @@ def apply_remote_charger_payload(
         updates[field] = _parse_remote_datetime(payload.get(field))
 
     updates["last_meter_values"] = payload.get("last_meter_values") or {}
+    updates["last_charging_limit"] = payload.get("last_charging_limit") or {}
+    updates["last_charging_limit_at"] = _parse_remote_datetime(
+        payload.get("last_charging_limit_at")
+    )
 
     if location_obj is not None:
         updates["location"] = location_obj

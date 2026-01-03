@@ -11,6 +11,7 @@ from .common import (
     _get_charger,
     _landing_page_translations,
     _live_sessions,
+    _charging_limit_details,
     _reverse_connector_url,
     _supported_language_codes,
     _transaction_rfid_details,
@@ -378,6 +379,7 @@ def charger_status(request, cid, connector=None):
         "charger_error_code": _visible_error_code(charger.last_error_code),
         "show_connector_tabs": show_connector_tabs,
         "show_connector_overview_cards": show_connector_overview_cards,
+        "charging_limit": _charging_limit_details(charger),
     },
 )
 

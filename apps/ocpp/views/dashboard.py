@@ -30,6 +30,7 @@ from . import common as view_common
 from .common import (
     _charger_last_seen,
     _charger_state,
+    _charging_limit_details,
     _clear_stale_statuses_for_view,
     _has_active_session,
     _reverse_connector_url,
@@ -190,6 +191,7 @@ def dashboard(request):
             "display_name": _charger_display_name(charger),
             "last_seen": _charger_last_seen(charger),
             "stats": _charger_stats(charger, tx_obj),
+            "charging_limit": _charging_limit_details(charger),
             "status_url": _status_url(charger),
         }
         chargers.append(entry)
