@@ -70,6 +70,7 @@ billing_updates: deque[dict[str, object]] = deque(maxlen=1000)
 ev_charging_needs: deque[dict[str, object]] = deque(maxlen=500)
 ev_charging_schedules: deque[dict[str, object]] = deque(maxlen=500)
 planner_notifications: deque[dict[str, object]] = deque(maxlen=500)
+observability_events: deque[dict[str, object]] = deque(maxlen=1000)
 display_message_compliance: dict[str, list[dict[str, object]]] = {}
 
 # mapping of charger id / cp_path to friendly names used for log files
@@ -256,6 +257,12 @@ def forward_ev_charging_schedule(schedule: dict[str, object]) -> None:
     """Queue a normalized EV charging schedule for downstream planners."""
 
     planner_notifications.append(dict(schedule))
+
+
+def forward_event_to_observability(event: dict[str, object]) -> None:
+    """Queue a normalized NotifyEvent payload for observability pipelines."""
+
+    observability_events.append(dict(event))
 
 
 def update_transaction_request(

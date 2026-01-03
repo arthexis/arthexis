@@ -44,6 +44,7 @@ def reset_store(monkeypatch, tmp_path):
     store.ev_charging_needs.clear()
     store.ev_charging_schedules.clear()
     store.planner_notifications.clear()
+    store.observability_events.clear()
     store.clear_display_message_compliance()
     log_dir = tmp_path / "logs"
     session_dir = log_dir / "sessions"
@@ -64,6 +65,7 @@ def reset_store(monkeypatch, tmp_path):
     store.ev_charging_needs.clear()
     store.ev_charging_schedules.clear()
     store.planner_notifications.clear()
+    store.observability_events.clear()
 
 
 @pytest.fixture
@@ -780,3 +782,95 @@ async def test_notify_ev_charging_schedule_requires_fields(monkeypatch):
     assert result == {}
     assert recorded is False
     assert forwarded is False
+
+
+@pytest.mark.anyio
+async def test_notify_event_forwards_observability_payload(monkeypatch):
+    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = store.identity_key("OBS-1", 1)
+    consumer.charger_id = "OBS-1"
+    consumer.connector_value = 1
+
+    forwarded: list[dict[str, object]] = []
+
+    monkeypatch.setattr(
+        store,
+        "forward_event_to_observability",
+        lambda payload: forwarded.append(payload),
+    )
+
+    payload = {
+        "generatedAt": "2024-01-01T00:00:00Z",
+        "seqNo": 9,
+        "tbc": True,
+        "eventData": [
+            {
+                "eventId": "7",
+                "timestamp": "2024-01-01T00:00:05Z",
+                "eventType": "Alert",
+                "trigger": "Delta",
+                "actualValue": "85C",
+                "cause": "Overheat",
+                "techCode": "TMP",
+                "techInfo": "Sensor drift",
+                "cleared": False,
+                "severity": "1",
+                "transactionId": "TX-9",
+                "variableMonitoringId": "3",
+                "component": {
+                    "name": "Temperature",
+                    "instance": "core",
+                    "evse": {"id": 2, "connectorId": 1},
+                },
+                "variable": {"name": "Temp", "instance": "A"},
+            }
+        ],
+    }
+
+    result = await consumer._handle_notify_event_action(payload, "evt-msg-1", "", "")
+
+    assert result == {}
+    assert forwarded
+    event = forwarded[0]
+    assert event["charger_id"] == "OBS-1"
+    assert event["connector_id"] == "1"
+    assert event["evse_id"] == 2
+    assert event["event_id"] == 7
+    assert event["event_type"] == "Alert"
+    assert event["trigger"] == "Delta"
+    assert event["actual_value"] == "85C"
+    assert event["severity"] == 1
+    assert event["cause"] == "Overheat"
+    assert event["tech_code"] == "TMP"
+    assert event["tech_info"] == "Sensor drift"
+    assert event["cleared"] is False
+    assert event["transaction_id"] == "TX-9"
+    assert event["variable_monitoring_id"] == 3
+    assert event["component_name"] == "Temperature"
+    assert event["component_instance"] == "core"
+    assert event["variable_name"] == "Temp"
+    assert event["variable_instance"] == "A"
+    assert event["seq_no"] == 9
+    assert event["tbc"] is True
+    assert event["generated_at"].isoformat().startswith("2024-01-01T00:00:00")
+    assert event["event_timestamp"].isoformat().startswith("2024-01-01T00:00:05")
+
+
+@pytest.mark.anyio
+async def test_notify_event_requires_event_data(monkeypatch):
+    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = "OBS-2"
+    consumer.charger_id = "OBS-2"
+
+    forwarded: list[dict[str, object]] = []
+
+    monkeypatch.setattr(
+        store,
+        "forward_event_to_observability",
+        lambda payload: forwarded.append(payload),
+    )
+
+    result = await consumer._handle_notify_event_action({"seqNo": 1}, "evt-msg-2", "", "")
+
+    assert result == {}
+    assert forwarded == []
