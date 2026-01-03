@@ -9,6 +9,7 @@ from .cp_network_profile_deployment import CPNetworkProfileDeployment
 from .charging_profile import ChargingProfile
 from .charging_schedule import ChargingSchedule
 from .charging_profile_dispatch import ChargingProfileDispatch
+from .cost_update import CostUpdate
 from .power_projection import PowerProjection
 from .transaction import Transaction, annotate_transaction_energy_bounds
 from .rfid_session_attempt import RFIDSessionAttempt
@@ -74,6 +75,7 @@ __all__ = [
     "StationModel",
     "CustomerInformationRequest",
     "CustomerInformationChunk",
+    "CostUpdate",
     "DisplayMessageNotification",
     "DisplayMessage",
     "CPForwarderManager",

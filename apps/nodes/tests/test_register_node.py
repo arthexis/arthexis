@@ -1,6 +1,5 @@
 import json
 import logging
-from pathlib import Path
 
 import pytest
 from django.conf import settings
@@ -202,32 +201,21 @@ def test_register_current_uses_managed_site_domain(settings, caplog):
     Node._local_cache.clear()
     NodeRole.objects.get_or_create(name="Terminal")
 
-    lock_dir = Path(settings.BASE_DIR) / ".locks"
-    lock_dir.mkdir(exist_ok=True)
-    mode_file = lock_dir / "nginx_mode.lck"
-    try:
-        mode_file.write_text("public", encoding="utf-8")
+    site = Site.objects.get_current()
+    site.domain = "arthexis.com"
+    site.name = "Arthexis"
+    site.managed = True
+    site.require_https = True
+    site.save()
 
-        site = Site.objects.get_current()
-        site.domain = "arthexis.com"
-        site.name = "Arthexis"
-        site.managed = True
-        site.require_https = True
-        site.save()
+    node, created = Node.register_current(notify_peers=False)
 
-        node, created = Node.register_current(notify_peers=False)
-
-        assert created
-        assert node.hostname == "arthexis.com"
-        assert node.network_hostname == "arthexis.com"
-        assert node.address == "arthexis.com"
-        assert node.base_site_id == site.id
-        assert node.port == 443
-    finally:
-        try:
-            mode_file.unlink()
-        except FileNotFoundError:
-            pass
+    assert created
+    assert node.hostname == "arthexis.com"
+    assert node.network_hostname == "arthexis.com"
+    assert node.address == "arthexis.com"
+    assert node.base_site_id == site.id
+    assert node.port == 443
 
 
 @pytest.mark.django_db

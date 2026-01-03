@@ -68,6 +68,7 @@ transaction_requests: dict[str, dict[str, object]] = {}
 _transaction_requests_by_connector: dict[str, set[str]] = {}
 _transaction_requests_by_transaction: dict[str, set[str]] = {}
 _transaction_requests_lock = threading.Lock()
+billing_updates: deque[dict[str, object]] = deque(maxlen=1000)
 
 # mapping of charger id / cp_path to friendly names used for log files
 log_names: dict[str, dict[str, str]] = {"charger": {}, "simulator": {}}
@@ -323,6 +324,12 @@ def mark_transaction_requests(
         if update:
             updated.append(update)
     return updated
+
+
+def forward_cost_update_to_billing(update: dict[str, object]) -> None:
+    """Queue a cost update payload for downstream billing handlers."""
+
+    billing_updates.append(dict(update))
 
 
 def _connection_token(consumer: object) -> str:

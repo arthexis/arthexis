@@ -1,0 +1,21 @@
+{% extends "pages/base.html" %}
+{% load i18n %}
+
+{% block title %}{{ topic.name }} Survey{% endblock %}
+
+{% block content %}
+  <h1 class="mb-3">{{ topic.name }}</h1>
+  <div class="card mb-3">
+    <div class="card-body">
+      <div class="mb-3 question-body">{{ rendered_prompt|safe }}</div>
+      <form method="post">
+        {% csrf_token %}
+        {{ form.question_id }}
+        <div class="mb-3">
+          {{ form.answer }}
+        </div>
+        <button type="submit" class="btn btn-primary">{% trans "Submit" %}</button>
+      </form>
+    </div>
+  </div>
+{% endblock %}

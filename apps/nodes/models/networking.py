@@ -15,10 +15,6 @@ class NodeNetworkingMixin:
         site = getattr(self, "base_site", None)
         if site and bool(getattr(site, "require_https", False)):
             return True
-        if getattr(self, "is_local", False):
-            detect_mode = getattr(self, "_detect_nginx_mode", None)
-            if callable(detect_mode) and detect_mode() == "public":
-                return True
         if getattr(self, "port", None) == 443:
             return True
         return False

@@ -32,13 +32,14 @@ from .forwarder import forwarder
 from .status_resets import STATUS_RESET_UPDATES, clear_cached_statuses
 from .call_error_handlers import dispatch_call_error
 from .call_result_handlers import dispatch_call_result
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from django.utils.dateparse import parse_datetime
 from .models import (
     Transaction,
     Charger,
     ChargerConfiguration,
     MeterValue,
+    CostUpdate,
     DataTransferMessage,
     CPReservation,
     CPFirmware,
@@ -2046,6 +2047,76 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
     @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "CostUpdated")
     async def _handle_cost_updated_action(self, payload, msg_id, raw, text_data):
         self._log_ocpp201_notification("CostUpdated", payload)
+        payload_data = payload if isinstance(payload, dict) else {}
+        transaction_reference = str(payload_data.get("transactionId") or "").strip()
+        total_cost_raw = payload_data.get("totalCost")
+        currency_value = str(payload_data.get("currency") or "").strip()
+        reported_at = _parse_ocpp_timestamp(payload_data.get("timestamp"))
+        if reported_at is None:
+            reported_at = timezone.now()
+
+        try:
+            total_cost_value = Decimal(str(total_cost_raw))
+        except (InvalidOperation, TypeError, ValueError):
+            store.add_log(
+                self.store_key,
+                "CostUpdated ignored: invalid totalCost",
+                log_type="charger",
+            )
+            return {}
+
+        if not transaction_reference:
+            store.add_log(
+                self.store_key,
+                "CostUpdated ignored: missing transactionId",
+                log_type="charger",
+            )
+            return {}
+
+        tx_obj = store.transactions.get(self.store_key)
+        if tx_obj is None and transaction_reference:
+            tx_obj = await Transaction.aget_by_ocpp_id(
+                self.charger, transaction_reference
+            )
+        if tx_obj is None and transaction_reference.isdigit():
+            tx_obj = await database_sync_to_async(
+                Transaction.objects.filter(
+                    pk=int(transaction_reference), charger=self.charger
+                ).first
+            )()
+
+        def _persist_cost_update():
+            charger = self.charger
+            if charger is None and self.charger_id:
+                charger = Charger.objects.filter(
+                    charger_id=self.charger_id, connector_id=None
+                ).first()
+            if charger is None:
+                return None
+            return CostUpdate.objects.create(
+                charger=charger,
+                transaction=tx_obj,
+                ocpp_transaction_id=transaction_reference,
+                connector_id=self.connector_value,
+                total_cost=total_cost_value,
+                currency=currency_value,
+                payload=payload_data,
+                reported_at=reported_at,
+            )
+
+        cost_update = await database_sync_to_async(_persist_cost_update)()
+        if cost_update is not None:
+            store.forward_cost_update_to_billing(
+                {
+                    "charger_id": cost_update.charger.charger_id,
+                    "connector_id": cost_update.connector_id,
+                    "transaction_id": transaction_reference,
+                    "cost_update_id": cost_update.pk,
+                    "total_cost": str(total_cost_value),
+                    "currency": currency_value,
+                    "reported_at": reported_at,
+                }
+            )
         return {}
 
     @protocol_call(
