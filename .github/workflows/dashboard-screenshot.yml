@@ -27,8 +27,44 @@ on:
       - 'requirements.txt'
 
 jobs:
+  install-test:
+    name: Install test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure workspace is writable
+        run: sudo chown -R "$USER:$USER" "$GITHUB_WORKSPACE"
+
+      - uses: actions/checkout@v6
+        with:
+          clean: false
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+
+      - name: Cache pip
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            pip-${{ runner.os }}-
+
+      - name: Cache virtualenv
+        uses: actions/cache@v5
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
+          restore-keys: |
+            venv-${{ runner.os }}-
+
+      - name: Install suite from repository
+        run: |
+          ./install.sh --clean --no-start
+
   capture-dashboard:
     name: Capture admin dashboard
+    needs: install-test
     runs-on: ubuntu-latest
     steps:
       - name: Ensure workspace is writable
