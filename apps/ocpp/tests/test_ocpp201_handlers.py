@@ -12,6 +12,7 @@ from apps.ocpp.models import (
     Charger,
     CertificateRequest,
     CertificateStatusCheck,
+    InstalledCertificate,
     CostUpdate,
     Transaction,
     Variable,
@@ -275,22 +276,51 @@ async def test_get_15118_ev_certificate_persists_request():
 @pytest.mark.django_db(transaction=True)
 async def test_get_certificate_status_persists_check():
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="CERT-2")
+    hash_data = {"hashAlgorithm": "SHA256", "issuerNameHash": "abc"}
+    await database_sync_to_async(InstalledCertificate.objects.create)(
+        charger=charger,
+        certificate_type="V2G",
+        certificate_hash_data=hash_data,
+        status=InstalledCertificate.STATUS_INSTALLED,
+    )
     consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "CERT-2"
     consumer.charger = charger
     consumer.aggregate_charger = None
 
-    payload = {"certificateHashData": {"hashAlgorithm": "SHA256"}}
+    payload = {"certificateHashData": hash_data}
     result = await consumer._handle_get_certificate_status_action(
-        payload, "msg-2", "", ""
+        payload, "msg-2", "", "",
     )
 
-    assert result["status"] == "Rejected"
+    assert result["status"] == "Accepted"
+    status_check = await database_sync_to_async(CertificateStatusCheck.objects.get)(
+        charger=charger
+    )
+    assert status_check.status == CertificateStatusCheck.STATUS_ACCEPTED
+    assert status_check.certificate_hash_data["hashAlgorithm"] == "SHA256"
+    assert status_check.responded_at is not None
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+async def test_get_certificate_status_handles_missing_certificate():
+    charger = await database_sync_to_async(Charger.objects.create)(charger_id="CERT-4")
+    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = "CERT-4"
+    consumer.charger = charger
+    consumer.aggregate_charger = None
+
+    payload = {"certificateHashData": {"hashAlgorithm": "SHA256"}}
+    result = await consumer._handle_get_certificate_status_action(
+        payload, "msg-3", "", "",
+    )
+
+    assert result["status"] == "Failed"
     status_check = await database_sync_to_async(CertificateStatusCheck.objects.get)(
         charger=charger
     )
     assert status_check.status == CertificateStatusCheck.STATUS_REJECTED
-    assert status_check.certificate_hash_data["hashAlgorithm"] == "SHA256"
+    assert status_check.status_info == "Certificate not found."
 
 
 @pytest.mark.anyio
