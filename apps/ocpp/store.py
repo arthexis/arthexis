@@ -68,6 +68,8 @@ _transaction_requests_by_transaction: dict[str, set[str]] = {}
 _transaction_requests_lock = threading.Lock()
 billing_updates: deque[dict[str, object]] = deque(maxlen=1000)
 ev_charging_needs: deque[dict[str, object]] = deque(maxlen=500)
+ev_charging_schedules: deque[dict[str, object]] = deque(maxlen=500)
+planner_notifications: deque[dict[str, object]] = deque(maxlen=500)
 display_message_compliance: dict[str, list[dict[str, object]]] = {}
 
 # mapping of charger id / cp_path to friendly names used for log files
@@ -222,6 +224,38 @@ def record_ev_charging_needs(
         "received_at": received_at,
     }
     ev_charging_needs.append(record)
+
+
+def record_ev_charging_schedule(
+    charger_id: str | None,
+    *,
+    connector_id: int | str | None,
+    evse_id: int,
+    timebase: datetime | None,
+    charging_schedule: dict[str, object] | None,
+    received_at: datetime,
+) -> None:
+    """Track EV charging schedules so planners can synchronize demand."""
+
+    if not charger_id or charging_schedule is None:
+        return
+
+    ev_charging_schedules.append(
+        {
+            "charger_id": charger_id,
+            "connector_id": connector_slug(connector_id),
+            "evse_id": evse_id,
+            "timebase": timebase,
+            "charging_schedule": dict(charging_schedule),
+            "received_at": received_at,
+        }
+    )
+
+
+def forward_ev_charging_schedule(schedule: dict[str, object]) -> None:
+    """Queue a normalized EV charging schedule for downstream planners."""
+
+    planner_notifications.append(dict(schedule))
 
 
 def update_transaction_request(

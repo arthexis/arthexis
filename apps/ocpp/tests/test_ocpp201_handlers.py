@@ -42,6 +42,8 @@ def reset_store(monkeypatch, tmp_path):
     store._transaction_requests_by_transaction.clear()
     store.billing_updates.clear()
     store.ev_charging_needs.clear()
+    store.ev_charging_schedules.clear()
+    store.planner_notifications.clear()
     store.clear_display_message_compliance()
     log_dir = tmp_path / "logs"
     session_dir = log_dir / "sessions"
@@ -60,6 +62,8 @@ def reset_store(monkeypatch, tmp_path):
     store._transaction_requests_by_transaction.clear()
     store.billing_updates.clear()
     store.ev_charging_needs.clear()
+    store.ev_charging_schedules.clear()
+    store.planner_notifications.clear()
 
 
 @pytest.fixture
@@ -686,3 +690,93 @@ async def test_notify_ev_charging_needs_requires_fields(monkeypatch):
 
     assert result == {}
     assert called is False
+
+
+@pytest.mark.anyio
+async def test_notify_ev_charging_schedule_records_schedule(monkeypatch):
+    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = store.identity_key("SCHED-1", 1)
+    consumer.charger_id = "SCHED-1"
+    consumer.connector_value = 1
+
+    recorded: list[dict[str, object]] = []
+    forwarded: list[dict[str, object]] = []
+
+    def _record(*args, **kwargs):
+        if args:
+            kwargs["charger_id"] = args[0]
+        if "connector_id" in kwargs:
+            kwargs["connector_id"] = store.connector_slug(kwargs["connector_id"])
+        recorded.append(kwargs)
+
+    monkeypatch.setattr(store, "record_ev_charging_schedule", _record)
+    monkeypatch.setattr(
+        store, "forward_ev_charging_schedule", lambda payload: forwarded.append(payload)
+    )
+
+    payload = {
+        "timebase": "2024-01-01T00:00:00Z",
+        "evseId": 2,
+        "chargingSchedule": {
+            "id": "9",
+            "duration": "600",
+            "chargingRateUnit": "W",
+            "startSchedule": "2024-01-01T00:05:00Z",
+            "chargingSchedulePeriod": [
+                {"startPeriod": 0, "limit": 32, "numberPhases": 3},
+                {"startPeriod": 300, "limit": "16.5"},
+            ],
+        },
+    }
+
+    result = await consumer._handle_notify_ev_charging_schedule_action(
+        payload, "sched-1", "", ""
+    )
+
+    assert result == {}
+    assert recorded
+    entry = recorded[0]
+    assert entry["charger_id"] == "SCHED-1"
+    assert entry["connector_id"] == "1"
+    assert entry["evse_id"] == 2
+    assert entry["timebase"].isoformat().startswith("2024-01-01T00:00:00")
+    schedule = entry["charging_schedule"]
+    assert schedule["id"] == 9
+    assert schedule["duration_seconds"] == 600
+    assert schedule["charging_rate_unit"] == "W"
+    assert schedule["start_schedule"].isoformat().startswith("2024-01-01T00:05:00")
+    assert len(schedule["periods"]) == 2
+    assert schedule["periods"][0]["limit"] == 32.0
+    assert schedule["periods"][0]["number_phases"] == 3
+    assert schedule["periods"][1]["limit"] == 16.5
+    assert forwarded
+    assert forwarded[0]["evse_id"] == 2
+
+
+@pytest.mark.anyio
+async def test_notify_ev_charging_schedule_requires_fields(monkeypatch):
+    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = "SCHED-2"
+    consumer.charger_id = "SCHED-2"
+
+    recorded = False
+    forwarded = False
+
+    def _record(*_args, **_kwargs):  # pragma: no cover - guard
+        nonlocal recorded
+        recorded = True
+
+    def _forward(*_args, **_kwargs):  # pragma: no cover - guard
+        nonlocal forwarded
+        forwarded = True
+
+    monkeypatch.setattr(store, "record_ev_charging_schedule", _record)
+    monkeypatch.setattr(store, "forward_ev_charging_schedule", _forward)
+
+    result = await consumer._handle_notify_ev_charging_schedule_action(
+        {"timebase": "2024-01-01T00:00:00Z"}, "sched-2", "", ""
+    )
+
+    assert result == {}
+    assert recorded is False
+    assert forwarded is False
