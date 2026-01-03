@@ -749,7 +749,7 @@ def main() -> None:  # pragma: no cover - hardware dependent
     clock_cycle = 0
     health = LCDHealthMonitor()
     watchdog = LCDWatchdog()
-    frame_writer: LCDFrameWriter = LCDFrameWriter(None)
+    frame_writer: LCDFrameWriter = LCDFrameWriter(None, history_recorder=history_recorder)
     paused = False
 
     _clear_low_lock_file()
@@ -763,7 +763,7 @@ def main() -> None:  # pragma: no cover - hardware dependent
     try:
         try:
             lcd = _initialize_lcd()
-            frame_writer = LCDFrameWriter(lcd)
+            frame_writer = LCDFrameWriter(lcd, history_recorder=history_recorder)
             health.record_success()
         except LCDUnavailableError as exc:
             logger.warning("LCD unavailable during startup: %s", exc)
@@ -776,7 +776,7 @@ def main() -> None:  # pragma: no cover - hardware dependent
 
             lcd, paused = _handle_pause_request(lcd)
             if paused:
-                frame_writer = LCDFrameWriter(None)
+                frame_writer = LCDFrameWriter(None, history_recorder=history_recorder)
                 display_state = None
                 next_display_state = None
                 time.sleep(0.1)

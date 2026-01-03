@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timezone, date
 from pathlib import Path
 from typing import Callable, Iterable, List
 
@@ -33,7 +33,7 @@ class LCDHistoryRecorder:
         self.max_days = max_days
         self.clock = clock or (lambda: datetime.now(timezone.utc))
         self.history_dir.mkdir(parents=True, exist_ok=True)
-        self._current_date = None
+        self._current_date = self._detect_current_history_date()
         self._rotate_if_needed()
 
     # ------------------------------------------------------------------
@@ -88,6 +88,17 @@ class LCDHistoryRecorder:
 
     def _history_path(self, index: int) -> Path:
         return self.history_dir / f"lcd-history-{index}.txt"
+
+    def _detect_current_history_date(self) -> date | None:
+        history_path = self._history_path(0)
+        try:
+            stat_result = history_path.stat()
+        except FileNotFoundError:
+            return None
+        except OSError:
+            return None
+
+        return datetime.fromtimestamp(stat_result.st_mtime, tz=timezone.utc).date()
 
 
 def load_history_entries(base_dir: Path, *, history_dir_name: str = "works") -> list[HistoryEntry]:
