@@ -2479,7 +2479,63 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
     async def _handle_notify_ev_charging_needs_action(
         self, payload, msg_id, raw, text_data
     ):
-        self._log_ocpp201_notification("NotifyEVChargingNeeds", payload)
+        payload_data = payload if isinstance(payload, dict) else {}
+        evse_id_value = payload_data.get("evseId")
+        charging_needs = payload_data.get("chargingNeeds")
+
+        try:
+            evse_id = int(evse_id_value) if evse_id_value is not None else None
+        except (TypeError, ValueError):
+            evse_id = None
+
+        if not isinstance(charging_needs, dict) or evse_id is None:
+            store.add_log(
+                self.store_key,
+                "NotifyEVChargingNeeds: missing evseId or chargingNeeds",
+                log_type="charger",
+            )
+            return {}
+
+        def _parse_energy(value: object | None) -> int | None:
+            try:
+                return int(value) if value is not None else None
+            except (TypeError, ValueError):
+                return None
+
+        ac_params = charging_needs.get("acChargingParameters")
+        if not isinstance(ac_params, dict):
+            ac_params = {}
+        dc_params = charging_needs.get("dcChargingParameters")
+        if not isinstance(dc_params, dict):
+            dc_params = {}
+
+        requested_energy = _parse_energy(ac_params.get("energyAmount"))
+        if requested_energy is None:
+            requested_energy = _parse_energy(dc_params.get("maxEnergyAtChargingStation"))
+
+        departure_time = _parse_ocpp_timestamp(charging_needs.get("departureTime"))
+        received_at = timezone.now()
+
+        log_parts = [f"evseId={evse_id}"]
+        if requested_energy is not None:
+            log_parts.append(f"energy={requested_energy}")
+        if departure_time is not None:
+            log_parts.append(f"departure={departure_time.isoformat()}")
+        store.add_log(
+            self.store_key,
+            "NotifyEVChargingNeeds" + (": " + ", ".join(log_parts) if log_parts else ""),
+            log_type="charger",
+        )
+
+        store.record_ev_charging_needs(
+            getattr(self, "charger_id", None) or self.store_key,
+            connector_id=getattr(self, "connector_value", None),
+            evse_id=evse_id,
+            requested_energy=requested_energy,
+            departure_time=departure_time,
+            charging_needs=charging_needs,
+            received_at=received_at,
+        )
         return {}
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "NotifyEVChargingSchedule")

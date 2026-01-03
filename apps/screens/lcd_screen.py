@@ -24,8 +24,9 @@ from glob import glob
 from pathlib import Path
 from typing import Callable, NamedTuple
 
-import psutil
 from itertools import cycle, islice
+
+import psutil
 
 def _resolve_base_dir() -> Path:
     env_base = os.getenv("ARTHEXIS_BASE_DIR")
@@ -44,10 +45,12 @@ LOGS_DIR = BASE_DIR / "logs"
 LOG_FILE = LOGS_DIR / "lcd-screen.log"
 WORK_DIR = BASE_DIR / "work"
 WORK_FILE = WORK_DIR / "lcd-screen.txt"
+HISTORY_DIR = BASE_DIR / "works"
 LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
 WORK_DIR.mkdir(parents=True, exist_ok=True)
+HISTORY_DIR.mkdir(parents=True, exist_ok=True)
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -67,6 +70,7 @@ root_logger.setLevel(logging.DEBUG)
 
 from apps.screens.lcd import CharLCD1602, LCDUnavailableError
 from apps.screens.animations import AnimationLoadError, default_tree_frames
+from apps.screens.history import LCDHistoryRecorder
 from apps.screens.startup_notifications import (
     LCD_HIGH_LOCK_FILE,
     LCD_LOW_LOCK_FILE,
@@ -180,20 +184,33 @@ def _warn_on_non_ascii_payload(payload: LockPayload, label: str) -> None:
 
 
 class LCDFrameWriter:
-    """Write full LCD frames with retry and batching."""
+    """Write full LCD frames with retry, batching, and history capture."""
 
     def __init__(
-        self, lcd: CharLCD1602 | None, *, work_file: Path = WORK_FILE
+        self,
+        lcd: CharLCD1602 | None,
+        *,
+        work_file: Path = WORK_FILE,
+        history_recorder: LCDHistoryRecorder | None = None,
     ) -> None:
         self.lcd = lcd
         self.work_file = work_file
+        self.history_recorder = history_recorder
 
-    def write(self, line1: str, line2: str) -> bool:
+    def write(
+        self,
+        line1: str,
+        line2: str,
+        *,
+        label: str | None = None,
+        timestamp: datetime | None = None,
+    ) -> bool:
         row1 = line1.ljust(LCD_COLUMNS)[:LCD_COLUMNS]
         row2 = line2.ljust(LCD_COLUMNS)[:LCD_COLUMNS]
 
         if self.lcd is None:
             _write_work_display(row1, row2, target=self.work_file)
+            self._record_history(row1, row2, label=label, timestamp=timestamp)
             return False
 
         try:
@@ -204,9 +221,32 @@ class LCDFrameWriter:
             )
             _write_work_display(row1, row2, target=self.work_file)
             self.lcd = None
+            self._record_history(row1, row2, label=label, timestamp=timestamp)
             return False
 
+        self._record_history(row1, row2, label=label, timestamp=timestamp)
         return True
+
+    def _record_history(
+        self,
+        row1: str,
+        row2: str,
+        *,
+        label: str | None,
+        timestamp: datetime | None,
+    ) -> None:
+        if not self.history_recorder:
+            return
+
+        try:
+            self.history_recorder.record(
+                row1,
+                row2,
+                label=label,
+                timestamp=timestamp or datetime.now(datetime_timezone.utc),
+            )
+        except Exception:
+            logger.debug("Unable to record LCD history", exc_info=True)
 
 
 class LCDHealthMonitor:
@@ -648,7 +688,11 @@ def _prepare_display_state(line1: str, line2: str, scroll_ms: int) -> DisplaySta
 
 
 def _advance_display(
-    state: DisplayState, frame_writer: LCDFrameWriter
+    state: DisplayState,
+    frame_writer: LCDFrameWriter,
+    *,
+    label: str | None = None,
+    timestamp: datetime | None = None,
 ) -> tuple[DisplayState, bool]:
     if _shutdown_requested():
         return state, True
@@ -660,7 +704,10 @@ def _advance_display(
     write_success = True
     if write_required:
         write_success = frame_writer.write(
-            segment1.ljust(LCD_COLUMNS), segment2.ljust(LCD_COLUMNS)
+            segment1.ljust(LCD_COLUMNS),
+            segment2.ljust(LCD_COLUMNS),
+            label=label,
+            timestamp=timestamp,
         )
 
     next_index1 = (state.index1 + 1) % state.steps1
@@ -731,10 +778,11 @@ def main() -> None:  # pragma: no cover - hardware dependent
     scroll_scheduler = ScrollScheduler()
     state_order = ("high", "low", "clock")
     state_index = 0
+    history_recorder = LCDHistoryRecorder(base_dir=BASE_DIR, history_dir_name="works")
     clock_cycle = 0
     health = LCDHealthMonitor()
     watchdog = LCDWatchdog()
-    frame_writer: LCDFrameWriter = LCDFrameWriter(None)
+    frame_writer: LCDFrameWriter = LCDFrameWriter(None, history_recorder=history_recorder)
     paused = False
     channel_indices = {"all": 0, "high": 0, "low": 0}
     channel_files = _discover_channel_files(LOCK_DIR)
@@ -750,7 +798,7 @@ def main() -> None:  # pragma: no cover - hardware dependent
     try:
         try:
             lcd = _initialize_lcd()
-            frame_writer = LCDFrameWriter(lcd)
+            frame_writer = LCDFrameWriter(lcd, history_recorder=history_recorder)
             health.record_success()
         except LCDUnavailableError as exc:
             logger.warning("LCD unavailable during startup: %s", exc)
@@ -763,7 +811,7 @@ def main() -> None:  # pragma: no cover - hardware dependent
 
             lcd, paused = _handle_pause_request(lcd)
             if paused:
-                frame_writer = LCDFrameWriter(None)
+                frame_writer = LCDFrameWriter(None, history_recorder=history_recorder)
                 display_state = None
                 time.sleep(0.1)
                 continue
@@ -853,13 +901,18 @@ def main() -> None:  # pragma: no cover - hardware dependent
 
                 if lcd is None:
                     lcd = _initialize_lcd()
-                    frame_writer = LCDFrameWriter(lcd)
+                    frame_writer = LCDFrameWriter(lcd, history_recorder=history_recorder)
                     health.record_success()
 
                 if display_state and frame_writer:
                     scroll_scheduler.sleep_until_ready()
+                    frame_timestamp = datetime.now(datetime_timezone.utc)
+                    label = state_order[state_index] if state_order else None
                     display_state, write_success = _advance_display(
-                        display_state, frame_writer
+                        display_state,
+                        frame_writer,
+                        label=label,
+                        timestamp=frame_timestamp,
                     )
                     if write_success:
                         health.record_success()
@@ -869,7 +922,9 @@ def main() -> None:  # pragma: no cover - hardware dependent
                     else:
                         if lcd is not None and frame_writer.lcd is None:
                             lcd = None
-                            frame_writer = LCDFrameWriter(None)
+                            frame_writer = LCDFrameWriter(
+                                None, history_recorder=history_recorder
+                            )
                             display_state = None
                         delay = health.record_failure()
                         time.sleep(delay)
@@ -886,7 +941,7 @@ def main() -> None:  # pragma: no cover - hardware dependent
             except LCDUnavailableError as exc:
                 logger.warning("LCD unavailable: %s", exc)
                 lcd = None
-                frame_writer = LCDFrameWriter(None)
+                frame_writer = LCDFrameWriter(None, history_recorder=history_recorder)
                 display_state = None
                 delay = health.record_failure()
                 time.sleep(delay)
@@ -895,7 +950,8 @@ def main() -> None:  # pragma: no cover - hardware dependent
                 _blank_display(lcd)
                 lcd = None
                 display_state = None
-                frame_writer = LCDFrameWriter(None)
+                next_display_state = None
+                frame_writer = LCDFrameWriter(None, history_recorder=history_recorder)
                 delay = health.record_failure()
                 time.sleep(delay)
 

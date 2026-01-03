@@ -67,6 +67,7 @@ _transaction_requests_by_connector: dict[str, set[str]] = {}
 _transaction_requests_by_transaction: dict[str, set[str]] = {}
 _transaction_requests_lock = threading.Lock()
 billing_updates: deque[dict[str, object]] = deque(maxlen=1000)
+ev_charging_needs: deque[dict[str, object]] = deque(maxlen=500)
 display_message_compliance: dict[str, list[dict[str, object]]] = {}
 
 # mapping of charger id / cp_path to friendly names used for log files
@@ -194,6 +195,33 @@ def clear_display_message_compliance() -> None:
     """Clear cached NotifyDisplayMessages compliance data (test helper)."""
 
     display_message_compliance.clear()
+
+
+def record_ev_charging_needs(
+    charger_id: str | None,
+    *,
+    connector_id: int | str | None,
+    evse_id: int,
+    requested_energy: int | None,
+    departure_time: datetime | None,
+    charging_needs: dict[str, object] | None,
+    received_at: datetime,
+) -> None:
+    """Track EV charging needs so schedulers can prioritize sessions."""
+
+    if not charger_id:
+        return
+
+    record = {
+        "charger_id": charger_id,
+        "connector_id": connector_slug(connector_id),
+        "evse_id": evse_id,
+        "requested_energy": requested_energy,
+        "departure_time": departure_time,
+        "charging_needs": dict(charging_needs or {}),
+        "received_at": received_at,
+    }
+    ev_charging_needs.append(record)
 
 
 def update_transaction_request(
