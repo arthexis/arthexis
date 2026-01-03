@@ -2542,7 +2542,103 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
     async def _handle_notify_ev_charging_schedule_action(
         self, payload, msg_id, raw, text_data
     ):
-        self._log_ocpp201_notification("NotifyEVChargingSchedule", payload)
+        payload_data = payload if isinstance(payload, dict) else {}
+        evse_id_value = payload_data.get("evseId")
+        charging_schedule = payload_data.get("chargingSchedule")
+        timebase = _parse_ocpp_timestamp(payload_data.get("timebase"))
+
+        try:
+            evse_id = int(evse_id_value) if evse_id_value is not None else None
+        except (TypeError, ValueError):
+            evse_id = None
+
+        if not isinstance(charging_schedule, dict) or evse_id is None:
+            store.add_log(
+                self.store_key,
+                "NotifyEVChargingSchedule: missing evseId or chargingSchedule",
+                log_type="charger",
+            )
+            return {}
+
+        def _parse_int(value: object | None) -> int | None:
+            try:
+                return int(value) if value is not None else None
+            except (TypeError, ValueError):
+                return None
+
+        duration_seconds = _parse_int(charging_schedule.get("duration"))
+        schedule_id = _parse_int(charging_schedule.get("id"))
+        charging_rate_unit = str(charging_schedule.get("chargingRateUnit") or "").strip()
+        start_schedule = _parse_ocpp_timestamp(charging_schedule.get("startSchedule"))
+
+        periods_data = charging_schedule.get("chargingSchedulePeriod")
+        if not isinstance(periods_data, list):
+            periods_data = []
+        periods: list[dict[str, object]] = []
+        for index, entry in enumerate(periods_data, start=1):
+            if not isinstance(entry, dict):
+                continue
+            start_period = _parse_int(entry.get("startPeriod"))
+            if start_period is None:
+                continue
+            try:
+                limit = float(entry.get("limit"))
+            except (TypeError, ValueError):
+                continue
+            period: dict[str, object] = {
+                "start_period": start_period,
+                "limit": limit,
+            }
+            number_phases = _parse_int(entry.get("numberPhases"))
+            if number_phases is not None:
+                period["number_phases"] = number_phases
+            phase_to_use = _parse_int(entry.get("phaseToUse"))
+            if phase_to_use is not None:
+                period["phase_to_use"] = phase_to_use
+            periods.append(period)
+
+        normalized_schedule: dict[str, object] = {"periods": periods}
+        if schedule_id is not None:
+            normalized_schedule["id"] = schedule_id
+        if duration_seconds is not None:
+            normalized_schedule["duration_seconds"] = duration_seconds
+        if charging_rate_unit:
+            normalized_schedule["charging_rate_unit"] = charging_rate_unit
+        if start_schedule is not None:
+            normalized_schedule["start_schedule"] = start_schedule
+
+        details: list[str] = [f"evseId={evse_id}"]
+        if schedule_id is not None:
+            details.append(f"id={schedule_id}")
+        if periods:
+            details.append(f"periods={len(periods)}")
+        if timebase:
+            details.append(f"timebase={timebase.isoformat()}")
+        store.add_log(
+            self.store_key,
+            "NotifyEVChargingSchedule" + (": " + ", ".join(details) if details else ""),
+            log_type="charger",
+        )
+
+        received_at = timezone.now()
+        record = {
+            "charger_id": getattr(self, "charger_id", None),
+            "connector_id": getattr(self, "connector_value", None),
+            "evse_id": evse_id,
+            "timebase": timebase,
+            "charging_schedule": normalized_schedule,
+            "received_at": received_at,
+        }
+
+        store.record_ev_charging_schedule(
+            record.get("charger_id"),
+            connector_id=record.get("connector_id"),
+            evse_id=evse_id,
+            timebase=timebase,
+            charging_schedule=normalized_schedule,
+            received_at=received_at,
+        )
+        store.forward_ev_charging_schedule(record)
         return {}
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "NotifyEvent")
