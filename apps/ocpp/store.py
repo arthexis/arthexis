@@ -67,6 +67,7 @@ _transaction_requests_by_connector: dict[str, set[str]] = {}
 _transaction_requests_by_transaction: dict[str, set[str]] = {}
 _transaction_requests_lock = threading.Lock()
 billing_updates: deque[dict[str, object]] = deque(maxlen=1000)
+display_message_compliance: dict[str, list[dict[str, object]]] = {}
 
 # mapping of charger id / cp_path to friendly names used for log files
 log_names: dict[str, dict[str, str]] = {"charger": {}, "simulator": {}}
@@ -165,6 +166,34 @@ def register_transaction_request(message_id: str, metadata: dict[str, object]) -
         _add_transaction_index_entry(
             _transaction_requests_by_transaction, transaction_key, message_id
         )
+
+
+def record_display_message_compliance(
+    charger_id: str | None,
+    *,
+    request_id: int | None,
+    tbc: bool,
+    messages: list[dict[str, object]],
+    received_at: datetime,
+) -> None:
+    """Track NotifyDisplayMessages payloads for compliance reporting."""
+
+    if not charger_id:
+        return
+    record = {
+        "charger_id": charger_id,
+        "request_id": request_id,
+        "tbc": tbc,
+        "messages": messages,
+        "received_at": received_at,
+    }
+    display_message_compliance.setdefault(charger_id, []).append(record)
+
+
+def clear_display_message_compliance() -> None:
+    """Clear cached NotifyDisplayMessages compliance data (test helper)."""
+
+    display_message_compliance.clear()
 
 
 def update_transaction_request(

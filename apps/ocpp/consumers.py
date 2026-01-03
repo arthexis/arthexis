@@ -2366,6 +2366,8 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         if not isinstance(message_info, (list, tuple)):
             message_info = []
 
+        compliance_messages: list[dict[str, object]] = []
+
         def _persist_display_messages() -> None:
             charger = self.charger
             if charger is None and self.charger_id:
@@ -2435,6 +2437,17 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
                     component = {}
                 if not isinstance(variable, dict):
                     variable = {}
+                compliance_messages.append(
+                    {
+                        "message_id": message_id,
+                        "priority": str(entry.get("priority") or ""),
+                        "state": str(entry.get("state") or ""),
+                        "valid_from": _parse_ocpp_timestamp(entry.get("validFrom")),
+                        "valid_to": _parse_ocpp_timestamp(entry.get("validTo")),
+                        "language": str(language_value or ""),
+                        "content": str(content_value or ""),
+                    }
+                )
                 DisplayMessage.objects.create(
                     notification=notification,
                     charger=charger,
@@ -2453,6 +2466,13 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
                 )
 
         await database_sync_to_async(_persist_display_messages)()
+        store.record_display_message_compliance(
+            self.charger_id,
+            request_id=request_id,
+            tbc=tbc,
+            messages=compliance_messages,
+            received_at=received_at,
+        )
         return {}
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "NotifyEVChargingNeeds")
