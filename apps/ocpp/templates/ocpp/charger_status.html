@@ -173,6 +173,31 @@
         {% endif %}
       </div>
       {% endif %}
+      {% if charging_limit %}
+      <div class="mb-3">
+        <h2 class="h6 mb-1">{% trans "Charging Limit" %}</h2>
+        {% if charging_limit.source %}
+        <p class="mb-1" id="charging-limit-source">{% trans "Source" %}: {{ charging_limit.source }}</p>
+        {% endif %}
+        {% if charging_limit.is_grid_critical is not None %}
+        <p class="mb-1" id="charging-limit-grid">{% trans "Grid critical" %}: {{ charging_limit.is_grid_critical|yesno:_("Yes,No") }}</p>
+        {% endif %}
+        {% if charging_limit.schedules %}
+        <ul class="mb-1" id="charging-limit-schedules">
+          {% for summary in charging_limit.schedules %}
+          <li>{{ summary }}</li>
+          {% endfor %}
+        </ul>
+        {% elif charging_limit.evse_id %}
+        <p class="mb-1">{% blocktrans with evse=charging_limit.evse_id %}Applies to EVSE {{ evse }}{% endblocktrans %}</p>
+        {% endif %}
+        {% if charging_limit.timestamp %}
+        <p class="mb-0 text-muted">
+          <small>{% trans "Reported" %}: <span id="charging-limit-timestamp">{{ charging_limit.timestamp|date:"SHORT_DATETIME_FORMAT" }}</span></small>
+        </p>
+        {% endif %}
+      </div>
+      {% endif %}
       {% if charger.temperature is not None %}
       <p>{% trans "Temperature" %}: <span id="temperature">{{ charger.temperature }}</span> {{ charger.temperature_unit }}</p>
       {% endif %}
