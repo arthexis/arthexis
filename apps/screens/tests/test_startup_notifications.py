@@ -27,3 +27,11 @@ def test_lcd_feature_enabled_accepts_numbered_lock(tmp_path: Path):
     (lock_dir / "lcd-high-5.lck").write_text("payload", encoding="utf-8")
 
     assert startup_notifications.lcd_feature_enabled(lock_dir)
+
+
+def test_lcd_feature_enabled_accepts_legacy_extensionless_lock(tmp_path: Path):
+    lock_dir = tmp_path / ".locks"
+    lock_dir.mkdir(parents=True, exist_ok=True)
+    (lock_dir / "lcd-low").write_text("payload", encoding="utf-8")
+
+    assert startup_notifications.lcd_feature_enabled(lock_dir)

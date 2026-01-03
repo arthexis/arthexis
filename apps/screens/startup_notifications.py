@@ -123,7 +123,9 @@ def lcd_feature_enabled(lock_dir: Path) -> bool:
         if (lock_dir / name).exists():
             return True
 
-    for candidate in lock_dir.glob("lcd-*.lck"):
+    for candidate in lock_dir.glob("lcd-*"):
+        if not candidate.is_file():
+            continue
         if LCD_LOCK_PATTERN.match(candidate.name):
             return True
     return False
