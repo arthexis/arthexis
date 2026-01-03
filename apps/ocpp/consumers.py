@@ -51,6 +51,7 @@ from .models import (
     PowerProjection,
     CertificateRequest,
     CertificateStatusCheck,
+    InstalledCertificate,
     Variable,
     MonitoringRule,
     MonitoringReport,
@@ -2664,36 +2665,62 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         self, payload, msg_id, raw, text_data
     ):
         hash_data = payload.get("certificateHashData") or {}
-        response_payload = {
-            "status": "Rejected",
-            "statusInfo": {
-                "reasonCode": "NotSupported",
-                "additionalInfo": "Manual certificate handling required.",
-            },
-        }
+        if not isinstance(hash_data, dict):
+            hash_data = {}
 
-        def _persist_status() -> None:
+        def _persist_status() -> dict:
             target = self._resolve_certificate_target()
-            if target is None:
-                return
-            CertificateStatusCheck.objects.create(
-                charger=target,
-                certificate_hash_data=hash_data if isinstance(hash_data, dict) else {},
-                ocsp_result={},
-                status=CertificateStatusCheck.STATUS_REJECTED,
-                status_info="Manual certificate handling required.",
-                request_payload=payload,
-                response_payload=response_payload,
-                responded_at=timezone.now(),
-            )
+            status_value = "Failed"
+            status_info = "Unknown charge point."
+            response_payload: dict[str, object] = {"status": status_value}
 
-        await database_sync_to_async(_persist_status)()
+            if target is not None:
+                status_info = "Certificate not found."
+                installed = InstalledCertificate.objects.filter(
+                    charger=target, certificate_hash_data=hash_data
+                ).first()
+                if installed and installed.status == InstalledCertificate.STATUS_INSTALLED:
+                    status_value = "Accepted"
+                    status_info = ""
+                    response_payload = {"status": status_value}
+                else:
+                    response_payload = {
+                        "status": status_value,
+                        "statusInfo": {
+                            "reasonCode": "NotFound",
+                            "additionalInfo": status_info,
+                        },
+                    }
+
+                CertificateStatusCheck.objects.create(
+                    charger=target,
+                    certificate_hash_data=hash_data,
+                    ocsp_result={},
+                    status=(
+                        CertificateStatusCheck.STATUS_ACCEPTED
+                        if status_value == "Accepted"
+                        else CertificateStatusCheck.STATUS_REJECTED
+                    ),
+                    status_info=status_info,
+                    request_payload=payload,
+                    response_payload=response_payload,
+                    responded_at=timezone.now(),
+                )
+
+            return {
+                "response": response_payload,
+                "status": status_value,
+                "status_info": status_info,
+            }
+
+        result = await database_sync_to_async(_persist_status)()
+        status_value = result.get("status")
         store.add_log(
             self.store_key,
-            "GetCertificateStatus request received (rejected; manual handling).",
+            f"GetCertificateStatus request received (status={status_value}).",
             log_type="charger",
         )
-        return response_payload
+        return result.get("response")
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "SignCertificate")
     @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "SignCertificate")
