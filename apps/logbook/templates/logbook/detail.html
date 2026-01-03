@@ -1,0 +1,70 @@
+{% extends "pages/base.html" %}
+{% load i18n %}
+
+{% block title %}{{ entry.title }}{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <div class="row justify-content-center">
+    <div class="col-lg-9">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+          <h1 class="mb-1">{{ entry.title }}</h1>
+          <p class="text-muted mb-0">{% translate "Secret" %}: <code>{{ entry.secret }}</code></p>
+          <p class="text-muted">{% translate "Event date" %}: {{ entry.event_date }}</p>
+        </div>
+      </div>
+      <div class="card bg-dark border-secondary mb-3">
+        <div class="card-body">
+          <h5 class="card-title">{% translate "Report" %}</h5>
+          <p class="card-text">{{ entry.report|linebreaks }}</p>
+        </div>
+      </div>
+      {% if entry.debug_info %}
+      <div class="card bg-dark border-secondary mb-3">
+        <div class="card-body">
+          <h5 class="card-title">{% translate "Debug information" %}</h5>
+          <pre class="mb-0 small bg-black p-3 border border-secondary rounded">{{ debug_pretty }}</pre>
+        </div>
+      </div>
+      {% endif %}
+      {% if image_urls %}
+      <div class="card bg-dark border-secondary mb-3">
+        <div class="card-body">
+          <h5 class="card-title">{% translate "Images" %}</h5>
+          <div class="row g-3">
+            {% for image_url in image_urls %}
+              <div class="col-md-4">
+                <img src="{{ image_url }}" alt="logbook image" class="img-fluid rounded border border-secondary" loading="lazy">
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      {% endif %}
+      {% with attachments=entry.log_attachments.all %}
+      {% if attachments|length %}
+      <div class="card bg-dark border-secondary mb-3">
+        <div class="card-body">
+          <h5 class="card-title">{% translate "Attached logs" %}</h5>
+          <ul class="list-unstyled mb-0">
+            {% for attachment in attachments %}
+              <li class="mb-1"><a href="{{ attachment.file.url }}" class="link-light">{{ attachment.original_name }}</a> <small class="text-muted">({{ attachment.size }} bytes)</small></li>
+            {% endfor %}
+          </ul>
+        </div>
+      </div>
+      {% endif %}
+      {% endwith %}
+      {% if entry.debug_document %}
+      <div class="card bg-dark border-secondary mb-3">
+        <div class="card-body">
+          <h5 class="card-title">{% translate "Debug document" %}</h5>
+          <a href="{{ entry.debug_document.url }}" class="btn btn-outline-primary">{% translate "Download JSON" %}</a>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
