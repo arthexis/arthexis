@@ -27,7 +27,7 @@ on:
       - 'requirements.txt'
 
 jobs:
-  install-test:
+  install:
     name: Install test
     runs-on: ubuntu-latest
     steps:
@@ -64,7 +64,7 @@ jobs:
 
   capture-dashboard:
     name: Capture admin dashboard
-    needs: install-test
+    needs: install
     runs-on: ubuntu-latest
     steps:
       - name: Ensure workspace is writable
