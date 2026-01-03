@@ -41,6 +41,7 @@ def reset_store(monkeypatch, tmp_path):
     store._transaction_requests_by_connector.clear()
     store._transaction_requests_by_transaction.clear()
     store.billing_updates.clear()
+    store.clear_display_message_compliance()
     log_dir = tmp_path / "logs"
     session_dir = log_dir / "sessions"
     lock_dir = tmp_path / "locks"
@@ -510,6 +511,39 @@ async def test_notify_display_messages_persists_messages():
     assert message.language == "en"
     assert message.component_name == "Display"
     assert message.variable_name == "Content"
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+async def test_notify_display_messages_updates_compliance_report():
+    charger = await database_sync_to_async(Charger.objects.create)(charger_id="DISP-2")
+    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = "DISP-2"
+    consumer.charger_id = charger.charger_id
+    consumer.charger = charger
+    consumer.aggregate_charger = None
+
+    payload = {
+        "requestId": 10,
+        "tbc": True,
+        "messageInfo": [
+            {
+                "messageId": 202,
+                "priority": "Low",
+                "state": "Displayed",
+                "message": {"text": "Promo", "language": "es"},
+            }
+        ],
+    }
+
+    await consumer._handle_notify_display_messages_action(payload, "msg-10", "", "")
+
+    reports = store.display_message_compliance.get(charger.charger_id)
+    assert reports is not None
+    assert reports[0]["request_id"] == 10
+    assert reports[0]["tbc"] is True
+    assert reports[0]["messages"][0]["message_id"] == 202
+    assert reports[0]["messages"][0]["state"] == "Displayed"
 
 
 @pytest.mark.anyio
