@@ -2134,7 +2134,82 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
     async def _handle_notify_charging_limit_action(
         self, payload, msg_id, raw, text_data
     ):
-        self._log_ocpp201_notification("NotifyChargingLimit", payload)
+        payload_data = payload if isinstance(payload, dict) else {}
+        charging_limit = payload_data.get("chargingLimit")
+        if not isinstance(charging_limit, dict):
+            charging_limit = {}
+        source_value = str(charging_limit.get("chargingLimitSource") or "").strip()
+        grid_critical_value = charging_limit.get("isGridCritical")
+        grid_critical = None
+        if grid_critical_value is not None:
+            grid_critical = bool(grid_critical_value)
+        schedules = payload_data.get("chargingSchedule")
+        if not isinstance(schedules, list):
+            schedules = []
+        evse_id_value = payload_data.get("evseId")
+        try:
+            evse_id = int(evse_id_value) if evse_id_value is not None else None
+        except (TypeError, ValueError):
+            evse_id = None
+
+        details: list[str] = []
+        if source_value:
+            details.append(f"source={source_value}")
+        if grid_critical is not None:
+            details.append(f"gridCritical={'yes' if grid_critical else 'no'}")
+        if evse_id is not None:
+            details.append(f"evseId={evse_id}")
+        if schedules:
+            details.append(f"schedules={len(schedules)}")
+        message = "NotifyChargingLimit"
+        if details:
+            message += f": {', '.join(details)}"
+        store.add_log(self.store_key, message, log_type="charger")
+
+        normalized_payload: dict[str, object] = {
+            "chargingLimit": charging_limit,
+            "chargingSchedule": schedules,
+        }
+        if evse_id is not None:
+            normalized_payload["evseId"] = evse_id
+
+        received_at = timezone.now()
+
+        def _persist_limit() -> None:
+            target = getattr(self, "aggregate_charger", None) or getattr(
+                self, "charger", None
+            )
+            connector_hint = getattr(self, "connector_value", None)
+            if target is None and getattr(self, "charger_id", None):
+                target = (
+                    Charger.objects.filter(
+                        charger_id=self.charger_id, connector_id=connector_hint
+                    ).first()
+                    or Charger.objects.filter(
+                        charger_id=self.charger_id, connector_id__isnull=True
+                    ).first()
+                )
+            if target is None and getattr(self, "charger_id", None):
+                target, _created = Charger.objects.get_or_create(
+                    charger_id=self.charger_id,
+                    connector_id=connector_hint,
+                )
+            if target is None:
+                return
+
+            updates: dict[str, object] = {
+                "last_charging_limit": normalized_payload,
+                "last_charging_limit_source": source_value,
+                "last_charging_limit_at": received_at,
+            }
+            if grid_critical is not None:
+                updates["last_charging_limit_is_grid_critical"] = grid_critical
+
+            Charger.objects.filter(pk=target.pk).update(**updates)
+            for field, value in updates.items():
+                setattr(target, field, value)
+
+        await database_sync_to_async(_persist_limit)()
         return {}
 
     @protocol_call(

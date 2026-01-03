@@ -2,6 +2,7 @@ import json
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta, timezone as dt_timezone
+from decimal import Decimal, InvalidOperation
 from functools import lru_cache
 from types import SimpleNamespace
 
@@ -1083,4 +1084,87 @@ def _diagnostics_payload(charger: Charger) -> dict[str, str | None]:
         "diagnosticsStatus": status,
         "diagnosticsTimestamp": timestamp,
         "diagnosticsLocation": location,
+    }
+
+
+def _charging_limit_details(charger: Charger) -> dict[str, object] | None:
+    """Return structured charging limit details for dashboard views."""
+
+    payload = charger.last_charging_limit or {}
+    limit_data = payload.get("chargingLimit") if isinstance(payload, dict) else {}
+    if not isinstance(limit_data, dict):
+        limit_data = {}
+    source = (charger.last_charging_limit_source or "").strip() or (
+        str(limit_data.get("chargingLimitSource") or "").strip()
+    )
+    grid_critical = charger.last_charging_limit_is_grid_critical
+    if grid_critical is None:
+        flag = limit_data.get("isGridCritical")
+        grid_critical = bool(flag) if flag is not None else None
+
+    evse_value = None
+    if isinstance(payload, dict):
+        evse_value = payload.get("evseId")
+    try:
+        evse_id = int(evse_value) if evse_value is not None else None
+    except (TypeError, ValueError):
+        evse_id = None
+
+    raw_schedules = []
+    if isinstance(payload, dict):
+        raw_schedules = payload.get("chargingSchedule") or []
+    schedules = raw_schedules if isinstance(raw_schedules, list) else []
+
+    if not (source or schedules or grid_critical or evse_id is not None):
+        return None
+
+    summaries: list[str] = []
+    for schedule in schedules:
+        if not isinstance(schedule, dict):
+            continue
+        unit = schedule.get("chargingRateUnit") or ""
+        periods = schedule.get("chargingSchedulePeriod") or []
+        limit_value: Decimal | None = None
+        for period in periods:
+            if not isinstance(period, dict):
+                continue
+            try:
+                limit_value = Decimal(str(period.get("limit")))
+                break
+            except (InvalidOperation, TypeError, ValueError):
+                continue
+        parts: list[str] = []
+        if limit_value is not None:
+            parts.append(f"{limit_value.normalize()} {unit}".strip())
+        elif unit:
+            parts.append(unit)
+        duration = schedule.get("duration")
+        if duration:
+            parts.append(_("duration %(seconds)s s") % {"seconds": duration})
+        if not parts:
+            parts.append(_("charging schedule"))
+        summaries.append(", ".join(parts))
+
+    label_parts: list[str] = []
+    if source:
+        label_parts.append(source)
+    if grid_critical is True:
+        label_parts.append(_("grid critical"))
+    elif grid_critical is False:
+        label_parts.append(_("grid stable"))
+    if summaries:
+        label_parts.append(summaries[0])
+    elif evse_id is not None:
+        label_parts.append(_("EVSE %(evse)s") % {"evse": evse_id})
+
+    label = ", ".join(str(part) for part in label_parts) if label_parts else None
+
+    return {
+        "source": source or None,
+        "evse_id": evse_id,
+        "is_grid_critical": grid_critical,
+        "schedules": summaries,
+        "schedule_count": len(summaries),
+        "label": label,
+        "timestamp": charger.last_charging_limit_at,
     }

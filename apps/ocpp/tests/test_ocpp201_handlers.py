@@ -108,6 +108,48 @@ async def test_cleared_charging_limit_persists_event():
 
 
 @pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+async def test_notify_charging_limit_persists_payload():
+    charger = await database_sync_to_async(Charger.objects.create)(
+        charger_id="CP-301", connector_id=1
+    )
+    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = "CP-301#1"
+    consumer.charger = charger
+    consumer.aggregate_charger = None
+    consumer.connector_value = 1
+
+    payload = {
+        "chargingLimit": {"chargingLimitSource": "EMS", "isGridCritical": True},
+        "chargingSchedule": [
+            {
+                "id": 1,
+                "chargingRateUnit": "A",
+                "chargingSchedulePeriod": [{"startPeriod": 0, "limit": 16}],
+            }
+        ],
+        "evseId": 5,
+    }
+
+    result = await consumer._handle_notify_charging_limit_action(
+        payload, "msg-3", "", ""
+    )
+
+    assert result == {}
+    updated = await database_sync_to_async(Charger.objects.get)(pk=charger.pk)
+    assert updated.last_charging_limit.get("evseId") == 5
+    assert updated.last_charging_limit_source == "EMS"
+    assert updated.last_charging_limit_is_grid_critical is True
+    assert updated.last_charging_limit_at is not None
+    schedule = updated.last_charging_limit.get("chargingSchedule") or []
+    assert isinstance(schedule, list)
+    assert schedule[0]["chargingSchedulePeriod"][0]["limit"] == 16
+    entries = list(store.logs["charger"].get(consumer.store_key, []))
+    assert any("NotifyChargingLimit" in entry for entry in entries)
+    assert any("source=EMS" in entry for entry in entries)
+
+
+@pytest.mark.anyio
 async def test_notify_report_logs_payload():
     consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "CP-201"
