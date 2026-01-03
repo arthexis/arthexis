@@ -26,18 +26,55 @@ def _select_next_question(questions: Iterable[SurveyQuestion]) -> SurveyQuestion
     return random.choice(candidates)
 
 
+def _merge_results(source: SurveyResult, target: SurveyResult) -> SurveyResult:
+    """Merge responses and identifiers from ``source`` into ``target``."""
+
+    source_payload = source.data if isinstance(source.data, dict) else {}
+    target_payload = target.data if isinstance(target.data, dict) else {}
+
+    merged = {**source_payload.get("identifiers", {}), **target_payload.get("identifiers", {})}
+    target_payload["identifiers"] = merged
+
+    target_responses = target_payload.setdefault("responses", [])
+    seen_ids = {resp.get("question_id") for resp in target_responses if "question_id" in resp}
+    for resp in source_payload.get("responses", []):
+        question_id = resp.get("question_id")
+        if question_id is None or question_id in seen_ids:
+            continue
+        target_responses.append(resp)
+        seen_ids.add(question_id)
+
+    target.data = target_payload
+    target.save(update_fields=["data", "updated_at"])
+    return target
+
+
 def _get_or_create_result(request: HttpRequest, topic: SurveyTopic) -> SurveyResult:
     session_key = request.session.session_key
     if session_key is None:
         request.session.save()
         session_key = request.session.session_key
 
-    result = None
-    if request.user.is_authenticated:
-        result = SurveyResult.objects.filter(topic=topic, user=request.user).first()
-    if result is None and session_key:
-        result = SurveyResult.objects.filter(topic=topic, session_key=session_key).first()
+    session_results = request.session.setdefault("survey_result_ids", {})
+    session_result_id = session_results.get(str(topic.pk))
 
+    session_result = None
+    if session_result_id:
+        session_result = SurveyResult.objects.filter(pk=session_result_id, topic=topic).first()
+    if session_result is None and session_key:
+        session_result = SurveyResult.objects.filter(topic=topic, session_key=session_key).first()
+
+    user_result = None
+    if request.user.is_authenticated:
+        user_result = SurveyResult.objects.filter(topic=topic, user=request.user).first()
+
+    if user_result and session_result and user_result.pk != session_result.pk:
+        # Prefer the authenticated user's record and merge any in-progress answers
+        user_result = _merge_results(session_result, user_result)
+        session_result.delete()
+        session_result = user_result
+
+    result = user_result or session_result
     if result is None:
         result = SurveyResult.objects.create(
             topic=topic,
@@ -45,9 +82,21 @@ def _get_or_create_result(request: HttpRequest, topic: SurveyTopic) -> SurveyRes
             session_key=session_key or "",
             data={"responses": [], "identifiers": {}},
         )
-    elif not result.session_key and session_key:
-        result.session_key = session_key
-        result.save(update_fields=["session_key"])
+    else:
+        updated_fields: list[str] = []
+        if request.user.is_authenticated and result.user_id is None:
+            result.user = request.user
+            updated_fields.append("user")
+        if not result.session_key and session_key:
+            result.session_key = session_key
+            updated_fields.append("session_key")
+        if updated_fields:
+            updated_fields.append("updated_at")
+            result.save(update_fields=updated_fields)
+
+    if session_results.get(str(topic.pk)) != result.pk:
+        session_results[str(topic.pk)] = result.pk
+        request.session.modified = True
 
     return result
 
