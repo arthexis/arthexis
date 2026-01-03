@@ -1,13 +1,13 @@
 # Release install verification
 
-The previous manual PyPI install report tracked a single installation against version 0.1.34. To keep the documentation aligned with current releases, Arthexis relies on an automated workflow that verifies installation and upgrade paths on every change that could alter packaging.
+Installation and upgrade paths are now validated as part of the main CI workflow rather than a separate lightweight check. This keeps coverage centralized and avoids duplicating effort.
 
-## Automated workflow
-- Workflow: [Install latest release](../.github/workflows/release-install.yml)
-- Triggers: Pushes or pull requests that modify migrations or the workflow itself.
+## Coverage in CI
+- Workflow: [CI](../.github/workflows/ci.yml)
+- Triggers: All pushes, pull requests, and the nightly schedule.
 - Environment: Ubuntu runner with Python 3.x.
 - Steps:
-  - **install** job checks out the code, sets up Python, and runs `bash install.sh --terminal` to validate a clean installation.
-  - **upgrade** job installs the latest `main` branch via `install.sh`, then checks out the pull request and runs `./upgrade.sh --local --no-restart` to confirm the upgrade path succeeds.
+  - **install** job bootstraps the suite with caching, runs `./install.sh --clean --no-start`, lints documentation links, validates migrations, checks import resolution, lints seed fixtures, and executes pytest.
+  - **upgrade** job installs from the default branch, checks out the pull request changes, runs `./upgrade.sh --local --no-restart`, and repeats migration validation, import checks, fixture linting, and tests on the upgraded environment.
 
-These automated checks ensure installation guidance stays current without relying on historical one-off reports.
+The consolidated CI run provides the same installation assurance while combining it with the broader validation suite that already runs on every change.
