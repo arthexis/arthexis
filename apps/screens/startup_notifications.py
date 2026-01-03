@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import socket
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -11,8 +12,32 @@ from utils import revision
 
 logger = logging.getLogger(__name__)
 
-LCD_HIGH_LOCK_FILE = "lcd-high"
-LCD_LOW_LOCK_FILE = "lcd-low"
+LCD_LOCK_PATTERN = re.compile(
+    r"^lcd-(?P<channel>all|high|low)(?:-(?P<number>\d+))?(?:\.lck)?$"
+)
+
+
+def lcd_lock_name(channel: str, number: int | None = None) -> str:
+    normalized_channel = (channel or "").lower()
+    if normalized_channel not in {"all", "high", "low"}:
+        normalized_channel = "low"
+
+    suffix = ""
+    if number is None:
+        number = 0
+    try:
+        parsed_number = max(int(number), 0)
+    except (TypeError, ValueError):
+        parsed_number = 0
+    if parsed_number:
+        suffix = f"-{parsed_number}"
+
+    return f"lcd-{normalized_channel}{suffix}.lck"
+
+
+LCD_HIGH_LOCK_FILE = lcd_lock_name("high")
+LCD_LOW_LOCK_FILE = lcd_lock_name("low")
+LCD_ALL_LOCK_FILE = lcd_lock_name("all")
 LCD_LEGACY_FEATURE_LOCK = "lcd_screen_enabled.lck"
 LCD_RUNTIME_LOCK_FILE = "lcd_screen.lck"
 
@@ -52,19 +77,54 @@ def ensure_lock_dir(lock_dir: Path) -> Path | None:
     return lock_dir
 
 
+def iter_lcd_channel_lock_files(lock_dir: Path, channel: str) -> list[Path]:
+    if not lock_dir:
+        return []
+
+    normalized = (channel or "").lower()
+    if normalized not in {"all", "high", "low"}:
+        return []
+
+    matches: list[tuple[int, Path]] = []
+
+    for candidate in lock_dir.glob("lcd-*.lck"):
+        match = LCD_LOCK_PATTERN.match(candidate.name)
+        if not match:
+            continue
+        groups = match.groupdict()
+        if groups.get("channel") != normalized:
+            continue
+        try:
+            number = int(groups.get("number") or 0)
+        except (TypeError, ValueError):
+            number = 0
+        matches.append((max(number, 0), candidate))
+
+    legacy_path = lock_dir / f"lcd-{normalized}"
+    if legacy_path.exists():
+        matches.append((0, legacy_path))
+
+    matches.sort(key=lambda item: item[0])
+    return [path for _, path in matches]
+
+
 def lcd_feature_enabled(lock_dir: Path) -> bool:
     """Return True when the LCD feature flag or runtime lock is present."""
 
     if not lock_dir:
         return False
 
-    for name in (
-        LCD_HIGH_LOCK_FILE,
-        LCD_LOW_LOCK_FILE,
+    explicit_locks = [
         LCD_LEGACY_FEATURE_LOCK,
         LCD_RUNTIME_LOCK_FILE,
-    ):
+    ]
+
+    for name in explicit_locks:
         if (lock_dir / name).exists():
+            return True
+
+    for candidate in lock_dir.glob("lcd-*.lck"):
+        if LCD_LOCK_PATTERN.match(candidate.name):
             return True
     return False
 

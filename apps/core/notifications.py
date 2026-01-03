@@ -17,6 +17,7 @@ from pathlib import Path
 from apps.screens.startup_notifications import (
     LCD_HIGH_LOCK_FILE,
     LCD_LOW_LOCK_FILE,
+    lcd_lock_name,
     render_lcd_lock_file,
 )
 
@@ -79,12 +80,37 @@ class NotificationManager:
         # a non-interactive environment (e.g. service or CI).
         # Any failure will fall back to logging quietly.
 
-    def _write_lock_file(self, subject: str, body: str, *, sticky: bool = False) -> None:
+    def _write_lock_file(
+        self,
+        subject: str,
+        body: str,
+        *,
+        sticky: bool = False,
+        channel_type: str | None = None,
+        channel_number: int | None = None,
+    ) -> None:
         payload = render_lcd_lock_file(subject=subject[:64], body=body[:64])
-        target = self.sticky_lock_file if sticky else self.lock_file
+        if channel_type:
+            normalized = channel_type.lower()
+            if normalized == "both":
+                normalized = "all"
+            target = (
+                self.lock_file.parent
+                / lcd_lock_name(normalized, channel_number if channel_number else 0)
+            )
+        else:
+            target = self.sticky_lock_file if sticky else self.lock_file
         target.write_text(payload, encoding="utf-8")
 
-    def send(self, subject: str, body: str = "", *, sticky: bool = False) -> bool:
+    def send(
+        self,
+        subject: str,
+        body: str = "",
+        *,
+        sticky: bool = False,
+        channel_type: str | None = None,
+        channel_number: int | None = None,
+    ) -> bool:
         """Store *subject* and *body* in the LCD lock file when available.
 
         The method truncates each line to 64 characters. If the lock file is
@@ -94,19 +120,39 @@ class NotificationManager:
         """
 
         try:
-            self._write_lock_file(subject[:64], body[:64], sticky=sticky)
+            self._write_lock_file(
+                subject[:64],
+                body[:64],
+                sticky=sticky,
+                channel_type=channel_type,
+                channel_number=channel_number,
+            )
             return True
         except Exception as exc:  # pragma: no cover - filesystem dependent
             logger.warning("LCD lock file write failed: %s", exc)
             self._gui_display(subject, body)
             return True
 
-    def send_async(self, subject: str, body: str = "", *, sticky: bool = False) -> None:
+    def send_async(
+        self,
+        subject: str,
+        body: str = "",
+        *,
+        sticky: bool = False,
+        channel_type: str | None = None,
+        channel_number: int | None = None,
+    ) -> None:
         """Dispatch :meth:`send` on a background thread."""
 
         def _send() -> None:
             try:
-                self.send(subject, body, sticky=sticky)
+                self.send(
+                    subject,
+                    body,
+                    sticky=sticky,
+                    channel_type=channel_type,
+                    channel_number=channel_number,
+                )
             except Exception:
                 # Notification failures shouldn't affect callers.
                 pass
@@ -130,13 +176,39 @@ class NotificationManager:
 manager = NotificationManager()
 
 
-def notify(subject: str, body: str = "", *, sticky: bool = False) -> bool:
+def notify(
+    subject: str,
+    body: str = "",
+    *,
+    sticky: bool = False,
+    channel_type: str | None = None,
+    channel_number: int | None = None,
+) -> bool:
     """Convenience wrapper using the global :class:`NotificationManager`."""
 
-    return manager.send(subject=subject, body=body, sticky=sticky)
+    return manager.send(
+        subject=subject,
+        body=body,
+        sticky=sticky,
+        channel_type=channel_type,
+        channel_number=channel_number,
+    )
 
 
-def notify_async(subject: str, body: str = "", *, sticky: bool = False) -> None:
+def notify_async(
+    subject: str,
+    body: str = "",
+    *,
+    sticky: bool = False,
+    channel_type: str | None = None,
+    channel_number: int | None = None,
+) -> None:
     """Run :func:`notify` without blocking the caller."""
 
-    manager.send_async(subject=subject, body=body, sticky=sticky)
+    manager.send_async(
+        subject=subject,
+        body=body,
+        sticky=sticky,
+        channel_type=channel_type,
+        channel_number=channel_number,
+    )

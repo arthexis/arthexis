@@ -1033,6 +1033,20 @@ class NetMessage(Entity):
     subject = models.CharField(max_length=64, blank=True)
     body = models.CharField(max_length=256, blank=True)
     attachments = models.JSONField(blank=True, null=True)
+    lcd_channel = models.CharField(
+        max_length=10,
+        blank=True,
+        choices=(
+            ("low", "Low"),
+            ("high", "High"),
+            ("all", "All"),
+        ),
+        help_text="Optional LCD channel to write when the feature is enabled.",
+    )
+    lcd_channel_number = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Optional LCD channel number (0 for the default channel).",
+    )
     filter_node = models.ForeignKey(
         "Node",
         on_delete=models.SET_NULL,
@@ -1103,6 +1117,8 @@ class NetMessage(Entity):
         reach: NodeRole | str | None = None,
         seen: list[str] | None = None,
         attachments: list[dict[str, object]] | None = None,
+        lcd_channel: str | None = None,
+        lcd_channel_number: int | None = None,
     ):
         role = None
         if reach:
@@ -1114,12 +1130,23 @@ class NetMessage(Entity):
             role = NodeRole.objects.filter(name="Terminal").first()
         origin = Node.get_local()
         normalized_attachments = cls.normalize_attachments(attachments)
+        cleaned_channel = (lcd_channel or "").lower()
+        if cleaned_channel == "both":
+            cleaned_channel = "all"
+        if cleaned_channel not in {"", "high", "low", "all"}:
+            cleaned_channel = ""
+        try:
+            cleaned_channel_number = max(int(lcd_channel_number or 0), 0)
+        except (TypeError, ValueError):
+            cleaned_channel_number = 0
         msg = cls.objects.create(
             subject=subject[:64],
             body=body[:256],
             reach=role,
             node_origin=origin,
             attachments=normalized_attachments or None,
+            lcd_channel=cleaned_channel,
+            lcd_channel_number=cleaned_channel_number,
         )
         if normalized_attachments:
             msg.apply_attachments(normalized_attachments)
@@ -1227,6 +1254,10 @@ class NetMessage(Entity):
             "sender": sender_id,
             "origin": origin_uuid,
         }
+        if self.lcd_channel:
+            payload["lcd_channel"] = self.lcd_channel
+        if self.lcd_channel_number:
+            payload["lcd_channel_number"] = self.lcd_channel_number
         if self.attachments:
             payload["attachments"] = self.attachments
         if self.filter_node:
@@ -1311,6 +1342,15 @@ class NetMessage(Entity):
         reach_role = None
         if reach_name:
             reach_role = NodeRole.objects.filter(name=reach_name).first()
+        lcd_channel = (data.get("lcd_channel") or "").lower()
+        if lcd_channel == "both":
+            lcd_channel = "all"
+        if lcd_channel not in {"", "high", "low", "all"}:
+            lcd_channel = ""
+        try:
+            lcd_channel_number = max(int(data.get("lcd_channel_number") or 0), 0)
+        except (TypeError, ValueError):
+            lcd_channel_number = 0
         filter_node_uuid = data.get("filter_node")
         filter_node = None
         if filter_node_uuid:
@@ -1348,6 +1388,8 @@ class NetMessage(Entity):
                 "reach": reach_role,
                 "node_origin": origin_node,
                 "attachments": attachments or None,
+                "lcd_channel": lcd_channel,
+                "lcd_channel_number": lcd_channel_number,
                 "filter_node": filter_node,
                 "filter_node_feature": filter_feature,
                 "filter_node_role": filter_role,
@@ -1366,6 +1408,12 @@ class NetMessage(Entity):
             if msg.node_origin_id is None and origin_node:
                 msg.node_origin = origin_node
                 update_fields.append("node_origin")
+            if msg.lcd_channel != lcd_channel:
+                msg.lcd_channel = lcd_channel
+                update_fields.append("lcd_channel")
+            if msg.lcd_channel_number != lcd_channel_number:
+                msg.lcd_channel_number = lcd_channel_number
+                update_fields.append("lcd_channel_number")
             if attachments and msg.attachments != attachments:
                 msg.attachments = attachments
                 update_fields.append("attachments")
@@ -1399,7 +1447,15 @@ class NetMessage(Entity):
             )
             return
 
-        displayed = notify(self.subject, self.body)
+        channel_type = self.lcd_channel or None
+        channel_number = self.lcd_channel_number or 0
+        displayed = notify(
+            self.subject,
+            self.body,
+            sticky=channel_type == "high",
+            channel_type=channel_type,
+            channel_number=channel_number,
+        )
         local = Node.get_local()
         if displayed:
             cutoff = timezone.now() - timedelta(hours=24)

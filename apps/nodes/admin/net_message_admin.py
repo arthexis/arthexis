@@ -33,7 +33,7 @@ class NetMessageAdmin(EntityModelAdmin):
     readonly_fields = ("complete",)
     actions = ["send_messages"]
     fieldsets = (
-        (None, {"fields": ("subject", "body")}),
+        (None, {"fields": ("subject", "body", "lcd_channel", "lcd_channel_number")}),
         (
             "Filters",
             {

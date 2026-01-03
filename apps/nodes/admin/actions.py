@@ -74,11 +74,15 @@ def send_net_message(modeladmin, request, queryset):
         subject = form.cleaned_data["subject"]
         body = form.cleaned_data["body"]
         created = 0
+        lcd_channel = form.cleaned_data.get("lcd_channel") or ""
+        lcd_channel_number = form.cleaned_data.get("lcd_channel_number") or 0
         for node in nodes:
             message = NetMessage.objects.create(
                 subject=subject,
                 body=body,
                 filter_node=node,
+                lcd_channel=lcd_channel,
+                lcd_channel_number=lcd_channel_number,
             )
             message.propagate()
             created += 1
@@ -105,7 +109,7 @@ def send_net_message(modeladmin, request, queryset):
         "action_checkbox_name": helpers.ACTION_CHECKBOX_NAME,
         "adminform": helpers.AdminForm(
             form,
-            [(None, {"fields": ("subject", "body")})],
+            [(None, {"fields": ("subject", "body", "lcd_channel", "lcd_channel_number")})],
             {},
         ),
         "form": form,

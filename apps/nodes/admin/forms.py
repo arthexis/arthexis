@@ -46,6 +46,22 @@ class SendNetMessageForm(forms.Form):
         required=False,
         widget=forms.Textarea(attrs={"rows": 4}),
     )
+    lcd_channel = forms.ChoiceField(
+        label=_("LCD channel"),
+        required=False,
+        choices=(
+            ("", _("Default")),
+            ("low", _("Low")),
+            ("high", _("High")),
+            ("all", _("All")),
+        ),
+    )
+    lcd_channel_number = forms.IntegerField(
+        label=_("LCD channel number"),
+        required=False,
+        min_value=0,
+        help_text=_("Channel number (0 for the default channel)."),
+    )
 
     def clean(self):
         cleaned = super().clean()
@@ -55,6 +71,11 @@ class SendNetMessageForm(forms.Form):
             raise forms.ValidationError(_("Enter a subject or body to send."))
         cleaned["subject"] = subject
         cleaned["body"] = body
+        try:
+            channel_number = int(cleaned.get("lcd_channel_number") or 0)
+        except (TypeError, ValueError):
+            channel_number = 0
+        cleaned["lcd_channel_number"] = max(channel_number, 0)
         return cleaned
 
 
@@ -117,6 +138,8 @@ class QuickSendForm(forms.ModelForm):
             "subject",
             "body",
             "attachments",
+            "lcd_channel",
+            "lcd_channel_number",
             "filter_node",
             "filter_node_feature",
             "filter_node_role",

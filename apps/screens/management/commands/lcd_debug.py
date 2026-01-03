@@ -240,8 +240,8 @@ class Command(BaseCommand):
         work_file = base_dir / "work" / WORK_FILE.name
         lines = ["Encoding health checks:"]
         targets = [
-            ("lcd-high", lock_dir / LCD_HIGH_LOCK_FILE),
-            ("lcd-low", lock_dir / LCD_LOW_LOCK_FILE),
+            (LCD_HIGH_LOCK_FILE, lock_dir / LCD_HIGH_LOCK_FILE),
+            (LCD_LOW_LOCK_FILE, lock_dir / LCD_LOW_LOCK_FILE),
             ("lcd-screen", work_file),
         ]
 

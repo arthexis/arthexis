@@ -6,13 +6,15 @@ import pytest
 from django.core.management import call_command
 from django.test import override_settings
 
+from apps.screens.startup_notifications import LCD_HIGH_LOCK_FILE, LCD_LOW_LOCK_FILE
+
 
 @pytest.mark.django_db
 def test_generates_debug_report(monkeypatch, tmp_path: Path, capsys):
     lock_dir = tmp_path / ".locks"
     lock_dir.mkdir(parents=True, exist_ok=True)
-    (lock_dir / "lcd-high").write_text("hello\nworld\n", encoding="utf-8")
-    (lock_dir / "lcd-low").write_text("", encoding="utf-8")
+    (lock_dir / LCD_HIGH_LOCK_FILE).write_text("hello\nworld\n", encoding="utf-8")
+    (lock_dir / LCD_LOW_LOCK_FILE).write_text("", encoding="utf-8")
     (lock_dir / "service.lck").write_text("lcd-demo", encoding="utf-8")
 
     work_dir = tmp_path / "work"
@@ -46,7 +48,7 @@ def test_generates_debug_report(monkeypatch, tmp_path: Path, capsys):
     assert "LCD timings:" in report
     assert "After 30s" in report
     assert "After 60s" in report
-    assert "lcd-high" in report
+    assert LCD_HIGH_LOCK_FILE in report
     assert "lcd-screen.txt" in report
     assert "lcd-screen.log" in report
     assert "Encoding health checks:" in report

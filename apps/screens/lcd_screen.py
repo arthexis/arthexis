@@ -1,10 +1,12 @@
 """Standalone LCD screen updater with predictable rotations.
 
-The script polls ``.locks/lcd-high`` and ``.locks/lcd-low`` for payload
-text and writes it to the attached LCD1602 display. The screen rotates
-every 10 seconds across three states in a fixed order: High, Low, and
-Time/Temp. Each row scrolls independently when it exceeds 16 characters;
-shorter rows remain static.
+The script polls LCD lock files (e.g. ``.locks/lcd-high.lck``) for
+payload text and writes it to the attached LCD1602 display. When an
+``lcd-all`` lock exists it overrides both high and low payloads. When
+multiple numbered locks exist for a channel, they are displayed in
+ascending order. The screen rotates every 10 seconds across a fixed set
+of states. Each row scrolls independently when it exceeds 16
+characters; shorter rows remain static.
 """
 
 from __future__ import annotations
@@ -68,6 +70,7 @@ from apps.screens.animations import AnimationLoadError, default_tree_frames
 from apps.screens.startup_notifications import (
     LCD_HIGH_LOCK_FILE,
     LCD_LOW_LOCK_FILE,
+    iter_lcd_channel_lock_files,
     read_lcd_lock_file,
 )
 
@@ -258,6 +261,39 @@ def _read_lock_file(lock_file: Path) -> LockPayload:
     if payload is None:
         return LockPayload("", "", DEFAULT_SCROLL_MS)
     return LockPayload(payload.subject, payload.body, DEFAULT_SCROLL_MS)
+
+
+def _discover_channel_files(lock_dir: Path) -> dict[str, list[Path]]:
+    files = {
+        "all": iter_lcd_channel_lock_files(lock_dir, "all"),
+        "high": iter_lcd_channel_lock_files(lock_dir, "high"),
+        "low": iter_lcd_channel_lock_files(lock_dir, "low"),
+    }
+
+    if not files["high"]:
+        files["high"] = [HIGH_LOCK_FILE]
+    if not files["low"]:
+        files["low"] = [LOW_LOCK_FILE]
+    return files
+
+
+def _channel_payload(
+    channel_files: dict[str, list[Path]],
+    channel_indices: dict[str, int],
+    channel_label: str,
+    *,
+    advance: bool,
+) -> LockPayload:
+    effective = "all" if channel_files.get("all") else channel_label
+    paths = channel_files.get(effective) or []
+    if not paths:
+        return LockPayload("", "", DEFAULT_SCROLL_MS)
+
+    index = channel_indices.get(effective, 0) % len(paths)
+    payload = _read_lock_file(paths[index])
+    if advance:
+        channel_indices[effective] = (index + 1) % len(paths)
+    return payload
 
 
 def _payload_has_text(payload: LockPayload) -> bool:
@@ -689,11 +725,8 @@ def _initialize_lcd(reset: bool = True) -> CharLCD1602:
 def main() -> None:  # pragma: no cover - hardware dependent
     lcd = None
     display_state: DisplayState | None = None
-    next_display_state: DisplayState | None = None
     high_payload = LockPayload("", "", DEFAULT_SCROLL_MS)
     low_payload = LockPayload("", "", DEFAULT_SCROLL_MS)
-    high_mtime = 0.0
-    low_mtime = 0.0
     rotation_deadline = 0.0
     scroll_scheduler = ScrollScheduler()
     state_order = ("high", "low", "clock")
@@ -703,6 +736,8 @@ def main() -> None:  # pragma: no cover - hardware dependent
     watchdog = LCDWatchdog()
     frame_writer: LCDFrameWriter = LCDFrameWriter(None)
     paused = False
+    channel_indices = {"all": 0, "high": 0, "low": 0}
+    channel_files = _discover_channel_files(LOCK_DIR)
 
     _clear_low_lock_file()
 
@@ -730,7 +765,6 @@ def main() -> None:  # pragma: no cover - hardware dependent
             if paused:
                 frame_writer = LCDFrameWriter(None)
                 display_state = None
-                next_display_state = None
                 time.sleep(0.1)
                 continue
 
@@ -738,37 +772,27 @@ def main() -> None:  # pragma: no cover - hardware dependent
                 now = time.monotonic()
 
                 if display_state is None or now >= rotation_deadline:
-                    high_available = True
-                    try:
-                        high_stat = HIGH_LOCK_FILE.stat()
-                        if high_stat.st_mtime != high_mtime:
-                            high_payload = _read_lock_file(HIGH_LOCK_FILE)
-                            high_mtime = high_stat.st_mtime
-                    except OSError:
-                        high_payload = LockPayload("", "", DEFAULT_SCROLL_MS)
-                        high_mtime = 0.0
-                        high_available = False
-
-                    low_available = True
-                    try:
-                        low_stat = LOW_LOCK_FILE.stat()
-                        if low_stat.st_mtime != low_mtime:
-                            low_payload = _read_lock_file(LOW_LOCK_FILE)
-                            low_mtime = low_stat.st_mtime
-                    except OSError:
-                        low_payload = LockPayload("", "", DEFAULT_SCROLL_MS)
-                        low_mtime = 0.0
-                        low_available = False
+                    channel_files = _discover_channel_files(LOCK_DIR)
+                    all_available = bool(channel_files.get("all"))
 
                     low_payload = _select_low_payload(
-                        low_payload,
+                        _channel_payload(
+                            channel_files, channel_indices, "low", advance=False
+                        ),
                         frame_cycle=GAP_ANIMATION_CYCLE,
                         scroll_ms=GAP_ANIMATION_SCROLL_MS,
                     )
-                    low_available = _payload_has_text(low_payload)
+                    high_payload = _channel_payload(
+                        channel_files, channel_indices, "high", advance=False
+                    )
+
+                    high_available = all_available or _payload_has_text(high_payload)
+                    low_available = all_available or _payload_has_text(low_payload)
 
                     previous_order = state_order
-                    if high_available:
+                    if all_available:
+                        state_order = ("all", "clock")
+                    elif high_available:
                         state_order = ("high", "low", "clock") if low_available else ("high", "clock")
                     else:
                         state_order = ("low", "clock") if low_available else ("clock",)
@@ -782,13 +806,29 @@ def main() -> None:  # pragma: no cover - hardware dependent
                     else:
                         state_index = 0
 
-                    def _payload_for_state(index: int) -> LockPayload:
+                    def _payload_for_state(index: int, *, advance: bool) -> LockPayload:
                         nonlocal clock_cycle
                         state_label = state_order[index]
                         if state_label == "high":
-                            return high_payload
+                            return _channel_payload(
+                                channel_files, channel_indices, "high", advance=advance
+                            )
                         if state_label == "low":
-                            return _refresh_uptime_payload(low_payload)
+                            low_message = _select_low_payload(
+                                _channel_payload(
+                                    channel_files,
+                                    channel_indices,
+                                    "low",
+                                    advance=advance,
+                                ),
+                                frame_cycle=GAP_ANIMATION_CYCLE,
+                                scroll_ms=GAP_ANIMATION_SCROLL_MS,
+                            )
+                            return _refresh_uptime_payload(low_message)
+                        if state_label == "all":
+                            return _channel_payload(
+                                channel_files, channel_indices, "all", advance=advance
+                            )
                         if _lcd_clock_enabled():
                             use_fahrenheit = clock_cycle % 2 == 0
                             line1, line2, speed, _ = _clock_payload(
@@ -798,7 +838,7 @@ def main() -> None:  # pragma: no cover - hardware dependent
                             return LockPayload(line1, line2, speed)
                         return LockPayload("", "", DEFAULT_SCROLL_MS)
 
-                    current_payload = _payload_for_state(state_index)
+                    current_payload = _payload_for_state(state_index, advance=True)
                     _warn_on_non_ascii_payload(current_payload, state_order[state_index])
                     display_state = _prepare_display_state(
                         current_payload.line1,
@@ -808,13 +848,8 @@ def main() -> None:  # pragma: no cover - hardware dependent
                     rotation_deadline = now + ROTATION_SECONDS
 
                     next_index = (state_index + 1) % len(state_order)
-                    next_payload = _payload_for_state(next_index)
+                    next_payload = _payload_for_state(next_index, advance=False)
                     _warn_on_non_ascii_payload(next_payload, state_order[next_index])
-                    next_display_state = _prepare_display_state(
-                        next_payload.line1,
-                        next_payload.line2,
-                        next_payload.scroll_ms,
-                    )
 
                 if lcd is None:
                     lcd = _initialize_lcd()
@@ -836,7 +871,6 @@ def main() -> None:  # pragma: no cover - hardware dependent
                             lcd = None
                             frame_writer = LCDFrameWriter(None)
                             display_state = None
-                            next_display_state = None
                         delay = health.record_failure()
                         time.sleep(delay)
                     scroll_scheduler.advance(display_state.scroll_sec or 0.5)
@@ -846,25 +880,14 @@ def main() -> None:  # pragma: no cover - hardware dependent
 
                 if time.monotonic() >= rotation_deadline:
                     state_index = (state_index + 1) % len(state_order)
-                    display_state = next_display_state
-
-                    # Prepare the following state in advance for predictable timing.
-                    high_payload = _read_lock_file(HIGH_LOCK_FILE)
-                    low_payload = _read_lock_file(LOW_LOCK_FILE)
-                    next_index = (state_index + 1) % len(state_order)
-                    next_payload = _payload_for_state(next_index)
-                    next_display_state = _prepare_display_state(
-                        next_payload.line1,
-                        next_payload.line2,
-                        next_payload.scroll_ms,
-                    )
-                    rotation_deadline = time.monotonic() + ROTATION_SECONDS
+                    display_state = None
+                    rotation_deadline = 0.0
+                    continue
             except LCDUnavailableError as exc:
                 logger.warning("LCD unavailable: %s", exc)
                 lcd = None
                 frame_writer = LCDFrameWriter(None)
                 display_state = None
-                next_display_state = None
                 delay = health.record_failure()
                 time.sleep(delay)
             except Exception as exc:
@@ -872,7 +895,6 @@ def main() -> None:  # pragma: no cover - hardware dependent
                 _blank_display(lcd)
                 lcd = None
                 display_state = None
-                next_display_state = None
                 frame_writer = LCDFrameWriter(None)
                 delay = health.record_failure()
                 time.sleep(delay)
