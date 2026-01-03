@@ -23,7 +23,7 @@ This guide explains how to install, operate, upgrade, and remove an Arthexis nod
 
 ## 1. Installation scripts (`install.sh` and `install.bat`)
 
-Run the installer from the project root. Every installer writes a timestamped log to `logs/install.log`, making it easy to review what happened if anything fails.【F:install.sh†L10-L16】【F:install.sh†L26-L30】 The shell variant also bootstraps helper tools shared with other scripts (logging, nginx maintenance, and desktop shortcut utilities).【F:install.sh†L6-L9】
+Run the installer from the project root. Every installer writes a timestamped log to `logs/install.log`, making it easy to review what happened if anything fails.【F:install.sh†L10-L16】【F:install.sh†L26-L30】 The shell variant also bootstraps helper tools shared with other scripts (logging and desktop shortcut utilities).【F:install.sh†L6-L9】
 
 ### 1.1 Linux installer flags
 
@@ -32,8 +32,7 @@ Run the installer from the project root. Every installer writes a timestamped lo
 | Flag | Purpose |
 | --- | --- |
 | `--service NAME` | Registers the deployment under a specific systemd service name. When present, the installer records the value in `.locks/service.lck`, enabling later scripts to control that service instead of spawning foreground processes.【F:install.sh†L221-L225】【F:install.sh†L519-L524】 |
-| `--internal` / `--public` | Chooses the nginx topology. `--internal` listens on HTTP ports 80/8000/8080/8900 for LAN-only access, while `--public` provisions TLS-forwarding on 80/443. Both modes proxy to the configured backend port (default 8888).【F:install.sh†L226-L233】【F:install.sh†L305-L373】 |
-| `--port PORT` | Overrides the backend port used by Django when nginx proxies traffic. Defaults to 8888 for every role unless explicitly overridden.【F:install.sh†L234-L237】 |
+| `--port PORT` | Overrides the backend port used by Django. Defaults to 8888 for every role unless explicitly overridden.【F:install.sh†L234-L237】 |
 | `--upgrade` | Runs the installer in upgrade mode, preserving state while refreshing configuration. Often paired with role flags to recompute dependencies.【F:install.sh†L239-L242】【F:install.sh†L578-L599】 |
 | `--auto-upgrade` | Enables unattended upgrades (disabled by default) and writes `.locks/auto_upgrade.lck` so Celery schedules the checks.【F:install.sh†L243-L259】【F:install.sh†L578-L603】 |
 | `--fixed` | Leaves auto-upgrade off and removes any existing automation lock so upgrades stay manual.【F:install.sh†L247-L259】【F:install.sh†L601-L603】 |
@@ -52,12 +51,12 @@ Role flags set opinionated defaults and verify external dependencies before proc
 run on Ubuntu 22.04 or later with an `eth0` interface present before you install or rerun `./configure.sh` to change into one
 of those roles.
 
-- **`--satellite`** – Requires nginx and Redis to be installed and running. Keeps nginx internal, enables Celery, and marks the node as `Satellite`; add `--stable` or `--unstable` to opt into auto-upgrades. Redis connection details are written to `redis.env`.【F:install.sh†L303-L310】【F:install.sh†L320-L373】
-- **`--terminal`** – The lightest profile. Keeps nginx internal, enables Celery for background tasks, and defaults to fixed upgrades; choose `--unstable`/`--latest` or `--stable` to enable auto-upgrade on your preferred channel.【F:install.sh†L312-L317】【F:install.sh†L320-L373】
-- **`--control`** – For lab control stations. Requires nginx and Redis, enables Celery, LCD control, and writes the `control.lck` flag so future scripts manage the accessory services. Starts services immediately unless you pass `--no-start`, and defaults to fixed upgrades unless you select a channel with `--unstable`/`--latest` or `--stable`.【F:install.sh†L24-L47】【F:install.sh†L319-L333】【F:install.sh†L320-L341】
-- **`--watchtower`** – Cloud-oriented role. Requires nginx, flips nginx into public mode, enables Celery, and records the `Watchtower` role for downstream tooling. Add `--stable` or `--unstable` when you want auto-upgrades for this role.【F:install.sh†L334-L340】【F:install.sh†L320-L373】
+- **`--satellite`** – Enables Celery, marks the node as `Satellite`, and writes Redis connection details to `redis.env`; add `--stable` or `--unstable` to opt into auto-upgrades.【F:install.sh†L303-L310】【F:install.sh†L320-L373】
+- **`--terminal`** – The lightest profile. Enables Celery for background tasks and defaults to fixed upgrades; choose `--unstable`/`--latest` or `--stable` to enable auto-upgrade on your preferred channel.【F:install.sh†L312-L317】【F:install.sh†L320-L373】
+- **`--control`** – For lab control stations. Enables Celery, LCD control, and writes the `control.lck` flag so future scripts manage the accessory services. Starts services immediately unless you pass `--no-start`, and defaults to fixed upgrades unless you select a channel with `--unstable`/`--latest` or `--stable`.【F:install.sh†L24-L47】【F:install.sh†L319-L333】【F:install.sh†L320-L341】
+- **`--watchtower`** – Cloud-oriented role. Enables Celery, records the `Watchtower` role for downstream tooling, and supports the same auto-upgrade options as the other presets.【F:install.sh†L334-L340】【F:install.sh†L320-L373】
 
-During installation, the script ensures the Python virtual environment exists, seeds nginx fallback assets, and writes fully rendered nginx vhosts (public or internal) with the correct upstream port substitution.【F:install.sh†L430-L515】 System prompts appear when prerequisites (nginx or Redis) are missing, explaining how to install them on Debian/Ubuntu systems.【F:install.sh†L33-L74】【F:install.sh†L124-L156】
+During installation, the script ensures the Python virtual environment exists and prepares application metadata and dependencies. Nginx configuration is now managed exclusively through `apps.nginx` tooling rather than the lifecycle shell scripts.【F:install.sh†L6-L9】【F:apps/nginx/management/commands/nginx_configure.py†L7-L20】 System prompts appear when prerequisites such as Redis are missing, explaining how to install them on Debian/Ubuntu systems.【F:install.sh†L33-L74】【F:install.sh†L124-L156】
 
 ### 1.3 Windows installer behaviour
 

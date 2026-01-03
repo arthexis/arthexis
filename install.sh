@@ -33,8 +33,6 @@ exec > >(tee "$LOG_FILE") 2>&1
 
 # Default configuration flags populated by CLI parsing below.
 SERVICE=""
-NGINX_MODE="internal"
-DISABLE_NGINX=false
 PORT=""
 AUTO_UPGRADE=false
 CHANNEL="stable"
@@ -53,7 +51,7 @@ START_SERVICES=false
 REPAIR=false
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--public|--internal|--no-nginx] [--port PORT] [--upgrade] [--fixed] [--stable|--regular|--normal|--unstable|--latest] [--satellite] [--terminal] [--control] [--watchtower] [--celery] [--embedded|--systemd] [--lcd-screen|--no-lcd-screen] [--clean] [--start|--no-start] [--repair]" >&2
+    echo "Usage: $0 [--service NAME] [--port PORT] [--upgrade] [--fixed] [--stable|--regular|--normal|--unstable|--latest] [--satellite] [--terminal] [--control] [--watchtower] [--celery] [--embedded|--systemd] [--lcd-screen|--no-lcd-screen] [--clean] [--start|--no-start] [--repair]" >&2
     exit 1
 }
 
@@ -199,19 +197,6 @@ while [[ $# -gt 0 ]]; do
             SERVICE="$2"
             shift 2
             ;;
-        --internal)
-            NGINX_MODE="internal"
-            shift
-            ;;
-        --public)
-            NGINX_MODE="public"
-            shift
-            ;;
-        --no-nginx)
-            DISABLE_NGINX=true
-            NGINX_MODE="none"
-            shift
-            ;;
         --port)
             [ -z "$2" ] && usage
             PORT="$2"
@@ -282,7 +267,6 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --satellite)
-            NGINX_MODE="internal"
             SERVICE="arthexis"
             ENABLE_CELERY=true
             NODE_ROLE="Satellite"
@@ -290,14 +274,12 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --terminal)
-            NGINX_MODE="internal"
             SERVICE="arthexis"
             ENABLE_CELERY=true
             NODE_ROLE="Terminal"
             shift
             ;;
         --control)
-            NGINX_MODE="internal"
             SERVICE="arthexis"
             ENABLE_CELERY=true
             ENABLE_LCD_SCREEN=true
@@ -311,7 +293,6 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --watchtower)
-            NGINX_MODE="public"
             SERVICE="arthexis"
             ENABLE_CELERY=true
             NODE_ROLE="Watchtower"
@@ -341,9 +322,6 @@ if [ "$REPAIR" = true ]; then
                     ;;
             esac
         done < "$LOCK_DIR_PATH/systemd_services.lck"
-    fi
-    if [ -f "$LOCK_DIR_PATH/nginx_mode.lck" ]; then
-        NGINX_MODE="$(cat "$LOCK_DIR_PATH/nginx_mode.lck")"
     fi
     if [ "$ENABLE_CELERY" = false ] && [ -f "$LOCK_DIR_PATH/celery.lck" ]; then
         ENABLE_CELERY=true
@@ -462,7 +440,6 @@ else
 fi
 
 echo "$PORT" > "$LOCK_DIR/backend_port.lck"
-echo "$NGINX_MODE" > "$LOCK_DIR/nginx_mode.lck"
 echo "$NODE_ROLE" > "$LOCK_DIR/role.lck"
 
 source .venv/bin/activate

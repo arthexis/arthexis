@@ -59,7 +59,6 @@ LOCK_DIR="$BASE_DIR/.locks"
 SYSTEMD_UNITS_LOCK="$LOCK_DIR/systemd_services.lck"
 SERVICE_NAME=""
 [ -f "$LOCK_DIR/service.lck" ] && SERVICE_NAME="$(cat "$LOCK_DIR/service.lck")"
-DISABLE_NGINX=0
 
 mkdir -p "$LOCK_DIR"
 
@@ -779,11 +778,6 @@ while [[ $# -gt 0 ]]; do
       ;;
     --detached)
       DETACHED=1
-      shift
-      ;;
-    --no-nginx)
-      DISABLE_NGINX=1
-      FORWARDED_ARGS+=("$1")
       shift
       ;;
     --check)
