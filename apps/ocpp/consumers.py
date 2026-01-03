@@ -57,6 +57,7 @@ from .models import (
     CustomerInformationChunk,
     DisplayMessageNotification,
     DisplayMessage,
+    ClearedChargingLimitEvent,
 )
 from apps.links.reference_utils import host_is_local_loopback
 from .evcs_discovery import (
@@ -1966,14 +1967,56 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
     async def _handle_cleared_charging_limit_action(
         self, payload, msg_id, raw, text_data
     ):
+        payload_data = payload if isinstance(payload, dict) else {}
+        evse_id_value = payload_data.get("evseId")
+        try:
+            evse_id = int(evse_id_value) if evse_id_value is not None else None
+        except (TypeError, ValueError):
+            evse_id = None
+        source_value = str(payload_data.get("chargingLimitSource") or "").strip()
+        details: list[str] = []
+        if source_value:
+            details.append(f"source={source_value}")
+        if evse_id is not None:
+            details.append(f"evseId={evse_id}")
         message = "ClearedChargingLimit"
-        if payload:
-            try:
-                payload_text = json.dumps(payload, separators=(",", ":"))
-            except (TypeError, ValueError):
-                payload_text = str(payload)
-            message += f": {payload_text}"
+        if details:
+            message += f": {', '.join(details)}"
+
         store.add_log(self.store_key, message, log_type="charger")
+
+        def _persist_cleared_limit() -> None:
+            target = getattr(self, "aggregate_charger", None) or getattr(
+                self, "charger", None
+            )
+            connector_hint = getattr(self, "connector_value", None)
+            if target is None and getattr(self, "charger_id", None):
+                target = (
+                    Charger.objects.filter(
+                        charger_id=self.charger_id,
+                        connector_id=connector_hint,
+                    ).first()
+                    or Charger.objects.filter(
+                        charger_id=self.charger_id, connector_id__isnull=True
+                    ).first()
+                )
+            if target is None and getattr(self, "charger_id", None):
+                target, _created = Charger.objects.get_or_create(
+                    charger_id=self.charger_id,
+                    connector_id=connector_hint,
+                )
+            if target is None:
+                return
+
+            ClearedChargingLimitEvent.objects.create(
+                charger=target,
+                ocpp_message_id=msg_id or "",
+                evse_id=evse_id,
+                charging_limit_source=source_value,
+                raw_payload=payload_data,
+            )
+
+        await database_sync_to_async(_persist_cleared_limit)()
         return {}
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "NotifyReport")

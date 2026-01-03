@@ -18,6 +18,7 @@ from apps.ocpp.models import (
     CustomerInformationChunk,
     DisplayMessageNotification,
     DisplayMessage,
+    ClearedChargingLimitEvent,
 )
 from apps.protocols.models import ProtocolCall as ProtocolCallModel
 
@@ -61,14 +62,44 @@ async def test_cleared_charging_limit_logs_payload():
     consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "CP-201"
 
+    calls = getattr(consumer._handle_cleared_charging_limit_action, "__protocol_calls__", set())
+    assert ("ocpp201", ProtocolCallModel.CP_TO_CSMS, "ClearedChargingLimit") in calls
+    assert ("ocpp21", ProtocolCallModel.CP_TO_CSMS, "ClearedChargingLimit") in calls
+
     result = await consumer._handle_cleared_charging_limit_action(
-        {"evseId": 1}, "msg-1", "", ""
+        {"evseId": 1, "chargingLimitSource": "EMS"}, "msg-1", "", ""
     )
 
     assert result == {}
     entries = list(store.logs["charger"][consumer.store_key])
     assert any("ClearedChargingLimit" in entry for entry in entries)
     assert any("evseId" in entry for entry in entries)
+    assert any("EMS" in entry for entry in entries)
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+async def test_cleared_charging_limit_persists_event():
+    charger = await database_sync_to_async(Charger.objects.create)(charger_id="CP-202")
+    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = "CP-202"
+    consumer.charger = charger
+    consumer.aggregate_charger = None
+
+    payload = {"evseId": 3, "chargingLimitSource": "EMS"}
+
+    result = await consumer._handle_cleared_charging_limit_action(
+        payload, "msg-2", "", ""
+    )
+
+    assert result == {}
+    event = await database_sync_to_async(ClearedChargingLimitEvent.objects.get)(
+        charger=charger
+    )
+    assert event.evse_id == 3
+    assert event.charging_limit_source == "EMS"
+    assert event.ocpp_message_id == "msg-2"
+    assert event.raw_payload["evseId"] == 3
 
 
 @pytest.mark.anyio
