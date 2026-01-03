@@ -25,6 +25,68 @@
     margin: 0;
   }
 
+  .upgrade-report .upgrade-report-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+
+  .upgrade-report .upgrade-summary-card {
+    border: 1px solid var(--border-color, #e0e0e0);
+    border-radius: 4px;
+    padding: 0.75rem 1rem;
+    background: #fff;
+  }
+
+  .upgrade-report .upgrade-summary-card h4 {
+    margin: 0 0 0.35rem 0;
+    font-size: 0.95rem;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+  }
+
+  .upgrade-report .upgrade-summary-value {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 0;
+    word-break: break-word;
+  }
+
+  .upgrade-report .upgrade-status-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.65rem;
+    border-radius: 9999px;
+    font-weight: 600;
+    font-size: 0.95rem;
+  }
+
+  .upgrade-report .state-ok {
+    background: #e6f4ea;
+    color: #0d652d;
+  }
+
+  .upgrade-report .state-warning {
+    background: #fef3c7;
+    color: #92400e;
+  }
+
+  .upgrade-report .state-error {
+    background: #fee2e2;
+    color: #991b1b;
+  }
+
+  .upgrade-report .upgrade-issues {
+    margin: 0.25rem 0 0;
+    padding-left: 1.25rem;
+  }
+
+  .upgrade-report .upgrade-issues li {
+    margin: 0.15rem 0;
+  }
+
   .upgrade-report .upgrade-report-actions {
     display: flex;
     flex-wrap: wrap;
@@ -110,6 +172,56 @@
       </div>
     </div>
     {% with report=auto_upgrade_report %}
+    <div class="upgrade-report-summary">
+      <div class="upgrade-summary-card">
+        <h4>{% trans "Overall status" %}</h4>
+        <p class="upgrade-summary-value">
+          <span class="upgrade-status-chip state-{{ report.summary.state }}">
+            {{ report.summary.headline }}
+          </span>
+        </p>
+        {% if report.summary.issues %}
+          <ul class="upgrade-issues">
+            {% for issue in report.summary.issues %}
+            <li class="state-{{ issue.severity }}">{{ issue.label }}</li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <p class="help">{% trans "No outstanding issues detected." %}</p>
+        {% endif %}
+      </div>
+      <div class="upgrade-summary-card">
+        <h4>{% trans "Current channel" %}</h4>
+        <p class="upgrade-summary-value"><code>{{ report.settings.channel }}</code></p>
+        {% if report.settings.raw_mode and report.settings.raw_mode|lower != report.settings.channel %}
+          <p class="help">{% blocktrans %}Legacy mode value: {{ report.settings.raw_mode }}{% endblocktrans %}</p>
+        {% endif %}
+      </div>
+      <div class="upgrade-summary-card">
+        <h4>{% trans "Next scheduled run" %}</h4>
+        <p class="upgrade-summary-value">
+          {% if report.summary.next_run %}
+            {{ report.summary.next_run }}
+          {% else %}
+            <em>{% trans "Not scheduled" %}</em>
+          {% endif %}
+        </p>
+        {% if report.schedule.description %}
+          <p class="help">{{ report.schedule.description }}</p>
+        {% endif %}
+      </div>
+      <div class="upgrade-summary-card">
+        <h4>{% trans "Last activity" %}</h4>
+        {% if report.summary.last_activity.message %}
+          <p class="upgrade-summary-value">
+            <code>{{ report.summary.last_activity.message }}</code>
+          </p>
+          <p class="help">{{ report.summary.last_activity.timestamp|default:"" }}</p>
+        {% else %}
+          <p class="upgrade-summary-value"><em>{% trans "No activity recorded yet." %}</em></p>
+        {% endif %}
+      </div>
+    </div>
     <div class="upgrade-report-section">
       <h3>{% trans "Settings" %}</h3>
       <dl>

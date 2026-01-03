@@ -1324,11 +1324,85 @@ def _build_auto_upgrade_report(
     }
     settings_info.update(revision_details)
 
+    log_entries = log_info.get("entries", [])
+    last_log_entry = log_entries[0] if log_entries else {}
+
+    issues: list[dict[str, str]] = []
+    status_state = "ok"
+
+    def note(label: str, *, severity: str = "warning") -> None:
+        nonlocal status_state
+        issues.append({"label": label, "severity": severity})
+        if severity == "error":
+            status_state = "error"
+        elif status_state != "error":
+            status_state = severity
+
+    if log_info.get("error"):
+        note(str(log_info["error"]), severity="error")
+
+    if settings_info.get("read_error"):
+        note(
+            str(
+                _("The auto-upgrade mode could not be read; verify the lock file permissions.")),
+            severity="error",
+        )
+
+    if not settings_info.get("enabled"):
+        note(str(_("Auto-upgrades are currently disabled.")), severity="warning")
+
+    if schedule_info.get("available"):
+        if not schedule_info.get("configured"):
+            note(str(_("The auto-upgrade periodic task has not been created yet.")), severity="warning")
+        elif not schedule_info.get("enabled"):
+            note(str(_("The periodic task is present but disabled.")), severity="warning")
+    else:
+        if schedule_info.get("error"):
+            note(str(schedule_info["error"]), severity="error")
+        else:
+            note(str(_("Scheduling information is unavailable.")), severity="warning")
+
+    failure_count = schedule_info.get("failure_count", 0) or 0
+    try:
+        failure_count = int(failure_count)
+    except (TypeError, ValueError):
+        failure_count = 0
+    if failure_count:
+        note(
+            str(
+                ngettext(
+                    "There is %(count)s recorded upgrade failure.",
+                    "There are %(count)s recorded upgrade failures.",
+                    failure_count,
+                )
+                % {"count": failure_count}
+            ),
+            severity="warning",
+        )
+
+    headline = _("Auto-upgrade status looks good.")
+    if status_state == "warning":
+        headline = _("Auto-upgrade needs attention.")
+    elif status_state == "error":
+        headline = _("Auto-upgrade is blocked or misconfigured.")
+
+    summary = {
+        "state": status_state,
+        "headline": headline,
+        "last_activity": {
+            "timestamp": last_log_entry.get("timestamp", ""),
+            "message": last_log_entry.get("message", ""),
+        },
+        "next_run": schedule_info.get("next_run", ""),
+        "issues": issues,
+    }
+
     return {
         "settings": settings_info,
         "schedule": schedule_info,
-        "log_entries": log_info.get("entries", []),
+        "log_entries": log_entries,
         "log_error": str(log_info.get("error", "")),
+        "summary": summary,
     }
 
 

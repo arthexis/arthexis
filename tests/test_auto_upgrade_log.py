@@ -62,6 +62,39 @@ def test_auto_upgrade_report_uses_log_timestamp_when_schedule_missing(
     assert report["schedule"]["last_run_at"] == report["log_entries"][0]["timestamp"]
 
 
+@pytest.mark.django_db
+def test_auto_upgrade_summary_highlights_last_activity(monkeypatch, settings, tmp_path):
+    env_base = tmp_path / "runtime"
+    log_dir = env_base / "logs"
+    log_dir.mkdir(parents=True)
+
+    log_file = log_dir / "auto-upgrade.log"
+    log_file.write_text("2024-01-01T00:00:00+00:00 logged entry\n", encoding="utf-8")
+
+    settings.BASE_DIR = tmp_path / "settings"
+    monkeypatch.setenv("ARTHEXIS_BASE_DIR", str(env_base))
+
+    monkeypatch.setattr(
+        system,
+        "_load_auto_upgrade_schedule",
+        lambda: {
+            "available": True,
+            "configured": True,
+            "enabled": True,
+            "next_run": "2024-01-02 00:00",
+            "failure_count": 1,
+        },
+    )
+
+    report = system._build_auto_upgrade_report()
+
+    assert report["summary"]["last_activity"]["message"] == "logged entry"
+    assert report["summary"]["next_run"] == "2024-01-02 00:00"
+    assert any(
+        "recorded upgrade failure" in issue["label"] for issue in report["summary"]["issues"]
+    )
+
+
 def test_trigger_upgrade_check_runs_inline_with_memory_broker(monkeypatch, settings):
     calls: list[str | None] = []
 
