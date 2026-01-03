@@ -5,12 +5,15 @@ from functools import partial
 
 import pytest
 from channels.db import database_sync_to_async
+from django.utils import timezone
 
 from apps.ocpp import consumers, store, call_result_handlers
 from apps.ocpp.models import (
     Charger,
     CertificateRequest,
     CertificateStatusCheck,
+    CostUpdate,
+    Transaction,
     Variable,
     MonitoringRule,
     MonitoringReport,
@@ -35,6 +38,7 @@ def reset_store(monkeypatch, tmp_path):
     store.transaction_requests.clear()
     store._transaction_requests_by_connector.clear()
     store._transaction_requests_by_transaction.clear()
+    store.billing_updates.clear()
     log_dir = tmp_path / "logs"
     session_dir = log_dir / "sessions"
     lock_dir = tmp_path / "locks"
@@ -50,6 +54,7 @@ def reset_store(monkeypatch, tmp_path):
     store.transaction_requests.clear()
     store._transaction_requests_by_connector.clear()
     store._transaction_requests_by_transaction.clear()
+    store.billing_updates.clear()
 
 
 @pytest.fixture
@@ -113,6 +118,68 @@ async def test_notify_report_logs_payload():
     entries = list(store.logs["charger"][consumer.store_key])
     assert any("NotifyReport" in entry for entry in entries)
     assert any("count" in entry for entry in entries)
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+async def test_cost_updated_persists_and_forwards():
+    charger = await database_sync_to_async(Charger.objects.create)(
+        charger_id="COST-1"
+    )
+    transaction = await database_sync_to_async(Transaction.objects.create)(
+        charger=charger,
+        start_time=timezone.now(),
+        received_start_time=timezone.now(),
+        ocpp_transaction_id="TX-1",
+    )
+    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = store.identity_key(charger.charger_id, 1)
+    consumer.charger_id = charger.charger_id
+    consumer.charger = charger
+    consumer.connector_value = 1
+
+    payload = {
+        "transactionId": "TX-1",
+        "totalCost": "15.75",
+        "currency": "USD",
+        "timestamp": "2024-01-01T00:00:00Z",
+    }
+
+    result = await consumer._handle_cost_updated_action(payload, "msg-cost", "", "")
+
+    assert result == {}
+    cost_update = await database_sync_to_async(CostUpdate.objects.get)(
+        charger=charger
+    )
+    assert cost_update.transaction_id == transaction.pk
+    assert cost_update.ocpp_transaction_id == "TX-1"
+    assert str(cost_update.total_cost) == "15.750"
+    assert cost_update.currency == "USD"
+    assert any(
+        entry.get("cost_update_id") == cost_update.pk for entry in store.billing_updates
+    )
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+async def test_cost_updated_rejects_invalid_payload():
+    charger = await database_sync_to_async(Charger.objects.create)(
+        charger_id="COST-2"
+    )
+    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = store.identity_key(charger.charger_id, 1)
+    consumer.charger_id = charger.charger_id
+    consumer.charger = charger
+    consumer.connector_value = 1
+
+    result = await consumer._handle_cost_updated_action(
+        {"totalCost": "bad"}, "msg-invalid", "", ""
+    )
+
+    assert result == {}
+    exists = await database_sync_to_async(CostUpdate.objects.filter)(charger=charger)
+    assert not await database_sync_to_async(exists.exists)()
+    assert not store.billing_updates
 
 
 @pytest.mark.anyio
