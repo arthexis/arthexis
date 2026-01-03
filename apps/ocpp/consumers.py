@@ -2221,7 +2221,15 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
     async def _handle_notify_customer_information_action(
         self, payload, msg_id, raw, text_data
     ):
-        payload_data = payload if isinstance(payload, dict) else {}
+        if not isinstance(payload, dict):
+            store.add_log(
+                self.store_key,
+                "NotifyCustomerInformation: invalid payload received",
+                log_type="charger",
+            )
+            return {}
+
+        payload_data = payload
         request_id_value = payload_data.get("requestId")
         data_value = payload_data.get("data")
         tbc_value = payload_data.get("tbc")
@@ -2229,9 +2237,25 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             request_id = int(request_id_value) if request_id_value is not None else None
         except (TypeError, ValueError):
             request_id = None
-        data_text = str(data_value or "")
+        data_text = str(data_value or "").strip()
         tbc = bool(tbc_value) if tbc_value is not None else False
         notified_at = timezone.now()
+
+        if request_id is None or not data_text:
+            store.add_log(
+                self.store_key,
+                "NotifyCustomerInformation: missing requestId or data",
+                log_type="charger",
+            )
+            return {}
+
+        log_details = [f"requestId={request_id}", f"tbc={tbc}"]
+        log_details.append(f"data={data_text}")
+        store.add_log(
+            self.store_key,
+            "NotifyCustomerInformation: " + ", ".join(log_details),
+            log_type="charger",
+        )
 
         def _persist_customer_information() -> None:
             charger = self.charger
@@ -2281,8 +2305,49 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
                 raw_payload=payload_data,
             )
 
+            self._route_customer_care_acknowledgement(
+                charger=charger,
+                request_id=request_id,
+                data_text=data_text,
+                tbc=tbc,
+                notified_at=notified_at,
+            )
+
         await database_sync_to_async(_persist_customer_information)()
         return {}
+
+    def _route_customer_care_acknowledgement(
+        self,
+        *,
+        charger: Charger | None,
+        request_id: int | None,
+        data_text: str,
+        tbc: bool,
+        notified_at,
+    ) -> None:
+        if charger is None:
+            return
+
+        identifier_bits = [charger.charger_id or ""]
+        if request_id is not None:
+            identifier_bits.append(str(request_id))
+        if charger.connector_id is not None:
+            identifier_bits.append(str(charger.connector_id))
+        workflow_identifier = ":".join([bit for bit in identifier_bits if bit]) or "unknown"
+
+        try:
+            from apps.flows.models import Transition
+
+            Transition.objects.create(
+                workflow="customer-care.customer-information",
+                identifier=workflow_identifier,
+                from_state="pending",
+                to_state="partial" if tbc else "acknowledged",
+                step_name=data_text[:255] if data_text else "acknowledged",
+                occurred_at=notified_at,
+            )
+        except Exception:  # pragma: no cover - defensive safeguard
+            logger.exception("Unable to route customer-care acknowledgement")
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "NotifyDisplayMessages")
     async def _handle_notify_display_messages_action(

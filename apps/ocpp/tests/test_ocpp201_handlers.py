@@ -8,6 +8,7 @@ from channels.db import database_sync_to_async
 from django.utils import timezone
 
 from apps.ocpp import consumers, store, call_result_handlers
+from apps.flows.models import Transition
 from apps.ocpp.models import (
     Charger,
     CertificateRequest,
@@ -426,6 +427,44 @@ async def test_notify_customer_information_persists_chunks():
     assert chunk.request_id == 7
     assert chunk.data == "chunk-data"
     assert chunk.request_id == request.request_id
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+async def test_notify_customer_information_routes_to_customer_care_workflow():
+    charger = await database_sync_to_async(Charger.objects.create)(charger_id="INFO-ROUTE")
+    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = "INFO-ROUTE"
+    consumer.charger_id = charger.charger_id
+    consumer.charger = charger
+    consumer.aggregate_charger = None
+
+    payload = {"requestId": 11, "data": "acknowledged", "tbc": True}
+    result = await consumer._handle_notify_customer_information_action(
+        payload, "msg-11", "", ""
+    )
+
+    assert result == {}
+    entries = list(store.logs["charger"].get(consumer.store_key, []))
+    assert any("NotifyCustomerInformation" in entry for entry in entries)
+    transition = await database_sync_to_async(Transition.objects.get)(
+        workflow="customer-care.customer-information",
+        identifier="INFO-ROUTE:11",
+    )
+    assert transition.from_state == "pending"
+    assert transition.to_state == "partial"
+
+
+@pytest.mark.anyio
+async def test_notify_customer_information_rejects_non_dict_payload():
+    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = "INFO-BAD"
+
+    result = await consumer._handle_notify_customer_information_action([], "msg-bad", "", "")
+
+    assert result == {}
+    entries = list(store.logs["charger"].get(consumer.store_key, []))
+    assert any("invalid payload" in entry for entry in entries)
 
 
 @pytest.mark.anyio
