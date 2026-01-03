@@ -50,6 +50,8 @@ transactions: dict[str, object] = {}
 MAX_IN_MEMORY_LOG_ENTRIES = 1000
 
 logs: dict[str, dict[str, deque[str]]] = {"charger": {}, "simulator": {}}
+# queue certificate retrieval requests until the credential store processes them
+credential_requests: dict[str, deque[dict[str, object]]] = {}
 # store per charger session logs before they are flushed to disk
 history: dict[str, dict[str, object]] = {}
 simulators = {}
@@ -109,6 +111,31 @@ def identity_key(serial: str, connector: int | str | None) -> str:
     """Return the identity key used for in-memory store lookups."""
 
     return f"{serial}{IDENTITY_SEPARATOR}{connector_slug(connector)}"
+
+
+def queue_credential_request(charger_id: str, request: dict[str, object]) -> None:
+    """Append a certificate retrieval request for the credential store."""
+
+    credential_requests.setdefault(charger_id, deque()).append(request)
+
+
+def iter_credential_requests(charger_id: str | None = None) -> Iterator[dict[str, object]]:
+    """Iterate credential requests, optionally filtered by charger id."""
+
+    if charger_id:
+        yield from credential_requests.get(charger_id, [])
+        return
+    for queue in credential_requests.values():
+        yield from queue
+
+
+def clear_credential_requests(charger_id: str | None = None) -> None:
+    """Remove queued credential requests for tests or teardown."""
+
+    if charger_id is None:
+        credential_requests.clear()
+        return
+    credential_requests.pop(charger_id, None)
 
 
 def _normalize_transaction_id(value: object | None) -> str | None:

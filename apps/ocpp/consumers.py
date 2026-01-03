@@ -2475,39 +2475,77 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         self, payload, msg_id, raw, text_data
     ):
         certificate_type = str(payload.get("certificateType") or "").strip()
+        schema_version = str(payload.get("iso15118SchemaVersion") or "").strip()
         csr_value = payload.get("exiRequest") or payload.get("csr")
         if csr_value is None:
             csr_value = ""
         if not isinstance(csr_value, str):
             csr_value = str(csr_value)
-        response_payload = {
-            "status": "Rejected",
-            "statusInfo": {
-                "reasonCode": "NotSupported",
-                "additionalInfo": "Manual certificate handling required.",
-            },
-        }
 
-        def _persist_request() -> None:
+        errors: list[str] = []
+        if not csr_value:
+            errors.append("exiRequest is required")
+        else:
+            try:
+                base64.b64decode(csr_value, validate=True)
+            except (binascii.Error, ValueError):
+                errors.append("exiRequest must be base64 encoded")
+        if not schema_version:
+            errors.append("iso15118SchemaVersion is required")
+
+        status_value = "Pending" if not errors else "Rejected"
+        status_info_value = "" if not errors else "; ".join(errors)
+        response_payload = {
+            "status": status_value,
+        }
+        if status_info_value:
+            response_payload["statusInfo"] = {
+                "reasonCode": "FormatViolation",
+                "additionalInfo": status_info_value,
+            }
+
+        def _persist_request() -> Charger | None:
             target = self._resolve_certificate_target()
             if target is None:
-                return
+                return None
             CertificateRequest.objects.create(
                 charger=target,
                 action=CertificateRequest.ACTION_15118,
                 certificate_type=certificate_type,
                 csr=csr_value,
-                status=CertificateRequest.STATUS_REJECTED,
-                status_info="Manual certificate handling required.",
+                status=(
+                    CertificateRequest.STATUS_PENDING
+                    if not errors
+                    else CertificateRequest.STATUS_REJECTED
+                ),
+                status_info=status_info_value,
                 request_payload=payload,
                 response_payload=response_payload,
                 responded_at=timezone.now(),
             )
+            return target
 
-        await database_sync_to_async(_persist_request)()
+        target = await database_sync_to_async(_persist_request)()
+        if target and not errors:
+            store.queue_credential_request(
+                target.charger_id,
+                {
+                    "charger_id": target.charger_id,
+                    "certificate_type": certificate_type,
+                    "exi_request": csr_value,
+                    "schema_version": schema_version,
+                    "ocpp_message_id": msg_id,
+                    "requested_at": timezone.now(),
+                },
+            )
+        log_message = "Get15118EVCertificate request received"
+        if errors:
+            log_message += f" (rejected: {status_info_value})"
+        else:
+            log_message += " (queued for credential store)"
         store.add_log(
             self.store_key,
-            "Get15118EVCertificate request received (rejected; manual handling).",
+            log_message,
             log_type="charger",
         )
         return response_payload

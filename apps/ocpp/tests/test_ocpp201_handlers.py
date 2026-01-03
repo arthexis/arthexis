@@ -1,4 +1,5 @@
 from unittest.mock import AsyncMock
+import base64
 
 import anyio
 from functools import partial
@@ -35,6 +36,7 @@ def reset_store(monkeypatch, tmp_path):
     store.transaction_requests.clear()
     store._transaction_requests_by_connector.clear()
     store._transaction_requests_by_transaction.clear()
+    store.clear_credential_requests()
     log_dir = tmp_path / "logs"
     session_dir = log_dir / "sessions"
     lock_dir = tmp_path / "locks"
@@ -50,6 +52,7 @@ def reset_store(monkeypatch, tmp_path):
     store.transaction_requests.clear()
     store._transaction_requests_by_connector.clear()
     store._transaction_requests_by_transaction.clear()
+    store.clear_credential_requests()
 
 
 @pytest.fixture
@@ -149,17 +152,25 @@ async def test_get_15118_ev_certificate_persists_request():
     consumer.charger = charger
     consumer.aggregate_charger = None
 
-    payload = {"certificateType": "V2G", "exiRequest": "CSRDATA"}
+    store.clear_credential_requests()
+    payload = {
+        "certificateType": "V2G",
+        "iso15118SchemaVersion": "2.0.1",
+        "exiRequest": base64.b64encode(b"CSRDATA").decode(),
+    }
     result = await consumer._handle_get_15118_ev_certificate_action(
         payload, "msg-1", "", ""
     )
 
-    assert result["status"] == "Rejected"
+    assert result["status"] == "Pending"
     request = await database_sync_to_async(CertificateRequest.objects.get)(charger=charger)
     assert request.action == CertificateRequest.ACTION_15118
-    assert request.csr == "CSRDATA"
-    assert request.status == CertificateRequest.STATUS_REJECTED
-    assert request.response_payload["status"] == "Rejected"
+    assert request.csr == payload["exiRequest"]
+    assert request.status == CertificateRequest.STATUS_PENDING
+    assert request.response_payload["status"] == "Pending"
+    queued = list(store.iter_credential_requests("CERT-1"))
+    assert len(queued) == 1
+    assert queued[0]["schema_version"] == "2.0.1"
 
 
 @pytest.mark.anyio
@@ -202,6 +213,30 @@ async def test_sign_certificate_persists_request():
     request = await database_sync_to_async(CertificateRequest.objects.get)(charger=charger)
     assert request.action == CertificateRequest.ACTION_SIGN
     assert request.csr == "CSR-123"
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+async def test_get_15118_ev_certificate_validation_error():
+    charger = await database_sync_to_async(Charger.objects.create)(charger_id="CERT-4")
+    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = "CERT-4"
+    consumer.charger = charger
+    consumer.aggregate_charger = None
+
+    store.clear_credential_requests()
+    payload = {"certificateType": "V2G", "exiRequest": "!!!", "iso15118SchemaVersion": ""}
+    result = await consumer._handle_get_15118_ev_certificate_action(
+        payload, "msg-4", "", ""
+    )
+
+    assert result["status"] == "Rejected"
+    assert "statusInfo" in result
+    queued = list(store.iter_credential_requests("CERT-4"))
+    assert queued == []
+    request = await database_sync_to_async(CertificateRequest.objects.get)(charger=charger)
+    assert request.status == CertificateRequest.STATUS_REJECTED
+    assert "exiRequest must be base64 encoded" in request.status_info
 
 
 @pytest.mark.anyio
