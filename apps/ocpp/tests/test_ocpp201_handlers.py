@@ -11,10 +11,13 @@ from apps.ocpp import consumers, store, call_result_handlers
 from apps.flows.models import Transition
 from apps.ocpp.models import (
     Charger,
+    CPReservation,
     CertificateRequest,
     CertificateStatusCheck,
     InstalledCertificate,
     CostUpdate,
+    ChargingProfile,
+    ChargingSchedule,
     Transaction,
     Variable,
     MonitoringRule,
@@ -30,6 +33,7 @@ from apps.ocpp.models import (
     CPFirmwareDeployment,
 )
 from apps.protocols.models import ProtocolCall as ProtocolCallModel
+from apps.maps.models import Location
 from django.utils.dateparse import parse_datetime
 
 
@@ -49,9 +53,11 @@ def reset_store(monkeypatch, tmp_path):
     store.ev_charging_needs.clear()
     store.ev_charging_schedules.clear()
     store.planner_notifications.clear()
+    store.connector_release_notifications.clear()
     store.observability_events.clear()
     store.monitoring_reports.clear()
     store.clear_display_message_compliance()
+    store.charging_profile_reports.clear()
     log_dir = tmp_path / "logs"
     session_dir = log_dir / "sessions"
     lock_dir = tmp_path / "locks"
@@ -71,8 +77,10 @@ def reset_store(monkeypatch, tmp_path):
     store.ev_charging_needs.clear()
     store.ev_charging_schedules.clear()
     store.planner_notifications.clear()
+    store.connector_release_notifications.clear()
     store.observability_events.clear()
     store.monitoring_reports.clear()
+    store.charging_profile_reports.clear()
 
 
 @pytest.fixture
@@ -983,6 +991,162 @@ async def test_notify_ev_charging_schedule_requires_fields(monkeypatch):
 
 
 @pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+async def test_report_charging_profiles_matches_local_state(monkeypatch):
+    charger = await database_sync_to_async(Charger.objects.create)(
+        charger_id="RCP-1", connector_id=1
+    )
+    profile = await database_sync_to_async(ChargingProfile.objects.create)(
+        charger=charger,
+        connector_id=1,
+        charging_profile_id=9,
+        stack_level=1,
+        purpose=ChargingProfile.Purpose.TX_DEFAULT_PROFILE,
+        kind=ChargingProfile.Kind.ABSOLUTE,
+    )
+    await database_sync_to_async(ChargingSchedule.objects.create)(
+        profile=profile,
+        charging_rate_unit=ChargingProfile.RateUnit.AMP,
+        charging_schedule_periods=[{"start_period": 0, "limit": 32}],
+    )
+
+    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = store.identity_key(charger.charger_id, charger.connector_id)
+    consumer.charger_id = charger.charger_id
+    consumer.charger = charger
+    consumer.aggregate_charger = None
+    consumer.connector_value = charger.connector_id
+    consumer._log_ocpp201_notification = lambda *args, **kwargs: None
+
+    logs: list[str] = []
+    monkeypatch.setattr(store, "add_log", lambda _cid, entry, log_type="charger": logs.append(entry))
+
+    payload = {
+        "requestId": 7,
+        "evseId": 1,
+        "chargingProfile": profile.as_cs_charging_profile(),
+        "tbc": False,
+    }
+
+    result = await consumer._handle_report_charging_profiles_action(
+        payload, "msg-rcp-1", "", ""
+    )
+
+    assert result == {}
+    assert logs == []
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+async def test_report_charging_profiles_flags_mismatch(monkeypatch):
+    charger = await database_sync_to_async(Charger.objects.create)(
+        charger_id="RCP-2", connector_id=1
+    )
+    profile = await database_sync_to_async(ChargingProfile.objects.create)(
+        charger=charger,
+        connector_id=1,
+        charging_profile_id=5,
+        stack_level=2,
+        purpose=ChargingProfile.Purpose.TX_DEFAULT_PROFILE,
+        kind=ChargingProfile.Kind.ABSOLUTE,
+    )
+    await database_sync_to_async(ChargingSchedule.objects.create)(
+        profile=profile,
+        charging_rate_unit=ChargingProfile.RateUnit.AMP,
+        charging_schedule_periods=[{"start_period": 0, "limit": 16}],
+    )
+
+    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = store.identity_key(charger.charger_id, charger.connector_id)
+    consumer.charger_id = charger.charger_id
+    consumer.charger = charger
+    consumer.aggregate_charger = None
+    consumer.connector_value = charger.connector_id
+    consumer._log_ocpp201_notification = lambda *args, **kwargs: None
+
+    logs: list[str] = []
+    monkeypatch.setattr(store, "add_log", lambda _cid, entry, log_type="charger": logs.append(entry))
+
+    payload_profile = profile.as_cs_charging_profile()
+    payload_profile["stackLevel"] = 3
+
+    payload = {
+        "requestId": 11,
+        "evseId": 1,
+        "chargingProfile": payload_profile,
+        "tbc": False,
+    }
+
+    result = await consumer._handle_report_charging_profiles_action(
+        payload, "msg-rcp-2", "", ""
+    )
+
+    assert result == {}
+    assert any("stack level expected" in entry for entry in logs)
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+async def test_report_charging_profiles_flags_missing_entries(monkeypatch):
+    charger = await database_sync_to_async(Charger.objects.create)(
+        charger_id="RCP-3", connector_id=1
+    )
+    profile_one = await database_sync_to_async(ChargingProfile.objects.create)(
+        charger=charger,
+        connector_id=1,
+        charging_profile_id=2,
+        stack_level=1,
+        purpose=ChargingProfile.Purpose.TX_DEFAULT_PROFILE,
+        kind=ChargingProfile.Kind.ABSOLUTE,
+    )
+    await database_sync_to_async(ChargingSchedule.objects.create)(
+        profile=profile_one,
+        charging_rate_unit=ChargingProfile.RateUnit.AMP,
+        charging_schedule_periods=[{"start_period": 0, "limit": 10}],
+    )
+
+    profile_two = await database_sync_to_async(ChargingProfile.objects.create)(
+        charger=charger,
+        connector_id=1,
+        charging_profile_id=3,
+        stack_level=1,
+        purpose=ChargingProfile.Purpose.TX_DEFAULT_PROFILE,
+        kind=ChargingProfile.Kind.ABSOLUTE,
+    )
+    await database_sync_to_async(ChargingSchedule.objects.create)(
+        profile=profile_two,
+        charging_rate_unit=ChargingProfile.RateUnit.AMP,
+        charging_schedule_periods=[{"start_period": 0, "limit": 20}],
+    )
+
+    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = store.identity_key(charger.charger_id, charger.connector_id)
+    consumer.charger_id = charger.charger_id
+    consumer.charger = charger
+    consumer.aggregate_charger = None
+    consumer.connector_value = charger.connector_id
+    consumer._log_ocpp201_notification = lambda *args, **kwargs: None
+
+    logs: list[str] = []
+    monkeypatch.setattr(store, "add_log", lambda _cid, entry, log_type="charger": logs.append(entry))
+
+    payload = {
+        "requestId": 15,
+        "evseId": 1,
+        "chargingProfile": profile_one.as_cs_charging_profile(),
+        "tbc": False,
+    }
+
+    result = await consumer._handle_report_charging_profiles_action(
+        payload, "msg-rcp-3", "", ""
+    )
+
+    assert result == {}
+    assert any("ReportChargingProfiles missing" in entry for entry in logs)
+    assert any("3" in entry for entry in logs)
+
+
+@pytest.mark.anyio
 async def test_notify_event_forwards_observability_payload(monkeypatch):
     consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = store.identity_key("OBS-1", 1)
@@ -1072,3 +1236,96 @@ async def test_notify_event_requires_event_data(monkeypatch):
 
     assert result == {}
     assert forwarded == []
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize(
+    "status,confirmed",
+    [("Accepted", True), ("Cancelled", False), ("Expired", False)],
+)
+async def test_reservation_status_update_persists_and_notifies(status, confirmed):
+    from apps.ocpp.models import Charger as ChargerModel
+
+    location = await database_sync_to_async(Location.objects.create)(name="Depot")
+    charger = await database_sync_to_async(ChargerModel.objects.create)(
+        charger_id="CP-RES-1", connector_id=1, location=location
+    )
+    reservation = await database_sync_to_async(CPReservation.objects.create)(
+        location=location,
+        connector=charger,
+        start_time=timezone.now(),
+        duration_minutes=30,
+    )
+
+    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = store.identity_key(charger.charger_id, charger.connector_id)
+    consumer.charger = charger
+    consumer.aggregate_charger = None
+    consumer.connector_value = charger.connector_id
+
+    payload = {
+        "reservationId": reservation.pk,
+        "reservationUpdateStatus": status,
+    }
+
+    result = await consumer._handle_reservation_status_update_action(
+        payload, "resv-msg-1", "", ""
+    )
+
+    assert result == {}
+    updated = await database_sync_to_async(CPReservation.objects.get)(pk=reservation.pk)
+    assert updated.evcs_status == status
+    assert updated.evcs_confirmed is confirmed
+    assert bool(updated.evcs_confirmed_at) == confirmed
+
+    assert store.connector_release_notifications
+    notification = store.connector_release_notifications[-1]
+    assert notification == {
+        "charger_id": charger.charger_id,
+        "connector_id": charger.connector_id,
+        "reservation_id": reservation.pk,
+        "status": status,
+    }
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+async def test_reservation_status_update_ignored_for_other_connector():
+    from apps.ocpp.models import Charger as ChargerModel
+
+    location = await database_sync_to_async(Location.objects.create)(name="Depot")
+    primary = await database_sync_to_async(ChargerModel.objects.create)(
+        charger_id="CP-RES-PRIMARY", connector_id=1, location=location
+    )
+    other = await database_sync_to_async(ChargerModel.objects.create)(
+        charger_id="CP-RES-OTHER", connector_id=1, location=location
+    )
+    reservation = await database_sync_to_async(CPReservation.objects.create)(
+        location=location,
+        connector=primary,
+        start_time=timezone.now(),
+        duration_minutes=30,
+    )
+
+    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = store.identity_key(other.charger_id, other.connector_id)
+    consumer.charger = other
+    consumer.aggregate_charger = None
+    consumer.connector_value = other.connector_id
+
+    payload = {
+        "reservationId": reservation.pk,
+        "reservationUpdateStatus": "Accepted",
+    }
+
+    result = await consumer._handle_reservation_status_update_action(
+        payload, "resv-msg-2", "", ""
+    )
+
+    assert result == {}
+    updated = await database_sync_to_async(CPReservation.objects.get)(pk=reservation.pk)
+    assert updated.evcs_status == ""
+    assert updated.evcs_confirmed is False
+    assert updated.evcs_confirmed_at is None
+    assert not store.connector_release_notifications

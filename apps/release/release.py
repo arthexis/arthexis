@@ -51,6 +51,7 @@ class Package:
     version_path: Optional[Path | str] = None
     dependencies_path: Optional[Path | str] = None
     test_command: Optional[str] = None
+    generate_wheels: bool = False
     repositories: Sequence["RepositoryTarget"] = ()
 
 
@@ -196,14 +197,17 @@ def _export_tracked_files(base_dir: Path, destination: Path) -> None:
     _copy_working_tree()
 
 
-def _build_in_sanitized_tree(base_dir: Path) -> None:
+def _build_in_sanitized_tree(base_dir: Path, *, generate_wheels: bool) -> None:
     """Run ``python -m build`` from a staging tree containing tracked files."""
 
     with tempfile.TemporaryDirectory(prefix="arthexis-build-") as temp_dir:
         staging_root = Path(temp_dir)
         _export_tracked_files(base_dir, staging_root)
         with contextlib.chdir(staging_root):
-            _run([sys.executable, "-m", "build"])
+            build_cmd = [sys.executable, "-m", "build", "--sdist"]
+            if generate_wheels:
+                build_cmd.append("--wheel")
+            _run(build_cmd)
         built_dist = staging_root / "dist"
         if not built_dist.exists():
             raise ReleaseError("dist directory not created")
@@ -664,7 +668,7 @@ def build(
                 # A local ``build`` package shadows the build backend; reinstall it.
                 sys.modules.pop("build", None)
                 _run([sys.executable, "-m", "pip", "install", "build"])
-        _build_in_sanitized_tree(Path.cwd())
+        _build_in_sanitized_tree(Path.cwd(), generate_wheels=package.generate_wheels)
 
     if git:
         files = ["VERSION", "pyproject.toml"]

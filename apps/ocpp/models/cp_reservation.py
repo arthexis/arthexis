@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from .base import *
+from .charger import Charger
 
 class CPReservation(Entity):
     """Track connector reservations dispatched to an EVCS."""

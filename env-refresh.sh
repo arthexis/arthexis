@@ -59,6 +59,7 @@ PYTHON="$VENV_DIR/bin/python"
 USE_SYSTEM_PYTHON=0
 FORCE_REQUIREMENTS_INSTALL=0
 LOCK_DIR="$SCRIPT_DIR/.locks"
+FORCE_REFRESH=0
 
 LATEST=0
 CLEAN=0
@@ -70,6 +71,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --clean)
       CLEAN=1
+      shift
+      ;;
+    --force-refresh)
+      FORCE_REFRESH=1
       shift
       ;;
     *)
@@ -115,6 +120,28 @@ pip_install_with_helper() {
   else
     "$PYTHON" -m pip install "$@"
   fi
+}
+
+collect_requirement_files() {
+  local -n out_array="$1"
+
+  mapfile -t out_array < <(find "$SCRIPT_DIR" -maxdepth 1 -type f -name 'requirements*.txt' -print | sort)
+}
+
+compute_requirements_checksum() {
+  local -a files=("$@")
+
+  if [ ${#files[@]} -eq 0 ]; then
+    echo ""
+    return 0
+  fi
+
+  (
+    for file in "${files[@]}"; do
+      printf '%s\n' "${file##*/}"
+      cat "$file"
+    done
+  ) | md5sum | awk '{print $1}'
 }
 
 install_watch_upgrade_helper() {
@@ -174,17 +201,24 @@ if [ "$CLEAN" -eq 1 ]; then
   find "$SCRIPT_DIR" -maxdepth 1 -name 'db*.sqlite3' -delete
 fi
 
-REQ_FILE="$SCRIPT_DIR/requirements.txt"
-if [ -f "$REQ_FILE" ]; then
-  MD5_FILE="$LOCK_DIR/requirements.md5"
-  NEW_HASH=$(md5sum "$REQ_FILE" | awk '{print $1}')
-  STORED_HASH=""
-  [ -f "$MD5_FILE" ] && STORED_HASH=$(cat "$MD5_FILE")
-  NEED_INSTALL=0
-  if [ "$NEW_HASH" != "$STORED_HASH" ]; then
-    NEED_INSTALL=1
-  elif [ "$USE_SYSTEM_PYTHON" -eq 1 ]; then
-    if ! "$PYTHON" - <<'PY' >/dev/null 2>&1
+collect_requirement_files REQUIREMENT_FILES
+REQ_MD5_FILE="$LOCK_DIR/requirements.bundle.md5"
+STORED_REQ_HASH=""
+[ -f "$REQ_MD5_FILE" ] && STORED_REQ_HASH=$(cat "$REQ_MD5_FILE")
+REQUIREMENTS_HASH=""
+if [ ${#REQUIREMENT_FILES[@]} -gt 0 ]; then
+  REQUIREMENTS_HASH=$(compute_requirements_checksum "${REQUIREMENT_FILES[@]}")
+fi
+
+NEED_INSTALL=$FORCE_REQUIREMENTS_INSTALL
+if [ -n "$REQUIREMENTS_HASH" ] && [ "$REQUIREMENTS_HASH" != "$STORED_REQ_HASH" ]; then
+  NEED_INSTALL=1
+fi
+if [ "$FORCE_REFRESH" -eq 1 ]; then
+  NEED_INSTALL=1
+fi
+if [ "$USE_SYSTEM_PYTHON" -eq 1 ] && [ "$NEED_INSTALL" -eq 0 ]; then
+  if ! "$PYTHON" - <<'PY' >/dev/null 2>&1
 import importlib
 import sys
 
@@ -193,37 +227,29 @@ try:
 except ModuleNotFoundError:
     sys.exit(1)
 PY
-    then
-      NEED_INSTALL=1
-    fi
+  then
+    NEED_INSTALL=1
   fi
-  if [ "$NEED_INSTALL" -eq 1 ]; then
-    pip_args=()
-    if [ "$USE_SYSTEM_PYTHON" -eq 1 ]; then
-      pip_args+=(--user)
-    fi
-    if pip_install_with_helper "${pip_args[@]}" -r "$REQ_FILE"; then
-      echo "$NEW_HASH" > "$MD5_FILE"
-    else
+fi
+
+if [ ${#REQUIREMENT_FILES[@]} -eq 0 ]; then
+  echo "No requirements*.txt files found; skipping dependency installation."
+elif [ "$NEED_INSTALL" -eq 0 ]; then
+  echo "dependencies unchanged—env refresh skipped"
+else
+  pip_args=()
+  if [ "$USE_SYSTEM_PYTHON" -eq 1 ]; then
+    pip_args+=(--user)
+  fi
+  for req_file in "${REQUIREMENT_FILES[@]}"; do
+    if ! pip_install_with_helper "${pip_args[@]}" -r "$req_file"; then
       pip_status=$?
       show_pip_failure "$pip_status"
       exit "$pip_status"
     fi
-  fi
-elif [ -f "$REQ_FILE" ]; then
-  MD5_FILE="$LOCK_DIR/requirements.system.md5"
-  NEW_HASH=$(md5sum "$REQ_FILE" | awk '{print $1}')
-  STORED_HASH=""
-  [ -f "$MD5_FILE" ] && STORED_HASH=$(cat "$MD5_FILE")
-  if [ "$NEW_HASH" != "$STORED_HASH" ]; then
-    if pip_install_with_helper -r "$REQ_FILE"; then
-      echo "$NEW_HASH" > "$MD5_FILE"
-    else
-      pip_status=$?
-      show_pip_failure "$pip_status"
-      echo "Failed to install project requirements with system Python. Run ./install.sh." >&2
-      exit "$pip_status"
-    fi
+  done
+  if [ -n "$REQUIREMENTS_HASH" ]; then
+    echo "$REQUIREMENTS_HASH" > "$REQ_MD5_FILE"
   fi
 fi
 
