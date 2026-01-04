@@ -90,42 +90,42 @@ def capture_rpi_snapshot(timeout: int = 10) -> Path:
     if not acquired:
         raise RuntimeError("Camera is busy. Wait for the current capture to finish.")
 
-    strategies: list[tuple[str, list[str]]] = []
-    if has_rpicam_binaries():
-        rpicam = shutil.which("rpicam-still")
-        if not rpicam:
-            raise RuntimeError("rpicam-still is not available")
-        strategies.append(("rpicam-still", [rpicam, "-o", str(filename), "-t", "1"]))
-    if _has_ffmpeg_capture_support():
-        ffmpeg = shutil.which("ffmpeg")
-        if not ffmpeg:
-            raise RuntimeError("ffmpeg is not available")
-        strategies.append(
-            (
-                "ffmpeg",
-                [
-                    ffmpeg,
-                    "-hide_banner",
-                    "-loglevel",
-                    "error",
-                    "-f",
-                    "v4l2",
-                    "-i",
-                    str(RPI_CAMERA_DEVICE),
-                    "-frames:v",
-                    "1",
-                    "-y",
-                    str(filename),
-                ],
-            )
-        )
-
-    if not strategies:
-        raise RuntimeError("No supported camera stack is available")
-
-    errors: list[str] = []
-
     try:
+        strategies: list[tuple[str, list[str]]] = []
+        if has_rpicam_binaries():
+            rpicam = shutil.which("rpicam-still")
+            if not rpicam:
+                raise RuntimeError("rpicam-still is not available")
+            strategies.append(("rpicam-still", [rpicam, "-o", str(filename), "-t", "1"]))
+        if _has_ffmpeg_capture_support():
+            ffmpeg = shutil.which("ffmpeg")
+            if not ffmpeg:
+                raise RuntimeError("ffmpeg is not available")
+            strategies.append(
+                (
+                    "ffmpeg",
+                    [
+                        ffmpeg,
+                        "-hide_banner",
+                        "-loglevel",
+                        "error",
+                        "-f",
+                        "v4l2",
+                        "-i",
+                        str(RPI_CAMERA_DEVICE),
+                        "-frames:v",
+                        "1",
+                        "-y",
+                        str(filename),
+                    ],
+                )
+            )
+
+        if not strategies:
+            raise RuntimeError("No supported camera stack is available")
+
+        errors: list[str] = []
+
         for name, command in strategies:
             try:
                 result = subprocess.run(
