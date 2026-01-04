@@ -1331,6 +1331,124 @@ def _handle_set_charging_profile(
     )
 
 
+@protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "ClearChargingProfile")
+def _handle_clear_charging_profile(
+    context: ActionContext, data: dict
+) -> JsonResponse | ActionCall:
+    charging_profile_id: int | None = None
+    stack_level: int | None = None
+    evse_id: int | None = None
+
+    def _parse_int(value, label: str) -> int | None | JsonResponse:
+        if value in (None, ""):
+            return None
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            return JsonResponse({"detail": f"invalid {label}"}, status=400)
+        if parsed < 0:
+            return JsonResponse({"detail": f"{label} must be positive"}, status=400)
+        return parsed
+
+    parsed = _parse_int(data.get("chargingProfileId"), "chargingProfileId")
+    if isinstance(parsed, JsonResponse):
+        return parsed
+    charging_profile_id = parsed
+
+    parsed = _parse_int(data.get("stackLevel"), "stackLevel")
+    if isinstance(parsed, JsonResponse):
+        return parsed
+    stack_level = parsed
+
+    parsed = _parse_int(data.get("evseId"), "evseId")
+    if isinstance(parsed, JsonResponse):
+        return parsed
+    evse_id = parsed
+
+    criteria = data.get("chargingProfileCriteria")
+    criteria_payload: dict[str, object] = {}
+    if criteria not in (None, ""):
+        if not isinstance(criteria, dict):
+            return JsonResponse({"detail": "chargingProfileCriteria must be an object"}, status=400)
+
+        parsed = _parse_int(criteria.get("chargingProfileId"), "chargingProfileId")
+        if isinstance(parsed, JsonResponse):
+            return parsed
+        if parsed is not None:
+            criteria_payload["chargingProfileId"] = parsed
+            charging_profile_id = charging_profile_id or parsed
+
+        parsed = _parse_int(criteria.get("stackLevel"), "stackLevel")
+        if isinstance(parsed, JsonResponse):
+            return parsed
+        if parsed is not None:
+            criteria_payload["stackLevel"] = parsed
+            stack_level = stack_level or parsed
+
+        parsed = _parse_int(criteria.get("evseId"), "evseId")
+        if isinstance(parsed, JsonResponse):
+            return parsed
+        if parsed is not None:
+            criteria_payload["evseId"] = parsed
+            evse_id = evse_id or parsed
+
+        purpose = criteria.get("chargingProfilePurpose")
+        if purpose not in (None, ""):
+            criteria_payload["chargingProfilePurpose"] = str(purpose)
+
+        if not criteria_payload:
+            return JsonResponse({"detail": "chargingProfileCriteria must include a filter"}, status=400)
+
+    if charging_profile_id is None and stack_level is None and evse_id is None:
+        return JsonResponse(
+            {"detail": "chargingProfileId, stackLevel, evseId, or chargingProfileCriteria required"},
+            status=400,
+        )
+
+    payload: dict[str, object] = {}
+    if charging_profile_id is not None:
+        payload["chargingProfileId"] = charging_profile_id
+    if stack_level is not None:
+        payload["stackLevel"] = stack_level
+    if evse_id is not None:
+        payload["evseId"] = evse_id
+    if criteria_payload:
+        payload["chargingProfileCriteria"] = criteria_payload
+
+    message_id = uuid.uuid4().hex
+    ocpp_action = "ClearChargingProfile"
+    expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
+    msg = json.dumps([2, message_id, ocpp_action, payload])
+    async_to_sync(context.ws.send)(msg)
+    log_key = context.log_key
+    store.register_pending_call(
+        message_id,
+        {
+            "action": ocpp_action,
+            "charger_id": context.cid,
+            "connector_id": context.connector_value,
+            "log_key": log_key,
+            "charging_profile_id": charging_profile_id,
+            "stack_level": stack_level,
+            "evse_id": evse_id,
+            "requested_at": timezone.now(),
+        },
+    )
+    store.schedule_call_timeout(
+        message_id,
+        action=ocpp_action,
+        log_key=log_key,
+        message="ClearChargingProfile request timed out",
+    )
+    return ActionCall(
+        msg=msg,
+        message_id=message_id,
+        ocpp_action=ocpp_action,
+        expected_statuses=expected_statuses,
+        log_key=log_key,
+    )
+
+
 @protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "InstallCertificate")
 def _handle_install_certificate(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
     certificate = data.get("certificate")

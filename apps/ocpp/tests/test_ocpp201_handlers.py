@@ -8,7 +8,7 @@ import pytest
 from channels.db import database_sync_to_async
 from django.utils import timezone
 
-from apps.ocpp import consumers, store, call_result_handlers
+from apps.ocpp import consumers, store, call_error_handlers, call_result_handlers
 from apps.flows.models import Transition
 from apps.ocpp.models import (
     Charger,
@@ -90,6 +90,85 @@ def reset_store(monkeypatch, tmp_path):
 @pytest.fixture
 def anyio_backend():
     return "asyncio"
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+async def test_handle_clear_charging_profile_result_updates_profile():
+    charger = await database_sync_to_async(Charger.objects.create)(charger_id="CLR-CP-1")
+    profile = ChargingProfile(
+        charger=charger,
+        connector_id=1,
+        charging_profile_id=9,
+        stack_level=1,
+        purpose=ChargingProfile.Purpose.CHARGE_POINT_MAX_PROFILE,
+        kind=ChargingProfile.Kind.ABSOLUTE,
+    )
+    await database_sync_to_async(ChargingProfile.objects.bulk_create)([profile])
+    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = "CLR-CP-1"
+    consumer.charger_id = charger.charger_id
+    payload = {"status": "Accepted", "statusInfo": {"detail": "ok"}}
+    metadata = {"charging_profile_id": 9, "charger_id": charger.charger_id}
+
+    result = await call_result_handlers.handle_clear_charging_profile_result(
+        consumer,
+        "msg-clear-1",
+        metadata,
+        payload,
+        consumer.store_key,
+    )
+
+    assert result is True
+    updated = await database_sync_to_async(ChargingProfile.objects.get)(
+        charger=charger, charging_profile_id=9
+    )
+    assert updated.last_status == "Accepted"
+    assert updated.last_status_info == "{\"detail\": \"ok\"}"
+    assert updated.last_response_payload.get("status") == "Accepted"
+    assert "msg-clear-1" in store._pending_call_results
+    logs = list(store.logs["charger"].get(consumer.store_key, []))
+    assert any("ClearChargingProfile result" in entry for entry in logs)
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+async def test_handle_clear_charging_profile_error_records_failure():
+    charger = await database_sync_to_async(Charger.objects.create)(charger_id="CLR-CP-2")
+    profile = ChargingProfile(
+        charger=charger,
+        connector_id=1,
+        charging_profile_id=11,
+        stack_level=1,
+        purpose=ChargingProfile.Purpose.CHARGE_POINT_MAX_PROFILE,
+        kind=ChargingProfile.Kind.ABSOLUTE,
+    )
+    await database_sync_to_async(ChargingProfile.objects.bulk_create)([profile])
+    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = "CLR-CP-2"
+    consumer.charger_id = charger.charger_id
+    metadata = {"charging_profile_id": 11, "charger_id": charger.charger_id}
+
+    result = await call_error_handlers.handle_clear_charging_profile_error(
+        consumer,
+        "msg-clear-2",
+        metadata,
+        "InternalError",
+        "failure",
+        {"reason": "test"},
+        consumer.store_key,
+    )
+
+    assert result is True
+    updated = await database_sync_to_async(ChargingProfile.objects.get)(
+        charger=charger, charging_profile_id=11
+    )
+    assert updated.last_status == "InternalError"
+    assert "failure" in updated.last_status_info
+    assert updated.last_response_payload.get("errorCode") == "InternalError"
+    assert "msg-clear-2" in store._pending_call_results
+    logs = list(store.logs["charger"].get(consumer.store_key, []))
+    assert any("ClearChargingProfile error" in entry for entry in logs)
 
 
 @pytest.mark.anyio

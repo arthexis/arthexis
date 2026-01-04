@@ -16,6 +16,7 @@ from .models import (
     PowerProjection,
     CertificateOperation,
     InstalledCertificate,
+    ChargingProfile,
 )
 
 class CallErrorContext(Protocol):
@@ -1370,6 +1371,62 @@ async def handle_get_installed_certificate_ids_error(
     return True
 
 
+async def handle_clear_charging_profile_error(
+    consumer: CallErrorContext,
+    message_id: str,
+    metadata: dict,
+    error_code: str | None,
+    description: str | None,
+    details: dict | None,
+    log_key: str,
+) -> bool:
+    parts: list[str] = []
+    if error_code:
+        parts.append(f"code={error_code}")
+    if description:
+        parts.append(f"description={description}")
+    message = "ClearChargingProfile error"
+    if parts:
+        message += ": " + ", ".join(parts)
+    store.add_log(log_key, message, log_type="charger")
+
+    charging_profile_id = metadata.get("charging_profile_id")
+    charger_id = metadata.get("charger_id")
+    responded_at = timezone.now()
+    error_payload = {
+        "errorCode": error_code or "",
+        "description": description or "",
+        "details": details or {},
+    }
+    detail_text = (description or "").strip() or _json_details(details)
+    if not detail_text:
+        detail_text = (error_code or "").strip()
+
+    def _apply_error() -> None:
+        if not charging_profile_id:
+            return
+        qs = ChargingProfile.objects.filter(charging_profile_id=charging_profile_id)
+        if charger_id:
+            qs = qs.filter(charger__charger_id=str(charger_id))
+        qs.update(
+            last_status=error_code or "Error",
+            last_status_info=detail_text,
+            last_response_payload=error_payload,
+            last_response_at=responded_at,
+        )
+
+    await database_sync_to_async(_apply_error)()
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        success=False,
+        error_code=error_code,
+        error_description=description,
+        error_details=details,
+    )
+    return True
+
+
 CALL_ERROR_HANDLERS: dict[str, CallErrorHandler] = {
     "GetCompositeSchedule": handle_get_composite_schedule_error,
     "ChangeConfiguration": handle_change_configuration_error,
@@ -1392,6 +1449,7 @@ CALL_ERROR_HANDLERS: dict[str, CallErrorHandler] = {
     "Reset": handle_reset_error,
     "ChangeAvailability": handle_change_availability_error,
     "SetChargingProfile": handle_set_charging_profile_error,
+    "ClearChargingProfile": handle_clear_charging_profile_error,
     "ClearDisplayMessage": handle_clear_display_message_error,
     "CustomerInformation": handle_customer_information_error,
     "GetBaseReport": handle_get_base_report_error,
