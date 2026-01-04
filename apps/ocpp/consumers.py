@@ -3007,6 +3007,47 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
     async def _handle_publish_firmware_status_notification_action(
         self, payload, msg_id, raw, text_data
     ):
+        status_raw = payload.get("status")
+        status_value = str(status_raw or "").strip()
+        info_value = payload.get("statusInfo")
+        if not isinstance(info_value, str):
+            info_value = payload.get("info")
+        status_info = str(info_value or "").strip()
+        request_id_value = payload.get("requestId")
+        timestamp_value = _parse_ocpp_timestamp(payload.get("publishTimestamp"))
+        if timestamp_value is None:
+            timestamp_value = _parse_ocpp_timestamp(payload.get("timestamp"))
+        if timestamp_value is None:
+            timestamp_value = timezone.now()
+
+        def _persist_status():
+            deployment = None
+            try:
+                deployment_pk = int(request_id_value)
+            except (TypeError, ValueError, OverflowError):
+                deployment_pk = None
+            if deployment_pk:
+                deployment = CPFirmwareDeployment.objects.filter(pk=deployment_pk).first()
+            if deployment is None and self.charger:
+                deployment = (
+                    CPFirmwareDeployment.objects.filter(
+                        charger=self.charger, completed_at__isnull=True
+                    )
+                    .order_by("-requested_at")
+                    .first()
+                )
+            if deployment is None:
+                return
+            if status_value == "Downloaded" and deployment.downloaded_at is None:
+                deployment.downloaded_at = timestamp_value
+            deployment.mark_status(
+                status_value,
+                status_info,
+                timestamp_value,
+                response=payload,
+            )
+
+        await database_sync_to_async(_persist_status)()
         self._log_ocpp201_notification("PublishFirmwareStatusNotification", payload)
         return {}
 
