@@ -113,6 +113,12 @@ def _save_cache(payload: dict) -> None:
         json.dump(payload, handle, indent=2)
 
 
+def _write_metadata(path: Path, payload: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as handle:
+        json.dump(payload, handle, indent=2)
+
+
 def _filesystem_snapshot(roots: Iterable[str]) -> tuple[int | None, int]:
     """Return the newest mtime and file count for provided roots.
 
@@ -213,6 +219,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Return the cached hash if still valid, otherwise exit with 3.",
     )
+    parser.add_argument(
+        "--metadata-output",
+        type=Path,
+        help="Optional path to write metadata describing the current snapshot.",
+    )
     args = parser.parse_args(argv)
 
     commit = _current_commit()
@@ -221,6 +232,8 @@ def main(argv: list[str] | None = None) -> int:
     if not args.ignore_cache:
         cache_valid, cached_hash = _cache_is_valid(cache, commit)
         if cache_valid and cached_hash:
+            if args.metadata_output:
+                _write_metadata(args.metadata_output, cache)
             print(cached_hash)
             return 0
         if args.check_cache:
@@ -246,6 +259,8 @@ def main(argv: list[str] | None = None) -> int:
         "cacheable": metadata.get("cacheable", False),
     }
     _save_cache(payload)
+    if args.metadata_output:
+        _write_metadata(args.metadata_output, payload)
 
     print(digest)
     return 0
