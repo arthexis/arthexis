@@ -74,10 +74,12 @@ def send_net_message(modeladmin, request, queryset):
         subject = form.cleaned_data["subject"]
         body = form.cleaned_data["body"]
         created = 0
+        expires_at = form.cleaned_data.get("expires_at")
         for node in nodes:
             message = NetMessage.objects.create(
                 subject=subject,
                 body=body,
+                expires_at=expires_at,
                 filter_node=node,
             )
             message.propagate()
@@ -105,7 +107,7 @@ def send_net_message(modeladmin, request, queryset):
         "action_checkbox_name": helpers.ACTION_CHECKBOX_NAME,
         "adminform": helpers.AdminForm(
             form,
-            [(None, {"fields": ("subject", "body")})],
+            [(None, {"fields": ("subject", "body", "expires_at")})],
             {},
         ),
         "form": form,

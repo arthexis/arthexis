@@ -337,6 +337,12 @@ def net_message_pull(request):
             expired_ids.append(entry.pk)
             continue
         message = entry.message
+        if message.is_expired:
+            expired_ids.append(entry.pk)
+            if not message.complete:
+                message.complete = True
+                message.save(update_fields=["complete"])
+            continue
         reach_source = message.filter_node_role or message.reach
         reach_name = reach_source.name if reach_source else None
         origin_node = message.node_origin

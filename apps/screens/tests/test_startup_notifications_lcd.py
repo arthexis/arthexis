@@ -3,6 +3,7 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from django.test import TestCase, override_settings
+from django.utils import timezone
 
 from apps.nodes.models import Node, NodeFeature
 from apps.screens.startup_notifications import (
@@ -11,6 +12,8 @@ from apps.screens.startup_notifications import (
     LCD_LOW_LOCK_FILE,
     lcd_feature_enabled,
     lcd_feature_enabled_for_paths,
+    read_lcd_lock_file,
+    render_lcd_lock_file,
 )
 
 
@@ -86,3 +89,18 @@ class LCDStartupNotificationTests(TestCase):
             (lock_dir / LCD_LEGACY_FEATURE_LOCK).write_text("", encoding="utf-8")
 
             self.assertTrue(lcd_feature_enabled(lock_dir))
+
+    def test_render_and_read_preserve_expiration(self):
+        expires_at = timezone.now().replace(microsecond=0)
+        payload = render_lcd_lock_file(subject="hi", body="there", expires_at=expires_at)
+
+        with TemporaryDirectory() as tmpdir:
+            lock_dir = Path(tmpdir) / ".locks"
+            lock_dir.mkdir(parents=True)
+            target = lock_dir / LCD_HIGH_LOCK_FILE
+            target.write_text(payload, encoding="utf-8")
+
+            message = read_lcd_lock_file(target)
+
+        assert message is not None
+        assert message.expires_at == expires_at

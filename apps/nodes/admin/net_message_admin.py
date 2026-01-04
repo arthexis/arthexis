@@ -21,6 +21,7 @@ class NetMessageAdmin(EntityModelAdmin):
     list_display = (
         "subject",
         "body",
+        "expires_at",
         "filter_node_role_display",
         "node_origin_display",
         "created_date_display",
@@ -33,7 +34,7 @@ class NetMessageAdmin(EntityModelAdmin):
     readonly_fields = ("complete",)
     actions = ["send_messages"]
     fieldsets = (
-        (None, {"fields": ("subject", "body")}),
+        (None, {"fields": ("subject", "body", "expires_at")}),
         (
             "Filters",
             {
@@ -79,6 +80,7 @@ class NetMessageAdmin(EntityModelAdmin):
             _("Propagation"),
             {
                 "fields": (
+                    "expires_at",
                     "target_limit",
                 )
             },

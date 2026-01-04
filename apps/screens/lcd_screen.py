@@ -297,6 +297,12 @@ def _read_lock_file(lock_file: Path) -> LockPayload:
     payload = read_lcd_lock_file(lock_file)
     if payload is None:
         return LockPayload("", "", DEFAULT_SCROLL_MS)
+    if payload.expires_at and payload.expires_at <= datetime.now(datetime_timezone.utc):
+        try:
+            lock_file.unlink()
+        except OSError:
+            logger.debug("Failed to remove expired lock file: %s", lock_file, exc_info=True)
+        return LockPayload("", "", DEFAULT_SCROLL_MS)
     return LockPayload(payload.subject, payload.body, DEFAULT_SCROLL_MS)
 
 
