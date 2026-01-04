@@ -71,6 +71,7 @@ ev_charging_needs: deque[dict[str, object]] = deque(maxlen=500)
 ev_charging_schedules: deque[dict[str, object]] = deque(maxlen=500)
 planner_notifications: deque[dict[str, object]] = deque(maxlen=500)
 observability_events: deque[dict[str, object]] = deque(maxlen=1000)
+monitoring_reports: deque[dict[str, object]] = deque(maxlen=1000)
 display_message_compliance: dict[str, list[dict[str, object]]] = {}
 
 # mapping of charger id / cp_path to friendly names used for log files
@@ -248,6 +249,54 @@ def record_ev_charging_schedule(
             "evse_id": evse_id,
             "timebase": timebase,
             "charging_schedule": dict(charging_schedule),
+            "received_at": received_at,
+        }
+    )
+
+
+def record_monitoring_report(
+    charger_id: str | None,
+    *,
+    request_id: int | None,
+    seq_no: int | None,
+    generated_at: datetime | None,
+    tbc: bool,
+    component_name: str,
+    component_instance: str,
+    variable_name: str,
+    variable_instance: str,
+    monitoring_id: int,
+    severity: int | None,
+    monitor_type: str,
+    threshold: str,
+    is_transaction: bool,
+    evse_id: int | None,
+    connector_id: int | str | None,
+    received_at: datetime,
+) -> None:
+    """Queue a normalized monitoring report entry for analytics pipelines."""
+
+    if not charger_id:
+        return
+
+    monitoring_reports.append(
+        {
+            "charger_id": charger_id,
+            "request_id": request_id,
+            "seq_no": seq_no,
+            "generated_at": generated_at,
+            "tbc": tbc,
+            "component_name": component_name,
+            "component_instance": component_instance,
+            "variable_name": variable_name,
+            "variable_instance": variable_instance,
+            "monitoring_id": monitoring_id,
+            "severity": severity,
+            "monitor_type": monitor_type,
+            "threshold": threshold,
+            "is_transaction": is_transaction,
+            "evse_id": evse_id,
+            "connector_id": connector_slug(connector_id),
             "received_at": received_at,
         }
     )

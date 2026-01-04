@@ -2737,6 +2737,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         seq_no_value = payload_data.get("seqNo")
         generated_at = _parse_ocpp_timestamp(payload_data.get("generatedAt"))
         tbc_value = payload_data.get("tbc")
+        received_at = timezone.now()
         try:
             request_id = int(request_id_value) if request_id_value is not None else None
         except (TypeError, ValueError):
@@ -2749,6 +2750,8 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         monitoring_data = payload_data.get("monitoringData")
         if not isinstance(monitoring_data, (list, tuple)):
             monitoring_data = []
+
+        normalized_records: list[dict[str, object]] = []
 
         def _persist_monitoring_report() -> None:
             charger = None
@@ -2789,6 +2792,15 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
                     continue
                 component_instance = str(component_data.get("instance") or "").strip()
                 variable_instance = str(variable_data.get("instance") or "").strip()
+                component_evse = component_data.get("evse")
+                evse_id = None
+                connector_id = None
+                if isinstance(component_evse, dict):
+                    try:
+                        evse_id = int(component_evse.get("id"))
+                    except (TypeError, ValueError):
+                        evse_id = None
+                    connector_id = component_evse.get("connectorId")
                 variable_obj, _created = Variable.objects.get_or_create(
                     charger=charger,
                     component_name=component_name,
@@ -2843,7 +2855,48 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
                         },
                     )
 
+                    normalized_records.append(
+                        {
+                            "charger_id": charger.charger_id,
+                            "request_id": request_id,
+                            "seq_no": seq_no,
+                            "generated_at": generated_at,
+                            "tbc": tbc,
+                            "component_name": component_name,
+                            "component_instance": component_instance,
+                            "variable_name": variable_name,
+                            "variable_instance": variable_instance,
+                            "monitoring_id": monitoring_id,
+                            "severity": severity,
+                            "monitor_type": monitor_type,
+                            "threshold": threshold_text,
+                            "is_transaction": is_transaction,
+                            "evse_id": evse_id,
+                            "connector_id": connector_id,
+                        }
+                    )
+
         await database_sync_to_async(_persist_monitoring_report)()
+        for record in normalized_records:
+            store.record_monitoring_report(
+                record.get("charger_id"),
+                request_id=record.get("request_id"),
+                seq_no=record.get("seq_no"),
+                generated_at=record.get("generated_at"),
+                tbc=record.get("tbc", False),
+                component_name=record.get("component_name", ""),
+                component_instance=record.get("component_instance", ""),
+                variable_name=record.get("variable_name", ""),
+                variable_instance=record.get("variable_instance", ""),
+                monitoring_id=record.get("monitoring_id"),
+                severity=record.get("severity"),
+                monitor_type=record.get("monitor_type", ""),
+                threshold=record.get("threshold", ""),
+                is_transaction=record.get("is_transaction", False),
+                evse_id=record.get("evse_id"),
+                connector_id=record.get("connector_id"),
+                received_at=received_at,
+            )
         if request_id is not None and not tbc:
             store.pop_monitoring_report_request(request_id)
         self._log_ocpp201_notification("NotifyMonitoringReport", payload)
