@@ -589,6 +589,17 @@ class NodeAdmin(SaveBeforeChangeAction, EntityModelAdmin):
         if not node:
             return JsonResponse({"detail": "Node not found"}, status=404)
 
+        if node.current_relation == Node.Relation.DOWNSTREAM:
+            message = _("Downstream Skipped")
+            return JsonResponse(
+                {
+                    "node": str(node),
+                    "status": "skipped",
+                    "local": {"ok": True, "message": message},
+                    "remote": {"ok": True, "message": message},
+                }
+            )
+
         local_result = self._refresh_local_information(node)
         remote_result = self._push_remote_information(node)
 
