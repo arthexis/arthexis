@@ -178,6 +178,8 @@ fi
 DEFAULT_PORT="$(arthexis_detect_backend_port "$BASE_DIR")"
 PORT="$DEFAULT_PORT"
 RELOAD=false
+# Force migration checks even when no changes are detected
+MIGRATION_FORCE=false
 # Whether to wait for the suite to become reachable after launching
 AWAIT_START=false
 STARTUP_TIMEOUT=300
@@ -261,11 +263,15 @@ while [[ $# -gt 0 ]]; do
       ;;
     --show)
       if [ -z "${2:-}" ]; then
-        echo "Usage: $0 [--port PORT] [--reload] [--await] [--debug] [--show LEVEL] [--public|--internal] [--embedded|--systemd|--no-celery]" >&2
+        echo "Usage: $0 [--port PORT] [--reload] [--await] [--debug] [--show LEVEL] [--migrate] [--public|--internal] [--embedded|--systemd|--no-celery]" >&2
         exit 1
       fi
       SHOW_LEVEL="$2"
       shift 2
+      ;;
+    --migrate)
+      MIGRATION_FORCE=true
+      shift
       ;;
     --embedded|--celery)
       CELERY_MANAGEMENT_MODE="$ARTHEXIS_SERVICE_MODE_EMBEDDED"
@@ -291,7 +297,7 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     *)
-      echo "Usage: $0 [--port PORT] [--reload] [--await] [--debug] [--show LEVEL] [--public|--internal] [--embedded|--systemd|--no-celery]" >&2
+      echo "Usage: $0 [--port PORT] [--reload] [--await] [--debug] [--show LEVEL] [--migrate] [--public|--internal] [--embedded|--systemd|--no-celery]" >&2
       exit 1
       ;;
   esac
@@ -439,26 +445,74 @@ if [ "$LCD_FEATURE" = true ]; then
 fi
 
 RUNSERVER_EXTRA_ARGS=()
+# Migration checks run only when new migrations are detected or --migrate is provided.
+MIGRATIONS_HASH_FILE="$BASE_DIR/migrations.md5"
+MIGRATIONS_HASH_CURRENT=""
+STORED_MIGRATIONS_HASH=""
+MIGRATIONS_CHANGED=false
+MIGRATION_HASH_FALLBACK=false
+
+compute_migrations_hash() {
+  python "$BASE_DIR/scripts/migrations_hash.py"
+}
+
+initialize_migration_hash_state() {
+  if [ -n "$MIGRATIONS_HASH_CURRENT" ]; then
+    return 0
+  fi
+
+  if ! MIGRATIONS_HASH_CURRENT=$(compute_migrations_hash); then
+    echo "Failed to compute migrations hash; will run migration checks to be safe."
+    MIGRATIONS_CHANGED=true
+    MIGRATION_HASH_FALLBACK=true
+    return 0
+  fi
+
+  [ -f "$MIGRATIONS_HASH_FILE" ] && STORED_MIGRATIONS_HASH=$(cat "$MIGRATIONS_HASH_FILE")
+  if [ "$MIGRATIONS_HASH_CURRENT" != "$STORED_MIGRATIONS_HASH" ]; then
+    MIGRATIONS_CHANGED=true
+  fi
+}
+
+# Preflight uses migration hashing to avoid database calls when migrations are unchanged.
+# Pass --migrate to force checks even when hashes match.
 run_runserver_preflight() {
   if [ "${RUNSERVER_PREFLIGHT_DONE:-false}" = true ]; then
     return 0
   fi
 
-  echo "Inspecting migrations before runserver..."
-  if migration_plan=$(python manage.py showmigrations --plan); then
-    if echo "$migration_plan" | grep -q '^\s*\[ \]'; then
-      echo "Applying pending migrations..."
-      python manage.py migrate --noinput
-    else
-      echo "No pending migrations detected; skipping migrate."
-    fi
-  else
-    echo "Failed to inspect migrations" >&2
-    return 1
+  initialize_migration_hash_state
+  local should_run_migrations=false
+
+  if [ "$MIGRATION_FORCE" = true ]; then
+    should_run_migrations=true
+  elif [ "$MIGRATIONS_CHANGED" = true ]; then
+    should_run_migrations=true
   fi
 
-  echo "Running Django migration check once before runserver..."
-  python manage.py migrate --check
+  if [ "$should_run_migrations" = true ]; then
+    echo "Inspecting migrations before runserver..."
+    if migration_plan=$(python manage.py showmigrations --plan); then
+      if echo "$migration_plan" | grep -q '^\s*\[ \]'; then
+        echo "Applying pending migrations..."
+        python manage.py migrate --noinput
+      else
+        echo "No pending migrations detected; skipping migrate."
+      fi
+    else
+      echo "Failed to inspect migrations" >&2
+      return 1
+    fi
+
+    echo "Running Django migration check once before runserver..."
+    python manage.py migrate --check
+
+    if [ -n "$MIGRATIONS_HASH_CURRENT" ] && [ "$MIGRATION_HASH_FALLBACK" = false ]; then
+      echo "$MIGRATIONS_HASH_CURRENT" > "$MIGRATIONS_HASH_FILE"
+    fi
+  else
+    echo "Migrations unchanged; skipping migration inspection. Use --migrate to force."
+  fi
 
   RUNSERVER_PREFLIGHT_DONE=true
   export DJANGO_SUPPRESS_MIGRATION_CHECK=1
