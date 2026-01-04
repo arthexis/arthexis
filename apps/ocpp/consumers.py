@@ -2239,11 +2239,22 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         def _persist_reservation():
             reservation = None
             if reservation_pk is not None:
-                reservation = (
-                    CPReservation.objects.select_related("connector")
-                    .filter(pk=reservation_pk)
-                    .first()
+                charger_id_hint = getattr(self, "charger_id", None) or getattr(
+                    getattr(self, "charger", None), "charger_id", None
                 )
+                connector_hint = getattr(self, "connector_value", None)
+                reservation_query = CPReservation.objects.select_related("connector").filter(
+                    pk=reservation_pk
+                )
+                if charger_id_hint:
+                    reservation_query = reservation_query.filter(
+                        connector__charger_id=charger_id_hint
+                    )
+                if connector_hint is not None:
+                    reservation_query = reservation_query.filter(
+                        connector__connector_id=connector_hint
+                    )
+                reservation = reservation_query.first()
             if reservation is None:
                 return None
 

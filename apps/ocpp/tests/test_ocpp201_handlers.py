@@ -1287,3 +1287,45 @@ async def test_reservation_status_update_persists_and_notifies(status, confirmed
         "reservation_id": reservation.pk,
         "status": status,
     }
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+async def test_reservation_status_update_ignored_for_other_connector():
+    from apps.ocpp.models import Charger as ChargerModel
+
+    location = await database_sync_to_async(Location.objects.create)(name="Depot")
+    primary = await database_sync_to_async(ChargerModel.objects.create)(
+        charger_id="CP-RES-PRIMARY", connector_id=1, location=location
+    )
+    other = await database_sync_to_async(ChargerModel.objects.create)(
+        charger_id="CP-RES-OTHER", connector_id=1, location=location
+    )
+    reservation = await database_sync_to_async(CPReservation.objects.create)(
+        location=location,
+        connector=primary,
+        start_time=timezone.now(),
+        duration_minutes=30,
+    )
+
+    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = store.identity_key(other.charger_id, other.connector_id)
+    consumer.charger = other
+    consumer.aggregate_charger = None
+    consumer.connector_value = other.connector_id
+
+    payload = {
+        "reservationId": reservation.pk,
+        "reservationUpdateStatus": "Accepted",
+    }
+
+    result = await consumer._handle_reservation_status_update_action(
+        payload, "resv-msg-2", "", ""
+    )
+
+    assert result == {}
+    updated = await database_sync_to_async(CPReservation.objects.get)(pk=reservation.pk)
+    assert updated.evcs_status == ""
+    assert updated.evcs_confirmed is False
+    assert updated.evcs_confirmed_at is None
+    assert not store.connector_release_notifications
