@@ -23,6 +23,7 @@ class LcdMessage:
     subject: str
     body: str
     expires_at: datetime | None = None
+    animation: str | None = None
 
 
 def _parse_expires_at(value: str | None) -> datetime | None:
@@ -47,8 +48,26 @@ def _parse_expires_at(value: str | None) -> datetime | None:
 def _parse_lcd_lock_lines(lines: list[str]) -> LcdMessage:
     subject = lines[0][:64] if lines else ""
     body = lines[1][:64] if len(lines) > 1 else ""
-    expires_at = _parse_expires_at(lines[2]) if len(lines) > 2 else None
-    return LcdMessage(subject=subject, body=body, expires_at=expires_at)
+
+    animation = None
+    expires_at = None
+
+    remaining = lines[2:]
+    if remaining:
+        third_line = remaining[0].strip()
+        if third_line.lower().startswith("animation:"):
+            animation = third_line.split(":", 1)[1].strip() or None
+        else:
+            expires_at = _parse_expires_at(third_line)
+
+    if remaining[1:]:
+        for extra in remaining[1:]:
+            extra_value = extra.strip()
+            if extra_value.lower().startswith("animation:"):
+                animation = extra_value.split(":", 1)[1].strip() or None
+                break
+
+    return LcdMessage(subject=subject, body=body, expires_at=expires_at, animation=animation)
 
 
 def read_lcd_lock_file(lock_file: Path) -> LcdMessage | None:
@@ -80,11 +99,15 @@ def _format_expires_at(value: datetime | str | None) -> str:
     return expires_at.isoformat()
 
 
-def render_lcd_lock_file(*, subject: str = "", body: str = "", expires_at=None) -> str:
+def render_lcd_lock_file(
+    *, subject: str = "", body: str = "", expires_at=None, animation: str | None = None
+) -> str:
     lines = [subject.strip()[:64], body.strip()[:64]]
     expires_line = _format_expires_at(expires_at)
     if expires_line:
         lines.append(expires_line)
+    if animation:
+        lines.append(f"animation:{animation.strip()[:64]}")
     return "\n".join(lines) + "\n"
 
 

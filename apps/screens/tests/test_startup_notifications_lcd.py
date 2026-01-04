@@ -104,3 +104,18 @@ class LCDStartupNotificationTests(TestCase):
 
         assert message is not None
         assert message.expires_at == expires_at
+
+    def test_render_and_read_include_animation(self):
+        payload = render_lcd_lock_file(subject="hi", body="there", animation="trees")
+
+        with TemporaryDirectory() as tmpdir:
+            lock_dir = Path(tmpdir) / ".locks"
+            lock_dir.mkdir(parents=True)
+            target = lock_dir / LCD_HIGH_LOCK_FILE
+            target.write_text(payload, encoding="utf-8")
+
+            message = read_lcd_lock_file(target)
+
+        assert message is not None
+        assert message.animation == "trees"
+        assert message.expires_at is None

@@ -67,7 +67,7 @@ if not any(
 root_logger.setLevel(logging.DEBUG)
 
 from apps.screens.lcd import CharLCD1602, LCDUnavailableError
-from apps.screens.animations import AnimationLoadError, default_tree_frames
+from apps.screens.animations import AnimationLoadError, load_frames_from_file
 from apps.screens.history import LCDHistoryRecorder
 from apps.screens.startup_notifications import (
     LCD_HIGH_LOCK_FILE,
@@ -87,18 +87,10 @@ LCD_ROWS = CharLCD1602.rows
 CLOCK_TIME_FORMAT = "%p %I:%M"
 CLOCK_DATE_FORMAT = "%Y-%m-%d %a"
 ROTATION_SECONDS = 10
-GAP_ANIMATION_FRAMES_PER_PAYLOAD = 4
-GAP_ANIMATION_SCROLL_MS = 600
+ANIMATION_FRAMES_PER_PAYLOAD = 1
+ANIMATION_SCROLL_MS = 600
 SUITE_UPTIME_LOCK_NAME = "suite_uptime.lck"
 SUITE_UPTIME_LOCK_MAX_AGE = timedelta(minutes=10)
-
-try:
-    GAP_ANIMATION_FRAMES = default_tree_frames()
-except AnimationLoadError:
-    logger.debug("Falling back to blank animation frames", exc_info=True)
-    GAP_ANIMATION_FRAMES = [" " * (LCD_COLUMNS * LCD_ROWS)]
-
-GAP_ANIMATION_CYCLE = cycle(GAP_ANIMATION_FRAMES)
 
 
 class FateDeck:
@@ -146,6 +138,7 @@ class LockPayload(NamedTuple):
     line1: str
     line2: str
     scroll_ms: int
+    animation_name: str | None = None
 
 
 class DisplayState(NamedTuple):
@@ -162,6 +155,7 @@ class DisplayState(NamedTuple):
 
 
 _NON_ASCII_CACHE: set[str] = set()
+_ANIMATION_CYCLES: dict[str, cycle[str]] = {}
 
 
 def _non_ascii_positions(text: str) -> list[str]:
@@ -303,39 +297,72 @@ def _read_lock_file(lock_file: Path) -> LockPayload:
         except OSError:
             logger.debug("Failed to remove expired lock file: %s", lock_file, exc_info=True)
         return LockPayload("", "", DEFAULT_SCROLL_MS)
-    return LockPayload(payload.subject, payload.body, DEFAULT_SCROLL_MS)
+    return LockPayload(
+        payload.subject,
+        payload.body,
+        DEFAULT_SCROLL_MS,
+        payload.animation,
+    )
 
 
 def _payload_has_text(payload: LockPayload) -> bool:
     return bool(payload.line1.strip() or payload.line2.strip())
 
 
+def _payload_is_active(payload: LockPayload) -> bool:
+    return bool(payload.animation_name) or _payload_has_text(payload)
+
+
 def _animation_payload(
-    frame_cycle, *, frames_per_payload: int = GAP_ANIMATION_FRAMES_PER_PAYLOAD, scroll_ms: int = GAP_ANIMATION_SCROLL_MS
+    frame_cycle,
+    *,
+    animation_name: str | None = None,
+    frames_per_payload: int = ANIMATION_FRAMES_PER_PAYLOAD,
+    scroll_ms: int = ANIMATION_SCROLL_MS,
 ) -> LockPayload:
     frames = list(islice(frame_cycle, frames_per_payload))
     if not frames:
-        return LockPayload("", "", scroll_ms)
+        return LockPayload("", "", scroll_ms, animation_name)
 
     line1 = " ".join(frame[:LCD_COLUMNS] for frame in frames).rstrip()
     line2 = " ".join(frame[LCD_COLUMNS:] for frame in frames).rstrip()
-    return LockPayload(line1, line2, scroll_ms)
+    return LockPayload(line1, line2, scroll_ms, animation_name)
 
 
-def _select_low_payload(
-    payload: LockPayload,
-    frame_cycle=GAP_ANIMATION_CYCLE,
-    scroll_ms: int | None = None,
-    frames_per_payload: int | None = None,
-) -> LockPayload:
-    if _payload_has_text(payload):
-        return payload
+def _animation_cycle(animation_name: str) -> cycle[str]:
+    normalized = animation_name.strip()
+    if not normalized:
+        raise AnimationLoadError("Animation name cannot be empty.")
+
+    if normalized not in _ANIMATION_CYCLES:
+        frames = load_frames_from_file(normalized)
+        _ANIMATION_CYCLES[normalized] = cycle(frames)
+
+    return _ANIMATION_CYCLES[normalized]
+
+
+def _render_animation_payload(payload: LockPayload) -> LockPayload:
+    try:
+        frame_cycle = _animation_cycle(payload.animation_name or "")
+    except Exception:
+        logger.warning(
+            "Failed to load animation '%s'", payload.animation_name, exc_info=True
+        )
+        return LockPayload(payload.line1, payload.line2, payload.scroll_ms)
 
     return _animation_payload(
         frame_cycle,
-        frames_per_payload=frames_per_payload or GAP_ANIMATION_FRAMES_PER_PAYLOAD,
-        scroll_ms=scroll_ms or GAP_ANIMATION_SCROLL_MS,
+        animation_name=payload.animation_name,
+        frames_per_payload=ANIMATION_FRAMES_PER_PAYLOAD,
+        scroll_ms=payload.scroll_ms or ANIMATION_SCROLL_MS,
     )
+
+
+def _select_low_payload(payload: LockPayload) -> LockPayload:
+    if payload.animation_name:
+        return _render_animation_payload(payload)
+
+    return payload
 
 
 def _lcd_clock_enabled() -> bool:
@@ -814,12 +841,14 @@ def main() -> None:  # pragma: no cover - hardware dependent
                         low_mtime = 0.0
                         low_available = False
 
-                    low_payload = _select_low_payload(
-                        low_payload,
-                        frame_cycle=GAP_ANIMATION_CYCLE,
-                        scroll_ms=GAP_ANIMATION_SCROLL_MS,
+                    high_payload = (
+                        _render_animation_payload(high_payload)
+                        if high_payload.animation_name
+                        else high_payload
                     )
-                    low_available = _payload_has_text(low_payload)
+                    high_available = high_available and _payload_is_active(high_payload)
+                    low_payload = _select_low_payload(low_payload)
+                    low_available = _payload_is_active(low_payload)
 
                     previous_order = state_order
                     if high_available:
