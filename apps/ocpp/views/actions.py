@@ -22,6 +22,7 @@ from ..models import (
     CPReservation,
     Charger,
     ChargingProfile,
+    ChargerLogRequest,
     DataTransferMessage,
     CertificateOperation,
     CertificateRequest,
@@ -76,6 +77,7 @@ def _handle_get_configuration(context: ActionContext, data: dict) -> JsonRespons
     )
 
 
+@protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "ReserveNow")
 @protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "ReserveNow")
 def _handle_reserve_now(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
     reservation_pk = data.get("reservation") or data.get("reservationId")
@@ -98,12 +100,21 @@ def _handle_reserve_now(context: ActionContext, data: dict) -> JsonResponse | Ac
     if ws is None:
         return JsonResponse({"detail": "no connection"}, status=404)
     expiry = timezone.localtime(reservation.end_time)
+    ocpp_version = str(getattr(context.ws, "ocpp_version", "") or "")
     payload = {
         "connectorId": connector_value,
         "expiryDate": expiry.isoformat(),
         "idTag": id_tag,
         "reservationId": reservation.pk,
     }
+    if ocpp_version.startswith("ocpp2.0"):
+        payload = {
+            "id": reservation.pk,
+            "expiryDateTime": expiry.isoformat(),
+            "idToken": {"idToken": id_tag, "type": "Central"},
+        }
+        if connector_value not in (None, ""):
+            payload["evseId"] = connector_value
     message_id = uuid.uuid4().hex
     ocpp_action = "ReserveNow"
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
@@ -482,12 +493,14 @@ def _handle_get_diagnostics(
     )
 
 
+@protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "ChangeAvailability")
 @protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "ChangeAvailability")
 def _handle_change_availability(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
     availability_type = data.get("type")
     if availability_type not in {"Operative", "Inoperative"}:
         return JsonResponse({"detail": "invalid availability type"}, status=400)
     connector_payload = context.connector_value if context.connector_value is not None else 0
+    ocpp_version = str(getattr(context.ws, "ocpp_version", "") or "")
     if "connectorId" in data:
         candidate = data.get("connectorId")
         if candidate not in (None, ""):
@@ -495,10 +508,21 @@ def _handle_change_availability(context: ActionContext, data: dict) -> JsonRespo
                 connector_payload = int(candidate)
             except (TypeError, ValueError):
                 connector_payload = candidate
+    if "evseId" in data:
+        evse_candidate = data.get("evseId")
+        if evse_candidate not in (None, ""):
+            try:
+                connector_payload = int(evse_candidate)
+            except (TypeError, ValueError):
+                connector_payload = evse_candidate
     message_id = uuid.uuid4().hex
     ocpp_action = "ChangeAvailability"
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
     payload = {"connectorId": connector_payload, "type": availability_type}
+    if ocpp_version.startswith("ocpp2.0"):
+        payload = {"operationalStatus": availability_type}
+        if connector_payload not in (None, ""):
+            payload["evseId"] = connector_payload
     msg = json.dumps([2, message_id, "ChangeAvailability", payload])
     async_to_sync(context.ws.send)(msg)
     requested_at = timezone.now()
@@ -595,6 +619,7 @@ def _handle_change_configuration(context: ActionContext, data: dict) -> JsonResp
     )
 
 
+@protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "ClearCache")
 @protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "ClearCache")
 def _handle_clear_cache(context: ActionContext, _data: dict) -> JsonResponse | ActionCall:
     message_id = uuid.uuid4().hex
@@ -620,6 +645,72 @@ def _handle_clear_cache(context: ActionContext, _data: dict) -> JsonResponse | A
     )
 
 
+@protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "GetLog")
+def _handle_get_log(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
+    if context.charger is None:
+        return JsonResponse({"detail": "charger not found"}, status=404)
+
+    log_type = str(data.get("logType") or data.get("log_type") or "").strip()
+    request = ChargerLogRequest.objects.create(
+        charger=context.charger,
+        log_type=log_type,
+        status="Pending",
+    )
+
+    message_id = uuid.uuid4().hex
+    capture_key = store.start_log_capture(
+        context.cid,
+        context.connector_value,
+        request.request_id,
+    )
+    request.message_id = message_id
+    request.session_key = capture_key
+    request.status = "Requested"
+    request.save(update_fields=["message_id", "session_key", "status"])
+
+    payload: dict[str, object] = {"requestId": request.request_id}
+    if log_type:
+        payload["logType"] = log_type
+    if "location" in data and data["location"] not in (None, ""):
+        payload["location"] = str(data.get("location"))
+    elif "remoteLocation" in data and data["remoteLocation"] not in (None, ""):
+        payload["remoteLocation"] = str(data.get("remoteLocation"))
+
+    message = json.dumps([2, message_id, "GetLog", payload])
+    async_to_sync(context.ws.send)(message)
+
+    log_key = context.log_key
+    store.register_pending_call(
+        message_id,
+        {
+            "action": "GetLog",
+            "charger_id": context.cid,
+            "connector_id": context.connector_value,
+            "log_key": log_key,
+            "log_request_pk": request.pk,
+            "capture_key": capture_key,
+            "message_id": message_id,
+            "requested_at": timezone.now(),
+        },
+    )
+    store.schedule_call_timeout(
+        message_id,
+        timeout=10.0,
+        action="GetLog",
+        log_key=log_key,
+        message="GetLog request timed out",
+    )
+
+    return ActionCall(
+        msg=message,
+        message_id=message_id,
+        ocpp_action="GetLog",
+        expected_statuses=CALL_EXPECTED_STATUSES.get("GetLog"),
+        log_key=log_key,
+    )
+
+
+@protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "CancelReservation")
 @protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "CancelReservation")
 def _handle_cancel_reservation(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
     reservation_pk = data.get("reservation") or data.get("reservationId")
@@ -734,6 +825,7 @@ def _handle_unlock_connector(context: ActionContext, data: dict) -> JsonResponse
     )
 
 
+@protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "DataTransfer")
 @protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "DataTransfer")
 def _handle_data_transfer(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
     vendor_id = data.get("vendorId")
@@ -784,6 +876,7 @@ def _handle_data_transfer(context: ActionContext, data: dict) -> JsonResponse | 
     )
 
 
+@protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "Reset")
 @protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "Reset")
 def _handle_reset(context: ActionContext, _data: dict) -> JsonResponse | ActionCall:
     tx_obj = store.get_transaction(context.cid, context.connector_value)
@@ -816,6 +909,7 @@ def _handle_reset(context: ActionContext, _data: dict) -> JsonResponse | ActionC
     )
 
 
+@protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "TriggerMessage")
 @protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "TriggerMessage")
 def _handle_trigger_message(context: ActionContext, data: dict) -> JsonResponse | ActionCall:
     trigger_target = data.get("target") or data.get("triggerTarget")
@@ -934,6 +1028,7 @@ def _handle_send_local_list(context: ActionContext, data: dict) -> JsonResponse 
     )
 
 
+@protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "GetLocalListVersion")
 @protocol_call("ocpp16", ProtocolCallModel.CSMS_TO_CP, "GetLocalListVersion")
 def _handle_get_local_list_version(context: ActionContext, _data: dict) -> JsonResponse | ActionCall:
     message_id = uuid.uuid4().hex
@@ -962,6 +1057,74 @@ def _handle_get_local_list_version(context: ActionContext, _data: dict) -> JsonR
         message_id=message_id,
         ocpp_action=ocpp_action,
         expected_statuses=expected_statuses,
+    )
+
+
+@protocol_call("ocpp201", ProtocolCallModel.CSMS_TO_CP, "GetCompositeSchedule")
+def _handle_get_composite_schedule(
+    context: ActionContext, data: dict
+) -> JsonResponse | ActionCall:
+    duration_raw = data.get("duration") or data.get("durationSeconds")
+    try:
+        duration_value = int(duration_raw)
+    except (TypeError, ValueError):
+        return JsonResponse({"detail": "duration must be an integer"}, status=400)
+    if duration_value <= 0:
+        return JsonResponse({"detail": "duration must be positive"}, status=400)
+
+    evse_value = data.get("evseId")
+    if evse_value in (None, ""):
+        evse_value = data.get("connectorId")
+    if evse_value in (None, ""):
+        evse_value = context.connector_value
+    evse_payload: int | None = None
+    if evse_value not in (None, ""):
+        try:
+            evse_payload = int(evse_value)
+        except (TypeError, ValueError):
+            return JsonResponse({"detail": "evseId must be an integer"}, status=400)
+
+    payload: dict[str, object] = {"duration": duration_value}
+    if evse_payload is not None:
+        payload["evseId"] = evse_payload
+    rate_unit = data.get("chargingRateUnit") or ChargingProfile.RateUnit.WATT
+    if rate_unit:
+        payload["chargingRateUnit"] = rate_unit
+
+    message_id = uuid.uuid4().hex
+    ocpp_action = "GetCompositeSchedule"
+    expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
+    msg = json.dumps([2, message_id, ocpp_action, payload])
+    async_to_sync(context.ws.send)(msg)
+
+    log_key = context.log_key
+    store.register_pending_call(
+        message_id,
+        {
+            "action": ocpp_action,
+            "charger_id": context.cid,
+            "connector_id": evse_payload,
+            "log_key": log_key,
+            "requested_at": timezone.now(),
+        },
+    )
+    store.schedule_call_timeout(
+        message_id,
+        timeout=5.0,
+        action=ocpp_action,
+        log_key=log_key,
+        message=(
+            "GetCompositeSchedule timed out: charger did not respond"
+            " (operation may not be supported)"
+        ),
+    )
+
+    return ActionCall(
+        msg=msg,
+        message_id=message_id,
+        ocpp_action=ocpp_action,
+        expected_statuses=expected_statuses,
+        log_key=log_key,
     )
 
 
@@ -2663,6 +2826,7 @@ ACTION_HANDLERS = {
     "change_availability": _handle_change_availability,
     "change_configuration": _handle_change_configuration,
     "clear_cache": _handle_clear_cache,
+    "get_log": _handle_get_log,
     "cancel_reservation": _handle_cancel_reservation,
     "unlock_connector": _handle_unlock_connector,
     "data_transfer": _handle_data_transfer,
@@ -2670,6 +2834,7 @@ ACTION_HANDLERS = {
     "trigger_message": _handle_trigger_message,
     "send_local_list": _handle_send_local_list,
     "get_local_list_version": _handle_get_local_list_version,
+    "get_composite_schedule": _handle_get_composite_schedule,
     "update_firmware": _handle_update_firmware,
     "set_charging_profile": _handle_set_charging_profile,
     "install_certificate": _handle_install_certificate,
