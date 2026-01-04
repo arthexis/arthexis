@@ -23,9 +23,13 @@ def env_refresh_module():
 
 @pytest.fixture(scope="module")
 def refreshed_environment(env_refresh_module, django_db_setup, django_db_blocker):
-    locks_dir = Path(settings.BASE_DIR) / ".locks"
+    base_dir = Path(settings.BASE_DIR)
+    locks_dir = base_dir / ".locks"
     if locks_dir.exists():
         shutil.rmtree(locks_dir)
+
+    existing_md5_files = {path.name for path in base_dir.glob("*.md5")}
+    existing_lock_files = {path.name for path in base_dir.glob("*.lock")}
 
     with django_db_blocker.unblock():
         env_refresh_module.main(["database"], latest=True)
@@ -41,6 +45,9 @@ def refreshed_environment(env_refresh_module, django_db_setup, django_db_blocker
         fixtures = env_refresh_module._fixture_files()
         expected_fixtures_hash = env_refresh_module._fixtures_hash(fixtures) if fixtures else ""
 
+    md5_files = {path.name for path in base_dir.glob("*.md5")}
+    lock_files = {path.name for path in base_dir.glob("*.lock")}
+
     return {
         "locks_dir": locks_dir,
         "migration_plan": migration_plan,
@@ -48,6 +55,8 @@ def refreshed_environment(env_refresh_module, django_db_setup, django_db_blocker
         "expected_migrations_hash": expected_migrations_hash,
         "fixtures_hash": fixtures_hash,
         "expected_fixtures_hash": expected_fixtures_hash,
+        "new_md5_files": md5_files - existing_md5_files,
+        "new_lock_files": lock_files - existing_lock_files,
     }
 
 
@@ -94,5 +103,10 @@ def test_env_refresh_leaves_no_pending_migrations(refreshed_environment, env_ref
 
     executor = MigrationExecutor(connection)
     assert executor.loader.detect_conflicts() == {}
+
+
+def test_env_refresh_does_not_create_md5_or_lockfiles_in_base_dir(refreshed_environment):
+    assert not refreshed_environment["new_md5_files"]
+    assert not refreshed_environment["new_lock_files"]
 
 
