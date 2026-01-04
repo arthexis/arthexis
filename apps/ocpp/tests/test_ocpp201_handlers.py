@@ -276,6 +276,98 @@ async def test_set_monitoring_level_error_clears_pending_call_from_action():
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
+async def test_unlock_connector_result_updates_state():
+    _reset_pending_calls()
+
+    class DummyWebSocket:
+        def __init__(self):
+            self.sent: list[str] = []
+
+        async def send(self, message: str) -> None:  # pragma: no cover - async wrapper
+            self.sent.append(message)
+
+    charger = await database_sync_to_async(Charger.objects.create)(
+        charger_id="CP-UNLOCK-1", connector_id=2
+    )
+    log_key = store.identity_key(charger.charger_id, charger.connector_id)
+    ws = DummyWebSocket()
+    context = ActionContext(
+        charger.charger_id, charger.connector_id, charger=charger, ws=ws, log_key=log_key
+    )
+    action_call = await anyio.to_thread.run_sync(
+        lambda: actions._handle_unlock_connector(context, {})
+    )
+
+    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = log_key
+    consumer.charger_id = charger.charger_id
+    consumer.charger = charger
+    consumer.aggregate_charger = None
+
+    payload = {"status": "Unlocked", "statusInfo": {"detail": "released"}}
+    await consumer._handle_call_result(action_call.message_id, payload)
+
+    assert action_call.message_id not in store.pending_calls
+    updated = await database_sync_to_async(Charger.objects.get)(pk=charger.pk)
+    assert updated.availability_request_status == "Unlocked"
+    assert updated.availability_request_details == '{"detail": "released"}'
+    result = store.wait_for_pending_call(action_call.message_id, timeout=0.5)
+    assert result is not None
+    assert result.get("success") is True
+    assert (result.get("payload") or {}).get("status") == "Unlocked"
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+async def test_unlock_connector_error_records_failure():
+    _reset_pending_calls()
+
+    class DummyWebSocket:
+        def __init__(self):
+            self.sent: list[str] = []
+
+        async def send(self, message: str) -> None:  # pragma: no cover - async wrapper
+            self.sent.append(message)
+
+    charger = await database_sync_to_async(Charger.objects.create)(
+        charger_id="CP-UNLOCK-2", connector_id=3
+    )
+    log_key = store.identity_key(charger.charger_id, charger.connector_id)
+    ws = DummyWebSocket()
+    context = ActionContext(
+        charger.charger_id, charger.connector_id, charger=charger, ws=ws, log_key=log_key
+    )
+    action_call = await anyio.to_thread.run_sync(
+        lambda: actions._handle_unlock_connector(context, {})
+    )
+
+    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = log_key
+    consumer.charger_id = charger.charger_id
+    consumer.charger = charger
+    consumer.aggregate_charger = None
+
+    await consumer._handle_call_error(
+        action_call.message_id,
+        "InternalError",
+        "unable to unlock",
+        {"detail": "test"},
+    )
+
+    assert action_call.message_id not in store.pending_calls
+    updated = await database_sync_to_async(Charger.objects.get)(pk=charger.pk)
+    assert updated.availability_request_status == "Rejected"
+    assert updated.availability_request_details == '{"detail": "test"}'
+    result = store.wait_for_pending_call(action_call.message_id, timeout=0.5)
+    assert result is not None
+    assert result.get("success") is False
+    assert result.get("error_code") == "InternalError"
+    assert result.get("error_description") == "unable to unlock"
+    assert result.get("error_details") == {"detail": "test"}
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
 async def test_handle_clear_charging_profile_error_records_failure():
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="CLR-CP-2")
     profile = ChargingProfile(
