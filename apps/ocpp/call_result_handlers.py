@@ -1331,20 +1331,33 @@ async def handle_set_monitoring_base_result(
 ) -> bool:
     status_value = str(payload_data.get("status") or "").strip()
     status_info_text = _format_status_info(payload_data.get("statusInfo"))
+    monitoring_base = metadata.get("monitoring_base") or payload_data.get(
+        "monitoringBase"
+    )
 
     fragments: list[str] = []
     if status_value:
         fragments.append(f"status={status_value}")
     if status_info_text:
         fragments.append(f"statusInfo={status_info_text}")
+    if monitoring_base not in (None, ""):
+        fragments.append(f"base={monitoring_base}")
     message = "SetMonitoringBase result"
     if fragments:
         message += ": " + ", ".join(fragments)
     store.add_log(log_key, message, log_type="charger")
 
+    result_metadata = dict(metadata or {})
+    if monitoring_base not in (None, ""):
+        result_metadata["monitoring_base"] = monitoring_base
+    if status_value:
+        result_metadata["status"] = status_value
+    if status_info_text:
+        result_metadata["status_info"] = status_info_text
+
     store.record_pending_call_result(
         message_id,
-        metadata=metadata,
+        metadata=result_metadata,
         payload=payload_data,
     )
     return True
@@ -1359,20 +1372,33 @@ async def handle_set_monitoring_level_result(
 ) -> bool:
     status_value = str(payload_data.get("status") or "").strip()
     status_info_text = _format_status_info(payload_data.get("statusInfo"))
+    monitoring_level = metadata.get("monitoring_level") or payload_data.get(
+        "severity"
+    )
 
     fragments: list[str] = []
     if status_value:
         fragments.append(f"status={status_value}")
     if status_info_text:
         fragments.append(f"statusInfo={status_info_text}")
+    if monitoring_level not in (None, ""):
+        fragments.append(f"severity={monitoring_level}")
     message = "SetMonitoringLevel result"
     if fragments:
         message += ": " + ", ".join(fragments)
     store.add_log(log_key, message, log_type="charger")
 
+    result_metadata = dict(metadata or {})
+    if monitoring_level not in (None, ""):
+        result_metadata["monitoring_level"] = monitoring_level
+    if status_value:
+        result_metadata["status"] = status_value
+    if status_info_text:
+        result_metadata["status_info"] = status_info_text
+
     store.record_pending_call_result(
         message_id,
-        metadata=metadata,
+        metadata=result_metadata,
         payload=payload_data,
     )
     return True
