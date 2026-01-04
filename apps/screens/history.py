@@ -24,7 +24,7 @@ class LCDHistoryRecorder:
         self,
         *,
         base_dir: Path,
-        history_dir_name: str = "works",
+        history_dir_name: str = "work",
         max_days: int = 3,
         clock: Callable[[], datetime] | None = None,
     ) -> None:
@@ -101,7 +101,7 @@ class LCDHistoryRecorder:
         return datetime.fromtimestamp(stat_result.st_mtime, tz=timezone.utc).date()
 
 
-def load_history_entries(base_dir: Path, *, history_dir_name: str = "works") -> list[HistoryEntry]:
+def load_history_entries(base_dir: Path, *, history_dir_name: str = "work") -> list[HistoryEntry]:
     history_dir = base_dir / history_dir_name
     entries: List[HistoryEntry] = []
     if not history_dir.exists():

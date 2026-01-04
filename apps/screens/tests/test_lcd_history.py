@@ -17,7 +17,7 @@ def test_history_recorder_rotates_between_days(tmp_path):
     recorder = LCDHistoryRecorder(base_dir=tmp_path, clock=clock)
     recorder.record("line1", "line2", label="first")
 
-    history_dir = tmp_path / "works"
+    history_dir = tmp_path / "work"
     first_entry = json.loads((history_dir / "lcd-history-0.txt").read_text())
     assert first_entry["line1"] == "line1"
     assert first_entry["label"] == "first"
