@@ -9,6 +9,9 @@ from typing import Any, Dict, List
 import django
 import pytest
 
+# Force lightweight SQLite settings during tests to avoid slow Postgres
+# connection attempts when checking availability inside config.settings.
+os.environ.setdefault("ARTHEXIS_DB_BACKEND", "sqlite")
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 
 
