@@ -3,6 +3,7 @@ name: CI
 env:
   PYTHONDONTWRITEBYTECODE: '1'
   NODE_OPTIONS: '--no-deprecation'
+  PYTEST_ADDOPTS: '-q --maxfail=1 --disable-warnings --timeout=30 -n auto --dist loadfile'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -62,7 +63,7 @@ jobs:
       - name: Run tests
         run: |
           source .venv/bin/activate
-          pytest --maxfail=1 --disable-warnings -q --timeout=30
+          pytest
   upgrade:
     runs-on: ubuntu-latest
     steps:
@@ -124,4 +125,4 @@ jobs:
         run: |
           set -Eeuo pipefail
           source .venv/bin/activate
-          pytest --maxfail=1 --disable-warnings -q --timeout=30
+          pytest
