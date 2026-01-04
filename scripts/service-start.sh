@@ -116,6 +116,9 @@ fi
 
 mkdir -p "$LOCK_DIR"
 
+# shellcheck source=scripts/helpers/runserver_preflight.sh
+. "$BASE_DIR/scripts/helpers/runserver_preflight.sh"
+
 DJANGO_PID_FILE="$LOCK_DIR/django.pid"
 CELERY_WORKER_PID_FILE="$LOCK_DIR/celery_worker.pid"
 CELERY_BEAT_PID_FILE="$LOCK_DIR/celery_beat.pid"
@@ -479,31 +482,6 @@ if [ "$LCD_FEATURE" = true ]; then
 fi
 
 RUNSERVER_EXTRA_ARGS=()
-run_runserver_preflight() {
-  if [ "${RUNSERVER_PREFLIGHT_DONE:-false}" = true ]; then
-    return 0
-  fi
-
-  echo "Inspecting migrations before runserver..."
-  if migration_plan=$(python manage.py showmigrations --plan); then
-    if echo "$migration_plan" | grep -q '^\s*\[ \]'; then
-      echo "Applying pending migrations..."
-      python manage.py migrate --noinput
-    else
-      echo "No pending migrations detected; skipping migrate."
-    fi
-  else
-    echo "Failed to inspect migrations" >&2
-    return 1
-  fi
-
-  echo "Running Django migration check once before runserver..."
-  python manage.py migrate --check
-
-  RUNSERVER_PREFLIGHT_DONE=true
-  export DJANGO_SUPPRESS_MIGRATION_CHECK=1
-  RUNSERVER_EXTRA_ARGS+=("--skip-checks")
-}
 
 # Start Celery components to handle queued email if enabled
 if [ "$CELERY" = true ]; then
