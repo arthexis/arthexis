@@ -3440,6 +3440,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         timestamp_value = _parse_ocpp_timestamp(payload.get("timestamp"))
         if timestamp_value is None:
             timestamp_value = timezone.now()
+
         tech_raw = (
             payload.get("techInfo")
             or payload.get("techinfo")
@@ -3933,6 +3934,27 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         if timestamp_value is None:
             timestamp_value = timezone.now()
 
+        def _record_transaction_event(
+            tx_obj: Transaction | None, extra: dict[str, object] | None = None
+        ) -> None:
+            notification: dict[str, object] = {
+                "charger_id": getattr(self, "charger_id", None) or self.store_key,
+                "connector_id": store.connector_slug(connector_value),
+                "event_type": event_type,
+                "timestamp": timestamp_value,
+                "transaction_pk": getattr(tx_obj, "pk", None),
+                "ocpp_transaction_id": ocpp_tx_id
+                or getattr(tx_obj, "ocpp_transaction_id", None),
+            }
+            if transaction_info:
+                if "meterStart" in transaction_info:
+                    notification["meter_start"] = transaction_info.get("meterStart")
+                if "meterStop" in transaction_info:
+                    notification["meter_stop"] = transaction_info.get("meterStop")
+            if extra:
+                notification.update(extra)
+            store.record_transaction_event(notification)
+
         id_token = payload.get("idToken") or {}
         id_tag = ""
         if isinstance(id_token, dict):
@@ -3985,6 +4007,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
                 await self._process_meter_value_entries(
                     payload.get("meterValue"), connector_value, tx_obj
                 )
+                _record_transaction_event(tx_obj)
                 transaction_reference = ocpp_tx_id or tx_obj.ocpp_transaction_id or str(tx_obj.pk)
                 store.mark_transaction_requests(
                     charger_id=self.charger_id,
@@ -4042,6 +4065,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             await self._process_meter_value_entries(
                 payload.get("meterValue"), connector_value, tx_obj
             )
+            _record_transaction_event(tx_obj)
             await self._update_consumption_message(tx_obj.pk)
             await self._cancel_consumption_message()
             transaction_reference = ocpp_tx_id or tx_obj.ocpp_transaction_id or str(tx_obj.pk)
@@ -4090,6 +4114,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             await self._process_meter_value_entries(
                 payload.get("meterValue"), connector_value, tx_obj
             )
+            _record_transaction_event(tx_obj)
             return {}
 
         return {}
