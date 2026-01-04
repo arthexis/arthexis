@@ -1,5 +1,6 @@
 from datetime import datetime
 from pathlib import Path
+import platform
 import logging
 
 from django.conf import settings
@@ -20,6 +21,40 @@ from apps.selenium.utils.firefox import ensure_geckodriver, find_firefox_binary
 WORK_DIR = Path(settings.BASE_DIR) / "work"
 SCREENSHOT_DIR = settings.LOG_DIR / "screenshots"
 logger = logging.getLogger(__name__)
+
+
+def _format_firefox_driver_help() -> str:
+    """Return OS-aware instructions for installing geckodriver."""
+
+    os_name = platform.system() or "Unknown"
+    instructions: list[str] = [
+        "Firefox WebDriver is unavailable.",
+        f"Detected OS: {os_name}.",
+    ]
+
+    if os_name == "Linux":
+        instructions.append(
+            "Download geckodriver for Linux and place the executable in /usr/local/bin or /usr/bin, "
+            "or set the GECKODRIVER environment variable to its full path. Ensure the file is executable (chmod +x)."
+        )
+    elif os_name == "Windows":
+        instructions.append(
+            "Download geckodriver.exe and add its folder (for example C:\\tools\\geckodriver) to the PATH or set the GECKODRIVER environment variable to the full executable path."
+        )
+    elif os_name == "Darwin":
+        instructions.append(
+            "Download the macOS geckodriver and place it in /usr/local/bin or another directory on PATH, or set GECKODRIVER to the executable path."
+        )
+    else:
+        instructions.append(
+            "Download the appropriate geckodriver for your platform and add it to PATH or set GECKODRIVER to the executable path."
+        )
+
+    instructions.append(
+        "The suite runs headless Firefox; ensure Firefox itself is installed and available to the same user running the tests."
+    )
+
+    return " ".join(instructions)
 
 def capture_screenshot(url: str, cookies=None) -> Path:
     """Capture a screenshot of ``url`` and save it to :data:`SCREENSHOT_DIR`.
@@ -60,9 +95,7 @@ def capture_screenshot(url: str, cookies=None) -> Path:
         logger.error("Failed to capture screenshot from %s: %s", url, exc)
         message = str(exc)
         if "Unable to obtain driver for firefox" in message:
-            message = (
-                "Firefox WebDriver is unavailable. Install geckodriver or configure the GECKODRIVER environment variable so Selenium can locate it."
-            )
+            message = _format_firefox_driver_help()
         raise RuntimeError(f"Screenshot capture failed: {message}") from exc
 
 

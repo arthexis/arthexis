@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from types import SimpleNamespace
+
 from apps.nginx import config_utils
 from apps.nginx.renderers import (
     apply_site_entries,
@@ -34,6 +36,20 @@ def test_generate_primary_config_external_websockets_toggle():
 
     assert config_utils.WEBSOCKET_MAP_DIRECTIVE not in disabled
     assert config_utils.WEBSOCKET_CONNECTION_HEADER not in disabled
+
+
+def test_generate_primary_config_with_secondary_backend():
+    secondary = SimpleNamespace(name="Blue", port=9090)
+
+    config = generate_primary_config(
+        "internal", 8080, secondary_instance=secondary, external_websockets=True
+    )
+
+    assert "upstream arthexis-blue-pool" in config
+    assert "server 127.0.0.1:8080;" in config
+    assert "server 127.0.0.1:9090 backup;" in config
+    assert "proxy_pass http://arthexis-blue-pool" in config
+    assert config_utils.WEBSOCKET_MAP_DIRECTIVE in config
 
 
 def test_apply_site_entries(tmp_path: Path):
@@ -74,6 +90,17 @@ def test_generate_site_entries_content_matches_written_file(tmp_path: Path):
     apply_site_entries(staging, "internal", 8080, dest)
 
     assert dest.read_text(encoding="utf-8") == preview_content
+
+
+def test_generate_site_entries_content_uses_proxy_target(tmp_path: Path):
+    staging = tmp_path / "sites.json"
+    staging.write_text('[{"domain": "proxy.example.com", "require_https": false}]', encoding="utf-8")
+
+    content = generate_site_entries_content(
+        staging, "public", 8080, proxy_target="arthexis-blue"
+    )
+
+    assert "proxy_pass http://arthexis-blue" in content
 
 
 def test_ssl_directives_omitted_when_assets_missing(monkeypatch, tmp_path: Path):

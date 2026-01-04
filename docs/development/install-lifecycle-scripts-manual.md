@@ -27,6 +27,7 @@ Passing a role flag applies a curated bundle of options. Each preset still honou
 | `--internal` | Forces the internal Nginx template (HTTP ports 80/8000/8080/8900). This is the default unless a role preset changes it.【F:install.sh†L226-L229】【F:install.sh†L320-L373】 |
 | `--public` | Enables the public HTTPS reverse proxy template while continuing to proxy to the backend on port 8888 unless overridden.【F:install.sh†L230-L233】【F:install.sh†L305-L373】 |
 | `--port PORT` | Overrides the backend Django port used in generated systemd units and the stored lock. If omitted, every mode defaults to `8888`.【F:install.sh†L234-L237】 |
+| `--secondary NAME` | Clones the repository into `../NAME`, reruns `install.sh` there with the same flags (excluding `--secondary`), and keeps both siblings aligned for A/B green/blue failover. The current instance continues installing after the sibling completes.【F:install.sh†L1-L174】【F:install.sh†L332-L365】 |
 | `--upgrade` | Immediately runs `upgrade.sh` after installation, using the selected channel (stable by default, unstable when requested).【F:install.sh†L239-L242】【F:install.sh†L578-L599】 |
 | `--auto-upgrade` | Explicitly enables unattended upgrades (off by default) and refreshes the Celery schedule when locks exist.【F:install.sh†L243-L259】【F:install.sh†L578-L603】 |
 | `--fixed` | Disables unattended upgrades and removes the auto-upgrade lock so future runs stay manual-only.【F:install.sh†L247-L259】【F:install.sh†L601-L603】 |
@@ -39,6 +40,7 @@ Passing a role flag applies a curated bundle of options. Each preset still honou
 
 The script also:
 
+- Surfaces a **Secondary instance** selector in the Nginx admin form whenever sibling installs exist so operators can validate and apply green/blue upstreams (web and websocket) during previews.【F:apps/nginx/forms.py†L1-L28】【F:apps/nginx/admin/views.py†L21-L120】【F:apps/nginx/renderers.py†L1-L120】
 - Verifies Nginx and Redis availability for roles that require them, writing `redis.env` when Redis is configured.【F:install.sh†L61-L200】【F:install.sh†L303-L340】
 - Creates `.venv`, installs dependencies via `scripts/helpers/pip_install.py`, applies migrations, and refreshes environment secrets via `env-refresh.sh`.【F:install.sh†L430-L515】
 - Writes lock files capturing the selected role, Nginx mode, and enabled subsystems so the runtime helpers know how to behave.【F:install.sh†L303-L373】

@@ -14,11 +14,19 @@ def _run(
     return subprocess.run(list(cmd), check=check, cwd=cwd)
 
 
+def _has_porcelain_changes(output: str) -> bool:
+    for line in output.splitlines():
+        if not line or line.startswith("##"):
+            continue
+        return True
+    return False
+
+
 def _is_clean_repository(base_dir: Path | None = None) -> bool:
     proc = subprocess.run(
         ["git", "status", "--porcelain"], capture_output=True, text=True, cwd=base_dir
     )
-    return not proc.stdout.strip()
+    return not _has_porcelain_changes(proc.stdout)
 
 
 def _maybe_create_maintenance_branch(

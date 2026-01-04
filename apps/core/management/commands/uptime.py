@@ -11,13 +11,24 @@ from apps.core import system
 from apps.nodes import tasks as node_tasks
 
 
-def _lcd_lines(uptime_seconds: int | None) -> tuple[str, str]:
-    parts = node_tasks._uptime_components(uptime_seconds)
-    if parts is None:
-        return "UP ?d?h?m", "ON ?h?m"
+def _lcd_lines(
+    uptime_seconds: int | None,
+    down_seconds: int | None,
+    interface_label: str | None,
+) -> tuple[str, str]:
+    def _format_duration(seconds: int | None) -> str:
+        parts = node_tasks._uptime_components(seconds)
+        if parts is None:
+            return "?d?h?m"
 
-    days, hours, minutes = parts
-    return f"UP {days}d{hours}h{minutes}m", f"ON {hours}h{minutes}m"
+        days, hours, minutes = parts
+        return f"{days}d{hours}h{minutes}m"
+
+    subject_parts = [f"UP {_format_duration(uptime_seconds)}"]
+    if interface_label:
+        subject_parts.append(interface_label)
+
+    return " ".join(subject_parts), f"DOWN {_format_duration(down_seconds)}"
 
 
 def _lock_heartbeat(lock_path: Path) -> datetime | None:
@@ -74,7 +85,10 @@ class Command(BaseCommand):
         lock_path = lock_info.get("path")
         boot_time = system._system_boot_time(now)
         uptime_seconds = node_tasks._startup_duration_seconds(base_dir)
-        subject_line, body_line = _lcd_lines(uptime_seconds)
+        down_seconds = node_tasks._boot_delay_seconds(base_dir)
+        subject_line, body_line = _lcd_lines(
+            uptime_seconds, down_seconds, node_tasks._active_interface_label()
+        )
 
         started_at = lock_info.get("started_at") if isinstance(lock_info.get("started_at"), datetime) else None
         heartbeat = _lock_heartbeat(lock_path) if isinstance(lock_path, Path) else None

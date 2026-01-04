@@ -1,0 +1,14 @@
+[
+  {
+    "model": "links.reference",
+    "fields": {
+      "value": "https://theonyxpath.com/",
+      "alt_text": "Onyx Path",
+      "method": "link",
+      "include_in_footer": true,
+      "footer_visibility": "public",
+      "created": "2024-01-01T00:00:00Z",
+      "is_seed_data": true
+    }
+  }
+]

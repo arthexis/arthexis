@@ -52,16 +52,21 @@ def websocket_directives() -> tuple[str, ...]:
 
 
 def proxy_block(
-    port: int,
+    port: int | None = None,
     *,
     trailing_slash: bool = True,
     external_websockets: bool = True,
+    proxy_target: str | None = None,
 ) -> str:
-    """Return the proxy pass configuration block for *port*."""
+    """Return the proxy pass configuration block for *port* or *proxy_target*."""
 
-    upstream = f"http://127.0.0.1:{port}"
+    if proxy_target is None and port is None:
+        raise ValueError("proxy_block requires a port or proxy_target")
+
+    upstream = proxy_target or f"127.0.0.1:{port}"
+    proxy_pass_target = f"http://{upstream}"
     if trailing_slash:
-        upstream += "/"
+        proxy_pass_target += "/"
 
     if external_websockets:
         websocket_lines = textwrap.dedent(
@@ -92,7 +97,7 @@ def proxy_block(
             if ($simulator_redirect = \"/\") {{
                 return 302 /ocpp/evcs/simulator/;
             }}
-            proxy_pass {upstream};
+            proxy_pass {proxy_pass_target};
             proxy_intercept_errors on;
             proxy_http_version 1.1;
         """
@@ -159,6 +164,7 @@ def http_proxy_server(
     *,
     trailing_slash: bool = True,
     external_websockets: bool = True,
+    proxy_target: str | None = None,
 ) -> str:
     """Return an HTTP proxy server block for *server_names*."""
 
@@ -176,6 +182,7 @@ def http_proxy_server(
                 port,
                 trailing_slash=trailing_slash,
                 external_websockets=external_websockets,
+                proxy_target=proxy_target,
             ),
             "    ",
         )
@@ -236,6 +243,7 @@ def https_proxy_server(
     certificate_key_path: str | Path | None = None,
     trailing_slash: bool = True,
     external_websockets: bool = True,
+    proxy_target: str | None = None,
 ) -> str:
     """Return an HTTPS proxy server block for *server_names*."""
 
@@ -264,6 +272,7 @@ def https_proxy_server(
                 port,
                 trailing_slash=trailing_slash,
                 external_websockets=external_websockets,
+                proxy_target=proxy_target,
             ),
             "    ",
         )

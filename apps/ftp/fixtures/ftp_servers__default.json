@@ -1,0 +1,14 @@
+[
+  {
+    "model": "ftp.ftpserver",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "bind_address": "0.0.0.0",
+      "port": 2121,
+      "passive_ports": "",
+      "enabled": false,
+      "node": null
+    }
+  }
+]
