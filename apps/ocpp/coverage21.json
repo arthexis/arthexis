@@ -1,7 +1,7 @@
 {
   "coverage": {
     "cp_to_csms": {
-      "count": 29,
+      "count": 27,
       "percent": 100.0,
       "supported": [
         "Authorize",
@@ -29,21 +29,18 @@
         "ReservationStatusUpdate",
         "SecurityEventNotification",
         "SignCertificate",
-        "StartTransaction",
         "StatusNotification",
-        "StopTransaction",
         "TransactionEvent"
       ],
-      "total": 29
+      "total": 27
     },
     "csms_to_cp": {
-      "count": 44,
+      "count": 39,
       "percent": 100.0,
       "supported": [
         "CancelReservation",
         "CertificateSigned",
         "ChangeAvailability",
-        "ChangeConfiguration",
         "ClearCache",
         "ClearChargingProfile",
         "ClearDisplayMessage",
@@ -54,8 +51,6 @@
         "GetBaseReport",
         "GetChargingProfiles",
         "GetCompositeSchedule",
-        "GetConfiguration",
-        "GetDiagnostics",
         "GetDisplayMessages",
         "GetInstalledCertificateIds",
         "GetLocalListVersion",
@@ -66,8 +61,6 @@
         "GetVariables",
         "InstallCertificate",
         "PublishFirmware",
-        "RemoteStartTransaction",
-        "RemoteStopTransaction",
         "RequestStartTransaction",
         "RequestStopTransaction",
         "ReserveNow",
@@ -85,10 +78,10 @@
         "UnpublishFirmware",
         "UpdateFirmware"
       ],
-      "total": 44
+      "total": 39
     },
     "overall": {
-      "count": 72,
+      "count": 65,
       "percent": 100.0,
       "supported": [
         "Authorize",
@@ -96,7 +89,6 @@
         "CancelReservation",
         "CertificateSigned",
         "ChangeAvailability",
-        "ChangeConfiguration",
         "ClearCache",
         "ClearChargingProfile",
         "ClearDisplayMessage",
@@ -113,8 +105,6 @@
         "GetCertificateStatus",
         "GetChargingProfiles",
         "GetCompositeSchedule",
-        "GetConfiguration",
-        "GetDiagnostics",
         "GetDisplayMessages",
         "GetInstalledCertificateIds",
         "GetLocalListVersion",
@@ -137,8 +127,6 @@
         "NotifyReport",
         "PublishFirmware",
         "PublishFirmwareStatusNotification",
-        "RemoteStartTransaction",
-        "RemoteStopTransaction",
         "ReportChargingProfiles",
         "RequestStartTransaction",
         "RequestStopTransaction",
@@ -155,16 +143,14 @@
         "SetVariableMonitoring",
         "SetVariables",
         "SignCertificate",
-        "StartTransaction",
         "StatusNotification",
-        "StopTransaction",
         "TransactionEvent",
         "TriggerMessage",
         "UnlockConnector",
         "UnpublishFirmware",
         "UpdateFirmware"
       ],
-      "total": 72
+      "total": 65
     }
   },
   "implemented": {
@@ -273,16 +259,13 @@
       "ReservationStatusUpdate",
       "SecurityEventNotification",
       "SignCertificate",
-      "StartTransaction",
       "StatusNotification",
-      "StopTransaction",
       "TransactionEvent"
     ],
     "csms_to_cp": [
       "CancelReservation",
       "CertificateSigned",
       "ChangeAvailability",
-      "ChangeConfiguration",
       "ClearCache",
       "ClearChargingProfile",
       "ClearDisplayMessage",
@@ -293,10 +276,8 @@
       "GetBaseReport",
       "GetChargingProfiles",
       "GetCompositeSchedule",
-      "GetConfiguration",
       "GetDisplayMessages",
       "GetInstalledCertificateIds",
-      "GetDiagnostics",
       "GetLocalListVersion",
       "GetLog",
       "GetMonitoringReport",
@@ -305,8 +286,6 @@
       "GetVariables",
       "InstallCertificate",
       "PublishFirmware",
-      "RemoteStartTransaction",
-      "RemoteStopTransaction",
       "RequestStartTransaction",
       "RequestStopTransaction",
       "ReserveNow",
