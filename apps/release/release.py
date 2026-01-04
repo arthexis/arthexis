@@ -335,6 +335,22 @@ def _is_git_repository(base_dir: Path) -> bool:
     return proc.returncode == 0 and proc.stdout.strip().lower() == "true"
 
 
+def _has_porcelain_changes(output: str) -> bool:
+    """Return True when porcelain output includes working tree changes.
+
+    ``git status --porcelain`` can include a leading branch summary line (``##``)
+    when configuration such as ``status.branch`` is enabled. Being ahead or
+    behind the remote should not mark the repository as dirty, so those summary
+    lines are ignored.
+    """
+
+    for line in output.splitlines():
+        if not line or line.startswith("##"):
+            continue
+        return True
+    return False
+
+
 def _git_clean() -> bool:
     if not _is_git_repository(Path.cwd()):
         return True
@@ -342,7 +358,7 @@ def _git_clean() -> bool:
     proc = subprocess.run(
         ["git", "status", "--porcelain"], capture_output=True, text=True
     )
-    return not proc.stdout.strip()
+    return not _has_porcelain_changes(proc.stdout)
 
 
 def _git_has_staged_changes() -> bool:
