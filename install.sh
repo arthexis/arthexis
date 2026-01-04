@@ -32,6 +32,7 @@ LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 exec > >(tee "$LOG_FILE") 2>&1
 
 # Default configuration flags populated by CLI parsing below.
+ORIGINAL_ARGS=("$@")
 SERVICE=""
 PORT=""
 AUTO_UPGRADE=false
@@ -49,9 +50,10 @@ NODE_ROLE="Terminal"
 REQUIRES_REDIS=false
 START_SERVICES=false
 REPAIR=false
+SECONDARY_INSTANCE=""
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--port PORT] [--upgrade] [--fixed] [--stable|--regular|--normal|--unstable|--latest] [--satellite] [--terminal] [--control] [--watchtower] [--celery] [--embedded|--systemd] [--lcd-screen|--no-lcd-screen] [--clean] [--start|--no-start] [--repair]" >&2
+    echo "Usage: $0 [--service NAME] [--port PORT] [--upgrade] [--fixed] [--stable|--regular|--normal|--unstable|--latest] [--satellite] [--terminal] [--control] [--watchtower] [--celery] [--embedded|--systemd] [--lcd-screen|--no-lcd-screen] [--clean] [--start|--no-start] [--repair] [--secondary NAME]" >&2
     exit 1
 }
 
@@ -189,6 +191,76 @@ ensure_i2c_packages() {
     fi
 }
 
+sync_secondary_tree() {
+    local target_dir="$1"
+
+    if [ -z "$target_dir" ]; then
+        echo "Secondary target directory not provided" >&2
+        exit 1
+    fi
+
+    mkdir -p "$target_dir"
+
+    local -a rsync_args=("-a" "--delete" "--exclude=.venv" "--exclude=logs" "--exclude=backups" "--exclude=work" "--exclude=.locks" "--exclude=db.sqlite3")
+
+    if command -v rsync >/dev/null 2>&1; then
+        rsync "${rsync_args[@]}" "$SCRIPT_DIR/" "$target_dir/"
+    else
+        echo "rsync not available; using tar to stage secondary installation" >&2
+        tar -cf - --exclude=.venv --exclude=logs --exclude=backups --exclude=work --exclude=.locks --exclude=db.sqlite3 -C "$SCRIPT_DIR" . \
+            | tar -xf - -C "$target_dir"
+    fi
+}
+
+delegate_secondary_install() {
+    local secondary_name="$1"
+    if [ -z "$secondary_name" ]; then
+        return 0
+    fi
+
+    if [ -n "${ARTHEXIS_SECONDARY_CHILD:-}" ]; then
+        return 0
+    fi
+
+    local parent_dir
+    parent_dir="$(cd "$SCRIPT_DIR/.." && pwd)"
+    local target_dir="$parent_dir/$secondary_name"
+
+    if [ "$target_dir" = "$SCRIPT_DIR" ]; then
+        echo "Secondary target cannot be the current installation directory" >&2
+        exit 1
+    fi
+
+    if [ -e "$target_dir" ] && [ ! -d "$target_dir" ]; then
+        echo "Secondary target $target_dir exists and is not a directory" >&2
+        exit 1
+    fi
+
+    echo "Staging secondary installation at $target_dir"
+    sync_secondary_tree "$target_dir"
+
+    local -a forwarded_args=()
+    local index=0
+    local total=${#ORIGINAL_ARGS[@]}
+    while [ $index -lt $total ]; do
+        local arg="${ORIGINAL_ARGS[$index]}"
+        if [ "$arg" = "--secondary" ]; then
+            index=$((index + 2))
+            continue
+        fi
+        forwarded_args+=("$arg")
+        index=$((index + 1))
+    done
+
+    echo "Delegating installation to $target_dir/install.sh with sibling-awareness"
+    ARTHEXIS_SECONDARY_CHILD=1 "$target_dir/install.sh" "${forwarded_args[@]}"
+    local status=$?
+    if [ $status -ne 0 ]; then
+        echo "Secondary installation at $target_dir failed with status $status" >&2
+        exit $status
+    fi
+}
+
 # Parse CLI arguments to configure the installation behavior.
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -262,6 +334,11 @@ while [[ $# -gt 0 ]]; do
             START_FLAG=true
             shift
             ;;
+        --secondary)
+            [ -z "$2" ] && usage
+            SECONDARY_INSTANCE="$2"
+            shift 2
+            ;;
         --repair)
             REPAIR=true
             shift
@@ -304,6 +381,8 @@ while [[ $# -gt 0 ]]; do
             ;;
     esac
 done
+
+delegate_secondary_install "$SECONDARY_INSTANCE"
 
 if [ "$REPAIR" = true ]; then
     LOCK_DIR_PATH="$SCRIPT_DIR/.locks"

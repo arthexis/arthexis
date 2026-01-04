@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from apps.nginx.config_utils import (
     default_reject_server,
@@ -12,6 +13,9 @@ from apps.nginx.config_utils import (
     websocket_map,
     write_if_changed,
 )
+
+if TYPE_CHECKING:  # pragma: no cover - import cycle guard for type checkers
+    from apps.nginx.services import SecondaryInstance
 
 HTTP_IPV4_LISTENS = (
     "0.0.0.0:80",
@@ -31,6 +35,17 @@ HTTPS_IPV4_LISTENS = ("443 ssl",)
 HTTPS_IPV6_LISTENS = ("[::]:443 ssl",)
 
 
+def upstream_block(upstream_name: str, primary_port: int, backup_port: int | None = None) -> str:
+    lines = [
+        f"upstream {upstream_name} {{",
+        f"    server 127.0.0.1:{primary_port};",
+    ]
+    if backup_port:
+        lines.append(f"    server 127.0.0.1:{backup_port} backup;")
+    lines.append("}")
+    return "\n".join(lines)
+
+
 def generate_primary_config(
     mode: str,
     port: int,
@@ -41,6 +56,7 @@ def generate_primary_config(
     https_enabled: bool = False,
     include_ipv6: bool = False,
     external_websockets: bool = True,
+    secondary_instance: "SecondaryInstance | None" = None,
 ) -> str:
     mode = mode.lower()
     if mode not in {"internal", "public"}:
@@ -59,6 +75,18 @@ def generate_primary_config(
     certificate_path = getattr(certificate, "certificate_path", None)
     certificate_key_path = getattr(certificate, "certificate_key_path", None)
 
+    proxy_target = f"127.0.0.1:{port}"
+    prefix_blocks: list[str] = []
+    if secondary_instance:
+        upstream_name = f"arthexis-{slugify(secondary_instance.name)}-pool"
+        prefix_blocks.append(
+            upstream_block(upstream_name, port, getattr(secondary_instance, "port", None))
+        )
+        proxy_target = upstream_name
+
+    if external_websockets:
+        prefix_blocks.insert(0, websocket_map())
+
     if mode == "public":
         http_names = http_server_names or "arthexis.com *.arthexis.com"
         https_names = https_server_names or "arthexis.com *.arthexis.com"
@@ -71,10 +99,11 @@ def generate_primary_config(
                 http_listens,
                 trailing_slash=False,
                 external_websockets=external_websockets,
+                proxy_target=proxy_target,
             )
         http_default = default_reject_server(http_listens)
 
-        blocks = [http_block, http_default]
+        blocks = [*prefix_blocks, http_block, http_default]
         if https_enabled:
             https_block = https_proxy_server(
                 https_names,
@@ -84,6 +113,7 @@ def generate_primary_config(
                 certificate_key_path=certificate_key_path,
                 trailing_slash=False,
                 external_websockets=external_websockets,
+                proxy_target=proxy_target,
             )
             https_default = default_reject_server(
                 https_listens,
@@ -92,8 +122,6 @@ def generate_primary_config(
                 certificate_key_path=certificate_key_path,
             )
             blocks.extend([https_block, https_default])
-        if external_websockets:
-            blocks.insert(0, websocket_map())
         return "\n\n".join(blocks) + "\n"
 
     http_names = http_server_names or "_"
@@ -103,8 +131,9 @@ def generate_primary_config(
         http_listens,
         trailing_slash=False,
         external_websockets=external_websockets,
+        proxy_target=proxy_target,
     )
-    blocks = [http_block]
+    blocks = [*prefix_blocks, http_block]
 
     if https_enabled:
         https_block = https_proxy_server(
@@ -115,10 +144,9 @@ def generate_primary_config(
             certificate_key_path=certificate_key_path,
             trailing_slash=False,
             external_websockets=external_websockets,
+            proxy_target=proxy_target,
         )
         blocks.append(https_block)
-    if external_websockets:
-        blocks.insert(0, websocket_map())
     return "\n\n".join(blocks) + "\n"
 
 
@@ -129,6 +157,7 @@ def generate_site_entries_content(
     *,
     https_enabled: bool = False,
     external_websockets: bool = True,
+    proxy_target: str | None = None,
 ) -> str:
     try:
         raw = config_path.read_text(encoding="utf-8")
@@ -163,6 +192,7 @@ def generate_site_entries_content(
                     domain,
                     port,
                     external_websockets=external_websockets,
+                    proxy_target=proxy_target,
                 )
             )
 
@@ -172,6 +202,7 @@ def generate_site_entries_content(
                     domain,
                     port,
                     external_websockets=external_websockets,
+                    proxy_target=proxy_target,
                 )
             )
         elif require_https:
@@ -196,6 +227,7 @@ def apply_site_entries(
     *,
     https_enabled: bool = False,
     external_websockets: bool = True,
+    proxy_target: str | None = None,
     sudo: str | None = None,
 ) -> bool:
     content = generate_site_entries_content(
@@ -204,5 +236,6 @@ def apply_site_entries(
         port,
         https_enabled=https_enabled,
         external_websockets=external_websockets,
+        proxy_target=proxy_target,
     )
     return write_if_changed(dest_path, content, sudo=sudo)

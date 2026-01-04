@@ -1,4 +1,5 @@
 from datetime import timedelta
+from pathlib import Path
 
 import pytest
 from django.utils import timezone
@@ -62,3 +63,46 @@ def test_site_configuration_validate_only(monkeypatch):
     config.refresh_from_db()
     assert config.last_validated_at == later
     assert config.last_message == "restarted"
+
+
+@pytest.mark.django_db
+def test_site_configuration_apply_uses_secondary_instance(monkeypatch):
+    config = SiteConfiguration.get_default()
+    config.secondary_instance = "blue"
+
+    secondary = services.SecondaryInstance(
+        name="blue", path=Path("/tmp/blue"), port=9999, role="Control"
+    )
+
+    def fake_get_secondary(name, base_dir=None):
+        assert name == "blue"
+        return secondary
+
+    captured = {}
+
+    def fake_apply_nginx_configuration(**kwargs):
+        captured.update(kwargs)
+        return services.ApplyResult(
+            changed=True, validated=True, reloaded=True, message="applied"
+        )
+
+    monkeypatch.setattr(services, "get_secondary_instance", fake_get_secondary)
+    monkeypatch.setattr(services, "apply_nginx_configuration", fake_apply_nginx_configuration)
+
+    config.apply()
+
+    assert captured["secondary_instance"] is secondary
+
+
+@pytest.mark.django_db
+def test_site_configuration_apply_bubbles_secondary_errors(monkeypatch):
+    config = SiteConfiguration.get_default()
+    config.secondary_instance = "missing"
+
+    def fake_get_secondary(name, base_dir=None):
+        raise services.SecondaryInstanceError("missing")
+
+    monkeypatch.setattr(services, "get_secondary_instance", fake_get_secondary)
+
+    with pytest.raises(services.ValidationError):
+        config.apply()
