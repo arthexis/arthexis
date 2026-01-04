@@ -13,6 +13,10 @@ import pytest
 # connection attempts when checking availability inside config.settings.
 os.environ.setdefault("ARTHEXIS_DB_BACKEND", "sqlite")
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+# Skip running Django migrations during test database setup unless explicitly
+# requested. This keeps database creation fast enough to stay within
+# pytest-timeout limits when suites spin up a fresh SQLite database.
+os.environ.setdefault("PYTEST_DISABLE_MIGRATIONS", "1")
 
 
 def _ensure_clean_test_databases() -> None:
