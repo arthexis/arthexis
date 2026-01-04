@@ -134,7 +134,7 @@ static_hash_fast_path() {
       if [ -n "$mtime" ] && [ "$mtime" -gt "$latest_mtime" ]; then
         latest_mtime="$mtime"
       fi
-    done < <(find "$root" -type f -print0 2>/dev/null)
+    done < <(find "$root" \( -type f -o -type d \) -print0 2>/dev/null)
   done
 
   if [ "$saw_root" = false ]; then
