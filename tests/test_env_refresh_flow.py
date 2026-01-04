@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import shutil
 from pathlib import Path
 
@@ -44,6 +45,10 @@ def refreshed_environment(env_refresh_module, django_db_setup, django_db_blocker
         fixtures_hash = (locks_dir / "fixtures.md5").read_text().strip()
         fixtures = env_refresh_module._fixture_files()
         expected_fixtures_hash = env_refresh_module._fixtures_hash(fixtures) if fixtures else ""
+        fixtures_cache = json.loads((locks_dir / "fixtures.by-app.json").read_text())
+        expected_fixture_cache = (
+            env_refresh_module._fixture_hashes_by_app(fixtures) if fixtures else {}
+        )
 
     md5_files = {path.name for path in base_dir.glob("*.md5")}
     lock_files = {path.name for path in base_dir.glob("*.lock")}
@@ -55,6 +60,8 @@ def refreshed_environment(env_refresh_module, django_db_setup, django_db_blocker
         "expected_migrations_hash": expected_migrations_hash,
         "fixtures_hash": fixtures_hash,
         "expected_fixtures_hash": expected_fixtures_hash,
+        "fixtures_cache": fixtures_cache,
+        "expected_fixture_cache": expected_fixture_cache,
         "new_md5_files": md5_files - existing_md5_files,
         "new_lock_files": lock_files - existing_lock_files,
     }
@@ -84,6 +91,12 @@ def test_env_refresh_loads_seed_fixtures(refreshed_environment, env_refresh_modu
 
     if env_refresh_module._fixture_files():
         assert refreshed_environment["fixtures_hash"]
+
+
+def test_env_refresh_records_per_app_fixture_hashes(refreshed_environment):
+    assert refreshed_environment["fixtures_cache"] == refreshed_environment[
+        "expected_fixture_cache"
+    ]
 
 
 def test_env_refresh_leaves_no_pending_migrations(refreshed_environment, env_refresh_module):

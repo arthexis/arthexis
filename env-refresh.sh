@@ -60,6 +60,7 @@ USE_SYSTEM_PYTHON=0
 FORCE_REQUIREMENTS_INSTALL=0
 LOCK_DIR="$SCRIPT_DIR/.locks"
 FORCE_REFRESH=0
+PIP_FRESHNESS_MINUTES=0
 
 LATEST=0
 CLEAN=0
@@ -76,6 +77,10 @@ while [[ $# -gt 0 ]]; do
     --force-refresh)
       FORCE_REFRESH=1
       shift
+      ;;
+    --pip-freshness-minutes)
+      PIP_FRESHNESS_MINUTES="$2"
+      shift 2
       ;;
     *)
       break
@@ -203,6 +208,7 @@ fi
 
 collect_requirement_files REQUIREMENT_FILES
 REQ_MD5_FILE="$LOCK_DIR/requirements.bundle.md5"
+REQ_TIMESTAMP_FILE="$LOCK_DIR/requirements.install-ts"
 STORED_REQ_HASH=""
 [ -f "$REQ_MD5_FILE" ] && STORED_REQ_HASH=$(cat "$REQ_MD5_FILE")
 REQUIREMENTS_HASH=""
@@ -217,6 +223,14 @@ fi
 if [ "$FORCE_REFRESH" -eq 1 ]; then
   NEED_INSTALL=1
 fi
+RECENT_INSTALL=0
+if [ "$PIP_FRESHNESS_MINUTES" -gt 0 ] && [ -f "$REQ_TIMESTAMP_FILE" ]; then
+  LAST_INSTALL_TS=$(stat -c %Y "$REQ_TIMESTAMP_FILE" 2>/dev/null || echo 0)
+  NOW_TS=$(date +%s)
+  if [ $((NOW_TS - LAST_INSTALL_TS)) -lt $((PIP_FRESHNESS_MINUTES * 60)) ]; then
+    RECENT_INSTALL=1
+  fi
+fi
 if [ "$USE_SYSTEM_PYTHON" -eq 1 ] && [ "$NEED_INSTALL" -eq 0 ]; then
   if ! "$PYTHON" - <<'PY' >/dev/null 2>&1
 import importlib
@@ -230,6 +244,10 @@ PY
   then
     NEED_INSTALL=1
   fi
+fi
+if [ "$NEED_INSTALL" -eq 1 ] && [ "$RECENT_INSTALL" -eq 1 ] && [ "$FORCE_REFRESH" -eq 0 ]; then
+  echo "requirements checksum changed recently—skipping pip (fresh within ${PIP_FRESHNESS_MINUTES}m)"
+  NEED_INSTALL=0
 fi
 
 if [ ${#REQUIREMENT_FILES[@]} -eq 0 ]; then
@@ -251,6 +269,7 @@ else
   if [ -n "$REQUIREMENTS_HASH" ]; then
     echo "$REQUIREMENTS_HASH" > "$REQ_MD5_FILE"
   fi
+  date +%s > "$REQ_TIMESTAMP_FILE"
 fi
 
 install_watch_upgrade_helper || echo "watch-upgrade helper setup failed unexpectedly; delegated auto-upgrades may be unavailable"

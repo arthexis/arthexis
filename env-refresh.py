@@ -34,6 +34,7 @@ from django.db.migrations.exceptions import (
 from django.db.utils import OperationalError
 from django.db.migrations.recorder import MigrationRecorder
 from django.db.migrations.loader import MigrationLoader
+from django.db.migrations.executor import MigrationExecutor
 from django.core.serializers.base import DeserializationError
 from utils.migration_branches import MissingBranchSplinterError
 
@@ -58,6 +59,23 @@ if TYPE_CHECKING:  # pragma: no cover - typing support
     from django.db.models import Model
 
 _MODEL_SEED_FIELD_CACHE = WeakKeyDictionary()
+
+
+def _schema_needs_migration() -> bool:
+    """Return ``True`` when unapplied migrations exist."""
+
+    try:
+        executor = MigrationExecutor(connection)
+    except (OperationalError, MigrationSchemaMissing):
+        return True
+
+    targets = executor.loader.graph.leaf_nodes()
+    try:
+        plan = executor.migration_plan(targets)
+    except (OperationalError, MigrationSchemaMissing):
+        return True
+
+    return bool(plan)
 
 
 def _model_defines_seed_flag(model: "type[Model]") -> bool:
@@ -347,6 +365,26 @@ def _fixtures_hash(fixtures: Iterable[str]) -> str:
     return digest.hexdigest()
 
 
+def _fixture_hashes_by_app(fixtures: Iterable[str]) -> dict[str, str]:
+    """Return md5 hashes of fixtures grouped by app label."""
+
+    base_dir = Path(settings.BASE_DIR)
+    buckets: dict[str, hashlib._Hash] = {}
+
+    for fixture in sorted(fixtures):
+        path = base_dir / fixture
+        parts = path.relative_to(base_dir).parts
+        label = parts[1] if len(parts) >= 3 and parts[0] == "apps" else "global"
+        digest = buckets.setdefault(label, hashlib.md5(usedforsecurity=False))
+        try:
+            digest.update(str(path.relative_to(base_dir)).encode("utf-8"))
+            digest.update(path.read_bytes())
+        except OSError:
+            continue
+
+    return {label: digest.hexdigest() for label, digest in buckets.items()}
+
+
 def _remove_integrator_from_auth_migration() -> None:
     """Strip lingering integrator imports from Django's auth migration."""
     spec = importlib.util.find_spec("django.contrib.auth.migrations.0013_userproxy")
@@ -393,6 +431,8 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
     new_hash = _migration_hash(local_apps)
     stored_hash = hash_file.read_text().strip() if hash_file.exists() else ""
 
+    migrations_ran = False
+
     if clean:
         if stored_hash and stored_hash != new_hash:
             if using_sqlite:
@@ -422,65 +462,73 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                         continue
 
     if not connection.in_atomic_block:
-        try:
-            _run_migrate(
-                using_sqlite=using_sqlite,
-                default_db=default_db,
-                interactive=False,
-            )
-        except MissingBranchSplinterError as exc:
-            print(
-                "Detected a retroactively edited migration branch that this database "
-                "skipped.\n"
-                f"{exc}\n"
-                "Manually recreate the database or roll it back to the splinter "
-                "migration before retrying the installation.",
-                flush=True,
-            )
-            raise
-        except InconsistentMigrationHistory:
-            call_command("reset_ocpp_migrations")
-            _run_migrate(
-                using_sqlite=using_sqlite,
-                default_db=default_db,
-                interactive=False,
-            )
-        except InvalidBasesError:
-            raise
-        except OperationalError as exc:
-            if using_sqlite:
-                _unlink_sqlite_db(Path(default_db["NAME"]))
+        needs_migration = True if clean else _schema_needs_migration()
+        if not needs_migration:
+            print("Database schema already up to date; skipping migrate.")
+        else:
+            try:
                 _run_migrate(
                     using_sqlite=using_sqlite,
                     default_db=default_db,
                     interactive=False,
                 )
-            else:  # pragma: no cover - unreachable in sqlite
-                try:
-                    import psycopg
-                    from psycopg import sql
-
-                    params = {
-                        "dbname": "postgres",
-                        "user": default_db.get("USER", ""),
-                        "password": default_db.get("PASSWORD", ""),
-                        "host": default_db.get("HOST", ""),
-                        "port": default_db.get("PORT", ""),
-                    }
-                    with psycopg.connect(**params, autocommit=True) as conn:
-                        with conn.cursor() as cur:
-                            cur.execute(
-                                sql.SQL("CREATE DATABASE {}").format(
-                                    sql.Identifier(default_db["NAME"])
-                                )
-                            )
+                migrations_ran = True
+            except MissingBranchSplinterError as exc:
+                print(
+                    "Detected a retroactively edited migration branch that this database "
+                    "skipped.\n"
+                    f"{exc}\n"
+                    "Manually recreate the database or roll it back to the splinter "
+                    "migration before retrying the installation.",
+                    flush=True,
+                )
+                raise
+            except InconsistentMigrationHistory:
+                call_command("reset_ocpp_migrations")
+                _run_migrate(
+                    using_sqlite=using_sqlite,
+                    default_db=default_db,
+                    interactive=False,
+                )
+                migrations_ran = True
+            except InvalidBasesError:
+                raise
+            except OperationalError as exc:
+                if using_sqlite:
+                    _unlink_sqlite_db(Path(default_db["NAME"]))
                     _run_migrate(
                         using_sqlite=using_sqlite,
                         default_db=default_db,
                         interactive=False,
                     )
-                except Exception:
-                    raise exc
+                    migrations_ran = True
+                else:  # pragma: no cover - unreachable in sqlite
+                    try:
+                        import psycopg
+                        from psycopg import sql
+
+                        params = {
+                            "dbname": "postgres",
+                            "user": default_db.get("USER", ""),
+                            "password": default_db.get("PASSWORD", ""),
+                            "host": default_db.get("HOST", ""),
+                            "port": default_db.get("PORT", ""),
+                        }
+                        with psycopg.connect(**params, autocommit=True) as conn:
+                            with conn.cursor() as cur:
+                                cur.execute(
+                                    sql.SQL("CREATE DATABASE {}").format(
+                                        sql.Identifier(default_db["NAME"])
+                                    )
+                                )
+                        _run_migrate(
+                            using_sqlite=using_sqlite,
+                            default_db=default_db,
+                            interactive=False,
+                        )
+                        migrations_ran = True
+                    except Exception:
+                        raise exc
 
     # Remove auto-generated SigilRoot entries so fixtures define prefixes
     SigilRoot = apps.get_model("sigils", "SigilRoot")
@@ -495,17 +543,28 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
     call_command("register_site_apps")
 
     fixture_hash_file = locks_dir / "fixtures.md5"
+    fixture_cache_file = locks_dir / "fixtures.by-app.json"
     fixtures = _fixture_files()
     fixture_hash = _fixtures_hash(fixtures) if fixtures else ""
+    fixtures_by_app = _fixture_hashes_by_app(fixtures) if fixtures else {}
     stored_fixture_hash = (
         fixture_hash_file.read_text().strip() if fixture_hash_file.exists() else ""
     )
+    stored_fixture_cache = {}
+    if fixture_cache_file.exists():
+        try:
+            stored_fixture_cache = json.loads(fixture_cache_file.read_text())
+        except json.JSONDecodeError:
+            stored_fixture_cache = {}
     migrations_changed = stored_hash != new_hash
     should_load_fixtures = fixtures_changed(
         fixtures_present=bool(fixtures),
         current_hash=fixture_hash,
         stored_hash=stored_fixture_hash,
         migrations_changed=migrations_changed,
+        migrations_ran=migrations_ran,
+        current_by_app=fixtures_by_app,
+        stored_by_app=stored_fixture_cache,
         clean=clean,
     )
 
@@ -698,8 +757,10 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
         generate_model_sigils()
 
         fixture_hash_file.write_text(fixture_hash)
+        fixture_cache_file.write_text(json.dumps(fixtures_by_app, sort_keys=True))
     elif fixtures:
         print("Fixtures unchanged; skipping reload.")
+        fixture_cache_file.write_text(json.dumps(fixtures_by_app, sort_keys=True))
 
     # Ensure current node is registered or updated
     node, _ = Node.register_current(notify_peers=False)
