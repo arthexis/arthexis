@@ -21,7 +21,7 @@ from .utils import capture_rpi_snapshot, has_rpi_camera_stack
 class VideoDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
     list_display = ("identifier", "node", "description", "is_default")
     search_fields = ("identifier", "description", "raw_info", "node__hostname")
-    changelist_actions = ["find_video_devices", "take_snapshot", "view_stream"]
+    changelist_actions = ["find_video_devices", "take_snapshot", "test_camera"]
     change_list_template = "django_object_actions/change_list.html"
 
     def get_urls(self):
@@ -41,6 +41,11 @@ class VideoDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
                 self.admin_site.admin_view(self.view_stream),
                 name="video_videodevice_view_stream",
             ),
+            path(
+                "test-camera/",
+                self.admin_site.admin_view(self.view_stream),
+                name="video_videodevice_test_camera",
+            ),
         ]
         return custom + super().get_urls()
 
@@ -50,20 +55,20 @@ class VideoDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
     def take_snapshot(self, request, queryset=None):
         return redirect("admin:video_videodevice_take_snapshot")
 
-    def view_stream(self, request, queryset=None):
+    def test_camera(self, request, queryset=None):
         return redirect("admin:video_videodevice_view_stream")
 
     find_video_devices.label = _("Find Video Devices")
     find_video_devices.short_description = _("Find Video Devices")
     find_video_devices.changelist = True
 
-    take_snapshot.label = _("Take a Snapshot")
-    take_snapshot.short_description = _("Take a Snapshot")
+    take_snapshot.label = _("Take Snapshot")
+    take_snapshot.short_description = _("Take Snapshot")
     take_snapshot.changelist = True
 
-    view_stream.label = _("View stream")
-    view_stream.short_description = _("View stream")
-    view_stream.changelist = True
+    test_camera.label = _("Test Camera")
+    test_camera.short_description = _("Test Camera")
+    test_camera.changelist = True
 
     def _ensure_video_feature_enabled(
         self,
