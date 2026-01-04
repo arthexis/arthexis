@@ -46,6 +46,7 @@ class SendNetMessageForm(forms.Form):
         required=False,
         widget=forms.Textarea(attrs={"rows": 4}),
     )
+    expires_at = forms.DateTimeField(label=_("Expires at"), required=False)
 
     def clean(self):
         cleaned = super().clean()
@@ -124,6 +125,7 @@ class QuickSendForm(forms.ModelForm):
             "filter_installed_version",
             "filter_installed_revision",
             "target_limit",
+            "expires_at",
         ]
         widgets = {"body": forms.Textarea(attrs={"rows": 4})}
 

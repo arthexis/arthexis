@@ -79,12 +79,23 @@ class NotificationManager:
         # a non-interactive environment (e.g. service or CI).
         # Any failure will fall back to logging quietly.
 
-    def _write_lock_file(self, subject: str, body: str, *, sticky: bool = False) -> None:
-        payload = render_lcd_lock_file(subject=subject[:64], body=body[:64])
+    def _write_lock_file(
+        self,
+        subject: str,
+        body: str,
+        *,
+        sticky: bool = False,
+        expires_at=None,
+    ) -> None:
+        payload = render_lcd_lock_file(
+            subject=subject[:64], body=body[:64], expires_at=expires_at
+        )
         target = self.sticky_lock_file if sticky else self.lock_file
         target.write_text(payload, encoding="utf-8")
 
-    def send(self, subject: str, body: str = "", *, sticky: bool = False) -> bool:
+    def send(
+        self, subject: str, body: str = "", *, sticky: bool = False, expires_at=None
+    ) -> bool:
         """Store *subject* and *body* in the LCD lock file when available.
 
         The method truncates each line to 64 characters. If the lock file is
@@ -94,19 +105,23 @@ class NotificationManager:
         """
 
         try:
-            self._write_lock_file(subject[:64], body[:64], sticky=sticky)
+            self._write_lock_file(
+                subject[:64], body[:64], sticky=sticky, expires_at=expires_at
+            )
             return True
         except Exception as exc:  # pragma: no cover - filesystem dependent
             logger.warning("LCD lock file write failed: %s", exc)
             self._gui_display(subject, body)
             return True
 
-    def send_async(self, subject: str, body: str = "", *, sticky: bool = False) -> None:
+    def send_async(
+        self, subject: str, body: str = "", *, sticky: bool = False, expires_at=None
+    ) -> None:
         """Dispatch :meth:`send` on a background thread."""
 
         def _send() -> None:
             try:
-                self.send(subject, body, sticky=sticky)
+                self.send(subject, body, sticky=sticky, expires_at=expires_at)
             except Exception:
                 # Notification failures shouldn't affect callers.
                 pass
@@ -130,13 +145,21 @@ class NotificationManager:
 manager = NotificationManager()
 
 
-def notify(subject: str, body: str = "", *, sticky: bool = False) -> bool:
+def notify(
+    subject: str, body: str = "", *, sticky: bool = False, expires_at=None
+) -> bool:
     """Convenience wrapper using the global :class:`NotificationManager`."""
 
-    return manager.send(subject=subject, body=body, sticky=sticky)
+    return manager.send(
+        subject=subject, body=body, sticky=sticky, expires_at=expires_at
+    )
 
 
-def notify_async(subject: str, body: str = "", *, sticky: bool = False) -> None:
+def notify_async(
+    subject: str, body: str = "", *, sticky: bool = False, expires_at=None
+) -> None:
     """Run :func:`notify` without blocking the caller."""
 
-    manager.send_async(subject=subject, body=body, sticky=sticky)
+    manager.send_async(
+        subject=subject, body=body, sticky=sticky, expires_at=expires_at
+    )

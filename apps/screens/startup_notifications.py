@@ -5,6 +5,7 @@ import os
 import socket
 from collections.abc import Iterable
 from dataclasses import dataclass
+from datetime import datetime, timezone as datetime_timezone
 from pathlib import Path
 
 from utils import revision
@@ -21,12 +22,31 @@ LCD_RUNTIME_LOCK_FILE = "lcd_screen.lck"
 class LcdMessage:
     subject: str
     body: str
+    expires_at: datetime | None = None
+
+
+def _parse_expires_at(raw_value: str | None) -> datetime | None:
+    if not raw_value:
+        return None
+    text = raw_value.strip()
+    if not text:
+        return None
+    if text[-1] in {"Z", "z"}:
+        text = f"{text[:-1]}+00:00"
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=datetime_timezone.utc)
+    return parsed
 
 
 def _parse_lcd_lock_lines(lines: list[str]) -> LcdMessage:
     subject = lines[0][:64] if lines else ""
     body = lines[1][:64] if len(lines) > 1 else ""
-    return LcdMessage(subject=subject, body=body)
+    expires_at = _parse_expires_at(lines[2]) if len(lines) > 2 else None
+    return LcdMessage(subject=subject, body=body, expires_at=expires_at)
 
 
 def read_lcd_lock_file(lock_file: Path) -> LcdMessage | None:
@@ -40,8 +60,12 @@ def read_lcd_lock_file(lock_file: Path) -> LcdMessage | None:
     return _parse_lcd_lock_lines(lines)
 
 
-def render_lcd_lock_file(*, subject: str = "", body: str = "") -> str:
+def render_lcd_lock_file(
+    *, subject: str = "", body: str = "", expires_at: datetime | None = None
+) -> str:
     lines = [subject.strip()[:64], body.strip()[:64]]
+    if expires_at:
+        lines.append(expires_at.astimezone(datetime_timezone.utc).isoformat())
     return "\n".join(lines) + "\n"
 
 
@@ -127,8 +151,10 @@ def build_startup_message(base_dir: Path, port: str | None = None) -> tuple[str,
 def render_lcd_payload(
     subject: str,
     body: str,
+    *,
+    expires_at: datetime | None = None,
 ) -> str:
-    return render_lcd_lock_file(subject=subject, body=body)
+    return render_lcd_lock_file(subject=subject, body=body, expires_at=expires_at)
 
 
 def queue_startup_message(

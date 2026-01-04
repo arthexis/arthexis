@@ -1,4 +1,5 @@
 from pathlib import Path
+from datetime import datetime, timedelta, timezone as datetime_timezone
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
@@ -11,6 +12,8 @@ from apps.screens.startup_notifications import (
     LCD_LOW_LOCK_FILE,
     lcd_feature_enabled,
     lcd_feature_enabled_for_paths,
+    read_lcd_lock_file,
+    render_lcd_lock_file,
 )
 
 
@@ -86,3 +89,20 @@ class LCDStartupNotificationTests(TestCase):
             (lock_dir / LCD_LEGACY_FEATURE_LOCK).write_text("", encoding="utf-8")
 
             self.assertTrue(lcd_feature_enabled(lock_dir))
+
+    def test_render_and_read_lock_file_preserves_expiration(self):
+        with TemporaryDirectory() as tmpdir:
+            lock_dir = Path(tmpdir) / ".locks"
+            lock_dir.mkdir(parents=True)
+            lock_file = lock_dir / LCD_LOW_LOCK_FILE
+
+            expires_at = datetime.now(datetime_timezone.utc) + timedelta(minutes=10)
+            payload = render_lcd_lock_file(
+                subject="Hello", body="World", expires_at=expires_at
+            )
+            lock_file.write_text(payload, encoding="utf-8")
+
+            parsed = read_lcd_lock_file(lock_file)
+
+            assert parsed is not None
+            assert parsed.expires_at == expires_at

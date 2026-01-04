@@ -92,12 +92,14 @@ class Command(BaseCommand):
             subject = resolve_sigils(subject)
             body = resolve_sigils(body)
 
-        payload = render_lcd_lock_file(subject=subject, body=body)
+        payload = render_lcd_lock_file(
+            subject=subject, body=body, expires_at=existing.expires_at
+        )
         lock_file.write_text(payload, encoding="utf-8")
         self.stdout.write(self.style.SUCCESS(f"Updated {lock_file}"))
 
     def _default_lock_payload(self) -> LcdMessage:
-        return LcdMessage(subject="", body="")
+        return LcdMessage(subject="", body="", expires_at=None)
 
     def _restart_service(self, *, base_dir: Path, service_name: str | None) -> None:
         resolved_service = service_name or self._read_service_name(base_dir)

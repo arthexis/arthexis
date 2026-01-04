@@ -24,6 +24,7 @@ class NetMessageAdmin(EntityModelAdmin):
         "filter_node_role_display",
         "node_origin_display",
         "created_date_display",
+        "expires_at",
         "target_limit_display",
         "complete",
     )
@@ -47,6 +48,7 @@ class NetMessageAdmin(EntityModelAdmin):
                 )
             },
         ),
+        ("Expiration", {"fields": ("expires_at",)}),
         ("Attachments", {"fields": ("attachments",)}),
         (
             "Propagation",
@@ -79,6 +81,7 @@ class NetMessageAdmin(EntityModelAdmin):
             _("Propagation"),
             {
                 "fields": (
+                    "expires_at",
                     "target_limit",
                 )
             },

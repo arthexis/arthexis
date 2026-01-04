@@ -333,10 +333,10 @@ def net_message_pull(request):
     origin_fallback = str(local.uuid)
 
     for entry in entries:
-        if entry.is_stale:
+        message = entry.message
+        if message.is_expired or entry.is_stale:
             expired_ids.append(entry.pk)
             continue
-        message = entry.message
         reach_source = message.filter_node_role or message.reach
         reach_name = reach_source.name if reach_source else None
         origin_node = message.node_origin

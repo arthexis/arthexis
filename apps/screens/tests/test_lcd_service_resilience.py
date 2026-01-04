@@ -5,9 +5,11 @@ import importlib.util
 import os
 import sys
 import time
+from datetime import datetime, timedelta, timezone as datetime_timezone
 from pathlib import Path
 
 from apps.screens import lcd_screen
+from apps.screens.startup_notifications import render_lcd_lock_file
 
 
 def test_base_dir_resolution_avoids_django(monkeypatch, tmp_path):
@@ -82,3 +84,19 @@ def test_low_lock_file_kept_when_recent(tmp_path):
     lcd_screen._clear_low_lock_file(lock_file=lock_file, stale_after_seconds=3600)
 
     assert lock_file.exists()
+
+
+def test_read_lock_file_removes_expired_payload(tmp_path):
+    lock_file = tmp_path / "lcd-high"
+    expires_at = datetime.now(datetime_timezone.utc) - timedelta(seconds=1)
+    payload = render_lcd_lock_file(
+        subject="Expired", body="Payload", expires_at=expires_at
+    )
+    lock_file.write_text(payload, encoding="utf-8")
+
+    result = lcd_screen._read_lock_file(lock_file)
+
+    assert result.line1 == ""
+    assert result.line2 == ""
+    assert result.expires_at == expires_at
+    assert not lock_file.exists()

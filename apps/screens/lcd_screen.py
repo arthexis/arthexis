@@ -146,6 +146,7 @@ class LockPayload(NamedTuple):
     line1: str
     line2: str
     scroll_ms: int
+    expires_at: datetime | None = None
 
 
 class DisplayState(NamedTuple):
@@ -297,7 +298,16 @@ def _read_lock_file(lock_file: Path) -> LockPayload:
     payload = read_lcd_lock_file(lock_file)
     if payload is None:
         return LockPayload("", "", DEFAULT_SCROLL_MS)
-    return LockPayload(payload.subject, payload.body, DEFAULT_SCROLL_MS)
+
+    expires_at = payload.expires_at
+    if expires_at and datetime.now(datetime_timezone.utc) >= expires_at:
+        try:
+            lock_file.unlink()
+        except OSError:
+            logger.debug("Unable to delete expired LCD lock file", exc_info=True)
+        return LockPayload("", "", DEFAULT_SCROLL_MS, expires_at)
+
+    return LockPayload(payload.subject, payload.body, DEFAULT_SCROLL_MS, expires_at)
 
 
 def _payload_has_text(payload: LockPayload) -> bool:

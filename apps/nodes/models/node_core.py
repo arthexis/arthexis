@@ -27,6 +27,7 @@ from django.db.models import Q
 from django.db.utils import DatabaseError, IntegrityError
 from django.dispatch import Signal, receiver
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _
 
@@ -1042,6 +1043,11 @@ class NetMessage(Entity):
     subject = models.CharField(max_length=64, blank=True)
     body = models.CharField(max_length=256, blank=True)
     attachments = models.JSONField(blank=True, null=True)
+    expires_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Stop propagating and displaying this message after this time.",
+    )
     filter_node = models.ForeignKey(
         "Node",
         on_delete=models.SET_NULL,
@@ -1112,6 +1118,7 @@ class NetMessage(Entity):
         reach: NodeRole | str | None = None,
         seen: list[str] | None = None,
         attachments: list[dict[str, object]] | None = None,
+        expires_at: datetime | None = None,
     ):
         role = None
         if reach:
@@ -1129,6 +1136,7 @@ class NetMessage(Entity):
             reach=role,
             node_origin=origin,
             attachments=normalized_attachments or None,
+            expires_at=expires_at,
         )
         if normalized_attachments:
             msg.apply_attachments(normalized_attachments)
@@ -1252,6 +1260,10 @@ class NetMessage(Entity):
             payload["filter_installed_version"] = self.filter_installed_version
         if self.filter_installed_revision:
             payload["filter_installed_revision"] = self.filter_installed_revision
+        if self.expires_at:
+            payload["expires_at"] = (
+                self.expires_at.astimezone(datetime_timezone.utc).isoformat()
+            )
         return payload
 
     @staticmethod
@@ -1269,8 +1281,13 @@ class NetMessage(Entity):
         if node.current_relation != Node.Relation.DOWNSTREAM:
             return
 
+        if self.is_expired:
+            return
+
         now = timezone.now()
         expires_at = now + timedelta(hours=1)
+        if self.expires_at and self.expires_at < expires_at:
+            expires_at = self.expires_at
         normalized_seen = [str(value) for value in seen]
         entry, created = PendingNetMessage.objects.get_or_create(
             node=node,
@@ -1341,6 +1358,16 @@ class NetMessage(Entity):
             filter_relation = relation.value if relation else ""
         filter_installed_version = (data.get("filter_installed_version") or "")[:20]
         filter_installed_revision = (data.get("filter_installed_revision") or "")[:40]
+        expires_at_value = data.get("expires_at")
+        expires_at = None
+        if expires_at_value:
+            parsed = parse_datetime(str(expires_at_value))
+            if parsed is not None:
+                expires_at = parsed
+                if expires_at.tzinfo is None:
+                    expires_at = timezone.make_aware(
+                        expires_at, timezone.get_current_timezone()
+                    )
         seen_values = data.get("seen", [])
         if not isinstance(seen_values, list):
             seen_values = list(seen_values)  # type: ignore[arg-type]
@@ -1365,6 +1392,7 @@ class NetMessage(Entity):
                 "filter_current_relation": filter_relation,
                 "filter_installed_version": filter_installed_version,
                 "filter_installed_revision": filter_installed_revision,
+                "expires_at": expires_at,
             },
         )
         if not created:
@@ -1387,6 +1415,7 @@ class NetMessage(Entity):
                 "filter_current_relation": filter_relation,
                 "filter_installed_version": filter_installed_version,
                 "filter_installed_revision": filter_installed_revision,
+                "expires_at": expires_at,
             }
             for field, value in field_updates.items():
                 if getattr(msg, field) != value:
@@ -1399,6 +1428,12 @@ class NetMessage(Entity):
         msg.propagate(seen=normalized_seen)
         return msg
 
+    @property
+    def is_expired(self) -> bool:
+        if not self.expires_at:
+            return False
+        return self.expires_at <= timezone.now()
+
     def propagate(self, seen: list[str] | None = None):
         from apps.core.notifications import notify
         import random
@@ -1410,7 +1445,14 @@ class NetMessage(Entity):
             )
             return
 
-        displayed = notify(self.subject, self.body)
+        if self.is_expired:
+            if not self.complete:
+                self.complete = True
+                self.save(update_fields=["complete"])
+            PendingNetMessage.objects.filter(message=self).delete()
+            return
+
+        displayed = notify(self.subject, self.body, expires_at=self.expires_at)
         local = Node.get_local()
         if displayed:
             cutoff = timezone.now() - timedelta(hours=24)
