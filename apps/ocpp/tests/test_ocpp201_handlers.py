@@ -11,6 +11,7 @@ from apps.ocpp import consumers, store, call_result_handlers
 from apps.flows.models import Transition
 from apps.ocpp.models import (
     Charger,
+    CPReservation,
     CertificateRequest,
     CertificateStatusCheck,
     InstalledCertificate,
@@ -32,6 +33,7 @@ from apps.ocpp.models import (
     CPFirmwareDeployment,
 )
 from apps.protocols.models import ProtocolCall as ProtocolCallModel
+from apps.maps.models import Location
 from django.utils.dateparse import parse_datetime
 
 
@@ -51,6 +53,7 @@ def reset_store(monkeypatch, tmp_path):
     store.ev_charging_needs.clear()
     store.ev_charging_schedules.clear()
     store.planner_notifications.clear()
+    store.connector_release_notifications.clear()
     store.observability_events.clear()
     store.monitoring_reports.clear()
     store.clear_display_message_compliance()
@@ -74,6 +77,7 @@ def reset_store(monkeypatch, tmp_path):
     store.ev_charging_needs.clear()
     store.ev_charging_schedules.clear()
     store.planner_notifications.clear()
+    store.connector_release_notifications.clear()
     store.observability_events.clear()
     store.monitoring_reports.clear()
     store.charging_profile_reports.clear()
@@ -1232,3 +1236,54 @@ async def test_notify_event_requires_event_data(monkeypatch):
 
     assert result == {}
     assert forwarded == []
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+@pytest.mark.parametrize(
+    "status,confirmed",
+    [("Accepted", True), ("Cancelled", False), ("Expired", False)],
+)
+async def test_reservation_status_update_persists_and_notifies(status, confirmed):
+    from apps.ocpp.models import Charger as ChargerModel
+
+    location = await database_sync_to_async(Location.objects.create)(name="Depot")
+    charger = await database_sync_to_async(ChargerModel.objects.create)(
+        charger_id="CP-RES-1", connector_id=1, location=location
+    )
+    reservation = await database_sync_to_async(CPReservation.objects.create)(
+        location=location,
+        connector=charger,
+        start_time=timezone.now(),
+        duration_minutes=30,
+    )
+
+    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = store.identity_key(charger.charger_id, charger.connector_id)
+    consumer.charger = charger
+    consumer.aggregate_charger = None
+    consumer.connector_value = charger.connector_id
+
+    payload = {
+        "reservationId": reservation.pk,
+        "reservationUpdateStatus": status,
+    }
+
+    result = await consumer._handle_reservation_status_update_action(
+        payload, "resv-msg-1", "", ""
+    )
+
+    assert result == {}
+    updated = await database_sync_to_async(CPReservation.objects.get)(pk=reservation.pk)
+    assert updated.evcs_status == status
+    assert updated.evcs_confirmed is confirmed
+    assert bool(updated.evcs_confirmed_at) == confirmed
+
+    assert store.connector_release_notifications
+    notification = store.connector_release_notifications[-1]
+    assert notification == {
+        "charger_id": charger.charger_id,
+        "connector_id": charger.connector_id,
+        "reservation_id": reservation.pk,
+        "status": status,
+    }

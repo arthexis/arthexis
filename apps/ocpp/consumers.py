@@ -2227,6 +2227,54 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         self, payload, msg_id, raw, text_data
     ):
         self._log_ocpp201_notification("ReservationStatusUpdate", payload)
+        payload_data = payload if isinstance(payload, dict) else {}
+        reservation_value = payload_data.get("reservationId")
+        try:
+            reservation_pk = int(reservation_value) if reservation_value is not None else None
+        except (TypeError, ValueError):
+            reservation_pk = None
+
+        status_value = str(payload_data.get("reservationUpdateStatus") or "").strip()
+
+        def _persist_reservation():
+            reservation = None
+            if reservation_pk is not None:
+                reservation = (
+                    CPReservation.objects.select_related("connector")
+                    .filter(pk=reservation_pk)
+                    .first()
+                )
+            if reservation is None:
+                return None
+
+            reservation.evcs_status = status_value
+            reservation.evcs_error = ""
+            confirmed = status_value.casefold() == "accepted"
+            reservation.evcs_confirmed = confirmed
+            reservation.evcs_confirmed_at = timezone.now() if confirmed else None
+            reservation.save(
+                update_fields=[
+                    "evcs_status",
+                    "evcs_error",
+                    "evcs_confirmed",
+                    "evcs_confirmed_at",
+                    "updated_on",
+                ]
+            )
+            return reservation
+
+        reservation = await database_sync_to_async(_persist_reservation)()
+        if reservation and reservation.connector_id:
+            connector = reservation.connector
+            store.forward_connector_release(
+                {
+                    "charger_id": connector.charger_id,
+                    "connector_id": connector.connector_id,
+                    "reservation_id": reservation.pk,
+                    "status": status_value or None,
+                }
+            )
+
         return {}
 
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "NotifyChargingLimit")
