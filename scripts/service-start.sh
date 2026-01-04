@@ -154,26 +154,6 @@ SOFT_FD_LIMIT="$(ulimit -Sn 2>/dev/null || echo "unknown")"
 HARD_FD_LIMIT="$(ulimit -Hn 2>/dev/null || echo "unknown")"
 echo "Open file limits: soft=${SOFT_FD_LIMIT} hard=${HARD_FD_LIMIT}"
 
-# Collect static files only when their sources change
-STATIC_MD5_FILE="$BASE_DIR/staticfiles.md5"
-if ! STATIC_HASH=$(python scripts/staticfiles_md5.py); then
-  echo "Failed to compute static files hash; running collectstatic."
-  python manage.py collectstatic --noinput
-else
-  STORED_HASH=""
-  [ -f "$STATIC_MD5_FILE" ] && STORED_HASH=$(cat "$STATIC_MD5_FILE")
-  if [ "$STATIC_HASH" != "$STORED_HASH" ]; then
-    if python manage.py collectstatic --noinput; then
-      echo "$STATIC_HASH" > "$STATIC_MD5_FILE"
-    else
-      echo "collectstatic failed"
-      exit 1
-    fi
-  else
-    echo "Static files unchanged. Skipping collectstatic."
-  fi
-fi
-
 # Determine default port based on nginx mode if present
 DEFAULT_PORT="$(arthexis_detect_backend_port "$BASE_DIR")"
 PORT="$DEFAULT_PORT"
@@ -182,6 +162,7 @@ RELOAD=false
 AWAIT_START=false
 STARTUP_TIMEOUT=300
 DEBUG_MODE=false
+FORCE_COLLECTSTATIC=false
 SHOW_LEVEL=""
 APP_LOG_FILE="$LOG_DIR/$(hostname).log"
 # Celery workers process Post Office's email queue; prefer embedded mode.
@@ -261,7 +242,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     --show)
       if [ -z "${2:-}" ]; then
-        echo "Usage: $0 [--port PORT] [--reload] [--await] [--debug] [--show LEVEL] [--public|--internal] [--embedded|--systemd|--no-celery]" >&2
+        echo "Usage: $0 [--port PORT] [--reload] [--await] [--debug] [--show LEVEL] [--public|--internal] [--embedded|--systemd|--no-celery] [--force-collectstatic]" >&2
         exit 1
       fi
       SHOW_LEVEL="$2"
@@ -290,8 +271,12 @@ while [[ $# -gt 0 ]]; do
       PORT="$DEFAULT_PORT"
       shift
       ;;
+    --force-collectstatic)
+      FORCE_COLLECTSTATIC=true
+      shift
+      ;;
     *)
-      echo "Usage: $0 [--port PORT] [--reload] [--await] [--debug] [--show LEVEL] [--public|--internal] [--embedded|--systemd|--no-celery]" >&2
+      echo "Usage: $0 [--port PORT] [--reload] [--await] [--debug] [--show LEVEL] [--public|--internal] [--embedded|--systemd|--no-celery] [--force-collectstatic]" >&2
       exit 1
       ;;
   esac
@@ -313,6 +298,49 @@ if [ "$DEBUG_MODE" = true ]; then
 fi
 
 start_log_follower "$APP_LOG_FILE" "$SHOW_LEVEL"
+
+STATIC_MD5_FILE="$BASE_DIR/staticfiles.md5"
+STATIC_HASH=""
+if [ "$FORCE_COLLECTSTATIC" = false ]; then
+  set +e
+  CACHE_OUTPUT=$(python scripts/staticfiles_md5.py --check-cache)
+  CACHE_STATUS=$?
+  set -e
+  if [ "$CACHE_STATUS" -eq 0 ]; then
+    STATIC_HASH="$CACHE_OUTPUT"
+    echo "Using cached static files hash."
+  elif [ "$CACHE_STATUS" -ne 3 ]; then
+    echo "Cached static files hash unavailable (exit $CACHE_STATUS); recalculating."
+  fi
+fi
+
+HASH_ARGS=()
+if [ "$FORCE_COLLECTSTATIC" = true ]; then
+  HASH_ARGS+=(--ignore-cache)
+fi
+
+if [ -z "$STATIC_HASH" ]; then
+  if ! STATIC_HASH=$(python scripts/staticfiles_md5.py "${HASH_ARGS[@]}"); then
+    echo "Failed to compute static files hash; running collectstatic."
+    python manage.py collectstatic --noinput
+    STATIC_HASH=""
+  fi
+fi
+
+STORED_HASH=""
+[ -f "$STATIC_MD5_FILE" ] && STORED_HASH=$(cat "$STATIC_MD5_FILE")
+if [ "$FORCE_COLLECTSTATIC" = true ] || [ -z "$STATIC_HASH" ] || [ "$STATIC_HASH" != "$STORED_HASH" ]; then
+  if python manage.py collectstatic --noinput; then
+    if [ -n "$STATIC_HASH" ]; then
+      echo "$STATIC_HASH" > "$STATIC_MD5_FILE"
+    fi
+  else
+    echo "collectstatic failed"
+    exit 1
+  fi
+else
+  echo "Static files unchanged. Skipping collectstatic."
+fi
 
 arthexis_suite_reachable() {
   local port="$1"
