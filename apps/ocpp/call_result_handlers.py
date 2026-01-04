@@ -1430,6 +1430,40 @@ async def handle_change_availability_result(
     return True
 
 
+async def handle_unlock_connector_result(
+    consumer: CallResultContext,
+    message_id: str,
+    metadata: dict,
+    payload_data: dict,
+    log_key: str,
+) -> bool:
+    status_value = str((payload_data or {}).get("status") or "").strip()
+    status_info_text = _format_status_info((payload_data or {}).get("statusInfo"))
+    connector_value = metadata.get("connector_id")
+    requested_at = metadata.get("requested_at")
+
+    await consumer._update_change_availability_state(
+        connector_value,
+        None,
+        status_value,
+        requested_at,
+        details=status_info_text,
+    )
+
+    result_metadata = dict(metadata or {})
+    if status_value:
+        result_metadata["status"] = status_value
+    if status_info_text:
+        result_metadata["status_info"] = status_info_text
+
+    store.record_pending_call_result(
+        message_id,
+        metadata=result_metadata,
+        payload=payload_data,
+    )
+    return True
+
+
 async def handle_clear_display_message_result(
     consumer: CallResultContext,
     message_id: str,
@@ -1870,6 +1904,7 @@ CALL_RESULT_HANDLERS: dict[str, CallResultHandler] = {
     "GetTransactionStatus": handle_get_transaction_status_result,
     "Reset": handle_reset_result,
     "ChangeAvailability": handle_change_availability_result,
+    "UnlockConnector": handle_unlock_connector_result,
     "SetChargingProfile": handle_set_charging_profile_result,
     "ClearChargingProfile": handle_clear_charging_profile_result,
     "ClearDisplayMessage": handle_clear_display_message_result,
