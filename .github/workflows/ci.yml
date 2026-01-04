@@ -38,7 +38,7 @@ jobs:
             venv-${{ runner.os }}-
       - name: Install suite from repository
         run: |
-          ./install.sh --clean --no-start
+          ./install.sh --no-start
       - name: Check documentation links use HTTPS
         run: |
           source .venv/bin/activate
@@ -89,7 +89,7 @@ jobs:
             venv-${{ runner.os }}-
       - name: Install from default branch
         run: |
-          ./install.sh --clean --no-start
+          ./install.sh --no-start
       - name: Checkout PR changes
         uses: actions/checkout@v6
         with:
