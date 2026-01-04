@@ -43,6 +43,7 @@ from .certificates import (
     TrustAnchor,
 )
 from .monitoring import Variable, MonitoringRule, MonitoringReport
+from .device_report import DeviceInventorySnapshot, DeviceInventoryItem
 from .charging_limit_event import ClearedChargingLimitEvent
 
 __all__ = [
@@ -94,5 +95,7 @@ __all__ = [
     "Variable",
     "MonitoringRule",
     "MonitoringReport",
+    "DeviceInventorySnapshot",
+    "DeviceInventoryItem",
     "ClearedChargingLimitEvent",
 ]
