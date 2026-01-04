@@ -1331,6 +1331,34 @@ clear_workdir_before_restart() {
   fi
 }
 
+clear_lcd_lockfiles() {
+  local lock_dir="$LOCK_DIR"
+
+  if [ -z "$lock_dir" ]; then
+    return 0
+  fi
+
+  local -a lcd_lock_files=(
+    "$lock_dir/lcd-high"
+    "$lock_dir/lcd-low"
+    "$lock_dir/${ARTHEXIS_LCD_LOCK:-lcd_screen.lck}"
+    "$lock_dir/lcd_screen_enabled.lck"
+  )
+
+  local lock_file cleared
+  cleared=0
+  for lock_file in "${lcd_lock_files[@]}"; do
+    if [ -e "$lock_file" ]; then
+      : > "$lock_file"
+      cleared=1
+    fi
+  done
+
+  if [ "$cleared" -eq 1 ]; then
+    echo "Cleared LCD lock files before restart."
+  fi
+}
+
 upgrade_failure_recovery() {
   local exit_code=$?
 
@@ -1755,6 +1783,10 @@ if [ -n "$SERVICE_NAME" ] && lcd_systemd_unit_present "$SERVICE_NAME"; then
   arthexis_install_lcd_service_unit "$BASE_DIR" "$LOCK_DIR" "$SERVICE_NAME"
 elif [ -n "$SERVICE_NAME" ] && [ "$NODE_ROLE_NAME" = "Control" ] && [ "$SERVICE_MANAGEMENT_MODE" = "$ARTHEXIS_SERVICE_MODE_SYSTEMD" ]; then
   arthexis_install_lcd_service_unit "$BASE_DIR" "$LOCK_DIR" "$SERVICE_NAME"
+fi
+
+if [ -n "$SERVICE_NAME" ] && [[ $NO_RESTART -eq 0 ]] && lcd_systemd_unit_present "$SERVICE_NAME"; then
+  clear_lcd_lockfiles
 fi
 
 SHOULD_RESTART_AFTER_UPGRADE=1
