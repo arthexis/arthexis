@@ -409,6 +409,7 @@ LOCAL_APPS = [
     "apps.celery",
     "apps.nodes",
     "apps.services",
+    "apps.ftp",
     "apps.dns",
     "apps.screens",
     "apps.sensors",

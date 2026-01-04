@@ -1,0 +1,17 @@
+[
+  {
+    "model": "ftp.ftpfolder",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "name": "Work Directory",
+      "path": "work",
+      "enabled": false,
+      "owner": null,
+      "security_group": null,
+      "owner_permission": "admin",
+      "group_permission": "read",
+      "node": null
+    }
+  }
+]
