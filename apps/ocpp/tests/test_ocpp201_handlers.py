@@ -727,24 +727,33 @@ async def test_transaction_event_registered_for_ocpp201():
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-async def test_get_15118_ev_certificate_persists_request():
+async def test_get_15118_ev_certificate_persists_request(monkeypatch):
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="CERT-1")
     consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "CERT-1"
     consumer.charger = charger
     consumer.aggregate_charger = None
 
+    def fake_sign(**kwargs):
+        return "EXI-RESPONSE"
+
+    monkeypatch.setattr(
+        consumers.certificate_signing, "sign_certificate_request", fake_sign
+    )
+
     payload = {"certificateType": "V2G", "exiRequest": "CSRDATA"}
     result = await consumer._handle_get_15118_ev_certificate_action(
         payload, "msg-1", "", ""
     )
 
-    assert result["status"] == "Rejected"
+    assert result["status"] == "Accepted"
+    assert result["exiResponse"] == "EXI-RESPONSE"
     request = await database_sync_to_async(CertificateRequest.objects.get)(charger=charger)
     assert request.action == CertificateRequest.ACTION_15118
     assert request.csr == "CSRDATA"
-    assert request.status == CertificateRequest.STATUS_REJECTED
-    assert request.response_payload["status"] == "Rejected"
+    assert request.status == CertificateRequest.STATUS_ACCEPTED
+    assert request.signed_certificate == "EXI-RESPONSE"
+    assert request.response_payload["status"] == "Accepted"
 
 
 @pytest.mark.anyio
