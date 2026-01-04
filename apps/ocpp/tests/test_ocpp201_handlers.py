@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timezone as dt_timezone
 from functools import partial
 from unittest.mock import AsyncMock
@@ -13,6 +14,7 @@ from apps.ocpp.models import (
     Charger,
     CPReservation,
     CertificateRequest,
+    CertificateOperation,
     CertificateStatusCheck,
     InstalledCertificate,
     CostUpdate,
@@ -482,22 +484,81 @@ async def test_get_certificate_status_handles_missing_certificate():
 
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
-async def test_sign_certificate_persists_request():
+async def test_sign_certificate_validates_csr(monkeypatch):
     charger = await database_sync_to_async(Charger.objects.create)(charger_id="CERT-3")
     consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
     consumer.store_key = "CERT-3"
     consumer.charger = charger
     consumer.aggregate_charger = None
 
-    payload = {"csr": "CSR-123", "certificateType": "V2G"}
+    called = False
+
+    def fake_sign(**kwargs):
+        nonlocal called
+        called = True
+        return "CHAIN"
+
+    monkeypatch.setattr(
+        consumers.certificate_signing, "sign_certificate_request", fake_sign
+    )
+
+    payload = {"csr": "   ", "certificateType": "V2G"}
     result = await consumer._handle_sign_certificate_action(
         payload, "msg-3", "", ""
     )
 
     assert result["status"] == "Rejected"
+    assert called is False
+    request = await database_sync_to_async(CertificateRequest.objects.get)(charger=charger)
+    assert request.status == CertificateRequest.STATUS_REJECTED
+    assert request.status_info == "CSR payload is missing or invalid."
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+async def test_sign_certificate_signs_and_dispatches_certificate(monkeypatch):
+    charger = await database_sync_to_async(Charger.objects.create)(charger_id="CERT-4")
+    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = "CERT-4"
+    consumer.charger = charger
+    consumer.aggregate_charger = None
+
+    sent: list[str] = []
+
+    async def fake_send(message):
+        sent.append(message)
+
+    consumer.send = fake_send
+
+    def fake_sign(**kwargs):
+        return "CERTCHAIN"
+
+    monkeypatch.setattr(
+        consumers.certificate_signing, "sign_certificate_request", fake_sign
+    )
+
+    payload = {"csr": "CSR-123", "certificateType": "V2G"}
+    result = await consumer._handle_sign_certificate_action(
+        payload, "msg-4", "", ""
+    )
+
+    assert result["status"] == "Accepted"
+
     request = await database_sync_to_async(CertificateRequest.objects.get)(charger=charger)
     assert request.action == CertificateRequest.ACTION_SIGN
     assert request.csr == "CSR-123"
+    assert request.signed_certificate == "CERTCHAIN"
+    assert request.status == CertificateRequest.STATUS_PENDING
+
+    operation = await database_sync_to_async(
+        CertificateOperation.objects.get
+    )(charger=charger, action=CertificateOperation.ACTION_SIGNED)
+    assert operation.status == CertificateOperation.STATUS_PENDING
+
+    assert len(sent) == 1
+    message = json.loads(sent[0])
+    assert message[2] == "CertificateSigned"
+    assert message[3]["certificateChain"] == "CERTCHAIN"
 
 
 @pytest.mark.anyio
