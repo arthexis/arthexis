@@ -20,12 +20,9 @@ RPI_CAMERA_BINARIES = ("rpicam-hello", "rpicam-still", "rpicam-vid")
 _CAMERA_LOCK = threading.Lock()
 
 
-def has_rpi_camera_stack() -> bool:
-    """Return ``True`` when the Raspberry Pi camera stack is available."""
+def _is_video_device_available(device: Path) -> bool:
+    """Return ``True`` when ``device`` exists and is a readable char device."""
 
-    device = RPI_CAMERA_DEVICE
-    if not device.exists():
-        return False
     device_path = str(device)
     try:
         mode = os.stat(device_path).st_mode
@@ -34,6 +31,15 @@ def has_rpi_camera_stack() -> bool:
     if not stat.S_ISCHR(mode):
         return False
     if not os.access(device_path, os.R_OK | os.W_OK):
+        return False
+    return True
+
+
+def has_rpicam_binaries() -> bool:
+    """Return ``True`` when the Raspberry Pi camera binaries are available."""
+
+    device = RPI_CAMERA_DEVICE
+    if not _is_video_device_available(device):
         return False
     for binary in RPI_CAMERA_BINARIES:
         tool_path = shutil.which(binary)
@@ -54,12 +60,23 @@ def has_rpi_camera_stack() -> bool:
     return True
 
 
+def _has_ffmpeg_capture_support() -> bool:
+    """Return ``True`` when a generic V4L2 device can be captured with ffmpeg."""
+
+    if not _is_video_device_available(RPI_CAMERA_DEVICE):
+        return False
+    return shutil.which("ffmpeg") is not None
+
+
+def has_rpi_camera_stack() -> bool:
+    """Return ``True`` when any supported camera stack is available."""
+
+    return has_rpicam_binaries() or _has_ffmpeg_capture_support()
+
+
 def capture_rpi_snapshot(timeout: int = 10) -> Path:
     """Capture a snapshot using the Raspberry Pi camera stack."""
 
-    tool_path = shutil.which("rpicam-still")
-    if not tool_path:
-        raise RuntimeError("rpicam-still is not available")
     CAMERA_DIR.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.utcnow()
     unique_suffix = uuid.uuid4().hex
@@ -69,8 +86,34 @@ def capture_rpi_snapshot(timeout: int = 10) -> Path:
         raise RuntimeError("Camera is busy. Wait for the current capture to finish.")
 
     try:
+        if has_rpicam_binaries():
+            tool_path = shutil.which("rpicam-still")
+            if not tool_path:
+                raise RuntimeError("rpicam-still is not available")
+            command = [tool_path, "-o", str(filename), "-t", "1"]
+        elif _has_ffmpeg_capture_support():
+            tool_path = shutil.which("ffmpeg")
+            if not tool_path:
+                raise RuntimeError("ffmpeg is not available")
+            command = [
+                tool_path,
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-f",
+                "v4l2",
+                "-i",
+                str(RPI_CAMERA_DEVICE),
+                "-frames:v",
+                "1",
+                "-y",
+                str(filename),
+            ]
+        else:
+            raise RuntimeError("No supported camera stack is available")
+
         result = subprocess.run(
-            [tool_path, "-o", str(filename), "-t", "1"],
+            command,
             capture_output=True,
             text=True,
             check=False,
@@ -142,6 +185,7 @@ __all__ = [
     "CAMERA_DIR",
     "RPI_CAMERA_BINARIES",
     "RPI_CAMERA_DEVICE",
+    "has_rpicam_binaries",
     "capture_rpi_snapshot",
     "has_rpi_camera_stack",
     "record_rpi_video",
