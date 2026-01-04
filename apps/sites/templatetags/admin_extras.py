@@ -14,6 +14,7 @@ from django.db.models import Count, Exists, OuterRef, Q
 from django.db.models import Model
 from django.urls import NoReverseMatch, reverse
 from django.utils.text import capfirst
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from apps.celery.utils import celery_feature_enabled as celery_feature_enabled_helper
 from apps.core.entity import Entity
@@ -125,8 +126,10 @@ def last_net_message() -> dict[str, object]:
     """Return the most recent NetMessage with content for the admin dashboard."""
 
     try:
+        now = timezone.now()
         entries = list(
-            NetMessage.objects.order_by("-created")
+            NetMessage.objects.filter(Q(expires_at__isnull=True) | Q(expires_at__gt=now))
+            .order_by("-created")
             .values("subject", "body")[:25]
         )
     except DatabaseError:

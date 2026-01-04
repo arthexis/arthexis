@@ -87,12 +87,13 @@ class Command(BaseCommand):
             else existing.subject
         )
         body = options.get("body") if options.get("body") is not None else existing.body
+        expires_at = existing.expires_at
 
         if options.get("resolve_sigils"):
             subject = resolve_sigils(subject)
             body = resolve_sigils(body)
 
-        payload = render_lcd_lock_file(subject=subject, body=body)
+        payload = render_lcd_lock_file(subject=subject, body=body, expires_at=expires_at)
         lock_file.write_text(payload, encoding="utf-8")
         self.stdout.write(self.style.SUCCESS(f"Updated {lock_file}"))
 

@@ -1042,6 +1042,11 @@ class NetMessage(Entity):
     subject = models.CharField(max_length=64, blank=True)
     body = models.CharField(max_length=256, blank=True)
     attachments = models.JSONField(blank=True, null=True)
+    expires_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="UTC timestamp after which this message should be discarded.",
+    )
     filter_node = models.ForeignKey(
         "Node",
         on_delete=models.SET_NULL,
@@ -1112,6 +1117,7 @@ class NetMessage(Entity):
         reach: NodeRole | str | None = None,
         seen: list[str] | None = None,
         attachments: list[dict[str, object]] | None = None,
+        expires_at: datetime | str | None = None,
     ):
         role = None
         if reach:
@@ -1129,6 +1135,7 @@ class NetMessage(Entity):
             reach=role,
             node_origin=origin,
             attachments=normalized_attachments or None,
+            expires_at=cls.normalize_expires_at(expires_at),
         )
         if normalized_attachments:
             msg.apply_attachments(normalized_attachments)
@@ -1193,6 +1200,34 @@ class NetMessage(Entity):
             normalized.append(normalized_item)
         return normalized
 
+    @staticmethod
+    def normalize_expires_at(value: datetime | str | None) -> datetime | None:
+        if not value:
+            return None
+
+        parsed: datetime | None
+        if isinstance(value, datetime):
+            parsed = value
+        else:
+            try:
+                parsed = datetime.fromisoformat(str(value))
+            except ValueError:
+                return None
+
+        if timezone.is_naive(parsed):
+            try:
+                parsed = timezone.make_aware(parsed, timezone.get_current_timezone())
+            except Exception:
+                return None
+
+        return parsed
+
+    @property
+    def is_expired(self) -> bool:
+        if not self.expires_at:
+            return False
+        return self.expires_at <= timezone.now()
+
     def apply_attachments(
         self, attachments: list[dict[str, object]] | None = None
     ) -> None:
@@ -1240,6 +1275,8 @@ class NetMessage(Entity):
         }
         if self.attachments:
             payload["attachments"] = self.attachments
+        if self.expires_at:
+            payload["expires_at"] = self.expires_at.isoformat()
         if self.filter_node:
             payload["filter_node"] = str(self.filter_node.uuid)
         if self.filter_node_feature:
@@ -1269,8 +1306,18 @@ class NetMessage(Entity):
         if node.current_relation != Node.Relation.DOWNSTREAM:
             return
 
+        if self.is_expired:
+            if not self.complete:
+                self.complete = True
+                if self.pk:
+                    self.save(update_fields=["complete"])
+            self.clear_queue_for_node(node)
+            return
+
         now = timezone.now()
         expires_at = now + timedelta(hours=1)
+        if self.expires_at:
+            expires_at = min(expires_at, self.expires_at)
         normalized_seen = [str(value) for value in seen]
         entry, created = PendingNetMessage.objects.get_or_create(
             node=node,
@@ -1351,6 +1398,7 @@ class NetMessage(Entity):
             origin_node = Node.objects.filter(uuid=origin_id).first()
         if not origin_node:
             origin_node = sender
+        expires_at = cls.normalize_expires_at(data.get("expires_at"))
         msg, created = cls.objects.get_or_create(
             uuid=msg_uuid,
             defaults={
@@ -1359,6 +1407,7 @@ class NetMessage(Entity):
                 "reach": reach_role,
                 "node_origin": origin_node,
                 "attachments": attachments or None,
+                "expires_at": expires_at,
                 "filter_node": filter_node,
                 "filter_node_feature": filter_feature,
                 "filter_node_role": filter_role,
@@ -1380,6 +1429,9 @@ class NetMessage(Entity):
             if attachments and msg.attachments != attachments:
                 msg.attachments = attachments
                 update_fields.append("attachments")
+            if msg.expires_at != expires_at:
+                msg.expires_at = expires_at
+                update_fields.append("expires_at")
             field_updates = {
                 "filter_node": filter_node,
                 "filter_node_feature": filter_feature,
@@ -1404,13 +1456,21 @@ class NetMessage(Entity):
         import random
         import requests
 
+        if self.is_expired:
+            if not self.complete:
+                self.complete = True
+                if self.pk:
+                    self.save(update_fields=["complete"])
+            PendingNetMessage.objects.filter(message=self).delete()
+            return
+
         if _upgrade_in_progress():
             logger.info(
                 "Skipping NetMessage propagation during upgrade in progress", extra={"id": self.pk}
             )
             return
 
-        displayed = notify(self.subject, self.body)
+        displayed = notify(self.subject, self.body, expires_at=self.expires_at)
         local = Node.get_local()
         if displayed:
             cutoff = timezone.now() - timedelta(hours=24)
@@ -1623,6 +1683,8 @@ class PendingNetMessage(Entity):
 
     @property
     def is_stale(self) -> bool:
+        if self.message and getattr(self.message, "is_expired", False):
+            return True
         return self.stale_at <= timezone.now()
 
 

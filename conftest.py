@@ -33,6 +33,22 @@ def _ensure_clean_test_databases() -> None:
 _ensure_clean_test_databases()
 django.setup()
 
+from django.conf import settings  # noqa: E402
+
+
+class _DisableMigrations(dict):
+    """Short-circuit Django migrations for faster test database setup."""
+
+    def __contains__(self, item: object) -> bool:  # pragma: no cover - trivial
+        return True
+
+    def __getitem__(self, item: str) -> None:  # pragma: no cover - trivial
+        return None
+
+
+if os.environ.get("PYTEST_DISABLE_MIGRATIONS", "1") == "1":
+    settings.MIGRATION_MODULES = _DisableMigrations()
+
 from apps.tests.domain import RecordedTestResult, persist_results  # noqa: E402
 COLLECTED_RESULTS: Dict[str, Dict[str, Any]] = defaultdict(lambda: {"logs": []})
 DB_BLOCKER = None

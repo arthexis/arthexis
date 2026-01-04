@@ -1,5 +1,6 @@
 from django import forms
 from django.contrib.admin.widgets import FilteredSelectMultiple
+from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 from apps.ocpp.models import Charger
@@ -46,6 +47,12 @@ class SendNetMessageForm(forms.Form):
         required=False,
         widget=forms.Textarea(attrs={"rows": 4}),
     )
+    expires_at = forms.DateTimeField(
+        label=_("Expires at"),
+        required=False,
+        widget=forms.DateTimeInput(attrs={"type": "datetime-local"}),
+        help_text=_("Stop propagating and displaying after this time."),
+    )
 
     def clean(self):
         cleaned = super().clean()
@@ -55,6 +62,12 @@ class SendNetMessageForm(forms.Form):
             raise forms.ValidationError(_("Enter a subject or body to send."))
         cleaned["subject"] = subject
         cleaned["body"] = body
+        expires_at = cleaned.get("expires_at")
+        if expires_at and timezone.is_naive(expires_at):
+            expires_at = timezone.make_aware(
+                expires_at, timezone.get_current_timezone()
+            )
+        cleaned["expires_at"] = expires_at
         return cleaned
 
 
@@ -116,6 +129,7 @@ class QuickSendForm(forms.ModelForm):
         fields = [
             "subject",
             "body",
+            "expires_at",
             "attachments",
             "filter_node",
             "filter_node_feature",
