@@ -18,14 +18,16 @@ def test_refresh_uptime_payload_updates_subject(tmp_path):
     now = started_at + timedelta(hours=1, minutes=2)
     os.utime(lock_path, (now.timestamp(), now.timestamp()))
     uptime_payload = lcd_screen.LockPayload(
-        "UP 0d0h0m ROLE", "ON 0h0m iface", lcd_screen.DEFAULT_SCROLL_MS
+        "UP 0d0h0m ROLE iface",
+        "DOWN 0d0h0m",
+        lcd_screen.DEFAULT_SCROLL_MS,
     )
 
     refreshed = lcd_screen._refresh_uptime_payload(
         uptime_payload, base_dir=base_dir, now=now
     )
 
-    assert refreshed.line1 == "UP 0d1h2m ROLE"
+    assert refreshed.line1 == "UP 0d1h2m ROLE iface"
     assert refreshed.line2 == uptime_payload.line2
 
 

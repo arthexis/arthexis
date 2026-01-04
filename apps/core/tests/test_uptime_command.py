@@ -32,13 +32,21 @@ def test_uptime_command_reports_lcd_format(monkeypatch, settings, tmp_path):
     monkeypatch.setattr(uptime_command.timezone, "now", lambda: now)
     monkeypatch.setattr(uptime_command.node_tasks.django_timezone, "now", lambda: now)
     monkeypatch.setattr(uptime_command.system, "_system_boot_time", lambda _now: started_at - timedelta(minutes=1))
+    monkeypatch.setattr(
+        uptime_command.node_tasks.psutil,
+        "boot_time",
+        lambda: (started_at - timedelta(minutes=1)).timestamp(),
+    )
+    monkeypatch.setattr(
+        uptime_command.node_tasks, "_active_interface_label", lambda: "n/a"
+    )
 
     stdout = io.StringIO()
     call_command("uptime", stdout=stdout)
 
     output = stdout.getvalue()
-    assert "UP 0d2h5m" in output
-    assert "ON 2h5m" in output
+    assert "UP 0d2h5m n/a" in output
+    assert "DOWN 0d0h1m" in output
     assert "Uptime lock status: OK" in output
 
 
