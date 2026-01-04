@@ -34,6 +34,10 @@ class Package(Entity):
     version_path = models.CharField(max_length=255, blank=True, default="")
     dependencies_path = models.CharField(max_length=255, blank=True, default="")
     test_command = models.TextField(blank=True, default="")
+    generate_wheels = models.BooleanField(
+        default=False,
+        help_text="Build wheel distributions when creating releases",
+    )
     release_manager = models.ForeignKey(
         ReleaseManager, on_delete=models.SET_NULL, null=True, blank=True
     )
@@ -78,5 +82,6 @@ class Package(Entity):
             version_path=self.version_path or None,
             dependencies_path=self.dependencies_path or None,
             test_command=self.test_command or None,
+            generate_wheels=self.generate_wheels,
             repositories=repositories,
         )
