@@ -138,6 +138,37 @@ def test_set_charging_profile_supports_ocpp201(monkeypatch, ws):
     assert message_id in store._pending_call_handles
 
 
+def test_clear_charging_profile_requires_identifier(ws):
+    log_key = store.identity_key("CID", 1)
+    context = ActionContext("CID", 1, charger=None, ws=ws, log_key=log_key)
+
+    response = actions._handle_clear_charging_profile(context, {})
+
+    assert response.status_code == 400
+
+
+def test_clear_charging_profile_registers_pending_call(ws):
+    log_key = store.identity_key("CID", 1)
+    context = ActionContext("CID", 1, charger=None, ws=ws, log_key=log_key)
+
+    result = actions._handle_clear_charging_profile(
+        context,
+        {"chargingProfileId": 7, "evseId": 2},
+    )
+
+    assert isinstance(result, ActionCall)
+    message = json.loads(ws.sent[0])
+    assert message[2] == "ClearChargingProfile"
+    payload = message[3]
+    assert payload["chargingProfileId"] == 7
+    assert payload["evseId"] == 2
+    message_id = message[1]
+    assert message_id in store.pending_calls
+    assert store.pending_calls[message_id]["charging_profile_id"] == 7
+    assert store.pending_calls[message_id]["evse_id"] == 2
+    assert message_id in store._pending_call_handles
+
+
 def test_firmware_actions_register_ocpp201_and_ocpp21():
     update_calls = actions._handle_update_firmware.__protocol_calls__
     publish_calls = actions._handle_publish_firmware.__protocol_calls__
