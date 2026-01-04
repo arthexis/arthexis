@@ -26,8 +26,11 @@ from apps.ocpp.models import (
     DisplayMessageNotification,
     DisplayMessage,
     ClearedChargingLimitEvent,
+    CPFirmware,
+    CPFirmwareDeployment,
 )
 from apps.protocols.models import ProtocolCall as ProtocolCallModel
+from django.utils.dateparse import parse_datetime
 
 
 @pytest.fixture
@@ -211,6 +214,84 @@ async def test_notify_report_persists_inventory_snapshot():
     entries = list(store.logs["charger"].get(consumer.store_key, []))
     assert any("NotifyReport" in entry for entry in entries)
     assert any("items=1" in entry for entry in entries)
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+async def test_publish_firmware_status_updates_deployment():
+    firmware = await database_sync_to_async(CPFirmware.objects.create)(
+        name="Test Firmware", payload_json={}
+    )
+    charger = await database_sync_to_async(Charger.objects.create)(
+        charger_id="PUB-201"
+    )
+    deployment = await database_sync_to_async(CPFirmwareDeployment.objects.create)(
+        firmware=firmware,
+        charger=charger,
+        status="Pending",
+        status_timestamp=timezone.now(),
+    )
+    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = charger.charger_id
+    consumer.charger = charger
+    consumer.aggregate_charger = None
+
+    download_ts = parse_datetime("2024-01-01T00:00:00Z")
+    published_ts = parse_datetime("2024-01-01T02:00:00Z")
+
+    await consumer._handle_publish_firmware_status_notification_action(
+        {
+            "status": "Downloading",
+            "requestId": deployment.pk,
+            "statusInfo": "starting",
+            "timestamp": download_ts.isoformat().replace("+00:00", "Z"),
+        },
+        "msg-1",
+        "",
+        "",
+    )
+
+    deployment = await database_sync_to_async(CPFirmwareDeployment.objects.get)(
+        pk=deployment.pk
+    )
+    assert deployment.status == "Downloading"
+    assert deployment.status_info == "starting"
+    assert deployment.completed_at is None
+
+    await consumer._handle_publish_firmware_status_notification_action(
+        {
+            "status": "Downloaded",
+            "requestId": deployment.pk,
+            "statusInfo": "ready",
+            "timestamp": download_ts.isoformat().replace("+00:00", "Z"),
+        },
+        "msg-1",
+        "",
+        "",
+    )
+
+    deployment = await database_sync_to_async(CPFirmwareDeployment.objects.get)(
+        pk=deployment.pk
+    )
+    assert deployment.status == "Downloaded"
+    assert deployment.downloaded_at == download_ts
+
+    await consumer._handle_publish_firmware_status_notification_action(
+        {
+            "status": "Published",
+            "requestId": deployment.pk,
+            "timestamp": published_ts.isoformat().replace("+00:00", "Z"),
+        },
+        "msg-1",
+        "",
+        "",
+    )
+
+    deployment = await database_sync_to_async(CPFirmwareDeployment.objects.get)(
+        pk=deployment.pk
+    )
+    assert deployment.status == "Published"
+    assert deployment.completed_at is not None
 
 
 @pytest.mark.anyio

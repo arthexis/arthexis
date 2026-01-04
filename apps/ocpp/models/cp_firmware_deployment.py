@@ -6,7 +6,13 @@ from .cp_firmware import CPFirmware
 class CPFirmwareDeployment(Entity):
     """Track firmware rollout attempts for specific charge points."""
 
-    TERMINAL_STATUSES = {"Installed", "InstallationFailed", "DownloadFailed"}
+    TERMINAL_STATUSES = {
+        "Installed",
+        "InstallationFailed",
+        "DownloadFailed",
+        "Published",
+        "PublishFailed",
+    }
 
     firmware = models.ForeignKey(
         CPFirmware,
@@ -93,16 +99,20 @@ class CPFirmwareDeployment(Entity):
             self.response_payload = response
         if status in self.TERMINAL_STATUSES and not self.completed_at:
             self.completed_at = timezone.now()
-        self.save(
-            update_fields=[
-                "status",
-                "status_info",
-                "status_timestamp",
-                "response_payload",
-                "completed_at",
-                "updated_at",
-            ]
-        )
+
+        update_fields = [
+            "status",
+            "status_info",
+            "status_timestamp",
+            "response_payload",
+            "updated_at",
+        ]
+        if self.completed_at:
+            update_fields.append("completed_at")
+        if self.downloaded_at:
+            update_fields.append("downloaded_at")
+
+        self.save(update_fields=update_fields)
 
     @property
     def is_terminal(self) -> bool:
