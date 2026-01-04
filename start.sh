@@ -45,12 +45,16 @@ while [[ $# -gt 0 ]]; do
       ;;
     --show)
       if [ -z "${2:-}" ]; then
-        echo "Usage: $0 [--silent] [--debug] [--show LEVEL] [service args...]" >&2
+        echo "Usage: $0 [--silent] [--debug] [--show LEVEL] [--log-follow] [service args...]" >&2
         exit 1
       fi
       SHOW_LEVEL="$2"
       SERVICE_ARGS+=("$1" "$2")
       shift 2
+      ;;
+    --log-follow)
+      SERVICE_ARGS+=("$1")
+      shift
       ;;
     *)
       SERVICE_ARGS+=("$1")
