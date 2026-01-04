@@ -92,6 +92,18 @@ def anyio_backend():
     return "asyncio"
 
 
+def _reset_pending_calls() -> None:
+    store.pending_calls.clear()
+    store._pending_call_events.clear()
+    store._pending_call_results.clear()
+    for handle in store._pending_call_handles.values():
+        try:
+            handle.cancel()
+        except Exception:
+            pass
+    store._pending_call_handles.clear()
+
+
 @pytest.mark.anyio
 @pytest.mark.django_db(transaction=True)
 async def test_handle_clear_charging_profile_result_updates_profile():
@@ -129,6 +141,54 @@ async def test_handle_clear_charging_profile_result_updates_profile():
     assert "msg-clear-1" in store._pending_call_results
     logs = list(store.logs["charger"].get(consumer.store_key, []))
     assert any("ClearChargingProfile result" in entry for entry in logs)
+
+
+@pytest.mark.anyio
+async def test_set_monitoring_base_result_clears_pending_call():
+    _reset_pending_calls()
+    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = "CP-MON-BASE"
+    consumer.charger_id = consumer.store_key
+    message_id = "msg-monitoring-base"
+    metadata = {"action": "SetMonitoringBase", "charger_id": consumer.charger_id, "log_key": consumer.store_key}
+
+    store.register_pending_call(message_id, metadata)
+
+    await consumer._handle_call_result(
+        message_id,
+        {"status": "Accepted", "statusInfo": {"detail": "applied"}},
+    )
+
+    assert message_id not in store.pending_calls
+    result = store.wait_for_pending_call(message_id, timeout=0.5)
+    assert result is not None
+    assert result.get("success") is True
+    assert (result.get("payload") or {}).get("status") == "Accepted"
+
+
+@pytest.mark.anyio
+async def test_set_monitoring_level_error_clears_pending_call():
+    _reset_pending_calls()
+    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = "CP-MON-LEVEL"
+    consumer.charger_id = consumer.store_key
+    message_id = "msg-monitoring-level"
+    metadata = {"action": "SetMonitoringLevel", "charger_id": consumer.charger_id, "log_key": consumer.store_key}
+
+    store.register_pending_call(message_id, metadata)
+
+    await consumer._handle_call_error(
+        message_id,
+        "InternalError",
+        "unable to apply",
+        {"detail": "test"},
+    )
+
+    assert message_id not in store.pending_calls
+    result = store.wait_for_pending_call(message_id, timeout=0.5)
+    assert result is not None
+    assert result.get("success") is False
+    assert result.get("error_code") == "InternalError"
 
 
 @pytest.mark.anyio
