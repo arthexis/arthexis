@@ -1,0 +1,16 @@
+[
+  {
+    "model": "nodes.nodefeature",
+    "fields": {
+      "is_seed_data": true,
+      "is_deleted": false,
+      "slug": "ftp-server",
+      "display": "FTP Server",
+      "roles": [
+        ["Terminal"],
+        ["Control"],
+        ["Watchtower"]
+      ]
+    }
+  }
+]
