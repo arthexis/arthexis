@@ -19,6 +19,8 @@ from apps.ocpp.models import (
     Variable,
     MonitoringRule,
     MonitoringReport,
+    DeviceInventorySnapshot,
+    DeviceInventoryItem,
     CustomerInformationRequest,
     CustomerInformationChunk,
     DisplayMessageNotification,
@@ -161,16 +163,70 @@ async def test_notify_charging_limit_persists_payload():
 
 
 @pytest.mark.anyio
-async def test_notify_report_logs_payload():
+@pytest.mark.django_db(transaction=True)
+async def test_notify_report_persists_inventory_snapshot():
+    charger = await database_sync_to_async(Charger.objects.create)(
+        charger_id="INV-201", connector_id=1
+    )
     consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
-    consumer.store_key = "CP-201"
+    consumer.store_key = "INV-201#1"
+    consumer.charger_id = charger.charger_id
+    consumer.charger = charger
+    consumer.connector_value = 1
 
-    result = await consumer._handle_notify_report_action({"count": 2}, "msg-2", "", "")
+    payload = {
+        "requestId": 7,
+        "seqNo": 2,
+        "tbc": False,
+        "generatedAt": "2024-01-01T00:00:00Z",
+        "reportData": [
+            {
+                "component": {"name": "EVSE", "instance": "1"},
+                "variable": {"name": "Status", "instance": "A"},
+                "variableAttribute": [{"type": "Actual", "value": "Available"}],
+                "variableCharacteristics": {"dataType": "string"},
+            }
+        ],
+    }
+
+    result = await consumer._handle_notify_report_action(payload, "msg-2", "", "")
 
     assert result == {}
-    entries = list(store.logs["charger"][consumer.store_key])
+    snapshot = await database_sync_to_async(DeviceInventorySnapshot.objects.get)(
+        charger=charger
+    )
+    assert snapshot.request_id == 7
+    assert snapshot.seq_no == 2
+    assert snapshot.generated_at.isoformat() == "2024-01-01T00:00:00+00:00"
+    items = await database_sync_to_async(list)(snapshot.items.all())
+    assert len(items) == 1
+    assert items[0].component_name == "EVSE"
+    assert items[0].component_instance == "1"
+    assert items[0].variable_name == "Status"
+    assert items[0].variable_instance == "A"
+    assert items[0].attributes[0]["value"] == "Available"
+    assert items[0].characteristics["dataType"] == "string"
+    entries = list(store.logs["charger"].get(consumer.store_key, []))
     assert any("NotifyReport" in entry for entry in entries)
-    assert any("count" in entry for entry in entries)
+    assert any("items=1" in entry for entry in entries)
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+async def test_notify_report_requires_mandatory_fields():
+    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = "INV-MISSING"
+    consumer.charger_id = "INV-MISSING"
+    consumer.connector_value = None
+
+    payload = {"requestId": 8, "reportData": "invalid"}
+
+    result = await consumer._handle_notify_report_action(payload, "msg-3", "", "")
+
+    assert result == {}
+    assert await database_sync_to_async(DeviceInventorySnapshot.objects.count)() == 0
+    entries = list(store.logs["charger"].get(consumer.store_key, []))
+    assert any("missing generatedAt" in entry for entry in entries)
 
 
 @pytest.mark.anyio

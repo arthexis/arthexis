@@ -55,6 +55,8 @@ from .models import (
     Variable,
     MonitoringRule,
     MonitoringReport,
+    DeviceInventorySnapshot,
+    DeviceInventoryItem,
     CustomerInformationRequest,
     CustomerInformationChunk,
     DisplayMessageNotification,
@@ -2024,14 +2026,109 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
     @protocol_call("ocpp201", ProtocolCallModel.CP_TO_CSMS, "NotifyReport")
     @protocol_call("ocpp21", ProtocolCallModel.CP_TO_CSMS, "NotifyReport")
     async def _handle_notify_report_action(self, payload, msg_id, raw, text_data):
-        message = "NotifyReport"
+        payload_data = payload if isinstance(payload, dict) else {}
+        generated_at = _parse_ocpp_timestamp(payload_data.get("generatedAt"))
+        report_data = payload_data.get("reportData")
+        request_id_value = payload_data.get("requestId")
+        seq_no_value = payload_data.get("seqNo")
+        tbc_value = payload_data.get("tbc")
+
         try:
-            payload_text = json.dumps(payload, separators=(",", ":"))
+            request_id = int(request_id_value) if request_id_value is not None else None
         except (TypeError, ValueError):
-            payload_text = str(payload)
-        if payload_text and payload_text != "{}":
-            message += f": {payload_text}"
-        store.add_log(self.store_key, message, log_type="charger")
+            request_id = None
+        try:
+            seq_no = int(seq_no_value) if seq_no_value is not None else None
+        except (TypeError, ValueError):
+            seq_no = None
+        tbc = bool(tbc_value) if tbc_value is not None else False
+
+        if generated_at is None:
+            store.add_log(
+                self.store_key,
+                "NotifyReport ignored: missing generatedAt",
+                log_type="charger",
+            )
+            return {}
+        if not isinstance(report_data, (list, tuple)):
+            store.add_log(
+                self.store_key,
+                "NotifyReport ignored: missing reportData",
+                log_type="charger",
+            )
+            return {}
+
+        def _persist_report() -> None:
+            charger = None
+            if self.charger and getattr(self.charger, "pk", None):
+                charger = self.charger
+            if charger is None and self.charger_id:
+                charger = Charger.objects.filter(
+                    charger_id=self.charger_id, connector_id=self.connector_value
+                ).first()
+            if charger is None and self.charger_id:
+                charger, _created = Charger.objects.get_or_create(
+                    charger_id=self.charger_id, connector_id=self.connector_value
+                )
+            if charger is None:
+                return
+
+            snapshot = DeviceInventorySnapshot.objects.create(
+                charger=charger,
+                request_id=request_id,
+                seq_no=seq_no,
+                generated_at=generated_at,
+                tbc=tbc,
+                raw_payload=payload_data,
+            )
+
+            for entry in report_data:
+                if not isinstance(entry, dict):
+                    continue
+                component_data = entry.get("component") if isinstance(entry.get("component"), dict) else {}
+                variable_data = entry.get("variable") if isinstance(entry.get("variable"), dict) else {}
+
+                component_name = str(component_data.get("name") or "").strip()
+                variable_name = str(variable_data.get("name") or "").strip()
+                if not component_name or not variable_name:
+                    continue
+
+                component_instance = str(component_data.get("instance") or "").strip()
+                variable_instance = str(variable_data.get("instance") or "").strip()
+
+                attributes = entry.get("variableAttribute")
+                if not isinstance(attributes, (list, tuple)):
+                    attributes = []
+                characteristics = entry.get("variableCharacteristics")
+                if not isinstance(characteristics, dict):
+                    characteristics = {}
+
+                DeviceInventoryItem.objects.create(
+                    snapshot=snapshot,
+                    component_name=component_name,
+                    component_instance=component_instance,
+                    variable_name=variable_name,
+                    variable_instance=variable_instance,
+                    attributes=list(attributes),
+                    characteristics=characteristics,
+                )
+
+        await database_sync_to_async(_persist_report)()
+
+        details: list[str] = []
+        if request_id is not None:
+            details.append(f"requestId={request_id}")
+        if seq_no is not None:
+            details.append(f"seqNo={seq_no}")
+        if generated_at is not None:
+            details.append(f"generatedAt={generated_at.isoformat()}")
+        details.append(f"items={len(report_data)}")
+
+        store.add_log(
+            self.store_key,
+            "NotifyReport" + (": " + ", ".join(details) if details else ""),
+            log_type="charger",
+        )
         return {}
 
     def _log_ocpp201_notification(self, label: str, payload) -> None:
