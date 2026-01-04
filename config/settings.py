@@ -403,6 +403,7 @@ LOCAL_APPS = [
     "apps.base",
     "apps.celery",
     "apps.nodes",
+    "apps.ftp",
     "apps.dns",
     "apps.screens",
     "apps.sensors",
