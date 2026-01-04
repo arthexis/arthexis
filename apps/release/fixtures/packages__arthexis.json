@@ -15,6 +15,7 @@
       "version_path": "",
       "dependencies_path": "",
       "test_command": "",
+      "generate_wheels": false,
       "release_manager": null,
       "is_active": true
     }
