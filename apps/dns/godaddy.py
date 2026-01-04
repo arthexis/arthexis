@@ -11,8 +11,7 @@ from dns import resolver as dns_resolver
 from requests import Response
 
 if TYPE_CHECKING:  # pragma: no cover - imported for type checking only
-    from apps.nodes.models import NodeManager
-    from .models import GoDaddyDNSRecord
+    from .models import DNSProviderCredential, GoDaddyDNSRecord
 
 
 @dataclass
@@ -43,11 +42,13 @@ def _error_from_response(response: Response) -> str:
     return f"{response.status_code} {reason}".strip()
 
 
-def deploy_records(manager: "NodeManager", records: Iterable["GoDaddyDNSRecord"]) -> DeploymentResult:
+def deploy_records(
+    credentials: "DNSProviderCredential", records: Iterable["GoDaddyDNSRecord"]
+) -> DeploymentResult:
     filtered: list["GoDaddyDNSRecord"] = []
     skipped: MutableMapping["GoDaddyDNSRecord", str] = {}
     for record in records:
-        domain = record.get_domain(manager)
+        domain = record.get_domain(credentials)
         if not domain:
             skipped[record] = "Domain is required for deployment"
             continue
@@ -59,19 +60,19 @@ def deploy_records(manager: "NodeManager", records: Iterable["GoDaddyDNSRecord"]
     session = requests.Session()
     session.headers.update(
         {
-            "Authorization": manager.get_auth_header(),
+            "Authorization": credentials.get_auth_header(),
             "Accept": "application/json",
             "Content-Type": "application/json",
         }
     )
-    customer_id = manager.get_customer_id()
+    customer_id = credentials.get_customer_id()
     if customer_id:
         session.headers["X-Shopper-Id"] = customer_id
 
     grouped: MutableMapping[tuple[str, str, str], list["GoDaddyDNSRecord"]] = defaultdict(list)
     for record in filtered:
         key = (
-            record.get_domain(manager),
+            record.get_domain(credentials),
             record.record_type,
             record.get_name(),
         )
@@ -81,7 +82,7 @@ def deploy_records(manager: "NodeManager", records: Iterable["GoDaddyDNSRecord"]
     failures: MutableMapping["GoDaddyDNSRecord", str] = {}
     now = timezone.now()
 
-    base_url = manager.get_base_url()
+    base_url = credentials.get_base_url()
     for (domain, record_type, name), grouped_records in grouped.items():
         payload = [record.to_godaddy_payload() for record in grouped_records]
         url = f"{base_url}/v1/domains/{domain}/records/{record_type}/{name or '@'}"
@@ -90,19 +91,19 @@ def deploy_records(manager: "NodeManager", records: Iterable["GoDaddyDNSRecord"]
         except requests.RequestException as exc:
             message = str(exc)
             for record in grouped_records:
-                record.mark_error(message, manager=manager)
+                record.mark_error(message, credentials=credentials)
                 failures[record] = message
             continue
 
         if response.status_code >= 400:
             message = _error_from_response(response)
             for record in grouped_records:
-                record.mark_error(message, manager=manager)
+                record.mark_error(message, credentials=credentials)
                 failures[record] = message
             continue
 
         for record in grouped_records:
-            record.mark_deployed(manager=manager, timestamp=now)
+            record.mark_deployed(credentials=credentials, timestamp=now)
             deployed.append(record)
 
     return DeploymentResult(deployed, failures, skipped)

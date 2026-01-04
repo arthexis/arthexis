@@ -5,9 +5,9 @@
 <h1>{{ title }}</h1>
 <p>
   {% blocktrans count total=queryset|length %}
-  Deploy {{ total }} DNS record using the selected node manager.
+  Deploy {{ total }} DNS record using the selected DNS credentials.
   {% plural %}
-  Deploy {{ total }} DNS records using the selected node manager.
+  Deploy {{ total }} DNS records using the selected DNS credentials.
   {% endblocktrans %}
 </p>
 <form method="post" novalidate>

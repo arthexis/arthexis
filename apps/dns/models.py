@@ -1,10 +1,105 @@
 from __future__ import annotations
 
+from typing import Iterable
+
 from django.db import models
 from django.utils import timezone
 
 from apps.base.models import Entity
 from apps.sigils.fields import SigilLongAutoField, SigilShortAutoField
+from apps.users.models import Profile
+
+
+class DNSProviderCredential(Profile):
+    """Credentials for interacting with external DNS providers."""
+
+    class Provider(models.TextChoices):
+        GODADDY = "godaddy", "GoDaddy"
+
+    profile_fields = (
+        "provider",
+        "api_key",
+        "api_secret",
+        "customer_id",
+        "default_domain",
+    )
+
+    provider = models.CharField(
+        max_length=20,
+        choices=Provider.choices,
+        default=Provider.GODADDY,
+    )
+    api_key = SigilShortAutoField(
+        max_length=255,
+        verbose_name="API key",
+        help_text="API key issued by the DNS provider.",
+    )
+    api_secret = SigilShortAutoField(
+        max_length=255,
+        verbose_name="API secret",
+        help_text="API secret issued by the DNS provider.",
+    )
+    customer_id = SigilShortAutoField(
+        max_length=100,
+        blank=True,
+        verbose_name="Customer ID",
+        help_text="Optional GoDaddy customer identifier for the account.",
+    )
+    default_domain = SigilShortAutoField(
+        max_length=253,
+        blank=True,
+        help_text="Fallback domain when records omit one.",
+    )
+    use_sandbox = models.BooleanField(
+        default=False,
+        help_text="Use the GoDaddy OTE (test) environment.",
+    )
+    is_enabled = models.BooleanField(
+        default=True,
+        help_text="Disable to prevent deployments with this manager.",
+    )
+
+    class Meta:
+        verbose_name = "DNS Credential"
+        verbose_name_plural = "DNS Credentials"
+
+    def __str__(self) -> str:  # pragma: no cover - representation only
+        owner = self.owner_display()
+        provider = self.get_provider_display()
+        if owner:
+            return f"{provider} ({owner})"
+        return provider
+
+    def clean(self):
+        if self.user_id or self.group_id:
+            super().clean()
+        else:
+            super(Profile, self).clean()
+
+    def get_base_url(self) -> str:
+        if self.provider != self.Provider.GODADDY:
+            raise ValueError("Unsupported DNS provider")
+        if self.use_sandbox:
+            return "https://api.ote-godaddy.com"
+        return "https://api.godaddy.com"
+
+    def get_auth_header(self) -> str:
+        key = (self.resolve_sigils("api_key") or "").strip()
+        secret = (self.resolve_sigils("api_secret") or "").strip()
+        if not key or not secret:
+            raise ValueError("API credentials are required for DNS deployment")
+        return f"sso-key {key}:{secret}"
+
+    def get_customer_id(self) -> str:
+        return (self.resolve_sigils("customer_id") or "").strip()
+
+    def get_default_domain(self) -> str:
+        return (self.resolve_sigils("default_domain") or "").strip()
+
+    def publish_dns_records(self, records: Iterable["GoDaddyDNSRecord"]):
+        from apps.dns import godaddy as dns_utils
+
+        return dns_utils.deploy_records(self, records)
 
 
 class DNSRecord(Entity):
@@ -19,8 +114,8 @@ class DNSRecord(Entity):
         SRV = "SRV", "SRV"
         TXT = "TXT", "TXT"
 
-    node_manager = models.ForeignKey(
-        "nodes.NodeManager",
+    credentials = models.ForeignKey(
+        "dns.DNSProviderCredential",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -82,12 +177,12 @@ class DNSRecord(Entity):
     def __str__(self) -> str:
         return f"{self.record_type} {self.fqdn()}"
 
-    def get_domain(self, manager=None) -> str:
+    def get_domain(self, credentials: DNSProviderCredential | None = None) -> str:
         domain = (self.resolve_sigils("domain") or "").strip()
         if domain:
             return domain.rstrip(".")
-        if manager:
-            fallback = manager.get_default_domain()
+        if credentials:
+            fallback = credentials.get_default_domain()
             if fallback:
                 return fallback.rstrip(".")
         return ""
@@ -96,8 +191,8 @@ class DNSRecord(Entity):
         name = (self.resolve_sigils("name") or "").strip()
         return name or "@"
 
-    def fqdn(self, manager=None) -> str:
-        domain = self.get_domain(manager)
+    def fqdn(self, credentials: DNSProviderCredential | None = None) -> str:
+        domain = self.get_domain(credentials)
         name = self.get_name()
         if name in {"@", ""}:
             return domain
@@ -107,23 +202,23 @@ class DNSRecord(Entity):
             return f"{name}.{domain}".rstrip(".")
         return name.rstrip(".")
 
-    def mark_deployed(self, manager=None, timestamp=None) -> None:
+    def mark_deployed(self, credentials: DNSProviderCredential | None = None, timestamp=None) -> None:
         if timestamp is None:
             timestamp = timezone.now()
         update_fields = ["last_synced_at", "last_error"]
         self.last_synced_at = timestamp
         self.last_error = ""
-        if manager and self.node_manager_id != getattr(manager, "pk", None):
-            self.node_manager = manager
-            update_fields.append("node_manager")
+        if credentials and self.credentials_id != getattr(credentials, "pk", None):
+            self.credentials = credentials
+            update_fields.append("credentials")
         self.save(update_fields=update_fields)
 
-    def mark_error(self, message: str, manager=None) -> None:
+    def mark_error(self, message: str, credentials: DNSProviderCredential | None = None) -> None:
         update_fields = ["last_error"]
         self.last_error = message
-        if manager and self.node_manager_id != getattr(manager, "pk", None):
-            self.node_manager = manager
-            update_fields.append("node_manager")
+        if credentials and self.credentials_id != getattr(credentials, "pk", None):
+            self.credentials = credentials
+            update_fields.append("credentials")
         self.save(update_fields=update_fields)
 
 
