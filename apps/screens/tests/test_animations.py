@@ -42,3 +42,26 @@ def test_low_channel_without_text_or_animation_is_blank():
     payload = lcd_screen.LockPayload("", "", lcd_screen.DEFAULT_SCROLL_MS)
 
     assert lcd_screen._select_low_payload(payload) == payload
+
+
+def test_animation_retry_keeps_request(tmp_path):
+    animation_path = tmp_path / "eventual.txt"
+    payload = lcd_screen.LockPayload(
+        "pending", "animation", lcd_screen.ANIMATION_SCROLL_MS, str(animation_path)
+    )
+
+    fallback_payload = lcd_screen._render_animation_payload(payload)
+
+    assert fallback_payload.animation_name == str(animation_path)
+    assert fallback_payload.line1 == payload.line1
+    assert fallback_payload.line2 == payload.line2
+
+    animation_path.write_text(
+        "B" * animations.ANIMATION_FRAME_CHARS + "\n", encoding="utf-8"
+    )
+
+    retried_payload = lcd_screen._render_animation_payload(fallback_payload)
+
+    assert retried_payload.animation_name == str(animation_path)
+    assert retried_payload.line1 == "B" * lcd_screen.LCD_COLUMNS
+    assert retried_payload.line2 == "B" * lcd_screen.LCD_COLUMNS

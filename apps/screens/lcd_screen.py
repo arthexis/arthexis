@@ -348,7 +348,12 @@ def _render_animation_payload(payload: LockPayload) -> LockPayload:
         logger.warning(
             "Failed to load animation '%s'", payload.animation_name, exc_info=True
         )
-        return LockPayload(payload.line1, payload.line2, payload.scroll_ms)
+        return LockPayload(
+            payload.line1,
+            payload.line2,
+            payload.scroll_ms,
+            payload.animation_name,
+        )
 
     return _animation_payload(
         frame_cycle,
