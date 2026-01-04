@@ -71,6 +71,7 @@ ev_charging_needs: deque[dict[str, object]] = deque(maxlen=500)
 ev_charging_schedules: deque[dict[str, object]] = deque(maxlen=500)
 planner_notifications: deque[dict[str, object]] = deque(maxlen=500)
 observability_events: deque[dict[str, object]] = deque(maxlen=1000)
+transaction_events: deque[dict[str, object]] = deque(maxlen=1000)
 connector_release_notifications: deque[dict[str, object]] = deque(maxlen=500)
 monitoring_reports: deque[dict[str, object]] = deque(maxlen=1000)
 display_message_compliance: dict[str, list[dict[str, object]]] = {}
@@ -363,6 +364,12 @@ def forward_event_to_observability(event: dict[str, object]) -> None:
     """Queue a normalized NotifyEvent payload for observability pipelines."""
 
     observability_events.append(dict(event))
+
+
+def record_transaction_event(event: dict[str, object]) -> None:
+    """Queue a normalized TransactionEvent payload for downstream handlers."""
+
+    transaction_events.append(dict(event))
 
 
 def forward_connector_release(notification: dict[str, object]) -> None:
