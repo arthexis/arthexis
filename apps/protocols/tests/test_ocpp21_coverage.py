@@ -1,6 +1,8 @@
+import json
 from importlib import import_module, reload
+from pathlib import Path
 
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 
 from apps.protocols.models import Protocol
 from apps.protocols.registry import (
@@ -8,6 +10,30 @@ from apps.protocols.registry import (
     get_registered_calls,
     rehydrate_from_module,
 )
+from apps.protocols.services import load_protocol_spec_from_file, spec_path
+
+
+class Ocpp21SpecTests(SimpleTestCase):
+    def test_spec_matches_call_registry_fixture(self):
+        project_root = Path(__file__).resolve().parents[3]
+        registry_path = project_root / "apps/ocpp/spec/ocpp21_calls.json"
+        registry_calls = json.loads(registry_path.read_text(encoding="utf-8"))
+
+        spec = load_protocol_spec_from_file(spec_path("ocpp21"))
+        spec_calls = spec["calls"]
+
+        for direction in ("cp_to_csms", "csms_to_cp"):
+            with self.subTest(direction=direction):
+                self.assertEqual(
+                    set(spec_calls[direction]),
+                    set(registry_calls[direction]),
+                    msg=f"Spec mismatch for {direction}",
+                )
+                self.assertEqual(
+                    len(spec_calls[direction]),
+                    len(registry_calls[direction]),
+                    msg=f"Spec count mismatch for {direction}",
+                )
 
 
 class Ocpp21CoverageTests(TestCase):
