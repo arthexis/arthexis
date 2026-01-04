@@ -1358,6 +1358,7 @@ class NetMessage(Entity):
             filter_relation = relation.value if relation else ""
         filter_installed_version = (data.get("filter_installed_version") or "")[:20]
         filter_installed_revision = (data.get("filter_installed_revision") or "")[:40]
+        expires_at_present = "expires_at" in data
         expires_at_value = data.get("expires_at")
         expires_at = None
         if expires_at_value:
@@ -1415,8 +1416,9 @@ class NetMessage(Entity):
                 "filter_current_relation": filter_relation,
                 "filter_installed_version": filter_installed_version,
                 "filter_installed_revision": filter_installed_revision,
-                "expires_at": expires_at,
             }
+            if expires_at_present:
+                field_updates["expires_at"] = expires_at
             for field, value in field_updates.items():
                 if getattr(msg, field) != value:
                     setattr(msg, field, value)
