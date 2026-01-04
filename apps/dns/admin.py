@@ -4,45 +4,46 @@ from django.shortcuts import render
 from django.utils.translation import gettext_lazy as _
 
 from apps.locals.user_data import EntityModelAdmin
-from apps.nodes.models import NodeManager
 
 from . import godaddy as dns_utils
-from .models import GoDaddyDNSRecord
+from .models import DNSProviderCredential, GoDaddyDNSRecord
 
 
 class DeployDNSRecordsForm(forms.Form):
-    manager = forms.ModelChoiceField(
-        label="Node Manager",
-        queryset=NodeManager.objects.none(),
+    credentials = forms.ModelChoiceField(
+        label="DNS credentials",
+        queryset=DNSProviderCredential.objects.none(),
         help_text="Credentials used to authenticate with the DNS provider.",
     )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["manager"].queryset = NodeManager.objects.filter(
-            provider=NodeManager.Provider.GODADDY, is_enabled=True
+        self.fields["credentials"].queryset = DNSProviderCredential.objects.filter(
+            provider=DNSProviderCredential.Provider.GODADDY, is_enabled=True
         )
 
 
 @admin.register(GoDaddyDNSRecord)
 class GoDaddyDNSRecordAdmin(EntityModelAdmin):
-    list_display = ("record_type", "fqdn", "node_manager", "ttl", "last_synced_at")
-    list_filter = ("record_type", "node_manager")
+    list_display = ("record_type", "fqdn", "credentials", "ttl", "last_synced_at")
+    list_filter = ("record_type", "credentials")
     search_fields = ("domain", "name", "data")
-    autocomplete_fields = ("node_manager",)
+    autocomplete_fields = ("credentials",)
     actions = ["deploy_selected_records", "validate_selected_records"]
 
-    def _default_manager_for_queryset(self, queryset) -> NodeManager | None:
-        manager_ids = list(
-            queryset.exclude(node_manager__isnull=True)
-            .values_list("node_manager_id", flat=True)
+    def _default_credentials_for_queryset(
+        self, queryset,
+    ) -> DNSProviderCredential | None:
+        credential_ids = list(
+            queryset.exclude(credentials__isnull=True)
+            .values_list("credentials_id", flat=True)
             .distinct()
         )
-        if len(manager_ids) == 1:
-            return manager_ids[0]
+        if len(credential_ids) == 1:
+            return credential_ids[0]
         available = list(
-            NodeManager.objects.filter(
-                provider=NodeManager.Provider.GODADDY, is_enabled=True
+            DNSProviderCredential.objects.filter(
+                provider=DNSProviderCredential.Provider.GODADDY, is_enabled=True
             ).values_list("pk", flat=True)
         )
         if len(available) == 1:
@@ -54,8 +55,8 @@ class GoDaddyDNSRecordAdmin(EntityModelAdmin):
         if "apply" in request.POST:
             form = DeployDNSRecordsForm(request.POST)
             if form.is_valid():
-                manager = form.cleaned_data["manager"]
-                result = manager.publish_dns_records(list(queryset))
+                credentials = form.cleaned_data["credentials"]
+                result = credentials.publish_dns_records(list(queryset))
                 for record, reason in result.skipped.items():
                     self.message_user(request, f"{record}: {reason}", messages.WARNING)
                 for record, reason in result.failures.items():
@@ -63,13 +64,13 @@ class GoDaddyDNSRecordAdmin(EntityModelAdmin):
                 if result.deployed:
                     self.message_user(
                         request,
-                        f"Deployed {len(result.deployed)} DNS record(s) via {manager}.",
+                        f"Deployed {len(result.deployed)} DNS record(s) via {credentials}.",
                         messages.SUCCESS,
                     )
                 return None
         else:
-            initial_manager = self._default_manager_for_queryset(queryset)
-            form = DeployDNSRecordsForm(initial={"manager": initial_manager})
+            initial_credentials = self._default_credentials_for_queryset(queryset)
+            form = DeployDNSRecordsForm(initial={"credentials": initial_credentials})
 
         context = {
             **self.admin_site.each_context(request),
@@ -99,3 +100,32 @@ class GoDaddyDNSRecordAdmin(EntityModelAdmin):
             self.message_user(
                 request, f"{successes} record(s) validated successfully.", messages.SUCCESS
             )
+
+
+@admin.register(DNSProviderCredential)
+class DNSProviderCredentialAdmin(EntityModelAdmin):
+    list_display = ("__str__", "provider", "is_enabled", "default_domain")
+    list_filter = ("provider", "is_enabled")
+    search_fields = (
+        "default_domain",
+        "user__username",
+        "group__name",
+    )
+    fieldsets = (
+        (_("Owner"), {"fields": ("user", "group", "avatar")}),
+        (
+            _("Credentials"),
+            {"fields": ("api_key", "api_secret", "customer_id")},
+        ),
+        (
+            _("Configuration"),
+            {
+                "fields": (
+                    "provider",
+                    "default_domain",
+                    "use_sandbox",
+                    "is_enabled",
+                )
+            },
+        ),
+    )

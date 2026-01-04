@@ -7,7 +7,6 @@ The Django admin setup for the nodes app is split across focused modules to keep
 - `forms.py` — admin-only forms such as `NodeAdminForm`, firmware/DataTransfer helpers, and NetMessage forms. All admin classes import shared forms from here rather than defining them inline.
 - `inlines.py` — inline admin configurations (currently `NodeFeatureAssignmentInline`).
 - `node_service_admin.py` — admin for `NodeService` and related service validation actions.
-- `node_manager_admin.py` — admin for `NodeManager` owner/credential management.
 - `node_admin.py` — primary admin for `Node` including visitor registration, firmware/DataTransfer/OCPP helpers, and diagnostics/update actions.
 - `email_outbox_admin.py` — email outbox admin tooling and test endpoint.
 - `node_role_admin.py` — admin for `NodeRole` with role-to-node assignment form.

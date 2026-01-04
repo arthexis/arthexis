@@ -9,7 +9,6 @@ from .features import (
 from .node_core import (
     NetMessage,
     Node,
-    NodeManager,
     NodeRole,
     NodeRoleManager,
     PendingNetMessage,
@@ -32,7 +31,6 @@ __all__ = [
     "NodeFeatureDefaultAction",
     "NodeFeatureManager",
     "NodeFeatureMixin",
-    "NodeManager",
     "NodeRole",
     "NodeRoleManager",
     "NodeService",
