@@ -60,6 +60,7 @@ USE_SYSTEM_PYTHON=0
 FORCE_REQUIREMENTS_INSTALL=0
 LOCK_DIR="$SCRIPT_DIR/.locks"
 FORCE_REFRESH=0
+DEPS_FRESHNESS_MINUTES=0
 
 LATEST=0
 CLEAN=0
@@ -76,6 +77,10 @@ while [[ $# -gt 0 ]]; do
     --force-refresh)
       FORCE_REFRESH=1
       shift
+      ;;
+    --deps-fresh-within)
+      DEPS_FRESHNESS_MINUTES="$2"
+      shift 2
       ;;
     *)
       break
@@ -203,8 +208,11 @@ fi
 
 collect_requirement_files REQUIREMENT_FILES
 REQ_MD5_FILE="$LOCK_DIR/requirements.bundle.md5"
+REQ_TIMESTAMP_FILE="$LOCK_DIR/requirements.bundle.last"
 STORED_REQ_HASH=""
 [ -f "$REQ_MD5_FILE" ] && STORED_REQ_HASH=$(cat "$REQ_MD5_FILE")
+REQ_TIMESTAMP=""
+[ -f "$REQ_TIMESTAMP_FILE" ] && REQ_TIMESTAMP=$(cat "$REQ_TIMESTAMP_FILE")
 REQUIREMENTS_HASH=""
 if [ ${#REQUIREMENT_FILES[@]} -gt 0 ]; then
   REQUIREMENTS_HASH=$(compute_requirements_checksum "${REQUIREMENT_FILES[@]}")
@@ -216,6 +224,17 @@ if [ -n "$REQUIREMENTS_HASH" ] && [ "$REQUIREMENTS_HASH" != "$STORED_REQ_HASH" ]
 fi
 if [ "$FORCE_REFRESH" -eq 1 ]; then
   NEED_INSTALL=1
+fi
+if [ "$NEED_INSTALL" -eq 1 ] && [ "$DEPS_FRESHNESS_MINUTES" -gt 0 ]; then
+  if [ -n "$REQ_TIMESTAMP" ] && [ "$REQUIREMENTS_HASH" = "$STORED_REQ_HASH" ]; then
+    now=$(date +%s)
+    freshness_limit=$((REQ_TIMESTAMP + DEPS_FRESHNESS_MINUTES * 60))
+    if [ "$freshness_limit" -ge "$now" ]; then
+      NEED_INSTALL=0
+      minutes_since=$(((now - REQ_TIMESTAMP) / 60))
+      echo "Dependencies installed ${minutes_since}m ago; skipping pip within freshness window."
+    fi
+  fi
 fi
 if [ "$USE_SYSTEM_PYTHON" -eq 1 ] && [ "$NEED_INSTALL" -eq 0 ]; then
   if ! "$PYTHON" - <<'PY' >/dev/null 2>&1
@@ -250,6 +269,7 @@ else
   done
   if [ -n "$REQUIREMENTS_HASH" ]; then
     echo "$REQUIREMENTS_HASH" > "$REQ_MD5_FILE"
+    date +%s > "$REQ_TIMESTAMP_FILE"
   fi
 fi
 
