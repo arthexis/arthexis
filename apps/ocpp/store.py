@@ -73,6 +73,7 @@ planner_notifications: deque[dict[str, object]] = deque(maxlen=500)
 observability_events: deque[dict[str, object]] = deque(maxlen=1000)
 monitoring_reports: deque[dict[str, object]] = deque(maxlen=1000)
 display_message_compliance: dict[str, list[dict[str, object]]] = {}
+charging_profile_reports: dict[str, dict[int, dict[str, object]]] = {}
 
 # mapping of charger id / cp_path to friendly names used for log files
 log_names: dict[str, dict[str, str]] = {"charger": {}, "simulator": {}}
@@ -199,6 +200,55 @@ def clear_display_message_compliance() -> None:
     """Clear cached NotifyDisplayMessages compliance data (test helper)."""
 
     display_message_compliance.clear()
+
+
+def record_reported_charging_profile(
+    charger_id: str | None,
+    *,
+    request_id: int | None,
+    evse_id: int | str | None,
+    profile_id: int | None,
+) -> None:
+    """Track profiles reported during a ReportChargingProfiles sequence."""
+
+    if not charger_id or profile_id is None:
+        return
+
+    request_key = int(request_id) if request_id is not None else -1
+    connector_key = connector_slug(evse_id)
+
+    entry = charging_profile_reports.setdefault(charger_id, {}).setdefault(
+        request_key, {"reported": {}}
+    )
+    entry["reported"].setdefault(connector_key, set()).add(profile_id)
+
+
+def consume_reported_charging_profiles(
+    charger_id: str | None, *, request_id: int | None
+) -> dict[str, object] | None:
+    """Pop recorded ReportChargingProfiles entries for the request."""
+
+    if not charger_id:
+        return None
+
+    request_key = int(request_id) if request_id is not None else -1
+    entries = charging_profile_reports.get(charger_id)
+    if entries is None:
+        return None
+
+    record = entries.pop(request_key, None)
+    if not entries:
+        charging_profile_reports.pop(charger_id, None)
+
+    if record is None:
+        return None
+
+    reported = record.get("reported") or {}
+    normalized = {
+        key: set(value) if isinstance(value, set) else set()
+        for key, value in reported.items()
+    }
+    return {"reported": normalized}
 
 
 def record_ev_charging_needs(
@@ -965,6 +1015,7 @@ def clear_pending_calls(serial: str) -> None:
             _remove_transaction_index_entry(
                 _transaction_requests_by_transaction, transaction_key, request_id
             )
+    charging_profile_reports.pop(serial, None)
 
 
 def restore_pending_calls(serial: str) -> list[str]:
