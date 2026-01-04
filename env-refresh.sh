@@ -6,6 +6,7 @@
 set -Eeuo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PIP_INSTALL_HELPER="$SCRIPT_DIR/scripts/helpers/pip_install.py"
+PIP_CACHE_DIR="$SCRIPT_DIR/.cache/pip"
 # Normalize helper scripts that might have been checked out with Windows line endings
 sanitize_helper_newlines() {
   local target="$1"
@@ -31,6 +32,17 @@ sanitize_helper_newlines "$SCRIPT_DIR/scripts/helpers/logging.sh"
 sanitize_helper_newlines "$SCRIPT_DIR/scripts/helpers/systemd_locks.sh"
 . "$SCRIPT_DIR/scripts/helpers/systemd_locks.sh"
 
+now_ms() {
+  date +%s%3N
+}
+
+elapsed_ms() {
+  local start="$1"
+  local now
+  now=$(now_ms)
+  echo $((now - start))
+}
+
 if [ -z "${ARTHEXIS_RUN_AS_USER:-}" ]; then
   TARGET_USER="$(arthexis_detect_service_user "$SCRIPT_DIR")"
   if [ -n "$TARGET_USER" ] && [ "$TARGET_USER" != "root" ] && [ "$(id -un)" != "$TARGET_USER" ] && command -v sudo >/dev/null 2>&1 && sudo -n -u "$TARGET_USER" true >/dev/null 2>&1; then
@@ -45,6 +57,7 @@ cd "$SCRIPT_DIR"
 arthexis_resolve_log_dir "$SCRIPT_DIR" LOG_DIR || exit 1
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 exec > >(tee "$LOG_FILE") 2>&1
+SCRIPT_START_MS=$(now_ms)
 
 show_pip_failure() {
   local status=$1
@@ -133,6 +146,16 @@ collect_requirement_files() {
   mapfile -t out_array < <(find "$SCRIPT_DIR" -maxdepth 1 -type f -name 'requirements*.txt' -print | sort)
 }
 
+compute_file_checksum() {
+  local file="$1"
+  if [ ! -f "$file" ]; then
+    echo ""
+    return 0
+  fi
+
+  md5sum "$file" | awk '{print $1}'
+}
+
 compute_requirements_checksum() {
   local -a files=("$@")
 
@@ -201,13 +224,16 @@ install_watch_upgrade_helper() {
 
 
 mkdir -p "$LOCK_DIR"
+mkdir -p "$PIP_CACHE_DIR"
 
 if [ "$CLEAN" -eq 1 ]; then
   find "$SCRIPT_DIR" -maxdepth 1 -name 'db*.sqlite3' -delete
 fi
 
+REQ_SCAN_START_MS=$(now_ms)
 collect_requirement_files REQUIREMENT_FILES
 REQ_MD5_FILE="$LOCK_DIR/requirements.bundle.md5"
+REQ_HASH_MANIFEST="$LOCK_DIR/requirements.hashes"
 REQ_TIMESTAMP_FILE="$LOCK_DIR/requirements.install-ts"
 STORED_REQ_HASH=""
 [ -f "$REQ_MD5_FILE" ] && STORED_REQ_HASH=$(cat "$REQ_MD5_FILE")
@@ -215,6 +241,42 @@ REQUIREMENTS_HASH=""
 if [ ${#REQUIREMENT_FILES[@]} -gt 0 ]; then
   REQUIREMENTS_HASH=$(compute_requirements_checksum "${REQUIREMENT_FILES[@]}")
 fi
+
+declare -A PREVIOUS_REQ_HASHES=()
+declare -A CURRENT_REQ_HASHES=()
+if [ -f "$REQ_HASH_MANIFEST" ]; then
+  while read -r req_file stored_hash; do
+    [ -z "$req_file" ] && continue
+    PREVIOUS_REQ_HASHES["$req_file"]="$stored_hash"
+  done <"$REQ_HASH_MANIFEST"
+fi
+
+CHANGED_REQUIREMENTS=()
+for req_file in "${REQUIREMENT_FILES[@]}"; do
+  req_key="$(basename "$req_file")"
+  current_hash=$(compute_file_checksum "$req_file")
+  CURRENT_REQ_HASHES["$req_key"]="$current_hash"
+  previous_hash="${PREVIOUS_REQ_HASHES[$req_key]:-}"
+  if [ "$current_hash" != "$previous_hash" ]; then
+    CHANGED_REQUIREMENTS+=("$req_file")
+  fi
+done
+
+REMOVED_REQUIREMENTS=0
+for stored_req in "${!PREVIOUS_REQ_HASHES[@]}"; do
+  found=0
+  for req_file in "${REQUIREMENT_FILES[@]}"; do
+    if [ "$stored_req" = "$(basename "$req_file")" ]; then
+      found=1
+      break
+    fi
+  done
+  if [ "$found" -eq 0 ]; then
+    REMOVED_REQUIREMENTS=1
+    break
+  fi
+done
+echo "Timing: requirement hash scan took $(elapsed_ms "$REQ_SCAN_START_MS")ms"
 
 NEED_INSTALL=$FORCE_REQUIREMENTS_INSTALL
 if [ -n "$REQUIREMENTS_HASH" ] && [ "$REQUIREMENTS_HASH" != "$STORED_REQ_HASH" ]; then
@@ -255,19 +317,45 @@ if [ ${#REQUIREMENT_FILES[@]} -eq 0 ]; then
 elif [ "$NEED_INSTALL" -eq 0 ]; then
   echo "dependencies unchanged—env refresh skipped"
 else
-  pip_args=()
+  install_targets=()
+  if [ "$FORCE_REFRESH" -eq 1 ] || [ "$FORCE_REQUIREMENTS_INSTALL" -eq 1 ] || [ "$REMOVED_REQUIREMENTS" -eq 1 ]; then
+    install_targets=("${REQUIREMENT_FILES[@]}")
+  elif [ ${#CHANGED_REQUIREMENTS[@]} -gt 0 ]; then
+    install_targets=("${CHANGED_REQUIREMENTS[@]}")
+  else
+    install_targets=("${REQUIREMENT_FILES[@]}")
+  fi
+
+  if [ ${#CHANGED_REQUIREMENTS[@]} -gt 0 ] && [ "$FORCE_REFRESH" -eq 0 ] && [ "$FORCE_REQUIREMENTS_INSTALL" -eq 0 ]; then
+    echo "Detected updates in: ${CHANGED_REQUIREMENTS[*]}"
+  elif [ "$REMOVED_REQUIREMENTS" -eq 1 ]; then
+    echo "Detected removed requirement files; reinstalling remaining requirements"
+  fi
+
+  pip_args=(--cache-dir "$PIP_CACHE_DIR")
   if [ "$USE_SYSTEM_PYTHON" -eq 1 ]; then
     pip_args+=(--user)
   fi
-  for req_file in "${REQUIREMENT_FILES[@]}"; do
+  PIP_SECTION_START_MS=$(now_ms)
+  for req_file in "${install_targets[@]}"; do
+    FILE_INSTALL_START_MS=$(now_ms)
     if ! pip_install_with_helper "${pip_args[@]}" -r "$req_file"; then
       pip_status=$?
       show_pip_failure "$pip_status"
       exit "$pip_status"
     fi
+    echo "Timing: pip install ${req_file##*/} took $(elapsed_ms "$FILE_INSTALL_START_MS")ms"
   done
+  echo "Timing: pip installation block took $(elapsed_ms "$PIP_SECTION_START_MS")ms"
   if [ -n "$REQUIREMENTS_HASH" ]; then
     echo "$REQUIREMENTS_HASH" > "$REQ_MD5_FILE"
+  fi
+  if [ ${#CURRENT_REQ_HASHES[@]} -gt 0 ]; then
+    : >"$REQ_HASH_MANIFEST"
+    for req_file in "${REQUIREMENT_FILES[@]}"; do
+      req_key="$(basename "$req_file")"
+      printf '%s %s\n' "$req_key" "${CURRENT_REQ_HASHES[$req_key]}" >>"$REQ_HASH_MANIFEST"
+    done
   fi
   date +%s > "$REQ_TIMESTAMP_FILE"
 fi
@@ -285,3 +373,4 @@ if [ "$CLEAN" -eq 1 ]; then
   ARGS="$ARGS --clean"
 fi
 "$PYTHON" env-refresh.py $ARGS database
+echo "Timing: env-refresh.sh completed in $(elapsed_ms "$SCRIPT_START_MS")ms"
