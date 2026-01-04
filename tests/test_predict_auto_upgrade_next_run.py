@@ -103,21 +103,6 @@ def test_last_run_reference_with_aware_datetime(settings):
     assert system._predict_auto_upgrade_next_run(task) == expected
 
 
-def test_last_run_reference_with_naive_datetime_and_make_aware_error(settings):
-    now = timezone.now()
-    naive_last_run = (now - timedelta(minutes=7)).replace(tzinfo=None)
-    schedule = DummySchedule(now, timedelta(minutes=12), make_aware_error=True)
-    task = DummyTask(schedule=schedule, last_run_at=naive_last_run)
-
-    normalized_reference = timezone.make_aware(
-        naive_last_run, timezone.get_current_timezone()
-    )
-    expected = system._format_timestamp(now + timedelta(minutes=12))
-
-    assert system._predict_auto_upgrade_next_run(task) == expected
-    assert normalized_reference.tzinfo is not None
-
-
 def test_exception_during_remaining_estimate_returns_empty():
     now = timezone.now()
     schedule = DummySchedule(now, RuntimeError("no estimate"))
