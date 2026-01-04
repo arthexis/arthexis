@@ -92,12 +92,12 @@ class NodeFeature(SlugDisplayNaturalKeyMixin, Entity):
                 url_name="admin:video_videodevice_find_devices",
             ),
             NodeFeatureDefaultAction(
-                label="Take a Snapshot",
+                label="Take Snapshot",
                 url_name="admin:video_videodevice_take_snapshot",
             ),
             NodeFeatureDefaultAction(
-                label="View stream",
-                url_name="admin:video_videodevice_view_stream",
+                label="Test Camera",
+                url_name="admin:video_videodevice_test_camera",
             ),
         ),
     }
