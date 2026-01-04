@@ -87,33 +87,7 @@ def test_register_visitor_view_uses_clean_visitor_base(admin_client, monkeypatch
 
 
 @pytest.mark.django_db
-def test_register_visitor_view_ignores_request_addr(admin_client, monkeypatch):
-    node = Node.objects.create(
-        hostname="local",
-        address="127.0.0.1",
-        mac_address="00:11:22:33:44:55",
-        port=8888,
-        public_endpoint="local-endpoint",
-    )
-
-    monkeypatch.setattr(Node, "register_current", classmethod(lambda cls: (node, False)))
-
-    response = admin_client.get(
-        reverse("admin:nodes_node_register_visitor"),
-        REMOTE_ADDR="192.0.2.10",
-    )
-
-    assert response.status_code == 200
-    context = response.context[-1]
-    assert context["visitor_error"] is None
-    assert context["visitor_info_url"] == "https://127.0.0.1:443/nodes/info/"
-    assert context["visitor_register_url"] == "https://127.0.0.1:443/nodes/register/"
-    assert context["telemetry_url"] == reverse("register-telemetry")
-    assert context["visitor_proxy_url"] == reverse("register-visitor-proxy")
-
-
-@pytest.mark.django_db
-def test_register_visitor_view_ignores_forwarded_for(admin_client, monkeypatch):
+def test_register_visitor_view_ignores_client_address_headers(admin_client, monkeypatch):
     node = Node.objects.create(
         hostname="local",
         address="127.0.0.1",
