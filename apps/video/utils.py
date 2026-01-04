@@ -20,12 +20,9 @@ RPI_CAMERA_BINARIES = ("rpicam-hello", "rpicam-still", "rpicam-vid")
 _CAMERA_LOCK = threading.Lock()
 
 
-def has_rpi_camera_stack() -> bool:
-    """Return ``True`` when the Raspberry Pi camera stack is available."""
+def _is_video_device_available(device: Path) -> bool:
+    """Return ``True`` when ``device`` exists and is a readable char device."""
 
-    device = RPI_CAMERA_DEVICE
-    if not device.exists():
-        return False
     device_path = str(device)
     try:
         mode = os.stat(device_path).st_mode
@@ -34,6 +31,15 @@ def has_rpi_camera_stack() -> bool:
     if not stat.S_ISCHR(mode):
         return False
     if not os.access(device_path, os.R_OK | os.W_OK):
+        return False
+    return True
+
+
+def has_rpicam_binaries() -> bool:
+    """Return ``True`` when the Raspberry Pi camera binaries are available."""
+
+    device = RPI_CAMERA_DEVICE
+    if not _is_video_device_available(device):
         return False
     for binary in RPI_CAMERA_BINARIES:
         tool_path = shutil.which(binary)
@@ -54,12 +60,28 @@ def has_rpi_camera_stack() -> bool:
     return True
 
 
-def capture_rpi_snapshot(timeout: int = 10) -> Path:
-    """Capture a snapshot using the Raspberry Pi camera stack."""
+def _has_ffmpeg_capture_support() -> bool:
+    """Return ``True`` when a generic V4L2 device can be captured with ffmpeg."""
 
-    tool_path = shutil.which("rpicam-still")
-    if not tool_path:
-        raise RuntimeError("rpicam-still is not available")
+    if not _is_video_device_available(RPI_CAMERA_DEVICE):
+        return False
+    return shutil.which("ffmpeg") is not None
+
+
+def has_rpi_camera_stack() -> bool:
+    """Return ``True`` when any supported camera stack is available."""
+
+    return has_rpicam_binaries() or _has_ffmpeg_capture_support()
+
+
+def capture_rpi_snapshot(timeout: int = 10) -> Path:
+    """Capture a snapshot using the Raspberry Pi camera stack.
+
+    When Raspberry Pi binaries are installed but fail to access the camera (for
+    example, reporting "no cameras available"), fall back to an ffmpeg V4L2
+    capture if available.
+    """
+
     CAMERA_DIR.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.utcnow()
     unique_suffix = uuid.uuid4().hex
@@ -68,27 +90,71 @@ def capture_rpi_snapshot(timeout: int = 10) -> Path:
     if not acquired:
         raise RuntimeError("Camera is busy. Wait for the current capture to finish.")
 
-    try:
-        result = subprocess.run(
-            [tool_path, "-o", str(filename), "-t", "1"],
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=timeout,
+    strategies: list[tuple[str, list[str]]] = []
+    if has_rpicam_binaries():
+        rpicam = shutil.which("rpicam-still")
+        if not rpicam:
+            raise RuntimeError("rpicam-still is not available")
+        strategies.append(("rpicam-still", [rpicam, "-o", str(filename), "-t", "1"]))
+    if _has_ffmpeg_capture_support():
+        ffmpeg = shutil.which("ffmpeg")
+        if not ffmpeg:
+            raise RuntimeError("ffmpeg is not available")
+        strategies.append(
+            (
+                "ffmpeg",
+                [
+                    ffmpeg,
+                    "-hide_banner",
+                    "-loglevel",
+                    "error",
+                    "-f",
+                    "v4l2",
+                    "-i",
+                    str(RPI_CAMERA_DEVICE),
+                    "-frames:v",
+                    "1",
+                    "-y",
+                    str(filename),
+                ],
+            )
         )
-    except Exception as exc:  # pragma: no cover - depends on camera stack
-        logger.error("Failed to invoke %s: %s", tool_path, exc)
-        raise RuntimeError(f"Snapshot capture failed: {exc}") from exc
+
+    if not strategies:
+        raise RuntimeError("No supported camera stack is available")
+
+    errors: list[str] = []
+
+    try:
+        for name, command in strategies:
+            try:
+                result = subprocess.run(
+                    command,
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=timeout,
+                )
+            except Exception as exc:  # pragma: no cover - depends on camera stack
+                logger.error("Failed to invoke %s: %s", command[0], exc)
+                errors.append(f"{name} failed: {exc}")
+                continue
+
+            if result.returncode != 0:
+                error = (result.stderr or result.stdout or "Snapshot capture failed").strip()
+                logger.error("%s exited with %s: %s", name, result.returncode, error)
+                errors.append(f"{name} exited with {result.returncode}: {error}")
+                continue
+            if not filename.exists():
+                logger.error("Snapshot file %s was not created", filename)
+                errors.append(f"{name} did not produce output")
+                continue
+            return filename
     finally:
         _CAMERA_LOCK.release()
-    if result.returncode != 0:
-        error = (result.stderr or result.stdout or "Snapshot capture failed").strip()
-        logger.error("rpicam-still exited with %s: %s", result.returncode, error)
-        raise RuntimeError(error)
-    if not filename.exists():
-        logger.error("Snapshot file %s was not created", filename)
-        raise RuntimeError("Snapshot capture failed")
-    return filename
+
+    message = "; ".join(errors) or "Snapshot capture failed"
+    raise RuntimeError(message)
 
 
 def record_rpi_video(duration_seconds: int = 5, timeout: int = 15) -> Path:
@@ -142,6 +208,7 @@ __all__ = [
     "CAMERA_DIR",
     "RPI_CAMERA_BINARIES",
     "RPI_CAMERA_DEVICE",
+    "has_rpicam_binaries",
     "capture_rpi_snapshot",
     "has_rpi_camera_stack",
     "record_rpi_video",
