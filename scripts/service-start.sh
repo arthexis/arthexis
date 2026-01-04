@@ -105,6 +105,49 @@ start_log_follower() {
 
   LOG_FOLLOW_PID=$!
 }
+
+static_hash_fast_path() {
+  local cache_file="$1"
+  shift
+
+  if [ ! -f "$cache_file" ]; then
+    return 1
+  fi
+
+  local cache_mtime
+  cache_mtime=$(stat -c %Y "$cache_file" 2>/dev/null || true)
+  if [ -z "$cache_mtime" ] || [ "$cache_mtime" -eq 0 ]; then
+    return 1
+  fi
+
+  local latest_mtime=0
+  local saw_root=false
+
+  for root in "$@"; do
+    if [ ! -d "$root" ]; then
+      continue
+    fi
+    saw_root=true
+    while IFS= read -r -d '' path; do
+      local mtime
+      mtime=$(stat -c %Y "$path" 2>/dev/null || true)
+      if [ -n "$mtime" ] && [ "$mtime" -gt "$latest_mtime" ]; then
+        latest_mtime="$mtime"
+      fi
+    done < <(find "$root" -type f -print0 2>/dev/null)
+  done
+
+  if [ "$saw_root" = false ]; then
+    return 1
+  fi
+
+  if [ "$cache_mtime" -ge "$latest_mtime" ]; then
+    cat "$cache_file"
+    return 0
+  fi
+
+  return 1
+}
 LOCK_DIR="$BASE_DIR/.locks"
 STARTUP_LOCK="$LOCK_DIR/startup_started_at.lck"
 SYSTEMD_LOCK_FILE="$LOCK_DIR/systemd_services.lck"
@@ -163,6 +206,7 @@ AWAIT_START=false
 STARTUP_TIMEOUT=300
 DEBUG_MODE=false
 FORCE_COLLECTSTATIC=false
+FORCE_STATIC_HASH_RECOMPUTE=false
 SHOW_LEVEL=""
 APP_LOG_FILE="$LOG_DIR/$(hostname).log"
 # Celery workers process Post Office's email queue; prefer embedded mode.
@@ -242,7 +286,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     --show)
       if [ -z "${2:-}" ]; then
-        echo "Usage: $0 [--port PORT] [--reload] [--await] [--debug] [--show LEVEL] [--public|--internal] [--embedded|--systemd|--no-celery] [--force-collectstatic]" >&2
+        echo "Usage: $0 [--port PORT] [--reload] [--await] [--debug] [--show LEVEL] [--public|--internal] [--embedded|--systemd|--no-celery] [--force-collectstatic] [--recompute-static-hash]" >&2
         exit 1
       fi
       SHOW_LEVEL="$2"
@@ -275,8 +319,12 @@ while [[ $# -gt 0 ]]; do
       FORCE_COLLECTSTATIC=true
       shift
       ;;
+    --recompute-static-hash)
+      FORCE_STATIC_HASH_RECOMPUTE=true
+      shift
+      ;;
     *)
-      echo "Usage: $0 [--port PORT] [--reload] [--await] [--debug] [--show LEVEL] [--public|--internal] [--embedded|--systemd|--no-celery] [--force-collectstatic]" >&2
+      echo "Usage: $0 [--port PORT] [--reload] [--await] [--debug] [--show LEVEL] [--public|--internal] [--embedded|--systemd|--no-celery] [--force-collectstatic] [--recompute-static-hash]" >&2
       exit 1
       ;;
   esac
@@ -300,14 +348,26 @@ fi
 start_log_follower "$APP_LOG_FILE" "$SHOW_LEVEL"
 
 STATIC_MD5_FILE="$LOCK_DIR/staticfiles.md5"
+FAST_STATIC_HASH_FILE="$LOCK_DIR/staticfiles.hash"
+STATIC_CONTENT_ROOTS=("$BASE_DIR/static" "$BASE_DIR/staticfiles")
 STATIC_HASH=""
-if [ "$FORCE_COLLECTSTATIC" = false ]; then
+if [ "$FORCE_STATIC_HASH_RECOMPUTE" = false ]; then
+  if FAST_PATH_HASH=$(static_hash_fast_path "$FAST_STATIC_HASH_FILE" "${STATIC_CONTENT_ROOTS[@]}"); then
+    STATIC_HASH="$FAST_PATH_HASH"
+    echo "Static hash fast path used from $FAST_STATIC_HASH_FILE (no static asset changes detected)."
+  fi
+fi
+
+if [ -z "$STATIC_HASH" ] && [ "$FORCE_COLLECTSTATIC" = false ] && [ "$FORCE_STATIC_HASH_RECOMPUTE" = false ]; then
   set +e
   CACHE_OUTPUT=$(python scripts/staticfiles_md5.py --check-cache)
   CACHE_STATUS=$?
   set -e
   if [ "$CACHE_STATUS" -eq 0 ]; then
     STATIC_HASH="$CACHE_OUTPUT"
+    if [ -n "$STATIC_HASH" ]; then
+      echo "$STATIC_HASH" > "$FAST_STATIC_HASH_FILE"
+    fi
     echo "Using cached static files hash."
   elif [ "$CACHE_STATUS" -ne 3 ]; then
     echo "Cached static files hash unavailable (exit $CACHE_STATUS); recalculating."
@@ -315,7 +375,7 @@ if [ "$FORCE_COLLECTSTATIC" = false ]; then
 fi
 
 HASH_ARGS=()
-if [ "$FORCE_COLLECTSTATIC" = true ]; then
+if [ "$FORCE_COLLECTSTATIC" = true ] || [ "$FORCE_STATIC_HASH_RECOMPUTE" = true ]; then
   HASH_ARGS+=(--ignore-cache)
 fi
 
@@ -324,6 +384,8 @@ if [ -z "$STATIC_HASH" ]; then
     echo "Failed to compute static files hash; running collectstatic."
     python manage.py collectstatic --noinput
     STATIC_HASH=""
+  else
+    echo "$STATIC_HASH" > "$FAST_STATIC_HASH_FILE"
   fi
 fi
 
