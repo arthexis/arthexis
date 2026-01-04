@@ -13,6 +13,7 @@ from .utils import (
     RPI_CAMERA_BINARIES,
     RPI_CAMERA_DEVICE,
     has_rpi_camera_stack,
+    has_rpicam_binaries,
     record_rpi_video,
 )
 
@@ -55,8 +56,12 @@ class VideoDevice(Entity):
         if not has_rpi_camera_stack():
             return []
         identifier = str(RPI_CAMERA_DEVICE)
-        description = "Raspberry Pi Camera"
-        raw_info = f"device={identifier} binaries={', '.join(RPI_CAMERA_BINARIES)}"
+        if has_rpicam_binaries():
+            description = "Raspberry Pi Camera"
+            raw_info = f"device={identifier} binaries={', '.join(RPI_CAMERA_BINARIES)}"
+        else:
+            description = "Video4Linux Camera"
+            raw_info = f"device={identifier} binaries=ffmpeg"
         return [
             DetectedVideoDevice(
                 identifier=identifier,
