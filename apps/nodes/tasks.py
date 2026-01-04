@@ -144,6 +144,35 @@ def _startup_duration_seconds(base_dir: Path) -> int | None:
     return seconds if seconds >= 0 else None
 
 
+def _boot_delay_seconds(base_dir: Path) -> int | None:
+    lock_path = base_dir / ".locks" / SUITE_UPTIME_LOCK_NAME
+
+    try:
+        payload = json.loads(lock_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+    started_at = _parse_suite_start_timestamp(
+        payload.get("started_at") or payload.get("boot_time")
+    )
+    if not started_at:
+        return None
+
+    try:
+        boot_timestamp = float(psutil.boot_time())
+    except Exception:
+        return None
+
+    boot_time = datetime.fromtimestamp(boot_timestamp, tz=datetime_timezone.utc)
+    try:
+        boot_time = boot_time.astimezone(started_at.tzinfo)
+    except Exception:
+        return None
+
+    delta_seconds = int((started_at - boot_time).total_seconds())
+    return delta_seconds if delta_seconds >= 0 else None
+
+
 def _uptime_components(seconds: int | None) -> tuple[int, int, int] | None:
     if seconds is None or seconds < 0:
         return None
@@ -182,21 +211,32 @@ def _role_label_from_lock(lock_dir: Path) -> str:
 
 
 def _queue_boot_status_message(base_dir: Path, lock_dir: Path) -> None:
-    boot_time_seconds = _startup_duration_seconds(base_dir)
+    uptime_seconds = _startup_duration_seconds(base_dir)
+    boot_delay_seconds = _boot_delay_seconds(base_dir)
     role_label = _role_label_from_lock(lock_dir)
 
-    uptime_parts = _uptime_components(boot_time_seconds)
+    def _format_duration(seconds: int | None) -> str:
+        parts = _uptime_components(seconds)
+        if parts is None:
+            return "?d?h?m"
 
-    if uptime_parts is None:
-        subject = "UP ?d?h?m"
-        body = f"ON ?h?m {_active_interface_label()}"
-    else:
-        days, hours, minutes = uptime_parts
-        subject = f"UP {days}d{hours}h{minutes}m"
-        body = f"ON {hours}h{minutes}m {_active_interface_label()}"
+        days, hours, minutes = parts
+        return f"{days}d{hours}h{minutes}m"
+
+    uptime_label = _format_duration(uptime_seconds)
+    down_label = _format_duration(boot_delay_seconds)
+
+    subject_parts = [f"UP {uptime_label}"]
 
     if role_label:
-        subject = f"{subject} {role_label}".strip()
+        subject_parts.append(role_label)
+
+    interface_label = _active_interface_label()
+    if interface_label:
+        subject_parts.append(interface_label)
+
+    subject = " ".join(subject_parts).strip()
+    body = f"DOWN {down_label}"
 
     target = lock_dir / LCD_LOW_LOCK_FILE
     try:

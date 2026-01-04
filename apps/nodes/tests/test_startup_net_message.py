@@ -52,6 +52,11 @@ def test_send_startup_net_message_writes_boot_status(
     monkeypatch.setattr(tasks.Node, "get_local", lambda: DummyNode())
     monkeypatch.setattr(tasks, "queue_startup_message", write_high_lock)
     monkeypatch.setattr(tasks, "_active_interface_label", lambda: "n/a")
+    monkeypatch.setattr(
+        tasks.psutil,
+        "boot_time",
+        lambda: (started_at - timedelta(seconds=30)).timestamp(),
+    )
 
     tasks.send_startup_net_message()
 
@@ -59,8 +64,8 @@ def test_send_startup_net_message_writes_boot_status(
     assert high_lines == ["hi", "there"]
 
     low_lines = (lock_dir / tasks.LCD_LOW_LOCK_FILE).read_text().splitlines()
-    assert low_lines[0] == "UP 0d0h0m CTRL"
-    assert low_lines[1] == "ON 0h0m n/a"
+    assert low_lines[0] == "UP 0d0h0m CTRL n/a"
+    assert low_lines[1] == "DOWN 0d0h0m"
 
 
 @pytest.mark.django_db
@@ -90,12 +95,15 @@ def test_boot_message_reports_uptime(monkeypatch, settings, tmp_path):
     monkeypatch.setattr(tasks.Node, "get_local", lambda: DummyNode())
     monkeypatch.setattr(tasks, "queue_startup_message", write_high_lock)
     monkeypatch.setattr(tasks, "_active_interface_label", lambda: "n/a")
+    monkeypatch.setattr(
+        tasks.psutil, "boot_time", lambda: (started_at - timedelta(minutes=1)).timestamp()
+    )
 
     tasks.send_startup_net_message()
 
     low_lines = (lock_dir / tasks.LCD_LOW_LOCK_FILE).read_text().splitlines()
     assert low_lines[0].startswith("UP ")
-    assert low_lines[1] == "ON 0h1m n/a"
+    assert low_lines[1] == "DOWN 0d0h1m"
 
 
 @pytest.mark.django_db
@@ -126,8 +134,8 @@ def test_boot_message_uses_system_boot_time(monkeypatch, settings, tmp_path):
     tasks.send_startup_net_message()
 
     low_lines = (lock_dir / tasks.LCD_LOW_LOCK_FILE).read_text().splitlines()
-    assert low_lines[0] == "UP 0d0h2m CTRL"
-    assert low_lines[1] == "ON 0h2m n/a"
+    assert low_lines[0] == "UP 0d0h2m CTRL n/a"
+    assert low_lines[1] == "DOWN ?d?h?m"
 
 
 @pytest.mark.django_db
@@ -158,10 +166,15 @@ def test_lcd_boot_message_avoids_database(
     )
     monkeypatch.setattr(tasks, "queue_startup_message", write_high_lock)
     monkeypatch.setattr(tasks, "_active_interface_label", lambda: "n/a")
+    monkeypatch.setattr(
+        tasks.psutil,
+        "boot_time",
+        lambda: (started_at - timedelta(seconds=30)).timestamp(),
+    )
 
     with django_assert_num_queries(0):
         tasks.send_startup_net_message()
 
     low_lines = (lock_dir / tasks.LCD_LOW_LOCK_FILE).read_text().splitlines()
-    assert low_lines[0] == "UP 0d0h0m CTRL"
-    assert low_lines[1] == "ON 0h0m n/a"
+    assert low_lines[0] == "UP 0d0h0m CTRL n/a"
+    assert low_lines[1] == "DOWN 0d0h0m"
