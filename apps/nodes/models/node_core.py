@@ -366,6 +366,15 @@ class Node(NodeFeatureMixin, NodeNetworkingMixin, Entity):
             return None
 
     @classmethod
+    def default_instance(cls):
+        """Return the preferred node for sigil resolution."""
+
+        local = cls.get_local()
+        if local:
+            return local
+        return cls.objects.order_by("?").first()
+
+    @classmethod
     def register_current(cls, notify_peers: bool = True):
         """Create or update the :class:`Node` entry for this host.
 
@@ -1218,10 +1227,12 @@ class NetMessage(Entity):
         reach_name: str | None,
         seen: list[str],
     ) -> dict[str, object]:
+        from apps.sigils.sigil_resolver import resolve_sigils
+
         payload: dict[str, object] = {
             "uuid": str(self.uuid),
-            "subject": self.subject,
-            "body": self.body,
+            "subject": resolve_sigils(self.subject or "", current=self.node_origin),
+            "body": resolve_sigils(self.body or "", current=self.node_origin),
             "seen": list(seen),
             "reach": reach_name,
             "sender": sender_id,
