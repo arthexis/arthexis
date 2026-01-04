@@ -57,6 +57,7 @@ def reset_store(monkeypatch, tmp_path):
     store.planner_notifications.clear()
     store.connector_release_notifications.clear()
     store.observability_events.clear()
+    store.transaction_events.clear()
     store.monitoring_reports.clear()
     store.clear_display_message_compliance()
     store.charging_profile_reports.clear()
@@ -81,6 +82,7 @@ def reset_store(monkeypatch, tmp_path):
     store.planner_notifications.clear()
     store.connector_release_notifications.clear()
     store.observability_events.clear()
+    store.transaction_events.clear()
     store.monitoring_reports.clear()
     store.charging_profile_reports.clear()
 
@@ -894,6 +896,144 @@ async def test_transaction_event_updates_request_status(monkeypatch):
     await consumer._handle_transaction_event_action(payload, "msg-evt-2", "", "")
 
     assert store.transaction_requests["msg-req-2"]["status"] == "completed"
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+async def test_transaction_event_started_notifies_and_persists():
+    charger = await database_sync_to_async(Charger.objects.create)(charger_id="CP-TE-1")
+    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = store.identity_key(charger.charger_id, 1)
+    consumer.charger_id = charger.charger_id
+    consumer.charger = charger
+    consumer.aggregate_charger = None
+
+    async def fake_assign(connector):
+        consumer.connector_value = connector
+
+    consumer._assign_connector = AsyncMock(side_effect=fake_assign)
+    consumer._start_consumption_updates = AsyncMock()
+    consumer._process_meter_value_entries = AsyncMock()
+    consumer._record_rfid_attempt = AsyncMock()
+
+    payload = {
+        "eventType": "Started",
+        "timestamp": "2024-01-02T00:00:00Z",
+        "evse": {"id": 1, "connectorId": 1},
+        "transactionInfo": {"transactionId": "TX-TE-1", "meterStart": 5},
+    }
+
+    await consumer._handle_transaction_event_action(payload, "msg-evt-start", "", "")
+
+    tx_obj = await database_sync_to_async(Transaction.objects.get)(charger=charger)
+    assert tx_obj.ocpp_transaction_id == "TX-TE-1"
+    assert tx_obj.meter_start == 5
+    assert tx_obj.start_time == parse_datetime("2024-01-02T00:00:00Z")
+
+    assert store.transaction_events
+    event = store.transaction_events[-1]
+    assert event["event_type"] == "started"
+    assert event["transaction_pk"] == tx_obj.pk
+    assert event["ocpp_transaction_id"] == "TX-TE-1"
+    assert event["connector_id"] == "1"
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+async def test_transaction_event_updated_notifies_existing_transaction():
+    charger = await database_sync_to_async(Charger.objects.create)(charger_id="CP-TE-2")
+    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = store.identity_key(charger.charger_id, 1)
+    consumer.charger_id = charger.charger_id
+    consumer.charger = charger
+    consumer.aggregate_charger = None
+
+    async def fake_assign(connector):
+        consumer.connector_value = connector
+
+    consumer._assign_connector = AsyncMock(side_effect=fake_assign)
+    consumer._process_meter_value_entries = AsyncMock()
+
+    now = timezone.now()
+    tx_obj = await database_sync_to_async(Transaction.objects.create)(
+        charger=charger,
+        connector_id=1,
+        ocpp_transaction_id="TX-TE-2",
+        start_time=now,
+        received_start_time=now,
+    )
+    store.transactions[consumer.store_key] = tx_obj
+
+    payload = {
+        "eventType": "Updated",
+        "timestamp": "2024-01-03T00:00:00Z",
+        "evse": {"id": 1},
+        "transactionInfo": {"transactionId": "TX-TE-2"},
+    }
+
+    await consumer._handle_transaction_event_action(payload, "msg-evt-update", "", "")
+
+    refreshed = await database_sync_to_async(Transaction.objects.get)(pk=tx_obj.pk)
+    assert refreshed.ocpp_transaction_id == "TX-TE-2"
+
+    assert store.transaction_events
+    event = store.transaction_events[-1]
+    assert event["event_type"] == "updated"
+    assert event["transaction_pk"] == tx_obj.pk
+    assert event["ocpp_transaction_id"] == "TX-TE-2"
+    assert event["connector_id"] == "1"
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+async def test_transaction_event_ended_updates_and_notifies():
+    charger = await database_sync_to_async(Charger.objects.create)(charger_id="CP-TE-3")
+    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = store.identity_key(charger.charger_id, 1)
+    consumer.charger_id = charger.charger_id
+    consumer.charger = charger
+    consumer.aggregate_charger = None
+
+    async def fake_assign(connector):
+        consumer.connector_value = connector
+
+    consumer._assign_connector = AsyncMock(side_effect=fake_assign)
+    consumer._process_meter_value_entries = AsyncMock()
+    consumer._update_consumption_message = AsyncMock()
+    consumer._cancel_consumption_message = AsyncMock()
+    consumer._consumption_message_uuid = None
+
+    start_ts = timezone.now()
+    tx_obj = await database_sync_to_async(Transaction.objects.create)(
+        charger=charger,
+        connector_id=1,
+        ocpp_transaction_id="TX-TE-3",
+        start_time=start_ts,
+        received_start_time=start_ts,
+        meter_start=10,
+    )
+    store.transactions[consumer.store_key] = tx_obj
+
+    payload = {
+        "eventType": "Ended",
+        "timestamp": "2024-01-04T00:00:00Z",
+        "evse": {"id": 1},
+        "transactionInfo": {"transactionId": "TX-TE-3", "meterStop": 50},
+    }
+
+    await consumer._handle_transaction_event_action(payload, "msg-evt-end", "", "")
+
+    refreshed = await database_sync_to_async(Transaction.objects.get)(pk=tx_obj.pk)
+    assert refreshed.meter_stop == 50
+    assert refreshed.stop_time == parse_datetime("2024-01-04T00:00:00Z")
+    assert store.transactions.get(consumer.store_key) is None
+
+    assert store.transaction_events
+    event = store.transaction_events[-1]
+    assert event["event_type"] == "ended"
+    assert event["transaction_pk"] == tx_obj.pk
+    assert event["meter_stop"] == 50
+    assert event["connector_id"] == "1"
 
 
 @pytest.mark.anyio
