@@ -62,8 +62,6 @@ SERVICE_NAME=""
 
 mkdir -p "$LOCK_DIR"
 
-arthexis_timing_setup "upgrade"
-
 ensure_git_safe_directory() {
   if ! command -v git >/dev/null 2>&1; then
     return 0
@@ -76,6 +74,46 @@ ensure_git_safe_directory() {
 
   git config --global --add safe.directory "$BASE_DIR" >/dev/null 2>&1 || true
 }
+
+collect_requirement_files() {
+  local -n out_array="$1"
+
+  mapfile -t out_array < <(find "$BASE_DIR" -maxdepth 1 -type f -name 'requirements*.txt' -print | sort)
+}
+
+compute_requirements_checksum() {
+  local -a files=("$@")
+
+  if [ ${#files[@]} -eq 0 ]; then
+    echo ""
+    return 0
+  fi
+
+  (
+    for file in "${files[@]}"; do
+      printf '%s\n' "${file##*/}"
+      cat "$file"
+    done
+  ) | md5sum | awk '{print $1}'
+}
+
+collect_requirement_files REQUIREMENT_FILES
+REQ_MD5_FILE="$LOCK_DIR/requirements.bundle.md5"
+REQUIREMENTS_HASH=""
+STORED_REQ_HASH=""
+if [ ${#REQUIREMENT_FILES[@]} -gt 0 ]; then
+  REQUIREMENTS_HASH=$(compute_requirements_checksum "${REQUIREMENT_FILES[@]}")
+  [ -f "$REQ_MD5_FILE" ] && STORED_REQ_HASH=$(cat "$REQ_MD5_FILE")
+fi
+DEPENDENCY_REFRESH_REQUIRED=0
+if [ -n "$REQUIREMENTS_HASH" ] && [ "$REQUIREMENTS_HASH" != "$STORED_REQ_HASH" ]; then
+  DEPENDENCY_REFRESH_REQUIRED=1
+fi
+if [[ $FORCE_ENV_REFRESH -eq 1 ]]; then
+  DEPENDENCY_REFRESH_REQUIRED=1
+fi
+
+arthexis_timing_setup "upgrade"
 
 is_non_terminal_role() {
   case "$1" in
@@ -780,6 +818,7 @@ auto_realign_branch_for_role() {
 CHANNEL="stable"
 FORCE_STOP=0
 FORCE_UPGRADE=0
+FORCE_ENV_REFRESH=0
 CLEAN=0
 NO_RESTART=0
 STOP_ONLY=0
@@ -805,6 +844,11 @@ while [[ $# -gt 0 ]]; do
       FORCE_STOP=1
       FORCE_UPGRADE=1
       FORWARDED_ARGS+=("--force")
+      shift
+      ;;
+    --force-refresh)
+      FORCE_ENV_REFRESH=1
+      FORWARDED_ARGS+=("$1")
       shift
       ;;
     --clean)
@@ -1622,9 +1666,14 @@ if [ $VENV_PRESENT -eq 1 ]; then
     pip_install_env+=("PIP_BREAK_SYSTEM_PACKAGES=1")
     pip_install_flags+=("--break-system-packages")
   fi
-  arthexis_timing_start "pip_bootstrap"
-  env "${pip_install_env[@]}" python -m pip install --upgrade pip "${pip_install_flags[@]}"
-  arthexis_timing_end "pip_bootstrap"
+  if [[ $DEPENDENCY_REFRESH_REQUIRED -eq 0 ]]; then
+    echo "Dependencies unchanged; skipping pip bootstrap."
+    arthexis_timing_record "pip_bootstrap" 0 "skipped"
+  else
+    arthexis_timing_start "pip_bootstrap"
+    env "${pip_install_env[@]}" python -m pip install --upgrade pip "${pip_install_flags[@]}"
+    arthexis_timing_end "pip_bootstrap"
+  fi
   # env-refresh.sh is responsible for syncing requirements and updating the
   # requirements.md5 lock file; avoid duplicating that work here.
   if [[ $DEFER_BROADCAST_MESSAGE -eq 1 ]]; then
@@ -1651,6 +1700,9 @@ fi
 ENV_ARGS=""
 if [[ "$CHANNEL" == "unstable" ]]; then
   ENV_ARGS="--latest"
+fi
+if [[ $FORCE_ENV_REFRESH -eq 1 ]]; then
+  ENV_ARGS="$ENV_ARGS --force-refresh"
 fi
 echo "Refreshing environment..."
 arthexis_timing_start "env_refresh"
