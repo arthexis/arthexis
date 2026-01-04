@@ -441,6 +441,7 @@ LOCAL_APPS = [
     "apps.ocpp",
     "apps.ocpp.forwarder",
     "apps.ocpp.simulator",
+    "apps.mcp",
     "apps.meta",
     "apps.awg",
     "apps.chats",
