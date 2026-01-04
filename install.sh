@@ -242,15 +242,25 @@ delegate_secondary_install() {
     local -a forwarded_args=()
     local index=0
     local total=${#ORIGINAL_ARGS[@]}
+    local has_port_arg=false
     while [ $index -lt $total ]; do
         local arg="${ORIGINAL_ARGS[$index]}"
         if [ "$arg" = "--secondary" ]; then
             index=$((index + 2))
             continue
         fi
+        if [ "$arg" = "--port" ]; then
+            has_port_arg=true
+        fi
         forwarded_args+=("$arg")
         index=$((index + 1))
     done
+
+    if [ "$has_port_arg" = false ]; then
+        local primary_port="$(arthexis_detect_backend_port "$SCRIPT_DIR")"
+        local sibling_port=$((primary_port + 1))
+        forwarded_args+=("--port" "$sibling_port")
+    fi
 
     echo "Delegating installation to $target_dir/install.sh with sibling-awareness"
     ARTHEXIS_SECONDARY_CHILD=1 "$target_dir/install.sh" "${forwarded_args[@]}"
