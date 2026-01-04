@@ -3507,34 +3507,90 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             csr_value = ""
         if not isinstance(csr_value, str):
             csr_value = str(csr_value)
-        response_payload = {
-            "status": "Rejected",
-            "statusInfo": {
-                "reasonCode": "NotSupported",
-                "additionalInfo": "Manual certificate handling required.",
-            },
-        }
+        csr_value = csr_value.strip()
 
-        def _persist_request() -> None:
+        def _csr_is_valid(value: str) -> bool:
+            return bool(value)
+
+        responded_at = timezone.now()
+
+        def _handle_request():
             target = self._resolve_certificate_target()
-            if target is None:
-                return
-            CertificateRequest.objects.create(
-                charger=target,
-                action=CertificateRequest.ACTION_15118,
-                certificate_type=certificate_type,
-                csr=csr_value,
-                status=CertificateRequest.STATUS_REJECTED,
-                status_info="Manual certificate handling required.",
-                request_payload=payload,
-                response_payload=response_payload,
-                responded_at=timezone.now(),
-            )
+            response_payload: dict[str, object]
+            exi_response = ""
+            request_status = CertificateRequest.STATUS_REJECTED
+            status_info = ""
 
-        await database_sync_to_async(_persist_request)()
+            if target is None:
+                status_info = "Unknown charge point."
+                response_payload = {
+                    "status": "Rejected",
+                    "statusInfo": {
+                        "reasonCode": "Failed",
+                        "additionalInfo": status_info,
+                    },
+                }
+            elif not _csr_is_valid(csr_value):
+                status_info = "EXI request payload is missing or invalid."
+                response_payload = {
+                    "status": "Rejected",
+                    "statusInfo": {
+                        "reasonCode": "FormatViolation",
+                        "additionalInfo": status_info,
+                    },
+                }
+            else:
+                try:
+                    exi_response = certificate_signing.sign_certificate_request(
+                        csr=csr_value,
+                        certificate_type=certificate_type,
+                        charger_id=target.charger_id,
+                    )
+                    response_payload = {
+                        "status": "Accepted",
+                        "exiResponse": exi_response,
+                    }
+                    request_status = CertificateRequest.STATUS_ACCEPTED
+                    status_info = ""
+                except certificate_signing.CertificateSigningError as exc:
+                    status_info = str(exc) or "Certificate request failed."
+                    response_payload = {
+                        "status": "Rejected",
+                        "statusInfo": {
+                            "reasonCode": "Failed",
+                            "additionalInfo": status_info,
+                        },
+                    }
+                    request_status = CertificateRequest.STATUS_ERROR
+
+            request_pk: int | None = None
+            if target is not None:
+                request = CertificateRequest.objects.create(
+                    charger=target,
+                    action=CertificateRequest.ACTION_15118,
+                    certificate_type=certificate_type,
+                    csr=csr_value,
+                    signed_certificate=exi_response,
+                    status=request_status,
+                    status_info=status_info,
+                    request_payload=payload,
+                    response_payload=response_payload,
+                    responded_at=responded_at,
+                )
+                request_pk = request.pk
+
+            return {
+                "response": response_payload,
+                "status": request_status,
+                "request_pk": request_pk,
+            }
+
+        result = await database_sync_to_async(_handle_request)()
+        response_payload = result.get("response", {})
+        status_value = response_payload.get("status") or "Unknown"
         store.add_log(
             self.store_key,
-            "Get15118EVCertificate request received (rejected; manual handling).",
+            f"Get15118EVCertificate request processed (status={status_value}).",
             log_type="charger",
         )
         return response_payload
