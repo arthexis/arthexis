@@ -146,7 +146,7 @@ class LCDHistoryReplayer:
 
 
 class Command(BaseCommand):
-    help = "Replay historical LCD frames from works/lcd-history-x.txt files"
+    help = "Replay historical LCD frames from work/lcd-history-x.txt files"
 
     def add_arguments(self, parser) -> None:
         parser.add_argument(

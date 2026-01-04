@@ -43,7 +43,7 @@ LOGS_DIR = BASE_DIR / "logs"
 LOG_FILE = LOGS_DIR / "lcd-screen.log"
 WORK_DIR = BASE_DIR / "work"
 WORK_FILE = WORK_DIR / "lcd-screen.txt"
-HISTORY_DIR = BASE_DIR / "works"
+HISTORY_DIR = WORK_DIR
 LOG_FORMAT = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
 
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
@@ -745,7 +745,7 @@ def main() -> None:  # pragma: no cover - hardware dependent
     scroll_scheduler = ScrollScheduler()
     state_order = ("high", "low", "clock")
     state_index = 0
-    history_recorder = LCDHistoryRecorder(base_dir=BASE_DIR, history_dir_name="works")
+    history_recorder = LCDHistoryRecorder(base_dir=BASE_DIR, history_dir_name="work")
     clock_cycle = 0
     health = LCDHealthMonitor()
     watchdog = LCDWatchdog()
