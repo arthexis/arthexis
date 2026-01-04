@@ -4,8 +4,8 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.locals.user_data import EntityModelAdmin
 
-from ..models import NodeService
-from .actions import validate_service_active, validate_service_configuration
+from .admin_actions import validate_service_active, validate_service_configuration
+from .models import NodeService
 
 
 @admin.register(NodeService)

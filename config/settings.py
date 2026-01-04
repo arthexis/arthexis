@@ -52,6 +52,11 @@ install_validate_host_with_subnets()
 BASE_DIR = Path(__file__).resolve().parent.parent
 APPS_DIR = BASE_DIR / "apps"
 
+SERVICES_TEMPLATE_DIR = os.environ.get("SERVICES_TEMPLATE_DIR")
+SERVICES_SYSTEMD_DIR = Path(
+    os.environ.get("SERVICES_SYSTEMD_DIR", os.environ.get("SYSTEMD_DIR", "/etc/systemd/system"))
+)
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
@@ -403,6 +408,7 @@ LOCAL_APPS = [
     "apps.base",
     "apps.celery",
     "apps.nodes",
+    "apps.services",
     "apps.dns",
     "apps.screens",
     "apps.sensors",

@@ -21,7 +21,6 @@ from .node_core import (
     get_terminal_role,
     node_information_updated,
 )
-from .services import NodeService, NodeServiceManager
 from .slug_entities import SlugDisplayNaturalKeyMixin, SlugEntityManager
 
 __all__ = [
@@ -35,8 +34,6 @@ __all__ = [
     "NodeManager",
     "NodeRole",
     "NodeRoleManager",
-    "NodeService",
-    "NodeServiceManager",
     "SlugDisplayNaturalKeyMixin",
     "SlugEntityManager",
     "PendingNetMessage",

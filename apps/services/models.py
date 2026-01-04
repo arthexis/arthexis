@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import getpass
-import os
 from pathlib import Path
 
 from django.conf import settings
@@ -9,13 +8,23 @@ from django.db import models
 from django.utils.translation import gettext_lazy as _
 
 from apps.base.models import Entity
-from .slug_entities import SlugDisplayNaturalKeyMixin, SlugEntityManager
+from apps.nodes.models.slug_entities import SlugDisplayNaturalKeyMixin, SlugEntityManager
 
-SERVICE_TEMPLATE_DIR = Path(__file__).resolve().parent.parent / "service_templates"
+DEFAULT_SERVICE_TEMPLATE_DIR = Path(__file__).resolve().parent / "service_templates"
 
 
 def _systemd_directory() -> Path:
-    return Path(os.environ.get("SYSTEMD_DIR", "/etc/systemd/system"))
+    configured = getattr(settings, "SERVICES_SYSTEMD_DIR", None)
+    if configured:
+        return Path(configured)
+    return Path("/etc/systemd/system")
+
+
+def _template_directory() -> Path:
+    configured = getattr(settings, "SERVICES_TEMPLATE_DIR", None)
+    if configured:
+        return Path(configured)
+    return DEFAULT_SERVICE_TEMPLATE_DIR
 
 
 class NodeServiceManager(SlugEntityManager):
@@ -58,6 +67,7 @@ class NodeService(SlugDisplayNaturalKeyMixin, Entity):
         ordering = ["display"]
         verbose_name = "Node Service"
         verbose_name_plural = "Node Services"
+        db_table = "nodes_nodeservice"
 
     @staticmethod
     def detect_service_name(base_dir: Path) -> str:
@@ -82,7 +92,7 @@ class NodeService(SlugDisplayNaturalKeyMixin, Entity):
             return None
         candidate = Path(self.template_path)
         if not candidate.is_absolute():
-            candidate = SERVICE_TEMPLATE_DIR / candidate
+            candidate = _template_directory() / candidate
         return candidate
 
     def get_template_body(self) -> str:
