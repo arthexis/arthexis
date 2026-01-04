@@ -14,8 +14,7 @@ jobs:
   install:
     runs-on: ubuntu-latest
     steps:
-      - name: Ensure workspace is writable
-        run: sudo chown -R "$USER:$USER" "$GITHUB_WORKSPACE"
+      # GitHub-hosted runners start with a writable workspace; skipping manual chown saves setup time.
       - uses: actions/checkout@v6
         with:
           clean: false
@@ -63,8 +62,7 @@ jobs:
   upgrade:
     runs-on: ubuntu-latest
     steps:
-      - name: Ensure workspace is writable
-        run: sudo chown -R "$USER:$USER" "$GITHUB_WORKSPACE"
+      # Workspace is already writable on GitHub runners, so we skip the chown to reduce overhead.
       - name: Checkout main
         uses: actions/checkout@v6
         with:
