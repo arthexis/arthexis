@@ -9,6 +9,7 @@ from pathlib import Path
 
 from django.conf import settings
 
+from apps.nginx.config_utils import slugify
 from apps.nginx.renderers import apply_site_entries, generate_primary_config
 
 SITES_AVAILABLE_DIR = Path("/etc/nginx/sites-available")
@@ -29,6 +30,22 @@ class NginxUnavailableError(Exception):
 
 class ValidationError(Exception):
     """Raised when nginx validation fails."""
+
+
+@dataclass
+class SecondaryInstance:
+    name: str
+    path: Path
+    port: int
+    role: str = "Terminal"
+
+    @property
+    def lock_dir(self) -> Path:
+        return self.path / ".locks"
+
+
+class SecondaryInstanceError(Exception):
+    """Raised when a referenced sibling installation cannot be used."""
 
 
 def ensure_nginx_in_path() -> bool:
@@ -88,6 +105,73 @@ def record_lock_state(mode: str, port: int, role: str) -> None:
     _write_lock(lock_dir / "role.lck", role)
 
 
+def _read_secondary_port(lock_dir: Path) -> int | None:
+    port_path = lock_dir / "backend_port.lck"
+    try:
+        value = port_path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+
+    try:
+        parsed = int(value)
+    except ValueError:
+        return None
+
+    if parsed < 1 or parsed > 65535:
+        return None
+    return parsed
+
+
+def _read_secondary_role(lock_dir: Path) -> str:
+    role_path = lock_dir / "role.lck"
+    try:
+        value = role_path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return "Terminal"
+    return value or "Terminal"
+
+
+def discover_secondary_instances(base_dir: Path | str | None = None) -> list[SecondaryInstance]:
+    base = Path(base_dir or settings.BASE_DIR).resolve()
+    parent = base.parent
+    instances: list[SecondaryInstance] = []
+
+    for sibling in parent.iterdir():
+        if not sibling.is_dir():
+            continue
+        if sibling.resolve() == base:
+            continue
+        lock_dir = sibling / ".locks"
+        port = _read_secondary_port(lock_dir)
+        if port is None:
+            continue
+        role = _read_secondary_role(lock_dir)
+        instances.append(
+            SecondaryInstance(
+                name=sibling.name,
+                path=sibling.resolve(),
+                port=port,
+                role=role,
+            )
+        )
+
+    return sorted(instances, key=lambda instance: instance.name)
+
+
+def get_secondary_instance(name: str, base_dir: Path | str | None = None) -> SecondaryInstance:
+    if not name:
+        raise SecondaryInstanceError("Secondary instance name is required.")
+
+    instances = discover_secondary_instances(base_dir)
+    for instance in instances:
+        if instance.name == name:
+            return instance
+
+    raise SecondaryInstanceError(
+        f"Secondary instance '{name}' not found. Ensure sibling installs include .locks/backend_port.lck."
+    )
+
+
 def remove_nginx_configuration(*, sudo: str = "sudo", reload: bool = True) -> ApplyResult:
     if not can_manage_nginx():
         raise NginxUnavailableError(
@@ -137,6 +221,7 @@ def apply_nginx_configuration(
     site_config_path: Path | None = None,
     site_destination: Path | None = None,
     reload: bool = True,
+    secondary_instance: SecondaryInstance | None = None,
     sudo: str = "sudo",
 ) -> ApplyResult:
     if not can_manage_nginx():
@@ -146,6 +231,18 @@ def apply_nginx_configuration(
         )
 
     record_lock_state(mode, port, role)
+
+    if secondary_instance:
+        if secondary_instance.path.parent.resolve() != Path(settings.BASE_DIR).resolve().parent:
+            raise ValidationError("Secondary instance must be a sibling directory to the current install.")
+        if secondary_instance.port == port:
+            raise ValidationError("Secondary instance must use a different backend port for failover.")
+        if not secondary_instance.path.exists():
+            raise ValidationError("Secondary instance directory does not exist on disk.")
+
+    proxy_target = None
+    if secondary_instance:
+        proxy_target = f"arthexis-{slugify(secondary_instance.name)}-pool"
 
     subprocess.run([sudo, "mkdir", "-p", str(SITES_ENABLED_DIR)], check=False)
     subprocess.run([sudo, "sh", "-c", "rm -f /etc/nginx/sites-enabled/arthexis*.conf"], check=False)
@@ -160,6 +257,7 @@ def apply_nginx_configuration(
         https_enabled=https_enabled,
         include_ipv6=include_ipv6,
         external_websockets=external_websockets,
+        secondary_instance=secondary_instance,
     )
     _write_config_with_sudo(primary_dest, config_content, sudo=sudo)
     _ensure_site_enabled(primary_dest, sudo=sudo)
@@ -174,6 +272,7 @@ def apply_nginx_configuration(
                 site_destination,
                 https_enabled=https_enabled,
                 external_websockets=external_websockets,
+                proxy_target=proxy_target,
                 sudo=sudo,
             )
         except ValueError as exc:

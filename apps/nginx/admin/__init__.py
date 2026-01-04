@@ -4,6 +4,7 @@ from django.contrib import admin
 
 from apps.nginx.admin.certificates import CertificateGenerationMixin
 from apps.nginx.admin.views import SiteConfigurationViewMixin
+from apps.nginx.forms import SiteConfigurationForm
 from apps.nginx.models import SiteConfiguration
 
 
@@ -11,5 +12,5 @@ from apps.nginx.models import SiteConfiguration
 class SiteConfigurationAdmin(
     CertificateGenerationMixin, SiteConfigurationViewMixin, admin.ModelAdmin
 ):
-    pass
+    form = SiteConfigurationForm
 
