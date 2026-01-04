@@ -2,6 +2,7 @@ import json
 from datetime import datetime, timezone as dt_timezone
 from functools import partial
 from unittest.mock import AsyncMock
+import json
 
 import anyio
 import pytest
@@ -10,6 +11,8 @@ from django.utils import timezone
 
 from apps.ocpp import consumers, store, call_error_handlers, call_result_handlers
 from apps.flows.models import Transition
+from apps.ocpp.views import actions
+from apps.ocpp.views.common import ActionContext
 from apps.ocpp.models import (
     Charger,
     CPReservation,
@@ -189,6 +192,86 @@ async def test_set_monitoring_level_error_clears_pending_call():
     assert result is not None
     assert result.get("success") is False
     assert result.get("error_code") == "InternalError"
+
+
+@pytest.mark.anyio
+async def test_set_monitoring_base_result_clears_pending_call_from_action():
+    _reset_pending_calls()
+
+    class DummyWebSocket:
+        def __init__(self):
+            self.sent: list[str] = []
+
+        async def send(self, message: str) -> None:  # pragma: no cover - async wrapper
+            self.sent.append(message)
+
+    ws = DummyWebSocket()
+    log_key = store.identity_key("CP-MON-ACT", None)
+    context = ActionContext("CP-MON-ACT", None, charger=None, ws=ws, log_key=log_key)
+    action_call = await anyio.to_thread.run_sync(
+        lambda: actions._handle_set_monitoring_base(
+            context, {"monitoringBase": "All"}
+        )
+    )
+
+    assert isinstance(action_call, actions.ActionCall)
+    assert len(ws.sent) == 1
+    message = json.loads(ws.sent[0])
+    message_id = message[1]
+
+    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = log_key
+    consumer.charger_id = context.cid
+
+    await consumer._handle_call_result(message_id, {"status": "Accepted"})
+
+    assert message_id not in store.pending_calls
+    result = store.wait_for_pending_call(message_id, timeout=0.5)
+    assert result is not None
+    assert result.get("success") is True
+    assert result.get("metadata", {}).get("monitoring_base") == "All"
+
+
+@pytest.mark.anyio
+async def test_set_monitoring_level_error_clears_pending_call_from_action():
+    _reset_pending_calls()
+
+    class DummyWebSocket:
+        def __init__(self):
+            self.sent: list[str] = []
+
+        async def send(self, message: str) -> None:  # pragma: no cover - async wrapper
+            self.sent.append(message)
+
+    ws = DummyWebSocket()
+    log_key = store.identity_key("CP-MON-ERR", None)
+    context = ActionContext("CP-MON-ERR", None, charger=None, ws=ws, log_key=log_key)
+    action_call = await anyio.to_thread.run_sync(
+        lambda: actions._handle_set_monitoring_level(context, {"severity": 3})
+    )
+
+    assert isinstance(action_call, actions.ActionCall)
+    assert len(ws.sent) == 1
+    message = json.loads(ws.sent[0])
+    message_id = message[1]
+
+    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = log_key
+    consumer.charger_id = context.cid
+
+    await consumer._handle_call_error(
+        message_id,
+        "InternalError",
+        "unable to apply",
+        {"detail": "test"},
+    )
+
+    assert message_id not in store.pending_calls
+    result = store.wait_for_pending_call(message_id, timeout=0.5)
+    assert result is not None
+    assert result.get("success") is False
+    assert result.get("error_code") == "InternalError"
+    assert result.get("metadata", {}).get("monitoring_level") == 3
 
 
 @pytest.mark.anyio

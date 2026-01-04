@@ -2427,6 +2427,7 @@ def _handle_set_monitoring_base(
             "connector_id": context.connector_value,
             "log_key": context.log_key,
             "requested_at": timezone.now(),
+            "monitoring_base": monitoring_base,
         },
     )
     store.schedule_call_timeout(
@@ -2466,6 +2467,7 @@ def _handle_set_monitoring_level(
             "connector_id": context.connector_value,
             "log_key": context.log_key,
             "requested_at": timezone.now(),
+            "monitoring_level": severity,
         },
     )
     store.schedule_call_timeout(
