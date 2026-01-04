@@ -46,7 +46,7 @@ class _DisableMigrations(dict):
         return None
 
 
-if os.environ.get("PYTEST_DISABLE_MIGRATIONS", "1") == "1":
+if os.environ.get("PYTEST_DISABLE_MIGRATIONS", "0") == "1":
     settings.MIGRATION_MODULES = _DisableMigrations()
 
 from apps.tests.domain import RecordedTestResult, persist_results  # noqa: E402
