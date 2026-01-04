@@ -2,9 +2,20 @@
 
 import apps.sigils.fields
 import django.db.models.deletion
+from django.core.management.color import no_style
 from django.conf import settings
 from django.db import migrations, models
 from django.db.models import F
+
+
+def reset_sequences(models, schema_editor):
+    sql_statements = schema_editor.connection.ops.sequence_reset_sql(
+        no_style(), models
+    )
+    if sql_statements:
+        with schema_editor.connection.cursor() as cursor:
+            for statement in sql_statements:
+                cursor.execute(statement)
 
 
 def migrate_node_manager_credentials(apps, schema_editor):
@@ -35,6 +46,8 @@ def migrate_node_manager_credentials(apps, schema_editor):
         credentials_id=F("node_manager_id")
     )
 
+    reset_sequences([DNSProviderCredential], schema_editor)
+
 
 def reverse_node_manager_credentials(apps, schema_editor):
     NodeManager = apps.get_model("nodes", "NodeManager")
@@ -63,6 +76,8 @@ def reverse_node_manager_credentials(apps, schema_editor):
     GoDaddyDNSRecord.objects.filter(credentials_id__isnull=False).update(
         node_manager_id=F("credentials_id")
     )
+
+    reset_sequences([NodeManager], schema_editor)
 
 
 class Migration(migrations.Migration):
