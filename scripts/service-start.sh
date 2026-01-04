@@ -10,6 +10,8 @@ export TZ="${TZ:-America/Monterrey}"
 . "$BASE_DIR/scripts/helpers/ports.sh"
 # shellcheck source=scripts/helpers/service_manager.sh
 . "$BASE_DIR/scripts/helpers/service_manager.sh"
+# shellcheck source=scripts/helpers/staticfiles.sh
+. "$BASE_DIR/scripts/helpers/staticfiles.sh"
 arthexis_resolve_log_dir "$BASE_DIR" LOG_DIR || exit 1
 LOG_FILE="$LOG_DIR/$(basename "$0" .sh).log"
 ERROR_LOG="$LOG_DIR/error.log"
@@ -315,35 +317,35 @@ if [ "$FOLLOW_LOGS" = true ]; then
 fi
 
 STATIC_MD5_FILE="$LOCK_DIR/staticfiles.md5"
+STATIC_META_FILE="$LOCK_DIR/staticfiles.meta"
 STATIC_HASH=""
+STORED_HASH=""
+[ -f "$STATIC_MD5_FILE" ] && STORED_HASH=$(cat "$STATIC_MD5_FILE")
+
 if [ "$FORCE_COLLECTSTATIC" = false ]; then
   set +e
-  CACHE_OUTPUT=$(python scripts/staticfiles_md5.py --check-cache)
-  CACHE_STATUS=$?
+  STATIC_HASH=$(arthexis_staticfiles_snapshot_check "$STATIC_MD5_FILE" "$STATIC_META_FILE")
+  FAST_PATH_STATUS=$?
   set -e
-  if [ "$CACHE_STATUS" -eq 0 ]; then
-    STATIC_HASH="$CACHE_OUTPUT"
-    echo "Using cached static files hash."
-  elif [ "$CACHE_STATUS" -ne 3 ]; then
-    echo "Cached static files hash unavailable (exit $CACHE_STATUS); recalculating."
+
+  if [ "$FAST_PATH_STATUS" -eq 0 ] && [ -n "$STATIC_HASH" ]; then
+    echo "Static files unchanged since last run; using lock metadata."
+  elif [ "$FAST_PATH_STATUS" -ne 3 ]; then
+    echo "Static files metadata unavailable (exit $FAST_PATH_STATUS); recalculating."
+    STATIC_HASH=""
+  else
+    STATIC_HASH=""
   fi
 fi
 
-HASH_ARGS=()
-if [ "$FORCE_COLLECTSTATIC" = true ]; then
-  HASH_ARGS+=(--ignore-cache)
-fi
-
 if [ -z "$STATIC_HASH" ]; then
-  if ! STATIC_HASH=$(python scripts/staticfiles_md5.py "${HASH_ARGS[@]}"); then
+  if ! STATIC_HASH=$(arthexis_staticfiles_compute_hash "$STATIC_MD5_FILE" "$STATIC_META_FILE" "$FORCE_COLLECTSTATIC"); then
     echo "Failed to compute static files hash; running collectstatic."
     python manage.py collectstatic --noinput
     STATIC_HASH=""
   fi
 fi
 
-STORED_HASH=""
-[ -f "$STATIC_MD5_FILE" ] && STORED_HASH=$(cat "$STATIC_MD5_FILE")
 if [ "$FORCE_COLLECTSTATIC" = true ] || [ -z "$STATIC_HASH" ] || [ "$STATIC_HASH" != "$STORED_HASH" ]; then
   if python manage.py collectstatic --noinput; then
     if [ -n "$STATIC_HASH" ]; then

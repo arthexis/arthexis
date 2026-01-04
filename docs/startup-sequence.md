@@ -19,9 +19,12 @@ manual runs of `env-refresh.sh` or calls made as part of an upgrade.
    current attempt.
 2. Ensure the virtual environment exists, activate it, and load any `*.env`
    files into the environment for downstream commands.
-3. Compute the static assets hash with `scripts/staticfiles_md5.py`; when the
-   hash changes or cannot be computed, run `manage.py collectstatic --noinput`
-   and cache the new hash in `.locks/staticfiles.md5`.
+3. Reuse `.locks/staticfiles.md5` together with `.locks/staticfiles.meta` to
+   avoid re-hashing static assets when the recorded mtime snapshot matches the
+   current filesystem. When the metadata is stale (or
+   `--force-collectstatic` is provided), compute a new hash with
+   `scripts/staticfiles_md5.py`, refresh both lock files, and run
+   `manage.py collectstatic --noinput` if the hash differs.
 4. Generate a migrations fingerprint (hash of `apps/**/migrations/*.py`) during
    the runserver preflight. The first successful preflight writes the hash to
    `.locks/migrations.sha`; subsequent launches skip `showmigrations`,
