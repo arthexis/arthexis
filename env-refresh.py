@@ -78,6 +78,22 @@ def _schema_needs_migration() -> bool:
     return bool(plan)
 
 
+def _pending_migration_graph() -> bool:
+    """Return ``True`` when migration graph leaves have not been applied."""
+
+    try:
+        loader = MigrationLoader(connection)
+        recorder = MigrationRecorder(connection)
+    except (OperationalError, MigrationSchemaMissing):
+        return True
+
+    applied = set(recorder.applied_migrations())
+    try:
+        return any(node not in applied for node in loader.graph.leaf_nodes())
+    except (OperationalError, MigrationSchemaMissing):
+        return True
+
+
 def _model_defines_seed_flag(model: "type[Model]") -> bool:
     """Return whether *model* exposes the ``is_seed_data`` field.
 
@@ -115,6 +131,20 @@ def _fixture_files() -> list[str]:
         str(path.relative_to(base_dir)) for path in base_dir.glob("**/fixtures/*.json")
     ]
     return sorted(fixtures)
+
+
+def _fixture_mtime_cache(fixtures: Iterable[str]) -> dict[str, float]:
+    """Return modification times for *fixtures* relative to ``BASE_DIR``."""
+
+    base_dir = Path(settings.BASE_DIR)
+    cache: dict[str, float] = {}
+    for fixture in fixtures:
+        path = base_dir / fixture
+        try:
+            cache[fixture] = path.stat().st_mtime
+        except OSError:
+            continue
+    return cache
 
 
 def _fixture_tables(fixtures: list[str]) -> set[str]:
@@ -403,7 +433,9 @@ def _remove_integrator_from_auth_migration() -> None:
     path.write_text(patched + ("\n" if not patched.endswith("\n") else ""))
 
 
-def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
+def run_database_tasks(
+    *, latest: bool = False, clean: bool = False, force_db: bool = False
+) -> None:
     """Run all database related maintenance steps."""
     default_db = settings.DATABASES["default"]
     using_sqlite = default_db["ENGINE"] == "django.db.backends.sqlite3"
@@ -431,6 +463,7 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
     new_hash = _migration_hash(local_apps)
     stored_hash = hash_file.read_text().strip() if hash_file.exists() else ""
 
+    migrations_pending = _pending_migration_graph()
     migrations_ran = False
 
     if clean:
@@ -461,9 +494,13 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                     except OperationalError:
                         continue
 
-    if not connection.in_atomic_block:
-        needs_migration = True if clean else _schema_needs_migration()
-        if not needs_migration:
+    should_attempt_migrate = force_db or clean or migrations_pending
+    if latest and stored_hash != new_hash:
+        should_attempt_migrate = True
+
+    if not connection.in_atomic_block and should_attempt_migrate:
+        needs_migration = True if clean or force_db else _schema_needs_migration()
+        if not needs_migration and not force_db:
             print("Database schema already up to date; skipping migrate.")
         else:
             try:
@@ -544,9 +581,17 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
 
     fixture_hash_file = locks_dir / "fixtures.md5"
     fixture_cache_file = locks_dir / "fixtures.by-app.json"
+    fixture_mtime_file = locks_dir / "fixtures.mtime.json"
     fixtures = _fixture_files()
-    fixture_hash = _fixtures_hash(fixtures) if fixtures else ""
-    fixtures_by_app = _fixture_hashes_by_app(fixtures) if fixtures else {}
+    fixture_mtimes = _fixture_mtime_cache(fixtures) if fixtures else {}
+    stored_fixture_mtimes: dict[str, float] = {}
+    if fixture_mtime_file.exists():
+        try:
+            stored_fixture_mtimes = json.loads(fixture_mtime_file.read_text())
+        except json.JSONDecodeError:
+            stored_fixture_mtimes = {}
+    fixtures_mtime_changed = fixture_mtimes != stored_fixture_mtimes
+
     stored_fixture_hash = (
         fixture_hash_file.read_text().strip() if fixture_hash_file.exists() else ""
     )
@@ -556,8 +601,20 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
             stored_fixture_cache = json.loads(fixture_cache_file.read_text())
         except json.JSONDecodeError:
             stored_fixture_cache = {}
+
+    if fixtures:
+        if force_db or fixtures_mtime_changed or not stored_fixture_hash:
+            fixture_hash = _fixtures_hash(fixtures)
+            fixtures_by_app = _fixture_hashes_by_app(fixtures)
+        else:
+            fixture_hash = stored_fixture_hash
+            fixtures_by_app = stored_fixture_cache or _fixture_hashes_by_app(fixtures)
+    else:
+        fixture_hash = ""
+        fixtures_by_app = {}
+
     migrations_changed = stored_hash != new_hash
-    should_load_fixtures = fixtures_changed(
+    should_load_fixtures = force_db or fixtures_changed(
         fixtures_present=bool(fixtures),
         current_hash=fixture_hash,
         stored_hash=stored_fixture_hash,
@@ -758,9 +815,11 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
 
         fixture_hash_file.write_text(fixture_hash)
         fixture_cache_file.write_text(json.dumps(fixtures_by_app, sort_keys=True))
+        fixture_mtime_file.write_text(json.dumps(fixture_mtimes, sort_keys=True))
     elif fixtures:
         print("Fixtures unchanged; skipping reload.")
         fixture_cache_file.write_text(json.dumps(fixtures_by_app, sort_keys=True))
+        fixture_mtime_file.write_text(json.dumps(fixture_mtimes, sort_keys=True))
 
     # Ensure current node is registered or updated
     node, _ = Node.register_current(notify_peers=False)
@@ -780,12 +839,16 @@ TASKS = {"database": run_database_tasks}
 
 
 def main(
-    selected: list[str] | None = None, *, latest: bool = False, clean: bool = False
+    selected: list[str] | None = None,
+    *,
+    latest: bool = False,
+    clean: bool = False,
+    force_db: bool = False,
 ) -> None:
     """Run the selected maintenance tasks."""
     to_run = selected or list(TASKS)
     for name in to_run:
-        TASKS[name](latest=latest, clean=clean)
+        TASKS[name](latest=latest, clean=clean, force_db=force_db)
 
 
 if __name__ == "__main__":
@@ -797,5 +860,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--clean", action="store_true", help="Reset database before applying migrations"
     )
+    parser.add_argument(
+        "--force-db",
+        action="store_true",
+        help="Force running migrations and fixtures even if preflight is clean",
+    )
     args = parser.parse_args()
-    main(args.tasks, latest=args.latest, clean=args.clean)
+    main(args.tasks, latest=args.latest, clean=args.clean, force_db=args.force_db)
