@@ -481,6 +481,18 @@ fi
 
 SYSTEMD_DIR="${SYSTEMD_DIR:-/etc/systemd/system}"
 
+lcd_service_lockfiles_present() {
+  if [ ! -f "$SYSTEMD_UNITS_LOCK" ]; then
+    return 1
+  fi
+
+  if grep -Eq '^lcd-.*\\.service$' "$SYSTEMD_UNITS_LOCK"; then
+    return 0
+  fi
+
+  return 1
+}
+
 lcd_systemd_unit_present() {
   local service_name="$1"
 
@@ -507,6 +519,79 @@ lcd_systemd_unit_present() {
 if [ -n "$SERVICE_NAME" ]; then
   arthexis_repair_auto_upgrade_workdir "$BASE_DIR" "$SERVICE_NAME" "$SYSTEMD_DIR"
 fi
+
+start_lcd_upgrade_helper_service() {
+  if [ ${#SYSTEMCTL_CMD[@]} -eq 0 ] || { [ ${#SUDO_CMD[@]} -eq 0 ] && [ ! -w "$SYSTEMD_DIR" ]; }; then
+    return 0
+  fi
+
+  if ! lcd_service_lockfiles_present; then
+    return 0
+  fi
+
+  local helper_script
+  helper_script="$BASE_DIR/scripts/helpers/lcd-upgrade-helper.py"
+  if [ ! -f "$helper_script" ]; then
+    return 0
+  fi
+
+  local helper_service
+  helper_service="lcd-upgrade-helper.service"
+  local helper_service_file
+  helper_service_file="${SYSTEMD_DIR}/${helper_service}"
+
+  local helper_user
+  helper_user="$(arthexis_detect_service_user "$BASE_DIR")"
+
+  local helper_python
+  helper_python="$PYTHON_BIN"
+  if [ -z "$helper_python" ] || [ ! -x "$helper_python" ]; then
+    helper_python="$(command -v python3 || command -v python || true)"
+  fi
+
+  if [ -z "$helper_python" ]; then
+    return 0
+  fi
+
+  if [ ${#SUDO_CMD[@]} -gt 0 ]; then
+    "${SUDO_CMD[@]}" bash -c "cat > '$helper_service_file' <<SERVICEEOF
+[Unit]
+Description=LCD helper reminder to rerun upgrade.sh after script update
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=${BASE_DIR}
+ExecStart=${helper_python} ${helper_script}
+User=${helper_user}
+Restart=no
+
+[Install]
+WantedBy=multi-user.target
+SERVICEEOF"
+  else
+    bash -c "cat > '$helper_service_file' <<SERVICEEOF
+[Unit]
+Description=LCD helper reminder to rerun upgrade.sh after script update
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=${BASE_DIR}
+ExecStart=${helper_python} ${helper_script}
+User=${helper_user}
+Restart=no
+
+[Install]
+WantedBy=multi-user.target
+SERVICEEOF"
+  fi
+
+  if [ ${#SYSTEMCTL_CMD[@]} -gt 0 ]; then
+    "${SYSTEMCTL_CMD[@]}" daemon-reload >/dev/null 2>&1 || true
+    "${SYSTEMCTL_CMD[@]}" start "$helper_service" >/dev/null 2>&1 || true
+  fi
+}
 
 # Remove deprecated systemd prestart environment refresh hooks before starting services.
 remove_prestart_env_refresh() {
@@ -1500,6 +1585,7 @@ else
       printf 'LCD_WAS_ACTIVE=%s\n' "$LCD_WAS_ACTIVE"
     } > "$UPGRADE_RERUN_LOCK"
     notify_lcd_manual_upgrade_required
+    start_lcd_upgrade_helper_service
     echo "upgrade.sh was updated during git pull; please run the upgrade again to use the new script." >&2
     exit "$UPGRADE_RERUN_EXIT_CODE"
   fi
