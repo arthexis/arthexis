@@ -45,6 +45,7 @@ def reset_store(monkeypatch, tmp_path):
     store.ev_charging_schedules.clear()
     store.planner_notifications.clear()
     store.observability_events.clear()
+    store.monitoring_reports.clear()
     store.clear_display_message_compliance()
     log_dir = tmp_path / "logs"
     session_dir = log_dir / "sessions"
@@ -66,6 +67,7 @@ def reset_store(monkeypatch, tmp_path):
     store.ev_charging_schedules.clear()
     store.planner_notifications.clear()
     store.observability_events.clear()
+    store.monitoring_reports.clear()
 
 
 @pytest.fixture
@@ -404,6 +406,74 @@ async def test_notify_monitoring_report_persists_data():
     )
     assert rule.variable_id == variable.pk
     assert rule.threshold == "240"
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+async def test_notify_monitoring_report_forwards_analytics_payload(monkeypatch):
+    charger = await database_sync_to_async(Charger.objects.create)(charger_id="MON-2")
+    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = store.identity_key("MON-2", 2)
+    consumer.charger_id = charger.charger_id
+    consumer.charger = charger
+    consumer.connector_value = 2
+    consumer.aggregate_charger = None
+
+    forwarded: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        store,
+        "forward_monitoring_report",
+        lambda payload: forwarded.append(payload),
+    )
+
+    payload = {
+        "requestId": "7",
+        "seqNo": "3",
+        "generatedAt": "2024-02-01T10:00:00Z",
+        "tbc": True,
+        "monitoringData": [
+            {
+                "component": {"name": "EVSE", "instance": "2", "evse": {"id": 2, "connectorId": 2}},
+                "variable": {"name": "Voltage", "instance": "L1"},
+                "variableMonitoring": [
+                    {"id": "9", "severity": "3", "type": "UpperThreshold", "value": 250},
+                    "invalid",
+                ],
+            },
+            {"component": {"name": "", "instance": ""}, "variable": {"name": "", "instance": ""}},
+        ],
+    }
+
+    result = await consumer._handle_notify_monitoring_report_action(
+        payload, "msg-6", "", ""
+    )
+
+    assert result == {}
+    assert forwarded
+    report = forwarded[0]
+    assert report["charger_id"] == "MON-2"
+    assert report["request_id"] == 7
+    assert report["seq_no"] == 3
+    assert report["tbc"] is True
+    assert report["generated_at"].isoformat().startswith("2024-02-01T10:00:00")
+    assert report["monitoring_data"]
+    assert len(report["monitoring_data"]) == 1
+    entry = report["monitoring_data"][0]
+    assert entry["component_name"] == "EVSE"
+    assert entry["component_instance"] == "2"
+    assert entry["variable_name"] == "Voltage"
+    assert entry["variable_instance"] == "L1"
+    assert entry["evse_id"] == 2
+    assert entry["connector_id"] == "2"
+    assert entry["monitoring"] == [
+        {
+            "monitoring_id": 9,
+            "severity": 3,
+            "type": "UpperThreshold",
+            "threshold": "250",
+            "transaction": False,
+        }
+    ]
 
 
 @pytest.mark.anyio

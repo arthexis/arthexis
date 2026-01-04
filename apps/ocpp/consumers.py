@@ -2750,6 +2750,12 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         if not isinstance(monitoring_data, (list, tuple)):
             monitoring_data = []
 
+        def _parse_int(value: object | None) -> int | None:
+            try:
+                return int(value) if value is not None else None
+            except (TypeError, ValueError):
+                return None
+
         def _persist_monitoring_report() -> None:
             charger = None
             if self.charger and getattr(self.charger, "pk", None):
@@ -2776,6 +2782,9 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
                 raw_payload=payload_data,
             )
 
+            normalized_entries: list[dict[str, object]] = []
+            received_at = timezone.now()
+
             for entry in monitoring_data:
                 if not isinstance(entry, dict):
                     continue
@@ -2789,6 +2798,9 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
                     continue
                 component_instance = str(component_data.get("instance") or "").strip()
                 variable_instance = str(variable_data.get("instance") or "").strip()
+                evse = component_data.get("evse") if isinstance(component_data.get("evse"), dict) else {}
+                evse_id = _parse_int(evse.get("id")) if evse else None
+                connector_value = evse.get("connectorId") if isinstance(evse, dict) else None
                 variable_obj, _created = Variable.objects.get_or_create(
                     charger=charger,
                     component_name=component_name,
@@ -2801,27 +2813,16 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
                 variable_monitoring = entry.get("variableMonitoring")
                 if not isinstance(variable_monitoring, (list, tuple)):
                     continue
+                normalized_monitoring: list[dict[str, object]] = []
                 for monitor in variable_monitoring:
                     if not isinstance(monitor, dict):
                         continue
                     monitoring_id_value = monitor.get("id") or monitor.get("monitoringId")
-                    try:
-                        monitoring_id = (
-                            int(monitoring_id_value)
-                            if monitoring_id_value is not None
-                            else None
-                        )
-                    except (TypeError, ValueError):
-                        monitoring_id = None
+                    monitoring_id = _parse_int(monitoring_id_value)
                     if monitoring_id is None:
                         continue
                     severity_value = monitor.get("severity")
-                    try:
-                        severity = (
-                            int(severity_value) if severity_value is not None else None
-                        )
-                    except (TypeError, ValueError):
-                        severity = None
+                    severity = _parse_int(severity_value)
                     threshold_value = monitor.get("value")
                     threshold_text = (
                         str(threshold_value) if threshold_value is not None else ""
@@ -2842,6 +2843,46 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
                             "raw_payload": monitor,
                         },
                     )
+                    normalized_monitoring.append(
+                        {
+                            "monitoring_id": monitoring_id,
+                            "severity": severity,
+                            "type": monitor_type,
+                            "threshold": threshold_text,
+                            "transaction": is_transaction,
+                        }
+                    )
+
+                if normalized_monitoring:
+                    normalized_entries.append(
+                        {
+                            "component_name": component_name,
+                            "component_instance": component_instance,
+                            "variable_name": variable_name,
+                            "variable_instance": variable_instance,
+                            "evse_id": evse_id,
+                            "connector_id": store.connector_slug(
+                                connector_value
+                                if connector_value is not None
+                                else getattr(self, "connector_value", None)
+                            ),
+                            "monitoring": normalized_monitoring,
+                        }
+                    )
+
+            if normalized_entries:
+                store.forward_monitoring_report(
+                    {
+                        "charger_id": getattr(self, "charger_id", None)
+                        or getattr(self, "store_key", None),
+                        "request_id": request_id,
+                        "seq_no": seq_no,
+                        "generated_at": generated_at,
+                        "tbc": tbc,
+                        "received_at": received_at,
+                        "monitoring_data": normalized_entries,
+                    }
+                )
 
         await database_sync_to_async(_persist_monitoring_report)()
         if request_id is not None and not tbc:
