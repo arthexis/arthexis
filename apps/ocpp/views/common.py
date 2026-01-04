@@ -97,6 +97,7 @@ CALL_ACTION_LABELS = {
     "GetInstalledCertificateIds": _("Get installed certificate ids"),
     "GetVariables": _("Get variables"),
     "SetVariables": _("Set variables"),
+    "ClearChargingProfile": _("Clear charging profile"),
     "SetMonitoringBase": _("Set monitoring base"),
     "SetMonitoringLevel": _("Set monitoring level"),
     "SetVariableMonitoring": _("Set variable monitoring"),
@@ -110,6 +111,9 @@ CALL_ACTION_LABELS = {
     "GetReport": _("Get report"),
     "SetDisplayMessage": _("Set display message"),
     "SetNetworkProfile": _("Set network profile"),
+    "GetCompositeSchedule": _("Get composite schedule"),
+    "GetLocalListVersion": _("Get local list version"),
+    "GetLog": _("Get log"),
 }
 
 CALL_EXPECTED_STATUSES: dict[str, set[str] | None] = {
@@ -135,6 +139,7 @@ CALL_EXPECTED_STATUSES: dict[str, set[str] | None] = {
     "DeleteCertificate": {"Accepted", "Rejected"},
     "CertificateSigned": {"Accepted", "Rejected"},
     "GetInstalledCertificateIds": {"Accepted", "NotSupported"},
+    "ClearChargingProfile": {"Accepted", "Unknown", "NotSupported"},
     "SetMonitoringBase": {"Accepted", "Rejected", "NotSupported"},
     "SetMonitoringLevel": {"Accepted", "Rejected", "NotSupported"},
     "ClearVariableMonitoring": {"Accepted", "Rejected", "NotSupported"},
@@ -154,6 +159,9 @@ CALL_EXPECTED_STATUSES: dict[str, set[str] | None] = {
         "UnknownTransaction",
     },
     "SetNetworkProfile": {"Accepted", "Rejected", "Failed"},
+    "GetCompositeSchedule": {"Accepted", "Rejected"},
+    "GetLocalListVersion": None,
+    "GetLog": {"Accepted", "Rejected"},
 }
 
 
