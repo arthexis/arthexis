@@ -37,6 +37,12 @@ def sign_certificate_request(
     except ValueError as exc:
         raise CertificateSigningError("Invalid signing service response.") from exc
 
+    if not isinstance(data, dict):
+        message = str(data).strip()
+        if response.status_code >= 400:
+            raise CertificateSigningError(message or "Signing service rejected request.")
+        raise CertificateSigningError("Signing service returned invalid response payload.")
+
     if response.status_code >= 400:
         message = data.get("detail") or data.get("error") or response.reason
         raise CertificateSigningError(message or "Signing service rejected request.")
