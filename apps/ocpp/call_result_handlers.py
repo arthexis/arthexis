@@ -1322,6 +1322,62 @@ async def handle_get_monitoring_report_result(
     return True
 
 
+async def handle_set_monitoring_base_result(
+    consumer: CallResultContext,
+    message_id: str,
+    metadata: dict,
+    payload_data: dict,
+    log_key: str,
+) -> bool:
+    status_value = str(payload_data.get("status") or "").strip()
+    status_info_text = _format_status_info(payload_data.get("statusInfo"))
+
+    fragments: list[str] = []
+    if status_value:
+        fragments.append(f"status={status_value}")
+    if status_info_text:
+        fragments.append(f"statusInfo={status_info_text}")
+    message = "SetMonitoringBase result"
+    if fragments:
+        message += ": " + ", ".join(fragments)
+    store.add_log(log_key, message, log_type="charger")
+
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        payload=payload_data,
+    )
+    return True
+
+
+async def handle_set_monitoring_level_result(
+    consumer: CallResultContext,
+    message_id: str,
+    metadata: dict,
+    payload_data: dict,
+    log_key: str,
+) -> bool:
+    status_value = str(payload_data.get("status") or "").strip()
+    status_info_text = _format_status_info(payload_data.get("statusInfo"))
+
+    fragments: list[str] = []
+    if status_value:
+        fragments.append(f"status={status_value}")
+    if status_info_text:
+        fragments.append(f"statusInfo={status_info_text}")
+    message = "SetMonitoringLevel result"
+    if fragments:
+        message += ": " + ", ".join(fragments)
+    store.add_log(log_key, message, log_type="charger")
+
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        payload=payload_data,
+    )
+    return True
+
+
 async def handle_change_availability_result(
     consumer: CallResultContext,
     message_id: str,
@@ -1797,6 +1853,8 @@ CALL_RESULT_HANDLERS: dict[str, CallResultHandler] = {
     "GetDisplayMessages": handle_get_display_messages_result,
     "GetReport": handle_get_report_result,
     "SetDisplayMessage": handle_set_display_message_result,
+    "SetMonitoringBase": handle_set_monitoring_base_result,
+    "SetMonitoringLevel": handle_set_monitoring_level_result,
     "SetNetworkProfile": handle_set_network_profile_result,
     "InstallCertificate": handle_install_certificate_result,
     "DeleteCertificate": handle_delete_certificate_result,

@@ -1120,6 +1120,74 @@ async def handle_get_report_error(
     return True
 
 
+async def handle_set_monitoring_base_error(
+    consumer: CallErrorContext,
+    message_id: str,
+    metadata: dict,
+    error_code: str | None,
+    description: str | None,
+    details: dict | None,
+    log_key: str,
+) -> bool:
+    fragments: list[str] = []
+    if error_code:
+        fragments.append(f"code={str(error_code).strip()}")
+    if description:
+        fragments.append(f"description={str(description).strip()}")
+    details_text = _json_details(details)
+    if details_text:
+        fragments.append(f"details={details_text}")
+
+    message = "SetMonitoringBase error"
+    if fragments:
+        message += ": " + ", ".join(fragments)
+    store.add_log(log_key, message, log_type="charger")
+
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        success=False,
+        error_code=error_code,
+        error_description=description,
+        error_details=details,
+    )
+    return True
+
+
+async def handle_set_monitoring_level_error(
+    consumer: CallErrorContext,
+    message_id: str,
+    metadata: dict,
+    error_code: str | None,
+    description: str | None,
+    details: dict | None,
+    log_key: str,
+) -> bool:
+    fragments: list[str] = []
+    if error_code:
+        fragments.append(f"code={str(error_code).strip()}")
+    if description:
+        fragments.append(f"description={str(description).strip()}")
+    details_text = _json_details(details)
+    if details_text:
+        fragments.append(f"details={details_text}")
+
+    message = "SetMonitoringLevel error"
+    if fragments:
+        message += ": " + ", ".join(fragments)
+    store.add_log(log_key, message, log_type="charger")
+
+    store.record_pending_call_result(
+        message_id,
+        metadata=metadata,
+        success=False,
+        error_code=error_code,
+        error_description=description,
+        error_details=details,
+    )
+    return True
+
+
 async def handle_set_display_message_error(
     consumer: CallErrorContext,
     message_id: str,
@@ -1457,6 +1525,8 @@ CALL_ERROR_HANDLERS: dict[str, CallErrorHandler] = {
     "GetDisplayMessages": handle_get_display_messages_error,
     "GetReport": handle_get_report_error,
     "SetDisplayMessage": handle_set_display_message_error,
+    "SetMonitoringBase": handle_set_monitoring_base_error,
+    "SetMonitoringLevel": handle_set_monitoring_level_error,
     "SetNetworkProfile": handle_set_network_profile_error,
     "InstallCertificate": handle_install_certificate_error,
     "DeleteCertificate": handle_delete_certificate_error,
