@@ -1305,6 +1305,10 @@ def _build_auto_upgrade_report(
 
     revision_details = _prepare_revision_info(revision_info)
 
+    suite_details = _suite_uptime_details()
+    suite_boot_time = suite_details.get("boot_time")
+    suite_lock_started_at = suite_details.get("lock_started_at")
+
     settings_info = {
         "enabled": bool(mode_info.get("enabled", False)),
         "mode": resolved_mode,
@@ -1320,7 +1324,19 @@ def _build_auto_upgrade_report(
         "task_name": AUTO_UPGRADE_TASK_NAME,
         "task_path": AUTO_UPGRADE_TASK_PATH,
         "log_path": str(log_info.get("path")),
-        "suite_uptime": _suite_uptime(),
+        "suite_uptime": str(suite_details.get("uptime", "")),
+        "suite_uptime_details": {
+            "available": bool(suite_details.get("available") or suite_details.get("uptime")),
+            "boot_time_label": suite_details.get("boot_time_label", ""),
+            "lock_started_at_label": _format_datetime(suite_lock_started_at)
+            if isinstance(suite_lock_started_at, datetime)
+            else "",
+            "lock_predates_boot": bool(
+                isinstance(suite_lock_started_at, datetime)
+                and isinstance(suite_boot_time, datetime)
+                and suite_lock_started_at < suite_boot_time
+            ),
+        },
     }
     settings_info.update(revision_details)
 

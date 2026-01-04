@@ -12,6 +12,21 @@
 {% block extrastyle %}
 {{ block.super }}
 <style>
+  :root {
+    --upgrade-card-bg: #fff;
+    --upgrade-card-border: #e0e0e0;
+    --upgrade-card-fg: inherit;
+    --upgrade-muted: var(--body-quiet-color, #4b5563);
+    --upgrade-code-bg: #f1f5f9;
+    --upgrade-code-fg: #0f172a;
+    --upgrade-chip-ok-bg: #e6f4ea;
+    --upgrade-chip-ok-fg: #0d652d;
+    --upgrade-chip-warning-bg: #fef3c7;
+    --upgrade-chip-warning-fg: #92400e;
+    --upgrade-chip-error-bg: #fee2e2;
+    --upgrade-chip-error-fg: #991b1b;
+  }
+
   .upgrade-report .upgrade-report-header {
     display: flex;
     align-items: center;
@@ -33,10 +48,11 @@
   }
 
   .upgrade-report .upgrade-summary-card {
-    border: 1px solid var(--border-color, #e0e0e0);
+    border: 1px solid var(--upgrade-card-border, #e0e0e0);
     border-radius: 4px;
     padding: 0.75rem 1rem;
-    background: #fff;
+    background: var(--upgrade-card-bg, #fff);
+    color: var(--upgrade-card-fg, inherit);
   }
 
   .upgrade-report .upgrade-summary-card h4 {
@@ -64,23 +80,24 @@
   }
 
   .upgrade-report .state-ok {
-    background: #e6f4ea;
-    color: #0d652d;
+    background: var(--upgrade-chip-ok-bg, #e6f4ea);
+    color: var(--upgrade-chip-ok-fg, #0d652d);
   }
 
   .upgrade-report .state-warning {
-    background: #fef3c7;
-    color: #92400e;
+    background: var(--upgrade-chip-warning-bg, #fef3c7);
+    color: var(--upgrade-chip-warning-fg, #92400e);
   }
 
   .upgrade-report .state-error {
-    background: #fee2e2;
-    color: #991b1b;
+    background: var(--upgrade-chip-error-bg, #fee2e2);
+    color: var(--upgrade-chip-error-fg, #991b1b);
   }
 
   .upgrade-report .upgrade-issues {
     margin: 0.25rem 0 0;
     padding-left: 1.25rem;
+    color: var(--upgrade-muted, inherit);
   }
 
   .upgrade-report .upgrade-issues li {
@@ -120,6 +137,37 @@
 
   .upgrade-report .precheck-button {
     flex: 0 0 auto;
+  }
+
+  .upgrade-report code {
+    background: var(--upgrade-code-bg, #f1f5f9);
+    color: var(--upgrade-code-fg, #0f172a);
+    border-radius: 4px;
+    padding: 0.15rem 0.35rem;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: light dark;
+      --upgrade-card-bg: #0b1727;
+      --upgrade-card-border: rgba(148, 163, 184, 0.35);
+      --upgrade-card-fg: #e2e8f0;
+      --upgrade-muted: #cbd5e1;
+      --upgrade-code-bg: rgba(226, 232, 240, 0.12);
+      --upgrade-code-fg: #e2e8f0;
+      --upgrade-chip-ok-bg: rgba(16, 185, 129, 0.18);
+      --upgrade-chip-ok-fg: #6ee7b7;
+      --upgrade-chip-warning-bg: rgba(249, 213, 35, 0.22);
+      --upgrade-chip-warning-fg: #facc15;
+      --upgrade-chip-error-bg: rgba(248, 113, 113, 0.22);
+      --upgrade-chip-error-fg: #fca5a5;
+    }
+
+    .upgrade-report .upgrade-summary-card .help,
+    .upgrade-report .upgrade-issues,
+    .upgrade-report .upgrade-report-header h2 {
+      color: var(--upgrade-muted, inherit);
+    }
   }
 </style>
 {% endblock %}
@@ -255,7 +303,8 @@
           {% if report.settings.local_revision %}
             <code>{{ report.settings.local_revision }}</code>
           {% else %}
-            <em>{% trans "Unavailable" %}</em>
+            <p><em>{% trans "Unavailable" %}</em></p>
+            <p class="help">{% trans "Run Pre-Upgrade Checks to capture the local revision from the auto-upgrade worker." %}</p>
           {% endif %}
         </dd>
         <dt>{% trans "Origin revision" %}</dt>
@@ -263,7 +312,8 @@
           {% if report.settings.origin_revision %}
             <code>{{ report.settings.origin_revision }}</code>
           {% else %}
-            <em>{% trans "Unavailable" %}</em>
+            <p><em>{% trans "Unavailable" %}</em></p>
+            <p class="help">{% trans "No origin revision has been recorded yet. Run Pre-Upgrade Checks to query the upstream repository and confirm connectivity." %}</p>
           {% endif %}
           {% if report.settings.origin_revision_error %}
             <p class="errornote">{{ report.settings.origin_revision_error }}</p>
@@ -282,7 +332,8 @@
           {% if report.settings.ci_status %}
             <code>{{ report.settings.ci_status }}</code>
           {% else %}
-            <em>{% trans "Unavailable" %}</em>
+            <p><em>{% trans "Unavailable" %}</em></p>
+            <p class="help">{% trans "CI results are fetched during revision checks. Rerun Pre-Upgrade Checks after verifying connectivity to the CI service." %}</p>
           {% endif %}
           {% if not report.settings.revision_checked_label %}
             <p class="help">{% trans "Run Pre-Upgrade Checks to retrieve the current CI status." %}</p>
@@ -304,8 +355,20 @@
         <dd>
           {% if report.settings.suite_uptime %}
             {{ report.settings.suite_uptime }}
+            {% if report.settings.suite_uptime_details.boot_time_label %}
+              <p class="help">{% blocktrans with boot_time=report.settings.suite_uptime_details.boot_time_label %}Tracking since {{ boot_time }}.{% endblocktrans %}</p>
+            {% endif %}
           {% else %}
-            <em>{% trans "Unavailable" %}</em>
+            <p><em>{% trans "Unavailable" %}</em></p>
+            {% with details=report.settings.suite_uptime_details %}
+              {% if details.lock_predates_boot and details.boot_time_label %}
+                <p class="help">{% blocktrans with boot_time=details.boot_time_label %}The uptime lock predates the current boot on {{ boot_time }}; tracking will resume after the next check.{% endblocktrans %}</p>
+              {% elif details.boot_time_label %}
+                <p class="help">{% blocktrans with boot_time=details.boot_time_label %}Uptime tracking will begin from {{ boot_time }} after the monitor writes a fresh lock.{% endblocktrans %}</p>
+              {% else %}
+                <p class="help">{% trans "Start the suite uptime monitor or rerun Pre-Upgrade Checks to populate this value." %}</p>
+              {% endif %}
+            {% endwith %}
           {% endif %}
         </dd>
         <dt>{% trans "Blocked revisions" %}</dt>
