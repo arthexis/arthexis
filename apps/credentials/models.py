@@ -45,6 +45,7 @@ class SSHAccount(Entity):
         verbose_name_plural = "SSH Accounts"
         unique_together = ("node", "username")
         ordering = ("username", "pk")
+        db_table = "nodes_sshaccount"
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return f"{self.username}@{self.node}" if self.node_id else self.username

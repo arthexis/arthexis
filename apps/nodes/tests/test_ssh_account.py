@@ -2,7 +2,8 @@ import pytest
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 
-from apps.nodes.models import Node, SSHAccount
+from apps.credentials.models import SSHAccount
+from apps.nodes.models import Node
 
 
 @pytest.mark.django_db
