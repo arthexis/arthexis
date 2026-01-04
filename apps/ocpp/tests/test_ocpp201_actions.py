@@ -147,6 +147,27 @@ def test_clear_charging_profile_requires_identifier(ws):
     assert response.status_code == 400
 
 
+def test_clear_charging_profile_accepts_criteria_only(ws):
+    log_key = store.identity_key("CID", 1)
+    context = ActionContext("CID", 1, charger=None, ws=ws, log_key=log_key)
+
+    result = actions._handle_clear_charging_profile(
+        context,
+        {"chargingProfileCriteria": {"chargingProfilePurpose": "TxProfile"}},
+    )
+
+    assert isinstance(result, ActionCall)
+    message = json.loads(ws.sent[0])
+    assert message[2] == "ClearChargingProfile"
+    payload = message[3]
+    assert payload == {
+        "chargingProfileCriteria": {"chargingProfilePurpose": "TxProfile"}
+    }
+    message_id = message[1]
+    assert message_id in store.pending_calls
+    assert message_id in store._pending_call_handles
+
+
 def test_clear_charging_profile_registers_pending_call(ws):
     log_key = store.identity_key("CID", 1)
     context = ActionContext("CID", 1, charger=None, ws=ws, log_key=log_key)

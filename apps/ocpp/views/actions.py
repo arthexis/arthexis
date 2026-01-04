@@ -1399,7 +1399,12 @@ def _handle_clear_charging_profile(
         if not criteria_payload:
             return JsonResponse({"detail": "chargingProfileCriteria must include a filter"}, status=400)
 
-    if charging_profile_id is None and stack_level is None and evse_id is None:
+    if (
+        charging_profile_id is None
+        and stack_level is None
+        and evse_id is None
+        and not criteria_payload
+    ):
         return JsonResponse(
             {"detail": "chargingProfileId, stackLevel, evseId, or chargingProfileCriteria required"},
             status=400,
