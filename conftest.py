@@ -11,8 +11,15 @@ import pytest
 
 # Force lightweight SQLite settings during tests to avoid slow Postgres
 # connection attempts when checking availability inside config.settings.
-os.environ.setdefault("ARTHEXIS_DB_BACKEND", "sqlite")
+db_backend = os.environ.setdefault("ARTHEXIS_DB_BACKEND", "sqlite")
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+# Skip running Django migrations during test database setup unless explicitly
+# requested. This keeps database creation fast enough to stay within
+# pytest-timeout limits when suites spin up a fresh SQLite database. Only
+# apply the default when SQLite is selected so Postgres-backed integration
+# tests still exercise migrations unless the caller opts out.
+if "PYTEST_DISABLE_MIGRATIONS" not in os.environ and db_backend == "sqlite":
+    os.environ["PYTEST_DISABLE_MIGRATIONS"] = "1"
 
 
 def _ensure_clean_test_databases() -> None:
