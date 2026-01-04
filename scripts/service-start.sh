@@ -341,6 +341,7 @@ fi
 if [ -z "$STATIC_HASH" ]; then
   if ! STATIC_HASH=$(arthexis_staticfiles_compute_hash "$STATIC_MD5_FILE" "$STATIC_META_FILE" "$FORCE_COLLECTSTATIC"); then
     echo "Failed to compute static files hash; running collectstatic."
+    arthexis_staticfiles_clear_staged_lock
     python manage.py collectstatic --noinput
     STATIC_HASH=""
   fi
@@ -348,14 +349,14 @@ fi
 
 if [ "$FORCE_COLLECTSTATIC" = true ] || [ -z "$STATIC_HASH" ] || [ "$STATIC_HASH" != "$STORED_HASH" ]; then
   if python manage.py collectstatic --noinput; then
-    if [ -n "$STATIC_HASH" ]; then
-      echo "$STATIC_HASH" > "$STATIC_MD5_FILE"
-    fi
+    arthexis_staticfiles_commit_staged_lock "$STATIC_MD5_FILE" "$STATIC_META_FILE"
   else
     echo "collectstatic failed"
+    arthexis_staticfiles_clear_staged_lock
     exit 1
   fi
 else
+  arthexis_staticfiles_clear_staged_lock
   echo "Static files unchanged. Skipping collectstatic."
 fi
 
