@@ -24,6 +24,49 @@ class SigilRoot(Entity):
 
     objects = SigilRootManager()
 
+    def default_instance(self):
+        """Return the preferred instance for this sigil root's model.
+
+        This allows sigils such as ``[NODE.ROLE]`` to resolve without
+        specifying an explicit identifier by letting the related model (or
+        its manager) advertise a default object.
+        """
+
+        model = self.content_type.model_class() if self.content_type else None
+        if model is None:
+            return None
+
+        def _evaluate(source):
+            if source is None:
+                return None
+            try:
+                candidate = source() if callable(source) else source
+            except TypeError:
+                return None
+            if isinstance(candidate, models.Model):
+                return candidate
+            return None
+
+        for attr in ("default_instance", "get_default_instance", "default", "get_default"):
+            instance = _evaluate(getattr(model, attr, None))
+            if instance:
+                return instance
+
+        manager = getattr(model, "_default_manager", None)
+        if manager:
+            for attr in ("default_instance", "get_default_instance", "default", "get_default"):
+                instance = _evaluate(getattr(manager, attr, None))
+                if instance:
+                    return instance
+
+        qs = model._default_manager.all()
+        ordering = list(getattr(model._meta, "ordering", []))
+        if ordering:
+            qs = qs.order_by(*ordering)
+        else:
+            qs = qs.order_by("?")
+        return qs.first()
+
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return self.prefix
 

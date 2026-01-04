@@ -361,7 +361,7 @@ def _resolve_token(token: str, current: Optional[models.Model] = None) -> str:
                     if inst_pk is not None:
                         instance = model.objects.filter(pk=inst_pk).first()
                     if instance is None:
-                        instance = _first_instance(model)
+                        instance = root.default_instance()
             if instance:
                 if normalized_key:
                     resolver = getattr(instance, "resolve_profile_field_value", None)
@@ -383,6 +383,10 @@ def _resolve_token(token: str, current: Optional[models.Model] = None) -> str:
                     )
                     if field:
                         val = getattr(instance, field.attname)
+                        if isinstance(field, models.ForeignKey):
+                            related = getattr(instance, field.name, None)
+                            if related is not None:
+                                val = related
                         return _stringify_value(val)
                     found, attr_val = _call_attribute(
                         instance, normalized_key or raw_key or "", param_args
