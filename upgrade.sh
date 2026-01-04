@@ -1331,33 +1331,45 @@ clear_workdir_before_restart() {
   fi
 }
 
-clear_lcd_lockfiles() {
-  local lock_dir="$LOCK_DIR"
+  clear_lcd_lockfiles() {
+    local lock_dir="$LOCK_DIR"
 
-  if [ -z "$lock_dir" ]; then
-    return 0
-  fi
-
-  local -a lcd_lock_files=(
-    "$lock_dir/lcd-high"
-    "$lock_dir/lcd-low"
-    "$lock_dir/${ARTHEXIS_LCD_LOCK:-lcd_screen.lck}"
-    "$lock_dir/lcd_screen_enabled.lck"
-  )
-
-  local lock_file cleared
-  cleared=0
-  for lock_file in "${lcd_lock_files[@]}"; do
-    if [ -e "$lock_file" ]; then
-      : > "$lock_file"
-      cleared=1
+    if [ -z "$lock_dir" ]; then
+      return 0
     fi
-  done
 
-  if [ "$cleared" -eq 1 ]; then
-    echo "Cleared LCD lock files before restart."
-  fi
-}
+    local feature_lock_file="$lock_dir/${ARTHEXIS_LCD_LOCK:-lcd_screen.lck}"
+
+    local -a lcd_lock_files=(
+      "$lock_dir/lcd-high"
+      "$lock_dir/lcd-low"
+      "$lock_dir/${ARTHEXIS_LCD_LOCK:-lcd_screen.lck}"
+      "$lock_dir/lcd_screen_enabled.lck"
+    )
+
+    local lock_file cleared preserved_disabled_flag
+    cleared=0
+    preserved_disabled_flag=0
+    for lock_file in "${lcd_lock_files[@]}"; do
+      if [ -e "$lock_file" ]; then
+        if [ "$lock_file" = "$feature_lock_file" ] && grep -qi '^state=disabled' "$lock_file"; then
+          preserved_disabled_flag=1
+          continue
+        fi
+
+        : > "$lock_file"
+        cleared=1
+      fi
+    done
+
+    if [ "$cleared" -eq 1 ]; then
+      echo "Cleared LCD lock files before restart."
+    fi
+
+    if [ "$preserved_disabled_flag" -eq 1 ]; then
+      echo "Preserved LCD disable flag during lock file cleanup."
+    fi
+  }
 
 upgrade_failure_recovery() {
   local exit_code=$?
