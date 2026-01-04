@@ -446,7 +446,8 @@ fi
 
 RUNSERVER_EXTRA_ARGS=()
 # Migration checks run only when new migrations are detected or --migrate is provided.
-MIGRATIONS_HASH_FILE="$BASE_DIR/migrations.md5"
+# Store the hash in the lock directory so it is cleared alongside database resets.
+MIGRATIONS_HASH_FILE="$LOCK_DIR/migrations.md5"
 MIGRATIONS_HASH_CURRENT=""
 STORED_MIGRATIONS_HASH=""
 MIGRATIONS_CHANGED=false
