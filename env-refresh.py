@@ -403,7 +403,9 @@ def _remove_integrator_from_auth_migration() -> None:
     path.write_text(patched + ("\n" if not patched.endswith("\n") else ""))
 
 
-def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
+def run_database_tasks(
+    *, latest: bool = False, clean: bool = False, force_db: bool = False
+) -> None:
     """Run all database related maintenance steps."""
     default_db = settings.DATABASES["default"]
     using_sqlite = default_db["ENGINE"] == "django.db.backends.sqlite3"
@@ -430,6 +432,38 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
     hash_file = locks_dir / "migrations.md5"
     new_hash = _migration_hash(local_apps)
     stored_hash = hash_file.read_text().strip() if hash_file.exists() else ""
+
+    fixture_hash_file = locks_dir / "fixtures.md5"
+    fixture_cache_file = locks_dir / "fixtures.by-app.json"
+    fixtures = _fixture_files()
+    fixture_hash = _fixtures_hash(fixtures) if fixtures else ""
+    fixtures_by_app = _fixture_hashes_by_app(fixtures) if fixtures else {}
+    stored_fixture_hash = (
+        fixture_hash_file.read_text().strip() if fixture_hash_file.exists() else ""
+    )
+    stored_fixture_cache = {}
+    if fixture_cache_file.exists():
+        try:
+            stored_fixture_cache = json.loads(fixture_cache_file.read_text())
+        except json.JSONDecodeError:
+            stored_fixture_cache = {}
+
+    migrations_changed = stored_hash != new_hash
+    preflight_migrations_needed = clean or migrations_changed or _schema_needs_migration()
+    preflight_fixtures_needed = fixtures_changed(
+        fixtures_present=bool(fixtures),
+        current_hash=fixture_hash,
+        stored_hash=stored_fixture_hash,
+        migrations_changed=migrations_changed,
+        migrations_ran=False,
+        current_by_app=fixtures_by_app,
+        stored_by_app=stored_fixture_cache,
+        clean=clean,
+    )
+
+    if not force_db and not preflight_migrations_needed and not preflight_fixtures_needed:
+        print("No migration or fixture changes detected; skipping database refresh.")
+        return
 
     migrations_ran = False
 
@@ -462,7 +496,7 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                         continue
 
     if not connection.in_atomic_block:
-        needs_migration = True if clean else _schema_needs_migration()
+        needs_migration = preflight_migrations_needed
         if not needs_migration:
             print("Database schema already up to date; skipping migrate.")
         else:
@@ -530,32 +564,6 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
                     except Exception:
                         raise exc
 
-    # Remove auto-generated SigilRoot entries so fixtures define prefixes
-    SigilRoot = apps.get_model("sigils", "SigilRoot")
-    SigilRoot.objects.all().delete()
-
-    # Track Site entries provided via fixtures so we can update them without
-    # disturbing operator-managed records.
-    Site = apps.get_model("sites", "Site")
-
-    # Ensure Application entries exist for local apps before loading fixtures
-    # that reference them.
-    call_command("register_site_apps")
-
-    fixture_hash_file = locks_dir / "fixtures.md5"
-    fixture_cache_file = locks_dir / "fixtures.by-app.json"
-    fixtures = _fixture_files()
-    fixture_hash = _fixtures_hash(fixtures) if fixtures else ""
-    fixtures_by_app = _fixture_hashes_by_app(fixtures) if fixtures else {}
-    stored_fixture_hash = (
-        fixture_hash_file.read_text().strip() if fixture_hash_file.exists() else ""
-    )
-    stored_fixture_cache = {}
-    if fixture_cache_file.exists():
-        try:
-            stored_fixture_cache = json.loads(fixture_cache_file.read_text())
-        except json.JSONDecodeError:
-            stored_fixture_cache = {}
     migrations_changed = stored_hash != new_hash
     should_load_fixtures = fixtures_changed(
         fixtures_present=bool(fixtures),
@@ -569,6 +577,18 @@ def run_database_tasks(*, latest: bool = False, clean: bool = False) -> None:
     )
 
     if should_load_fixtures:
+        # Remove auto-generated SigilRoot entries so fixtures define prefixes
+        SigilRoot = apps.get_model("sigils", "SigilRoot")
+        SigilRoot.objects.all().delete()
+
+        # Track Site entries provided via fixtures so we can update them without
+        # disturbing operator-managed records.
+        Site = apps.get_model("sites", "Site")
+
+        # Ensure Application entries exist for local apps before loading fixtures
+        # that reference them.
+        call_command("register_site_apps")
+
         required_tables = _fixture_tables(fixtures)
         existing_tables = set(connection.introspection.table_names())
         missing_tables = required_tables - existing_tables
@@ -780,12 +800,16 @@ TASKS = {"database": run_database_tasks}
 
 
 def main(
-    selected: list[str] | None = None, *, latest: bool = False, clean: bool = False
+    selected: list[str] | None = None,
+    *,
+    latest: bool = False,
+    clean: bool = False,
+    force_db: bool = False,
 ) -> None:
     """Run the selected maintenance tasks."""
     to_run = selected or list(TASKS)
     for name in to_run:
-        TASKS[name](latest=latest, clean=clean)
+        TASKS[name](latest=latest, clean=clean, force_db=force_db)
 
 
 if __name__ == "__main__":
@@ -797,5 +821,10 @@ if __name__ == "__main__":
     parser.add_argument(
         "--clean", action="store_true", help="Reset database before applying migrations"
     )
+    parser.add_argument(
+        "--force-db",
+        action="store_true",
+        help="Force running migrations and fixtures even when nothing changed",
+    )
     args = parser.parse_args()
-    main(args.tasks, latest=args.latest, clean=args.clean)
+    main(args.tasks, latest=args.latest, clean=args.clean, force_db=args.force_db)
