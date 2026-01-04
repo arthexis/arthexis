@@ -164,6 +164,7 @@ STARTUP_TIMEOUT=300
 DEBUG_MODE=false
 FORCE_COLLECTSTATIC=false
 SHOW_LEVEL=""
+FOLLOW_LOGS=false
 APP_LOG_FILE="$LOG_DIR/$(hostname).log"
 # Celery workers process Post Office's email queue; prefer embedded mode.
 CELERY_MANAGEMENT_MODE="$SERVICE_MANAGEMENT_MODE"
@@ -242,10 +243,11 @@ while [[ $# -gt 0 ]]; do
       ;;
     --show)
       if [ -z "${2:-}" ]; then
-        echo "Usage: $0 [--port PORT] [--reload] [--await] [--debug] [--show LEVEL] [--public|--internal] [--embedded|--systemd|--no-celery] [--force-collectstatic]" >&2
+        echo "Usage: $0 [--port PORT] [--reload] [--await] [--debug] [--show LEVEL] [--public|--internal] [--embedded|--systemd|--no-celery] [--force-collectstatic] [--log-follow]" >&2
         exit 1
       fi
       SHOW_LEVEL="$2"
+      FOLLOW_LOGS=true
       shift 2
       ;;
     --embedded|--celery)
@@ -275,12 +277,20 @@ while [[ $# -gt 0 ]]; do
       FORCE_COLLECTSTATIC=true
       shift
       ;;
+    --log-follow)
+      FOLLOW_LOGS=true
+      shift
+      ;;
     *)
-      echo "Usage: $0 [--port PORT] [--reload] [--await] [--debug] [--show LEVEL] [--public|--internal] [--embedded|--systemd|--no-celery] [--force-collectstatic]" >&2
+      echo "Usage: $0 [--port PORT] [--reload] [--await] [--debug] [--show LEVEL] [--public|--internal] [--embedded|--systemd|--no-celery] [--force-collectstatic] [--log-follow]" >&2
       exit 1
       ;;
   esac
 done
+
+if [ "$FOLLOW_LOGS" = true ] && [ -z "$SHOW_LEVEL" ]; then
+  SHOW_LEVEL="INFO"
+fi
 
 if [ -n "$SHOW_LEVEL" ]; then
   if ! SHOW_LEVEL=$(normalize_log_level "$SHOW_LEVEL"); then
@@ -297,7 +307,9 @@ if [ "$DEBUG_MODE" = true ]; then
   export DEBUG=1
 fi
 
-start_log_follower "$APP_LOG_FILE" "$SHOW_LEVEL"
+if [ "$FOLLOW_LOGS" = true ]; then
+  start_log_follower "$APP_LOG_FILE" "$SHOW_LEVEL"
+fi
 
 STATIC_MD5_FILE="$LOCK_DIR/staticfiles.md5"
 STATIC_HASH=""
