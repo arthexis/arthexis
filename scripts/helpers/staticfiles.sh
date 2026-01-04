@@ -67,6 +67,33 @@ sys.exit(3)
 PY
 }
 
+arthexis_staticfiles_clear_staged_lock() {
+  local md5_tmp="${ARTHEXIS_STATICFILES_MD5_TMP:-}"\
+  meta_tmp="${ARTHEXIS_STATICFILES_META_TMP:-}"
+
+  [ -n "$md5_tmp" ] && rm -f "$md5_tmp"
+  [ -n "$meta_tmp" ] && rm -f "$meta_tmp"
+  unset ARTHEXIS_STATICFILES_MD5_TMP
+  unset ARTHEXIS_STATICFILES_META_TMP
+}
+
+arthexis_staticfiles_commit_staged_lock() {
+  local md5_file="$1"
+  local meta_file="$2"
+  local md5_tmp="${ARTHEXIS_STATICFILES_MD5_TMP:-${md5_file}.tmp}"
+  local meta_tmp="${ARTHEXIS_STATICFILES_META_TMP:-${meta_file}.tmp}"
+
+  if [ -f "$meta_tmp" ]; then
+    mv "$meta_tmp" "$meta_file"
+  fi
+
+  if [ -f "$md5_tmp" ]; then
+    mv "$md5_tmp" "$md5_file"
+  fi
+
+  arthexis_staticfiles_clear_staged_lock
+}
+
 arthexis_staticfiles_compute_hash() {
   local md5_file="$1"
   local meta_file="$2"
@@ -74,6 +101,9 @@ arthexis_staticfiles_compute_hash() {
   local hash_script="${STATICFILES_HASH_SCRIPT:-scripts/staticfiles_md5.py}"
   local hash_args=()
   local metadata_tmp="${meta_file}.tmp"
+  local md5_tmp="${md5_file}.tmp"
+
+  arthexis_staticfiles_clear_staged_lock
 
   if [ "$force_collectstatic" = true ]; then
     hash_args+=(--ignore-cache)
@@ -88,8 +118,9 @@ arthexis_staticfiles_compute_hash() {
     return 3
   fi
 
-  mv "$metadata_tmp" "$meta_file"
-  echo "$hash_output" > "$md5_file"
+  echo "$hash_output" > "$md5_tmp"
+  ARTHEXIS_STATICFILES_META_TMP="$metadata_tmp"
+  ARTHEXIS_STATICFILES_MD5_TMP="$md5_tmp"
   printf '%s' "$hash_output"
   return 0
 }
@@ -124,6 +155,7 @@ arthexis_prepare_staticfiles_hash() {
     return $status
   fi
 
+  arthexis_staticfiles_commit_staged_lock "$md5_file" "$meta_file"
   ARTHEXIS_STATICFILES_FAST_PATH_USED=false
   printf '%s' "$hash_value"
   return 0
