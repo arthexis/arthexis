@@ -13,26 +13,37 @@ HELPER_PATH = REPO_ROOT / "scripts" / "helpers" / "runserver_preflight.sh"
 def _write_manage_stub(base_dir: Path) -> None:
     manage_py = base_dir / "manage.py"
     manage_py.write_text(
-        textwrap.dedent(
-            """\
-            #!/usr/bin/env python
-            import os
-            import pathlib
-            import sys
+        """#!/usr/bin/env python
+import os
+import pathlib
+import sys
 
-            log_path = pathlib.Path(os.environ["COMMAND_LOG"])
-            log_path.parent.mkdir(parents=True, exist_ok=True)
-            with log_path.open("a", encoding="utf-8") as log:
-                log.write(" ".join(sys.argv[1:]) + "\\n")
+log_path = pathlib.Path(os.environ['COMMAND_LOG'])
+log_path.parent.mkdir(parents=True, exist_ok=True)
+with log_path.open('a', encoding='utf-8') as log:
+    log.write(' '.join(sys.argv[1:]) + '\\n')
 
-            plan_output = os.environ.get("SHOWMIGRATIONS_PLAN", "[ ] demo 0001_initial")
-            if sys.argv[1] == "showmigrations":
-                print(plan_output)
-            elif sys.argv[1] == "migrate":
-                pass
-            sys.exit(0)
-            """
-        )
+plan_output = os.environ.get('SHOWMIGRATIONS_PLAN', '[ ] demo 0001_initial')
+if sys.argv[1] == 'showmigrations':
+    print(plan_output)
+elif sys.argv[1] == 'migrate':
+    exit_code = 0
+    if '--check' in sys.argv:
+        status = os.environ.get('MIGRATE_CHECK_STATUS', '0')
+        status_file = os.environ.get('MIGRATE_CHECK_STATUS_FILE')
+        if status_file:
+            path = pathlib.Path(status_file)
+            if path.exists():
+                statuses = path.read_text().splitlines()
+                if statuses:
+                    status = statuses[0]
+                    path.write_text('\\n'.join(statuses[1:]))
+        exit_code = int(status)
+    else:
+        exit_code = int(os.environ.get('MIGRATE_STATUS', '0'))
+    sys.exit(exit_code)
+sys.exit(0)
+"""
     )
     manage_py.chmod(0o755)
 
@@ -45,7 +56,13 @@ def _write_migration(base_dir: Path, contents: str = "# initial migration\n") ->
     return migration_file
 
 
-def _run_preflight(base_dir: Path, plan_output: str = "[ ] demo 0001_initial", force_refresh: bool = False):
+def _run_preflight(
+    base_dir: Path,
+    plan_output: str = "[ ] demo 0001_initial",
+    force_refresh: bool = False,
+    migrate_check_status: str = "0",
+    migrate_check_sequence: list[str] | None = None,
+):
     lock_dir = base_dir / ".locks"
     lock_dir.mkdir(parents=True, exist_ok=True)
 
@@ -58,12 +75,20 @@ def _run_preflight(base_dir: Path, plan_output: str = "[ ] demo 0001_initial", f
         extra_args_log.unlink()
 
     env = os.environ.copy()
+
+    status_file = None
+    if migrate_check_sequence:
+        status_file = base_dir / "migrate_check_statuses.txt"
+        status_file.write_text("\n".join(migrate_check_sequence))
+
     env.update(
         {
             "BASE_DIR": str(base_dir),
             "LOCK_DIR": str(lock_dir),
             "COMMAND_LOG": str(command_log),
             "SHOWMIGRATIONS_PLAN": plan_output,
+            "MIGRATE_CHECK_STATUS": migrate_check_status,
+            "MIGRATE_CHECK_STATUS_FILE": str(status_file) if status_file else "",
             "RUNSERVER_PREFLIGHT_FORCE_REFRESH": "true" if force_refresh else "false",
         }
     )
@@ -109,7 +134,7 @@ def test_runserver_preflight_reuses_cached_fingerprint(tmp_path: Path):
     assert first_run["extra_args"] == ["--skip-checks"]
 
     second_run = _run_preflight(tmp_path, plan_output="[X] demo 0001_initial")
-    assert second_run["commands"] == []
+    assert second_run["commands"] == ["migrate --check"]
     assert second_run["extra_args"] == ["--skip-checks"]
     assert second_run["fingerprint"] == first_run["fingerprint"]
 
@@ -128,3 +153,23 @@ def test_runserver_preflight_invalidates_on_migration_change(tmp_path: Path):
     assert "migrate --noinput" in refreshed_run["commands"][1]
     assert "migrate --check" in refreshed_run["commands"][2]
     assert refreshed_run["extra_args"] == ["--skip-checks"]
+
+
+def test_runserver_preflight_rebuilds_when_db_missing(tmp_path: Path):
+    _write_manage_stub(tmp_path)
+    _write_migration(tmp_path)
+
+    successful_run = _run_preflight(tmp_path, plan_output="[X] demo 0001_initial")
+    assert any(cmd == "migrate --check" for cmd in successful_run["commands"])
+
+    wiped_db_run = _run_preflight(
+        tmp_path,
+        plan_output="[ ] demo 0001_initial",
+        migrate_check_sequence=["1", "0"],
+    )
+
+    assert wiped_db_run["commands"][0] == "migrate --check"
+    assert "showmigrations --plan" in wiped_db_run["commands"][1]
+    assert "migrate --noinput" in wiped_db_run["commands"][2]
+    assert "migrate --check" in wiped_db_run["commands"][3]
+    assert wiped_db_run["fingerprint"] == successful_run["fingerprint"]

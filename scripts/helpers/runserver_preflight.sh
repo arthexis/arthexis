@@ -48,12 +48,17 @@ run_runserver_preflight() {
   fi
 
   if [ "$stored_fingerprint" = "$fingerprint" ] && [ "${RUNSERVER_PREFLIGHT_FORCE_REFRESH:-false}" != true ]; then
-    echo "Migrations unchanged since last successful preflight; skipping migration checks."
-    echo "$fingerprint" > "$MIGRATIONS_SHA_FILE"
-    RUNSERVER_PREFLIGHT_DONE=true
-    export DJANGO_SUPPRESS_MIGRATION_CHECK=1
-    RUNSERVER_EXTRA_ARGS+=("--skip-checks")
-    return 0
+    echo "Migrations unchanged since last successful preflight; verifying database state..."
+    if python manage.py migrate --check; then
+      echo "Database matches cached migrations fingerprint; skipping migration checks."
+      echo "$fingerprint" > "$MIGRATIONS_SHA_FILE"
+      RUNSERVER_PREFLIGHT_DONE=true
+      export DJANGO_SUPPRESS_MIGRATION_CHECK=1
+      RUNSERVER_EXTRA_ARGS+=("--skip-checks")
+      return 0
+    fi
+
+    echo "Cached migration fingerprint is stale; rerunning migration preflight..."
   fi
 
   echo "Inspecting migrations before runserver..."
