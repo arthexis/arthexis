@@ -30,6 +30,7 @@ from ..models import (
     CustomerInformationRequest,
     CPNetworkProfile,
     CPNetworkProfileDeployment,
+    PowerProjection,
 )
 from .common import (
     CALL_ACTION_LABELS,
@@ -1091,6 +1092,18 @@ def _handle_get_composite_schedule(
     if rate_unit:
         payload["chargingRateUnit"] = rate_unit
 
+    connector_value = evse_payload if evse_payload is not None else (context.connector_value or 0)
+    charger = context.charger or _get_or_create_charger(context.cid, connector_value)
+    if charger is None:
+        return JsonResponse({"detail": "charger not found"}, status=404)
+
+    projection = PowerProjection.objects.create(
+        charger=charger,
+        connector_id=connector_value,
+        duration_seconds=duration_value,
+        charging_rate_unit=rate_unit,
+    )
+
     message_id = uuid.uuid4().hex
     ocpp_action = "GetCompositeSchedule"
     expected_statuses = CALL_EXPECTED_STATUSES.get(ocpp_action)
@@ -1103,8 +1116,9 @@ def _handle_get_composite_schedule(
         {
             "action": ocpp_action,
             "charger_id": context.cid,
-            "connector_id": evse_payload,
+            "connector_id": connector_value,
             "log_key": log_key,
+            "projection_pk": projection.pk,
             "requested_at": timezone.now(),
         },
     )
