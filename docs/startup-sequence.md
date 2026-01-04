@@ -21,7 +21,7 @@ manual runs of `env-refresh.sh` or calls made as part of an upgrade.
    files into the environment for downstream commands.
 3. Compute the static assets hash with `scripts/staticfiles_md5.py`; when the
    hash changes or cannot be computed, run `manage.py collectstatic --noinput`
-   and cache the new hash in `staticfiles.md5`.
+   and cache the new hash in `.locks/staticfiles.md5`.
 4. Detect the backend port, parse CLI flags (reload mode, port overrides, and
    Celery management preferences), and evaluate whether systemd-managed Celery
    or LCD units are present so embedded workers are enabled only when needed.

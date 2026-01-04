@@ -3,6 +3,8 @@ set SCRIPT_DIR=%~dp0
 if not "%SCRIPT_DIR%"=="" pushd "%SCRIPT_DIR%"
 
 set VENV=.venv
+set LOCK_DIR=.locks
+if not exist "%LOCK_DIR%" mkdir "%LOCK_DIR%"
 if not exist %VENV%\Scripts\python.exe (
     echo Virtual environment not found. Run install.sh or install.bat first.
     set EXIT_CODE=1
@@ -10,8 +12,8 @@ if not exist %VENV%\Scripts\python.exe (
 )
 
 set PORT=8888
-if exist .locks\backend_port.lck (
-    for /f %%p in ('findstr /R "^[0-9][0-9]*$" .locks\backend_port.lck') do set PORT=%%p
+if exist %LOCK_DIR%\backend_port.lck (
+    for /f %%p in ('findstr /R "^[0-9][0-9]*$" %LOCK_DIR%\backend_port.lck') do set PORT=%%p
 )
 set RELOAD=
 set DEBUG_MODE=
@@ -72,7 +74,7 @@ set LOG_FILE=%LOG_DIR%\%COMPUTERNAME%.log
 if defined SHOW_LEVEL call :start_log_listener "%LOG_FILE%" %SHOW_LEVEL%
 
 if not defined RELOAD set NORELOAD=--noreload
-set STATIC_MD5=staticfiles.md5
+set STATIC_MD5=%LOCK_DIR%\staticfiles.md5
 set NEW_STATIC_HASH=
 for /f "usebackq delims=" %%i in (`%VENV%\Scripts\python.exe scripts\staticfiles_md5.py 2^>nul`) do set NEW_STATIC_HASH=%%i
 if errorlevel 1 goto collectstatic_fallback

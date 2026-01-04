@@ -299,7 +299,7 @@ fi
 
 start_log_follower "$APP_LOG_FILE" "$SHOW_LEVEL"
 
-STATIC_MD5_FILE="$BASE_DIR/staticfiles.md5"
+STATIC_MD5_FILE="$LOCK_DIR/staticfiles.md5"
 STATIC_HASH=""
 if [ "$FORCE_COLLECTSTATIC" = false ]; then
   set +e
