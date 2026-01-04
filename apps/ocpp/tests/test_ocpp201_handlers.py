@@ -1,8 +1,8 @@
+from datetime import datetime, timezone as dt_timezone
+from functools import partial
 from unittest.mock import AsyncMock
 
 import anyio
-from functools import partial
-
 import pytest
 from channels.db import database_sync_to_async
 from django.utils import timezone
@@ -45,6 +45,7 @@ def reset_store(monkeypatch, tmp_path):
     store.ev_charging_schedules.clear()
     store.planner_notifications.clear()
     store.observability_events.clear()
+    store.monitoring_reports.clear()
     store.clear_display_message_compliance()
     log_dir = tmp_path / "logs"
     session_dir = log_dir / "sessions"
@@ -66,6 +67,7 @@ def reset_store(monkeypatch, tmp_path):
     store.ev_charging_schedules.clear()
     store.planner_notifications.clear()
     store.observability_events.clear()
+    store.monitoring_reports.clear()
 
 
 @pytest.fixture
@@ -404,6 +406,65 @@ async def test_notify_monitoring_report_persists_data():
     )
     assert rule.variable_id == variable.pk
     assert rule.threshold == "240"
+
+
+@pytest.mark.anyio
+@pytest.mark.django_db(transaction=True)
+async def test_notify_monitoring_report_records_analytics():
+    charger = await database_sync_to_async(Charger.objects.create)(charger_id="MON-2")
+    consumer = consumers.CSMSConsumer(scope={}, receive=None, send=None)
+    consumer.store_key = "MON-2"
+    consumer.charger_id = charger.charger_id
+    consumer.charger = charger
+    consumer.aggregate_charger = None
+
+    payload = {
+        "requestId": 99,
+        "seqNo": "3",
+        "generatedAt": "2024-02-02T10:00:00Z",
+        "tbc": True,
+        "monitoringData": [
+            {
+                "component": {
+                    "name": "Meter", "instance": "main", "evse": {"id": 4, "connectorId": 2}
+                },
+                "variable": {"name": "Energy", "instance": "A"},
+                "variableMonitoring": [
+                    {
+                        "id": "202",
+                        "severity": "3",
+                        "type": "LowerThreshold",
+                        "value": 10,
+                        "transaction": False,
+                    }
+                ],
+            }
+        ],
+    }
+
+    result = await consumer._handle_notify_monitoring_report_action(
+        payload, "msg-analytics", "", ""
+    )
+
+    assert result == {}
+    assert len(store.monitoring_reports) == 1
+    record = store.monitoring_reports[-1]
+    assert record["charger_id"] == "MON-2"
+    assert record["request_id"] == 99
+    assert record["seq_no"] == 3
+    assert record["tbc"] is True
+    assert record["component_name"] == "Meter"
+    assert record["component_instance"] == "main"
+    assert record["variable_name"] == "Energy"
+    assert record["variable_instance"] == "A"
+    assert record["monitoring_id"] == 202
+    assert record["severity"] == 3
+    assert record["monitor_type"] == "LowerThreshold"
+    assert record["threshold"] == "10"
+    assert record["is_transaction"] is False
+    assert record["evse_id"] == 4
+    assert record["connector_id"] == "2"
+    assert record["generated_at"] == datetime(2024, 2, 2, 10, 0, tzinfo=dt_timezone.utc)
 
 
 @pytest.mark.anyio
