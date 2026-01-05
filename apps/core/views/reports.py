@@ -1098,6 +1098,7 @@ def _step_promote_build(release, ctx, log_path: Path, *, user=None) -> None:
             package=release.to_package(),
             version=release.version,
             creds=release.to_credentials(user=user),
+            stash=True,
         )
         _append_log(
             log_path,
