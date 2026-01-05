@@ -1,4 +1,4 @@
-from django.contrib import messages
+from django.contrib import admin, messages
 from django.shortcuts import redirect
 from django.urls import path, reverse
 
@@ -9,6 +9,7 @@ from apps.locals.user_data import EntityModelAdmin
 
 class EmailOutboxAdmin(EntityModelAdmin):
     form = EmailOutboxAdminForm
+    actions = ["test_outboxes"]
     list_display = (
         "owner_label",
         "host",
@@ -37,6 +38,29 @@ class EmailOutboxAdmin(EntityModelAdmin):
             },
         ),
     )
+
+    @admin.action(description="Test selected Outbox")
+    def test_outboxes(self, request, queryset):
+        recipient = request.user.email
+        for outbox in queryset:
+            target = recipient or outbox.username
+            if not target:
+                self.message_user(
+                    request, f"{outbox}: No recipient available", level=messages.ERROR
+                )
+                continue
+
+            try:
+                outbox.send_mail(
+                    "Test email",
+                    "This is a test email.",
+                    [target],
+                )
+                self.message_user(
+                    request, f"{outbox}: Test email sent", level=messages.SUCCESS
+                )
+            except Exception as exc:  # pragma: no cover - admin feedback
+                self.message_user(request, f"{outbox}: {exc}", level=messages.ERROR)
 
     def get_urls(self):
         urls = super().get_urls()
