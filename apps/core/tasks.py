@@ -165,6 +165,75 @@ def _load_sidecar_records(base_dir: Path) -> list[dict[str, str]]:
     return records
 
 
+def _read_process_cmdline(pid: int) -> list[str] | None:
+    try:
+        with open(f"/proc/{pid}/cmdline", "rb") as handle:
+            raw_value = handle.read()
+    except OSError:
+        return None
+
+    if not raw_value:
+        return []
+
+    try:
+        decoded = raw_value.decode("utf-8", errors="ignore")
+    except UnicodeDecodeError:
+        return None
+
+    return [entry for entry in decoded.split("\0") if entry]
+
+
+def _read_process_start_time(pid: int) -> float | None:
+    try:
+        with open(f"/proc/{pid}/stat", "r", encoding="utf-8") as handle:
+            contents = handle.read().split()
+    except OSError:
+        return None
+
+    try:
+        start_ticks = int(contents[21])
+    except (IndexError, ValueError):
+        return None
+
+    try:
+        with open("/proc/uptime", "r", encoding="utf-8") as handle:
+            uptime_seconds = float(handle.read().split()[0])
+    except (OSError, ValueError, IndexError):
+        return None
+
+    try:
+        ticks_per_second = os.sysconf(os.sysconf_names["SC_CLK_TCK"])
+    except (ValueError, AttributeError, KeyError):
+        return None
+
+    boot_time = time.time() - uptime_seconds
+    return boot_time + (start_ticks / ticks_per_second)
+
+
+def _migration_pid_matches(pid: int, lock_dir: Path, started_at: float | None) -> bool:
+    if pid <= 0:
+        return False
+
+    cmdline = _read_process_cmdline(pid)
+    if not cmdline:
+        return False
+
+    base_dir = lock_dir.parent.resolve()
+    expected_script = (base_dir / "scripts" / "migration_server.py").resolve()
+    matches_cmd = any(
+        part.endswith("migration_server.py") or str(expected_script) in part for part in cmdline
+    )
+    if not matches_cmd:
+        return False
+
+    if started_at is not None:
+        process_start = _read_process_start_time(pid)
+        if process_start is not None and process_start > started_at + 120:
+            return False
+
+    return True
+
+
 def _is_migration_server_running(lock_dir: Path) -> bool:
     state_path = lock_dir / "migration_server.json"
     try:
@@ -175,9 +244,13 @@ def _is_migration_server_running(lock_dir: Path) -> bool:
         return True
 
     pid = payload.get("pid")
+    started_at = payload.get("timestamp")
     if isinstance(pid, str) and pid.isdigit():
         pid = int(pid)
     if not isinstance(pid, int):
+        return False
+
+    if not _migration_pid_matches(pid, lock_dir, started_at if isinstance(started_at, (int, float)) else None):
         return False
 
     try:
