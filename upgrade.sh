@@ -75,6 +75,31 @@ ensure_git_safe_directory() {
   git config --global --add safe.directory "$BASE_DIR" >/dev/null 2>&1 || true
 }
 
+print_pending_commit_messages() {
+  local from_rev="$1"
+  local to_rev="$2"
+
+  if [[ -z "$from_rev" || -z "$to_rev" || "$from_rev" == "$to_rev" ]]; then
+    return 0
+  fi
+
+  if ! git rev-parse --verify "${from_rev}^{commit}" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if ! git rev-parse --verify "${to_rev}^{commit}" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  local pending_commits
+  pending_commits=$(git log --pretty=format:'- %s' "${from_rev}..${to_rev}" 2>/dev/null || true)
+
+  if [[ -n "$pending_commits" ]]; then
+    echo "Pending updates include the following commits:"
+    echo "$pending_commits"
+  fi
+}
+
 collect_requirement_files() {
   local -n out_array="$1"
 
@@ -1549,6 +1574,9 @@ if [[ "$LOCAL_VERSION" == "$REMOTE_VERSION" ]]; then
   elif [[ $FORCE_UPGRADE -eq 1 ]]; then
     echo "Forcing upgrade despite matching version $LOCAL_VERSION."
   elif [[ -n "$REMOTE_REVISION" && -n "$LOCAL_REVISION" && "$LOCAL_REVISION" != "$REMOTE_REVISION" ]]; then
+    if [[ $CHECK_ONLY -eq 1 ]]; then
+      print_pending_commit_messages "$LOCAL_REVISION" "$REMOTE_REVISION"
+    fi
     echo "Updates detected for version $LOCAL_VERSION, but --latest is required to apply them."
     echo "Re-run upgrade.sh with --latest to migrate to the newest changes."
     exit 0
