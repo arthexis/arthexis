@@ -85,17 +85,12 @@ def capture_rpi_snapshot(timeout: int = 10) -> Path:
     if not acquired:
         raise RuntimeError("Camera is busy. Wait for the current capture to finish.")
 
-    try:
-        if has_rpicam_binaries():
-            tool_path = shutil.which("rpicam-still")
-            if not tool_path:
-                raise RuntimeError("rpicam-still is not available")
-            command = [tool_path, "-o", str(filename), "-t", "1"]
-        elif _has_ffmpeg_capture_support():
-            tool_path = shutil.which("ffmpeg")
-            if not tool_path:
-                raise RuntimeError("ffmpeg is not available")
-            command = [
+    def _build_ffmpeg_command() -> tuple[list[str], str]:
+        tool_path = shutil.which("ffmpeg")
+        if not tool_path:
+            raise RuntimeError("ffmpeg is not available")
+        return (
+            [
                 tool_path,
                 "-hide_banner",
                 "-loglevel",
@@ -108,25 +103,51 @@ def capture_rpi_snapshot(timeout: int = 10) -> Path:
                 "1",
                 "-y",
                 str(filename),
-            ]
-        else:
-            raise RuntimeError("No supported camera stack is available")
-
-        result = subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=timeout,
+            ],
+            tool_path,
         )
-    except Exception as exc:  # pragma: no cover - depends on camera stack
-        logger.error("Failed to invoke %s: %s", tool_path, exc)
-        raise RuntimeError(f"Snapshot capture failed: {exc}") from exc
+
+    def _run_command(command: list[str], tool_path: str) -> subprocess.CompletedProcess:
+        try:
+            return subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=timeout,
+            )
+        except Exception as exc:  # pragma: no cover - depends on camera stack
+            logger.error("Failed to invoke %s: %s", tool_path, exc)
+            raise RuntimeError(f"Snapshot capture failed: {exc}") from exc
+
+    try:
+        result: subprocess.CompletedProcess | None = None
+
+        if has_rpicam_binaries():
+            tool_path = shutil.which("rpicam-still")
+            if not tool_path:
+                raise RuntimeError("rpicam-still is not available")
+
+            result = _run_command([tool_path, "-o", str(filename), "-t", "1"], tool_path)
+            if result.returncode != 0 and _has_ffmpeg_capture_support():
+                error = (result.stderr or result.stdout or "Snapshot capture failed").strip()
+                logger.warning(
+                    "rpicam-still failed (%s); attempting ffmpeg fallback", error
+                )
+                result = None
+
+        if result is None:
+            if _has_ffmpeg_capture_support():
+                command, tool_path = _build_ffmpeg_command()
+                result = _run_command(command, tool_path)
+            else:
+                raise RuntimeError("No supported camera stack is available")
     finally:
         _CAMERA_LOCK.release()
+
     if result.returncode != 0:
         error = (result.stderr or result.stdout or "Snapshot capture failed").strip()
-        logger.error("rpicam-still exited with %s: %s", result.returncode, error)
+        logger.error("Snapshot command exited with %s: %s", result.returncode, error)
         raise RuntimeError(error)
     if not filename.exists():
         logger.error("Snapshot file %s was not created", filename)
