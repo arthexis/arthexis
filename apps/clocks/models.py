@@ -2,6 +2,7 @@ from __future__ import annotations
 from typing import Iterable
 
 from django.db import models
+from django.utils.text import slugify
 from django.utils.translation import gettext_lazy as _
 
 from apps.base.models import Entity
@@ -17,6 +18,8 @@ class ClockDevice(Entity):
     address = models.CharField(max_length=10)
     description = models.CharField(max_length=255, blank=True)
     raw_info = models.TextField(blank=True)
+    enable_public_view = models.BooleanField(default=False)
+    public_view_slug = models.SlugField(unique=True, blank=True, null=True)
 
     class Meta:
         ordering = ["bus", "address"]
@@ -30,6 +33,14 @@ class ClockDevice(Entity):
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return f"{self.address} (bus {self.bus})"
+
+    def save(self, *args, **kwargs):
+        generate_slug = not self.public_view_slug
+        super().save(*args, **kwargs)
+        if generate_slug and self.pk and not self.public_view_slug:
+            slug = slugify(f"clock-device-{self.pk}")
+            type(self).objects.filter(pk=self.pk).update(public_view_slug=slug)
+            self.public_view_slug = slug
 
     @classmethod
     def refresh_from_system(
