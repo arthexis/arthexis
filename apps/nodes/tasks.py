@@ -35,6 +35,19 @@ logger = logging.getLogger(__name__)
 STARTUP_NET_MESSAGE_CACHE_KEY = "nodes:startup_net_message:sent"
 
 
+def _startup_message_cache_key() -> str:
+    try:
+        boot_time = psutil.boot_time()
+    except Exception:
+        logger.debug("Unable to determine boot time for startup Net Message cache", exc_info=True)
+        boot_time = None
+
+    if boot_time:
+        return f"{STARTUP_NET_MESSAGE_CACHE_KEY}:{int(boot_time)}"
+
+    return STARTUP_NET_MESSAGE_CACHE_KEY
+
+
 @shared_task(name="nodes.tasks.sample_clipboard", bind=True)
 def discard_sample_clipboard(self, *args, **kwargs) -> str:
     """Discard legacy clipboard polling tasks that may still be queued."""
@@ -49,9 +62,10 @@ def discard_sample_clipboard(self, *args, **kwargs) -> str:
 def send_startup_net_message(lock_file: str | None = None, port: str | None = None) -> str:
     """Queue the LCD startup Net Message once Celery is available."""
 
+    cache_key = _startup_message_cache_key()
     try:
         # Prevent duplicate dispatches across multiple workers or reloads.
-        if not cache.add(STARTUP_NET_MESSAGE_CACHE_KEY, True, timeout=None):
+        if not cache.add(cache_key, True, timeout=None):
             return "skipped:already-sent"
     except Exception:
         logger.debug("Unable to set startup Net Message cache flag", exc_info=True)
