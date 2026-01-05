@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from django.contrib import admin, messages
 from django.shortcuts import redirect
-from django.urls import path
+from django.urls import path, reverse
+from django.utils.html import format_html
 from django.utils.translation import gettext_lazy as _
 from django_object_actions import DjangoObjectActions
 
@@ -15,7 +16,7 @@ from .utils import has_clock_device
 
 @admin.register(ClockDevice)
 class ClockDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
-    list_display = ("address", "bus", "node", "description")
+    list_display = ("address", "bus", "node", "description", "public_view")
     search_fields = ("address", "description", "raw_info", "node__hostname")
     changelist_actions = ["find_clock_devices"]
     change_list_template = "django_object_actions/change_list.html"
@@ -36,6 +37,15 @@ class ClockDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
     find_clock_devices.label = _("Find Clock Devices")
     find_clock_devices.short_description = _("Find Clock Devices")
     find_clock_devices.changelist = True
+
+    @admin.display(description=_("Public View"))
+    def public_view(self, obj):
+        if not obj.enable_public_view:
+            return _("Disabled")
+        if not obj.public_view_slug:
+            return _("Missing slug")
+        url = reverse("clockdevice-public-view", args=[obj.public_view_slug])
+        return format_html('<a href="{}" target="_blank">{}</a>', url, _("Open"))
 
     def _ensure_rtc_feature_enabled(
         self,

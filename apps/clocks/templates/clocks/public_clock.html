@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Public Clock View</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #0a0a0a;
+            color: #f5f5f5;
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+        }
+        .clock-container {
+            background: linear-gradient(145deg, #121212, #1e1e1e);
+            border: 1px solid #2c2c2c;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+            padding: 2rem 2.5rem;
+            max-width: 720px;
+            width: 100%;
+        }
+        .clock-time {
+            font-size: clamp(3rem, 8vw, 4.5rem);
+            font-weight: 800;
+            letter-spacing: 0.08em;
+            text-align: center;
+            margin: 0 0 0.5rem;
+        }
+        .clock-date {
+            text-align: center;
+            font-size: 1.25rem;
+            margin: 0 0 1rem;
+            color: #c7c7c7;
+        }
+        .clock-timezone {
+            text-align: center;
+            margin-bottom: 1.5rem;
+            font-weight: 600;
+        }
+        .device-info {
+            background: #161616;
+            border: 1px solid #2a2a2a;
+            border-radius: 12px;
+            padding: 1rem 1.25rem;
+            margin-bottom: 1.5rem;
+        }
+        .device-info h2 {
+            margin-top: 0;
+            margin-bottom: 0.5rem;
+            font-size: 1.1rem;
+            letter-spacing: 0.02em;
+        }
+        .device-info dl {
+            display: grid;
+            grid-template-columns: max-content 1fr;
+            grid-row-gap: 0.4rem;
+            grid-column-gap: 0.75rem;
+            margin: 0;
+        }
+        .device-info dt {
+            color: #9c9c9c;
+            font-weight: 600;
+        }
+        .device-info dd {
+            margin: 0;
+        }
+        .timezone-form {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+        .timezone-form label {
+            font-weight: 600;
+        }
+        .timezone-form select {
+            background: #111;
+            color: #f5f5f5;
+            border: 1px solid #2f2f2f;
+            border-radius: 10px;
+            padding: 0.75rem 1rem;
+            font-size: 1rem;
+            width: 100%;
+        }
+        .timezone-form button {
+            align-self: flex-end;
+            background: #2d8cff;
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            padding: 0.65rem 1.1rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background 0.2s ease-in-out;
+        }
+        .timezone-form button:hover {
+            background: #1d6fd6;
+        }
+    </style>
+</head>
+<body>
+    <div class="clock-container">
+        <div class="clock-time" id="clock-display">{{ now|date:"H:i:s" }}</div>
+        <div class="clock-date" id="clock-date">{{ now|date:"l, F j, Y" }}</div>
+        <div class="clock-timezone">Current time zone: <strong>{{ timezone_name }}</strong></div>
+
+        <div class="device-info">
+            <h2>Signal Source</h2>
+            <dl>
+                <dt>Node</dt><dd>{{ device.node }}</dd>
+                <dt>Bus</dt><dd>{{ device.bus }}</dd>
+                <dt>Address</dt><dd>{{ device.address }}</dd>
+                {% if device.description %}
+                    <dt>Description</dt><dd>{{ device.description }}</dd>
+                {% endif %}
+            </dl>
+        </div>
+
+        <form class="timezone-form" method="get">
+            <label for="timezone-select">Choose a time zone</label>
+            <select id="timezone-select" name="tz">
+                {% for tz in timezones %}
+                    <option value="{{ tz }}" {% if tz == timezone_name %}selected{% endif %}>{{ tz }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit">Update</button>
+        </form>
+    </div>
+
+    <script>
+        (function() {
+            const timezoneSelect = document.getElementById('timezone-select');
+            const clockDisplay = document.getElementById('clock-display');
+            const clockDate = document.getElementById('clock-date');
+            let currentTime = new Date("{{ now|date:'c'|escapejs }}");
+
+            if (timezoneSelect) {
+                timezoneSelect.addEventListener('change', () => {
+                    timezoneSelect.form.submit();
+                });
+            }
+
+            function pad(value) {
+                return value.toString().padStart(2, '0');
+            }
+
+            function renderClock() {
+                const hours = pad(currentTime.getHours());
+                const minutes = pad(currentTime.getMinutes());
+                const seconds = pad(currentTime.getSeconds());
+
+                const dateFormatter = new Intl.DateTimeFormat(undefined, {
+                    weekday: 'long',
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric',
+                });
+
+                clockDisplay.textContent = `${hours}:${minutes}:${seconds}`;
+                clockDate.textContent = dateFormatter.format(currentTime);
+                currentTime = new Date(currentTime.getTime() + 1000);
+            }
+
+            setInterval(renderClock, 1000);
+        })();
+    </script>
+</body>
+</html>
