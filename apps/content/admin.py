@@ -12,10 +12,15 @@ from apps.content.models import (
     ContentClassifier,
     ContentSample,
     ContentTag,
+    WebRequestSampler,
+    WebRequestStep,
+    WebSample,
+    WebSampleAttachment,
 )
 from apps.locals.user_data import EntityModelAdmin
 from apps.nodes.models import Node
 from apps.nodes.utils import capture_screenshot, save_screenshot
+from .web_sampling import execute_sampler
 
 
 @admin.register(ContentTag)
@@ -85,3 +90,61 @@ class ContentSampleAdmin(EntityModelAdmin):
             '<img src="data:image/png;base64,{}" style="max-width:100%;" />',
             encoded,
         )
+
+
+class WebRequestStepInline(admin.TabularInline):
+    model = WebRequestStep
+    extra = 0
+    fields = (
+        "order",
+        "slug",
+        "name",
+        "curl_command",
+        "save_as_content",
+        "attachment_kind",
+    )
+
+
+@admin.register(WebRequestSampler)
+class WebRequestSamplerAdmin(EntityModelAdmin):
+    list_display = (
+        "label",
+        "slug",
+        "sampling_period_minutes",
+        "last_sampled_at",
+        "owner",
+        "security_group",
+    )
+    search_fields = ("label", "slug", "description")
+    list_filter = ("sampling_period_minutes", "owner", "security_group")
+    actions = ("execute_selected_samplers",)
+    inlines = (WebRequestStepInline,)
+
+    @admin.action(description="Execute selected Samplers")
+    def execute_selected_samplers(self, request, queryset):
+        executed = 0
+        for sampler in queryset:
+            try:
+                execute_sampler(sampler, user=request.user)
+                executed += 1
+            except Exception as exc:  # pragma: no cover - admin message only
+                self.message_user(request, str(exc), level=messages.ERROR)
+        if executed:
+            self.message_user(
+                request,
+                f"Executed {executed} sampler(s)",
+                level=messages.SUCCESS,
+            )
+
+
+class WebSampleAttachmentInline(admin.TabularInline):
+    model = WebSampleAttachment
+    extra = 0
+    readonly_fields = ("content_sample", "uri", "step")
+
+
+@admin.register(WebSample)
+class WebSampleAdmin(EntityModelAdmin):
+    list_display = ("sampler", "executed_by", "created_at")
+    readonly_fields = ("document", "executed_by", "created_at")
+    inlines = (WebSampleAttachmentInline,)
