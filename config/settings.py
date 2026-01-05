@@ -401,6 +401,7 @@ CsrfViewMiddleware._check_referer = _check_referer_with_forwarded
 
 LOCAL_APPS = [
     "apps.base",
+    "apps.credentials",
     "apps.celery",
     "apps.nodes",
     "apps.ftp",

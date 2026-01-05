@@ -6,7 +6,6 @@ from .node_feature_admin import NodeFeatureAdmin
 from .node_role_admin import NodeRoleAdmin
 from .node_service_admin import NodeServiceAdmin
 from .platform_admin import PlatformAdmin
-from .ssh_account_admin import SSHAccountAdmin
 
 __all__ = [
     "EmailOutboxAdmin",
@@ -16,6 +15,5 @@ __all__ = [
     "NodeRoleAdmin",
     "NodeServiceAdmin",
     "PlatformAdmin",
-    "SSHAccountAdmin",
     "NodeFeatureAssignmentInline",
 ]

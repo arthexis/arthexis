@@ -1,4 +1,5 @@
-from .accounts import SSHAccount, ssh_key_upload_path
+from apps.credentials.models import SSHAccount, ssh_key_upload_path
+
 from .features import (
     NodeFeature,
     NodeFeatureAssignment,
@@ -25,7 +26,7 @@ from .slug_entities import SlugDisplayNaturalKeyMixin, SlugEntityManager
 
 __all__ = [
     "NetMessage",
-    "Node", 
+    "Node",
     "NodeFeature",
     "NodeFeatureAssignment",
     "NodeFeatureDefaultAction",
