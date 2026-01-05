@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import json
 import os
 import shutil
 import re
@@ -133,6 +134,156 @@ def legacy_heartbeat(self) -> None:
         )
 
     heartbeat()
+
+
+SIDE_CAR_LOCK_NAME = "sidecars.lck"
+
+
+def _sidecar_lock_path(base_dir: Path) -> Path:
+    return base_dir / ".locks" / SIDE_CAR_LOCK_NAME
+
+
+def _load_sidecar_records(base_dir: Path) -> list[dict[str, str]]:
+    lock_file = _sidecar_lock_path(base_dir)
+    try:
+        lines = lock_file.read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError:
+        return []
+    except OSError:
+        logger.warning("Unable to read sidecar lock file at %s", lock_file)
+        return []
+
+    records: list[dict[str, str]] = []
+    for line in lines:
+        parts = line.split("	")
+        if len(parts) < 3:
+            continue
+        record: dict[str, str] = {"type": parts[0], "name": parts[1], "path": parts[2]}
+        if len(parts) > 3 and parts[3]:
+            record["service"] = parts[3]
+        records.append(record)
+    return records
+
+
+def _is_migration_server_running(lock_dir: Path) -> bool:
+    state_path = lock_dir / "migration_server.json"
+    try:
+        payload = json.loads(state_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return False
+    except json.JSONDecodeError:
+        return True
+
+    pid = payload.get("pid")
+    if isinstance(pid, str) and pid.isdigit():
+        pid = int(pid)
+    if not isinstance(pid, int):
+        return False
+
+    try:
+        os.kill(pid, 0)
+    except PermissionError:
+        return True
+    except OSError:
+        try:
+            state_path.unlink()
+        except OSError:
+            pass
+        return False
+    return True
+
+
+def _read_service_mode(lock_dir: Path) -> str:
+    lock_path = lock_dir / "service_mode.lck"
+    try:
+        return lock_path.read_text(encoding="utf-8").strip().lower()
+    except FileNotFoundError:
+        return "embedded"
+    except OSError:
+        logger.warning("Failed to read service mode from %s", lock_path)
+        return "embedded"
+
+
+def _read_service_name(lock_dir: Path) -> str | None:
+    lock_path = lock_dir / "service.lck"
+    try:
+        raw_value = lock_path.read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        return None
+    except OSError:
+        logger.warning("Unable to read service name from %s", lock_path)
+        return None
+
+    return raw_value or None
+
+
+def _start_migration_service(base_dir: Path, service_name: str | None, use_systemd: bool) -> None:
+    if use_systemd and service_name:
+        command = _systemctl_command()
+        if command:
+            unit_name = service_name if service_name.endswith(".service") else f"{service_name}.service"
+            subprocess.run([*command, "restart", unit_name], check=False)
+            return
+
+    script = base_dir / "scripts" / "migration-service-start.sh"
+    if not script.exists():
+        logger.warning("Migration service launcher missing at %s", script)
+        return
+
+    env = os.environ.copy()
+    env.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+    log_path = base_dir / "logs" / "migration-service.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        with log_path.open("ab") as log_handle:
+            subprocess.Popen(
+                ["bash", str(script)],
+                cwd=base_dir,
+                stdout=log_handle,
+                stderr=subprocess.STDOUT,
+                env=env,
+                start_new_session=True,
+            )
+    except OSError:
+        logger.exception("Failed to start migration service for %s", base_dir)
+
+
+def _ensure_migrator_alive(record: dict[str, str]) -> None:
+    base_dir = Path(record.get("path", ""))
+    if not base_dir.exists():
+        logger.warning("Recorded migrator path missing: %s", base_dir)
+        return
+
+    lock_dir = base_dir / ".locks"
+    if _is_migration_server_running(lock_dir):
+        return
+
+    service_name = record.get("service") or _read_service_name(lock_dir)
+    service_mode = _read_service_mode(lock_dir)
+    use_systemd = service_mode == "systemd"
+
+    logger.info(
+        "Migration service for %s is down; attempting restart via %s",
+        base_dir,
+        "systemd" if use_systemd else "embedded runner",
+    )
+    _start_migration_service(base_dir, service_name, use_systemd)
+
+
+def _ensure_migrators_alive(base_dir: Path) -> None:
+    for record in _load_sidecar_records(base_dir):
+        if record.get("type") != "migrator":
+            continue
+        _ensure_migrator_alive(record)
+
+
+@shared_task
+def ensure_migration_service_alive() -> None:
+    """Restart migration sidecars when they stop running."""
+
+    base_dir = _project_base_dir()
+    _ensure_migrators_alive(base_dir)
 
 
 def _project_base_dir() -> Path:
