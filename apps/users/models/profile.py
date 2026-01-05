@@ -1,31 +1,16 @@
-from typing import Type
-
-from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
-from apps.base.models import Entity
+from apps.core.models import Ownable
 
 
-class Profile(Entity):
+class Profile(Ownable):
     """Abstract base class for user or group scoped configuration."""
 
-    user = models.OneToOneField(
-        settings.AUTH_USER_MODEL,
-        null=True,
-        blank=True,
-        on_delete=models.CASCADE,
-        related_name="+",
-    )
-    group = models.OneToOneField(
-        "groups.SecurityGroup",
-        null=True,
-        blank=True,
-        on_delete=models.CASCADE,
-        related_name="+",
-    )
+    owner_required = False
+
     avatar = models.ForeignKey(
         "chats.ChatAvatar",
         null=True,

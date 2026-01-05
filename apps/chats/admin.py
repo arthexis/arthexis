@@ -3,7 +3,7 @@ from django.contrib import admin
 from django.utils.translation import gettext_lazy as _
 
 from apps.chats.models import ChatAvatar
-from apps.core.admin import ProfileFormMixin, ProfileInlineFormSet
+from apps.core.admin import OwnableAdminMixin, ProfileFormMixin, ProfileInlineFormSet
 from apps.socials.models import BlueskyProfile, DiscordProfile
 
 
@@ -56,7 +56,7 @@ class DiscordProfileInline(admin.StackedInline):
 
 
 @admin.register(ChatAvatar)
-class ChatAvatarAdmin(admin.ModelAdmin):
+class ChatAvatarAdmin(OwnableAdminMixin, admin.ModelAdmin):
     list_display = ("name", "owner_display", "is_enabled")
     search_fields = ("name", "user__username", "group__name")
     list_filter = ("is_enabled",)

@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 class EmailInbox(CoreProfile):
     """Credentials and configuration for connecting to an email mailbox."""
 
+    owner_required = True
     IMAP = "imap"
     POP3 = "pop3"
     PROTOCOL_CHOICES = [

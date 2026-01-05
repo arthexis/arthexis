@@ -1,6 +1,8 @@
 from urllib.parse import urlencode
 
+from django import forms
 from django.contrib import admin, messages
+from django.core.exceptions import ValidationError
 from django.db.models import Q
 from django.http import HttpResponseBase, HttpResponseRedirect
 from django.shortcuts import redirect
@@ -28,6 +30,80 @@ def _build_credentials_actions(action_name, handler_name, description=TEST_CREDE
     change_action.label = description
     change_action.short_description = description
     return bulk_action, change_action
+
+
+class OwnableAdminForm(forms.ModelForm):
+    """Enforce mutual exclusivity between user and security group owners."""
+
+    owner_required: bool = True
+
+    def clean(self):
+        cleaned = super().clean()
+        user = cleaned.get("user")
+        group = cleaned.get("group")
+        if user and group:
+            raise ValidationError(
+                {
+                    "group": _("Select either a user or a security group, not both."),
+                    "user": _("Select either a user or a security group, not both."),
+                }
+            )
+        required = getattr(self._meta.model, "owner_required", self.owner_required)
+        if required and not user and not group:
+            raise ValidationError(_("Ownable objects must be assigned to a user or a security group."))
+        return cleaned
+
+
+class OwnableAdminMixin:
+    """Normalize owner fieldsets and validation for ownable models."""
+
+    ownable_fieldset = ("Owner", {"fields": ("user", "group")})
+    ownable_form_class = OwnableAdminForm
+
+    def _form_includes_ownable_validation(self, form_class):
+        return form_class and issubclass(form_class, OwnableAdminForm)
+
+    def get_form(self, request, obj=None, **kwargs):
+        form_class = kwargs.get("form") or getattr(self, "form", None)
+        if self._form_includes_ownable_validation(form_class):
+            return super().get_form(request, obj, **kwargs)
+        if form_class:
+            form_class = type(
+                f"Ownable{form_class.__name__}",
+                (OwnableAdminForm, form_class),
+                {},
+            )
+            kwargs["form"] = form_class
+        else:
+            kwargs["form"] = self.ownable_form_class
+        return super().get_form(request, obj, **kwargs)
+
+    def get_fieldsets(self, request, obj=None):
+        fieldsets = list(super().get_fieldsets(request, obj))
+        owner_fields = set(self.ownable_fieldset[1].get("fields", ()))
+        has_owner = any(owner_fields.issubset(set(fs[1].get("fields", ()))) for fs in fieldsets)
+        if not has_owner:
+            fieldsets.insert(0, self.ownable_fieldset)
+        return fieldsets
+
+
+class OwnedObjectLinksMixin:
+    """Inject owned object summaries into change form context."""
+
+    owned_object_context_key = "owned_object_links"
+
+    def _build_owned_object_context(self, direct, via, via_label):
+        if not direct and not via:
+            return None
+        return {
+            "direct": direct,
+            "via": via,
+            "via_label": via_label,
+        }
+
+    def _attach_owned_objects(self, extra_context, payload):
+        if payload:
+            extra_context.setdefault(self.owned_object_context_key, payload)
 
 
 class SaveBeforeChangeAction(DjangoObjectActions):

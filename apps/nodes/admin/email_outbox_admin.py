@@ -2,12 +2,12 @@ from django.contrib import admin, messages
 from django.shortcuts import redirect
 from django.urls import path, reverse
 
-from apps.core.admin import EmailOutboxAdminForm
+from apps.core.admin import EmailOutboxAdminForm, OwnableAdminMixin
 from apps.emails.models import EmailOutbox
 from apps.locals.user_data import EntityModelAdmin
 
 
-class EmailOutboxAdmin(EntityModelAdmin):
+class EmailOutboxAdmin(OwnableAdminMixin, EntityModelAdmin):
     form = EmailOutboxAdminForm
     actions = ["test_outboxes"]
     list_display = (

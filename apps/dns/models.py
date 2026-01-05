@@ -13,6 +13,7 @@ from apps.users.models import Profile
 class DNSProviderCredential(Profile):
     """Credentials for interacting with external DNS providers."""
 
+    owner_required = True
     class Provider(models.TextChoices):
         GODADDY = "godaddy", "GoDaddy"
 
@@ -69,12 +70,6 @@ class DNSProviderCredential(Profile):
         if owner:
             return f"{provider} ({owner})"
         return provider
-
-    def clean(self):
-        if self.user_id or self.group_id:
-            super().clean()
-        else:
-            super(Profile, self).clean()
 
     def get_base_url(self) -> str:
         if self.provider != self.Provider.GODADDY:

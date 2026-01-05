@@ -23,6 +23,7 @@ class ReleaseManagerManager(EntityManager):
 class ReleaseManager(Profile):
     """Store credentials for publishing packages."""
 
+    owner_required = True
     objects = ReleaseManagerManager()
 
     def natural_key(self):

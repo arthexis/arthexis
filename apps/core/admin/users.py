@@ -16,6 +16,8 @@ from apps.locals.user_data import (
     _resolve_fixture_user,
     _user_allows_user_data,
 )
+from apps.core.admin.mixins import OwnedObjectLinksMixin
+from apps.core.models import get_owned_objects_for_user
 from apps.users import temp_passwords
 from apps.users.models import User
 
@@ -57,7 +59,7 @@ GUEST_NAME_NOUNS = (
 
 
 @admin.register(User)
-class UserAdmin(UserDatumAdminMixin, DjangoUserAdmin):
+class UserAdmin(OwnedObjectLinksMixin, UserDatumAdminMixin, DjangoUserAdmin):
     form = UserChangeRFIDForm
     add_form = UserCreationWithExpirationForm
     actions = (DjangoUserAdmin.actions or []) + ["login_as_guest_user"]
@@ -179,6 +181,20 @@ class UserAdmin(UserDatumAdminMixin, DjangoUserAdmin):
                 options["fields"] = tuple(fields)
                 fieldsets[0] = (name, options)
         return fieldsets
+
+    def render_change_form(
+        self, request, context, add=False, change=False, form_url="", obj=None
+    ):
+        payload = None
+        if obj is not None:
+            direct, via = get_owned_objects_for_user(obj)
+            payload = self._build_owned_object_context(
+                direct, via, _("Owned via security group")
+            )
+        self._attach_owned_objects(context, payload)
+        return super().render_change_form(
+            request, context, add=add, change=change, form_url=form_url, obj=obj
+        )
 
     def _get_operate_as_profile_template(self):
         opts = self.model._meta

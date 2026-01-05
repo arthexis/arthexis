@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 class EmailOutbox(CoreProfile):
     """SMTP credentials for sending mail."""
 
+    owner_required = True
     profile_fields = (
         "host",
         "port",
@@ -85,12 +86,6 @@ class EmailOutbox(CoreProfile):
         if username:
             return username
         return super().__str__()
-
-    def clean(self):
-        if self.user_id or self.group_id:
-            super().clean()
-        else:
-            super(CoreProfile, self).clean()
 
     def get_connection(self):
         backend_path = getattr(

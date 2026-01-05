@@ -32,7 +32,12 @@ from .inlines import (
     _build_profile_inline,
 )
 from .invites import InviteLeadAdmin
-from .mixins import ProfileAdminMixin, SaveBeforeChangeAction, _build_credentials_actions
+from .mixins import (
+    OwnableAdminMixin,
+    ProfileAdminMixin,
+    SaveBeforeChangeAction,
+    _build_credentials_actions,
+)
 from .odoo import OdooCustomerSearchForm, OdooEmployeeAdmin, OdooProductAdmin
 from .payments import (
     OpenPayProcessorAdmin,
@@ -73,6 +78,7 @@ __all__ = [
     "OdooProductAdminForm",
     "OpenPayProcessorAdmin",
     "OpenPayProcessorAdminForm",
+    "OwnableAdminMixin",
     "PayPalProcessorAdmin",
     "PayPalProcessorAdminForm",
     "PaymentProcessorAdmin",
