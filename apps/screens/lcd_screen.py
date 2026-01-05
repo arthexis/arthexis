@@ -358,6 +358,24 @@ def _lcd_temperature_label() -> str | None:
     return None
 
 
+def _format_temperature_value(value: Decimal, unit: str) -> str:
+    precision = ".0f" if value.copy_abs() >= Decimal("100") else ".1f"
+    return f"{value:{precision}}{unit.upper()}"
+
+
+def _parse_temperature_label(label: str) -> tuple[Decimal | None, str]:
+    if not label:
+        return None, ""
+
+    unit = label[-1]
+    try:
+        value = Decimal(label[:-1])
+    except (InvalidOperation, ValueError):
+        return None, unit
+
+    return value, unit
+
+
 def _use_fate_vector() -> bool:
     return random.random() < 0.5
 
@@ -490,7 +508,8 @@ def _lcd_temperature_label_from_sysfs() -> str | None:
             logger.debug("Unable to load sysfs thermometer reading", exc_info=True)
         else:
             if label:
-                return label
+                value, unit = _parse_temperature_label(label)
+                return _format_temperature_value(value, unit) if value else label
 
     for path in glob("/sys/bus/w1/devices/28-*/temperature"):
         try:
@@ -505,7 +524,7 @@ def _lcd_temperature_label_from_sysfs() -> str | None:
             continue
         if value.copy_abs() >= Decimal("1000"):
             value = value / Decimal("1000")
-        return f"{value:.1f}C"
+        return _format_temperature_value(value, "C")
     return None
 
 
@@ -517,15 +536,13 @@ def _clock_payload(
     choose_fate: Callable[[], bool] | None = None,
 ) -> tuple[str, str, int, str]:
     temperature = _lcd_temperature_label()
-    if temperature and use_fahrenheit:
-        unit = temperature[-1].upper()
-        if unit == "C":
-            try:
-                temp_value = Decimal(temperature[:-1])
-            except (InvalidOperation, ValueError):
-                temp_value = None
-            if temp_value is not None:
-                temperature = f"{(temp_value * Decimal('9') / Decimal('5') + Decimal('32')):.1f}F"
+    temp_value, unit = _parse_temperature_label(temperature or "")
+    if temp_value is not None:
+        if use_fahrenheit and unit.upper() == "C":
+            temp_value = temp_value * Decimal("9") / Decimal("5") + Decimal("32")
+            temperature = _format_temperature_value(temp_value, "F")
+        else:
+            temperature = _format_temperature_value(temp_value, unit)
     week_label = f"{now.isocalendar().week:02d}"
     date_label = f"{now.strftime(CLOCK_DATE_FORMAT)}{week_label}"
     fate = choose_fate or _use_fate_vector
