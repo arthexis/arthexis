@@ -335,18 +335,66 @@ def _is_git_repository(base_dir: Path) -> bool:
     return proc.returncode == 0 and proc.stdout.strip().lower() == "true"
 
 
-def _has_porcelain_changes(output: str) -> bool:
+def _ignored_working_tree_paths(base_dir: Path) -> set[Path]:
+    """Return paths that should not mark the repository as dirty.
+
+    The release workflow writes runtime logs (``ARTHEXIS_LOG_DIR`` defaults to
+    ``logs``) and lock files (``.locks``) into the working tree. Those
+    artifacts are not part of source control and should not block a release.
+    """
+
+    ignored: set[Path] = set()
+    base_dir = base_dir.resolve()
+
+    env_log_dir = os.environ.get("ARTHEXIS_LOG_DIR")
+    if env_log_dir:
+        try:
+            log_dir = Path(env_log_dir).expanduser().resolve()
+        except OSError:
+            log_dir = None
+        else:
+            try:
+                log_dir.relative_to(base_dir)
+            except ValueError:
+                pass
+            else:
+                ignored.add(log_dir)
+
+    for path in (base_dir / "logs", base_dir / ".locks"):
+        ignored.add(path.resolve())
+
+    return ignored
+
+
+def _has_porcelain_changes(output: str, *, base_dir: Path | None = None) -> bool:
     """Return True when porcelain output includes working tree changes.
 
     ``git status --porcelain`` can include a leading branch summary line (``##``)
     when configuration such as ``status.branch`` is enabled. Being ahead or
     behind the remote should not mark the repository as dirty, so those summary
-    lines are ignored.
+    lines are ignored. Untracked log and lock artifacts are also ignored so the
+    release workflow does not fail on its own runtime files.
     """
+
+    base_dir = (base_dir or Path.cwd()).resolve()
+    ignored_paths = _ignored_working_tree_paths(base_dir)
 
     for line in output.splitlines():
         if not line or line.startswith("##"):
             continue
+
+        entry = line[3:].split(" -> ", 1)[-1].strip()
+        try:
+            entry_path = (base_dir / entry).resolve()
+        except Exception:
+            return True
+
+        if any(
+            entry_path == ignored or entry_path.is_relative_to(ignored)
+            for ignored in ignored_paths
+        ):
+            continue
+
         return True
     return False
 
@@ -358,7 +406,7 @@ def _git_clean() -> bool:
     proc = subprocess.run(
         ["git", "status", "--porcelain"], capture_output=True, text=True
     )
-    return not _has_porcelain_changes(proc.stdout)
+    return not _has_porcelain_changes(proc.stdout, base_dir=Path.cwd())
 
 
 def _git_has_staged_changes() -> bool:
