@@ -781,7 +781,8 @@ MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
 # Email settings
-EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_BASE_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_BACKEND = "apps.emails.backends.OutboxEmailBackend"
 DEFAULT_FROM_EMAIL = "arthexis@gmail.com"
 SERVER_EMAIL = DEFAULT_FROM_EMAIL
 

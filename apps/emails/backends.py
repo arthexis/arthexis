@@ -3,12 +3,19 @@ from __future__ import annotations
 import random
 from collections import defaultdict
 
-from django.core.mail.backends.base import BaseEmailBackend
-from django.core.mail import get_connection
 from django.conf import settings
+from django.core.mail import get_connection
+from django.core.mail.backends.base import BaseEmailBackend
 from django.db.models import Q
 
 from apps.emails.models import EmailOutbox
+
+
+DEFAULT_BASE_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+
+
+def _base_backend_path() -> str:
+    return getattr(settings, "EMAIL_BASE_BACKEND", DEFAULT_BASE_BACKEND)
 
 
 class OutboxEmailBackend(BaseEmailBackend):
@@ -122,7 +129,7 @@ class OutboxEmailBackend(BaseEmailBackend):
 
             if tried_outboxes:
                 for candidate in tried_outboxes:
-                    connection = candidate.get_connection()
+                    connection = candidate.get_connection(_base_backend_path())
                     message.from_email = (
                         original_from_email
                         or candidate.from_email
@@ -143,9 +150,7 @@ class OutboxEmailBackend(BaseEmailBackend):
                     message.from_email = original_from_email
                     raise last_error
             else:
-                connection = get_connection(
-                    "django.core.mail.backends.smtp.EmailBackend"
-                )
+                connection = get_connection(_base_backend_path())
                 if not message.from_email:
                     message.from_email = settings.DEFAULT_FROM_EMAIL
                 try:

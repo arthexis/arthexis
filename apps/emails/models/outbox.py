@@ -92,12 +92,12 @@ class EmailOutbox(CoreProfile):
         else:
             super(CoreProfile, self).clean()
 
-    def get_connection(self):
-        backend_path = getattr(
-            settings, "EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend"
+    def get_connection(self, backend_path=None):
+        backend_path = backend_path or getattr(
+            settings, "EMAIL_BASE_BACKEND", getattr(settings, "EMAIL_BACKEND", None)
         )
         return get_connection(
-            backend_path,
+            backend_path or "django.core.mail.backends.smtp.EmailBackend",
             host=self.host,
             port=self.port,
             username=self.username or None,
