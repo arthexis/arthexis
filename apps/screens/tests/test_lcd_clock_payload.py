@@ -27,6 +27,25 @@ def test_clock_payload_formats_temperature_units(monkeypatch, use_fahrenheit, ex
     assert line2.endswith(expected_suffix)
 
 
+@pytest.mark.parametrize(
+    "temperature_label,use_fahrenheit,expected_suffix",
+    [
+        ("100.0C", False, "100C"),
+        ("38.0C", True, "100F"),
+    ],
+)
+def test_clock_payload_omits_decimals_for_three_digits(
+    monkeypatch, temperature_label, use_fahrenheit, expected_suffix
+):
+    monkeypatch.setattr(lcd_screen, "_lcd_temperature_label", lambda: temperature_label)
+
+    _, line2, _, _ = lcd_screen._clock_payload(
+        datetime(2024, 1, 1, 12, 0), use_fahrenheit=use_fahrenheit
+    )
+
+    assert line2.endswith(expected_suffix)
+
+
 def test_clock_payload_can_use_fate_vector(monkeypatch):
     deck = lcd_screen.FateDeck(rng=random.Random(0))
     monkeypatch.setattr(lcd_screen, "FATE_VECTOR", "")
