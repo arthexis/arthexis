@@ -48,6 +48,7 @@ class NetMessageAdmin(EntityModelAdmin):
                 )
             },
         ),
+        (_("LCD Display"), {"fields": ("lcd_channel_type", "lcd_channel_num")}),
         ("Attachments", {"fields": ("attachments",)}),
         (
             "Propagation",
@@ -76,6 +77,7 @@ class NetMessageAdmin(EntityModelAdmin):
                 )
             },
         ),
+        (_("LCD Display"), {"fields": ("lcd_channel_type", "lcd_channel_num")}),
         (
             _("Propagation"),
             {

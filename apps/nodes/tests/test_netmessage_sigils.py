@@ -107,3 +107,54 @@ def test_net_message_propagation_skips_when_expired(monkeypatch):
 
     assert notified is False
     assert message.complete is True
+
+
+@pytest.mark.django_db
+def test_net_message_notifies_during_upgrade(monkeypatch, settings, tmp_path):
+    lock_dir = tmp_path / ".locks"
+    lock_dir.mkdir()
+    (lock_dir / "upgrade_in_progress.lck").write_text("", encoding="utf-8")
+    settings.BASE_DIR = tmp_path
+
+    calls: dict[str, object] = {}
+
+    def _notify(subject, body, **kwargs):
+        calls["subject"] = subject
+        calls["body"] = body
+        calls["kwargs"] = kwargs
+        return True
+
+    monkeypatch.setattr("apps.core.notifications.notify", _notify)
+    monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: None))
+
+    message = NetMessage.objects.create(subject="Upgrade", body="Running")
+    message.propagate()
+
+    assert calls["subject"] == "Upgrade"
+    assert calls["kwargs"]["channel_type"] == "low"
+    assert calls["kwargs"]["channel_num"] == 0
+
+
+@pytest.mark.django_db
+def test_net_message_propagate_uses_lcd_channel(monkeypatch):
+    calls: dict[str, object] = {}
+
+    def _notify(subject, body, **kwargs):
+        calls["subject"] = subject
+        calls["kwargs"] = kwargs
+        return True
+
+    monkeypatch.setattr("apps.core.notifications.notify", _notify)
+    monkeypatch.setattr(Node, "get_local", classmethod(lambda cls: None))
+
+    message = NetMessage.objects.create(
+        subject="Hello",
+        body="World",
+        lcd_channel_type="high",
+        lcd_channel_num=2,
+    )
+
+    message.propagate()
+
+    assert calls["kwargs"]["channel_type"] == "high"
+    assert calls["kwargs"]["channel_num"] == 2
