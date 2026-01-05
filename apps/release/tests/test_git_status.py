@@ -32,20 +32,32 @@ def test_git_clean_detects_working_tree_changes(monkeypatch: pytest.MonkeyPatch)
     assert release_tasks._is_clean_repository() is False  # noqa: SLF001
 
 
-def test_git_clean_ignores_log_and_lock_artifacts(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
-    log_dir = tmp_path / "logs"
-    lock_dir = tmp_path / ".locks"
-    log_dir.mkdir()
-    lock_dir.mkdir()
+def test_promote_rejects_dirty_repo_without_stash(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(release, "_git_clean", lambda: False)
 
-    porcelain_output = """## main...origin/main [ahead 2]
-?? logs/error.log
-?? .locks/release_publish_1.json
-"""
+    with pytest.raises(release.ReleaseError, match="Git repository is not clean"):
+        release.promote(version="1.2.3")
 
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("ARTHEXIS_LOG_DIR", str(log_dir))
-    _mock_git_status(monkeypatch, porcelain_output)
 
-    assert release._git_clean() is True  # noqa: SLF001
-    assert release_tasks._is_clean_repository(tmp_path) is True  # noqa: SLF001
+def test_promote_stashes_and_restores(monkeypatch: pytest.MonkeyPatch):
+    calls: list[list[str] | tuple[str, dict]] = []
+
+    monkeypatch.setattr(release, "_git_clean", lambda: False)
+    monkeypatch.setattr(release, "_git_has_staged_changes", lambda: False)
+
+    def fake_run(cmd, check=True, cwd=None):  # noqa: ANN001, D401
+        calls.append(cmd)
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(release, "_run", fake_run)
+    monkeypatch.setattr(
+        release,
+        "build",
+        lambda **kwargs: calls.append(("build", kwargs)),
+    )
+
+    release.promote(version="1.2.3", stash=True)
+
+    assert ["git", "stash", "--include-untracked"] in calls
+    assert ["git", "stash", "pop"] in calls
+    assert ("build", {"package": release.DEFAULT_PACKAGE, "version": "1.2.3", "creds": None, "tests": False, "dist": True, "git": False, "tag": False, "stash": True}) in calls

@@ -780,23 +780,34 @@ def promote(
     package: Package = DEFAULT_PACKAGE,
     version: str,
     creds: Optional[Credentials] = None,
+    stash: bool = False,
 ) -> None:
     """Build the package and commit the release on the current branch."""
+    stashed = False
     if not _git_clean():
-        raise ReleaseError("Git repository is not clean")
-    build(
-        package=package,
-        version=version,
-        creds=creds,
-        tests=False,
-        dist=True,
-        git=False,
-        tag=False,
-        stash=False,
-    )
-    _run(["git", "add", "."])  # add all changes
-    if _git_has_staged_changes():
-        _run(["git", "commit", "-m", f"Release v{version}"])
+        if stash:
+            _run(["git", "stash", "--include-untracked"])
+            stashed = True
+        else:
+            raise ReleaseError("Git repository is not clean")
+
+    try:
+        build(
+            package=package,
+            version=version,
+            creds=creds,
+            tests=False,
+            dist=True,
+            git=False,
+            tag=False,
+            stash=stash,
+        )
+        _run(["git", "add", "."])  # add all changes
+        if _git_has_staged_changes():
+            _run(["git", "commit", "-m", f"Release v{version}"])
+    finally:
+        if stashed:
+            _run(["git", "stash", "pop"], check=False)
 
 
 def publish(
