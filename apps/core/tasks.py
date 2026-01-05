@@ -155,9 +155,13 @@ def _load_sidecar_records(base_dir: Path) -> list[dict[str, str]]:
 
     records: list[dict[str, str]] = []
     for line in lines:
-        parts = line.split("	")
+        parts = line.split("\t")
+        if len(parts) < 3:
+            parts = line.split("    ")  # fallback for legacy space-delimited entries
+
         if len(parts) < 3:
             continue
+
         record: dict[str, str] = {"type": parts[0], "name": parts[1], "path": parts[2]}
         if len(parts) > 3 and parts[3]:
             record["service"] = parts[3]
