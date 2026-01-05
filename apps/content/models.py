@@ -129,3 +129,119 @@ class ContentClassification(Entity):
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return f"{self.sample} → {self.tag}"
+
+
+class WebRequestSampler(Entity):
+    """Sequence of cURL requests that collect web sampling data."""
+
+    slug = models.SlugField(max_length=100, unique=True)
+    label = models.CharField(max_length=150)
+    description = models.TextField(blank=True)
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="owned_web_request_samplers",
+    )
+    security_group = models.ForeignKey(
+        "groups.SecurityGroup",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="web_request_samplers",
+    )
+    sampling_period_minutes = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Minutes between automatic samples. Leave blank to disable scheduling.",
+    )
+    last_sampled_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["label"]
+        verbose_name = "Web Request Sampler"
+        verbose_name_plural = "Web Request Samplers"
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return self.label
+
+
+class WebRequestStep(Entity):
+    """Individual cURL call that belongs to a :class:`WebRequestSampler`."""
+
+    sampler = models.ForeignKey(
+        WebRequestSampler, on_delete=models.CASCADE, related_name="steps"
+    )
+    order = models.PositiveIntegerField(default=0)
+    slug = models.SlugField(max_length=100)
+    name = models.CharField(max_length=150, blank=True)
+    curl_command = models.TextField(
+        help_text="Full cURL command or arguments to execute when sampling."
+    )
+    save_as_content = models.BooleanField(
+        default=False,
+        help_text="Store the response body as a Content Sample attachment.",
+    )
+    attachment_kind = models.CharField(
+        max_length=10,
+        choices=ContentSample.KIND_CHOICES,
+        default=ContentSample.TEXT,
+        help_text="Kind to assign when saving the response as a Content Sample.",
+    )
+
+    class Meta:
+        ordering = ["order", "id"]
+        unique_together = ("sampler", "slug")
+        verbose_name = "Web Request Step"
+        verbose_name_plural = "Web Request Steps"
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return self.name or f"{self.sampler} step {self.slug}"
+
+
+class WebSample(Entity):
+    """Collected data from executing a :class:`WebRequestSampler`."""
+
+    sampler = models.ForeignKey(
+        WebRequestSampler, on_delete=models.CASCADE, related_name="web_samples"
+    )
+    executed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="web_samples",
+    )
+    document = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "Web Sample"
+        verbose_name_plural = "Web Samples"
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return f"{self.sampler} @ {self.created_at:%Y-%m-%d %H:%M:%S}"
+
+
+class WebSampleAttachment(Entity):
+    """Link between a :class:`WebSample` and a stored :class:`ContentSample`."""
+
+    sample = models.ForeignKey(
+        WebSample, on_delete=models.CASCADE, related_name="attachments"
+    )
+    step = models.ForeignKey(
+        WebRequestStep, on_delete=models.SET_NULL, null=True, blank=True
+    )
+    uri = models.CharField(max_length=500)
+    content_sample = models.ForeignKey(
+        ContentSample, on_delete=models.CASCADE, related_name="web_attachments"
+    )
+
+    class Meta:
+        verbose_name = "Web Sample Attachment"
+        verbose_name_plural = "Web Sample Attachments"
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return f"Attachment for {self.sample}"
