@@ -63,33 +63,89 @@ def supports_gui_toast() -> bool:
 class NotificationManager:
     """Write notifications to a lock file or fall back to GUI/log output."""
 
+    DEFAULT_CHANNEL_FILES: dict[str, str] = {
+        "low": LCD_LOW_LOCK_FILE,
+        "high": LCD_HIGH_LOCK_FILE,
+    }
+
     def __init__(
         self,
-        lock_file: Path | None = None,
-        sticky_lock_file: Path | None = None,
+        lock_dir: Path | None = None,
     ) -> None:
         base_dir = get_base_dir()
-        self.lock_file = lock_file or base_dir / ".locks" / LCD_LOW_LOCK_FILE
-        self.sticky_lock_file = (
-            sticky_lock_file or base_dir / ".locks" / LCD_HIGH_LOCK_FILE
-        )
-        self.lock_file.parent.mkdir(parents=True, exist_ok=True)
-        self.sticky_lock_file.parent.mkdir(parents=True, exist_ok=True)
+        self.lock_dir = lock_dir or (base_dir / ".locks")
+        self.lock_dir.mkdir(parents=True, exist_ok=True)
         # ``plyer`` is only available on Windows and can fail when used in
         # a non-interactive environment (e.g. service or CI).
         # Any failure will fall back to logging quietly.
 
+    @staticmethod
+    def _normalize_channel_type(channel_type: str | None, *, sticky: bool = False) -> str:
+        normalized = (channel_type or ("high" if sticky else "low")).strip().lower()
+        if not normalized:
+            return "low"
+        return normalized
+
+    @staticmethod
+    def _normalize_channel_num(channel_num: int | str | None) -> int:
+        try:
+            normalized = int(channel_num) if channel_num is not None else 0
+        except (TypeError, ValueError):
+            return 0
+        return normalized if normalized >= 0 else 0
+
+    def _target_lock_file(
+        self,
+        *,
+        channel_type: str | None,
+        channel_num: int | str | None,
+        sticky: bool = False,
+    ) -> Path:
+        """Return the lock file path for the requested LCD channel."""
+
+        normalized_type = self._normalize_channel_type(channel_type, sticky=sticky)
+        normalized_num = self._normalize_channel_num(channel_num)
+        filename = self.DEFAULT_CHANNEL_FILES.get(
+            normalized_type, f"lcd-{normalized_type}"
+        )
+
+        if normalized_num != 0 and filename in self.DEFAULT_CHANNEL_FILES.values():
+            logger.debug(
+                "LCD channel numbers are not supported; using %s for %s (%s)",
+                filename,
+                normalized_type,
+                normalized_num,
+            )
+        return self.lock_dir / filename
+
     def _write_lock_file(
-        self, subject: str, body: str, *, sticky: bool = False, expires_at=None
+        self,
+        subject: str,
+        body: str,
+        *,
+        sticky: bool = False,
+        expires_at=None,
+        channel_type: str | None = None,
+        channel_num: int | str | None = None,
     ) -> None:
         payload = render_lcd_lock_file(
             subject=subject[:64], body=body[:64], expires_at=expires_at
         )
-        target = self.sticky_lock_file if sticky else self.lock_file
+        target = self._target_lock_file(
+            channel_type=channel_type, channel_num=channel_num, sticky=sticky
+        )
+        target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(payload, encoding="utf-8")
 
     def send(
-        self, subject: str, body: str = "", *, sticky: bool = False, expires_at=None
+        self,
+        subject: str,
+        body: str = "",
+        *,
+        sticky: bool = False,
+        expires_at=None,
+        channel_type: str | None = None,
+        channel_num: int | str | None = None,
     ) -> bool:
         """Store *subject* and *body* in the LCD lock file when available.
 
@@ -101,7 +157,12 @@ class NotificationManager:
 
         try:
             self._write_lock_file(
-                subject[:64], body[:64], sticky=sticky, expires_at=expires_at
+                subject[:64],
+                body[:64],
+                sticky=sticky,
+                expires_at=expires_at,
+                channel_type=channel_type,
+                channel_num=channel_num,
             )
             return True
         except Exception as exc:  # pragma: no cover - filesystem dependent
@@ -110,13 +171,27 @@ class NotificationManager:
             return True
 
     def send_async(
-        self, subject: str, body: str = "", *, sticky: bool = False, expires_at=None
+        self,
+        subject: str,
+        body: str = "",
+        *,
+        sticky: bool = False,
+        expires_at=None,
+        channel_type: str | None = None,
+        channel_num: int | str | None = None,
     ) -> None:
         """Dispatch :meth:`send` on a background thread."""
 
         def _send() -> None:
             try:
-                self.send(subject, body, sticky=sticky, expires_at=expires_at)
+                self.send(
+                    subject,
+                    body,
+                    sticky=sticky,
+                    expires_at=expires_at,
+                    channel_type=channel_type,
+                    channel_num=channel_num,
+                )
             except Exception:
                 # Notification failures shouldn't affect callers.
                 pass
@@ -141,16 +216,42 @@ manager = NotificationManager()
 
 
 def notify(
-    subject: str, body: str = "", *, sticky: bool = False, expires_at=None
+    subject: str,
+    body: str = "",
+    *,
+    sticky: bool = False,
+    expires_at=None,
+    channel_type: str | None = None,
+    channel_num: int | str | None = None,
 ) -> bool:
     """Convenience wrapper using the global :class:`NotificationManager`."""
 
-    return manager.send(subject=subject, body=body, sticky=sticky, expires_at=expires_at)
+    return manager.send(
+        subject=subject,
+        body=body,
+        sticky=sticky,
+        expires_at=expires_at,
+        channel_type=channel_type,
+        channel_num=channel_num,
+    )
 
 
 def notify_async(
-    subject: str, body: str = "", *, sticky: bool = False, expires_at=None
+    subject: str,
+    body: str = "",
+    *,
+    sticky: bool = False,
+    expires_at=None,
+    channel_type: str | None = None,
+    channel_num: int | str | None = None,
 ) -> None:
     """Run :func:`notify` without blocking the caller."""
 
-    manager.send_async(subject=subject, body=body, sticky=sticky, expires_at=expires_at)
+    manager.send_async(
+        subject=subject,
+        body=body,
+        sticky=sticky,
+        expires_at=expires_at,
+        channel_type=channel_type,
+        channel_num=channel_num,
+    )

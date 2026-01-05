@@ -11,7 +11,7 @@ black==25.12.0
 botocore==1.36.23
 boto3==1.36.23
 celery==5.5.3
-certifi==2025.11.12
+certifi==2026.1.4
 cffi==2.0.0
 channels==4.3.2
 channels-redis==4.3.0

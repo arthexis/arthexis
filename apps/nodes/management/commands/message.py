@@ -31,12 +31,32 @@ class Command(BaseCommand):
             dest="seen",
             help="UUIDs of nodes that have already seen the message",
         )
+        parser.add_argument(
+            "--lcd-channel-type",
+            dest="lcd_channel_type",
+            help="LCD channel type to target (for example low or high)",
+        )
+        parser.add_argument(
+            "--lcd-channel-num",
+            dest="lcd_channel_num",
+            type=int,
+            help="LCD channel number to target",
+        )
 
     def handle(self, *args, **options):
         subject: str = options["subject"]
         body: str = options["body"]
         reach: str | None = options.get("reach")
         seen: list[str] | None = options.get("seen")
+        lcd_channel_type: str | None = options.get("lcd_channel_type")
+        lcd_channel_num: int | None = options.get("lcd_channel_num")
 
-        NetMessage.broadcast(subject=subject, body=body, reach=reach, seen=seen)
+        NetMessage.broadcast(
+            subject=subject,
+            body=body,
+            reach=reach,
+            seen=seen,
+            lcd_channel_type=lcd_channel_type,
+            lcd_channel_num=lcd_channel_num,
+        )
         self.stdout.write(self.style.SUCCESS("Net message broadcast"))

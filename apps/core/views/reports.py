@@ -1094,6 +1094,18 @@ def _step_promote_build(release, ctx, log_path: Path, *, user=None) -> None:
         return
     try:
         _ensure_origin_main_unchanged(log_path)
+        status_result = subprocess.run(
+            ["git", "status", "--porcelain"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        status_output = status_result.stdout.strip()
+        if status_output:
+            _append_log(
+                log_path,
+                "Git repository is not clean; git status --porcelain:\n" + status_output,
+            )
         release_utils.promote(
             package=release.to_package(),
             version=release.version,

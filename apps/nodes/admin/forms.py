@@ -130,6 +130,8 @@ class QuickSendForm(forms.ModelForm):
             "subject",
             "body",
             "expires_at",
+            "lcd_channel_type",
+            "lcd_channel_num",
             "attachments",
             "filter_node",
             "filter_node_feature",
