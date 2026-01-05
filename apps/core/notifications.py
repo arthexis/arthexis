@@ -105,12 +105,17 @@ class NotificationManager:
 
         normalized_type = self._normalize_channel_type(channel_type, sticky=sticky)
         normalized_num = self._normalize_channel_num(channel_num)
-        if normalized_num == 0:
-            filename = self.DEFAULT_CHANNEL_FILES.get(
-                normalized_type, f"lcd-{normalized_type}"
+        filename = self.DEFAULT_CHANNEL_FILES.get(
+            normalized_type, f"lcd-{normalized_type}"
+        )
+
+        if normalized_num != 0 and filename in self.DEFAULT_CHANNEL_FILES.values():
+            logger.debug(
+                "LCD channel numbers are not supported; using %s for %s (%s)",
+                filename,
+                normalized_type,
+                normalized_num,
             )
-        else:
-            filename = f"lcd-{normalized_type}-{normalized_num}"
         return self.lock_dir / filename
 
     def _write_lock_file(
