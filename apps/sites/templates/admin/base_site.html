@@ -678,11 +678,11 @@ body.login #site-badges .badge a {
     color: white;
     text-decoration: none;
 }
-body.login #site-badges .badge .badge-link {
+#site-badges .badge .badge-link {
     color: inherit;
     text-decoration: none;
 }
-body.login #site-badges .badge .badge-link-value {
+#site-badges .badge .badge-link-value {
     margin-left: 0.25em;
 }
 body.login .badge-unknown {background-color:#6c757d;}
@@ -760,13 +760,6 @@ body:not(.login) #site-badges .badge {
     font-size: 0.8em;
     color: white;
     text-decoration: none;
-}
-body:not(.login) #site-badges .badge .badge-link {
-    color: inherit;
-    text-decoration: none;
-}
-body:not(.login) #site-badges .badge .badge-link-value {
-    margin-left: 0.25em;
 }
 
 body:not(.login) .badge-unknown {background-color:#6c757d;}
@@ -1330,19 +1323,15 @@ body.user-story-open {
       <span style="display:none">NODE: Unknown</span>
     </a>
   {% endif %}
-  {% if badge_video_device %}
-    <span class="badge" style="background-color: {{ badge_video_device_color }};">
-      <a class="badge-link" href="{% url 'admin:video_videodevice_changelist' %}">CAM:</a>
+  <span class="badge {% if not badge_video_device %}badge-unknown{% endif %}" {% if badge_video_device %}style="background-color: {{ badge_video_device_color }};"{% endif %}>
+    <a class="badge-link" href="{% url 'admin:video_videodevice_changelist' %}">CAM:</a>
+    {% if badge_video_device %}
       <a class="badge-link badge-link-value" href="{% url 'admin:video_videodevice_change' badge_video_device.pk %}">{{ badge_video_device.identifier }}</a>
-      <span style="display:none">CAM: {{ badge_video_device.identifier }}</span>
-    </span>
-  {% else %}
-    <span class="badge badge-unknown" style="background-color: {{ badge_video_device_color }};">
-      <a class="badge-link" href="{% url 'admin:video_videodevice_changelist' %}">CAM:</a>
+    {% else %}
       <span class="badge-link badge-link-value">None</span>
-      <span style="display:none">CAM: None</span>
-    </span>
-  {% endif %}
+    {% endif %}
+    <span style="display:none">CAM: {{ badge_video_device.identifier|default:"None" }}</span>
+  </span>
 </div>
 {% endblock %}
 {% block userlinks %}

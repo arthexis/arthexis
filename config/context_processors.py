@@ -1,3 +1,4 @@
+import logging
 import socket
 
 from django.contrib.sites.models import Site
@@ -8,6 +9,9 @@ from django.conf import settings
 DEFAULT_BADGE_COLOR = "#28a745"
 UNKNOWN_BADGE_COLOR = "#6c757d"
 CAMERA_BADGE_COLOR = "#0d6efd"
+
+
+logger = logging.getLogger(__name__)
 
 
 def site_and_node(request: HttpRequest):
@@ -58,6 +62,7 @@ def site_and_node(request: HttpRequest):
                         or Node.objects.filter(address=host).first()
                     )
         except Exception:
+            logger.exception("Unexpected error resolving node for host '%s'", host)
             node = None
     request.badge_node = node
 
@@ -77,6 +82,9 @@ def site_and_node(request: HttpRequest):
         except (OperationalError, ProgrammingError):
             video_device = None
         except Exception:
+            logger.exception(
+                "Unexpected error resolving default video device for node %s", node
+            )
             video_device = None
     request.badge_video_device = video_device
 
