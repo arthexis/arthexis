@@ -147,7 +147,7 @@ def last_net_message() -> dict[str, object]:
                 try:
                     url = reverse("admin:nodes_netmessage_change", args=[pk])
                 except NoReverseMatch:
-                    url = ""
+                    pass
 
             return {"text": text, "has_content": True, "pk": pk, "url": url}
 
