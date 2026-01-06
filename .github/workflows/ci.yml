@@ -3,6 +3,7 @@ name: CI
 env:
   PYTHONDONTWRITEBYTECODE: '1'
   NODE_OPTIONS: '--no-deprecation'
+  ARTHEXIS_DB_BACKEND: sqlite
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
