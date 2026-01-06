@@ -37,17 +37,37 @@ from django.conf import settings  # noqa: E402
 
 
 class _DisableMigrations(dict):
-    """Short-circuit Django migrations for faster test database setup."""
+    """Short-circuit Django migrations for faster test database setup.
+
+    Individual apps can be whitelisted to ensure their migrations still run
+    when global disabling is enabled.
+    """
+
+    def __init__(self, enabled_apps: set[str] | None = None):
+        super().__init__()
+        self.enabled_apps = enabled_apps or set()
 
     def __contains__(self, item: object) -> bool:  # pragma: no cover - trivial
-        return True
+        return item not in self.enabled_apps
 
     def __getitem__(self, item: str) -> None:  # pragma: no cover - trivial
+        if item in self.enabled_apps:
+            raise KeyError(item)
         return None
 
 
-if os.environ.get("PYTEST_DISABLE_MIGRATIONS", "0") == "1":
-    settings.MIGRATION_MODULES = _DisableMigrations()
+def _configure_migrations() -> None:
+    """Keep test setup fast while guaranteeing critical migrations run."""
+    if os.environ.get("PYTEST_DISABLE_MIGRATIONS", "0") != "1":
+        return
+
+    # Tests rely on real schemas for apps such as apps.ocpp, which have a
+    # web of migration dependencies. Overriding the environment flag keeps
+    # migrations enabled even if a CI job sets PYTEST_DISABLE_MIGRATIONS.
+    os.environ["PYTEST_DISABLE_MIGRATIONS"] = "0"
+
+
+_configure_migrations()
 
 from apps.tests.domain import RecordedTestResult, persist_results  # noqa: E402
 COLLECTED_RESULTS: Dict[str, Dict[str, Any]] = defaultdict(lambda: {"logs": []})
