@@ -35,6 +35,7 @@ Passing a role flag applies a curated bundle of options. Each preset still honou
 | `--stable` / `--regular` / `--normal` | Enables auto-upgrade on the stable release channel with weekly Thursday-morning checks (before 5:00 AM).【F:install.sh†L256-L259】【F:install.sh†L578-L599】 |
 | `--celery` | Forces Celery services on even if the preset would leave them disabled. Rarely needed because all presets already enable Celery.【F:install.sh†L261-L263】【F:install.sh†L320-L341】 |
 | `--lcd-screen` / `--no-lcd-screen` | Adds or removes the LCD updater service and lock. Control preset enables it automatically; `--no-lcd-screen` removes an existing unit after reading `.locks/service.lck`.【F:install.sh†L275-L333】【F:install.sh†L526-L575】 |
+| `--ap-watchdog` | Installs the AP watchdog service, captures a snapshot of current nmcli connection templates, and provisions a systemd unit that restarts on failure with a 60s delay. The watchdog keeps the access-point profile on `wlan0` when `wlan1` has internet and fails over connections to `wlan0` when the dongle goes offline.【F:install.sh†L722-L741】【F:scripts/ap_watchdog.py†L1-L246】 |
 | `--clean` | Deletes `db.sqlite3` before installing, after first backing it up into `backups/` with version and Git metadata.【F:install.sh†L61-L120】 |
 | `--start` / `--no-start` | Launches or skips `start.sh` after setup completes, which is useful for unattended provisioning while still allowing explicit opt-outs.【F:install.sh†L24-L47】【F:install.sh†L289-L297】【F:install.sh†L611-L613】 |
 
@@ -110,6 +111,8 @@ The Windows upgrade helper focuses on Git safety and dependency refreshes. It pu
 ### 4.1 Linux: `uninstall.sh`
 
 `uninstall.sh` removes system services, lock files, and the SQLite database. It warns before deleting persistent data unless you pass `--no-warn` (useful for scripted teardown). Providing `--service NAME` overrides the autodetected service from `.locks/service.lck`.【F:uninstall.sh†L1-L77】【F:uninstall.sh†L90-L159】 The script always prompts before stopping the server, disables any LCD and Celery units, cleans up WLAN watchdog services, and refreshes desktop shortcuts on exit.【F:uninstall.sh†L90-L167】
+
+Passing `--ap-watchdog` removes only the AP watchdog assets (lock, template, and systemd unit) when present, while `--full` uninstalls it automatically. If a watchdog lock exists, plain uninstall runs abort until either `--ap-watchdog` or `--full` is provided to mirror multi-instance safeguards.【F:uninstall.sh†L14-L159】
 
 ### 4.2 Windows
 
