@@ -22,6 +22,7 @@ from apps.base.models import Entity
 from apps.celery.utils import normalize_periodic_task_name, periodic_task_name_variants
 from apps.emails import mailer
 from apps.video import has_rpi_camera_stack
+from apps.screens.startup_notifications import lcd_feature_enabled_for_paths
 from .slug_entities import SlugDisplayNaturalKeyMixin, SlugEntityManager
 
 if TYPE_CHECKING:  # pragma: no cover - used for type checking
@@ -197,6 +198,7 @@ class NodeFeatureMixin:
         "gui-toast",
         "rpi-camera",
         "ap-router",
+        "llm-summary",
     }
     MANUAL_FEATURE_SLUGS = {"screenshot-poll", "audio-capture"}
 
@@ -407,6 +409,14 @@ class NodeFeatureMixin:
     def sync_feature_tasks(self):
         screenshot_enabled = self.has_feature("screenshot-poll")
         celery_enabled = self.is_local and self.has_feature("celery-queue")
+        base_dir = Path(settings.BASE_DIR)
+        base_path = self.get_base_path()
+        summary_enabled = (
+            self.is_local
+            and celery_enabled
+            and self.has_feature("llm-summary")
+            and lcd_feature_enabled_for_paths(base_dir, base_path)
+        )
         self._sync_screenshot_task(screenshot_enabled)
         self._sync_landing_lead_task(celery_enabled)
         self._sync_ocpp_session_report_task(celery_enabled)
@@ -414,6 +424,7 @@ class NodeFeatureMixin:
         self._sync_net_message_purge_task(celery_enabled)
         self._sync_node_update_task(celery_enabled)
         self._sync_connectivity_monitor_task(celery_enabled)
+        self._sync_llm_summary_task(summary_enabled)
 
     def _sync_screenshot_task(self, enabled: bool):
         from django_celery_beat.models import IntervalSchedule, PeriodicTask
@@ -605,6 +616,34 @@ class NodeFeatureMixin:
             PeriodicTask.objects.filter(
                 name__in=periodic_task_name_variants(raw_task_name)
             ).update(enabled=False)
+
+    def _sync_llm_summary_task(self, enabled: bool):
+        if not self.is_local:
+            return
+
+        from django_celery_beat.models import IntervalSchedule, PeriodicTask
+
+        raw_task_name = "generate_log_summary"
+        task_name = normalize_periodic_task_name(
+            PeriodicTask.objects, raw_task_name
+        )
+
+        if enabled:
+            schedule, _ = IntervalSchedule.objects.get_or_create(
+                every=5, period=IntervalSchedule.MINUTES
+            )
+            PeriodicTask.objects.update_or_create(
+                name=task_name,
+                defaults={
+                    "interval": schedule,
+                    "task": "summary.tasks.generate_log_summary",
+                    "enabled": True,
+                },
+            )
+        else:
+            PeriodicTask.objects.filter(
+                name__in=periodic_task_name_variants(raw_task_name)
+            ).delete()
 
     def _sync_connectivity_monitor_task(self, celery_enabled: bool):
         if not self.is_local:

@@ -425,6 +425,7 @@ LOCAL_APPS = [
     "apps.maps",
     "apps.locals",
     "apps.locale",
+    "apps.summary",
     "apps.content",
     "apps.clocks",
     "apps.audio",
