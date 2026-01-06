@@ -94,7 +94,7 @@ class NotificationManager:
             return 0
         return normalized if normalized >= 0 else 0
 
-    def _target_lock_file(
+    def get_target_lock_file(
         self,
         *,
         channel_type: str | None,
@@ -118,6 +118,25 @@ class NotificationManager:
             )
         return self.lock_dir / filename
 
+    def _target_lock_file(
+        self,
+        *,
+        channel_type: str | None,
+        channel_num: int | str | None,
+        sticky: bool = False,
+    ) -> Path:
+        """Deprecated wrapper for :meth:`get_target_lock_file`.
+
+        Kept for backward compatibility with older callers that still
+        reference the private method directly.
+        """
+
+        return self.get_target_lock_file(
+            channel_type=channel_type,
+            channel_num=channel_num,
+            sticky=sticky,
+        )
+
     def _write_lock_file(
         self,
         subject: str,
@@ -131,7 +150,7 @@ class NotificationManager:
         payload = render_lcd_lock_file(
             subject=subject[:64], body=body[:64], expires_at=expires_at
         )
-        target = self._target_lock_file(
+        target = self.get_target_lock_file(
             channel_type=channel_type, channel_num=channel_num, sticky=sticky
         )
         target.parent.mkdir(parents=True, exist_ok=True)

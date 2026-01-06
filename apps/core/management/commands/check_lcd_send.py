@@ -63,7 +63,7 @@ class Command(BaseCommand):
 
         base_dir = Path(settings.BASE_DIR)
         manager = NotificationManager(lock_dir=base_dir / ".locks")
-        lock_file = manager._target_lock_file(  # pylint: disable=protected-access
+        lock_file = manager.get_target_lock_file(
             channel_type=channel_type,
             channel_num=channel_num,
             sticky=sticky,
@@ -130,35 +130,32 @@ class Command(BaseCommand):
             time.sleep(poll_interval)
         return predicate()
 
+    def _read_lock_payload_matches(
+        self, lock_file: Path, expected_payload: str
+    ) -> bool:
+        if not lock_file.exists():
+            return False
+        try:
+            raw = lock_file.read_text(encoding="utf-8")
+        except OSError:
+            return False
+        return raw == expected_payload
+
     def _wait_for_lock_write(
         self, lock_file: Path, expected_payload: str, timeout: float, poll_interval: float
     ) -> bool:
-        def _written() -> bool:
-            if not lock_file.exists():
-                return False
-            try:
-                raw = lock_file.read_text(encoding="utf-8")
-            except OSError:
-                return False
-            return raw == expected_payload
-
-        return self._wait_for_condition(_written, timeout, poll_interval)
+        return self._wait_for_condition(
+            lambda: self._read_lock_payload_matches(lock_file, expected_payload),
+            timeout,
+            poll_interval,
+        )
 
     def _wait_for_lock_persist(
         self, lock_file: Path, expected_payload: str, timeout: float, poll_interval: float
     ) -> bool:
-        def _matches() -> bool:
-            if not lock_file.exists():
-                return False
-            try:
-                raw = lock_file.read_text(encoding="utf-8")
-            except OSError:
-                return False
-            return raw == expected_payload
-
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
-            if not _matches():
+            if not self._read_lock_payload_matches(lock_file, expected_payload):
                 return False
             time.sleep(poll_interval)
-        return _matches()
+        return self._read_lock_payload_matches(lock_file, expected_payload)
