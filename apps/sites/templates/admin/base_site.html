@@ -678,6 +678,13 @@ body.login #site-badges .badge a {
     color: white;
     text-decoration: none;
 }
+#site-badges .badge .badge-link {
+    color: inherit;
+    text-decoration: none;
+}
+#site-badges .badge .badge-link-value {
+    margin-left: 0.25em;
+}
 body.login .badge-unknown {background-color:#6c757d;}
 #server-clock {
     font-family: monospace;
@@ -1316,6 +1323,15 @@ body.user-story-open {
       <span style="display:none">NODE: Unknown</span>
     </a>
   {% endif %}
+  <span class="badge {% if not badge_video_device %}badge-unknown{% endif %}" {% if badge_video_device %}style="background-color: {{ badge_video_device_color }};"{% endif %}>
+    <a class="badge-link" href="{% url 'admin:video_videodevice_changelist' %}">CAM:</a>
+    {% if badge_video_device %}
+      <a class="badge-link badge-link-value" href="{% url 'admin:video_videodevice_change' badge_video_device.pk %}">{{ badge_video_device.identifier }}</a>
+    {% else %}
+      <span class="badge-link badge-link-value">None</span>
+    {% endif %}
+    <span style="display:none">CAM: {{ badge_video_device.identifier|default:"None" }}</span>
+  </span>
 </div>
 {% endblock %}
 {% block userlinks %}
