@@ -22,6 +22,10 @@ class VideoDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
     list_display = ("identifier", "node", "description", "is_default")
     search_fields = ("identifier", "description", "raw_info", "node__hostname")
     changelist_actions = ["find_video_devices", "take_snapshot", "test_camera"]
+    actions = admin.ModelAdmin.actions + (
+        "take_snapshot_action",
+        "test_camera_action",
+    )
     change_list_template = "django_object_actions/change_list.html"
 
     def get_urls(self):
@@ -55,8 +59,16 @@ class VideoDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
     def take_snapshot(self, request, queryset=None):
         return redirect("admin:video_videodevice_take_snapshot")
 
+    @admin.action(description=_("Take Snapshot (default device)"))
+    def take_snapshot_action(self, request, queryset):
+        return self.take_snapshot(request, queryset)
+
     def test_camera(self, request, queryset=None):
         return redirect("admin:video_videodevice_view_stream")
+
+    @admin.action(description=_("Test Camera (default device)"))
+    def test_camera_action(self, request, queryset):
+        return self.test_camera(request, queryset)
 
     find_video_devices.label = _("Find Video Devices")
     find_video_devices.short_description = _("Find Video Devices")
