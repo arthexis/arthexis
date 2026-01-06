@@ -23,15 +23,9 @@ def _system_dashboard_rules_report_view(request: HttpRequest):
         content_type = rule.content_type
         model = content_type.model_class()
 
-        model_name = None
-        if model:
-            model_name = model._meta.verbose_name
-        else:
-            model_name = content_type.name
+        model_name = model._meta.verbose_name if model else content_type.name
 
-        status = DashboardRule.get_cached_value(
-            content_type, rule.evaluate, force_refresh=True
-        )
+        status = DashboardRule.get_cached_value(content_type, rule.evaluate)
 
         entries.append(
             {
