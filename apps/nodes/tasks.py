@@ -201,18 +201,30 @@ def _active_interface_label() -> str:
     try:
         stats = psutil.net_if_stats()
     except Exception:
-        return "n/a"
+        return "NA"
 
     def _shorten(name: str) -> str:
+        if name.startswith("eth"):
+            return f"E{name[3:]}" if len(name) > 3 else "E"
         if name.startswith("wlan"):
-            return f"wln{name[4:]}"
-        return name
+            return f"W{name[4:]}" if len(name) > 4 else "W"
+        if name.startswith("wln"):
+            return f"W{name[3:]}" if len(name) > 3 else "W"
+        return "AF"
 
-    for name in ("eth0", "wlan1", "wlan0"):
+    prioritized_interfaces = ("eth0", "wlan1", "wlan0")
+    for name in prioritized_interfaces:
         details = stats.get(name)
         if details and details.isup:
             return _shorten(name)
-    return "n/a"
+
+    for name, details in stats.items():
+        if name in prioritized_interfaces or name.startswith("lo"):
+            continue
+        if details and details.isup:
+            return _shorten(name)
+
+    return "NA"
 
 
 def _role_label_from_lock(lock_dir: Path) -> str:
