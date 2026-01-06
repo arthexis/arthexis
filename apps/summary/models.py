@@ -17,6 +17,4 @@ class SummaryState(models.Model):
     @classmethod
     def get_default(cls) -> "SummaryState":
         state, _ = cls.objects.get_or_create(slug="default")
-        if state.log_offsets is None:
-            state.log_offsets = {}
         return state

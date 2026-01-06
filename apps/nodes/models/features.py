@@ -412,8 +412,7 @@ class NodeFeatureMixin:
         base_dir = Path(settings.BASE_DIR)
         base_path = self.get_base_path()
         summary_enabled = (
-            self.is_local
-            and celery_enabled
+            celery_enabled
             and self.has_feature("llm-summary")
             and lcd_feature_enabled_for_paths(base_dir, base_path)
         )

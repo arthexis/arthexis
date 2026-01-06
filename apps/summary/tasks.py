@@ -133,20 +133,12 @@ def _compact_lines(lines: Iterable[str]) -> list[str]:
 
 
 def _collapse_repeats(lines: list[str]) -> list[str]:
-    if not lines:
-        return []
+    from itertools import groupby
 
     collapsed: list[str] = []
-    current = lines[0]
-    count = 1
-    for line in lines[1:]:
-        if line == current:
-            count += 1
-            continue
-        collapsed.append(f"{current} x{count}" if count > 1 else current)
-        current = line
-        count = 1
-    collapsed.append(f"{current} x{count}" if count > 1 else current)
+    for line, group in groupby(lines):
+        count = len(list(group))
+        collapsed.append(f"{line} x{count}" if count > 1 else line)
     return collapsed
 
 
@@ -172,7 +164,7 @@ def _log_state(state: SummaryState, log_dir: Path) -> tuple[list[str], dict[str,
     new_offsets: dict[str, int] = {}
 
     for log_file in _candidate_log_files(log_dir):
-        previous_offset = int(offsets.get(log_file.name, 0) or 0)
+        previous_offset = int(offsets.get(log_file.name, 0))
         lines, updated_offset = _read_incremental_log(log_file, previous_offset)
         if lines:
             collected.extend(lines)
