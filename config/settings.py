@@ -852,4 +852,8 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.ocpp.tasks.setup_forwarders",
         "schedule": timedelta(minutes=5),
     },
+    "web_request_sampling": {
+        "task": "apps.content.tasks.run_scheduled_web_samplers",
+        "schedule": timedelta(minutes=1),
+    },
 }
