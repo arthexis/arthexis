@@ -5,7 +5,7 @@ from django.urls import reverse
 from apps.content.models import ContentSample
 from apps.nodes.models import Node, NodeFeature
 from apps.video import admin as video_admin
-from apps.video.models import VideoDevice
+from apps.video.models import VideoDevice, VideoSnapshot
 
 
 @pytest.mark.django_db
@@ -107,3 +107,52 @@ def test_take_snapshot_warns_when_no_devices(
     assert response.request["PATH_INFO"].endswith(
         reverse("admin:video_videodevice_changelist")
     )
+
+
+@pytest.mark.django_db
+def test_change_view_shows_latest_snapshot(admin_client, monkeypatch, tmp_path):
+    Node._local_cache.clear()
+    node = Node.objects.create(
+        hostname="local",
+        mac_address=Node.get_current_mac(),
+        current_relation=Node.Relation.SELF,
+    )
+    NodeFeature.objects.create(slug="rpi-camera", display="Raspberry Pi Camera")
+
+    image_path = tmp_path / "snapshot.jpg"
+
+    try:
+        from PIL import Image
+    except ImportError:  # pragma: no cover - Pillow is an installed dependency
+        pytest.skip("Pillow not available")
+
+    Image.new("RGB", (8, 6), color="red").save(image_path, format="JPEG")
+
+    device = VideoDevice.objects.create(
+        node=node,
+        identifier="/dev/video0",
+        description="Raspberry Pi Camera",
+    )
+
+    sample = ContentSample.objects.create(
+        kind=ContentSample.IMAGE,
+        path=str(image_path),
+        node=node,
+    )
+    snapshot = VideoSnapshot.objects.create(
+        device=device,
+        sample=sample,
+        **VideoSnapshot.build_metadata(sample),
+    )
+
+    url = reverse("admin:video_videodevice_change", args=[device.pk])
+    response = admin_client.get(url)
+
+    assert response.status_code == 200
+    latest_snapshot = device.get_latest_snapshot()
+    assert latest_snapshot is not None
+    assert latest_snapshot.pk == snapshot.pk
+    assert latest_snapshot.resolution_display == "8 × 6"
+    assert latest_snapshot.image_format.lower() == "jpeg"
+    assert VideoSnapshot.objects.filter(device=device).count() == 1
+    assert "LATEST" in response.rendered_content

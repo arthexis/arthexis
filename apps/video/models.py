@@ -1,21 +1,33 @@
 from __future__ import annotations
 
+import base64
 from dataclasses import dataclass
+import logging
 from pathlib import Path
 
+from django.conf import settings
 from django.db import models
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from django.urls import reverse
+from PIL import Image
+
+from apps.content.models import ContentSample
 
 from apps.base.models import Entity
+from apps.core.models.ownable import Ownable
+from apps.nodes.utils import save_screenshot
 from .utils import (
     RPI_CAMERA_BINARIES,
     RPI_CAMERA_DEVICE,
+    capture_rpi_snapshot,
     has_rpi_camera_stack,
     has_rpicam_binaries,
     record_rpi_video,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -25,8 +37,10 @@ class DetectedVideoDevice:
     raw_info: str
 
 
-class VideoDevice(Entity):
+class VideoDevice(Ownable):
     """Detected video capture device available to a node."""
+
+    owner_required = False
 
     node = models.ForeignKey(
         "nodes.Node", on_delete=models.CASCADE, related_name="video_devices"
@@ -48,6 +62,15 @@ class VideoDevice(Entity):
 
     def __str__(self) -> str:  # pragma: no cover - simple representation
         return f"{self.identifier} ({self.node})"
+
+    @property
+    def is_public(self) -> bool:
+        return not self.user_id and not self.group_id
+
+    def owner_display(self) -> str:
+        if self.is_public:
+            return _("Public")
+        return super().owner_display()
 
     @classmethod
     def detect_devices(cls) -> list[DetectedVideoDevice]:
@@ -112,6 +135,36 @@ class VideoDevice(Entity):
         """Return ``True`` when a Raspberry Pi video device is available."""
 
         return bool(cls.detect_devices())
+
+    def get_latest_snapshot(self):
+        return self.snapshots.select_related("sample").order_by("-captured_at", "-pk").first()
+
+    def capture_snapshot(self, *, link_duplicates: bool = False):
+        path = capture_rpi_snapshot()
+        sample = save_screenshot(
+            path,
+            node=self.node,
+            method="RPI_CAMERA",
+            link_duplicates=link_duplicates,
+        )
+        if not sample:
+            return None
+
+        metadata = VideoSnapshot.build_metadata(sample)
+        snapshot, created = VideoSnapshot.objects.get_or_create(
+            device=self,
+            sample=sample,
+            defaults=metadata,
+        )
+        if not created:
+            updates: dict[str, object] = {}
+            for field, value in metadata.items():
+                if getattr(snapshot, field) != value:
+                    setattr(snapshot, field, value)
+                    updates[field] = value
+            if updates:
+                snapshot.save(update_fields=list(updates.keys()))
+        return snapshot
 
 
 class VideoStream(Entity):
@@ -189,6 +242,67 @@ class MjpegStream(VideoStream):
 
         for frame in self.iter_frame_bytes():
             yield boundary + content_type + frame + b"\r\n"
+
+
+class VideoSnapshot(Entity):
+    device = models.ForeignKey(
+        VideoDevice, on_delete=models.CASCADE, related_name="snapshots"
+    )
+    sample = models.ForeignKey(
+        ContentSample, on_delete=models.CASCADE, related_name="video_snapshots"
+    )
+    captured_at = models.DateTimeField(default=timezone.now)
+    width = models.PositiveIntegerField(null=True, blank=True)
+    height = models.PositiveIntegerField(null=True, blank=True)
+    image_format = models.CharField(max_length=50, blank=True)
+
+    class Meta:
+        ordering = ["-captured_at", "-id"]
+        verbose_name = _("Video Snapshot")
+        verbose_name_plural = _("Video Snapshots")
+
+    def __str__(self) -> str:  # pragma: no cover - simple representation
+        return _("Snapshot for %(device)s") % {"device": self.device}
+
+    @staticmethod
+    def _resolve_path(sample: ContentSample) -> Path:
+        file_path = Path(sample.path)
+        if not file_path.is_absolute():
+            file_path = settings.LOG_DIR / file_path
+        return file_path
+
+    @classmethod
+    def build_metadata(cls, sample: ContentSample) -> dict[str, object]:
+        width: int | None = None
+        height: int | None = None
+        image_format = ""
+        file_path = cls._resolve_path(sample)
+        try:
+            with Image.open(file_path) as image:
+                width, height = image.size
+                image_format = image.format or ""
+        except Exception as exc:  # pragma: no cover - best-effort metadata
+            logger.warning("Could not read image metadata from %s: %s", file_path, exc)
+        return {
+            "captured_at": sample.created_at,
+            "width": width,
+            "height": height,
+            "image_format": image_format,
+        }
+
+    @property
+    def resolution_display(self) -> str:
+        if self.width and self.height:
+            return f"{self.width} × {self.height}"
+        return ""
+
+    def get_data_uri(self) -> str | None:
+        file_path = self._resolve_path(self.sample)
+        if not file_path.exists():
+            return None
+        data = base64.b64encode(file_path.read_bytes()).decode("ascii")
+        mime = (self.image_format or "jpeg").lower()
+        return f"data:image/{mime};base64,{data}"
 
 
 class YoutubeChannel(Entity):
