@@ -7,6 +7,7 @@ from django.conf import settings
 
 DEFAULT_BADGE_COLOR = "#28a745"
 UNKNOWN_BADGE_COLOR = "#6c757d"
+CAMERA_BADGE_COLOR = "#0d6efd"
 
 
 def site_and_node(request: HttpRequest):
@@ -63,11 +64,28 @@ def site_and_node(request: HttpRequest):
     role = getattr(request, "badge_role", None) or getattr(node, "role", None)
     request.badge_role = role
 
+    video_device = getattr(request, "badge_video_device", None)
+    if video_device is None and node is not None:
+        try:
+            from apps.video.models import VideoDevice
+
+            video_device = (
+                VideoDevice.objects.filter(node=node, is_default=True)
+                .order_by("identifier")
+                .first()
+            )
+        except (OperationalError, ProgrammingError):
+            video_device = None
+        except Exception:
+            video_device = None
+    request.badge_video_device = video_device
+
     role = getattr(node, "role", None)
 
     site_color = DEFAULT_BADGE_COLOR if site else UNKNOWN_BADGE_COLOR
     node_color = DEFAULT_BADGE_COLOR if node else UNKNOWN_BADGE_COLOR
     role_color = DEFAULT_BADGE_COLOR if role else UNKNOWN_BADGE_COLOR
+    video_device_color = CAMERA_BADGE_COLOR if video_device else UNKNOWN_BADGE_COLOR
 
     site_name = site.name if site else ""
     node_role_name = role.name if role else ""
@@ -75,6 +93,7 @@ def site_and_node(request: HttpRequest):
         "badge_site": site,
         "badge_node": node,
         "badge_role": role,
+        "badge_video_device": video_device,
         # Public views fall back to the node role when the site name is blank.
         "badge_site_name": site_name or node_role_name,
         # Admin site badge uses the site display name if set, otherwise the domain.
@@ -82,6 +101,7 @@ def site_and_node(request: HttpRequest):
         "badge_site_color": site_color,
         "badge_node_color": node_color,
         "badge_role_color": role_color,
+        "badge_video_device_color": video_device_color,
         "current_site_domain": site.domain if site else host,
         "TIME_ZONE": settings.TIME_ZONE,
     }
