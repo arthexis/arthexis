@@ -14,9 +14,9 @@ from apps.screens.lcd import CharLCD1602, LCDUnavailableError
 
 
 class Command(BaseCommand):
-    """Validate LCD screen setup and display a test message."""
+    """Validate LCD service setup and display a test message."""
 
-    help = "Validate LCD screen setup and display a test message"
+    help = "Validate LCD service setup and display a test message"
 
     def handle(self, *args, **options):
         base_dir = Path(settings.BASE_DIR)

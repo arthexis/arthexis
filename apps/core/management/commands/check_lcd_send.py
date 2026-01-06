@@ -6,8 +6,8 @@ from pathlib import Path
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
-from apps.core.notifications import notify
-from apps.screens.startup_notifications import LCD_LOW_LOCK_FILE
+from apps.core.notifications import NotificationManager
+from apps.screens.startup_notifications import render_lcd_lock_file
 
 
 class Command(BaseCommand):
@@ -16,7 +16,28 @@ class Command(BaseCommand):
     help = "Send a test message to the LCD and validate lock-file handling"
 
     def add_arguments(self, parser) -> None:
-        parser.add_argument("message", help="Text to send to the LCD display")
+        parser.add_argument("subject", help="Text to send to the LCD display")
+        parser.add_argument("--body", default="", help="Second line of the LCD message")
+        parser.add_argument(
+            "--expires-at",
+            default=None,
+            help="Optional expiration timestamp written to the lock file",
+        )
+        parser.add_argument(
+            "--sticky",
+            action="store_true",
+            help="Write to the sticky (high-priority) lock file",
+        )
+        parser.add_argument(
+            "--channel-type",
+            default=None,
+            help="LCD channel type to target (e.g. low, high, custom)",
+        )
+        parser.add_argument(
+            "--channel-num",
+            default=None,
+            help="LCD channel number to target when applicable",
+        )
         parser.add_argument(
             "--timeout",
             type=float,
@@ -31,32 +52,62 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        message: str = options["message"]
+        subject: str = options["subject"]
+        body: str = options["body"]
+        expires_at = options["expires_at"]
+        sticky: bool = options["sticky"]
+        channel_type = options["channel_type"]
+        channel_num = options["channel_num"]
         timeout: float = options["timeout"]
         poll_interval: float = options["poll_interval"]
 
         base_dir = Path(settings.BASE_DIR)
-        lock_file = base_dir / ".locks" / LCD_LOW_LOCK_FILE
+        manager = NotificationManager(lock_dir=base_dir / ".locks")
+        lock_file = manager._target_lock_file(  # pylint: disable=protected-access
+            channel_type=channel_type,
+            channel_num=channel_num,
+            sticky=sticky,
+        )
         lock_file.parent.mkdir(parents=True, exist_ok=True)
 
-        self.stdout.write(f"Sending test message to LCD: {message}")
+        expected_payload = render_lcd_lock_file(
+            subject=subject,
+            body=body,
+            expires_at=expires_at,
+        )
+
+        self.stdout.write(
+            f"Sending test message to LCD: subject='{subject}' body='{body}'"
+        )
+        self.stdout.write(f"Target lock file: {lock_file}")
         self._clear_existing_lock(lock_file)
 
-        notify(subject=message)
+        manager.send(
+            subject=subject,
+            body=body,
+            sticky=sticky,
+            expires_at=expires_at,
+            channel_type=channel_type,
+            channel_num=channel_num,
+        )
 
-        if not self._wait_for_lock_write(lock_file, message, timeout, poll_interval):
+        if not self._wait_for_lock_write(
+            lock_file, expected_payload, timeout, poll_interval
+        ):
             raise CommandError("Lock file was not written by notification helper")
 
         self.stdout.write(self.style.SUCCESS("Lock file written with test message"))
 
-        if self._wait_for_lock_persist(lock_file, message, timeout, poll_interval):
+        if self._wait_for_lock_persist(
+            lock_file, expected_payload, timeout, poll_interval
+        ):
             self.stdout.write(
                 self.style.SUCCESS("LCD daemon kept the lock file message sticky")
             )
             return
 
         raise CommandError(
-            "LCD daemon did not keep the lock file message sticky"
+            "LCD daemon did not keep the lock file message sticky",
         )
 
     def _clear_existing_lock(self, lock_file: Path) -> None:
@@ -80,10 +131,8 @@ class Command(BaseCommand):
         return predicate()
 
     def _wait_for_lock_write(
-        self, lock_file: Path, message: str, timeout: float, poll_interval: float
+        self, lock_file: Path, expected_payload: str, timeout: float, poll_interval: float
     ) -> bool:
-        expected = message[:64]
-
         def _written() -> bool:
             if not lock_file.exists():
                 return False
@@ -91,16 +140,13 @@ class Command(BaseCommand):
                 raw = lock_file.read_text(encoding="utf-8")
             except OSError:
                 return False
-            first_line = raw.splitlines()[0] if raw else ""
-            return first_line.strip() == expected.strip()
+            return raw == expected_payload
 
         return self._wait_for_condition(_written, timeout, poll_interval)
 
     def _wait_for_lock_persist(
-        self, lock_file: Path, message: str, timeout: float, poll_interval: float
+        self, lock_file: Path, expected_payload: str, timeout: float, poll_interval: float
     ) -> bool:
-        expected = message[:64].strip()
-
         def _matches() -> bool:
             if not lock_file.exists():
                 return False
@@ -108,8 +154,7 @@ class Command(BaseCommand):
                 raw = lock_file.read_text(encoding="utf-8")
             except OSError:
                 return False
-            first_line = raw.splitlines()[0] if raw else ""
-            return first_line.strip() == expected
+            return raw == expected_payload
 
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
