@@ -56,6 +56,14 @@
         </tr>
         <tr>
           <th scope="row">
+            <a href="{% url 'admin:system-dashboard-rules-report' %}">
+              {% trans "Dashboard Rules" %}
+            </a>
+          </th>
+          <td>{% trans "Review dashboard rule results across all models and jump to their configurations." %}</td>
+        </tr>
+        <tr>
+          <th scope="row">
             <a href="{% url 'admin:system-nginx-report' %}">
               {% trans "NGINX Report" %}
             </a>

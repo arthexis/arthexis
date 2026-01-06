@@ -1,0 +1,58 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans 'Home' %}</a>
+  &rsaquo; <a href="{% url 'admin:system' %}">{% trans 'System' %}</a>
+  &rsaquo; {% trans "Dashboard Rules" %}
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+  <div class="module dashboard-rules-report">
+    <h2>{% trans "Dashboard Rules" %}</h2>
+    <p class="help">
+      {% trans "View all dashboard rule results in one place with quick links to adjust their configuration." %}
+    </p>
+
+    {% if dashboard_rule_entries %}
+      <table class="table table-striped">
+        <thead>
+          <tr>
+            <th scope="col">{% trans "Model" %}</th>
+            <th scope="col">{% trans "Rule" %}</th>
+            <th scope="col">{% trans "Description" %}</th>
+            <th scope="col">{% trans "Status" %}</th>
+            <th scope="col">{% trans "Configuration" %}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for entry in dashboard_rule_entries %}
+            <tr>
+              <th scope="row">{{ entry.model_name|default:_("Unknown model") }}</th>
+              <td>{{ entry.rule.name }}</td>
+              <td>{{ entry.description }}</td>
+              <td>
+                {% if entry.status %}
+                  <span class="dashboard-rule-status {% if entry.status.success %}is-success{% else %}is-failure{% endif %}">
+                    {{ entry.status.icon }} {{ entry.status.message }}
+                  </span>
+                {% else %}
+                  <span class="help">{% trans "No result available." %}</span>
+                {% endif %}
+              </td>
+              <td>
+                <a href="{{ entry.rule_admin_url }}">{% trans "View rule" %}</a>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% else %}
+      <p class="help">{% trans "No dashboard rules have been configured." %}</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
