@@ -217,6 +217,23 @@
             </button>
           </form>
         </div>
+        <div class="upgrade-report-action-group">
+          <form method="post" action="{% url 'admin:system-upgrade-toggle-fast-lane' %}">
+            {% csrf_token %}
+            <input
+              type="hidden"
+              name="fast_lane_action"
+              value="{% if auto_upgrade_report.settings.fast_lane_enabled %}disable{% else %}enable{% endif %}"
+            />
+            <button type="submit" class="button upgrade-action-button">
+              {% if auto_upgrade_report.settings.fast_lane_enabled %}
+                {% trans "Disable Fast Lane" %}
+              {% else %}
+                {% trans "Enable Fast Lane" %}
+              {% endif %}
+            </button>
+          </form>
+        </div>
       </div>
     </div>
     {% with report=auto_upgrade_report %}

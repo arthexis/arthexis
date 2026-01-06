@@ -25,6 +25,8 @@ from apps.repos import github
 from apps.core.auto_upgrade import (
     AUTO_UPGRADE_FALLBACK_INTERVAL,
     AUTO_UPGRADE_INTERVAL_MINUTES,
+    AUTO_UPGRADE_FAST_LANE_INTERVAL_MINUTES,
+    auto_upgrade_fast_lane_enabled,
     DEFAULT_AUTO_UPGRADE_MODE,
     append_auto_upgrade_log,
     auto_upgrade_base_dir,
@@ -416,6 +418,10 @@ def _auto_upgrade_ran_recently(base_dir: Path, interval_minutes: int) -> bool:
 
 
 def _resolve_auto_upgrade_interval_minutes(mode: str) -> int:
+    base_dir = auto_upgrade_base_dir()
+    if auto_upgrade_fast_lane_enabled(base_dir):
+        return AUTO_UPGRADE_FAST_LANE_INTERVAL_MINUTES
+
     interval_minutes = AUTO_UPGRADE_INTERVAL_MINUTES.get(
         mode, AUTO_UPGRADE_FALLBACK_INTERVAL
     )
