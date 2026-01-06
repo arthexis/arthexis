@@ -42,6 +42,9 @@ from apps.maps.models import Location
 from django.utils.dateparse import parse_datetime
 
 
+pytestmark = pytest.mark.django_db(transaction=True)
+
+
 @pytest.fixture
 def anyio_backend():
     return "asyncio"
