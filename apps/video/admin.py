@@ -61,17 +61,7 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
     def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
         extra_context = extra_context or {}
         obj = self.get_object(request, object_id) if object_id else None
-        latest_snapshot = None
-        if obj:
-            latest_snapshot = obj.get_latest_snapshot()
-            if latest_snapshot is None and request.method.lower() == "get":
-                latest_snapshot = self._capture_snapshot_for_device(
-                    request,
-                    obj,
-                    auto_enable=True,
-                    link_duplicates=True,
-                    silent=True,
-                )
+        latest_snapshot = obj.get_latest_snapshot() if obj else None
         extra_context["latest_snapshot"] = latest_snapshot
         return super().changeform_view(
             request, object_id, form_url=form_url, extra_context=extra_context

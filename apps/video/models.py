@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 from dataclasses import dataclass
+import logging
 from pathlib import Path
 
 from django.conf import settings
@@ -24,6 +25,9 @@ from .utils import (
     has_rpicam_binaries,
     record_rpi_video,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -277,8 +281,8 @@ class VideoSnapshot(Entity):
             with Image.open(file_path) as image:
                 width, height = image.size
                 image_format = image.format or ""
-        except Exception:
-            pass
+        except Exception as exc:  # pragma: no cover - best-effort metadata
+            logger.warning("Could not read image metadata from %s: %s", file_path, exc)
         return {
             "captured_at": sample.created_at,
             "width": width,
