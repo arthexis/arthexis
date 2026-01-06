@@ -21,7 +21,21 @@ def test_send_auto_upgrade_check_message(monkeypatch):
 
     monkeypatch.setattr(NetMessage, "broadcast", classmethod(fake_broadcast))
 
-    tasks._send_auto_upgrade_check_message("APPLIED-SUCCESSFULLY")
+    tasks._send_auto_upgrade_check_message("APPLIED-SUCCESSFULLY", "CLEAN")
 
     assert sent[0]["subject"] == "UP-CHECK 12:34"
-    assert sent[0]["body"] == "APPLIED-SUCCESSF"
+    assert sent[0]["body"] == "APPLIED-SUCCESSF CLEAN"
+
+
+def test_resolve_auto_upgrade_change_tag_for_version_change():
+    assert (
+        tasks._resolve_auto_upgrade_change_tag("1.0", "2.0", "aaa", "aaa")
+        == "2.0"
+    )
+
+
+def test_resolve_auto_upgrade_change_tag_for_revision_change():
+    assert (
+        tasks._resolve_auto_upgrade_change_tag("1.0", "1.0", "abc", "1234567")
+        == "234567"
+    )
