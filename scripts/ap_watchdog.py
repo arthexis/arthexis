@@ -107,7 +107,10 @@ class APWatchdog:
                         mode=item.get("mode", ""),
                     )
                 )
-            except Exception:
+            except KeyError:
+                self.log(
+                    f"Skipping invalid connection template item without 'name': {item}"
+                )
                 continue
         return templates
 
@@ -218,8 +221,12 @@ class APWatchdog:
         return active
 
     def _ping_via(self, interface: str) -> bool:
-        result = self._run(["ping", "-I", interface, "-c", "1", "-W", "2", "8.8.8.8"])
-        return result.returncode == 0
+        ping_targets = ["8.8.8.8", "1.1.1.1", "9.9.9.9"]
+        for target in ping_targets:
+            result = self._run(["ping", "-I", interface, "-c", "1", "-W", "2", target])
+            if result.returncode == 0:
+                return True
+        return False
 
     def _switch_interface(self, name: str, interface: str) -> None:
         self._run(
@@ -294,6 +301,10 @@ def snapshot_nmcli_template(base_dir: Path = BASE_DIR, runner: CommandRunner | N
     result = run(["nmcli", "-t", "-f", "NAME,TYPE", "connection", "show"])
     connections: list[ConnectionTemplate] = []
     if result.returncode != 0:
+        print(
+            f"Warning: Failed to snapshot nmcli connections: {result.stderr.strip()}",
+            file=sys.stderr,
+        )
         return connections
     for line in result.stdout.splitlines():
         if not line:
