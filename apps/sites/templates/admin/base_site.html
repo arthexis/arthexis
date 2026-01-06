@@ -667,12 +667,16 @@ body.login #site-badges {
     flex-wrap: wrap;
     justify-content: center;
 }
+#site-badges .badge {
+    border-radius: 4px;
+    color: white;
+    display: inline-flex;
+    align-items: center;
+}
 body.login #site-badges .badge {
     margin-right: 0.5em;
     font-size: 0.7em;
     padding: 2px 4px;
-    border-radius: 4px;
-    color: white;
 }
 body.login #site-badges .badge a {
     color: white;
@@ -756,9 +760,7 @@ body:not(.login) #site-badges {
 body:not(.login) #site-badges .badge {
     margin-right: 0.25em;
     padding: 2px 6px;
-    border-radius: 4px;
     font-size: 0.8em;
-    color: white;
     text-decoration: none;
 }
 
