@@ -30,11 +30,12 @@ REPAIR=false
 SKIP_SERVICE_RESTART=false
 REPAIR_AUTO_UPGRADE_CHANNEL=""
 FAILOVER_ROLE=""
+AP_WATCHDOG_MODE=""
 
 LOCK_DIR="$BASE_DIR/.locks"
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--port PORT] [--latest|--stable|--regular] [--check] [--auto-upgrade|--no-auto-upgrade] [--debug|--no-debug] [--satellite|--terminal|--control|--watchtower] [--repair [--failover ROLE]]]" >&2
+    echo "Usage: $0 [--service NAME] [--port PORT] [--latest|--stable|--regular] [--check] [--auto-upgrade|--no-auto-upgrade] [--debug|--no-debug] [--ap-watchdog|--no-ap-watchdog] [--satellite|--terminal|--control|--watchtower] [--repair [--failover ROLE]]]" >&2
     exit 1
 }
 
@@ -325,6 +326,22 @@ while [[ $# -gt 0 ]]; do
             DEBUG_MODE="disable"
             shift
             ;;
+        --ap-watchdog)
+            if [ "$AP_WATCHDOG_MODE" = "disable" ]; then
+                echo "Cannot combine --ap-watchdog with --no-ap-watchdog" >&2
+                usage
+            fi
+            AP_WATCHDOG_MODE="enable"
+            shift
+            ;;
+        --no-ap-watchdog)
+            if [ "$AP_WATCHDOG_MODE" = "enable" ]; then
+                echo "Cannot combine --ap-watchdog with --no-ap-watchdog" >&2
+                usage
+            fi
+            AP_WATCHDOG_MODE="disable"
+            shift
+            ;;
         --satellite)
             NODE_ROLE="Satellite"
             ENABLE_CELERY=true
@@ -612,6 +629,13 @@ elif [ "$AUTO_UPGRADE_MODE" = "disable" ]; then
     rm -f "$LOCK_DIR/auto_upgrade.lck"
     run_auto_upgrade_management disable
     echo "Auto-upgrade disabled."
+fi
+
+if [ "$AP_WATCHDOG_MODE" = "enable" ]; then
+    "$BASE_DIR/.venv/bin/python" "$BASE_DIR/scripts/ap_watchdog.py" --snapshot || true
+    arthexis_install_ap_watchdog_service "$BASE_DIR" "$LOCK_DIR" "$LOG_DIR"
+elif [ "$AP_WATCHDOG_MODE" = "disable" ]; then
+    arthexis_remove_ap_watchdog_service "$BASE_DIR" "$LOCK_DIR"
 fi
 
 if [ "$SERVICE_ACTIVE" = true ]; then
