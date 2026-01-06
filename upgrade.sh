@@ -370,9 +370,9 @@ stash_local_changes_for_upgrade() {
   fi
 
   if git status --porcelain 2>/dev/null | grep -q '^[ MADRCU?]'; then
-    if ! git config --get user.name >/dev/null 2>&1 || ! git config --get user.email >/dev/null 2>&1; then
+    if ! git var GIT_COMMITTER_IDENT >/dev/null 2>&1; then
       if [[ $FORCE_STASH -ne 1 ]]; then
-        echo "Skipping automatic stash because git user.name and user.email are not configured. Pass --stash to force stashing." >&2
+        echo "Skipping automatic stash because git committer identity is not configured. Pass --stash to force stashing." >&2
         return 0
       fi
     fi
