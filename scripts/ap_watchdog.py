@@ -93,7 +93,8 @@ class APWatchdog:
             return []
         try:
             data = json.loads(self.template_path.read_text(encoding="utf-8"))
-        except Exception:
+        except (json.JSONDecodeError, OSError) as e:
+            self.log(f"Error loading template file {self.template_path}: {e}")
             return []
         templates = []
         for item in data.get("connections", []):
