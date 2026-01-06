@@ -212,12 +212,15 @@ def _active_interface_label() -> str:
             return f"W{name[3:]}" if len(name) > 3 else "W"
         return "AF"
 
-    for name in ("eth0", "wlan1", "wlan0"):
+    prioritized_interfaces = ("eth0", "wlan1", "wlan0")
+    for name in prioritized_interfaces:
         details = stats.get(name)
         if details and details.isup:
             return _shorten(name)
 
     for name, details in stats.items():
+        if name in prioritized_interfaces or name.startswith("lo"):
+            continue
         if details and details.isup:
             return _shorten(name)
 
