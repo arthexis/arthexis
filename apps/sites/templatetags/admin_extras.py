@@ -130,10 +130,10 @@ def last_net_message() -> dict[str, object]:
         entries = list(
             NetMessage.objects.filter(Q(expires_at__isnull=True) | Q(expires_at__gt=now))
             .order_by("-created")
-            .values("subject", "body")[:25]
+            .values("pk", "subject", "body")[:25]
         )
     except DatabaseError:
-        return {"text": "", "has_content": False}
+        return {"text": "", "has_content": False, "pk": None, "url": ""}
 
     for entry in entries:
         subject = (entry.get("subject") or "").strip()
@@ -141,9 +141,17 @@ def last_net_message() -> dict[str, object]:
         parts = [part for part in (subject, body) if part]
         if parts:
             text = " — ".join(parts)
-            return {"text": text, "has_content": True}
+            pk = entry.get("pk")
+            url = ""
+            if pk:
+                try:
+                    url = reverse("admin:nodes_netmessage_change", args=[pk])
+                except NoReverseMatch:
+                    pass
 
-    return {"text": "", "has_content": False}
+            return {"text": text, "has_content": True, "pk": pk, "url": url}
+
+    return {"text": "", "has_content": False, "pk": None, "url": ""}
 
 
 @register.simple_tag(takes_context=True)

@@ -16,8 +16,17 @@
 <div id="admin-home-header">
   <h1>Home</h1>
   <div class="admin-home-net-message" role="status" aria-live="polite">
-    <a class="admin-home-net-message__label admin-home-net-message__link" href="{% url 'admin:nodes_netmessage_send' %}">{% translate 'Net message' %}</a>
-    <span class="admin-home-net-message__content{% if not admin_last_net_message.has_content %} admin-home-net-message__content--empty{% endif %}" title="{% if admin_last_net_message.has_content %}{{ admin_last_net_message.text }}{% else %}{% translate 'No net messages available' %}{% endif %}">{% if admin_last_net_message.has_content %}{{ admin_last_net_message.text }}{% else %}{% translate 'No net messages available' %}{% endif %}</span>
+    <a class="admin-home-net-message__label admin-home-net-message__link" href="{% url 'admin:nodes_netmessage_changelist' %}">{% translate 'Net message' %}</a>
+    {% if admin_last_net_message.has_content %}
+      {% if admin_last_net_message.url %}
+        <a class="admin-home-net-message__content admin-home-net-message__link" href="{{ admin_last_net_message.url }}" title="{{ admin_last_net_message.text }}">{{ admin_last_net_message.text }}</a>
+      {% else %}
+        <span class="admin-home-net-message__content" title="{{ admin_last_net_message.text }}">{{ admin_last_net_message.text }}</span>
+      {% endif %}
+    {% else %}
+      {% translate 'No net messages available' as no_message_text %}
+      <span class="admin-home-net-message__content admin-home-net-message__content--empty" title="{{ no_message_text }}">{{ no_message_text }}</span>
+    {% endif %}
   </div>
   <div class="admin-home-actions">
     <a class="button" href="{% url 'admin:seed_data' %}">{% translate 'Seed Data' %}</a>
