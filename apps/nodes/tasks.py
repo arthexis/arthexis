@@ -203,10 +203,15 @@ def _active_interface_label() -> str:
     except Exception:
         return "n/a"
 
+    def _shorten(name: str) -> str:
+        if name.startswith("wlan"):
+            return f"wln{name[4:]}"
+        return name
+
     for name in ("eth0", "wlan1", "wlan0"):
         details = stats.get(name)
         if details and details.isup:
-            return name
+            return _shorten(name)
     return "n/a"
 
 
