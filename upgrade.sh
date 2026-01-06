@@ -370,6 +370,13 @@ stash_local_changes_for_upgrade() {
   fi
 
   if git status --porcelain 2>/dev/null | grep -q '^[ MADRCU?]'; then
+    if ! git var GIT_COMMITTER_IDENT >/dev/null 2>&1; then
+      if [[ $FORCE_STASH -ne 1 ]]; then
+        echo "Skipping automatic stash because git committer identity is not configured. Pass --stash to force stashing." >&2
+        return 0
+      fi
+    fi
+
     local stash_label
     stash_label="upgrade-$(date -u +%Y%m%dT%H%M%SZ)"
 
@@ -853,6 +860,7 @@ CLEAN=0
 NO_RESTART=0
 STOP_ONLY=0
 FORCE_START=0
+FORCE_STASH=0
 NO_WARN=0
 LOCAL_ONLY=0
 DETACHED=0
@@ -874,6 +882,11 @@ while [[ $# -gt 0 ]]; do
       FORCE_STOP=1
       FORCE_UPGRADE=1
       FORWARDED_ARGS+=("--force")
+      shift
+      ;;
+    --stash)
+      FORCE_STASH=1
+      FORWARDED_ARGS+=("$1")
       shift
       ;;
     --force-refresh)
