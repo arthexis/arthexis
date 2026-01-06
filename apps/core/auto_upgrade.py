@@ -13,6 +13,8 @@ from django.utils import timezone
 AUTO_UPGRADE_LOG_NAME = "auto-upgrade.log"
 AUTO_UPGRADE_TASK_NAME = "auto-upgrade-check"
 AUTO_UPGRADE_TASK_PATH = "apps.core.tasks.check_github_updates"
+AUTO_UPGRADE_FAST_LANE_LOCK_NAME = "auto_upgrade_fast_lane.lck"
+AUTO_UPGRADE_FAST_LANE_INTERVAL_MINUTES = 60
 
 DEFAULT_AUTO_UPGRADE_MODE = "stable"
 AUTO_UPGRADE_CADENCE_HOUR = 4
@@ -97,6 +99,42 @@ def auto_upgrade_base_dir() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
+def auto_upgrade_fast_lane_lock_file(base_dir: Path) -> Path:
+    """Return the fast-lane control lock file path."""
+
+    return Path(base_dir) / ".locks" / AUTO_UPGRADE_FAST_LANE_LOCK_NAME
+
+
+def auto_upgrade_fast_lane_enabled(base_dir: Path | None = None) -> bool:
+    """Return ``True`` when the fast-lane lock file exists."""
+
+    base = Path(base_dir) if base_dir is not None else auto_upgrade_base_dir()
+    lock_file = auto_upgrade_fast_lane_lock_file(base)
+    try:
+        return lock_file.exists()
+    except OSError:  # pragma: no cover - defensive fallback
+        return False
+
+
+def set_auto_upgrade_fast_lane(enabled: bool, base_dir: Path | None = None) -> bool:
+    """Enable or disable fast-lane scheduling via the lock file."""
+
+    base = Path(base_dir) if base_dir is not None else auto_upgrade_base_dir()
+    lock_file = auto_upgrade_fast_lane_lock_file(base)
+
+    try:
+        lock_file.parent.mkdir(parents=True, exist_ok=True)
+        if enabled:
+            lock_file.touch(exist_ok=True)
+        else:
+            lock_file.unlink(missing_ok=True)
+    except OSError:
+        logger.exception("Unable to update fast-lane lock file")
+        return False
+
+    return True
+
+
 def ensure_auto_upgrade_periodic_task(
     sender=None, *, base_dir: Path | None = None, **kwargs
 ) -> None:
@@ -135,6 +173,7 @@ def ensure_auto_upgrade_periodic_task(
         return
 
     override_interval = environ.get("ARTHEXIS_UPGRADE_FREQ")
+    fast_lane_enabled = auto_upgrade_fast_lane_enabled(base_dir)
 
     _mode = mode_file.read_text().strip().lower() or DEFAULT_AUTO_UPGRADE_MODE
     if _mode == "version":
@@ -143,7 +182,10 @@ def ensure_auto_upgrade_periodic_task(
         _mode, AUTO_UPGRADE_FALLBACK_INTERVAL
     )
 
-    if override_interval:
+    if fast_lane_enabled:
+        interval_minutes = AUTO_UPGRADE_FAST_LANE_INTERVAL_MINUTES
+        override_interval = None
+    elif override_interval:
         try:
             parsed_interval = int(override_interval)
         except ValueError:
@@ -153,7 +195,10 @@ def ensure_auto_upgrade_periodic_task(
                 interval_minutes = parsed_interval
 
     try:
-        if override_interval or _mode not in AUTO_UPGRADE_CRONTAB_SCHEDULES:
+        description = "Auto-upgrade checks run every %s minutes." % interval_minutes
+        if fast_lane_enabled:
+            description = "Fast Lane enabled: upgrade checks run hourly."
+        if fast_lane_enabled or override_interval or _mode not in AUTO_UPGRADE_CRONTAB_SCHEDULES:
             schedule, _ = IntervalSchedule.objects.get_or_create(
                 every=interval_minutes, period=IntervalSchedule.MINUTES
             )
@@ -163,6 +208,7 @@ def ensure_auto_upgrade_periodic_task(
                 "solar": None,
                 "clocked": None,
                 "task": AUTO_UPGRADE_TASK_PATH,
+                "description": description,
             }
         else:
             crontab_config = AUTO_UPGRADE_CRONTAB_SCHEDULES[_mode]
@@ -180,6 +226,7 @@ def ensure_auto_upgrade_periodic_task(
                 "solar": None,
                 "clocked": None,
                 "task": AUTO_UPGRADE_TASK_PATH,
+                "description": description,
             }
         PeriodicTask.objects.update_or_create(
             name=AUTO_UPGRADE_TASK_NAME,

@@ -20,9 +20,10 @@ TARGET_SECONDARY=""
 TARGET_MIGRATOR=""
 FULL_UNINSTALL=0
 PRIMARY_ONLY=0
+REMOVE_AP_WATCHDOG=0
 
 usage() {
-    echo "Usage: $0 [--service NAME] [--no-warn] [--secondary NAME] [--migrator NAME] [--full] [--primary]" >&2
+    echo "Usage: $0 [--service NAME] [--no-warn] [--secondary NAME] [--migrator NAME] [--ap-watchdog] [--full] [--primary]" >&2
     exit 1
 }
 
@@ -121,6 +122,10 @@ while [[ $# -gt 0 ]]; do
             FULL_UNINSTALL=1
             shift
             ;;
+        --ap-watchdog)
+            REMOVE_AP_WATCHDOG=1
+            shift
+            ;;
         --primary)
             PRIMARY_ONLY=1
             shift
@@ -151,6 +156,11 @@ while IFS=$'\t' read -r type name path service; do
     [ -z "$type" ] && continue
     SIDECAR_RECORDS+=("$type\t$name\t$path\t$service")
 done < <(arthexis_read_sidecar_records "$BASE_DIR")
+
+AP_WATCHDOG_PRESENT=0
+if [ -f "$LOCK_DIR/ap_watchdog.lck" ]; then
+    AP_WATCHDOG_PRESENT=1
+fi
 
 if [ -z "$SERVICE" ] && [ -f "$LOCK_DIR/service.lck" ]; then
     SERVICE="$(cat "$LOCK_DIR/service.lck")"
@@ -195,6 +205,11 @@ if [ "$INSTANCE_TYPE" = "primary" ] && [ $SIDECAR_COUNT -gt 0 ] && [ $FULL_UNINS
     exit 1
 fi
 
+if [ $AP_WATCHDOG_PRESENT -eq 1 ] && [ $FULL_UNINSTALL -eq 0 ] && [ $REMOVE_AP_WATCHDOG -eq 0 ]; then
+    echo "An AP watchdog is installed. Re-run with --ap-watchdog to remove it or --full for a complete uninstall." >&2
+    exit 1
+fi
+
 read -r -p "This will stop the Arthexis server. Continue? [y/N] " CONFIRM
 if [[ "$CONFIRM" != "y" && "$CONFIRM" != "Y" ]]; then
     echo "Aborted."
@@ -204,6 +219,10 @@ fi
 if ! confirm_database_deletion "Uninstalling Arthexis"; then
     echo "Uninstall aborted."
     exit 0
+fi
+
+if [ $REMOVE_AP_WATCHDOG -eq 1 ] || [ $FULL_UNINSTALL -eq 1 ]; then
+    arthexis_remove_ap_watchdog_service "$BASE_DIR" "$LOCK_DIR"
 fi
 
 if [ $FULL_UNINSTALL -eq 1 ]; then

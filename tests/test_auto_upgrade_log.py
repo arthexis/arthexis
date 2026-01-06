@@ -95,6 +95,23 @@ def test_auto_upgrade_summary_highlights_last_activity(monkeypatch, settings, tm
     )
 
 
+@pytest.mark.django_db
+def test_auto_upgrade_report_marks_fast_lane(monkeypatch, settings, tmp_path):
+    env_base = tmp_path / "runtime"
+    lock_dir = env_base / ".locks"
+    lock_dir.mkdir(parents=True)
+    (lock_dir / "auto_upgrade_fast_lane.lck").touch()
+
+    settings.BASE_DIR = tmp_path / "settings"
+    monkeypatch.setenv("ARTHEXIS_BASE_DIR", str(env_base))
+
+    report = system._build_auto_upgrade_report()
+
+    assert report["settings"]["fast_lane_enabled"]
+    assert report["schedule"]["fast_lane_enabled"]
+    assert "hour" in report["schedule"]["description"].lower()
+
+
 def test_trigger_upgrade_check_runs_inline_with_memory_broker(monkeypatch, settings):
     calls: list[str | None] = []
 

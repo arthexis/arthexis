@@ -274,3 +274,69 @@ arthexis_update_systemd_service_user() {
     sudo systemctl daemon-reload
   fi
 }
+
+arthexis_install_ap_watchdog_service() {
+  local base_dir="$1"
+  local lock_dir="$2"
+  local log_dir="$3"
+
+  if [ -z "$base_dir" ] || [ -z "$lock_dir" ] || [ -z "$log_dir" ]; then
+    return 0
+  fi
+
+  local systemd_dir="${SYSTEMD_DIR:-/etc/systemd/system}"
+  local service_name="ap-watchdog"
+  local service_file="${systemd_dir}/${service_name}.service"
+  local service_user
+  service_user="$(arthexis_detect_service_user "$base_dir")"
+
+  mkdir -p "$log_dir"
+
+  sudo bash -c "cat > '$service_file'" <<SERVICEEOF
+[Unit]
+Description=Arthexis access point watchdog
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=$base_dir
+ExecStart=$base_dir/.venv/bin/python $base_dir/scripts/ap_watchdog.py
+Restart=on-failure
+RestartSec=60
+StandardOutput=journal
+StandardError=journal
+User=$service_user
+
+[Install]
+WantedBy=multi-user.target
+SERVICEEOF
+
+  sudo systemctl daemon-reload
+  sudo systemctl enable "$service_name"
+  arthexis_record_systemd_unit "$lock_dir" "${service_name}.service"
+  printf 'enabled\n' > "$lock_dir/ap_watchdog.lck"
+}
+
+arthexis_remove_ap_watchdog_service() {
+  local base_dir="$1"
+  local lock_dir="$2"
+  local systemd_dir="${SYSTEMD_DIR:-/etc/systemd/system}"
+  local service_name="ap-watchdog"
+  local service_file="${systemd_dir}/${service_name}.service"
+
+  arthexis_stop_systemd_unit_if_present "${service_name}.service"
+  if command -v systemctl >/dev/null 2>&1; then
+    if _arthexis_systemd_unit_present "${service_name}.service"; then
+      sudo systemctl disable "${service_name}.service" || true
+    fi
+  fi
+
+  if [ -f "$service_file" ]; then
+    sudo rm -f "$service_file"
+    sudo systemctl daemon-reload
+  fi
+
+  arthexis_remove_systemd_unit_record "$lock_dir" "${service_name}.service"
+  rm -f "$lock_dir/ap_watchdog.lck" "$lock_dir/ap_watchdog_template.json"
+}

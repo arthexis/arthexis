@@ -25,6 +25,8 @@ from apps.repos import github
 from apps.core.auto_upgrade import (
     AUTO_UPGRADE_FALLBACK_INTERVAL,
     AUTO_UPGRADE_INTERVAL_MINUTES,
+    AUTO_UPGRADE_FAST_LANE_INTERVAL_MINUTES,
+    auto_upgrade_fast_lane_enabled,
     DEFAULT_AUTO_UPGRADE_MODE,
     append_auto_upgrade_log,
     auto_upgrade_base_dir,
@@ -416,6 +418,10 @@ def _auto_upgrade_ran_recently(base_dir: Path, interval_minutes: int) -> bool:
 
 
 def _resolve_auto_upgrade_interval_minutes(mode: str) -> int:
+    base_dir = auto_upgrade_base_dir()
+    if auto_upgrade_fast_lane_enabled(base_dir):
+        return AUTO_UPGRADE_FAST_LANE_INTERVAL_MINUTES
+
     interval_minutes = AUTO_UPGRADE_INTERVAL_MINUTES.get(
         mode, AUTO_UPGRADE_FALLBACK_INTERVAL
     )
@@ -1544,14 +1550,27 @@ def _send_auto_upgrade_failure_message(base_dir: Path, reason: str, failure_coun
         )
 
 
-def _send_auto_upgrade_check_message(status: str) -> None:
+def _resolve_auto_upgrade_change_tag(
+    initial_version: str | None,
+    current_version: str | None,
+    initial_revision: str,
+    current_revision: str,
+) -> str:
+    if initial_version != current_version:
+        return current_version or "-"
+    if initial_revision != current_revision:
+        return _short_revision(current_revision)
+    return "CLEAN"
+
+
+def _send_auto_upgrade_check_message(status: str, change_tag: str) -> None:
     from apps.nodes.models import NetMessage
 
     timestamp = timezone.localtime(timezone.now()).strftime("%H:%M")
     subject = f"UP-CHECK {timestamp}"
 
     try:
-        NetMessage.broadcast(subject=subject, body=status[:16])
+        NetMessage.broadcast(subject=subject, body=f"{status[:16]} {change_tag}")
     except Exception:
         logger.warning(
             "Failed to broadcast auto-upgrade check Net Message", exc_info=True
@@ -2082,6 +2101,8 @@ def check_github_updates(
     ops = operations or _default_auto_upgrade_operations()
     state = AutoUpgradeState()
     status = "FAILED"
+    initial_version = _read_local_version(base_dir)
+    initial_revision = _current_revision(base_dir)
 
     try:
         mode = _resolve_auto_upgrade_mode(base_dir, channel_override)
@@ -2140,8 +2161,13 @@ def check_github_updates(
         _handle_auto_upgrade_failure(base_dir, exc, state)
         raise
     finally:
+        current_version = _read_local_version(base_dir)
+        current_revision = _current_revision(base_dir)
+        change_tag = _resolve_auto_upgrade_change_tag(
+            initial_version, current_version, initial_revision, current_revision
+        )
         _finalize_auto_upgrade(base_dir, state)
-        _send_auto_upgrade_check_message(status)
+        _send_auto_upgrade_check_message(status, change_tag)
 
 
 @shared_task

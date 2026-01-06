@@ -36,8 +36,12 @@ from apps.celery.utils import is_celery_enabled
 from apps.core.auto_upgrade import (
     AUTO_UPGRADE_TASK_NAME,
     AUTO_UPGRADE_TASK_PATH,
+    AUTO_UPGRADE_FAST_LANE_INTERVAL_MINUTES,
+    auto_upgrade_fast_lane_enabled,
+    auto_upgrade_fast_lane_lock_file,
     auto_upgrade_base_dir,
     auto_upgrade_log_file,
+    set_auto_upgrade_fast_lane,
     ensure_auto_upgrade_periodic_task,
 )
 from apps.release.release import (
@@ -1277,10 +1281,12 @@ def _build_auto_upgrade_report(
     """Assemble the composite auto-upgrade report for the admin view."""
 
     base_dir = auto_upgrade_base_dir()
+    fast_lane_enabled = auto_upgrade_fast_lane_enabled(base_dir)
     mode_info = _read_auto_upgrade_mode(base_dir)
     log_info = _load_auto_upgrade_log_entries(base_dir, limit=limit)
     skip_revisions = _load_auto_upgrade_skip_revisions(base_dir)
     schedule_info = _load_auto_upgrade_schedule()
+    schedule_info["fast_lane_enabled"] = fast_lane_enabled
 
     # ``last_run_at`` may be empty when Celery Beat has not executed the
     # periodic task yet or when inline task execution bypasses the scheduler,
@@ -1289,6 +1295,11 @@ def _build_auto_upgrade_report(
         last_log_entry = log_info["entries"][0]
         if last_log_entry.get("timestamp"):
             schedule_info["last_run_at"] = last_log_entry["timestamp"]
+
+    if fast_lane_enabled and not schedule_info.get("description"):
+        schedule_info["description"] = _(
+            "Fast Lane enabled: upgrade checks run hourly."
+        )
 
     raw_mode_value = str(mode_info.get("mode", "stable"))
     normalized_mode = raw_mode_value.lower() or "stable"
@@ -1320,6 +1331,8 @@ def _build_auto_upgrade_report(
         "lock_exists": bool(mode_info.get("lock_exists", False)),
         "read_error": bool(mode_info.get("read_error", False)),
         "mode_file": str(_auto_upgrade_mode_file(base_dir)),
+        "fast_lane_enabled": fast_lane_enabled,
+        "fast_lane_lock": str(auto_upgrade_fast_lane_lock_file(base_dir)),
         "skip_revisions": skip_revisions,
         "task_name": AUTO_UPGRADE_TASK_NAME,
         "task_path": AUTO_UPGRADE_TASK_PATH,
@@ -2245,6 +2258,38 @@ def _system_upgrade_revision_check_view(request):
 
     return _upgrade_redirect(request, reverse("admin:system-upgrade-report"))
 
+
+def _system_toggle_fast_lane_view(request):
+    if request.method != "POST":
+        return HttpResponseRedirect(reverse("admin:system-upgrade-report"))
+
+    action = (request.POST.get("fast_lane_action") or "").strip().lower()
+    enable = action == "enable"
+
+    base_dir = auto_upgrade_base_dir()
+    updated = set_auto_upgrade_fast_lane(enable, base_dir=base_dir)
+
+    if updated:
+        ensure_auto_upgrade_periodic_task(base_dir=base_dir)
+        if enable:
+            messages.success(
+                request,
+                _(
+                    "Fast Lane enabled. Upgrade checks will run once per hour until disabled."
+                ),
+            )
+        else:
+            messages.success(
+                request,
+                _(
+                    "Fast Lane disabled. Upgrade checks will run on the configured channel cadence."
+                ),
+            )
+    else:
+        messages.error(request, _("Unable to update Fast Lane mode."))
+
+    return _upgrade_redirect(request, reverse("admin:system-upgrade-report"))
+
 def patch_admin_system_view() -> None:
     """Add custom admin view for system information."""
     original_get_urls = admin.site.get_urls
@@ -2297,6 +2342,11 @@ def patch_admin_system_view() -> None:
                 "system/upgrade-report/run-check/",
                 admin.site.admin_view(_system_trigger_upgrade_check_view),
                 name="system-upgrade-run-check",
+            ),
+            path(
+                "system/upgrade-report/toggle-fast-lane/",
+                admin.site.admin_view(_system_toggle_fast_lane_view),
+                name="system-upgrade-toggle-fast-lane",
             ),
         ]
         return custom + urls
