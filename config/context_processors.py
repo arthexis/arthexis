@@ -4,6 +4,8 @@ from django.contrib.sites.models import Site
 from django.db.utils import OperationalError, ProgrammingError
 from django.http import HttpRequest
 from django.conf import settings
+from django.urls import reverse
+from django.utils import timezone
 
 DEFAULT_BADGE_COLOR = "#28a745"
 UNKNOWN_BADGE_COLOR = "#6c757d"
@@ -71,6 +73,53 @@ def site_and_node(request: HttpRequest):
 
     site_name = site.name if site else ""
     node_role_name = role.name if role else ""
+
+    clock_time = timezone.now()
+    clock_timezone = timezone.get_current_timezone_name()
+    clock_url = reverse("admin:clocks_clockdevice_changelist")
+    try:
+        from apps.clocks.models import ClockDevice
+        from apps.clocks.utils import read_hardware_clock_time
+    except Exception:
+        ClockDevice = None  # type: ignore
+        read_hardware_clock_time = None  # type: ignore
+
+    if ClockDevice is not None:
+        try:
+            clock_device = None
+            if node:
+                clock_device = (
+                    ClockDevice.objects.filter(node=node)
+                    .order_by("bus", "address", "pk")
+                    .first()
+                )
+            if clock_device is None:
+                clock_device = ClockDevice.objects.order_by("bus", "address", "pk").first()
+
+            if clock_device:
+                if clock_device.enable_public_view and clock_device.public_view_slug:
+                    clock_url = reverse(
+                        "clockdevice-public-view", args=[clock_device.public_view_slug]
+                    )
+                else:
+                    clock_url = reverse(
+                        "admin:clocks_clockdevice_change", args=[clock_device.pk]
+                    )
+
+                if read_hardware_clock_time:
+                    clock_value = read_hardware_clock_time()
+                    if clock_value:
+                        local_time = clock_value.astimezone(
+                            timezone.get_current_timezone()
+                        )
+                        clock_time = local_time
+                        clock_timezone = (
+                            clock_value.tzname()
+                            or timezone.get_current_timezone_name()
+                        )
+        except (OperationalError, ProgrammingError):
+            pass
+
     return {
         "badge_site": site,
         "badge_node": node,
@@ -84,4 +133,7 @@ def site_and_node(request: HttpRequest):
         "badge_role_color": role_color,
         "current_site_domain": site.domain if site else host,
         "TIME_ZONE": settings.TIME_ZONE,
+        "admin_clock_time": clock_time,
+        "admin_clock_timezone": clock_timezone,
+        "admin_clock_url": clock_url,
     }

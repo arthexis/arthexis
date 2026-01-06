@@ -2,10 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
+from datetime import datetime
 import re
 import shutil
 import subprocess
 from typing import Callable, Iterable
+
+from django.utils import timezone
 
 logger = logging.getLogger(__name__)
 
@@ -93,3 +96,61 @@ def has_clock_device(
     """Return ``True`` when a clock device is available."""
 
     return bool(discover_clock_devices(bus_numbers=bus_numbers, scanner=scanner))
+
+
+def read_hardware_clock_time() -> datetime | None:
+    """Return the current time reported by the hardware clock if available.
+
+    Attempts to read from the ``hwclock`` utility when present, returning an
+    aware :class:`~datetime.datetime` instance if parsing succeeds. Errors are
+    logged and ``None`` is returned so callers can gracefully fall back to the
+    Django time source.
+    """
+
+    tool_path = shutil.which("hwclock")
+    if not tool_path:
+        return None
+
+    try:
+        result = subprocess.run(
+            [tool_path, "--get", "--utc"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=5,
+        )
+    except Exception as exc:  # pragma: no cover - defensive; platform specific
+        logger.warning("Failed to read hardware clock: %s", exc)
+        return None
+
+    if result.returncode != 0:
+        message = (result.stderr or result.stdout or "hwclock failed").strip()
+        logger.warning("hwclock returned non-zero status: %s", message)
+        return None
+
+    output = (result.stdout or result.stderr or "").strip()
+    if not output:
+        return None
+
+    parsed: datetime | None = None
+    try:
+        parsed = datetime.fromisoformat(output)
+    except ValueError:
+        # Some platforms include extra tokens; try parsing the leading values.
+        parts = output.split()
+        for length in (3, 2):
+            try:
+                candidate = " ".join(parts[:length])
+                parsed = datetime.fromisoformat(candidate)
+                break
+            except (ValueError, IndexError):
+                continue
+
+    if parsed is None:
+        logger.warning("Unable to parse hardware clock output: %s", output)
+        return None
+
+    if timezone.is_naive(parsed):
+        parsed = timezone.make_aware(parsed, timezone=timezone.utc)
+
+    return parsed

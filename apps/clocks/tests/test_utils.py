@@ -1,4 +1,11 @@
-from apps.clocks.utils import discover_clock_devices, parse_i2cdetect_addresses
+from datetime import datetime, timezone
+
+from apps.clocks import utils
+from apps.clocks.utils import (
+    discover_clock_devices,
+    parse_i2cdetect_addresses,
+    read_hardware_clock_time,
+)
 
 
 def test_parse_i2cdetect_addresses_parses_hex_grid():
@@ -32,3 +39,20 @@ def test_discover_clock_devices_labels_ds3231():
     assert device.address == "0x68"
     assert device.description == "DS3231 RTC"
     assert sample.strip() in device.raw_info
+
+
+def test_read_hardware_clock_time(monkeypatch):
+    sample_output = "2024-05-01 12:34:56.000000+00:00\n"
+
+    monkeypatch.setattr(utils.shutil, "which", lambda cmd: "/sbin/hwclock")
+
+    class Result:
+        returncode = 0
+        stdout = sample_output
+        stderr = ""
+
+    monkeypatch.setattr(utils.subprocess, "run", lambda *args, **kwargs: Result())
+
+    clock_time = read_hardware_clock_time()
+
+    assert clock_time == datetime(2024, 5, 1, 12, 34, 56, tzinfo=timezone.utc)
