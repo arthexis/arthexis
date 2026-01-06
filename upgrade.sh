@@ -60,6 +60,25 @@ SYSTEMD_UNITS_LOCK="$LOCK_DIR/systemd_services.lck"
 SERVICE_NAME=""
 [ -f "$LOCK_DIR/service.lck" ] && SERVICE_NAME="$(cat "$LOCK_DIR/service.lck")"
 
+auto_upgrade_enabled() {
+  local base_dir="${1:-$BASE_DIR}"
+  local lock_file="${base_dir}/.locks/auto_upgrade.lck"
+
+  [ -f "$lock_file" ]
+}
+
+_discard_local_git_changes() {
+  if ! git reset --hard HEAD >/dev/null 2>&1; then
+    echo "Failed to discard local changes automatically; please commit or stash before upgrading." >&2
+    exit 1
+  fi
+
+  if ! git clean -fd -e data/ >/dev/null 2>&1; then
+    echo "Failed to remove untracked files automatically; please commit or stash before upgrading." >&2
+    exit 1
+  fi
+}
+
 mkdir -p "$LOCK_DIR"
 
 ensure_git_safe_directory() {
@@ -326,29 +345,15 @@ reset_safe_git_changes() {
   if git status --porcelain 2>/dev/null | grep -q '^[ MADRCU?]'; then
     if is_non_terminal_role "$role"; then
       echo "Non-terminal role $role detected unstashed changes; discarding local modifications before upgrading..."
-      if ! git reset --hard HEAD >/dev/null 2>&1; then
-        echo "Failed to discard local changes automatically; please commit or stash before upgrading." >&2
-        exit 1
-      fi
-
-      if ! git clean -fd -e data/ >/dev/null 2>&1; then
-        echo "Failed to remove untracked files automatically; please commit or stash before upgrading." >&2
-        exit 1
-      fi
-
+      _discard_local_git_changes
+      return 0
+    elif auto_upgrade_enabled "$BASE_DIR"; then
+      echo "Auto-upgrade enabled; discarding local changes before upgrading..."
+      _discard_local_git_changes
       return 0
     elif [[ ${FORCE_UPGRADE:-0} -eq 1 ]]; then
       echo "Force requested; discarding local working tree changes before upgrading..."
-      if ! git reset --hard HEAD >/dev/null 2>&1; then
-        echo "Failed to discard local changes automatically; please commit or stash before upgrading." >&2
-        exit 1
-      fi
-
-      if ! git clean -fd -e data/ >/dev/null 2>&1; then
-        echo "Failed to remove untracked files automatically; please commit or stash before upgrading." >&2
-        exit 1
-      fi
-
+      _discard_local_git_changes
       return 0
     fi
 
