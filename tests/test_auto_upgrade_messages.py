@@ -39,3 +39,17 @@ def test_resolve_auto_upgrade_change_tag_for_revision_change():
         tasks._resolve_auto_upgrade_change_tag("1.0", "1.0", "abc", "1234567")
         == "234567"
     )
+
+
+def test_resolve_auto_upgrade_change_tag_for_no_change():
+    assert (
+        tasks._resolve_auto_upgrade_change_tag("1.0", "1.0", "aaa", "aaa")
+        == "CLEAN"
+    )
+
+
+def test_resolve_auto_upgrade_change_tag_for_none_version():
+    assert (
+        tasks._resolve_auto_upgrade_change_tag("1.0", None, "aaa", "aaa")
+        == "-"
+    )
