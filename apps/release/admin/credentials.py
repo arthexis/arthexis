@@ -12,6 +12,7 @@ from django.utils.translation import gettext_lazy as _
 
 from apps.core.admin import (
     EntityModelAdmin,
+    OwnableAdminMixin,
     ProfileAdminMixin,
     SaveBeforeChangeAction,
     _build_credentials_actions,
@@ -65,7 +66,9 @@ class ReleaseManagerAdminForm(forms.ModelForm):
         )
 
 
-class ReleaseManagerAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdmin):
+class ReleaseManagerAdmin(
+    OwnableAdminMixin, ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdmin
+):
     form = ReleaseManagerAdminForm
     list_display = (
         "owner",

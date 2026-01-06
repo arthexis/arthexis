@@ -11,7 +11,12 @@ from apps.locals.user_data import EntityModelAdmin
 from apps.odoo.models import OdooEmployee, OdooProduct
 
 from .forms import OdooEmployeeAdminForm, OdooProductAdminForm
-from .mixins import ProfileAdminMixin, SaveBeforeChangeAction, _build_credentials_actions
+from .mixins import (
+    OwnableAdminMixin,
+    ProfileAdminMixin,
+    SaveBeforeChangeAction,
+    _build_credentials_actions,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +36,9 @@ class OdooCustomerSearchForm(forms.Form):
 
 
 @admin.register(OdooEmployee)
-class OdooEmployeeAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdmin):
+class OdooEmployeeAdmin(
+    OwnableAdminMixin, ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdmin
+):
     change_form_template = "django_object_actions/change_form.html"
     form = OdooEmployeeAdminForm
     list_display = ("owner", "host", "database", "credentials_ok", "verified_on")

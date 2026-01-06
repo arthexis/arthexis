@@ -3,6 +3,7 @@ from django.contrib import admin, messages
 from django.shortcuts import render
 from django.utils.translation import gettext_lazy as _
 
+from apps.core.admin import OwnableAdminMixin
 from apps.locals.user_data import EntityModelAdmin
 
 from . import godaddy as dns_utils
@@ -103,7 +104,7 @@ class GoDaddyDNSRecordAdmin(EntityModelAdmin):
 
 
 @admin.register(DNSProviderCredential)
-class DNSProviderCredentialAdmin(EntityModelAdmin):
+class DNSProviderCredentialAdmin(OwnableAdminMixin, EntityModelAdmin):
     list_display = ("__str__", "provider", "is_enabled", "default_domain")
     list_filter = ("provider", "is_enabled")
     search_fields = (

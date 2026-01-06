@@ -11,7 +11,7 @@ from apps.locals.user_data import EntityModelAdmin
 
 from .forms import EmailInboxAdminForm
 from .inlines import EmailCollectorInline
-from .mixins import ProfileAdminMixin, SaveBeforeChangeAction
+from .mixins import OwnableAdminMixin, ProfileAdminMixin, SaveBeforeChangeAction
 
 
 class EmailCollectorAdmin(EntityModelAdmin):
@@ -65,7 +65,9 @@ class EmailSearchForm(forms.Form):
     )
 
 
-class EmailInboxAdmin(ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdmin):
+class EmailInboxAdmin(
+    OwnableAdminMixin, ProfileAdminMixin, SaveBeforeChangeAction, EntityModelAdmin
+):
     form = EmailInboxAdminForm
     list_display = ("owner_label", "username", "host", "protocol", "is_enabled")
     actions = ["test_connection", "search_inbox", "test_collectors"]

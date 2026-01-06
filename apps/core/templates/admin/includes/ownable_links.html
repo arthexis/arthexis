@@ -1,0 +1,31 @@
+{% load i18n %}
+{% if owned_object_links %}
+<div class="inline-group">
+    <div class="tabular inline-related">
+        <h2>{% trans "Owned objects" %}</h2>
+        {% if owned_object_links.direct %}
+        <h3>{% trans "Direct ownership" %}</h3>
+        <ul>
+            {% for link in owned_object_links.direct %}
+            <li>
+                {% if link.url %}<a href="{{ link.url }}">{{ link.label }}</a>{% else %}{{ link.label }}{% endif %}
+                <span class="quiet">({{ link.model_label }})</span>
+            </li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+        {% if owned_object_links.via %}
+        <h3>{{ owned_object_links.via_label }}</h3>
+        <ul>
+            {% for link in owned_object_links.via %}
+            <li>
+                {% if link.via %}<strong>{{ link.via }}</strong> — {% endif %}
+                {% if link.url %}<a href="{{ link.url }}">{{ link.label }}</a>{% else %}{{ link.label }}{% endif %}
+                <span class="quiet">({{ link.model_label }})</span>
+            </li>
+            {% endfor %}
+        </ul>
+        {% endif %}
+    </div>
+</div>
+{% endif %}

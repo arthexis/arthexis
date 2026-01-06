@@ -5,8 +5,10 @@ from django.contrib.auth.admin import GroupAdmin as DjangoGroupAdmin
 from django.urls import reverse
 from django.utils.translation import gettext_lazy as _
 
-from .models import SecurityGroup
 from apps.core.admin import GROUP_PROFILE_INLINES
+from apps.core.admin.mixins import OwnedObjectLinksMixin
+from apps.core.models import get_owned_objects_for_group
+from .models import SecurityGroup
 
 
 class SecurityGroupAdminForm(forms.ModelForm):
@@ -35,8 +37,9 @@ class SecurityGroupAdminForm(forms.ModelForm):
         return instance
 
 
-class SecurityGroupAdmin(DjangoGroupAdmin):
+class SecurityGroupAdmin(OwnedObjectLinksMixin, DjangoGroupAdmin):
     form = SecurityGroupAdminForm
+    change_form_template = "admin/groups/securitygroup/change_form.html"
     fieldsets = (
         (None, {"fields": ("name", "parent", "site_template", "users", "permissions")}),
     )
@@ -70,6 +73,20 @@ class SecurityGroupAdmin(DjangoGroupAdmin):
                 )
             )
         return fieldsets
+
+    def render_change_form(
+        self, request, context, add=False, change=False, form_url="", obj=None
+    ):
+        payload = None
+        if obj is not None:
+            direct, via = get_owned_objects_for_group(obj)
+            payload = self._build_owned_object_context(
+                direct, via, _("Owned by member users")
+            )
+        self._attach_owned_objects(context, payload)
+        return super().render_change_form(
+            request, context, add=add, change=change, form_url=form_url, obj=obj
+        )
 
 
 admin.site.register(SecurityGroup, SecurityGroupAdmin)

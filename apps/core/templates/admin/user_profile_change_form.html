@@ -102,3 +102,8 @@
 {% endif %}
 {% endblock %}
 
+{% block after_related_objects %}
+{{ block.super }}
+{% include "admin/includes/ownable_links.html" %}
+{% endblock %}
+

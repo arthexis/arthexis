@@ -1,33 +1,18 @@
 from __future__ import annotations
 
-from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
-from apps.core.entity import Entity
+from apps.core.models import Ownable
 
 
-class ChatAvatar(Entity):
+class ChatAvatar(Ownable):
     """Represents an operator identity for handling chats."""
 
     name = models.CharField(max_length=150)
     photo = models.ImageField(upload_to="chats/avatars/", blank=True)
     is_enabled = models.BooleanField(default=True)
-    user = models.ForeignKey(
-        settings.AUTH_USER_MODEL,
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name="chat_avatars",
-    )
-    group = models.ForeignKey(
-        "groups.SecurityGroup",
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name="chat_avatars",
-    )
 
     class Meta:
         ordering = ["name", "pk"]

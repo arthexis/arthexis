@@ -231,20 +231,62 @@ def _resolve_token(token: str, current: Optional[models.Model] = None) -> str:
             param_args = param.split(",")
     if instance_id:
         instance_id = resolve_sigils(instance_id, current)
-    try:
-        root = SigilRoot.objects.get(prefix__iexact=lookup_root)
-    except SigilRoot.DoesNotExist:
-        logger.warning("Unknown sigil root [%s]", lookup_root)
-        return _failed_resolution(original_token)
-    except Exception:
-        logger.exception(
-            "Error resolving sigil [%s.%s]",
-            lookup_root,
-            key_upper or normalized_key or raw_key,
-        )
-        return _failed_resolution(original_token)
+    dynamic_instance = None
+    dynamic_model = None
+    if lookup_root.upper() == "OBJECT" and current is not None:
+        dynamic_instance = current
+        dynamic_model = current.__class__
+        root = None
+    else:
+        try:
+            root = SigilRoot.objects.get(prefix__iexact=lookup_root)
+        except SigilRoot.DoesNotExist:
+            logger.warning("Unknown sigil root [%s]", lookup_root)
+            return _failed_resolution(original_token)
+        except Exception:
+            logger.exception(
+                "Error resolving sigil [%s.%s]",
+                lookup_root,
+                key_upper or normalized_key or raw_key,
+            )
+            return _failed_resolution(original_token)
 
     try:
+        if dynamic_instance is not None and dynamic_model is not None:
+            instance = dynamic_instance
+            model = dynamic_model
+            if normalized_key:
+                resolver = getattr(instance, "resolve_profile_field_value", None)
+                if callable(resolver):
+                    try:
+                        handled, custom_value = resolver(normalized_key or raw_key or "")
+                    except TypeError:
+                        handled = False
+                        custom_value = None
+                    if handled:
+                        return _stringify_value(custom_value)
+                field = next(
+                    (
+                        f
+                        for f in model._meta.fields
+                        if f.name.lower() == (key_lower or "")
+                    ),
+                    None,
+                )
+                if field:
+                    val = getattr(instance, field.attname)
+                    if isinstance(field, models.ForeignKey):
+                        related = getattr(instance, field.name, None)
+                        if related is not None:
+                            val = related
+                    return _stringify_value(val)
+                found, attr_val = _call_attribute(
+                    instance, normalized_key or raw_key or "", param_args
+                )
+                if found:
+                    return _stringify_value(attr_val)
+                return _failed_resolution(original_token)
+            return serializers.serialize("json", [instance])
         if root.context_type == SigilRoot.Context.CONFIG:
             if not normalized_key:
                 return ""

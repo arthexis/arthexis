@@ -13,6 +13,7 @@ from django.urls import NoReverseMatch, path, reverse
 from django.utils.translation import gettext_lazy as _
 from django_object_actions import DjangoObjectActions
 
+from apps.core.admin import OwnableAdminMixin
 from apps.nodes.models import Node
 from config.request_utils import is_https_request
 
@@ -21,7 +22,7 @@ from ..models import SlackBotProfile
 from .fixtures import EntityModelAdmin
 
 
-class SlackBotProfileAdmin(DjangoObjectActions, EntityModelAdmin):
+class SlackBotProfileAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
     WIZARD_SESSION_KEY = "slack_bot_wizard_config"
     DEFAULT_SCOPE = "commands,chat:write,chat:write.public"
 
