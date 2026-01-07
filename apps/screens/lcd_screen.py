@@ -337,8 +337,9 @@ def _select_low_payload(
 
     now_value = now or datetime.now(datetime_timezone.utc)
     _install_date(base_dir, now=now_value)
-    uptime_label = _format_uptime_label(_uptime_seconds(base_dir, now=now_value)) or "?d?h?m"
-    down_label = _format_uptime_label(_down_seconds(base_dir, now=now_value)) or "?d?h?m"
+    uptime_secs = _uptime_seconds(base_dir, now=now_value)
+    uptime_label = _format_uptime_label(uptime_secs) or "?d?h?m"
+    down_label = _format_uptime_label(_down_seconds(uptime_secs, base_dir=base_dir, now=now_value)) or "?d?h?m"
     subject = f"UP {uptime_label}"
     body = f"DOWN {down_label}"
     return LockPayload(subject, body, DEFAULT_SCROLL_MS)
@@ -498,9 +499,8 @@ def _install_date(
 
 
 def _down_seconds(
-    base_dir: Path = BASE_DIR, *, now: datetime | None = None
+    uptime_seconds: int | None, base_dir: Path = BASE_DIR, *, now: datetime | None = None
 ) -> int | None:
-    uptime_seconds = _uptime_seconds(base_dir, now=now)
     if uptime_seconds is None:
         return None
 
@@ -534,14 +534,15 @@ def _refresh_uptime_payload(
     if not has_uptime and not has_downtime:
         return payload
 
-    uptime_label = _format_uptime_label(_uptime_seconds(base_dir, now=now))
-    down_label = _format_uptime_label(_down_seconds(base_dir, now=now))
+    uptime_secs = _uptime_seconds(base_dir, now=now)
+    uptime_label = _format_uptime_label(uptime_secs)
+    down_label = _format_uptime_label(_down_seconds(uptime_secs, base_dir=base_dir, now=now))
     if not uptime_label and not down_label:
         return payload
 
     subject = payload.line1
     if uptime_label:
-        suffix = payload.line1[3:].strip()
+        suffix = payload.line1[len("UP "):].strip()
         role_suffix = suffix.split(maxsplit=1)[1].strip() if " " in suffix else ""
         subject = f"UP {uptime_label}"
         if role_suffix:
@@ -549,7 +550,7 @@ def _refresh_uptime_payload(
 
     body = payload.line2
     if down_label and (has_downtime or not payload.line2.strip()):
-        suffix = payload.line2[5:].strip() if has_downtime else ""
+        suffix = payload.line2[len("DOWN "):].strip() if has_downtime else ""
         extra_suffix = suffix.split(maxsplit=1)[1].strip() if " " in suffix else ""
         body = f"DOWN {down_label}"
         if extra_suffix:
