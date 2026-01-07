@@ -17,6 +17,7 @@ nav:
       - Release Install Checks: release-install-checks.md
       - Runserver Log Duplication: runserver-log-duplication.md
       - DS3231 RTC Wiring: ds3231-rtc-wiring.md
+      - Video Devices: video-devices.md
   - Development:
       - CI Troubleshooting: development/ci-troubleshooting.md
       - Migration Branch Guards: development/migration-branch-guards.md

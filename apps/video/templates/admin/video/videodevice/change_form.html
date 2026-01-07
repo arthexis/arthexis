@@ -1,0 +1,38 @@
+{% extends "admin/django_object_actions_user_datum_change_form.html" %}
+{% load i18n %}
+
+{% block after_field_sets %}
+  {{ block.super }}
+  {% if latest_snapshot %}
+    <fieldset class="module aligned">
+      <h2>{% trans "LATEST" %}</h2>
+      <div class="form-row">
+        <div>
+          <strong>{% trans "Captured" %}:</strong>
+          {{ latest_snapshot.captured_at|date:"DATETIME_FORMAT" }}
+        </div>
+        {% if latest_snapshot.resolution_display %}
+          <div>
+            <strong>{% trans "Resolution" %}:</strong>
+            {{ latest_snapshot.resolution_display }}
+          </div>
+        {% endif %}
+        {% if latest_snapshot.image_format %}
+          <div>
+            <strong>{% trans "Format" %}:</strong>
+            {{ latest_snapshot.image_format }}
+          </div>
+        {% endif %}
+      </div>
+      <div class="form-row">
+        {% with preview=latest_snapshot.get_data_uri %}
+          {% if preview %}
+            <img src="{{ preview }}" alt="{% trans 'Latest snapshot' %}" style="max-width: 100%; height: auto;" />
+          {% else %}
+            <em>{% trans "Snapshot unavailable" %}</em>
+          {% endif %}
+        {% endwith %}
+      </div>
+    </fieldset>
+  {% endif %}
+{% endblock %}

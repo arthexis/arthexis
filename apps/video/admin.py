@@ -9,20 +9,29 @@ from django.utils.translation import gettext_lazy as _
 from django.utils.html import format_html
 from django_object_actions import DjangoObjectActions
 
+from apps.core.admin.mixins import OwnableAdminMixin
 from apps.locals.user_data import EntityModelAdmin
 from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
 from apps.nodes.utils import save_screenshot
 
-from .models import MjpegStream, VideoDevice, VideoRecording, YoutubeChannel
+from .models import MjpegStream, VideoDevice, VideoRecording, VideoSnapshot, YoutubeChannel
 from .utils import capture_rpi_snapshot, has_rpi_camera_stack
 
 
 @admin.register(VideoDevice)
-class VideoDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
-    list_display = ("identifier", "node", "description", "is_default")
+class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin):
+    list_display = (
+        "identifier",
+        "node",
+        "owner_display",
+        "description",
+        "is_default",
+    )
     search_fields = ("identifier", "description", "raw_info", "node__hostname")
     changelist_actions = ["find_video_devices", "take_snapshot", "test_camera"]
     change_list_template = "django_object_actions/change_list.html"
+    change_form_template = "admin/video/videodevice/change_form.html"
+    change_actions = ("refresh_snapshot",)
 
     def get_urls(self):
         custom = [
@@ -49,6 +58,25 @@ class VideoDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
         ]
         return custom + super().get_urls()
 
+    def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
+        extra_context = extra_context or {}
+        obj = self.get_object(request, object_id) if object_id else None
+        latest_snapshot = None
+        if obj:
+            latest_snapshot = obj.get_latest_snapshot()
+            if latest_snapshot is None and request.method.lower() == "get":
+                latest_snapshot = self._capture_snapshot_for_device(
+                    request,
+                    obj,
+                    auto_enable=True,
+                    link_duplicates=True,
+                    silent=True,
+                )
+        extra_context["latest_snapshot"] = latest_snapshot
+        return super().changeform_view(
+            request, object_id, form_url=form_url, extra_context=extra_context
+        )
+
     def find_video_devices(self, request, queryset=None):
         return redirect("admin:video_videodevice_find_devices")
 
@@ -57,6 +85,12 @@ class VideoDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
 
     def test_camera(self, request, queryset=None):
         return redirect("admin:video_videodevice_view_stream")
+
+    def refresh_snapshot(self, request, obj):
+        self._capture_snapshot_for_device(
+            request, obj, auto_enable=True, link_duplicates=True
+        )
+        return redirect(".")
 
     find_video_devices.label = _("Find Video Devices")
     find_video_devices.short_description = _("Find Video Devices")
@@ -69,6 +103,9 @@ class VideoDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
     test_camera.label = _("Test Camera")
     test_camera.short_description = _("Test Camera")
     test_camera.changelist = True
+
+    refresh_snapshot.label = _("Take Snapshot")
+    refresh_snapshot.short_description = _("Take Snapshot")
 
     def _ensure_video_feature_enabled(
         self,
@@ -122,6 +159,58 @@ class VideoDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
                 level=messages.ERROR,
             )
         return node
+
+    def _capture_snapshot_for_device(
+        self,
+        request,
+        device: VideoDevice,
+        *,
+        auto_enable: bool = False,
+        link_duplicates: bool = False,
+        silent: bool = False,
+    ) -> VideoSnapshot | None:
+        feature = self._ensure_video_feature_enabled(
+            request, _("Take Snapshot"), auto_enable=auto_enable
+        )
+        if not feature:
+            return None
+
+        node = self._get_local_node(request)
+        if node is None:
+            return None
+        if device.node_id != node.id:
+            if not silent:
+                self.message_user(
+                    request,
+                    _("Snapshots can only be captured for the local node."),
+                    level=messages.WARNING,
+                )
+            return None
+
+        try:
+            snapshot = device.capture_snapshot(link_duplicates=link_duplicates)
+        except Exception as exc:  # pragma: no cover - depends on camera stack
+            if not silent:
+                self.message_user(request, str(exc), level=messages.ERROR)
+            return None
+
+        if not snapshot:
+            if not silent:
+                self.message_user(
+                    request,
+                    _("Duplicate snapshot; not saved"),
+                    level=messages.INFO,
+                )
+            return None
+
+        NodeFeatureAssignment.objects.update_or_create(node=node, feature=feature)
+        if not silent:
+            self.message_user(
+                request,
+                _("Snapshot saved to %(path)s") % {"path": snapshot.sample.path},
+                level=messages.SUCCESS,
+            )
+        return snapshot
 
     def find_video_devices_view(self, request):
         feature = self._ensure_video_feature_enabled(
