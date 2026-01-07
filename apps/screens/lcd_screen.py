@@ -14,10 +14,7 @@ import logging
 import math
 import os
 import random
-import re
-import shutil
 import signal
-import subprocess
 import time
 from datetime import datetime, timedelta, timezone as datetime_timezone
 from decimal import Decimal, InvalidOperation
@@ -28,6 +25,7 @@ from typing import Callable, NamedTuple
 from itertools import cycle, islice
 
 import psutil
+
 
 def _resolve_base_dir() -> Path:
     env_base = os.getenv("ARTHEXIS_BASE_DIR")
@@ -77,6 +75,7 @@ from apps.screens.startup_notifications import (
     LCD_LOW_LOCK_FILE,
     read_lcd_lock_file,
 )
+from apps.core import uptime_utils
 
 logger = logging.getLogger(__name__)
 LOCK_DIR = BASE_DIR / ".locks"
@@ -95,9 +94,6 @@ GAP_ANIMATION_SCROLL_MS = 600
 SUITE_UPTIME_LOCK_NAME = "suite_uptime.lck"
 SUITE_UPTIME_LOCK_MAX_AGE = timedelta(minutes=10)
 INSTALL_DATE_LOCK_NAME = "install_date.lck"
-STARTUP_DURATION_LOCK_NAME = "startup_duration.lck"
-UPGRADE_DURATION_LOCK_NAME = "upgrade_duration.lck"
-INTERNET_ROUTE_TARGET = "8.8.8.8"
 
 try:
     GAP_ANIMATION_FRAMES = default_tree_frames()
@@ -440,106 +436,11 @@ def _uptime_components(seconds: int | None) -> tuple[int, int, int] | None:
 
 
 def _ap_mode_enabled() -> bool:
-    nmcli_path = shutil.which("nmcli")
-    if not nmcli_path:
-        return False
-
-    try:
-        result = subprocess.run(
-            [
-                nmcli_path,
-                "-t",
-                "-f",
-                "NAME,DEVICE,TYPE",
-                "connection",
-                "show",
-                "--active",
-            ],
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=5,
-        )
-    except Exception:
-        return False
-
-    if result.returncode != 0:
-        return False
-
-    for line in result.stdout.splitlines():
-        if not line:
-            continue
-        parts = line.split(":", 2)
-        if not parts:
-            continue
-        name = parts[0]
-        conn_type = ""
-        if len(parts) == 3:
-            conn_type = parts[2]
-        elif len(parts) > 1:
-            conn_type = parts[1]
-        if conn_type.strip().lower() not in {"wifi", "802-11-wireless"}:
-            continue
-        try:
-            mode_result = subprocess.run(
-                [
-                    nmcli_path,
-                    "-g",
-                    "802-11-wireless.mode",
-                    "connection",
-                    "show",
-                    name,
-                ],
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=5,
-            )
-        except Exception:
-            continue
-        if mode_result.returncode != 0:
-            continue
-        if mode_result.stdout.strip() == "ap":
-            return True
-    return False
+    return uptime_utils.ap_mode_enabled()
 
 
 def _internet_interface_label() -> str:
-    ip_path = shutil.which("ip")
-    if ip_path:
-        try:
-            result = subprocess.run(
-                [ip_path, "route", "get", INTERNET_ROUTE_TARGET],
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=2,
-            )
-        except Exception:
-            result = None
-        if result and result.returncode == 0:
-            match = re.search(r"\bdev\s+(\S+)", result.stdout)
-            if match:
-                return match.group(1)
-
-    try:
-        stats = psutil.net_if_stats()
-    except Exception:
-        return "NA"
-
-    prioritized_interfaces = ("eth0", "wlan1", "wlan0")
-    for name in prioritized_interfaces:
-        details = stats.get(name)
-        if details and details.isup:
-            return name
-
-    for name, details in stats.items():
-        if name in prioritized_interfaces or name.startswith("lo"):
-            continue
-        if details and details.isup:
-            return name
-
-    return "NA"
+    return uptime_utils.internet_interface_label()
 
 
 def _uptime_seconds(
@@ -589,37 +490,11 @@ def _uptime_seconds(
 def _boot_delay_seconds(
     base_dir: Path = BASE_DIR, *, now: datetime | None = None
 ) -> int | None:
-    lock_path = Path(base_dir) / ".locks" / SUITE_UPTIME_LOCK_NAME
-    now_value = now or datetime.now(datetime_timezone.utc)
-
-    try:
-        payload = json.loads(lock_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-
-    started_at = _parse_start_timestamp(
-        payload.get("started_at") or payload.get("boot_time")
+    return uptime_utils.boot_delay_seconds(
+        base_dir,
+        _parse_start_timestamp,
+        now=now,
     )
-    if not started_at:
-        return None
-
-    try:
-        boot_timestamp = float(psutil.boot_time())
-    except Exception:
-        return None
-
-    boot_time = datetime.fromtimestamp(boot_timestamp, tz=datetime_timezone.utc)
-    try:
-        boot_time = boot_time.astimezone(started_at.tzinfo or datetime_timezone.utc)
-    except Exception:
-        return None
-
-    delta_seconds = int((started_at - boot_time).total_seconds())
-    if delta_seconds < 0:
-        return None
-    if started_at > now_value:
-        return None
-    return delta_seconds
 
 
 def _install_date(
@@ -679,44 +554,17 @@ def _format_uptime_label(seconds: int | None) -> str | None:
 
 
 def _duration_from_lock(base_dir: Path, lock_name: str) -> int | None:
-    lock_path = Path(base_dir) / ".locks" / lock_name
-    try:
-        raw = lock_path.read_text(encoding="utf-8").strip()
-    except OSError:
-        return None
-    if not raw:
-        return None
-    payload = None
-    try:
-        payload = json.loads(raw)
-    except json.JSONDecodeError:
-        payload = None
-    if isinstance(payload, dict):
-        duration_value = payload.get("duration_seconds")
-        try:
-            duration_seconds = int(float(duration_value))
-        except (TypeError, ValueError):
-            duration_seconds = None
-    else:
-        try:
-            duration_seconds = int(float(raw.splitlines()[0]))
-        except (TypeError, ValueError, IndexError):
-            duration_seconds = None
-    if duration_seconds is None or duration_seconds < 0:
-        return None
-    return duration_seconds
+    return uptime_utils.duration_from_lock(base_dir, lock_name)
 
 
 def _availability_seconds(
     base_dir: Path = BASE_DIR, *, now: datetime | None = None
 ) -> int | None:
-    candidates = [
-        _duration_from_lock(base_dir, STARTUP_DURATION_LOCK_NAME),
-        _duration_from_lock(base_dir, UPGRADE_DURATION_LOCK_NAME),
-        _boot_delay_seconds(base_dir, now=now),
-    ]
-    valid = [value for value in candidates if value is not None]
-    return max(valid) if valid else None
+    return uptime_utils.availability_seconds(
+        base_dir,
+        _parse_start_timestamp,
+        now=now,
+    )
 
 
 def _format_on_label(seconds: int | None) -> str | None:
@@ -739,13 +587,11 @@ def _refresh_uptime_payload(
     if not uptime_label:
         return payload
 
-    subject = payload.line1
-    if uptime_label:
-        suffix = payload.line1[len("UP "):].strip()
-        extra_suffix = suffix.split(maxsplit=1)[1].strip() if " " in suffix else ""
-        subject = f"UP {uptime_label}"
-        if extra_suffix:
-            subject = f"{subject} {extra_suffix}"
+    suffix = payload.line1[len("UP "):].strip()
+    extra_suffix = suffix.split(maxsplit=1)[1].strip() if " " in suffix else ""
+    subject = f"UP {uptime_label}"
+    if extra_suffix:
+        subject = f"{subject} {extra_suffix}"
 
     return payload._replace(line1=subject)
 

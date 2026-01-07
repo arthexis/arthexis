@@ -2,7 +2,6 @@ import base64
 import json
 import logging
 import os
-import re
 import shutil
 import subprocess
 from datetime import datetime, timedelta, timezone as datetime_timezone
@@ -19,6 +18,7 @@ from django.contrib import admin
 from django.utils import timezone as django_timezone
 
 from apps.content.models import ContentSample
+from apps.core import uptime_utils
 from apps.core.system import SUITE_UPTIME_LOCK_NAME
 from apps.screens.startup_notifications import (
     LCD_HIGH_LOCK_FILE,
@@ -33,9 +33,7 @@ from .utils import capture_and_save_screenshot
 logger = logging.getLogger(__name__)
 
 STARTUP_NET_MESSAGE_CACHE_KEY = "nodes:startup_net_message:sent"
-STARTUP_DURATION_LOCK_NAME = "startup_duration.lck"
-UPGRADE_DURATION_LOCK_NAME = "upgrade_duration.lck"
-INTERNET_ROUTE_TARGET = "8.8.8.8"
+
 
 
 def _startup_message_cache_key() -> str:
@@ -162,32 +160,7 @@ def _startup_duration_seconds(base_dir: Path) -> int | None:
 
 
 def _boot_delay_seconds(base_dir: Path) -> int | None:
-    lock_path = base_dir / ".locks" / SUITE_UPTIME_LOCK_NAME
-
-    try:
-        payload = json.loads(lock_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-
-    started_at = _parse_suite_start_timestamp(
-        payload.get("started_at") or payload.get("boot_time")
-    )
-    if not started_at:
-        return None
-
-    try:
-        boot_timestamp = float(psutil.boot_time())
-    except Exception:
-        return None
-
-    boot_time = datetime.fromtimestamp(boot_timestamp, tz=datetime_timezone.utc)
-    try:
-        boot_time = boot_time.astimezone(started_at.tzinfo)
-    except Exception:
-        return None
-
-    delta_seconds = int((started_at - boot_time).total_seconds())
-    return delta_seconds if delta_seconds >= 0 else None
+    return uptime_utils.boot_delay_seconds(base_dir, _parse_suite_start_timestamp)
 
 
 def _uptime_components(seconds: int | None) -> tuple[int, int, int] | None:
@@ -201,145 +174,19 @@ def _uptime_components(seconds: int | None) -> tuple[int, int, int] | None:
 
 
 def _active_interface_label() -> str:
-    ip_path = shutil.which("ip")
-    if ip_path:
-        try:
-            result = subprocess.run(
-                [ip_path, "route", "get", INTERNET_ROUTE_TARGET],
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=2,
-            )
-        except Exception:
-            result = None
-        if result and result.returncode == 0:
-            match = re.search(r"\bdev\s+(\S+)", result.stdout)
-            if match:
-                return match.group(1)
-
-    try:
-        stats = psutil.net_if_stats()
-    except Exception:
-        return "NA"
-
-    prioritized_interfaces = ("eth0", "wlan1", "wlan0")
-    for name in prioritized_interfaces:
-        details = stats.get(name)
-        if details and details.isup:
-            return name
-
-    for name, details in stats.items():
-        if name in prioritized_interfaces or name.startswith("lo"):
-            continue
-        if details and details.isup:
-            return name
-
-    return "NA"
+    return uptime_utils.internet_interface_label()
 
 
 def _ap_mode_enabled() -> bool:
-    nmcli_path = shutil.which("nmcli")
-    if not nmcli_path:
-        return False
-
-    try:
-        result = subprocess.run(
-            [
-                nmcli_path,
-                "-t",
-                "-f",
-                "NAME,DEVICE,TYPE",
-                "connection",
-                "show",
-                "--active",
-            ],
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=Node.NMCLI_TIMEOUT,
-        )
-    except Exception:
-        return False
-
-    if result.returncode != 0:
-        return False
-
-    for line in result.stdout.splitlines():
-        if not line:
-            continue
-        parts = line.split(":", 2)
-        if not parts:
-            continue
-        name = parts[0]
-        conn_type = ""
-        if len(parts) == 3:
-            conn_type = parts[2]
-        elif len(parts) > 1:
-            conn_type = parts[1]
-        if conn_type.strip().lower() not in {"wifi", "802-11-wireless"}:
-            continue
-        try:
-            mode_result = subprocess.run(
-                [
-                    nmcli_path,
-                    "-g",
-                    "802-11-wireless.mode",
-                    "connection",
-                    "show",
-                    name,
-                ],
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=Node.NMCLI_TIMEOUT,
-            )
-        except Exception:
-            continue
-        if mode_result.returncode != 0:
-            continue
-        if mode_result.stdout.strip() == "ap":
-            return True
-    return False
+    return uptime_utils.ap_mode_enabled(timeout=Node.NMCLI_TIMEOUT)
 
 
 def _duration_from_lock(base_dir: Path, lock_name: str) -> int | None:
-    lock_path = base_dir / ".locks" / lock_name
-    try:
-        raw = lock_path.read_text(encoding="utf-8").strip()
-    except OSError:
-        return None
-    if not raw:
-        return None
-    payload = None
-    try:
-        payload = json.loads(raw)
-    except json.JSONDecodeError:
-        payload = None
-    if isinstance(payload, dict):
-        duration_value = payload.get("duration_seconds")
-        try:
-            duration_seconds = int(float(duration_value))
-        except (TypeError, ValueError):
-            duration_seconds = None
-    else:
-        try:
-            duration_seconds = int(float(raw.splitlines()[0]))
-        except (TypeError, ValueError, IndexError):
-            duration_seconds = None
-    if duration_seconds is None or duration_seconds < 0:
-        return None
-    return duration_seconds
+    return uptime_utils.duration_from_lock(base_dir, lock_name)
 
 
 def _availability_seconds(base_dir: Path) -> int | None:
-    candidates = [
-        _duration_from_lock(base_dir, STARTUP_DURATION_LOCK_NAME),
-        _duration_from_lock(base_dir, UPGRADE_DURATION_LOCK_NAME),
-        _boot_delay_seconds(base_dir),
-    ]
-    valid = [value for value in candidates if value is not None]
-    return max(valid) if valid else None
+    return uptime_utils.availability_seconds(base_dir, _parse_suite_start_timestamp)
 
 
 def _format_duration_hms(seconds: int | None) -> str:
