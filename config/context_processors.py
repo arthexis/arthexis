@@ -8,7 +8,7 @@ from django.conf import settings
 
 DEFAULT_BADGE_COLOR = "#28a745"
 UNKNOWN_BADGE_COLOR = "#6c757d"
-CAMERA_BADGE_COLOR = "#0d6efd"
+CAMERA_BADGE_COLOR = DEFAULT_BADGE_COLOR
 
 
 logger = logging.getLogger(__name__)
