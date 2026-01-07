@@ -97,10 +97,7 @@ def collect_recent_logs(
             stat = path.stat()
         except OSError:
             continue
-        if timezone.is_naive(since):
-            since_ts = since.timestamp()
-        else:
-            since_ts = since.timestamp()
+        since_ts = since.timestamp()
         if stat.st_mtime < since_ts:
             continue
         offset = _safe_offset(offsets.get(str(path)))

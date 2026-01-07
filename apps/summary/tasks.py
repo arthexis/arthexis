@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 import logging
 from pathlib import Path
+import shlex
 import subprocess
 import time
 
@@ -42,13 +43,13 @@ class LocalLLMSummarizer:
             return self._fallback(prompt)
         try:
             result = subprocess.run(
-                self.command,
+                shlex.split(self.command),
                 input=prompt,
                 capture_output=True,
                 text=True,
                 timeout=self.timeout,
                 check=False,
-                shell=isinstance(self.command, str),
+                shell=False,
             )
         except Exception:
             logger.exception("Failed to run local LLM command")
