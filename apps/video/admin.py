@@ -1,3 +1,5 @@
+import base64
+from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
 from django.conf import settings
@@ -5,24 +7,41 @@ from django.contrib import admin, messages
 from django.shortcuts import redirect
 from django.template.response import TemplateResponse
 from django.urls import NoReverseMatch, path, reverse
-from django.utils.translation import gettext_lazy as _
+from django.utils import timezone
 from django.utils.html import format_html
+from django.utils.safestring import mark_safe
+from django.utils.translation import gettext_lazy as _
+from PIL import Image
 from django_object_actions import DjangoObjectActions
 
+from apps.core.admin import OwnableAdminMixin
 from apps.locals.user_data import EntityModelAdmin
 from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
 from apps.nodes.utils import save_screenshot
 
-from .models import MjpegStream, VideoDevice, VideoRecording, YoutubeChannel
+from .models import (
+    MjpegStream,
+    VideoDevice,
+    VideoDeviceSnapshot,
+    VideoRecording,
+    YoutubeChannel,
+)
 from .utils import capture_rpi_snapshot, has_rpi_camera_stack
 
 
 @admin.register(VideoDevice)
-class VideoDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
-    list_display = ("identifier", "node", "description", "is_default")
+class VideoDeviceAdmin(OwnableAdminMixin, DjangoObjectActions, EntityModelAdmin):
+    list_display = ("identifier", "node", "owner_display", "is_default", "visibility")
     search_fields = ("identifier", "description", "raw_info", "node__hostname")
     changelist_actions = ["find_video_devices", "take_snapshot", "test_camera"]
+    change_actions = ["take_snapshot_action"]
     change_list_template = "django_object_actions/change_list.html"
+    readonly_fields = ("latest_snapshot",)
+    fieldsets = (
+        (None, {"fields": ("node", "identifier", "description", "raw_info", "is_default")}),
+        (_("Ownership"), {"fields": ("user", "group")}),
+        (_("Latest"), {"fields": ("latest_snapshot",)}),
+    )
 
     def get_urls(self):
         custom = [
@@ -55,6 +74,17 @@ class VideoDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
     def take_snapshot(self, request, queryset=None):
         return redirect("admin:video_videodevice_take_snapshot")
 
+    def take_snapshot_action(self, request, obj):
+        sample = self._capture_snapshot_for_device(request, obj)
+        if sample:
+            try:
+                return redirect(
+                    reverse("admin:content_contentsample_change", args=[sample.pk])
+                )
+            except NoReverseMatch:  # pragma: no cover - admin always registered
+                pass
+        return redirect(request.path)
+
     def test_camera(self, request, queryset=None):
         return redirect("admin:video_videodevice_view_stream")
 
@@ -66,9 +96,23 @@ class VideoDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
     take_snapshot.short_description = _("Take Snapshot")
     take_snapshot.changelist = True
 
+    take_snapshot_action.label = _("Take Snapshot")
+    take_snapshot_action.short_description = _("Refresh snapshot")
+
     test_camera.label = _("Test Camera")
     test_camera.short_description = _("Test Camera")
     test_camera.changelist = True
+
+    def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
+        if request.method == "GET" and object_id:
+            obj = self.get_object(request, object_id)
+            if obj and not obj.get_latest_snapshot():
+                self._capture_snapshot_for_device(
+                    request,
+                    obj,
+                    silent=True,
+                )
+        return super().changeform_view(request, object_id, form_url, extra_context)
 
     def _ensure_video_feature_enabled(
         self,
@@ -122,6 +166,108 @@ class VideoDeviceAdmin(DjangoObjectActions, EntityModelAdmin):
                 level=messages.ERROR,
             )
         return node
+
+    @admin.display(description=_("Visibility"))
+    def visibility(self, obj):
+        if not obj:
+            return ""
+        return _("Public") if obj.is_public else obj.owner_display()
+
+    @admin.display(description=_("Latest snapshot"))
+    def latest_snapshot(self, obj):
+        if not obj:
+            return ""
+        sample = obj.get_latest_snapshot()
+        if not sample:
+            return _("No snapshots captured yet.")
+
+        file_path = Path(sample.path)
+        if not file_path.is_absolute():
+            file_path = settings.LOG_DIR / file_path
+
+        metadata: list[str] = []
+        timestamp = timezone.localtime(sample.created_at)
+        metadata.append(
+            _("Captured at %(timestamp)s")
+            % {"timestamp": timestamp.strftime("%Y-%m-%d %H:%M:%S %Z")}
+        )
+
+        image_html = ""
+        mime_type = "image/jpeg"
+
+        if file_path.exists():
+            try:
+                with Image.open(file_path) as image:
+                    width, height = image.size
+                    fmt = image.format or "JPEG"
+                    mime_type = f"image/{fmt.lower()}"
+                    metadata.append(
+                        _("Resolution: %(width)s×%(height)s")
+                        % {"width": width, "height": height}
+                    )
+                    metadata.append(_("Format: %(format)s") % {"format": fmt})
+                with file_path.open("rb") as fh:
+                    encoded = base64.b64encode(fh.read()).decode("ascii")
+                image_html = format_html(
+                    '<div style="margin-bottom:8px;"><img src="data:{};base64,{}" '
+                    'style="max-width:100%; max-height:400px;" /></div>',
+                    mime_type,
+                    encoded,
+                )
+            except Exception:
+                metadata.append(_("Snapshot could not be displayed."))
+        else:
+            metadata.append(_("Snapshot file missing at %(path)s") % {"path": file_path})
+
+        metadata_html = mark_safe("<br />".join(metadata))
+        return format_html("{}{}", image_html, metadata_html)
+
+    def _capture_snapshot_for_device(self, request, device, *, silent: bool = False):
+        feature = self._ensure_video_feature_enabled(
+            request, _("Take Snapshot"), auto_enable=True
+        )
+        if not feature:
+            return None
+
+        node = device.node or self._get_local_node(request)
+        if node is None:
+            return None
+
+        NodeFeatureAssignment.objects.update_or_create(node=node, feature=feature)
+
+        try:
+            path = capture_rpi_snapshot()
+        except Exception as exc:  # pragma: no cover - depends on camera stack
+            if not silent:
+                self.message_user(request, str(exc), level=messages.ERROR)
+            return None
+
+        sample = save_screenshot(
+            path,
+            node=node,
+            method="RPI_CAMERA",
+            link_duplicates=True,
+        )
+
+        if not sample:
+            if not silent:
+                self.message_user(
+                    request, _("Duplicate snapshot; not saved"), level=messages.INFO
+                )
+            return None
+
+        VideoDeviceSnapshot.objects.update_or_create(
+            video_device=device, sample=sample
+        )
+        device.link_snapshot(sample)
+
+        if not silent:
+            self.message_user(
+                request,
+                _("Snapshot saved to %(path)s") % {"path": sample.path},
+                level=messages.SUCCESS,
+            )
+        return sample
 
     def find_video_devices_view(self, request):
         feature = self._ensure_video_feature_enabled(

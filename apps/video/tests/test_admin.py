@@ -1,6 +1,7 @@
 import pytest
 from django.contrib.messages import get_messages
 from django.urls import reverse
+from PIL import Image
 
 from apps.content.models import ContentSample
 from apps.nodes.models import Node, NodeFeature
@@ -107,3 +108,37 @@ def test_take_snapshot_warns_when_no_devices(
     assert response.request["PATH_INFO"].endswith(
         reverse("admin:video_videodevice_changelist")
     )
+
+
+@pytest.mark.django_db
+def test_latest_snapshot_section_auto_captures(admin_client, monkeypatch, tmp_path):
+    Node._local_cache.clear()
+    node = Node.objects.create(
+        hostname="local", mac_address=Node.get_current_mac(), current_relation=Node.Relation.SELF
+    )
+    NodeFeature.objects.create(slug="rpi-camera", display="Raspberry Pi Camera")
+    device = VideoDevice.objects.create(
+        node=node,
+        identifier="/dev/video0",
+        description="Raspberry Pi Camera",
+    )
+
+    image_path = tmp_path / "snapshot.png"
+    Image.new("RGB", (2, 2)).save(image_path, format="PNG")
+
+    monkeypatch.setattr(video_admin, "capture_rpi_snapshot", lambda: image_path)
+    monkeypatch.setattr(video_admin, "has_rpi_camera_stack", lambda: True)
+
+    response = admin_client.get(
+        reverse("admin:video_videodevice_change", args=[device.pk]),
+        follow=True,
+    )
+
+    device.refresh_from_db()
+    sample = device.get_latest_snapshot()
+    assert sample is not None
+    assert sample.path == str(image_path)
+
+    content = response.content.decode()
+    assert "Resolution: 2×2" in content
+    assert "Format: PNG" in content

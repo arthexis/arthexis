@@ -9,6 +9,8 @@ from django.utils.translation import gettext_lazy as _
 from django.urls import reverse
 
 from apps.base.models import Entity
+from apps.core.models import Ownable
+from apps.content.models import ContentSample
 from .utils import (
     RPI_CAMERA_BINARIES,
     RPI_CAMERA_DEVICE,
@@ -25,8 +27,10 @@ class DetectedVideoDevice:
     raw_info: str
 
 
-class VideoDevice(Entity):
+class VideoDevice(Ownable):
     """Detected video capture device available to a node."""
+
+    owner_required = False
 
     node = models.ForeignKey(
         "nodes.Node", on_delete=models.CASCADE, related_name="video_devices"
@@ -112,6 +116,38 @@ class VideoDevice(Entity):
         """Return ``True`` when a Raspberry Pi video device is available."""
 
         return bool(cls.detect_devices())
+
+    @property
+    def is_public(self) -> bool:
+        return self.owner is None
+
+    def get_latest_snapshot(self) -> ContentSample | None:
+        latest_snapshot = self.snapshots.select_related("sample").order_by(
+            "-sample__created_at"
+        )[:1]
+        if latest_snapshot:
+            return latest_snapshot[0].sample
+        return None
+
+    def link_snapshot(self, sample: ContentSample) -> None:
+        self.snapshots.update_or_create(sample=sample, defaults={"video_device": self})
+
+
+class VideoDeviceSnapshot(Entity):
+    """Snapshot captured from a :class:`VideoDevice`."""
+
+    video_device = models.ForeignKey(
+        VideoDevice, on_delete=models.CASCADE, related_name="snapshots"
+    )
+    sample = models.OneToOneField(
+        ContentSample, on_delete=models.CASCADE, related_name="video_snapshot"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = _("Video Device Snapshot")
+        verbose_name_plural = _("Video Device Snapshots")
 
 
 class VideoStream(Entity):
