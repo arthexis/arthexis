@@ -197,6 +197,7 @@ class NodeFeatureMixin:
         "gui-toast",
         "rpi-camera",
         "ap-router",
+        "llm-summary",
     }
     MANUAL_FEATURE_SLUGS = {"screenshot-poll", "audio-capture"}
 
@@ -407,6 +408,7 @@ class NodeFeatureMixin:
     def sync_feature_tasks(self):
         screenshot_enabled = self.has_feature("screenshot-poll")
         celery_enabled = self.is_local and self.has_feature("celery-queue")
+        llm_summary_enabled = celery_enabled and self.has_feature("llm-summary")
         self._sync_screenshot_task(screenshot_enabled)
         self._sync_landing_lead_task(celery_enabled)
         self._sync_ocpp_session_report_task(celery_enabled)
@@ -414,6 +416,7 @@ class NodeFeatureMixin:
         self._sync_net_message_purge_task(celery_enabled)
         self._sync_node_update_task(celery_enabled)
         self._sync_connectivity_monitor_task(celery_enabled)
+        self._sync_llm_summary_task(llm_summary_enabled)
 
     def _sync_screenshot_task(self, enabled: bool):
         from django_celery_beat.models import IntervalSchedule, PeriodicTask
@@ -627,6 +630,33 @@ class NodeFeatureMixin:
                 defaults={
                     "interval": schedule,
                     "task": "apps.nodes.tasks.monitor_nmcli",
+                    "enabled": True,
+                },
+            )
+        else:
+            PeriodicTask.objects.filter(
+                name__in=periodic_task_name_variants(raw_task_name)
+            ).delete()
+
+    def _sync_llm_summary_task(self, enabled: bool) -> None:
+        if not self.is_local:
+            return
+
+        from django_celery_beat.models import IntervalSchedule, PeriodicTask
+
+        raw_task_name = "llm_summary_lcd"
+        task_name = normalize_periodic_task_name(
+            PeriodicTask.objects, raw_task_name
+        )
+        if enabled:
+            schedule, _ = IntervalSchedule.objects.get_or_create(
+                every=5, period=IntervalSchedule.MINUTES
+            )
+            PeriodicTask.objects.update_or_create(
+                name=task_name,
+                defaults={
+                    "interval": schedule,
+                    "task": "apps.summary.tasks.generate_lcd_log_summary",
                     "enabled": True,
                 },
             )
