@@ -5,6 +5,8 @@ set -eE
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
 export TZ="${TZ:-America/Monterrey}"
 PIP_INSTALL_HELPER="$BASE_DIR/scripts/helpers/pip_install.py"
+UPGRADE_STARTED_AT=$(date +%s)
+UPGRADE_DURATION_LOCK="$BASE_DIR/.locks/upgrade_duration.lck"
 # Track upgrade script changes triggered by git pull so the newer version can be re-run.
 UPGRADE_SCRIPT_PATH="$BASE_DIR/upgrade.sh"
 INITIAL_UPGRADE_HASH=""
@@ -23,6 +25,7 @@ arthexis_log_startup_event "$BASE_DIR" "$UPGRADE_SCRIPT_NAME" "start" "invoked"
 log_upgrade_exit() {
   local status=$?
   arthexis_log_startup_event "$BASE_DIR" "$UPGRADE_SCRIPT_NAME" "finish" "status=$status"
+  arthexis_record_upgrade_duration "$status"
 }
 trap log_upgrade_exit EXIT
 # shellcheck source=scripts/helpers/desktop_shortcuts.sh
@@ -59,6 +62,35 @@ LOCK_DIR="$BASE_DIR/.locks"
 SYSTEMD_UNITS_LOCK="$LOCK_DIR/systemd_services.lck"
 SERVICE_NAME=""
 [ -f "$LOCK_DIR/service.lck" ] && SERVICE_NAME="$(cat "$LOCK_DIR/service.lck")"
+
+arthexis_record_upgrade_duration() {
+  local status="${1:-0}"
+  local end_time
+  end_time=$(date +%s)
+  local duration=$((end_time - UPGRADE_STARTED_AT))
+  python - "$UPGRADE_DURATION_LOCK" "$UPGRADE_STARTED_AT" "$end_time" "$duration" "$status" <<'PY'
+import json
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+lock_path = Path(sys.argv[1])
+started_at = int(sys.argv[2])
+finished_at = int(sys.argv[3])
+duration = int(sys.argv[4])
+status = int(sys.argv[5])
+
+payload = {
+    "started_at": datetime.fromtimestamp(started_at, tz=timezone.utc).isoformat(),
+    "finished_at": datetime.fromtimestamp(finished_at, tz=timezone.utc).isoformat(),
+    "duration_seconds": duration,
+    "status": status,
+}
+
+lock_path.parent.mkdir(parents=True, exist_ok=True)
+lock_path.write_text(json.dumps(payload), encoding="utf-8")
+PY
+}
 
 auto_upgrade_enabled() {
   local base_dir="${1:-$BASE_DIR}"
@@ -1898,4 +1930,3 @@ if arthexis_lcd_feature_enabled "$LOCK_DIR"; then
 fi
 
 arthexis_refresh_desktop_shortcuts "$BASE_DIR"
-

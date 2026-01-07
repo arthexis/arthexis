@@ -73,6 +73,7 @@ def test_send_startup_net_message_writes_boot_status(
     monkeypatch.setattr(tasks.Node, "get_local", lambda: DummyNode())
     monkeypatch.setattr(tasks, "queue_startup_message", write_high_lock)
     monkeypatch.setattr(tasks, "_active_interface_label", lambda: "NA")
+    monkeypatch.setattr(tasks, "_ap_mode_enabled", lambda: False)
     monkeypatch.setattr(
         tasks.psutil,
         "boot_time",
@@ -85,8 +86,8 @@ def test_send_startup_net_message_writes_boot_status(
     assert high_lines == ["hi", "there"]
 
     low_lines = (lock_dir / tasks.LCD_LOW_LOCK_FILE).read_text().splitlines()
-    assert low_lines[0] == "UP 0d0h0m CTRL NA"
-    assert low_lines[1] == "DOWN 0d0h0m"
+    assert low_lines[0] == "UP 0d0h0m"
+    assert low_lines[1] == "ON 0h0m30s NA"
 
 
 @pytest.mark.django_db
@@ -118,6 +119,7 @@ def test_boot_message_reports_uptime(monkeypatch, settings, tmp_path):
     monkeypatch.setattr(tasks.Node, "get_local", lambda: DummyNode())
     monkeypatch.setattr(tasks, "queue_startup_message", write_high_lock)
     monkeypatch.setattr(tasks, "_active_interface_label", lambda: "NA")
+    monkeypatch.setattr(tasks, "_ap_mode_enabled", lambda: False)
     monkeypatch.setattr(
         tasks.psutil, "boot_time", lambda: (started_at - timedelta(minutes=1)).timestamp()
     )
@@ -126,7 +128,7 @@ def test_boot_message_reports_uptime(monkeypatch, settings, tmp_path):
 
     low_lines = (lock_dir / tasks.LCD_LOW_LOCK_FILE).read_text().splitlines()
     assert low_lines[0].startswith("UP ")
-    assert low_lines[1] == "DOWN 0d0h1m"
+    assert low_lines[1] == "ON 0h1m0s NA"
 
 
 @pytest.mark.django_db
@@ -155,12 +157,13 @@ def test_boot_message_uses_system_boot_time(monkeypatch, settings, tmp_path):
     monkeypatch.setattr(tasks.Node, "get_local", lambda: DummyNode())
     monkeypatch.setattr(tasks, "queue_startup_message", write_high_lock)
     monkeypatch.setattr(tasks, "_active_interface_label", lambda: "NA")
+    monkeypatch.setattr(tasks, "_ap_mode_enabled", lambda: False)
 
     tasks.send_startup_net_message()
 
     low_lines = (lock_dir / tasks.LCD_LOW_LOCK_FILE).read_text().splitlines()
-    assert low_lines[0] == "UP 0d0h2m CTRL NA"
-    assert low_lines[1] == "DOWN ?d?h?m"
+    assert low_lines[0] == "UP 0d0h2m"
+    assert low_lines[1] == "ON ?h?m?s NA"
 
 
 @pytest.mark.django_db
@@ -194,13 +197,14 @@ def test_startup_message_cache_resets_each_boot(
     monkeypatch.setattr(tasks.Node, "get_local", lambda: DummyNode())
     monkeypatch.setattr(tasks, "queue_startup_message", write_high_lock)
     monkeypatch.setattr(tasks, "_active_interface_label", lambda: "NA")
+    monkeypatch.setattr(tasks, "_ap_mode_enabled", lambda: False)
 
     boot_time = started_at - timedelta(minutes=1)
     monkeypatch.setattr(tasks.psutil, "boot_time", lambda: boot_time.timestamp())
 
     tasks.send_startup_net_message()
     low_lines = (lock_dir / tasks.LCD_LOW_LOCK_FILE).read_text().splitlines()
-    assert low_lines[0] == "UP 0d0h5m CTRL NA"
+    assert low_lines[0] == "UP 0d0h5m"
     assert high_payloads == ["call-0"]
 
     (lock_dir / "role.lck").write_text("Terminal", encoding="utf-8")
@@ -209,7 +213,7 @@ def test_startup_message_cache_resets_each_boot(
 
     tasks.send_startup_net_message()
     low_lines = (lock_dir / tasks.LCD_LOW_LOCK_FILE).read_text().splitlines()
-    assert low_lines[0] == "UP 0d0h5m TERM NA"
+    assert low_lines[0] == "UP 0d0h5m"
     assert high_payloads == ["call-0", "call-1"]
 
 
@@ -241,6 +245,7 @@ def test_lcd_boot_message_avoids_database(
     )
     monkeypatch.setattr(tasks, "queue_startup_message", write_high_lock)
     monkeypatch.setattr(tasks, "_active_interface_label", lambda: "NA")
+    monkeypatch.setattr(tasks, "_ap_mode_enabled", lambda: False)
     monkeypatch.setattr(
         tasks.psutil,
         "boot_time",
@@ -251,5 +256,5 @@ def test_lcd_boot_message_avoids_database(
         tasks.send_startup_net_message()
 
     low_lines = (lock_dir / tasks.LCD_LOW_LOCK_FILE).read_text().splitlines()
-    assert low_lines[0] == "UP 0d0h0m CTRL NA"
-    assert low_lines[1] == "DOWN 0d0h0m"
+    assert low_lines[0] == "UP 0d0h0m"
+    assert low_lines[1] == "ON 0h0m30s NA"

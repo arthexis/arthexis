@@ -26,6 +26,7 @@ from itertools import cycle, islice
 
 import psutil
 
+
 def _resolve_base_dir() -> Path:
     env_base = os.getenv("ARTHEXIS_BASE_DIR")
     if env_base:
@@ -74,6 +75,7 @@ from apps.screens.startup_notifications import (
     LCD_LOW_LOCK_FILE,
     read_lcd_lock_file,
 )
+from apps.core import uptime_utils
 
 logger = logging.getLogger(__name__)
 LOCK_DIR = BASE_DIR / ".locks"
@@ -339,9 +341,16 @@ def _select_low_payload(
     _install_date(base_dir, now=now_value)
     uptime_secs = _uptime_seconds(base_dir, now=now_value)
     uptime_label = _format_uptime_label(uptime_secs) or "?d?h?m"
-    down_label = _format_uptime_label(_down_seconds(uptime_secs, base_dir=base_dir, now=now_value)) or "?d?h?m"
-    subject = f"UP {uptime_label}"
-    body = f"DOWN {down_label}"
+    on_label = _format_on_label(_availability_seconds(base_dir, now=now_value)) or "?h?m?s"
+    subject_parts = [f"UP {uptime_label}"]
+    if _ap_mode_enabled():
+        subject_parts.append("AP")
+    subject = " ".join(subject_parts).strip()
+    interface_label = _internet_interface_label()
+    body_parts = [f"ON {on_label}"]
+    if interface_label:
+        body_parts.append(interface_label)
+    body = " ".join(body_parts).strip()
     return LockPayload(subject, body, DEFAULT_SCROLL_MS)
 
 
@@ -426,6 +435,14 @@ def _uptime_components(seconds: int | None) -> tuple[int, int, int] | None:
     return days, hours, minutes
 
 
+def _ap_mode_enabled() -> bool:
+    return uptime_utils.ap_mode_enabled()
+
+
+def _internet_interface_label() -> str:
+    return uptime_utils.internet_interface_label()
+
+
 def _uptime_seconds(
     base_dir: Path = BASE_DIR, *, now: datetime | None = None
 ) -> int | None:
@@ -468,6 +485,16 @@ def _uptime_seconds(
     boot_dt = datetime.fromtimestamp(boot_time, tz=datetime_timezone.utc)
     seconds = int((now_value - boot_dt).total_seconds())
     return seconds if seconds >= 0 else None
+
+
+def _boot_delay_seconds(
+    base_dir: Path = BASE_DIR, *, now: datetime | None = None
+) -> int | None:
+    return uptime_utils.boot_delay_seconds(
+        base_dir,
+        _parse_start_timestamp,
+        now=now,
+    )
 
 
 def _install_date(
@@ -526,37 +553,47 @@ def _format_uptime_label(seconds: int | None) -> str | None:
     return f"{days}d{hours}h{minutes}m"
 
 
+def _duration_from_lock(base_dir: Path, lock_name: str) -> int | None:
+    return uptime_utils.duration_from_lock(base_dir, lock_name)
+
+
+def _availability_seconds(
+    base_dir: Path = BASE_DIR, *, now: datetime | None = None
+) -> int | None:
+    return uptime_utils.availability_seconds(
+        base_dir,
+        _parse_start_timestamp,
+        now=now,
+    )
+
+
+def _format_on_label(seconds: int | None) -> str | None:
+    if seconds is None or seconds < 0:
+        return None
+    hours, remainder = divmod(seconds, 3600)
+    minutes, secs = divmod(remainder, 60)
+    return f"{hours}h{minutes}m{secs}s"
+
+
 def _refresh_uptime_payload(
     payload: LockPayload, *, base_dir: Path = BASE_DIR, now: datetime | None = None
 ) -> LockPayload:
     has_uptime = payload.line1.startswith("UP ")
-    has_downtime = payload.line2.startswith("DOWN ")
-    if not has_uptime and not has_downtime:
+    if not has_uptime:
         return payload
 
     uptime_secs = _uptime_seconds(base_dir, now=now)
     uptime_label = _format_uptime_label(uptime_secs)
-    down_label = _format_uptime_label(_down_seconds(uptime_secs, base_dir=base_dir, now=now))
-    if not uptime_label and not down_label:
+    if not uptime_label:
         return payload
 
-    subject = payload.line1
-    if uptime_label:
-        suffix = payload.line1[len("UP "):].strip()
-        role_suffix = suffix.split(maxsplit=1)[1].strip() if " " in suffix else ""
-        subject = f"UP {uptime_label}"
-        if role_suffix:
-            subject = f"{subject} {role_suffix}"
+    suffix = payload.line1[len("UP "):].strip()
+    extra_suffix = suffix.split(maxsplit=1)[1].strip() if " " in suffix else ""
+    subject = f"UP {uptime_label}"
+    if extra_suffix:
+        subject = f"{subject} {extra_suffix}"
 
-    body = payload.line2
-    if down_label and (has_downtime or not payload.line2.strip()):
-        suffix = payload.line2[len("DOWN "):].strip() if has_downtime else ""
-        extra_suffix = suffix.split(maxsplit=1)[1].strip() if " " in suffix else ""
-        body = f"DOWN {down_label}"
-        if extra_suffix:
-            body = f"{body} {extra_suffix}"
-
-    return payload._replace(line1=subject, line2=body)
+    return payload._replace(line1=subject)
 
 
 def _lcd_temperature_label_from_sensors() -> str | None:

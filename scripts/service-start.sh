@@ -109,6 +109,7 @@ start_log_follower() {
 }
 LOCK_DIR="$BASE_DIR/.locks"
 STARTUP_LOCK="$LOCK_DIR/startup_started_at.lck"
+STARTUP_DURATION_LOCK="$LOCK_DIR/startup_duration.lck"
 SYSTEMD_LOCK_FILE="$LOCK_DIR/systemd_services.lck"
 SERVICE_MANAGEMENT_MODE="$(arthexis_detect_service_mode "$LOCK_DIR")"
 SERVICE_NAME=""
@@ -436,6 +437,37 @@ wait_for_suite_startup() {
   done
 }
 
+record_startup_duration() {
+  local status="${1:-0}"
+  local end_time
+  end_time=$(date +%s)
+  local duration=$((end_time - STARTUP_STARTED_AT))
+  python - "$STARTUP_DURATION_LOCK" "$STARTUP_STARTED_AT" "$end_time" "$duration" "$status" "$PORT" <<'PY'
+import json
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+lock_path = Path(sys.argv[1])
+started_at = int(sys.argv[2])
+finished_at = int(sys.argv[3])
+duration = int(sys.argv[4])
+status = int(sys.argv[5])
+port = sys.argv[6] if len(sys.argv) > 6 else ""
+
+payload = {
+    "started_at": datetime.fromtimestamp(started_at, tz=timezone.utc).isoformat(),
+    "finished_at": datetime.fromtimestamp(finished_at, tz=timezone.utc).isoformat(),
+    "duration_seconds": duration,
+    "status": status,
+    "port": port,
+}
+
+lock_path.parent.mkdir(parents=True, exist_ok=True)
+lock_path.write_text(json.dumps(payload), encoding="utf-8")
+PY
+}
+
 STARTUP_STARTED_AT=$(date +%s)
 {
   printf '%s\n' "$STARTUP_STARTED_AT"
@@ -518,8 +550,10 @@ if [ "$AWAIT_START" = true ]; then
   record_pid_file "$DJANGO_SERVER_PID" "$DJANGO_PID_FILE"
 
   if wait_for_suite_startup "$PORT" "$DJANGO_SERVER_PID" "$STARTUP_TIMEOUT"; then
+    record_startup_duration 0
     wait "$DJANGO_SERVER_PID"
   else
+    record_startup_duration 1
     exit 1
   fi
 else
@@ -530,5 +564,12 @@ else
   fi
   DJANGO_SERVER_PID=$!
   record_pid_file "$DJANGO_SERVER_PID" "$DJANGO_PID_FILE"
+  (
+    if wait_for_suite_startup "$PORT" "$DJANGO_SERVER_PID" "$STARTUP_TIMEOUT"; then
+      record_startup_duration 0
+    else
+      record_startup_duration 1
+    fi
+  ) &
   wait "$DJANGO_SERVER_PID"
 fi

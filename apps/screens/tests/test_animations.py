@@ -22,7 +22,7 @@ def test_loading_animation_enforces_width(tmp_path):
         animations.load_frames_from_file(bad_file)
 
 
-def test_low_channel_gaps_use_uptime_payload(tmp_path):
+def test_low_channel_gaps_use_uptime_payload(monkeypatch, tmp_path):
     base_dir = tmp_path
     lock_dir = base_dir / ".locks"
     lock_dir.mkdir()
@@ -39,6 +39,10 @@ def test_low_channel_gaps_use_uptime_payload(tmp_path):
     install_lock = lock_dir / lcd_screen.INSTALL_DATE_LOCK_NAME
     install_lock.write_text(install_date.isoformat(), encoding="utf-8")
 
+    monkeypatch.setattr(lcd_screen.psutil, "boot_time", lambda: (now - timedelta(hours=2)).timestamp())
+    monkeypatch.setattr(lcd_screen, "_ap_mode_enabled", lambda: False)
+    monkeypatch.setattr(lcd_screen, "_internet_interface_label", lambda: "eth0")
+
     payload = lcd_screen.LockPayload("", "", lcd_screen.DEFAULT_SCROLL_MS)
 
     uptime_payload = lcd_screen._select_low_payload(
@@ -48,5 +52,5 @@ def test_low_channel_gaps_use_uptime_payload(tmp_path):
     )
 
     assert uptime_payload.line1 == "UP 0d1h0m"
-    assert uptime_payload.line2 == "DOWN 0d1h0m"
+    assert uptime_payload.line2 == "ON 1h0m0s eth0"
     assert uptime_payload.scroll_ms == lcd_screen.DEFAULT_SCROLL_MS

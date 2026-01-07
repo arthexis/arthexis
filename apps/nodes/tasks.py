@@ -18,6 +18,7 @@ from django.contrib import admin
 from django.utils import timezone as django_timezone
 
 from apps.content.models import ContentSample
+from apps.core import uptime_utils
 from apps.core.system import SUITE_UPTIME_LOCK_NAME
 from apps.screens.startup_notifications import (
     LCD_HIGH_LOCK_FILE,
@@ -27,12 +28,12 @@ from apps.screens.startup_notifications import (
     render_lcd_lock_file,
 )
 from .models import NetMessage, Node, NodeRole, PendingNetMessage
-from .models.node_core import ROLE_ACRONYMS, ROLE_RENAMES
 from .utils import capture_and_save_screenshot
 
 logger = logging.getLogger(__name__)
 
 STARTUP_NET_MESSAGE_CACHE_KEY = "nodes:startup_net_message:sent"
+
 
 
 def _startup_message_cache_key() -> str:
@@ -159,32 +160,7 @@ def _startup_duration_seconds(base_dir: Path) -> int | None:
 
 
 def _boot_delay_seconds(base_dir: Path) -> int | None:
-    lock_path = base_dir / ".locks" / SUITE_UPTIME_LOCK_NAME
-
-    try:
-        payload = json.loads(lock_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-
-    started_at = _parse_suite_start_timestamp(
-        payload.get("started_at") or payload.get("boot_time")
-    )
-    if not started_at:
-        return None
-
-    try:
-        boot_timestamp = float(psutil.boot_time())
-    except Exception:
-        return None
-
-    boot_time = datetime.fromtimestamp(boot_timestamp, tz=datetime_timezone.utc)
-    try:
-        boot_time = boot_time.astimezone(started_at.tzinfo)
-    except Exception:
-        return None
-
-    delta_seconds = int((started_at - boot_time).total_seconds())
-    return delta_seconds if delta_seconds >= 0 else None
+    return uptime_utils.boot_delay_seconds(base_dir, _parse_suite_start_timestamp)
 
 
 def _uptime_components(seconds: int | None) -> tuple[int, int, int] | None:
@@ -198,53 +174,33 @@ def _uptime_components(seconds: int | None) -> tuple[int, int, int] | None:
 
 
 def _active_interface_label() -> str:
-    try:
-        stats = psutil.net_if_stats()
-    except Exception:
-        return "NA"
-
-    def _shorten(name: str) -> str:
-        if name.startswith("eth"):
-            return f"E{name[3:]}" if len(name) > 3 else "E"
-        if name.startswith("wlan"):
-            return f"W{name[4:]}" if len(name) > 4 else "W"
-        if name.startswith("wln"):
-            return f"W{name[3:]}" if len(name) > 3 else "W"
-        return "AF"
-
-    prioritized_interfaces = ("eth0", "wlan1", "wlan0")
-    for name in prioritized_interfaces:
-        details = stats.get(name)
-        if details and details.isup:
-            return _shorten(name)
-
-    for name, details in stats.items():
-        if name in prioritized_interfaces or name.startswith("lo"):
-            continue
-        if details and details.isup:
-            return _shorten(name)
-
-    return "NA"
+    return uptime_utils.internet_interface_label()
 
 
-def _role_label_from_lock(lock_dir: Path) -> str:
-    if not lock_dir:
-        return ""
+def _ap_mode_enabled() -> bool:
+    return uptime_utils.ap_mode_enabled(timeout=Node.NMCLI_TIMEOUT)
 
-    role_path = lock_dir / "role.lck"
-    try:
-        role_name = role_path.read_text(encoding="utf-8").strip()
-    except OSError:
-        return ""
 
-    normalized_name = ROLE_RENAMES.get(role_name, role_name)
-    return ROLE_ACRONYMS.get(normalized_name, normalized_name)
+def _duration_from_lock(base_dir: Path, lock_name: str) -> int | None:
+    return uptime_utils.duration_from_lock(base_dir, lock_name)
+
+
+def _availability_seconds(base_dir: Path) -> int | None:
+    return uptime_utils.availability_seconds(base_dir, _parse_suite_start_timestamp)
+
+
+def _format_duration_hms(seconds: int | None) -> str:
+    if seconds is None or seconds < 0:
+        return "?h?m?s"
+
+    hours, remainder = divmod(seconds, 3600)
+    minutes, secs = divmod(remainder, 60)
+    return f"{hours}h{minutes}m{secs}s"
 
 
 def _queue_boot_status_message(base_dir: Path, lock_dir: Path) -> None:
     uptime_seconds = _startup_duration_seconds(base_dir)
-    boot_delay_seconds = _boot_delay_seconds(base_dir)
-    role_label = _role_label_from_lock(lock_dir)
+    on_seconds = _availability_seconds(base_dir)
 
     def _format_duration(seconds: int | None) -> str:
         parts = _uptime_components(seconds)
@@ -255,19 +211,18 @@ def _queue_boot_status_message(base_dir: Path, lock_dir: Path) -> None:
         return f"{days}d{hours}h{minutes}m"
 
     uptime_label = _format_duration(uptime_seconds)
-    down_label = _format_duration(boot_delay_seconds)
+    on_label = _format_duration_hms(on_seconds)
 
     subject_parts = [f"UP {uptime_label}"]
-
-    if role_label:
-        subject_parts.append(role_label)
+    if _ap_mode_enabled():
+        subject_parts.append("AP")
+    subject = " ".join(subject_parts).strip()
 
     interface_label = _active_interface_label()
+    body_parts = [f"ON {on_label}"]
     if interface_label:
-        subject_parts.append(interface_label)
-
-    subject = " ".join(subject_parts).strip()
-    body = f"DOWN {down_label}"
+        body_parts.append(interface_label)
+    body = " ".join(body_parts).strip()
 
     target = lock_dir / LCD_LOW_LOCK_FILE
     try:
