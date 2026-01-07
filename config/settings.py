@@ -544,6 +544,8 @@ MIDDLEWARE = [
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
+ANALYTICS_EXCLUDED_URL_PREFIXES = ("/__debug__", "/healthz", "/status")
+
 if DEBUG:
     try:
         import debug_toolbar  # type: ignore

@@ -24,7 +24,7 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        days = int(options.get("days") or 30)
+        days = options["days"]
         summary = build_usage_summary(days=days, queryset=UsageEvent.objects.all())
         payload = json.dumps(summary, default=str, indent=2)
 

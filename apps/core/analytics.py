@@ -218,18 +218,3 @@ def build_usage_summary(days: int = 30, queryset: QuerySet[UsageEvent] | None = 
         ),
     }
 
-
-def connect_usage_signal_handlers():  # pragma: no cover - kept for explicit imports
-    # Signals are registered via decorators above; this helper keeps parity with
-    # other ready() hooks and allows explicit invocation when Django skips
-    # auto-discovery in certain contexts (e.g., documentation builds).
-    post_save.connect(
-        _usage_post_save,
-        dispatch_uid="core_usage_analytics_post_save",
-        weak=False,
-    )
-    post_delete.connect(
-        _usage_post_delete,
-        dispatch_uid="core_usage_analytics_post_delete",
-        weak=False,
-    )

@@ -9,7 +9,6 @@ from django.urls import Resolver404, resolve
 from apps.core.analytics import record_request_event
 from apps.core.models import UsageEvent
 from apps.nodes.models import Node
-from apps.sites.middleware import ViewHistoryMiddleware
 from utils.sites import get_site
 
 from .active_app import set_active_app
@@ -109,7 +108,7 @@ class UsageAnalyticsMiddleware:
             return response
 
     def _resolve_excluded_prefixes(self):
-        return getattr(ViewHistoryMiddleware, "_EXCLUDED_PREFIXES", ())
+        return getattr(settings, "ANALYTICS_EXCLUDED_URL_PREFIXES", ())
 
     def _should_track(self, request) -> bool:
         method = request.method.upper()
@@ -149,7 +148,7 @@ class UsageAnalyticsMiddleware:
             user=getattr(request, "user", None),
             app_label=app_label,
             view_name=view_name,
-            path=request.get_full_path() if hasattr(request, "get_full_path") else str(request),
+            path=request.get_full_path(),
             method=request.method,
             status_code=status_code,
             action=action,
