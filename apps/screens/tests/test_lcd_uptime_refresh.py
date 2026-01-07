@@ -11,9 +11,12 @@ def test_refresh_uptime_payload_updates_subject(tmp_path):
     lock_dir.mkdir()
 
     started_at = datetime(2024, 1, 1, 0, 0, tzinfo=timezone.utc)
+    install_date = started_at - timedelta(hours=1)
     payload = {"started_at": started_at.isoformat()}
     lock_path = lock_dir / lcd_screen.SUITE_UPTIME_LOCK_NAME
     lock_path.write_text(json.dumps(payload), encoding="utf-8")
+    install_lock = lock_dir / lcd_screen.INSTALL_DATE_LOCK_NAME
+    install_lock.write_text(install_date.isoformat(), encoding="utf-8")
 
     now = started_at + timedelta(hours=1, minutes=2)
     os.utime(lock_path, (now.timestamp(), now.timestamp()))
@@ -28,7 +31,7 @@ def test_refresh_uptime_payload_updates_subject(tmp_path):
     )
 
     assert refreshed.line1 == "UP 0d1h2m ROLE iface"
-    assert refreshed.line2 == uptime_payload.line2
+    assert refreshed.line2 == "DOWN 0d1h0m"
 
 
 def test_refresh_uptime_payload_passes_through_non_uptime_payload(tmp_path):
@@ -58,3 +61,17 @@ def test_uptime_seconds_ignores_stale_lock(monkeypatch, tmp_path):
     )
 
     assert lcd_screen._uptime_seconds(base_dir, now=now) == 300
+
+
+def test_install_date_lock_created_when_missing(tmp_path):
+    base_dir = tmp_path
+    lock_dir = base_dir / ".locks"
+    lock_dir.mkdir()
+
+    now = datetime(2024, 3, 1, 8, 30, tzinfo=timezone.utc)
+    install_date = lcd_screen._install_date(base_dir, now=now)
+
+    assert install_date == now
+    install_lock = lock_dir / lcd_screen.INSTALL_DATE_LOCK_NAME
+    assert install_lock.exists()
+    assert install_lock.read_text(encoding="utf-8").strip() == now.isoformat()
