@@ -17,6 +17,7 @@ class CoreConfig(AppConfig):
         _patch_entity_deserialization()
         _configure_lock_dependent_tasks(self)
         _connect_sqlite_wal()
+        _enable_usage_analytics()
 
 
 def _setup_celery_beat_integrations():
@@ -416,3 +417,7 @@ def _connect_sqlite_wal():
         dispatch_uid="apps.core.enable_sqlite_wal",
         weak=False,
     )
+
+
+def _enable_usage_analytics():
+    from . import analytics  # noqa: F401 - ensure signal registration

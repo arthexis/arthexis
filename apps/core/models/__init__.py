@@ -7,6 +7,7 @@ from .ownable import (
     get_owned_objects_for_user,
     get_ownable_models,
 )
+from .usage_event import UsageEvent
 
 __all__ = [
     "EmailArtifact",
@@ -15,6 +16,7 @@ __all__ = [
     "InviteLead",
     "OwnedObjectLink",
     "Ownable",
+    "UsageEvent",
     "get_owned_objects_for_group",
     "get_owned_objects_for_user",
     "get_ownable_models",

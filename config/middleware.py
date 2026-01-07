@@ -1,9 +1,15 @@
 import logging
 import socket
+from http import HTTPStatus
+from django.conf import settings
 from django.core.exceptions import DisallowedHost
 from django.http import HttpResponsePermanentRedirect
+from django.urls import Resolver404, resolve
 
+from apps.core.analytics import record_request_event
+from apps.core.models import UsageEvent
 from apps.nodes.models import Node
+from apps.sites.middleware import ViewHistoryMiddleware
 from utils.sites import get_site
 
 from .active_app import set_active_app
@@ -70,6 +76,126 @@ class ContentSecurityPolicyMiddleware:
         if _is_https_request(request):
             response["Content-Security-Policy"] = self.header_value
         return response
+
+
+class UsageAnalyticsMiddleware:
+    """Record request-level usage events for reporting."""
+
+    def __init__(self, get_response):
+        self.get_response = get_response
+        self._excluded_prefixes = self._resolve_excluded_prefixes()
+        static_url = getattr(settings, "STATIC_URL", "") or ""
+        media_url = getattr(settings, "MEDIA_URL", "") or ""
+        self._skipped_prefixes = tuple(
+            prefix.rstrip("/") for prefix in (static_url, media_url) if prefix
+        )
+
+    def __call__(self, request):
+        if not getattr(settings, "ENABLE_USAGE_ANALYTICS", False):
+            return self.get_response(request)
+
+        if not self._should_track(request):
+            return self.get_response(request)
+
+        try:
+            response = self.get_response(request)
+        except Exception as exc:
+            status_code = getattr(exc, "status_code", 500) or 500
+            self._record_event(request, status_code, error_message=str(exc))
+            raise
+        else:
+            status_code = getattr(response, "status_code", 0) or 0
+            self._record_event(request, status_code)
+            return response
+
+    def _resolve_excluded_prefixes(self):
+        return getattr(ViewHistoryMiddleware, "_EXCLUDED_PREFIXES", ())
+
+    def _should_track(self, request) -> bool:
+        method = request.method.upper()
+        if method not in {"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"}:
+            return False
+
+        path = request.path
+        if any(path.startswith(prefix) for prefix in self._excluded_prefixes):
+            return False
+
+        if any(path.startswith(prefix) for prefix in self._skipped_prefixes):
+            return False
+
+        if path.startswith("/favicon") or path.startswith("/robots.txt"):
+            return False
+
+        if "djdt" in request.GET:
+            return False
+
+        return True
+
+    def _record_event(self, request, status_code: int, error_message: str = "") -> None:
+        match = getattr(request, "resolver_match", None) or self._resolve_match(request)
+        view_name, module = self._resolve_view_name(match)
+        app_label = self._derive_app_label(module)
+        action = self._resolve_action(request.method)
+        metadata = {}
+        if error_message:
+            metadata["error"] = error_message
+        try:
+            status = HTTPStatus(status_code)
+            metadata["status_text"] = status.phrase
+        except ValueError:
+            pass
+
+        record_request_event(
+            user=getattr(request, "user", None),
+            app_label=app_label,
+            view_name=view_name,
+            path=request.get_full_path() if hasattr(request, "get_full_path") else str(request),
+            method=request.method,
+            status_code=status_code,
+            action=action,
+            metadata=metadata,
+        )
+
+    def _resolve_match(self, request):
+        try:
+            return resolve(request.path_info)
+        except Resolver404:
+            return None
+
+    def _resolve_view_name(self, match) -> tuple[str, str]:
+        if match is None:
+            return "", ""
+
+        if getattr(match, "view_name", ""):
+            func = getattr(match, "func", None)
+            module = getattr(func, "__module__", "")
+            return match.view_name, module
+
+        func = getattr(match, "func", None)
+        if func is None:
+            return "", ""
+
+        module = getattr(func, "__module__", "")
+        name = getattr(func, "__name__", "")
+        if module and name:
+            return f"{module}.{name}", module
+        return name or module or "", module
+
+    def _derive_app_label(self, module_path: str) -> str:
+        if not module_path:
+            return ""
+        parts = module_path.split(".")
+        if parts and parts[0] == "apps" and len(parts) > 1:
+            return parts[1]
+        return parts[0]
+
+    def _resolve_action(self, method: str) -> str:
+        normalized = method.upper()
+        if normalized in {"POST", "PUT", "PATCH"}:
+            return UsageEvent.Action.CREATE if normalized == "POST" else UsageEvent.Action.UPDATE
+        if normalized == "DELETE":
+            return UsageEvent.Action.DELETE
+        return UsageEvent.Action.READ
 
 
 class PageMissLoggingMiddleware:
