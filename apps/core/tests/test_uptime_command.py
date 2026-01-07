@@ -40,13 +40,14 @@ def test_uptime_command_reports_lcd_format(monkeypatch, settings, tmp_path):
     monkeypatch.setattr(
         uptime_command.node_tasks, "_active_interface_label", lambda: "NA"
     )
+    monkeypatch.setattr(uptime_command.node_tasks, "_ap_mode_enabled", lambda: False)
 
     stdout = io.StringIO()
     call_command("uptime", stdout=stdout)
 
     output = stdout.getvalue()
-    assert "UP 0d2h5m NA" in output
-    assert "DOWN 0d0h1m" in output
+    assert "UP 0d2h5m" in output
+    assert "ON 0h1m0s NA" in output
     assert "Uptime lock status: OK" in output
 
 

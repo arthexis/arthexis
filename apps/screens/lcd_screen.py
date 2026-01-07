@@ -14,7 +14,10 @@ import logging
 import math
 import os
 import random
+import re
+import shutil
 import signal
+import subprocess
 import time
 from datetime import datetime, timedelta, timezone as datetime_timezone
 from decimal import Decimal, InvalidOperation
@@ -92,6 +95,9 @@ GAP_ANIMATION_SCROLL_MS = 600
 SUITE_UPTIME_LOCK_NAME = "suite_uptime.lck"
 SUITE_UPTIME_LOCK_MAX_AGE = timedelta(minutes=10)
 INSTALL_DATE_LOCK_NAME = "install_date.lck"
+STARTUP_DURATION_LOCK_NAME = "startup_duration.lck"
+UPGRADE_DURATION_LOCK_NAME = "upgrade_duration.lck"
+INTERNET_ROUTE_TARGET = "8.8.8.8"
 
 try:
     GAP_ANIMATION_FRAMES = default_tree_frames()
@@ -339,9 +345,16 @@ def _select_low_payload(
     _install_date(base_dir, now=now_value)
     uptime_secs = _uptime_seconds(base_dir, now=now_value)
     uptime_label = _format_uptime_label(uptime_secs) or "?d?h?m"
-    down_label = _format_uptime_label(_down_seconds(uptime_secs, base_dir=base_dir, now=now_value)) or "?d?h?m"
-    subject = f"UP {uptime_label}"
-    body = f"DOWN {down_label}"
+    on_label = _format_on_label(_availability_seconds(base_dir, now=now_value)) or "?h?m?s"
+    subject_parts = [f"UP {uptime_label}"]
+    if _ap_mode_enabled():
+        subject_parts.append("AP")
+    subject = " ".join(subject_parts).strip()
+    interface_label = _internet_interface_label()
+    body_parts = [f"ON {on_label}"]
+    if interface_label:
+        body_parts.append(interface_label)
+    body = " ".join(body_parts).strip()
     return LockPayload(subject, body, DEFAULT_SCROLL_MS)
 
 
@@ -426,6 +439,109 @@ def _uptime_components(seconds: int | None) -> tuple[int, int, int] | None:
     return days, hours, minutes
 
 
+def _ap_mode_enabled() -> bool:
+    nmcli_path = shutil.which("nmcli")
+    if not nmcli_path:
+        return False
+
+    try:
+        result = subprocess.run(
+            [
+                nmcli_path,
+                "-t",
+                "-f",
+                "NAME,DEVICE,TYPE",
+                "connection",
+                "show",
+                "--active",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=5,
+        )
+    except Exception:
+        return False
+
+    if result.returncode != 0:
+        return False
+
+    for line in result.stdout.splitlines():
+        if not line:
+            continue
+        parts = line.split(":", 2)
+        if not parts:
+            continue
+        name = parts[0]
+        conn_type = ""
+        if len(parts) == 3:
+            conn_type = parts[2]
+        elif len(parts) > 1:
+            conn_type = parts[1]
+        if conn_type.strip().lower() not in {"wifi", "802-11-wireless"}:
+            continue
+        try:
+            mode_result = subprocess.run(
+                [
+                    nmcli_path,
+                    "-g",
+                    "802-11-wireless.mode",
+                    "connection",
+                    "show",
+                    name,
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=5,
+            )
+        except Exception:
+            continue
+        if mode_result.returncode != 0:
+            continue
+        if mode_result.stdout.strip() == "ap":
+            return True
+    return False
+
+
+def _internet_interface_label() -> str:
+    ip_path = shutil.which("ip")
+    if ip_path:
+        try:
+            result = subprocess.run(
+                [ip_path, "route", "get", INTERNET_ROUTE_TARGET],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=2,
+            )
+        except Exception:
+            result = None
+        if result and result.returncode == 0:
+            match = re.search(r"\bdev\s+(\S+)", result.stdout)
+            if match:
+                return match.group(1)
+
+    try:
+        stats = psutil.net_if_stats()
+    except Exception:
+        return "NA"
+
+    prioritized_interfaces = ("eth0", "wlan1", "wlan0")
+    for name in prioritized_interfaces:
+        details = stats.get(name)
+        if details and details.isup:
+            return name
+
+    for name, details in stats.items():
+        if name in prioritized_interfaces or name.startswith("lo"):
+            continue
+        if details and details.isup:
+            return name
+
+    return "NA"
+
+
 def _uptime_seconds(
     base_dir: Path = BASE_DIR, *, now: datetime | None = None
 ) -> int | None:
@@ -468,6 +584,42 @@ def _uptime_seconds(
     boot_dt = datetime.fromtimestamp(boot_time, tz=datetime_timezone.utc)
     seconds = int((now_value - boot_dt).total_seconds())
     return seconds if seconds >= 0 else None
+
+
+def _boot_delay_seconds(
+    base_dir: Path = BASE_DIR, *, now: datetime | None = None
+) -> int | None:
+    lock_path = Path(base_dir) / ".locks" / SUITE_UPTIME_LOCK_NAME
+    now_value = now or datetime.now(datetime_timezone.utc)
+
+    try:
+        payload = json.loads(lock_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+    started_at = _parse_start_timestamp(
+        payload.get("started_at") or payload.get("boot_time")
+    )
+    if not started_at:
+        return None
+
+    try:
+        boot_timestamp = float(psutil.boot_time())
+    except Exception:
+        return None
+
+    boot_time = datetime.fromtimestamp(boot_timestamp, tz=datetime_timezone.utc)
+    try:
+        boot_time = boot_time.astimezone(started_at.tzinfo or datetime_timezone.utc)
+    except Exception:
+        return None
+
+    delta_seconds = int((started_at - boot_time).total_seconds())
+    if delta_seconds < 0:
+        return None
+    if started_at > now_value:
+        return None
+    return delta_seconds
 
 
 def _install_date(
@@ -526,37 +678,76 @@ def _format_uptime_label(seconds: int | None) -> str | None:
     return f"{days}d{hours}h{minutes}m"
 
 
+def _duration_from_lock(base_dir: Path, lock_name: str) -> int | None:
+    lock_path = Path(base_dir) / ".locks" / lock_name
+    try:
+        raw = lock_path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    if not raw:
+        return None
+    payload = None
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        payload = None
+    if isinstance(payload, dict):
+        duration_value = payload.get("duration_seconds")
+        try:
+            duration_seconds = int(float(duration_value))
+        except (TypeError, ValueError):
+            duration_seconds = None
+    else:
+        try:
+            duration_seconds = int(float(raw.splitlines()[0]))
+        except (TypeError, ValueError, IndexError):
+            duration_seconds = None
+    if duration_seconds is None or duration_seconds < 0:
+        return None
+    return duration_seconds
+
+
+def _availability_seconds(
+    base_dir: Path = BASE_DIR, *, now: datetime | None = None
+) -> int | None:
+    candidates = [
+        _duration_from_lock(base_dir, STARTUP_DURATION_LOCK_NAME),
+        _duration_from_lock(base_dir, UPGRADE_DURATION_LOCK_NAME),
+        _boot_delay_seconds(base_dir, now=now),
+    ]
+    valid = [value for value in candidates if value is not None]
+    return max(valid) if valid else None
+
+
+def _format_on_label(seconds: int | None) -> str | None:
+    if seconds is None or seconds < 0:
+        return None
+    hours, remainder = divmod(seconds, 3600)
+    minutes, secs = divmod(remainder, 60)
+    return f"{hours}h{minutes}m{secs}s"
+
+
 def _refresh_uptime_payload(
     payload: LockPayload, *, base_dir: Path = BASE_DIR, now: datetime | None = None
 ) -> LockPayload:
     has_uptime = payload.line1.startswith("UP ")
-    has_downtime = payload.line2.startswith("DOWN ")
-    if not has_uptime and not has_downtime:
+    if not has_uptime:
         return payload
 
     uptime_secs = _uptime_seconds(base_dir, now=now)
     uptime_label = _format_uptime_label(uptime_secs)
-    down_label = _format_uptime_label(_down_seconds(uptime_secs, base_dir=base_dir, now=now))
-    if not uptime_label and not down_label:
+    if not uptime_label:
         return payload
 
     subject = payload.line1
     if uptime_label:
         suffix = payload.line1[len("UP "):].strip()
-        role_suffix = suffix.split(maxsplit=1)[1].strip() if " " in suffix else ""
-        subject = f"UP {uptime_label}"
-        if role_suffix:
-            subject = f"{subject} {role_suffix}"
-
-    body = payload.line2
-    if down_label and (has_downtime or not payload.line2.strip()):
-        suffix = payload.line2[len("DOWN "):].strip() if has_downtime else ""
         extra_suffix = suffix.split(maxsplit=1)[1].strip() if " " in suffix else ""
-        body = f"DOWN {down_label}"
+        subject = f"UP {uptime_label}"
         if extra_suffix:
-            body = f"{body} {extra_suffix}"
+            subject = f"{subject} {extra_suffix}"
 
-    return payload._replace(line1=subject, line2=body)
+    return payload._replace(line1=subject)
 
 
 def _lcd_temperature_label_from_sensors() -> str | None:
