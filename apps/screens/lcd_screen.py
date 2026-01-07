@@ -91,6 +91,7 @@ GAP_ANIMATION_FRAMES_PER_PAYLOAD = 4
 GAP_ANIMATION_SCROLL_MS = 600
 SUITE_UPTIME_LOCK_NAME = "suite_uptime.lck"
 SUITE_UPTIME_LOCK_MAX_AGE = timedelta(minutes=10)
+INSTALL_DATE_LOCK_NAME = "install_date.lck"
 
 try:
     GAP_ANIMATION_FRAMES = default_tree_frames()
@@ -325,17 +326,22 @@ def _animation_payload(
 def _select_low_payload(
     payload: LockPayload,
     frame_cycle=GAP_ANIMATION_CYCLE,
+    *,
+    base_dir: Path = BASE_DIR,
+    now: datetime | None = None,
     scroll_ms: int | None = None,
     frames_per_payload: int | None = None,
 ) -> LockPayload:
     if _payload_has_text(payload):
         return payload
 
-    return _animation_payload(
-        frame_cycle,
-        frames_per_payload=frames_per_payload or GAP_ANIMATION_FRAMES_PER_PAYLOAD,
-        scroll_ms=scroll_ms or GAP_ANIMATION_SCROLL_MS,
-    )
+    now_value = now or datetime.now(datetime_timezone.utc)
+    _install_date(base_dir, now=now_value)
+    uptime_label = _format_uptime_label(_uptime_seconds(base_dir, now=now_value)) or "?d?h?m"
+    down_label = _format_uptime_label(_down_seconds(base_dir, now=now_value)) or "?d?h?m"
+    subject = f"UP {uptime_label}"
+    body = f"DOWN {down_label}"
+    return LockPayload(subject, body, DEFAULT_SCROLL_MS)
 
 
 def _lcd_clock_enabled() -> bool:
@@ -463,6 +469,54 @@ def _uptime_seconds(
     return seconds if seconds >= 0 else None
 
 
+def _install_date(
+    base_dir: Path = BASE_DIR, *, now: datetime | None = None
+) -> datetime | None:
+    lock_path = Path(base_dir) / ".locks" / INSTALL_DATE_LOCK_NAME
+    now_value = now or datetime.now(datetime_timezone.utc)
+
+    try:
+        raw = lock_path.read_text(encoding="utf-8").strip()
+    except FileNotFoundError:
+        raw = ""
+    except OSError:
+        logger.debug("Unable to read install date lock file", exc_info=True)
+        raw = ""
+
+    parsed = _parse_start_timestamp(raw)
+    if parsed:
+        return parsed
+
+    try:
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        lock_path.write_text(now_value.isoformat(), encoding="utf-8")
+    except OSError:
+        logger.debug("Unable to write install date lock file", exc_info=True)
+        return None
+
+    return now_value
+
+
+def _down_seconds(
+    base_dir: Path = BASE_DIR, *, now: datetime | None = None
+) -> int | None:
+    uptime_seconds = _uptime_seconds(base_dir, now=now)
+    if uptime_seconds is None:
+        return None
+
+    now_value = now or datetime.now(datetime_timezone.utc)
+    install_date = _install_date(base_dir, now=now_value)
+    if install_date is None:
+        return None
+
+    elapsed_seconds = int((now_value - install_date).total_seconds())
+    if elapsed_seconds < 0:
+        return 0
+
+    down_seconds = elapsed_seconds - uptime_seconds
+    return down_seconds if down_seconds >= 0 else 0
+
+
 def _format_uptime_label(seconds: int | None) -> str | None:
     components = _uptime_components(seconds)
     if components is None:
@@ -475,20 +529,33 @@ def _format_uptime_label(seconds: int | None) -> str | None:
 def _refresh_uptime_payload(
     payload: LockPayload, *, base_dir: Path = BASE_DIR, now: datetime | None = None
 ) -> LockPayload:
-    if not payload.line1.startswith("UP "):
+    has_uptime = payload.line1.startswith("UP ")
+    has_downtime = payload.line2.startswith("DOWN ")
+    if not has_uptime and not has_downtime:
         return payload
 
     uptime_label = _format_uptime_label(_uptime_seconds(base_dir, now=now))
-    if not uptime_label:
+    down_label = _format_uptime_label(_down_seconds(base_dir, now=now))
+    if not uptime_label and not down_label:
         return payload
 
-    suffix = payload.line1[3:].strip()
-    role_suffix = suffix.split(maxsplit=1)[1].strip() if " " in suffix else ""
-    subject = f"UP {uptime_label}"
-    if role_suffix:
-        subject = f"{subject} {role_suffix}"
+    subject = payload.line1
+    if uptime_label:
+        suffix = payload.line1[3:].strip()
+        role_suffix = suffix.split(maxsplit=1)[1].strip() if " " in suffix else ""
+        subject = f"UP {uptime_label}"
+        if role_suffix:
+            subject = f"{subject} {role_suffix}"
 
-    return payload._replace(line1=subject)
+    body = payload.line2
+    if down_label and (has_downtime or not payload.line2.strip()):
+        suffix = payload.line2[5:].strip() if has_downtime else ""
+        extra_suffix = suffix.split(maxsplit=1)[1].strip() if " " in suffix else ""
+        body = f"DOWN {down_label}"
+        if extra_suffix:
+            body = f"{body} {extra_suffix}"
+
+    return payload._replace(line1=subject, line2=body)
 
 
 def _lcd_temperature_label_from_sensors() -> str | None:
@@ -834,6 +901,7 @@ def main() -> None:  # pragma: no cover - hardware dependent
                     low_payload = _select_low_payload(
                         low_payload,
                         frame_cycle=GAP_ANIMATION_CYCLE,
+                        base_dir=BASE_DIR,
                         scroll_ms=GAP_ANIMATION_SCROLL_MS,
                     )
                     low_available = _payload_has_text(low_payload)

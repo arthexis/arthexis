@@ -1,4 +1,6 @@
-from itertools import cycle
+import json
+import os
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -20,17 +22,31 @@ def test_loading_animation_enforces_width(tmp_path):
         animations.load_frames_from_file(bad_file)
 
 
-def test_low_channel_gaps_use_animation():
-    frame_cycle = cycle(["A" * animations.ANIMATION_FRAME_CHARS])
+def test_low_channel_gaps_use_uptime_payload(tmp_path):
+    base_dir = tmp_path
+    lock_dir = base_dir / ".locks"
+    lock_dir.mkdir()
+
+    now = datetime(2024, 2, 1, 12, 0, tzinfo=timezone.utc)
+    started_at = now - timedelta(hours=1)
+    lock_path = lock_dir / lcd_screen.SUITE_UPTIME_LOCK_NAME
+    lock_path.write_text(json.dumps({"started_at": started_at.isoformat()}), encoding="utf-8")
+    lock_path.touch()
+    lock_path_timestamp = now.timestamp()
+    os.utime(lock_path, (lock_path_timestamp, lock_path_timestamp))
+
+    install_date = now - timedelta(hours=2)
+    install_lock = lock_dir / lcd_screen.INSTALL_DATE_LOCK_NAME
+    install_lock.write_text(install_date.isoformat(), encoding="utf-8")
+
     payload = lcd_screen.LockPayload("", "", lcd_screen.DEFAULT_SCROLL_MS)
 
-    animation_payload = lcd_screen._select_low_payload(
+    uptime_payload = lcd_screen._select_low_payload(
         payload,
-        frame_cycle=frame_cycle,
-        scroll_ms=123,
-        frames_per_payload=1,
+        base_dir=base_dir,
+        now=now,
     )
 
-    assert animation_payload.line1 == "A" * lcd_screen.LCD_COLUMNS
-    assert animation_payload.line2 == "A" * lcd_screen.LCD_COLUMNS
-    assert animation_payload.scroll_ms == 123
+    assert uptime_payload.line1 == "UP 0d1h0m"
+    assert uptime_payload.line2 == "DOWN 0d1h0m"
+    assert uptime_payload.scroll_ms == lcd_screen.DEFAULT_SCROLL_MS
