@@ -62,6 +62,16 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
         extra_context = extra_context or {}
         obj = self.get_object(request, object_id) if object_id else None
         latest_snapshot = obj.get_latest_snapshot() if obj else None
+        if obj and obj.pk and latest_snapshot is None:
+            latest_snapshot = self._capture_snapshot_for_device(
+                request,
+                obj,
+                auto_enable=True,
+                link_duplicates=True,
+                silent=True,
+            )
+            if latest_snapshot is None:
+                latest_snapshot = obj.get_latest_snapshot()
         extra_context["latest_snapshot"] = latest_snapshot
         return super().changeform_view(
             request, object_id, form_url=form_url, extra_context=extra_context
@@ -104,16 +114,18 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
         *,
         auto_enable: bool = False,
         require_stack: bool = True,
+        silent: bool = False,
     ):
         try:
             feature = NodeFeature.objects.get(slug="rpi-camera")
         except NodeFeature.DoesNotExist:
-            self.message_user(
-                request,
-                _("%(action)s is unavailable because the feature is not configured.")
-                % {"action": action_label},
-                level=messages.ERROR,
-            )
+            if not silent:
+                self.message_user(
+                    request,
+                    _("%(action)s is unavailable because the feature is not configured.")
+                    % {"action": action_label},
+                    level=messages.ERROR,
+                )
             return None
         if feature.is_enabled:
             return feature
@@ -121,23 +133,25 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
         node = Node.get_local()
         if auto_enable and node:
             if require_stack and not has_rpi_camera_stack():
-                self.message_user(
-                    request,
-                    _("%(feature)s feature is not enabled on this node.")
-                    % {"feature": feature.display},
-                    level=messages.WARNING,
-                )
+                if not silent:
+                    self.message_user(
+                        request,
+                        _("%(feature)s feature is not enabled on this node.")
+                        % {"feature": feature.display},
+                        level=messages.WARNING,
+                    )
                 return None
 
             NodeFeatureAssignment.objects.update_or_create(node=node, feature=feature)
             return feature
 
-        self.message_user(
-            request,
-            _("%(feature)s feature is not enabled on this node.")
-            % {"feature": feature.display},
-            level=messages.WARNING,
-        )
+        if not silent:
+            self.message_user(
+                request,
+                _("%(feature)s feature is not enabled on this node.")
+                % {"feature": feature.display},
+                level=messages.WARNING,
+            )
         return None
 
     def _get_local_node(self, request):
@@ -160,7 +174,10 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
         silent: bool = False,
     ) -> VideoSnapshot | None:
         feature = self._ensure_video_feature_enabled(
-            request, _("Take Snapshot"), auto_enable=auto_enable
+            request,
+            _("Take Snapshot"),
+            auto_enable=auto_enable,
+            silent=silent,
         )
         if not feature:
             return None

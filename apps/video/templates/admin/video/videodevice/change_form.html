@@ -3,35 +3,57 @@
 
 {% block after_field_sets %}
   {{ block.super }}
-  {% if latest_snapshot %}
+  {% if original %}
     <fieldset class="module aligned">
       <h2>{% trans "LATEST" %}</h2>
       <div class="form-row">
         <div>
           <strong>{% trans "Captured" %}:</strong>
-          {{ latest_snapshot.captured_at|date:"DATETIME_FORMAT" }}
+          {% if latest_snapshot %}
+            {{ latest_snapshot.captured_at|date:"DATETIME_FORMAT" }}
+          {% else %}
+            <em>{% trans "Not captured" %}</em>
+          {% endif %}
         </div>
-        {% if latest_snapshot.resolution_display %}
-          <div>
-            <strong>{% trans "Resolution" %}:</strong>
+        <div>
+          <strong>{% trans "Resolution" %}:</strong>
+          {% if latest_snapshot and latest_snapshot.resolution_display %}
             {{ latest_snapshot.resolution_display }}
-          </div>
-        {% endif %}
-        {% if latest_snapshot.image_format %}
-          <div>
-            <strong>{% trans "Format" %}:</strong>
+          {% else %}
+            <em>{% trans "Unknown" %}</em>
+          {% endif %}
+        </div>
+        <div>
+          <strong>{% trans "Format" %}:</strong>
+          {% if latest_snapshot and latest_snapshot.image_format %}
             {{ latest_snapshot.image_format }}
-          </div>
-        {% endif %}
+          {% else %}
+            <em>{% trans "Unknown" %}</em>
+          {% endif %}
+        </div>
+        <div>
+          <button
+            type="submit"
+            name="_action"
+            value="refresh_snapshot"
+            class="button"
+          >
+            {% trans "Take Snapshot" %}
+          </button>
+        </div>
       </div>
       <div class="form-row">
-        {% with preview=latest_snapshot.get_data_uri %}
-          {% if preview %}
-            <img src="{{ preview }}" alt="{% trans 'Latest snapshot' %}" style="max-width: 100%; height: auto;" />
-          {% else %}
-            <em>{% trans "Snapshot unavailable" %}</em>
-          {% endif %}
-        {% endwith %}
+        {% if latest_snapshot %}
+          {% with preview=latest_snapshot.get_data_uri %}
+            {% if preview %}
+              <img src="{{ preview }}" alt="{% trans 'Latest snapshot' %}" style="max-width: 100%; height: auto;" />
+            {% else %}
+              <em>{% trans "Snapshot unavailable" %}</em>
+            {% endif %}
+          {% endwith %}
+        {% else %}
+          <em>{% trans "Snapshot unavailable" %}</em>
+        {% endif %}
       </div>
     </fieldset>
   {% endif %}
