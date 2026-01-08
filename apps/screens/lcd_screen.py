@@ -1008,6 +1008,7 @@ def main() -> None:  # pragma: no cover - hardware dependent
                         label=label,
                         timestamp=frame_timestamp,
                     )
+                    next_scroll_sec = display_state.scroll_sec
                     if write_success:
                         health.record_success()
                         if lcd and watchdog.tick():
@@ -1021,9 +1022,10 @@ def main() -> None:  # pragma: no cover - hardware dependent
                             )
                             display_state = None
                             next_display_state = None
+                            next_scroll_sec = 0.5
                         delay = health.record_failure()
                         time.sleep(delay)
-                    scroll_scheduler.advance(display_state.scroll_sec or 0.5)
+                    scroll_scheduler.advance(next_scroll_sec or 0.5)
                 else:
                     scroll_scheduler.advance(0.5)
                     scroll_scheduler.sleep_until_ready()
