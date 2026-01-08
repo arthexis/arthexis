@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -24,6 +25,8 @@ from .utils import (
     has_rpicam_binaries,
     record_rpi_video,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -147,19 +150,11 @@ class VideoDevice(Ownable):
             return None
 
         metadata = VideoSnapshot.build_metadata(sample)
-        snapshot, created = VideoSnapshot.objects.get_or_create(
+        snapshot, _ = VideoSnapshot.objects.update_or_create(
             device=self,
             sample=sample,
             defaults=metadata,
         )
-        if not created:
-            updates: dict[str, object] = {}
-            for field, value in metadata.items():
-                if getattr(snapshot, field) != value:
-                    setattr(snapshot, field, value)
-                    updates[field] = value
-            if updates:
-                snapshot.save(update_fields=list(updates.keys()))
         return snapshot
 
 
@@ -277,8 +272,8 @@ class VideoSnapshot(Entity):
             with Image.open(file_path) as image:
                 width, height = image.size
                 image_format = image.format or ""
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Could not read image metadata from %s: %s", file_path, exc)
         return {
             "captured_at": sample.created_at,
             "width": width,
