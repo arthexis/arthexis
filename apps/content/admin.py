@@ -88,7 +88,7 @@ class ContentSampleAdmin(EntityModelAdmin):
             self.message_user(request, "Duplicate screenshot; not saved", messages.INFO)
         return redirect("..")
 
-    def take_snapshot(self, request, object_id):
+    def take_snapshot(self, request, _object_id):
         if not has_rpi_camera_stack():
             self.message_user(
                 request,
@@ -98,13 +98,9 @@ class ContentSampleAdmin(EntityModelAdmin):
             return redirect("..")
 
         node = Node.get_local()
-        device = (
-            VideoDevice.objects.filter(node=node, is_default=True).first()
-            if node
-            else None
-        )
-        width = device.capture_width if device else None
-        height = device.capture_height if device else None
+        device = VideoDevice.objects.filter(node=node, is_default=True).first()
+        width = getattr(device, "capture_width", None)
+        height = getattr(device, "capture_height", None)
         if not width or not height:
             width, height = DEFAULT_CAMERA_RESOLUTION
 

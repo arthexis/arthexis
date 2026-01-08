@@ -80,7 +80,17 @@ class VideoDeviceAdminForm(forms.ModelForm):
 
         width = cleaned_data.get("capture_width")
         height = cleaned_data.get("capture_height")
-        if not width or not height:
+        if (width and not height) or (height and not width):
+            self.add_error(
+                None,
+                forms.ValidationError(
+                    _(
+                        "Both capture width and height must be provided together, or both left blank to use the default."
+                    ),
+                    code="incomplete_resolution",
+                ),
+            )
+        elif not width and not height:
             cleaned_data["capture_width"] = default_width
             cleaned_data["capture_height"] = default_height
         return cleaned_data
