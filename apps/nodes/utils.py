@@ -158,11 +158,15 @@ def capture_and_save_screenshot(
         target_url = f"{scheme}://localhost:{port}"
 
     try:
-        path = (
-            capture_local_screenshot()
-            if local
-            else capture_screenshot(target_url, width=width, height=height)
-        )
+        if local:
+            path = capture_local_screenshot()
+        else:
+            kwargs = {}
+            if width is not None:
+                kwargs["width"] = width
+            if height is not None:
+                kwargs["height"] = height
+            path = capture_screenshot(target_url, **kwargs)
     except Exception as exc:
         if log_capture_errors and logger is not None:
             logger.error("Screenshot capture failed: %s", exc)
