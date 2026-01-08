@@ -19,7 +19,7 @@ from django.utils import timezone as django_timezone
 
 from apps.content.models import ContentSample
 from apps.core import uptime_utils
-from apps.core.system import SUITE_UPTIME_LOCK_NAME
+from apps.core.uptime_constants import SUITE_UPTIME_LOCK_NAME
 from apps.screens.startup_notifications import (
     LCD_HIGH_LOCK_FILE,
     LCD_LOW_LOCK_FILE,

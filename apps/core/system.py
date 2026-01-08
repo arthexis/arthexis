@@ -51,6 +51,7 @@ from apps.release.release import (
     _remote_with_credentials,
 )
 from apps.core.tasks import check_github_updates, _read_auto_upgrade_failure_count
+from apps.core.uptime_constants import SUITE_UPTIME_LOCK_MAX_AGE, SUITE_UPTIME_LOCK_NAME
 from apps.nginx.renderers import generate_primary_config
 from apps.screens.startup_notifications import lcd_feature_enabled
 from apps.core.systemctl import _systemctl_command
@@ -62,9 +63,6 @@ AUTO_UPGRADE_LOCK_NAME = "auto_upgrade.lck"
 AUTO_UPGRADE_SKIP_LOCK_NAME = "auto_upgrade_skip_revisions.lck"
 AUTO_UPGRADE_LOG_LIMIT = 30
 UPGRADE_REVISION_SESSION_KEY = "system_upgrade_revision_info"
-
-SUITE_UPTIME_LOCK_NAME = "suite_uptime.lck"
-SUITE_UPTIME_LOCK_MAX_AGE = timedelta(minutes=10)
 
 STARTUP_REPORT_LOG_NAME = "startup-report.log"
 STARTUP_REPORT_DEFAULT_LIMIT = 50

@@ -10,7 +10,7 @@ from typing import Callable
 
 import psutil
 
-from apps.core.system import SUITE_UPTIME_LOCK_NAME
+from apps.core.uptime_constants import SUITE_UPTIME_LOCK_NAME
 
 INTERNET_ROUTE_TARGET = "8.8.8.8"
 STARTUP_DURATION_LOCK_NAME = "startup_duration.lck"
