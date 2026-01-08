@@ -21,10 +21,10 @@ from apps.screens.history import (
 from apps.screens.lcd import CharLCD1602, LCDUnavailableError
 from apps.screens.lcd_screen import LCDFrameWriter
 
-if sys.platform != "win32":
+try:
     import termios
     import tty
-else:
+except ImportError:
     termios = None
     tty = None
 
