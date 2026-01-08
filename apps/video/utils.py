@@ -16,6 +16,14 @@ WORK_DIR = Path(settings.BASE_DIR) / "work"
 CAMERA_DIR = WORK_DIR / "camera"
 RPI_CAMERA_DEVICE = Path("/dev/video0")
 RPI_CAMERA_BINARIES = ("rpicam-hello", "rpicam-still", "rpicam-vid")
+DEFAULT_CAMERA_RESOLUTION = (1280, 720)
+FALLBACK_CAMERA_RESOLUTIONS = (
+    (1920, 1080),
+    (1280, 720),
+    (1024, 768),
+    (800, 600),
+    (640, 480),
+)
 
 _CAMERA_LOCK = threading.Lock()
 
@@ -74,7 +82,60 @@ def has_rpi_camera_stack() -> bool:
     return has_rpicam_binaries() or _has_ffmpeg_capture_support()
 
 
-def capture_rpi_snapshot(timeout: int = 10) -> Path:
+def get_camera_resolutions() -> list[tuple[int, int]]:
+    """Return supported camera resolutions when available."""
+
+    if not has_rpi_camera_stack():
+        return list(FALLBACK_CAMERA_RESOLUTIONS)
+
+    tool_path = shutil.which("rpicam-hello")
+    if not tool_path:
+        return list(FALLBACK_CAMERA_RESOLUTIONS)
+
+    try:
+        result = subprocess.run(
+            [tool_path, "--list-cameras"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=5,
+        )
+    except Exception:
+        return list(FALLBACK_CAMERA_RESOLUTIONS)
+
+    if result.returncode != 0:
+        return list(FALLBACK_CAMERA_RESOLUTIONS)
+
+    resolutions: set[tuple[int, int]] = set()
+    for line in result.stdout.splitlines():
+        if "x" not in line:
+            continue
+        for chunk in line.split():
+            if "x" not in chunk:
+                continue
+            candidate = chunk.strip(",")
+            parts = candidate.lower().split("x")
+            if len(parts) != 2:
+                continue
+            try:
+                width = int(parts[0])
+                height = int(parts[1])
+            except ValueError:
+                continue
+            if width > 0 and height > 0:
+                resolutions.add((width, height))
+
+    if not resolutions:
+        return list(FALLBACK_CAMERA_RESOLUTIONS)
+    return sorted(resolutions, reverse=True)
+
+
+def capture_rpi_snapshot(
+    timeout: int = 10,
+    *,
+    width: int | None = None,
+    height: int | None = None,
+) -> Path:
     """Capture a snapshot using the Raspberry Pi camera stack."""
 
     CAMERA_DIR.mkdir(parents=True, exist_ok=True)
@@ -89,23 +150,20 @@ def capture_rpi_snapshot(timeout: int = 10) -> Path:
         tool_path = shutil.which("ffmpeg")
         if not tool_path:
             raise RuntimeError("ffmpeg is not available")
-        return (
-            [
-                tool_path,
-                "-hide_banner",
-                "-loglevel",
-                "error",
-                "-f",
-                "v4l2",
-                "-i",
-                str(RPI_CAMERA_DEVICE),
-                "-frames:v",
-                "1",
-                "-y",
-                str(filename),
-            ],
+        command = [
             tool_path,
-        )
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-f",
+            "v4l2",
+            "-i",
+            str(RPI_CAMERA_DEVICE),
+        ]
+        if width and height:
+            command.extend(["-video_size", f"{width}x{height}"])
+        command.extend(["-frames:v", "1", "-y", str(filename)])
+        return (command, tool_path)
 
     def _run_command(command: list[str], tool_path: str) -> subprocess.CompletedProcess:
         try:
@@ -128,7 +186,10 @@ def capture_rpi_snapshot(timeout: int = 10) -> Path:
             if not tool_path:
                 raise RuntimeError("rpicam-still is not available")
 
-            result = _run_command([tool_path, "-o", str(filename), "-t", "1"], tool_path)
+            command = [tool_path, "-o", str(filename), "-t", "1"]
+            if width and height:
+                command.extend(["--width", str(width), "--height", str(height)])
+            result = _run_command(command, tool_path)
             if result.returncode != 0 and _has_ffmpeg_capture_support():
                 error = (result.stderr or result.stdout or "Snapshot capture failed").strip()
                 logger.warning(
@@ -204,10 +265,13 @@ def record_rpi_video(duration_seconds: int = 5, timeout: int = 15) -> Path:
 
 __all__ = [
     "CAMERA_DIR",
+    "DEFAULT_CAMERA_RESOLUTION",
+    "FALLBACK_CAMERA_RESOLUTIONS",
     "RPI_CAMERA_BINARIES",
     "RPI_CAMERA_DEVICE",
     "has_rpicam_binaries",
     "capture_rpi_snapshot",
+    "get_camera_resolutions",
     "has_rpi_camera_stack",
     "record_rpi_video",
 ]

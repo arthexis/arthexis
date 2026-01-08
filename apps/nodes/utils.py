@@ -20,6 +20,7 @@ from apps.selenium.utils.firefox import ensure_geckodriver, find_firefox_binary
 
 WORK_DIR = Path(settings.BASE_DIR) / "work"
 SCREENSHOT_DIR = settings.LOG_DIR / "screenshots"
+DEFAULT_SCREENSHOT_RESOLUTION = (1280, 720)
 logger = logging.getLogger(__name__)
 
 
@@ -56,7 +57,14 @@ def _format_firefox_driver_help() -> str:
 
     return " ".join(instructions)
 
-def capture_screenshot(url: str, cookies=None) -> Path:
+
+def capture_screenshot(
+    url: str,
+    cookies=None,
+    *,
+    width: int | None = None,
+    height: int | None = None,
+) -> Path:
     """Capture a screenshot of ``url`` and save it to :data:`SCREENSHOT_DIR`.
 
     ``cookies`` can be an iterable of Selenium cookie mappings which will be
@@ -72,9 +80,14 @@ def capture_screenshot(url: str, cookies=None) -> Path:
     options.binary_location = firefox_binary
     options.add_argument("-headless")
     ensure_geckodriver()
+    resolution = (
+        width or DEFAULT_SCREENSHOT_RESOLUTION[0],
+        height or DEFAULT_SCREENSHOT_RESOLUTION[1],
+    )
+
     try:
         with webdriver.Firefox(options=options) as browser:
-            browser.set_window_size(1280, 720)
+            browser.set_window_size(*resolution)
             SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
             filename = SCREENSHOT_DIR / f"{datetime.utcnow():%Y%m%d%H%M%S}.png"
             try:
@@ -125,6 +138,8 @@ def capture_and_save_screenshot(
     method: str = "TASK",
     local: bool = False,
     *,
+    width: int | None = None,
+    height: int | None = None,
     logger: logging.Logger | None = None,
     log_capture_errors: bool = False,
 ):
@@ -143,7 +158,11 @@ def capture_and_save_screenshot(
         target_url = f"{scheme}://localhost:{port}"
 
     try:
-        path = capture_local_screenshot() if local else capture_screenshot(target_url)
+        path = (
+            capture_local_screenshot()
+            if local
+            else capture_screenshot(target_url, width=width, height=height)
+        )
     except Exception as exc:
         if log_capture_errors and logger is not None:
             logger.error("Screenshot capture failed: %s", exc)
@@ -182,5 +201,3 @@ def save_screenshot(
         content=content,
         duplicate_log_context="screenshot content",
     )
-
-
