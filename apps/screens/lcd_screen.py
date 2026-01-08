@@ -84,6 +84,7 @@ LOW_LOCK_FILE = LOCK_DIR / LCD_LOW_LOCK_FILE
 DEFAULT_SCROLL_MS = 1000
 MIN_SCROLL_MS = 50
 SCROLL_PADDING = 3
+DEFAULT_FALLBACK_SCROLL_SEC = 0.5
 LCD_COLUMNS = CharLCD1602.columns
 LCD_ROWS = CharLCD1602.rows
 CLOCK_TIME_FORMAT = "%p %I:%M"
@@ -1022,12 +1023,14 @@ def main() -> None:  # pragma: no cover - hardware dependent
                             )
                             display_state = None
                             next_display_state = None
-                            next_scroll_sec = 0.5
+                            next_scroll_sec = DEFAULT_FALLBACK_SCROLL_SEC
                         delay = health.record_failure()
                         time.sleep(delay)
-                    scroll_scheduler.advance(next_scroll_sec or 0.5)
+                    scroll_scheduler.advance(
+                        next_scroll_sec or DEFAULT_FALLBACK_SCROLL_SEC
+                    )
                 else:
-                    scroll_scheduler.advance(0.5)
+                    scroll_scheduler.advance(DEFAULT_FALLBACK_SCROLL_SEC)
                     scroll_scheduler.sleep_until_ready()
 
                 if time.monotonic() >= rotation_deadline:
