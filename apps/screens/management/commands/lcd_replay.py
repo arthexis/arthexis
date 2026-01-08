@@ -3,9 +3,7 @@ from __future__ import annotations
 import select
 import signal
 import sys
-import termios
 import time
-import tty
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -22,6 +20,13 @@ from apps.screens.history import (
 )
 from apps.screens.lcd import CharLCD1602, LCDUnavailableError
 from apps.screens.lcd_screen import LCDFrameWriter
+
+try:
+    import termios
+    import tty
+except ImportError:
+    termios = None
+    tty = None
 
 
 class LCDHistoryReplayer:
@@ -134,6 +139,10 @@ class LCDHistoryReplayer:
     @contextmanager
     def _keyboard_mode(self):
         if not sys.stdin.isatty():
+            yield
+            return
+
+        if termios is None or tty is None:
             yield
             return
 
