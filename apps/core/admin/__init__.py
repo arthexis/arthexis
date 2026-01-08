@@ -46,6 +46,7 @@ from .payments import (
     StripeProcessorAdmin,
 )
 from .rfid import CopyRFIDForm, RFIDAdmin, RFIDForm, RFIDResource
+from .usage import UsageEventAdmin
 from .site import (
     _append_operate_as,
     _include_require_2fa,
@@ -95,6 +96,7 @@ __all__ = [
     "SaveBeforeChangeAction",
     "StripeProcessorAdmin",
     "StripeProcessorAdminForm",
+    "UsageEventAdmin",
     "USER_PROFILE_INLINES",
     "UserAdmin",
     "UserChangeRFIDForm",

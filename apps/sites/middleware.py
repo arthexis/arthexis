@@ -37,7 +37,6 @@ class LanguagePreferenceMiddleware:
 class ViewHistoryMiddleware:
     """Persist public site visits for analytics."""
 
-    _EXCLUDED_PREFIXES = ("/__debug__", "/healthz", "/status")
     _ADMIN_PREFIX = "/admin"
 
     def __init__(self, get_response):
@@ -77,7 +76,8 @@ class ViewHistoryMiddleware:
             return False
 
         path = request.path
-        if any(path.startswith(prefix) for prefix in self._EXCLUDED_PREFIXES):
+        excluded_prefixes = getattr(settings, "ANALYTICS_EXCLUDED_URL_PREFIXES", ())
+        if any(path.startswith(prefix) for prefix in excluded_prefixes):
             return False
 
         if any(path.startswith(prefix) for prefix in self._skipped_prefixes):

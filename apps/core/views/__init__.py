@@ -19,6 +19,7 @@ from .reports import (
     release_progress,
 )
 from .rfid import rfid_batch
+from .usage_analytics import usage_analytics_summary
 
 __all__ = [
     "ApprovalRequired",
@@ -36,5 +37,6 @@ __all__ = [
     "request_temp_password",
     "rfid_batch",
     "rfid_login",
+    "usage_analytics_summary",
     "version_info",
 ]

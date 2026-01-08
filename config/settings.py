@@ -105,6 +105,8 @@ NET_MESSAGE_DISABLE_PROPAGATION = _env_bool(
     "NET_MESSAGE_DISABLE_PROPAGATION", False
 )
 
+ENABLE_USAGE_ANALYTICS = _env_bool("ENABLE_USAGE_ANALYTICS", False)
+
 ALLOWED_HOSTS = [
     "localhost",
     "127.0.0.1",
@@ -535,12 +537,15 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "config.middleware.UsageAnalyticsMiddleware",
     "apps.sigils.middleware.SigilContextMiddleware",
     "apps.sites.middleware.ViewHistoryMiddleware",
     "config.middleware.PageMissLoggingMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
+
+ANALYTICS_EXCLUDED_URL_PREFIXES = ("/__debug__", "/healthz", "/status")
 
 if DEBUG:
     try:
