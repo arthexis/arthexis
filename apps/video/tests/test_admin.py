@@ -156,3 +156,55 @@ def test_change_view_shows_latest_snapshot(admin_client, monkeypatch, tmp_path):
     assert latest_snapshot.image_format.lower() == "jpeg"
     assert VideoSnapshot.objects.filter(device=device).count() == 1
     assert "LATEST" in response.rendered_content
+
+
+@pytest.mark.django_db
+def test_change_view_captures_missing_snapshot(admin_client, monkeypatch, tmp_path):
+    Node._local_cache.clear()
+    node = Node.objects.create(
+        hostname="local",
+        mac_address=Node.get_current_mac(),
+        current_relation=Node.Relation.SELF,
+    )
+    NodeFeature.objects.create(slug="rpi-camera", display="Raspberry Pi Camera")
+
+    device = VideoDevice.objects.create(
+        node=node,
+        identifier="/dev/video0",
+        description="Raspberry Pi Camera",
+    )
+
+    image_path = tmp_path / "snapshot.jpg"
+    image_path.write_bytes(b"snapshot")
+
+    captured = {"called": False}
+
+    def fake_capture(self, request, target_device, **kwargs):
+        captured["called"] = True
+        sample = ContentSample.objects.create(
+            kind=ContentSample.IMAGE,
+            path=str(image_path),
+            node=node,
+        )
+        return VideoSnapshot.objects.create(
+            device=target_device,
+            sample=sample,
+            captured_at=sample.created_at,
+            width=1,
+            height=1,
+            image_format="JPEG",
+        )
+
+    monkeypatch.setattr(
+        video_admin.VideoDeviceAdmin,
+        "_capture_snapshot_for_device",
+        fake_capture,
+    )
+
+    url = reverse("admin:video_videodevice_change", args=[device.pk])
+    response = admin_client.get(url)
+
+    assert response.status_code == 200
+    assert captured["called"] is True
+    assert VideoSnapshot.objects.filter(device=device).count() == 1
+    assert "refresh_snapshot" in response.rendered_content

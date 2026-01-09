@@ -196,20 +196,6 @@ def request_charge_point_log(charger_pk: int, log_type: str = "Diagnostics") -> 
 
 
 @shared_task
-def schedule_connected_log_requests(log_type: str = "Diagnostics") -> int:
-    """Queue GetLog requests for connected charge points."""
-
-    scheduled = 0
-    qs = Charger.objects.filter(connector_id__isnull=True).only("pk", "charger_id")
-    for charger in qs:
-        if not store.is_connected(charger.charger_id):
-            continue
-        request_charge_point_log.delay(charger.pk, log_type=log_type)
-        scheduled += 1
-    return scheduled
-
-
-@shared_task
 def request_charge_point_firmware(charger_pk: int) -> bool:
     """Request firmware metadata from a connected charge point."""
 
@@ -713,4 +699,3 @@ def send_daily_session_report() -> int:
         "Sent OCPP session report for %s to %s", today.isoformat(), ", ".join(recipients)
     )
     return len(transactions)
-

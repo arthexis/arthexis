@@ -49,6 +49,8 @@ class VideoDevice(Ownable):
     description = models.CharField(max_length=255, blank=True)
     raw_info = models.TextField(blank=True)
     is_default = models.BooleanField(default=False)
+    capture_width = models.PositiveIntegerField(null=True, blank=True)
+    capture_height = models.PositiveIntegerField(null=True, blank=True)
 
     class Meta:
         ordering = ["identifier"]
@@ -140,7 +142,7 @@ class VideoDevice(Ownable):
         return self.snapshots.select_related("sample").order_by("-captured_at", "-pk").first()
 
     def capture_snapshot(self, *, link_duplicates: bool = False):
-        path = capture_rpi_snapshot()
+        path = capture_rpi_snapshot(width=self.capture_width, height=self.capture_height)
         sample = save_screenshot(
             path,
             node=self.node,

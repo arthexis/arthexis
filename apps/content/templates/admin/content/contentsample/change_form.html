@@ -1,0 +1,39 @@
+{% extends "admin/change_form.html" %}
+{% load i18n %}
+
+{% block after_field_sets %}
+  {{ block.super }}
+  {% if latest_sample %}
+    <fieldset class="module aligned">
+      <h2>{% trans "LATEST" %}</h2>
+      <div class="form-row">
+        <div>
+          <strong>{% trans "Captured" %}:</strong>
+          {{ latest_sample.created_at|date:"DATETIME_FORMAT" }}
+        </div>
+        <div>
+          <strong>{% trans "Kind" %}:</strong>
+          {{ latest_sample.get_kind_display }}
+        </div>
+        {% if latest_sample.method %}
+          <div>
+            <strong>{% trans "Method" %}:</strong>
+            {{ latest_sample.method }}
+          </div>
+        {% endif %}
+      </div>
+      {% if take_snapshot_url %}
+        <div class="form-row">
+          <a class="button" href="{{ take_snapshot_url }}">{% trans "Take Snapshot" %}</a>
+        </div>
+      {% endif %}
+      <div class="form-row">
+        {% if latest_preview %}
+          <img src="data:image/png;base64,{{ latest_preview }}" alt="{% trans 'Latest snapshot' %}" style="max-width: 100%; height: auto;" />
+        {% else %}
+          <em>{% trans "Snapshot unavailable" %}</em>
+        {% endif %}
+      </div>
+    </fieldset>
+  {% endif %}
+{% endblock %}

@@ -25,6 +25,7 @@ nav:
       - Secret Scanning: development/secret-scanning.md
       - Maintenance Roadmap: development/maintenance-roadmap.md
       - Documentation Refresh Tasks: development/documentation-refresh-tasks.md
+      - Video Device Admin: development/video-device-admin.md
       - OCPP User Manual: development/ocpp-user-manual.md
       - Release Package Options: development/release-package-options.md
   - Performance:

@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import os
 import shutil
 from pathlib import Path
 
@@ -9,7 +10,10 @@ from django.core.management import call_command
 from django.db import connection
 from django.db.migrations.executor import MigrationExecutor
 
-pytestmark = pytest.mark.django_db(transaction=True)
+pytestmark = [pytest.mark.django_db(transaction=True), pytest.mark.slow]
+
+if os.getenv("RUN_SLOW_TESTS") != "1":
+    pytest.skip("RUN_SLOW_TESTS=1 required for env refresh integration tests.", allow_module_level=True)
 
 
 @pytest.fixture(scope="session")
@@ -121,5 +125,4 @@ def test_env_refresh_leaves_no_pending_migrations(refreshed_environment, env_ref
 def test_env_refresh_does_not_create_md5_or_lockfiles_in_base_dir(refreshed_environment):
     assert not refreshed_environment["new_md5_files"]
     assert not refreshed_environment["new_lock_files"]
-
 
