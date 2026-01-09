@@ -5,9 +5,19 @@ import subprocess
 import textwrap
 from pathlib import Path
 
+import pytest
+
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 HELPER_PATH = REPO_ROOT / "scripts" / "helpers" / "runserver_preflight.sh"
+
+pytestmark = [pytest.mark.slow]
+
+if os.getenv("RUN_SLOW_TESTS") != "1":
+    pytest.skip(
+        "RUN_SLOW_TESTS=1 required for runserver preflight cache tests.",
+        allow_module_level=True,
+    )
 
 
 def _write_manage_stub(base_dir: Path) -> None:
