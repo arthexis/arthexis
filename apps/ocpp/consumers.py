@@ -286,7 +286,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
                             self.serial_source = "query"
                             return trimmed
 
-        serial = self.scope["url_route"]["kwargs"].get("cid", "")
+        serial = self.scope["url_route"]["kwargs"].get("cid", "").strip()
         if serial:
             self.serial_source = "route"
             return serial
