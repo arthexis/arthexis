@@ -2182,41 +2182,6 @@ def poll_emails() -> None:
         collector.collect()
 
 
-@shared_task
-def report_runtime_issue(
-    title: str,
-    body: str,
-    labels: list[str] | None = None,
-    fingerprint: str | None = None,
-):
-    """Report a runtime issue to GitHub using :mod:`apps.repos.github`."""
-
-    response = None
-    try:
-        response = github.create_issue(
-            title,
-            body,
-            labels=labels,
-            fingerprint=fingerprint,
-        )
-    except Exception:
-        logger.exception("Failed to report runtime issue '%s'", title)
-        raise
-
-    if response is None:
-        logger.info("Skipped GitHub issue creation for fingerprint %s", fingerprint)
-        return None
-
-    try:
-        logger.info("Reported runtime issue '%s' to GitHub", title)
-        return response
-    finally:
-        close = getattr(response, "close", None)
-        if callable(close):
-            with contextlib.suppress(Exception):
-                close()
-
-
 def _record_health_check_result(
     base_dir: Path, attempt: int, status: int | None, detail: str
 ) -> None:
