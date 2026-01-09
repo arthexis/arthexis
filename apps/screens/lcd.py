@@ -8,10 +8,11 @@ screen and writing text to a specific position.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import time
-import os
 from dataclasses import dataclass
+from pathlib import Path
 
 try:  # pragma: no cover - hardware dependent
     import smbus  # type: ignore
@@ -58,6 +59,27 @@ class LCDTimings:
     data_delay: float = 0.003
     clear_delay: float = 0.005
 
+    lock_file_name = "lcd-timings"
+    _lock_fields = {
+        "pulse_enable_delay": "LCD_PULSE_ENABLE_DELAY",
+        "pulse_disable_delay": "LCD_PULSE_DISABLE_DELAY",
+        "command_delay": "LCD_COMMAND_DELAY",
+        "data_delay": "LCD_DATA_DELAY",
+        "clear_delay": "LCD_CLEAR_DELAY",
+    }
+
+    @staticmethod
+    def _resolve_base_dir() -> Path:
+        env_base = os.getenv("ARTHEXIS_BASE_DIR")
+        if env_base:
+            return Path(env_base)
+
+        cwd = Path.cwd()
+        if (cwd / ".locks").exists():
+            return cwd
+
+        return Path(__file__).resolve().parents[2]
+
     @classmethod
     def from_env(cls) -> "LCDTimings":
         """Load timing overrides from environment variables.
@@ -83,6 +105,57 @@ class LCDTimings:
             clear_delay=_load("LCD_CLEAR_DELAY", cls.clear_delay),
         )
 
+    @classmethod
+    def from_lock_file(cls, lock_file: Path) -> "LCDTimings" | None:
+        if not lock_file.exists():
+            return None
+
+        values: dict[str, float] = {}
+        try:
+            contents = lock_file.read_text(encoding="utf-8")
+        except OSError:
+            return None
+
+        for line in contents.splitlines():
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            if "=" not in stripped:
+                continue
+            key, raw_value = map(str.strip, stripped.split("=", 1))
+            if key not in cls._lock_fields:
+                continue
+            try:
+                value = float(raw_value)
+            except (TypeError, ValueError):
+                continue
+            values[key] = value
+
+        if not values:
+            return None
+
+        timings = cls()
+        for key, value in values.items():
+            setattr(timings, key, value)
+        return timings
+
+    @classmethod
+    def from_configuration(cls, *, base_dir: Path | None = None) -> "LCDTimings":
+        base_dir = base_dir or cls._resolve_base_dir()
+        lock_file = base_dir / ".locks" / cls.lock_file_name
+        timings = cls.from_lock_file(lock_file)
+        if timings is not None:
+            return timings
+        return cls.from_env()
+
+    def to_lock_file(self) -> str:
+        lines = ["# LCD timing calibration values (seconds)"]
+        for key in self._lock_fields:
+            value = getattr(self, key)
+            lines.append(f"{key}={value:.6f}")
+        lines.append("")
+        return "\n".join(lines)
+
 
 class CharLCD1602:
     """Minimal driver for PCF8574/PCF8574A I2C backpack (LCD1602)."""
@@ -90,7 +163,13 @@ class CharLCD1602:
     columns = 16
     rows = 2
 
-    def __init__(self, bus: _BusWrapper | None = None, timings: LCDTimings | None = None) -> None:
+    def __init__(
+        self,
+        bus: _BusWrapper | None = None,
+        timings: LCDTimings | None = None,
+        *,
+        base_dir: Path | None = None,
+    ) -> None:
         if smbus is None:  # pragma: no cover - hardware dependent
             raise LCDUnavailableError(SMBUS_HINT)
         self.bus = bus or _BusWrapper(1)
@@ -98,7 +177,7 @@ class CharLCD1602:
         self.PCF8574_address = 0x27
         self.PCF8574A_address = 0x3F
         self.LCD_ADDR = self.PCF8574_address
-        self.timings = timings or LCDTimings.from_env()
+        self.timings = timings or LCDTimings.from_configuration(base_dir=base_dir)
 
     def _write_word(self, addr: int, data: int) -> None:
         if self.BLEN:
