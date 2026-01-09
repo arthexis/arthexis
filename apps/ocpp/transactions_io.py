@@ -222,14 +222,53 @@ def _normalize_transaction_entry(tx: Mapping, charger_map: dict[str, Charger]) -
     }
 
 
-def _persist_transactions(transactions: Iterable[dict]) -> int:
-    imported = 0
+def _persist_transactions_base(transactions: Iterable[dict]) -> Iterable[Transaction]:
     for tx in transactions:
         transaction = Transaction.objects.create(**tx["transaction_fields"])
         for mv in tx["meter_values"]:
             MeterValue.objects.create(transaction=transaction, charger=tx["charger"], **mv)
-        imported += 1
-    return imported
+        yield transaction
+
+
+def _persist_transactions(transactions: Iterable[dict]) -> int:
+    return sum(1 for _ in _persist_transactions_base(transactions))
+
+
+def _persist_transactions_with_objects(transactions: Iterable[dict]) -> list[Transaction]:
+    return list(_persist_transactions_base(transactions))
+
+
+def _is_duplicate_transaction(tx_fields: dict) -> bool:
+    charger = tx_fields.get("charger")
+    if charger is None:
+        return False
+    ocpp_transaction_id = tx_fields.get("ocpp_transaction_id") or ""
+    if ocpp_transaction_id:
+        if Transaction.objects.filter(
+            charger=charger, ocpp_transaction_id=ocpp_transaction_id
+        ).exists():
+            return True
+    start_time = tx_fields.get("start_time")
+    if start_time:
+        qs = Transaction.objects.filter(charger=charger, start_time=start_time)
+        meter_start = tx_fields.get("meter_start")
+        if meter_start is not None:
+            qs = qs.filter(meter_start=meter_start)
+        if qs.exists():
+            return True
+    return False
+
+
+def _iter_normalized_transactions(
+    data: dict, charger_map: dict[str, Charger]
+) -> Iterable[dict]:
+    for tx in data.get("transactions", []):
+        if not isinstance(tx, Mapping):
+            continue
+        try:
+            yield _normalize_transaction_entry(tx, charger_map)
+        except (ValidationError, ValueError, TypeError):
+            continue
 
 
 def import_transactions(data: dict) -> int:
@@ -240,13 +279,25 @@ def import_transactions(data: dict) -> int:
 
     charger_map = _build_charger_map(data.get("chargers", []))
 
-    normalized_transactions: list[dict] = []
-    for tx in data.get("transactions", []):
-        if not isinstance(tx, Mapping):
-            continue
-        try:
-            normalized_transactions.append(_normalize_transaction_entry(tx, charger_map))
-        except (ValidationError, ValueError, TypeError):
-            continue
-
+    normalized_transactions = list(_iter_normalized_transactions(data, charger_map))
     return _persist_transactions(normalized_transactions)
+
+
+def import_transactions_deduped(data: dict) -> tuple[int, int, list[Transaction]]:
+    """Import transactions while skipping duplicates.
+
+    Returns a tuple of (imported_count, skipped_count, created_transactions).
+    """
+
+    charger_map = _build_charger_map(data.get("chargers", []))
+
+    skipped = 0
+    normalized_transactions: list[dict] = []
+    for normalized in _iter_normalized_transactions(data, charger_map):
+        if _is_duplicate_transaction(normalized["transaction_fields"]):
+            skipped += 1
+            continue
+        normalized_transactions.append(normalized)
+
+    created = _persist_transactions_with_objects(normalized_transactions)
+    return len(created), skipped, created
