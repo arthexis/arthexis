@@ -328,9 +328,11 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
                 continue
             if raw_name.lower() != b"authorization":
                 continue
+            if not isinstance(raw_value, (bytes, bytearray)):
+                return None, "invalid"
             try:
                 header_value = raw_value.decode("latin1")
-            except Exception:
+            except UnicodeDecodeError:
                 return None, "invalid"
             scheme, _, param = header_value.partition(" ")
             if scheme.lower() != "basic" or not param:
