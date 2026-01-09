@@ -5,9 +5,13 @@ import subprocess
 import textwrap
 from pathlib import Path
 
+import pytest
+
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 HELPER_PATH = REPO_ROOT / "scripts" / "helpers" / "staticfiles.sh"
+
+pytestmark = pytest.mark.slow
 
 
 def _write_fake_staticfiles_hasher(base_dir: Path) -> Path:

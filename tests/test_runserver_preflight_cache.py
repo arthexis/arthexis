@@ -5,9 +5,13 @@ import subprocess
 import textwrap
 from pathlib import Path
 
+import pytest
+
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 HELPER_PATH = REPO_ROOT / "scripts" / "helpers" / "runserver_preflight.sh"
+
+pytestmark = pytest.mark.slow
 
 
 def _write_manage_stub(base_dir: Path) -> None:

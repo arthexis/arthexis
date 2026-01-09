@@ -14,6 +14,12 @@ on:
   pull_request:
   schedule:
     - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      run_slow_tests:
+        description: 'Run slow pytest markers'
+        required: false
+        default: 'false'
 
 jobs:
   install:
@@ -63,7 +69,7 @@ jobs:
       - name: Run tests
         run: |
           source .venv/bin/activate
-          pytest --maxfail=1 --disable-warnings -q --timeout=180
+          pytest --maxfail=1 --disable-warnings -q --timeout=180 -m "not slow"
   upgrade:
     runs-on: ubuntu-latest
     steps:
@@ -125,4 +131,35 @@ jobs:
         run: |
           set -Eeuo pipefail
           source .venv/bin/activate
-          pytest --maxfail=1 --disable-warnings -q --timeout=180
+          pytest --maxfail=1 --disable-warnings -q --timeout=180 -m "not slow"
+  slow-tests:
+    if: ${{ github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && inputs.run_slow_tests == 'true') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          clean: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+      - name: Cache pip
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
+          restore-keys: |
+            pip-${{ runner.os }}-
+      - name: Cache virtualenv
+        uses: actions/cache@v5
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ hashFiles('requirements*.txt', 'pyproject.toml') }}
+          restore-keys: |
+            venv-${{ runner.os }}-
+      - name: Install suite from repository
+        run: |
+          ./install.sh --no-start
+      - name: Run slow tests
+        run: |
+          source .venv/bin/activate
+          pytest --maxfail=1 --disable-warnings -q --timeout=180 -m "slow"
