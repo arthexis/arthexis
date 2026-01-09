@@ -232,6 +232,37 @@ def _persist_transactions(transactions: Iterable[dict]) -> int:
     return imported
 
 
+def _persist_transactions_with_objects(transactions: Iterable[dict]) -> list[Transaction]:
+    created: list[Transaction] = []
+    for tx in transactions:
+        transaction = Transaction.objects.create(**tx["transaction_fields"])
+        for mv in tx["meter_values"]:
+            MeterValue.objects.create(transaction=transaction, charger=tx["charger"], **mv)
+        created.append(transaction)
+    return created
+
+
+def _is_duplicate_transaction(tx_fields: dict) -> bool:
+    charger = tx_fields.get("charger")
+    if charger is None:
+        return False
+    ocpp_transaction_id = tx_fields.get("ocpp_transaction_id") or ""
+    if ocpp_transaction_id:
+        if Transaction.objects.filter(
+            charger=charger, ocpp_transaction_id=ocpp_transaction_id
+        ).exists():
+            return True
+    start_time = tx_fields.get("start_time")
+    if start_time:
+        qs = Transaction.objects.filter(charger=charger, start_time=start_time)
+        meter_start = tx_fields.get("meter_start")
+        if meter_start is not None:
+            qs = qs.filter(meter_start=meter_start)
+        if qs.exists():
+            return True
+    return False
+
+
 def import_transactions(data: dict) -> int:
     """Import transactions from export data.
 
@@ -250,3 +281,29 @@ def import_transactions(data: dict) -> int:
             continue
 
     return _persist_transactions(normalized_transactions)
+
+
+def import_transactions_deduped(data: dict) -> tuple[int, int, list[Transaction]]:
+    """Import transactions while skipping duplicates.
+
+    Returns a tuple of (imported_count, skipped_count, created_transactions).
+    """
+
+    charger_map = _build_charger_map(data.get("chargers", []))
+
+    normalized_transactions: list[dict] = []
+    skipped = 0
+    for tx in data.get("transactions", []):
+        if not isinstance(tx, Mapping):
+            continue
+        try:
+            normalized = _normalize_transaction_entry(tx, charger_map)
+        except (ValidationError, ValueError, TypeError):
+            continue
+        if _is_duplicate_transaction(normalized["transaction_fields"]):
+            skipped += 1
+            continue
+        normalized_transactions.append(normalized)
+
+    created = _persist_transactions_with_objects(normalized_transactions)
+    return len(created), skipped, created
