@@ -310,8 +310,12 @@ def _read_lock_file(lock_file: Path) -> LockPayload:
     return LockPayload(payload.subject, payload.body, DEFAULT_SCROLL_MS)
 
 
+def _has_visible_text(text: str) -> bool:
+    return any(ch.isprintable() and not ch.isspace() for ch in text)
+
+
 def _payload_has_text(payload: LockPayload) -> bool:
-    return bool(payload.line1.strip() or payload.line2.strip())
+    return _has_visible_text(payload.line1) or _has_visible_text(payload.line2)
 
 
 def _animation_payload(
