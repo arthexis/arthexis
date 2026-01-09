@@ -4,8 +4,9 @@ from pathlib import Path
 from django.conf import settings
 from django.contrib import admin, messages
 from django.shortcuts import redirect
-from django.urls import path
+from django.urls import path, reverse
 from django.utils.html import format_html
+from django.utils.translation import gettext_lazy as _
 
 from apps.content.models import (
     ContentClassification,
@@ -20,6 +21,12 @@ from apps.content.models import (
 from apps.locals.user_data import EntityModelAdmin
 from apps.nodes.models import Node
 from apps.nodes.utils import capture_screenshot, save_screenshot
+from apps.video.models import VideoDevice
+from apps.video.utils import (
+    DEFAULT_CAMERA_RESOLUTION,
+    capture_rpi_snapshot,
+    has_rpi_camera_stack,
+)
 from .web_sampling import execute_sampler
 
 
@@ -48,6 +55,7 @@ class ContentSampleAdmin(EntityModelAdmin):
     readonly_fields = ("created_at", "name", "user", "image_preview")
     inlines = (ContentClassificationInline,)
     list_filter = ("kind", "classifications__tag")
+    change_form_template = "admin/content/contentsample/change_form.html"
 
     def get_urls(self):
         urls = super().get_urls()
@@ -56,6 +64,11 @@ class ContentSampleAdmin(EntityModelAdmin):
                 "capture/",
                 self.admin_site.admin_view(self.capture_now),
                 name="nodes_contentsample_capture",
+            ),
+            path(
+                "<path:object_id>/take-snapshot/",
+                self.admin_site.admin_view(self.take_snapshot),
+                name="content_contentsample_take_snapshot",
             ),
         ]
         return custom + urls
@@ -75,21 +88,86 @@ class ContentSampleAdmin(EntityModelAdmin):
             self.message_user(request, "Duplicate screenshot; not saved", messages.INFO)
         return redirect("..")
 
+    def take_snapshot(self, request, _object_id):
+        if not has_rpi_camera_stack():
+            self.message_user(
+                request,
+                _("Camera stack not available."),
+                level=messages.ERROR,
+            )
+            return redirect("..")
+
+        node = Node.get_local()
+        device = VideoDevice.objects.filter(node=node, is_default=True).first()
+        width = getattr(device, "capture_width", None)
+        height = getattr(device, "capture_height", None)
+        if not width or not height:
+            width, height = DEFAULT_CAMERA_RESOLUTION
+
+        try:
+            path = capture_rpi_snapshot(width=width, height=height)
+        except Exception as exc:  # pragma: no cover - depends on camera stack
+            self.message_user(request, str(exc), level=messages.ERROR)
+            return redirect("..")
+
+        sample = save_screenshot(
+            path,
+            node=node,
+            method="RPI_CAMERA",
+            user=request.user,
+            link_duplicates=True,
+        )
+        if not sample:
+            self.message_user(
+                request, _("Duplicate snapshot; not saved"), level=messages.INFO
+            )
+            return redirect("..")
+
+        self.message_user(
+            request,
+            _("Snapshot saved to %(path)s") % {"path": sample.path},
+            messages.SUCCESS,
+        )
+        return redirect(
+            reverse("admin:content_contentsample_change", args=[sample.pk])
+        )
+
+    def changeform_view(self, request, object_id=None, form_url="", extra_context=None):
+        extra_context = extra_context or {}
+        obj = self.get_object(request, object_id) if object_id else None
+        extra_context["latest_sample"] = obj
+        extra_context["latest_preview"] = self._get_sample_preview(obj)
+        extra_context["take_snapshot_url"] = (
+            reverse("admin:content_contentsample_take_snapshot", args=[obj.pk])
+            if obj
+            else None
+        )
+        return super().changeform_view(
+            request, object_id, form_url=form_url, extra_context=extra_context
+        )
+
     @admin.display(description="Screenshot")
     def image_preview(self, obj):
         if not obj or obj.kind != ContentSample.IMAGE or not obj.path:
             return ""
-        file_path = Path(obj.path)
-        if not file_path.is_absolute():
-            file_path = settings.LOG_DIR / file_path
-        if not file_path.exists():
+        encoded = self._get_sample_preview(obj)
+        if not encoded:
             return "File not found"
-        with file_path.open("rb") as f:
-            encoded = base64.b64encode(f.read()).decode("ascii")
         return format_html(
             '<img src="data:image/png;base64,{}" style="max-width:100%;" />',
             encoded,
         )
+
+    def _get_sample_preview(self, obj):
+        if not obj or obj.kind != ContentSample.IMAGE or not obj.path:
+            return None
+        file_path = Path(obj.path)
+        if not file_path.is_absolute():
+            file_path = settings.LOG_DIR / file_path
+        if not file_path.exists():
+            return None
+        with file_path.open("rb") as f:
+            return base64.b64encode(f.read()).decode("ascii")
 
 
 class WebRequestStepInline(admin.TabularInline):

@@ -1,5 +1,6 @@
 from urllib.parse import urlsplit, urlunsplit
 
+from django import forms
 from django.conf import settings
 from django.contrib import admin, messages
 from django.shortcuts import redirect
@@ -15,11 +16,89 @@ from apps.nodes.models import Node, NodeFeature, NodeFeatureAssignment
 from apps.nodes.utils import save_screenshot
 
 from .models import MjpegStream, VideoDevice, VideoRecording, VideoSnapshot, YoutubeChannel
-from .utils import capture_rpi_snapshot, has_rpi_camera_stack
+from .utils import (
+    DEFAULT_CAMERA_RESOLUTION,
+    capture_rpi_snapshot,
+    get_camera_resolutions,
+    has_rpi_camera_stack,
+)
+
+
+class VideoDeviceAdminForm(forms.ModelForm):
+    resolution_choice = forms.ChoiceField(
+        required=False,
+        label=_("Resolution"),
+        help_text=_("Choose a supported resolution or enter a custom width and height."),
+    )
+
+    class Meta:
+        model = VideoDevice
+        fields = "__all__"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        resolutions = get_camera_resolutions()
+        default_width, default_height = DEFAULT_CAMERA_RESOLUTION
+        choices = [
+            (
+                "",
+                _("Default (%(width)s × %(height)s)")
+                % {"width": default_width, "height": default_height},
+            )
+        ]
+        choices.extend(
+            (f"{width}x{height}", f"{width} × {height}") for width, height in resolutions
+        )
+        self.fields["resolution_choice"].choices = choices
+
+        if self.instance and self.instance.pk:
+            width = self.instance.capture_width
+            height = self.instance.capture_height
+            if width and height:
+                self.fields["resolution_choice"].initial = f"{width}x{height}"
+        if not self.initial.get("capture_width") and not self.initial.get(
+            "capture_height"
+        ):
+            self.initial.setdefault("capture_width", default_width)
+            self.initial.setdefault("capture_height", default_height)
+
+    def clean(self):
+        cleaned_data = super().clean()
+        choice = cleaned_data.get("resolution_choice")
+        default_width, default_height = DEFAULT_CAMERA_RESOLUTION
+
+        if choice:
+            try:
+                width_str, height_str = choice.lower().split("x", 1)
+                cleaned_data["capture_width"] = int(width_str)
+                cleaned_data["capture_height"] = int(height_str)
+                return cleaned_data
+            except (ValueError, AttributeError):
+                self.add_error(
+                    "resolution_choice", _("Select a valid resolution option.")
+                )
+
+        width = cleaned_data.get("capture_width")
+        height = cleaned_data.get("capture_height")
+        if (width and not height) or (height and not width):
+            self.add_error(
+                None,
+                forms.ValidationError(
+                    _(
+                        "Both capture width and height must be provided together, or both left blank to use the default."
+                    ),
+                    code="incomplete_resolution",
+                ),
+            )
+        elif not width and not height:
+            cleaned_data["capture_width"] = default_width
+            cleaned_data["capture_height"] = default_height
+        return cleaned_data
 
 
 @admin.register(VideoDevice)
 class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin):
+    form = VideoDeviceAdminForm
     list_display = (
         "identifier",
         "node",
@@ -28,10 +107,35 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
         "is_default",
     )
     search_fields = ("identifier", "description", "raw_info", "node__hostname")
+    actions = ("reload_camera_defaults",)
     changelist_actions = ["find_video_devices", "take_snapshot", "test_camera"]
     change_list_template = "django_object_actions/change_list.html"
     change_form_template = "admin/video/videodevice/change_form.html"
     change_actions = ("refresh_snapshot",)
+    fieldsets = (
+        (
+            None,
+            {
+                "fields": (
+                    "node",
+                    "identifier",
+                    "description",
+                    "raw_info",
+                    "is_default",
+                )
+            },
+        ),
+        (
+            _("Camera Resolution"),
+            {
+                "fields": (
+                    "resolution_choice",
+                    "capture_width",
+                    "capture_height",
+                )
+            },
+        ),
+    )
 
     def get_urls(self):
         custom = [
@@ -89,6 +193,18 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
             request, obj, auto_enable=True, link_duplicates=True
         )
         return redirect(".")
+
+    @admin.action(description=_("Reload camera resolution defaults"))
+    def reload_camera_defaults(self, request, queryset):
+        width, height = DEFAULT_CAMERA_RESOLUTION
+        updated = queryset.update(capture_width=width, capture_height=height)
+        if updated:
+            self.message_user(
+                request,
+                _("Updated %(count)s device(s) with default resolution.")
+                % {"count": updated},
+                level=messages.SUCCESS,
+            )
 
     find_video_devices.label = _("Find Video Devices")
     find_video_devices.short_description = _("Find Video Devices")
