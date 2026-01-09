@@ -117,14 +117,6 @@ class NodeFeature(SlugDisplayNaturalKeyMixin, Entity):
             return False
         if node.features.filter(pk=self.pk).exists():
             return True
-        try:
-            from apps.nodes.node_feature_hooks import run_feature_checks
-        except Exception:
-            run_feature_checks = None
-        if run_feature_checks:
-            hook_result = run_feature_checks(self.slug, node=node)
-            if hook_result is not None:
-                return bool(hook_result)
         base_path = node.get_base_path()
         base_dir = Path(settings.BASE_DIR)
         return node._detect_auto_feature(
@@ -311,28 +303,6 @@ class NodeFeatureMixin:
     def _detect_auto_feature(
         self, slug: str, *, base_dir: Path, base_path: Path
     ) -> bool:
-        detected: bool | None = None
-        try:
-            from apps.nodes.node_feature_hooks import (
-                run_feature_checks,
-                run_feature_setups,
-            )
-        except Exception:
-            run_feature_checks = None
-            run_feature_setups = None
-        if run_feature_setups:
-            try:
-                detected = run_feature_setups(slug, node=self)
-            except Exception:
-                logger.exception("Auto-setup failed for feature %s", slug)
-        if detected is None and run_feature_checks:
-            try:
-                detected = run_feature_checks(slug, node=self)
-            except Exception:
-                logger.exception("Auto-check failed for feature %s", slug)
-        if detected is not None:
-            return bool(detected)
-
         lock = self.FEATURE_LOCK_MAP.get(slug)
         if lock:
             project_lock_dir = base_dir / ".locks"
