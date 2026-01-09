@@ -10,7 +10,7 @@ from django.utils.html import format_html
 from django.views.decorators.csrf import csrf_exempt
 
 from apps.locals.user_data import EntityModelAdmin
-from .models import ExperienceReference, Reference
+from .models import ExperienceReference, QRRedirect, QRRedirectLead, Reference
 
 
 @admin.register(ExperienceReference)
@@ -160,3 +160,99 @@ class ReferenceAdmin(EntityModelAdmin):
         return ""
 
     qr_code.short_description = "QR Code"
+
+
+@admin.register(QRRedirect)
+class QRRedirectAdmin(EntityModelAdmin):
+    list_display = (
+        "slug",
+        "title",
+        "target_url",
+        "is_public",
+        "public_view_link",
+        "redirect_link",
+        "created_on",
+    )
+    list_filter = ("is_public",)
+    search_fields = ("slug", "title", "target_url")
+    readonly_fields = ("created_on", "public_view_link", "redirect_link")
+    fields = (
+        "slug",
+        "title",
+        "target_url",
+        "is_public",
+        "text_above",
+        "text_below",
+        "public_view_link",
+        "redirect_link",
+        "created_on",
+    )
+
+    @admin.display(description="Public view")
+    def public_view_link(self, obj):
+        if not obj.slug:
+            return ""
+        url = reverse("links:qr-redirect-public", args=[obj.slug])
+        return format_html(
+            '<a href="{}" target="_blank" rel="noopener noreferrer">open</a>',
+            url,
+        )
+
+    @admin.display(description="Redirect URL")
+    def redirect_link(self, obj):
+        if not obj.slug:
+            return ""
+        url = reverse("links:qr-redirect", args=[obj.slug])
+        return format_html(
+            '<a href="{}" target="_blank" rel="noopener noreferrer">open</a>',
+            url,
+        )
+
+
+@admin.register(QRRedirectLead)
+class QRRedirectLeadAdmin(EntityModelAdmin):
+    list_display = (
+        "qr_redirect",
+        "status",
+        "user",
+        "referer_display",
+        "created_on",
+    )
+    list_filter = ("status",)
+    search_fields = (
+        "qr_redirect__slug",
+        "qr_redirect__title",
+        "target_url",
+        "referer",
+        "path",
+        "user__username",
+        "user__email",
+    )
+    readonly_fields = (
+        "qr_redirect",
+        "target_url",
+        "user",
+        "path",
+        "referer",
+        "user_agent",
+        "ip_address",
+        "created_on",
+    )
+    fields = (
+        "qr_redirect",
+        "target_url",
+        "user",
+        "path",
+        "referer",
+        "user_agent",
+        "ip_address",
+        "status",
+        "assign_to",
+        "created_on",
+    )
+    ordering = ("-created_on",)
+    date_hierarchy = "created_on"
+
+    @admin.display(description="Referrer")
+    def referer_display(self, obj):
+        return obj.referer or ""
