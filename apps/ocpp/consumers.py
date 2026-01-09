@@ -365,9 +365,44 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             return OCPP_VERSION_16
         return None
 
-    @requires_network
-    async def connect(self):
-        raw_serial = self._extract_serial_identifier()
+    def _get_offered_subprotocols(self) -> list[str]:
+        """Return the subprotocols offered by the connecting websocket client."""
+
+        offered = self.scope.get("subprotocols") or []
+        normalized: list[str] = []
+        for proto in offered:
+            try:
+                if isinstance(proto, (bytes, bytearray)):
+                    value = proto.decode("latin1")
+                else:
+                    value = str(proto)
+            except (AttributeError, TypeError, UnicodeDecodeError):
+                continue
+            value = value.strip()
+            if value:
+                normalized.append(value)
+        if normalized:
+            return normalized
+
+        headers = self.scope.get("headers") or []
+        for raw_name, raw_value in headers:
+            if not isinstance(raw_name, (bytes, bytearray)):
+                continue
+            if raw_name.lower() != b"sec-websocket-protocol":
+                continue
+            try:
+                header_value = raw_value.decode("latin1")
+                for candidate in header_value.split(","):
+                    trimmed = candidate.strip()
+                    if trimmed:
+                        normalized.append(trimmed)
+            except (AttributeError, TypeError, UnicodeDecodeError):
+                continue
+        return normalized
+
+    async def _validate_serial_or_reject(self, raw_serial: str) -> bool:
+        """Validate the charge point serial and reject the connection if invalid."""
+
         try:
             self.charger_id = Charger.validate_serial(raw_serial)
         except ValidationError as exc:
@@ -387,6 +422,142 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
                 log_type="charger",
             )
             await self.close(code=4003)
+            return False
+        return True
+
+    def _negotiate_ocpp_version(self, existing_charger: Charger | None) -> str | None:
+        """Resolve the negotiated OCPP subprotocol and set version attributes."""
+
+        preferred_version = (
+            existing_charger.preferred_ocpp_version_value()
+            if existing_charger
+            else ""
+        )
+        offered = self._get_offered_subprotocols()
+        subprotocol = self._select_subprotocol(offered, preferred_version)
+        self.preferred_ocpp_version = preferred_version
+        negotiated_version = subprotocol
+        if not negotiated_version and preferred_version in {
+            OCPP_VERSION_201,
+            OCPP_VERSION_21,
+        }:
+            negotiated_version = preferred_version
+        self.ocpp_version = negotiated_version or OCPP_VERSION_16
+        return subprotocol
+
+    async def _enforce_ws_auth(self, existing_charger: Charger | None) -> bool:
+        """Enforce HTTP Basic auth requirements for websocket connections."""
+
+        if not existing_charger or not existing_charger.requires_ws_auth:
+            return True
+        credentials, error_code = self._parse_basic_auth_header()
+        rejection_reason: str | None = None
+        if error_code == "missing":
+            rejection_reason = "HTTP Basic authentication required (credentials missing)"
+        elif error_code == "invalid":
+            rejection_reason = "HTTP Basic authentication header is invalid"
+        else:
+            username, password = credentials
+            auth_user = await self._authenticate_basic_credentials(
+                username, password
+            )
+            if auth_user is None:
+                rejection_reason = "HTTP Basic authentication failed"
+            else:
+                authorized = await database_sync_to_async(
+                    existing_charger.is_ws_user_authorized
+                )(auth_user)
+                if not authorized:
+                    user_label = getattr(auth_user, "get_username", None)
+                    if callable(user_label):
+                        user_label = user_label()
+                    else:
+                        user_label = getattr(auth_user, "username", "")
+                    if user_label:
+                        rejection_reason = (
+                            "HTTP Basic authentication rejected for unauthorized user "
+                            f"'{user_label}'"
+                        )
+                    else:
+                        rejection_reason = (
+                            "HTTP Basic authentication rejected for unauthorized user"
+                        )
+        if rejection_reason:
+            store.add_log(
+                self.store_key,
+                f"Rejected connection: {rejection_reason}",
+                log_type="charger",
+            )
+            await self.close(code=4003)
+            return False
+        return True
+
+    async def _accept_connection(self, subprotocol: str | None) -> bool:
+        """Accept the websocket connection after rate limits are enforced."""
+
+        existing = store.connections.get(self.store_key)
+        if existing is not None:
+            store.release_ip_connection(getattr(existing, "client_ip", None), existing)
+            await existing.close()
+        if not await self.enforce_rate_limit():
+            store.add_log(
+                self.store_key,
+                f"Rejected connection from {self.client_ip or 'unknown'}: rate limit exceeded",
+                log_type="charger",
+            )
+            return False
+        await self.accept(subprotocol=subprotocol)
+        store.add_log(
+            self.store_key,
+            f"Connected (subprotocol={subprotocol or 'none'})",
+            log_type="charger",
+        )
+        store.connections[self.store_key] = self
+        store.logs["charger"].setdefault(
+            self.store_key, deque(maxlen=store.MAX_IN_MEMORY_LOG_ENTRIES)
+        )
+        return True
+
+    async def _ensure_charger_record(
+        self, existing_charger: Charger | None
+    ) -> bool:
+        """Ensure a charger record exists and refresh cached metadata."""
+
+        created = False
+        if existing_charger is not None:
+            self.charger = existing_charger
+        else:
+            self.charger, created = await database_sync_to_async(
+                Charger.objects.get_or_create
+            )(
+                charger_id=self.charger_id,
+                connector_id=None,
+                defaults={"last_path": self.scope.get("path", "")},
+            )
+        await database_sync_to_async(self.charger.refresh_manager_node)()
+        self.aggregate_charger = self.charger
+        await self._clear_cached_status_fields()
+        return created
+
+    async def _register_charger_logs(self) -> None:
+        """Register charger log names based on location or charger id."""
+
+        location_name = await sync_to_async(
+            lambda: self.charger.location.name if self.charger.location else ""
+        )()
+        friendly_name = location_name or self.charger_id
+        store.register_log_name(self.store_key, friendly_name, log_type="charger")
+        store.register_log_name(self.charger_id, friendly_name, log_type="charger")
+        store.register_log_name(
+            store.identity_key(self.charger_id, None),
+            friendly_name,
+            log_type="charger",
+        )
+
+    @requires_network
+    async def connect(self):
+        raw_serial = self._extract_serial_identifier()
+        if not await self._validate_serial_or_reject(raw_serial):
             return
         self.connector_value: int | None = None
         self.store_key = store.pending_key(self.charger_id)
@@ -403,111 +574,13 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             .first(),
             thread_sensitive=False,
         )()
-        preferred_version = (
-            existing_charger.preferred_ocpp_version_value()
-            if existing_charger
-            else ""
-        )
-        offered = self.scope.get("subprotocols", [])
-        subprotocol = self._select_subprotocol(offered, preferred_version)
-        self.preferred_ocpp_version = preferred_version
-        negotiated_version = subprotocol
-        if not negotiated_version and preferred_version in {OCPP_VERSION_201, OCPP_VERSION_21}:
-            negotiated_version = preferred_version
-        self.ocpp_version = negotiated_version or OCPP_VERSION_16
-        if existing_charger and existing_charger.requires_ws_auth:
-            credentials, error_code = self._parse_basic_auth_header()
-            rejection_reason: str | None = None
-            if error_code == "missing":
-                rejection_reason = "HTTP Basic authentication required (credentials missing)"
-            elif error_code == "invalid":
-                rejection_reason = "HTTP Basic authentication header is invalid"
-            else:
-                if not credentials:
-                    rejection_reason = "HTTP Basic authentication header is invalid"
-                else:
-                    username, password = credentials
-                    auth_user = await self._authenticate_basic_credentials(
-                        username, password
-                    )
-                    if auth_user is None:
-                        rejection_reason = "HTTP Basic authentication failed"
-                    else:
-                        authorized = await database_sync_to_async(
-                            existing_charger.is_ws_user_authorized
-                        )(auth_user)
-                        if not authorized:
-                            user_label = getattr(auth_user, "get_username", None)
-                            if callable(user_label):
-                                user_label = user_label()
-                            else:
-                                user_label = getattr(auth_user, "username", "")
-                            if user_label:
-                                rejection_reason = (
-                                    "HTTP Basic authentication rejected for unauthorized user "
-                                    f"'{user_label}'"
-                                )
-                            else:
-                                rejection_reason = (
-                                    "HTTP Basic authentication rejected for unauthorized user"
-                                )
-            if rejection_reason:
-                store.add_log(
-                    self.store_key,
-                    f"Rejected connection: {rejection_reason}",
-                    log_type="charger",
-                )
-                await self.close(code=4003)
-                return
-        # Close any pending connection for this charger so reconnections do
-        # not leak stale consumers when the connector id has not been
-        # negotiated yet.
-        existing = store.connections.get(self.store_key)
-        if existing is not None:
-            store.release_ip_connection(getattr(existing, "client_ip", None), existing)
-            await existing.close()
-        if not await self.enforce_rate_limit():
-            store.add_log(
-                self.store_key,
-                f"Rejected connection from {self.client_ip or 'unknown'}: rate limit exceeded",
-                log_type="charger",
-            )
+        subprotocol = self._negotiate_ocpp_version(existing_charger)
+        if not await self._enforce_ws_auth(existing_charger):
             return
-        await self.accept(subprotocol=subprotocol)
-        store.add_log(
-            self.store_key,
-            f"Connected (subprotocol={subprotocol or 'none'})",
-            log_type="charger",
-        )
-        store.connections[self.store_key] = self
-        store.logs["charger"].setdefault(
-            self.store_key, deque(maxlen=store.MAX_IN_MEMORY_LOG_ENTRIES)
-        )
-        created = False
-        if existing_charger is not None:
-            self.charger = existing_charger
-        else:
-            self.charger, created = await database_sync_to_async(
-                Charger.objects.get_or_create
-            )(
-                charger_id=self.charger_id,
-                connector_id=None,
-                defaults={"last_path": self.scope.get("path", "")},
-            )
-        await database_sync_to_async(self.charger.refresh_manager_node)()
-        self.aggregate_charger = self.charger
-        await self._clear_cached_status_fields()
-        location_name = await sync_to_async(
-            lambda: self.charger.location.name if self.charger.location else ""
-        )()
-        friendly_name = location_name or self.charger_id
-        store.register_log_name(self.store_key, friendly_name, log_type="charger")
-        store.register_log_name(self.charger_id, friendly_name, log_type="charger")
-        store.register_log_name(
-            store.identity_key(self.charger_id, None),
-            friendly_name,
-            log_type="charger",
-        )
+        if not await self._accept_connection(subprotocol):
+            return
+        created = await self._ensure_charger_record(existing_charger)
+        await self._register_charger_logs()
 
         restored_calls = store.restore_pending_calls(self.charger_id)
         if restored_calls:
