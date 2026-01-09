@@ -49,16 +49,6 @@ def _startup_message_cache_key() -> str:
     return STARTUP_NET_MESSAGE_CACHE_KEY
 
 
-@shared_task(name="nodes.tasks.sample_clipboard", bind=True)
-def discard_sample_clipboard(self, *args, **kwargs) -> str:
-    """Discard legacy clipboard polling tasks that may still be queued."""
-
-    logger.warning(
-        "Discarding legacy sample_clipboard task", extra={"args": args, "kwargs": kwargs}
-    )
-    return "discarded:sample_clipboard"
-
-
 @shared_task
 def send_startup_net_message(lock_file: str | None = None, port: str | None = None) -> str:
     """Queue the LCD startup Net Message once Celery is available."""
