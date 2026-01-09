@@ -1,5 +1,8 @@
 from django.db import migrations, models
 
+# NOTE: This migration remains as a historical cleanup for legacy installs that
+# may still have scheduled clipboard polling tasks from earlier releases.
+
 
 def remove_invalid_clipboard_tasks(apps, schema_editor):
     try:
