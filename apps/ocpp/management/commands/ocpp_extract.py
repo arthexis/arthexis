@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
+from django.db.models import DecimalField, ExpressionWrapper, F, Value
+from django.db.models.functions import Coalesce
 from django.utils import timezone as dj_timezone
 
 from apps.ocpp import store
@@ -123,15 +125,26 @@ class Command(BaseCommand):
     def _list_transactions(self, limit: int | None) -> list[Transaction]:
         qs = annotate_transaction_energy_bounds(
             Transaction.objects.select_related("charger").prefetch_related("meter_values")
-        ).order_by("-start_time")
-        results: list[Transaction] = []
-        for tx in qs:
-            if tx.kw <= 0:
-                continue
-            results.append(tx)
-            if limit is not None and len(results) >= limit:
-                break
-        return results
+        )
+        kw_field = DecimalField(max_digits=12, decimal_places=3)
+        qs = qs.annotate(
+            energy_start=Coalesce(
+                ExpressionWrapper(F("meter_start") / Value(1000.0), output_field=kw_field),
+                F("meter_energy_start"),
+            ),
+            energy_end=Coalesce(
+                ExpressionWrapper(F("meter_stop") / Value(1000.0), output_field=kw_field),
+                F("meter_energy_end"),
+            ),
+        ).annotate(
+            energy_delta=ExpressionWrapper(
+                F("energy_end") - F("energy_start"),
+                output_field=kw_field,
+            )
+        ).filter(energy_delta__gt=0).order_by("-start_time")
+        if limit is None:
+            return list(qs)
+        return list(qs[:limit])
 
     def _describe_transaction(self, tx: Transaction) -> None:
         charger = tx.charger.charger_id if tx.charger else "unknown"

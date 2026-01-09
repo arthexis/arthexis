@@ -222,24 +222,20 @@ def _normalize_transaction_entry(tx: Mapping, charger_map: dict[str, Charger]) -
     }
 
 
-def _persist_transactions(transactions: Iterable[dict]) -> int:
-    imported = 0
+def _persist_transactions_base(transactions: Iterable[dict]) -> Iterable[Transaction]:
     for tx in transactions:
         transaction = Transaction.objects.create(**tx["transaction_fields"])
         for mv in tx["meter_values"]:
             MeterValue.objects.create(transaction=transaction, charger=tx["charger"], **mv)
-        imported += 1
-    return imported
+        yield transaction
+
+
+def _persist_transactions(transactions: Iterable[dict]) -> int:
+    return sum(1 for _ in _persist_transactions_base(transactions))
 
 
 def _persist_transactions_with_objects(transactions: Iterable[dict]) -> list[Transaction]:
-    created: list[Transaction] = []
-    for tx in transactions:
-        transaction = Transaction.objects.create(**tx["transaction_fields"])
-        for mv in tx["meter_values"]:
-            MeterValue.objects.create(transaction=transaction, charger=tx["charger"], **mv)
-        created.append(transaction)
-    return created
+    return list(_persist_transactions_base(transactions))
 
 
 def _is_duplicate_transaction(tx_fields: dict) -> bool:
@@ -263,6 +259,18 @@ def _is_duplicate_transaction(tx_fields: dict) -> bool:
     return False
 
 
+def _iter_normalized_transactions(
+    data: dict, charger_map: dict[str, Charger]
+) -> Iterable[dict]:
+    for tx in data.get("transactions", []):
+        if not isinstance(tx, Mapping):
+            continue
+        try:
+            yield _normalize_transaction_entry(tx, charger_map)
+        except (ValidationError, ValueError, TypeError):
+            continue
+
+
 def import_transactions(data: dict) -> int:
     """Import transactions from export data.
 
@@ -271,15 +279,7 @@ def import_transactions(data: dict) -> int:
 
     charger_map = _build_charger_map(data.get("chargers", []))
 
-    normalized_transactions: list[dict] = []
-    for tx in data.get("transactions", []):
-        if not isinstance(tx, Mapping):
-            continue
-        try:
-            normalized_transactions.append(_normalize_transaction_entry(tx, charger_map))
-        except (ValidationError, ValueError, TypeError):
-            continue
-
+    normalized_transactions = list(_iter_normalized_transactions(data, charger_map))
     return _persist_transactions(normalized_transactions)
 
 
@@ -291,15 +291,9 @@ def import_transactions_deduped(data: dict) -> tuple[int, int, list[Transaction]
 
     charger_map = _build_charger_map(data.get("chargers", []))
 
-    normalized_transactions: list[dict] = []
     skipped = 0
-    for tx in data.get("transactions", []):
-        if not isinstance(tx, Mapping):
-            continue
-        try:
-            normalized = _normalize_transaction_entry(tx, charger_map)
-        except (ValidationError, ValueError, TypeError):
-            continue
+    normalized_transactions: list[dict] = []
+    for normalized in _iter_normalized_transactions(data, charger_map):
         if _is_duplicate_transaction(normalized["transaction_fields"]):
             skipped += 1
             continue
