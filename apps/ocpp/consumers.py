@@ -283,10 +283,12 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
                             continue
                         trimmed = value.strip()
                         if trimmed:
+                            self.serial_source = "query"
                             return trimmed
 
         serial = self.scope["url_route"]["kwargs"].get("cid", "")
         if serial:
+            self.serial_source = "route"
             return serial
 
         path = (self.scope.get("path") or "").strip("/")
@@ -297,7 +299,11 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         if not segments:
             return ""
 
-        return segments[-1]
+        serial = segments[-1].strip()
+        if not serial:
+            return ""
+        self.serial_source = "path"
+        return serial
 
     def _parse_basic_auth_header(self) -> tuple[tuple[str, str] | None, str | None]:
         """Return decoded Basic auth credentials and an error code if any."""
