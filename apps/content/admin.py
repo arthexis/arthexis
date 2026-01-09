@@ -7,6 +7,7 @@ from django.shortcuts import redirect
 from django.urls import path
 from django.utils.html import format_html
 
+from apps.audio.models import AudioSample
 from apps.content.models import (
     ContentClassification,
     ContentClassifier,
@@ -45,7 +46,7 @@ class ContentClassificationInline(admin.TabularInline):
 @admin.register(ContentSample)
 class ContentSampleAdmin(EntityModelAdmin):
     list_display = ("name", "kind", "node", "user", "created_at")
-    readonly_fields = ("created_at", "name", "user", "image_preview")
+    readonly_fields = ("created_at", "name", "user", "image_preview", "audio_preview")
     inlines = (ContentClassificationInline,)
     list_filter = ("kind", "classifications__tag")
 
@@ -89,6 +90,21 @@ class ContentSampleAdmin(EntityModelAdmin):
         return format_html(
             '<img src="data:image/png;base64,{}" style="max-width:100%;" />',
             encoded,
+        )
+
+    @admin.display(description="Audio")
+    def audio_preview(self, obj):
+        if not obj or obj.kind != ContentSample.AUDIO or not obj.path:
+            return ""
+        audio_sample = obj.audio_samples.order_by("-captured_at", "-id").first()
+        if not audio_sample:
+            return "Audio metadata not available"
+        data_uri = audio_sample.get_data_uri()
+        if not data_uri:
+            return "File not found"
+        return format_html(
+            '<audio controls style="width:100%%;" src="{}"></audio>',
+            data_uri,
         )
 
 

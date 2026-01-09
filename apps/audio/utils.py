@@ -11,7 +11,7 @@ from django.conf import settings
 from apps.content.utils import save_content_sample
 from apps.content.models import ContentSample
 
-from .models import PCM_PATH, RecordingDevice
+from .models import AudioSample, PCM_PATH, RecordingDevice
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +74,7 @@ def save_audio_sample(
 ):
     """Save audio file info if not already recorded."""
 
-    return save_content_sample(
+    sample = save_content_sample(
         path=path,
         kind=ContentSample.AUDIO,
         node=node,
@@ -84,6 +84,23 @@ def save_audio_sample(
         link_duplicates=link_duplicates,
         duplicate_log_context="audio sample",
     )
+    if not sample:
+        return None
+
+    metadata = AudioSample.build_metadata(sample)
+    audio_sample, created = AudioSample.objects.get_or_create(
+        sample=sample,
+        defaults=metadata,
+    )
+    if not created:
+        updates: dict[str, object] = {}
+        for field, value in metadata.items():
+            if getattr(audio_sample, field) != value:
+                setattr(audio_sample, field, value)
+                updates[field] = value
+        if updates:
+            audio_sample.save(update_fields=list(updates.keys()))
+    return sample
 
 
 def has_audio_capture_device(*, pcm_path: Path = PCM_PATH) -> bool:
