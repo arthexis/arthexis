@@ -80,6 +80,7 @@ def test_fixture_hashes_group_by_app(tmp_path, monkeypatch, env_refresh_module):
         _write_fixture(tmp_path, "fixtures/global.json", '{"a": 1}'),
         _write_fixture(tmp_path, "apps/alpha/fixtures/alpha.json", '{"b": 2}'),
         _write_fixture(tmp_path, "apps/beta/fixtures/beta.json", '{"c": 3}'),
+        "apps/missing/fixtures/missing.json",
     ]
 
     expected: dict[str, hashlib._Hash] = {}
@@ -88,8 +89,11 @@ def test_fixture_hashes_group_by_app(tmp_path, monkeypatch, env_refresh_module):
         parts = path.relative_to(tmp_path).parts
         label = parts[1] if len(parts) >= 3 and parts[0] == "apps" else "global"
         digest = expected.setdefault(label, hashlib.md5(usedforsecurity=False))
-        digest.update(str(path.relative_to(tmp_path)).encode("utf-8"))
-        digest.update(path.read_bytes())
+        try:
+            digest.update(str(path.relative_to(tmp_path)).encode("utf-8"))
+            digest.update(path.read_bytes())
+        except OSError:
+            continue
 
     assert env_refresh_module._fixture_hashes_by_app(fixtures) == {
         label: digest.hexdigest() for label, digest in expected.items()
