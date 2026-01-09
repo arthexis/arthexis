@@ -2363,31 +2363,3 @@ def run_client_report_schedule(schedule_id: int) -> None:
     except Exception:
         logger.exception("ClientReportSchedule %s failed", schedule_id)
         raise
-
-
-@shared_task
-def ensure_recurring_client_reports() -> None:
-    """Ensure scheduled consumer reports run for the current period."""
-
-    from apps.energy.models import ClientReportSchedule
-
-    reference = timezone.localdate()
-    schedules = ClientReportSchedule.objects.filter(
-        periodicity__in=[
-            ClientReportSchedule.PERIODICITY_DAILY,
-            ClientReportSchedule.PERIODICITY_WEEKLY,
-            ClientReportSchedule.PERIODICITY_MONTHLY,
-            ClientReportSchedule.PERIODICITY_BIMONTHLY,
-            ClientReportSchedule.PERIODICITY_QUARTERLY,
-            ClientReportSchedule.PERIODICITY_YEARLY,
-        ]
-    ).prefetch_related("chargers")
-
-    for schedule in schedules:
-        try:
-            schedule.generate_missing_reports(reference=reference)
-        except Exception:
-            logger.exception(
-                "Automatic consumer report generation failed for schedule %s",
-                schedule.pk,
-            )
