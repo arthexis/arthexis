@@ -371,13 +371,13 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         offered = self.scope.get("subprotocols") or []
         normalized: list[str] = []
         for proto in offered:
-            if isinstance(proto, (bytes, bytearray)):
-                try:
+            try:
+                if isinstance(proto, (bytes, bytearray)):
                     value = proto.decode("latin1")
-                except Exception:
-                    continue
-            else:
-                value = str(proto)
+                else:
+                    value = str(proto)
+            except (AttributeError, TypeError, UnicodeDecodeError):
+                continue
             value = value.strip()
             if value:
                 normalized.append(value)
@@ -392,12 +392,12 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
                 continue
             try:
                 header_value = raw_value.decode("latin1")
-            except Exception:
+                for candidate in header_value.split(","):
+                    trimmed = candidate.strip()
+                    if trimmed:
+                        normalized.append(trimmed)
+            except (AttributeError, TypeError, UnicodeDecodeError):
                 continue
-            for candidate in header_value.split(","):
-                trimmed = candidate.strip()
-                if trimmed:
-                    normalized.append(trimmed)
         return normalized
 
     async def _validate_serial_or_reject(self, raw_serial: str) -> bool:
@@ -457,34 +457,31 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         elif error_code == "invalid":
             rejection_reason = "HTTP Basic authentication header is invalid"
         else:
-            if not credentials:
-                rejection_reason = "HTTP Basic authentication header is invalid"
+            username, password = credentials
+            auth_user = await self._authenticate_basic_credentials(
+                username, password
+            )
+            if auth_user is None:
+                rejection_reason = "HTTP Basic authentication failed"
             else:
-                username, password = credentials
-                auth_user = await self._authenticate_basic_credentials(
-                    username, password
-                )
-                if auth_user is None:
-                    rejection_reason = "HTTP Basic authentication failed"
-                else:
-                    authorized = await database_sync_to_async(
-                        existing_charger.is_ws_user_authorized
-                    )(auth_user)
-                    if not authorized:
-                        user_label = getattr(auth_user, "get_username", None)
-                        if callable(user_label):
-                            user_label = user_label()
-                        else:
-                            user_label = getattr(auth_user, "username", "")
-                        if user_label:
-                            rejection_reason = (
-                                "HTTP Basic authentication rejected for unauthorized user "
-                                f"'{user_label}'"
-                            )
-                        else:
-                            rejection_reason = (
-                                "HTTP Basic authentication rejected for unauthorized user"
-                            )
+                authorized = await database_sync_to_async(
+                    existing_charger.is_ws_user_authorized
+                )(auth_user)
+                if not authorized:
+                    user_label = getattr(auth_user, "get_username", None)
+                    if callable(user_label):
+                        user_label = user_label()
+                    else:
+                        user_label = getattr(auth_user, "username", "")
+                    if user_label:
+                        rejection_reason = (
+                            "HTTP Basic authentication rejected for unauthorized user "
+                            f"'{user_label}'"
+                        )
+                    else:
+                        rejection_reason = (
+                            "HTTP Basic authentication rejected for unauthorized user"
+                        )
         if rejection_reason:
             store.add_log(
                 self.store_key,
