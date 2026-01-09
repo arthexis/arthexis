@@ -102,6 +102,7 @@ def build_logging_settings(
         "celery.beat",
         "celery.worker",
         "celery.worker.consumer",
+        "celery.utils.functional",
     )
 
     logging_config["loggers"] = {
