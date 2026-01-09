@@ -185,6 +185,26 @@ def _extract_vehicle_identifier(payload: dict) -> tuple[str, str]:
     return vid_value, vin_value
 
 
+def _register_log_names_for_identity(
+    charger_id: str, connector_id: int | str | None, display_name: str
+) -> None:
+    """Register friendly log names for a charger identity and its pending key."""
+
+    if not charger_id:
+        return
+    friendly_name = display_name or charger_id
+    store.register_log_name(
+        store.identity_key(charger_id, connector_id),
+        friendly_name,
+        log_type="charger",
+    )
+    if connector_id is None:
+        store.register_log_name(
+            store.pending_key(charger_id), friendly_name, log_type="charger"
+        )
+        store.register_log_name(charger_id, friendly_name, log_type="charger")
+
+
 class SinkConsumer(AsyncWebsocketConsumer):
     """Accept any message without validation."""
 
@@ -308,9 +328,11 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
                 continue
             if raw_name.lower() != b"authorization":
                 continue
+            if not isinstance(raw_value, (bytes, bytearray)):
+                return None, "invalid"
             try:
                 header_value = raw_value.decode("latin1")
-            except Exception:
+            except UnicodeDecodeError:
                 return None, "invalid"
             scheme, _, param = header_value.partition(" ")
             if scheme.lower() != "basic" or not param:
@@ -347,7 +369,20 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
     ) -> str | None:
         """Choose the negotiated OCPP subprotocol, honoring stored preference."""
 
-        available = [proto for proto in offered if proto]
+        available: list[str] = []
+        for proto in offered:
+            if not proto:
+                continue
+            if isinstance(proto, bytes):
+                try:
+                    proto_text = proto.decode("latin1")
+                except Exception:
+                    continue
+            else:
+                proto_text = str(proto)
+            proto_text = proto_text.strip()
+            if proto_text:
+                available.append(proto_text)
         preferred_normalized = (preferred or "").strip()
         if preferred_normalized and preferred_normalized in available:
             return preferred_normalized
@@ -546,13 +581,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
             lambda: self.charger.location.name if self.charger.location else ""
         )()
         friendly_name = location_name or self.charger_id
-        store.register_log_name(self.store_key, friendly_name, log_type="charger")
-        store.register_log_name(self.charger_id, friendly_name, log_type="charger")
-        store.register_log_name(
-            store.identity_key(self.charger_id, None),
-            friendly_name,
-            log_type="charger",
-        )
+        _register_log_names_for_identity(self.charger_id, None, friendly_name)
 
     @requires_network
     async def connect(self):
@@ -739,13 +768,7 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
                 lambda: self.charger.name or self.charger.charger_id
             )()
             friendly_name = aggregate_name or self.charger_id
-            store.register_log_name(new_key, friendly_name, log_type="charger")
-            store.register_log_name(
-                store.identity_key(self.charger_id, None),
-                friendly_name,
-                log_type="charger",
-            )
-            store.register_log_name(self.charger_id, friendly_name, log_type="charger")
+            _register_log_names_for_identity(self.charger_id, None, friendly_name)
             self.store_key = new_key
             self.connector_value = None
             if not self._header_reference_created and self.client_ip:
@@ -809,16 +832,16 @@ class CSMSConsumer(RateLimitedConsumerMixin, AsyncWebsocketConsumer):
         connector_name = await sync_to_async(
             lambda: self.charger.name or self.charger.charger_id
         )()
-        store.register_log_name(new_key, connector_name, log_type="charger")
+        _register_log_names_for_identity(
+            self.charger_id, connector_value, connector_name
+        )
         aggregate_name = ""
         if self.aggregate_charger:
             aggregate_name = await sync_to_async(
                 lambda: self.aggregate_charger.name or self.aggregate_charger.charger_id
             )()
-        store.register_log_name(
-            store.identity_key(self.charger_id, None),
-            aggregate_name or self.charger_id,
-            log_type="charger",
+        _register_log_names_for_identity(
+            self.charger_id, None, aggregate_name or self.charger_id
         )
         self.store_key = new_key
         self.connector_value = connector_value
