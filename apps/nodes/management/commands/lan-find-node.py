@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 class Command(BaseCommand):
     help = (
-        "Scan eth0 and wlan0 neighbors for ArtHExis nodes and register them as peers."
+        "Scan LAN neighbors for ArtHExis nodes and register them as peers."
     )
 
     def add_arguments(self, parser):
@@ -45,20 +45,28 @@ class Command(BaseCommand):
             "--max-hosts",
             type=int,
             default=256,
-            help="Maximum number of eth0 hosts to scan (default: 256).",
+            help="Maximum number of hosts to scan per interface (default: 256).",
+        )
+        parser.add_argument(
+            "--interfaces",
+            default="eth0,wlan0",
+            help="Comma-separated interface list to scan (default: eth0,wlan0).",
         )
 
     def handle(self, *args, **options):
         ports = self._parse_ports(options["ports"])
         timeout = options["timeout"]
         max_hosts = options["max_hosts"]
+        interfaces = self._parse_interfaces(options["interfaces"])
 
         local_node = Node.get_local()
         local_mac = (local_node.mac_address or "").lower() if local_node else ""
         local_ips = discover_local_ip_addresses()
 
-        candidates = set(self._iter_eth0_hosts(max_hosts))
-        candidates.update(self._iter_known_wlan0_hosts())
+        candidates: set[str] = set()
+        for interface in interfaces:
+            candidates.update(self._iter_interface_hosts(interface, max_hosts))
+            candidates.update(self._iter_known_interface_hosts(interface))
         candidates.difference_update(local_ips)
 
         if not candidates:
@@ -130,14 +138,27 @@ class Command(BaseCommand):
             raise CommandError("At least one port is required")
         return ports
 
-    def _iter_eth0_hosts(self, max_hosts: int) -> Iterable[str]:
-        addresses = psutil.net_if_addrs().get("eth0")
-        if not addresses:
-            return []
+    def _parse_interfaces(self, raw_value: str) -> list[str]:
+        interfaces: list[str] = []
+        for token in raw_value.split(","):
+            token = token.strip()
+            if token:
+                interfaces.append(token)
+        if not interfaces:
+            raise CommandError("At least one interface is required")
+        return interfaces
 
-        hosts: list[str] = []
+    def _iter_interface_hosts(
+        self,
+        interface_name: str,
+        max_hosts: int,
+    ) -> Iterable[str]:
+        addresses = psutil.net_if_addrs().get(interface_name)
+        if not addresses:
+            return
+
         for addr in addresses:
-            if addr.family.name != "AF_INET":
+            if addr.family.name not in ("AF_INET", "AF_INET6"):
                 continue
             if not addr.address or not addr.netmask:
                 continue
@@ -150,38 +171,37 @@ class Command(BaseCommand):
             network = interface.network
             candidates = itertools.islice(network.hosts(), max_hosts)
             for candidate in candidates:
-                hosts.append(str(candidate))
+                yield str(candidate)
 
-        return hosts
-
-    def _iter_known_wlan0_hosts(self) -> Iterable[str]:
-        if "wlan0" not in psutil.net_if_stats():
-            return []
+    def _iter_known_interface_hosts(self, interface_name: str) -> Iterable[str]:
+        if interface_name not in psutil.net_if_stats():
+            return ()
         ip_path = shutil.which("ip")
         if not ip_path:
-            return []
+            return ()
         try:
             result = subprocess.run(
-                [ip_path, "neigh", "show", "dev", "wlan0"],
+                [ip_path, "neigh", "show", "dev", interface_name],
                 capture_output=True,
                 text=True,
                 check=False,
                 timeout=1.0,
             )
         except (OSError, subprocess.SubprocessError):
-            return []
+            return ()
         if result.returncode != 0:
-            return []
-        return [
+            return ()
+        return (
             token
             for line in result.stdout.splitlines()
             for token in line.split()
-            if self._is_ipv4(token)
-        ]
+            if self._is_ip(token)
+        )
 
-    def _is_ipv4(self, value: str) -> bool:
+    def _is_ip(self, value: str) -> bool:
         try:
-            return ipaddress.ip_address(value).version == 4
+            ipaddress.ip_address(value)
+            return True
         except ValueError:
             return False
 
@@ -267,7 +287,7 @@ class Command(BaseCommand):
         if response.status_code != 200:
             try:
                 detail = json.loads(response.content.decode()).get("detail", "")
-            except Exception:
+            except (json.JSONDecodeError, UnicodeDecodeError):
                 detail = response.content.decode(errors="ignore")
             raise CommandError(
                 f"Local registration failed with status {response.status_code}: {detail}"
