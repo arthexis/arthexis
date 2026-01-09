@@ -122,9 +122,7 @@ class LCDTimings:
                 continue
             if "=" not in stripped:
                 continue
-            key, raw_value = stripped.split("=", 1)
-            key = key.strip()
-            raw_value = raw_value.strip()
+            key, raw_value = map(str.strip, stripped.split("=", 1))
             if key not in cls._lock_fields:
                 continue
             try:

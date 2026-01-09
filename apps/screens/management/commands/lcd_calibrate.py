@@ -80,36 +80,37 @@ class Command(BaseCommand):
         return None
 
     def _stop_lcd_service(self, service_name: str) -> None:
-        lcd_unit = f"lcd-{service_name}"
-        self.stdout.write(f"Stopping {lcd_unit}...")
-        try:
-            result = subprocess.run(
-                ["systemctl", "stop", lcd_unit], capture_output=True, text=True
-            )
-        except FileNotFoundError as exc:
-            raise CommandError("systemctl not available; cannot stop lcd service") from exc
-
-        if result.returncode != 0:
-            error_output = (result.stderr or "").strip()
-            raise CommandError(f"Failed to stop {lcd_unit}: {error_output}")
-
-        self.stdout.write(self.style.SUCCESS(f"Stopped {lcd_unit}"))
+        self._run_systemctl("stop", service_name)
 
     def _restart_lcd_service(self, service_name: str) -> None:
+        self._run_systemctl("restart", service_name)
+
+    def _run_systemctl(self, action: str, service_name: str) -> None:
         lcd_unit = f"lcd-{service_name}"
-        self.stdout.write(f"Restarting {lcd_unit}...")
+        action_ing = {"stop": "Stopping", "restart": "Restarting"}.get(
+            action, f"{action.capitalize()}ing"
+        )
+        action_ed = {"stop": "Stopped", "restart": "Restarted"}.get(
+            action, f"{action.capitalize()}ed"
+        )
+        self.stdout.write(f"{action_ing} {lcd_unit}...")
         try:
             result = subprocess.run(
-                ["systemctl", "restart", lcd_unit], capture_output=True, text=True
+                ["systemctl", action, lcd_unit],
+                capture_output=True,
+                text=True,
+                check=False,
             )
         except FileNotFoundError as exc:
-            raise CommandError("systemctl not available; cannot restart lcd service") from exc
+            raise CommandError(
+                f"systemctl not available; cannot {action} lcd service"
+            ) from exc
 
         if result.returncode != 0:
             error_output = (result.stderr or "").strip()
-            raise CommandError(f"Failed to restart {lcd_unit}: {error_output}")
+            raise CommandError(f"Failed to {action} {lcd_unit}: {error_output}")
 
-        self.stdout.write(self.style.SUCCESS(f"Restarted {lcd_unit}"))
+        self.stdout.write(self.style.SUCCESS(f"{action_ed} {lcd_unit}"))
 
     def _initialize_lcd(self, base_dir: Path) -> CharLCD1602 | None:
         try:
@@ -139,11 +140,8 @@ class Command(BaseCommand):
             "Enter timing values in seconds. Press Enter to keep the current value."
         )
         prompts = [
-            ("pulse_enable_delay", "Pulse enable delay"),
-            ("pulse_disable_delay", "Pulse disable delay"),
-            ("command_delay", "Command delay"),
-            ("data_delay", "Data delay"),
-            ("clear_delay", "Clear delay"),
+            (key, key.replace("_", " ").capitalize())
+            for key in LCDTimings._lock_fields
         ]
 
         for key, label in prompts:
