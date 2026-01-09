@@ -69,9 +69,7 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
                 auto_enable=True,
                 link_duplicates=True,
                 silent=True,
-            )
-            if latest_snapshot is None:
-                latest_snapshot = obj.get_latest_snapshot()
+            ) or obj.get_latest_snapshot()
         extra_context["latest_snapshot"] = latest_snapshot
         return super().changeform_view(
             request, object_id, form_url=form_url, extra_context=extra_context
@@ -132,18 +130,9 @@ class VideoDeviceAdmin(DjangoObjectActions, OwnableAdminMixin, EntityModelAdmin)
 
         node = Node.get_local()
         if auto_enable and node:
-            if require_stack and not has_rpi_camera_stack():
-                if not silent:
-                    self.message_user(
-                        request,
-                        _("%(feature)s feature is not enabled on this node.")
-                        % {"feature": feature.display},
-                        level=messages.WARNING,
-                    )
-                return None
-
-            NodeFeatureAssignment.objects.update_or_create(node=node, feature=feature)
-            return feature
+            if not require_stack or has_rpi_camera_stack():
+                NodeFeatureAssignment.objects.update_or_create(node=node, feature=feature)
+                return feature
 
         if not silent:
             self.message_user(
