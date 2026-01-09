@@ -21,6 +21,7 @@ from apps.audio.utils import has_audio_capture_device
 from apps.base.models import Entity
 from apps.celery.utils import normalize_periodic_task_name, periodic_task_name_variants
 from apps.emails import mailer
+from apps.screens.startup_notifications import lcd_feature_enabled_for_paths
 from apps.video import has_rpi_camera_stack
 from .slug_entities import SlugDisplayNaturalKeyMixin, SlugEntityManager
 
@@ -310,6 +311,10 @@ class NodeFeatureMixin:
             if project_lock_dir not in lock_dirs:
                 lock_dirs.append(project_lock_dir)
             return any((lock_dir / lock).exists() for lock_dir in lock_dirs)
+        if slug == "lcd-screen":
+            return lcd_feature_enabled_for_paths(
+                base_dir=base_dir, node_base_path=base_path
+            )
         if slug == "gui-toast":
             try:
                 from apps.core.notifications import supports_gui_toast
