@@ -7,6 +7,8 @@ def remove_invalid_clipboard_tasks(apps, schema_editor):
     except LookupError:
         return
 
+    # The sample_clipboard task was removed from the codebase, but we still
+    # clear out legacy beat entries that reference it or related names.
     conditions = models.Q(task="nodes.tasks.sample_clipboard") | models.Q(
         name__icontains="poll-clipboard"
     )
