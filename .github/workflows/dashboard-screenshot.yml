@@ -234,14 +234,14 @@ jobs:
             const browser = await chromium.launch({ headless: true });
             const page = await browser.newPage();
 
-            await page.goto(baseUrl, { waitUntil: 'networkidle' });
+            await page.goto(baseUrl, { waitUntil: 'domcontentloaded' });
             await page.fill('input[name="username"]', username);
             await page.fill('input[name="password"]', password);
             await Promise.all([
-              page.waitForNavigation({ waitUntil: 'networkidle' }),
+              page.waitForNavigation({ waitUntil: 'domcontentloaded' }),
               page.click('input[type="submit"], button[type="submit"]'),
             ]);
-            await page.waitForLoadState('networkidle');
+            await page.waitForLoadState('domcontentloaded');
             await page.screenshot({ path: 'artifacts/admin-dashboard.png', fullPage: true });
 
             await browser.close();
@@ -273,8 +273,8 @@ jobs:
             const browser = await chromium.launch({ headless: true });
             const page = await browser.newPage();
 
-            await page.goto(baseUrl, { waitUntil: 'networkidle' });
-            await page.waitForLoadState('networkidle');
+            await page.goto(baseUrl, { waitUntil: 'domcontentloaded' });
+            await page.waitForLoadState('domcontentloaded');
             await page.screenshot({ path: 'artifacts/public-site.png', fullPage: true });
 
             await browser.close();
@@ -312,16 +312,16 @@ jobs:
             const browser = await chromium.launch({ headless: true });
             const page = await browser.newPage();
 
-            await page.goto(loginUrl, { waitUntil: 'networkidle' });
+            await page.goto(loginUrl, { waitUntil: 'domcontentloaded' });
             await page.fill('input[name="username"]', username);
             await page.fill('input[name="password"]', password);
             await Promise.all([
-              page.waitForNavigation({ waitUntil: 'networkidle' }),
+              page.waitForNavigation({ waitUntil: 'domcontentloaded' }),
               page.click('button[type="submit"], input[type="submit"]'),
             ]);
 
-            await page.goto(dashboardUrl, { waitUntil: 'networkidle' });
-            await page.waitForLoadState('networkidle');
+            await page.goto(dashboardUrl, { waitUntil: 'domcontentloaded' });
+            await page.waitForLoadState('domcontentloaded');
             await page.waitForTimeout(1000);
             await page.screenshot({ path: 'artifacts/ocpp-dashboard.png', fullPage: true });
 
@@ -355,8 +355,8 @@ jobs:
             const browser = await chromium.launch({ headless: true });
             const page = await browser.newPage();
 
-            await page.goto(publicUrl, { waitUntil: 'networkidle' });
-            await page.waitForLoadState('networkidle');
+            await page.goto(publicUrl, { waitUntil: 'domcontentloaded' });
+            await page.waitForLoadState('domcontentloaded');
             await page.waitForTimeout(1000);
             await page.screenshot({ path: 'artifacts/evcs-public.png', fullPage: true });
 
