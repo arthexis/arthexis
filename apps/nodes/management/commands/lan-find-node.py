@@ -89,12 +89,14 @@ class Command(BaseCommand):
                         self.style.WARNING(
                             f"Skipping {host}:{port} (missing mac_address)."
                         )
+                    )
                     continue
                 if local_mac and mac_address == local_mac:
                     self.stdout.write(
                         self.style.WARNING(
                             f"Skipping {host}:{port} (local node detected)."
                         )
+                    )
                     continue
 
                 payload = self._build_payload(info)
@@ -105,6 +107,7 @@ class Command(BaseCommand):
                         self.style.WARNING(
                             f"Failed to register {host}:{port}: {exc}"
                         )
+                    )
                     continue
 
                 registered += 1
